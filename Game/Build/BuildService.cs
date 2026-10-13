@@ -470,6 +470,12 @@ namespace Placemaker.Game.Build
                 return;
             }
             int tagged = TagTemporaries();
+            if (tagged > 0 && !CanAffordNets(out int netCost))
+            {
+                Mod.Log.Warn($"Placemaker: the roads/paths of this build cost {netCost}, more than the city has.");
+                BeginCleanup(BuildPhase.Failed, BuildErrorKeys.For("NotEnoughMoney"), 1, "NotEnoughMoney");
+                return;
+            }
             if (tagged == 0)
             {
                 BeginCleanup(BuildPhase.Failed, "Placemaker.Build.NothingMaterialized");
@@ -525,6 +531,7 @@ namespace Placemaker.Game.Build
                 BeginCleanup(BuildPhase.Failed, _status.ErrorPositions.Count > 0 ? _errorKey : "Placemaker.Build.ApplyRejected", _errorArgs);
                 return;
             }
+            ChargeNets();
             AfterApply();
             _status.Progress = 0.85f;
             Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
