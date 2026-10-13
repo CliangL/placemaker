@@ -227,7 +227,7 @@ export function isMix(catalog: Catalog, r: RecipeInfo) {
  * id heuristic when no recipe matches a layer id (older catalogs).
  */
 export function makeRecipes(catalog: Catalog): RecipeInfo[] {
-    const fills = new Set(catalog.layers.filter((l) => l.kind === "fill").map((l) => l.id.toLowerCase()));
+    const fills = new Set(catalog.layers.filter((l) => l.kind === "fill" && !l.hidden).map((l) => l.id.toLowerCase()));
     const singles = catalog.recipes.filter((r) => !r.custom && fills.has(r.id.toLowerCase()));
     return singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
 }
@@ -301,17 +301,22 @@ const FeatureRow = ({ catalog, design, state, parent, f }: { catalog: Catalog; d
     const layer = layerOf(catalog, f.layer);
     const name = f.label ? t(f.label, layerName(t, layer)) : layerName(t, layer);
     const child = f.enabled ? featureStep(design.root, parent, f) : null;
+    const own = f.options ?? [];
+    const tip = f.tooltip ? t(f.tooltip, "") : "";
     return (
         <div className={classNames(s.feature, { [s.featureOn]: f.enabled })} data-testid={`feature-${f.layer}`} data-enabled={f.enabled ? "true" : "false"}>
             <div className={s.featureHead}>
                 <Icon name={entityIcon(f.layer, f.icon || layer.icon)} size={14} tint={f.enabled ? "light" : "dim"} />
-                <div className={s.featureName}>{name}</div>
+                <Tip title={name} description={tip || undefined}>
+                    <div className={s.featureName}>{name}</div>
+                </Tip>
                 <Switch on={f.enabled} onChange={(v) => act.setFeature(parent.path, f.layer, v)} testId={`feature-toggle-${f.layer}`} />
             </div>
-            {child ? (
+            {f.enabled && (child || own.length) ? (
                 <div className={s.featureBody} data-testid={`feature-options-${f.layer}`}>
                     <ErrorBoundary name={"feature-" + f.layer}>
-                        <ControlList step={child} layer={layerOf(catalog, child.layer)} state={state} scope={parent.layer + ">" + f.layer} allFolded />
+                        {own.length ? <ControlList step={parent} layer={layerOf(catalog, parent.layer)} state={state} only={own} flat /> : null}
+                        {child ? <ControlList step={child} layer={layerOf(catalog, child.layer)} state={state} scope={parent.layer + ">" + f.layer} allFolded /> : null}
                     </ErrorBoundary>
                 </div>
             ) : null}
@@ -332,6 +337,13 @@ const Features = ({ catalog, design, state, step }: { catalog: Catalog; design: 
         </Section>
     );
 };
+
+/** Parent controls that belong to a feature: shown under its toggle, never in the parent's groups. */
+function featureOptionIds(step: StepView): Set<string> {
+    const out = new Set<string>();
+    for (const f of step.features ?? []) for (const id of f.options ?? []) out.add(id);
+    return out;
+}
 
 /** Paths of children that are shown as features (not as separate steps). */
 function featurePaths(root: StepView | null, step: StepView): Set<string> {
@@ -414,7 +426,7 @@ const StepOptions = ({ catalog, design, state, step }: { catalog: Catalog; desig
                     ) : null}
                     {typed ? <Entrances step={step} layer={layer} state={state} /> : null}
                     <ErrorBoundary name="controls">
-                        <ControlList step={step} layer={layer} state={state} scope={scope} />
+                        <ControlList step={step} layer={layer} state={state} scope={scope} exclude={featureOptionIds(step)} />
                     </ErrorBoundary>
                     <Features catalog={catalog} design={design} state={state} step={step} />
                     {subSteps.map((c) => (

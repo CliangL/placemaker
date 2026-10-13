@@ -130,7 +130,7 @@ function normalizeStep(s: Record<string, any>): StepView {
         markersRequired: Number(s.markersRequired) || 0,
         features: arr<any>(s.features)
             .filter((f) => isObj(f) && typeof f.layer === "string" && f.layer)
-            .map((f) => ({ layer: String(f.layer), label: String(f.label ?? ""), icon: String(f.icon ?? ""), enabled: f.enabled === true, path: typeof f.path === "string" && f.path ? f.path : undefined })),
+            .map((f) => ({ layer: String(f.layer), label: String(f.label ?? ""), icon: String(f.icon ?? ""), enabled: f.enabled === true, path: typeof f.path === "string" && f.path ? f.path : undefined, tooltip: typeof f.tooltip === "string" && f.tooltip ? f.tooltip : undefined, options: arr<any>(f.options).filter((o) => typeof o === "string"), defaultOn: f.defaultOn === true })),
         ready: s.ready !== false,
         nextStep: s.nextStep,
         children: arr<any>(s.children).filter(isObj).map(normalizeStep),

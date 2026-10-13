@@ -409,7 +409,14 @@ export function summarize(
         }
     }
     if (master && !parts.length) return t("Placemaker.UI.On", "On");
-    return parts.length ? parts.slice(0, 3).join(" · ") : t("Placemaker.UI.Picker.Auto", "Automatic");
+    if (!parts.length) return t("Placemaker.UI.Picker.Auto", "Automatic");
+    // Keep it to what fits one header line (~30 characters): the first values win.
+    let out = parts[0];
+    for (const p of parts.slice(1, 3)) {
+        if (out.length + 3 + p.length > 30) break;
+        out += " · " + p;
+    }
+    return out;
 }
 
 /**
@@ -418,16 +425,41 @@ export function summarize(
  * `allFolded`), and each group's state is remembered under "<scope>:<group>".
  * Marker controls are left out when the step declares markerKinds: the Entrances section shows them.
  */
-export const ControlList = ({ step, layer, state, scope, allFolded }: RowCtx & { scope?: string; allFolded?: boolean }) => {
+export const ControlList = ({
+    step, layer, state, scope, allFolded, only, exclude, flat,
+}: RowCtx & {
+    scope?: string;
+    allFolded?: boolean;
+    /** Only these control ids (a feature's options living on the parent step). */
+    only?: string[];
+    /** Leave these ids out (they are shown under their feature toggle instead). */
+    exclude?: Set<string>;
+    /** Plain rows, no group sections. */
+    flat?: boolean;
+}) => {
     const { t } = useT();
     const assetName = useAssetName();
     const ctx = { step, layer, state };
     const typedMarkers = !!(step.markerKinds && step.markerKinds.length);
+    const values = withDefaults(layer, step);
     const visible = (layer.controls as ControlEx[]).filter(
-        (c) => isVisible(c.visibleWhen, withDefaults(layer, step)) && !(typedMarkers && c.kind === "markers"),
+        (c) =>
+            isVisible(c.visibleWhen, values) &&
+            !(typedMarkers && c.kind === "markers") &&
+            (!only || only.includes(c.id)) &&
+            !(exclude && exclude.has(c.id)),
     );
     if (visible.length === 0) {
-        return typedMarkers ? null : <div className={s.none}>{t("Placemaker.UI.NoSettings", "No settings: adapts to the area.")}</div>;
+        return typedMarkers || only || exclude?.size ? null : <div className={s.none}>{t("Placemaker.UI.NoSettings", "No settings: adapts to the area.")}</div>;
+    }
+    if (flat) {
+        return (
+            <div className={s.list} data-testid="control-list-flat">
+                {visible.map((c) => (
+                    <ControlRow key={c.id} c={c} ctx={ctx} />
+                ))}
+            </div>
+        );
     }
     const groups = groupBy(visible);
     const key = scope ?? layer.id;

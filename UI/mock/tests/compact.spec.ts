@@ -2,51 +2,13 @@
 // remembered, single types only in the Make row, features as switches with indented options, and no
 // text that overflows or is cut anywhere in the panel.
 import { expect, Page, test } from "@playwright/test";
-import { clickWorld, drawPolygon, FIELD, open, panelShot, shot, waitPlanned } from "./helpers";
+import { clickWorld, drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
 
 async function toDesign(page: Page, recipe: string) {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
     await page.getByTestId(`recipe-${recipe}`).click();
     await waitPlanned(page);
-}
-
-/**
- * Every text in the panel fits its box (scrollWidth ≤ clientWidth: nothing cut or ellipsised) and
- * stays inside each of its ancestors horizontally (nothing spills onto a neighbour, as the card
- * descriptions did in Gameface).
- */
-export async function noTextOverflow(page: Page, where: string) {
-    const bad = await page.evaluate(() => {
-        const root = document.querySelector('[data-testid="placemaker-wrap"]') as HTMLElement;
-        const out: string[] = [];
-        const seen = new Set<Element>();
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-        while (walker.nextNode()) {
-            const node = walker.currentNode;
-            const text = (node.textContent ?? "").trim();
-            const el = node.parentElement;
-            if (!text || !el || seen.has(el)) continue;
-            seen.add(el);
-            const r = el.getBoundingClientRect();
-            if (r.width === 0 || r.height === 0) continue;
-            const inline = getComputedStyle(el).display === "inline";
-            if (!inline && el.scrollWidth > el.clientWidth + 1) out.push(`cut: "${text}" (${el.scrollWidth} > ${el.clientWidth})`);
-            for (let a = el.parentElement; a && a !== root.parentElement; a = a.parentElement) {
-                const ar = a.getBoundingClientRect();
-                if (ar.width === 0) continue;
-                if (r.left < ar.left - 1 || r.right > ar.right + 1) {
-                    out.push(`spills: "${text}" out of ${String(a.className).split(" ")[0] || a.tagName}`);
-                    break;
-                }
-                // the panel and the picker flyout beside it are the outermost boxes
-                const id = a.getAttribute("data-testid");
-                if (id === "placemaker-panel" || id === "picker-flyout") break;
-            }
-        }
-        return out;
-    });
-    expect(bad, where).toEqual([]);
 }
 
 async function expandAll(page: Page) {
@@ -63,6 +25,7 @@ test("Make row: single types only, three per row, no mixes", async ({ page }) =>
     const ids = await page.locator('[data-testid="recipes"] [data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
     expect(ids).toEqual(["recipe-parking", "recipe-plaza", "recipe-park", "recipe-roads", "recipe-campground"]);
     await expect(page.getByTestId("mixes")).toHaveCount(0);
+    // hidden layers (split, pond) never get a card
     await expect(page.getByTestId("placemaker-panel")).not.toContainText("Mixes");
     // icon + name only, three per row, compact
     const boxes = await Promise.all(["parking", "plaza", "park", "roads"].map((id) => page.getByTestId(`recipe-${id}`).boundingBox()));
@@ -138,8 +101,15 @@ test("features: switch adds the feature, its options fold out indented (collapse
     await opts.getByTestId("choice-size-l").click();
     await expect(opts.getByTestId("choice-size-l")).toHaveAttribute("aria-pressed", "true");
 
-    // a centre plaza (fill feature on the park's core) and a pond (permanent)
+    // the plaza feature's own options live on the park step: hidden from the park's groups, shown under the toggle when on
+    await expect(page.getByTestId("step-0").getByTestId("group-plaza")).toHaveCount(0);
+    await expect(page.getByTestId("control-plazaShape")).toHaveCount(0);
     await page.getByTestId("feature-toggle-plaza").click();
+    const plazaOpts = page.getByTestId("feature-options-plaza");
+    for (const id of ["plazaShape", "plazaAt", "plazaSize"]) await expect(plazaOpts.getByTestId("control-" + id)).toBeVisible();
+    await plazaOpts.getByTestId("choice-plazaAt-corner").click();
+    await expect.poll(() => page.evaluate(() => (window as any).pm.backend.root.values.plazaAt)).toBe("corner");
+    await expect(page.getByTestId("step-0").getByTestId("group-plaza")).toHaveCount(0);
     await page.getByTestId("feature-toggle-pond").click();
     await waitPlanned(page);
     layers = await page.evaluate(() => (window as any).pm.backend.plan.layers.map((l: any) => l.layer));

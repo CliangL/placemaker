@@ -211,7 +211,8 @@ export class MockBackend {
 
     /** Features a layer offers (Core IHasFeatures), limited to feature layers this catalog has. */
     featuresOf(layerId: string): FeatureDef[] {
-        const defs = FAKE_FEATURES[layerId] ?? FAKE_FEATURES[layerId.toLowerCase()] ?? [];
+        const own = this.layer(layerId)?.features;
+        const defs = own && own.length ? own : FAKE_FEATURES[layerId] ?? FAKE_FEATURES[layerId.toLowerCase()] ?? [];
         return defs.filter((f) => !!this.layer(f.layer));
     }
 
@@ -1181,7 +1182,7 @@ export class MockBackend {
 
     catalog(): Catalog {
         return {
-            layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, ...l }) => l) as any,
+            layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, features, ...l }) => l) as any,
             recipes: this.recipes.map((r) => r.info),
         };
     }
@@ -1212,7 +1213,10 @@ export class MockBackend {
         const features = this.featuresOf(s.layer).map((f) => {
             const i = s.children.findIndex((c) => c.feature === f.layer);
             const on = i >= 0 && s.children[i].enabled;
-            return { layer: f.layer, label: f.labelKey ?? "", icon: this.layer(f.layer)?.icon ?? f.layer, enabled: on, path: on ? path + "/" + i : undefined };
+            return {
+                layer: f.layer, label: f.labelKey ?? "", icon: this.layer(f.layer)?.icon ?? f.layer, enabled: on, path: on ? path + "/" + i : undefined,
+                tooltip: f.tooltip || undefined, options: f.options && f.options.length ? f.options : undefined, defaultOn: !!f.defaultOn,
+            };
         });
         return {
             path,

@@ -156,13 +156,14 @@
 
 .presets {
     @include row;
+    flex-wrap: wrap;
     min-width: 0;
-    height: $row-h;
-    overflow: hidden;
+    padding-top: 3rem;
 }
 
 .presetsLabel {
-    width: 60rem;
+    width: 52rem;
+    margin-bottom: 3rem;
     flex-shrink: 0;
     font-size: $fs-s;
     color: $c-text-faint;
@@ -172,11 +173,10 @@
 .presetBtn {
     @include row;
     @include button-reset;
-    flex: 0 1 auto;
-    min-width: 0;
+    flex: 0 0 auto;
     height: 20rem;
     padding: 0 7rem;
-    margin-right: 3rem;
+    margin: 0 3rem 3rem 0;
     border-radius: 10rem;
     background-color: $c-surface;
     overflow: hidden;

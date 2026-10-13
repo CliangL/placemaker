@@ -221,8 +221,21 @@ namespace Placemaker.MockHost
             var presets = new JsonArray();
             foreach (var p in g.Presets ?? Array.Empty<PresetInfo>())
                 presets.Add(new JsonObject { ["id"] = p.Id, ["name"] = p.LabelKey, ["icon"] = p.Icon ?? "", ["values"] = Bag(p.Values) });
+            // Built-in features (Core.IHasFeatures) and Make-row visibility (AreaGenerator Hidden).
+            var features = new JsonArray();
+            if (g is IHasFeatures hf)
+                foreach (var f in hf.Features ?? Array.Empty<FeatureInfo>())
+                    features.Add(new JsonObject
+                    {
+                        ["layer"] = f.Layer, ["target"] = f.Target ?? "", ["defaultOn"] = f.DefaultOn,
+                        ["labelKey"] = f.LabelKey ?? "", ["tooltip"] = f.TooltipKey ?? "",
+                        ["options"] = Arr(f.Options ?? Array.Empty<string>()), ["preset"] = Bag(f.Preset),
+                    });
+            var gattr = (AreaGeneratorAttribute)Attribute.GetCustomAttribute(g.GetType(), typeof(AreaGeneratorAttribute));
             return new JsonObject
             {
+                ["hidden"] = gattr?.Hidden ?? false,
+                ["features"] = features,
                 ["id"] = g.Id,
                 ["name"] = g.NameKey,
                 ["icon"] = g.Icon ?? "",
