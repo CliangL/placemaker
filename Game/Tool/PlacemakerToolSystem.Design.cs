@@ -23,6 +23,7 @@ namespace Placemaker.Game.Tool
             _inputRevision++;
             _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
             _inputFromDrag = preview;
+            _feedback.InputChanged();
             Touch();
         }
 
@@ -77,8 +78,12 @@ namespace Placemaker.Game.Tool
             var r = _recipes.Instantiate(id, NewSeed());
             if (r == null) { Flash(new LocText("Placemaker.Problem.UnknownRecipe")); return; }
             // Markers the player placed for the same root layer stay (switching park ↔ park+playground keeps entrances).
-            if (_recipe != null && _recipe.Root.Layer == r.Root.Layer && _recipe.Root.Markers.Count > 0)
+            bool sameRoot = _recipe != null && _recipe.Root.Layer == r.Root.Layer;
+            if (sameRoot && _recipe.Root.Markers.Count > 0)
                 r.Root.Markers.AddRange(_recipe.Root.Markers);
+            bool rootEdited = sameRoot && _markersEdited.Contains(RecipePaths.Root);
+            _markersEdited.Clear();
+            if (rootEdited) _markersEdited.Add(RecipePaths.Root);
             _recipe = r;
             _recipeId = id;
             _focus = RecipePaths.Root;

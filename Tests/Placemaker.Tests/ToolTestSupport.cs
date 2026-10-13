@@ -64,7 +64,8 @@ namespace Placemaker.Tests
             return new Readiness();
         }
 
-        public List<EdgeMarker> SuggestMarkers(AreaInput input) => new List<EdgeMarker>();
+        public List<EdgeMarker> Suggestions = new List<EdgeMarker>();
+        public List<EdgeMarker> SuggestMarkers(AreaInput input) => new List<EdgeMarker>(Suggestions);
 
         public SettingsBag Randomize(SettingsBag current, uint seed, ICollection<string> locked)
         {

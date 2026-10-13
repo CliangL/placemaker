@@ -36,3 +36,10 @@
 - **US8 Failure is recoverable:** If the game rejects part of a build, Placemaker fixes or skips that piece and tells me what was skipped; if it must fail, the map shows where and why, and all red markers vanish as soon as I change anything.
 - **US9 Always visible options:** every option of the chosen type is visible (no "More options" collapse), grouped under clear headings; scrolling within the tall panel.
 - **US10 Every button has an icon** (or is a text button by design); every picker has a close (X) button and closes on Esc / click outside.
+
+## Follow-up from the user (same day)
+
+- **Auto entrances/exits are fine** (revises US3): auto-place suggested entrances as real, editable markers; only prompt / block Build when there are literally none.
+- **Terrain elevation idea:** let a design level, raise or lower the ground (flat plaza, terraced park, sunken lot). Backlog: a shared "Ground" option/add-on emitting PlannedTerraform (follow terrain / flatten to average / custom height, with smoothing at the edge), warned as permanent.
+- **Lakes:** still in the Park layer (option "Lake", off by default because the basin is permanent) — make it discoverable in the new always-expanded options.
+- **Roads:** the roads builder was interrupted when the previous session ended; resumed in round 2.

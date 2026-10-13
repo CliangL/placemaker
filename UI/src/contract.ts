@@ -162,6 +162,8 @@ export interface Summary {
   issues: Issue[];
   /** Permanent effects the player must acknowledge (e.g. lake excavation). */
   permanent: LocText[];
+  /** True once the player ticked the permanent-effects box for exactly these effects. */
+  permanentAcknowledged?: boolean;
 }
 
 export interface AssetItem {
