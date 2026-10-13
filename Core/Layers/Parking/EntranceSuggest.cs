@@ -3,8 +3,12 @@
 //
 // Samples the outline every ~2 m, casts outward to the nearest road (same 40 m rule the build uses)
 // and scores each spot: close to the road, a minor road rather than an arterial, a two-way road,
-// meeting the road squarely, away from road junctions and lot corners. Large lots get a second
-// entrance far from the first. Pure and fast (< 5 ms for typical inputs).
+// meeting the road squarely, away from road junctions and lot corners. Small lots get one two-way
+// entrance. Large lots with a long frontage on the same street get an entry and an exit far apart
+// (cars circulate instead of turning at one gap); a large lot whose second-best spot is on another
+// street gets a second two-way entrance there. Alleys are never suggested (a junction changes the
+// street — only on the player's request). The tool applies these as real, editable markers when the
+// player has placed none. Pure and fast (< 5 ms for typical inputs).
 
 using System;
 using System.Collections.Generic;
@@ -16,7 +20,7 @@ namespace Placemaker.Core.Layers.Parking
     {
         private struct Candidate
         {
-            public int Edge; public double T; public double2 P; public double Score; public float Y;
+            public int Edge; public double T; public double2 P; public double Score; public float Y; public int Road;
         }
 
         public static List<EdgeMarker> Suggest(AreaInput input, ParkingSettings s)
@@ -44,11 +48,11 @@ namespace Placemaker.Core.Layers.Parking
                 for (double along = margin; along <= len - margin + 1e-9; along += step)
                 {
                     var p = a + tan * along;
-                    double score;
+                    double score; int roadIdx = -1;
                     if (roads.Count > 0)
                     {
                         if (!Roads.Cast(roads, p, -inward, Roads.SearchDistance, out var hit)) continue;
-                        var road = roads[hit.Road];
+                        var road = roads[hit.Road]; roadIdx = hit.Road;
                         double gap = hit.Distance - road.Width / 2;
                         if (gap > 15 || gap < -road.Width / 2) continue;
                         score = Math.Max(0, gap);
@@ -68,31 +72,48 @@ namespace Placemaker.Core.Layers.Parking
                     if (corner < 10) score += (10 - corner) * 0.3;
                     score += Math.Abs(along - len / 2) / len * 2;
                     float y = math.lerp(ring3[i].y, ring3[(i + 1) % n].y, (float)(along / len));
-                    cands.Add(new Candidate { Edge = i, T = along / len, P = p, Score = score, Y = y });
+                    cands.Add(new Candidate { Edge = i, T = along / len, P = p, Score = score, Y = y, Road = roadIdx });
                 }
             }
             if (cands.Count == 0) return result;
             cands.Sort((x, y) => x.Score != y.Score ? x.Score.CompareTo(y.Score) : x.Edge != y.Edge ? x.Edge.CompareTo(y.Edge) : x.T.CompareTo(y.T));
             var first = cands[0];
-            result.Add(Marker(first));
             if (area > 6000 || perimeter > 320)
             {
                 double minApart = Math.Max(40, perimeter * 0.15);
-                Candidate? best = null; double bestScore = double.MaxValue;
+                // entry + exit on the same street (long frontage)
+                Candidate? same = null; double sameScore = double.MaxValue;
+                Candidate? other = null; double otherScore = double.MaxValue;
                 foreach (var c in cands)
                 {
                     if (PGeo.Len(c.P - first.P) < minApart) continue;
-                    double sc = c.Score + (c.Edge == first.Edge ? 3 : 0);
-                    if (sc < bestScore) { bestScore = sc; best = c; }
+                    if (first.Road >= 0 && c.Road == first.Road)
+                    {
+                        if (c.Score < sameScore) { sameScore = c.Score; same = c; }
+                    }
+                    else
+                    {
+                        double sc = c.Score + (c.Edge == first.Edge ? 3 : 0);
+                        if (sc < otherScore) { otherScore = sc; other = c; }
+                    }
                 }
-                if (best.HasValue) result.Add(Marker(best.Value));
+                if (same.HasValue)
+                {
+                    result.Add(Marker(first, ParkingIds.KindEntry));
+                    result.Add(Marker(same.Value, ParkingIds.KindExit));
+                    return result;
+                }
+                result.Add(Marker(first));
+                if (other.HasValue) result.Add(Marker(other.Value));
+                return result;
             }
+            result.Add(Marker(first));
             return result;
         }
 
-        private static EdgeMarker Marker(Candidate c) => new EdgeMarker
+        private static EdgeMarker Marker(Candidate c, string kind = ParkingIds.KindEntrance) => new EdgeMarker
         {
-            Kind = ParkingIds.KindEntrance, RingSegment = c.Edge, RingT = (float)c.T,
+            Kind = kind, RingSegment = c.Edge, RingT = (float)c.T,
             Position = new float3((float)c.P.x, c.Y, (float)c.P.y),
         };
 

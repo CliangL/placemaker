@@ -101,9 +101,9 @@ namespace Placemaker.Core.Layers.Parking
         }
 
         /// <summary>Road for an entrance at boundary point p with inward normal n: outward ray first, nearest as fallback.</summary>
-        public static bool ForEntrance(List<RoadLine> roads, double2 p, double2 inward, out RoadHit hit)
+        public static bool ForEntrance(List<RoadLine> roads, double2 p, double2 inward, out RoadHit hit, double maxDist = SearchDistance)
         {
-            if (Cast(roads, p, -inward, SearchDistance, out hit)) return true;
+            if (Cast(roads, p, -inward, maxDist, out hit)) return true;
             if (Nearest(roads, p, 12, out hit))
             {
                 // only accept a road on the outside of the edge

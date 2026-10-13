@@ -43,14 +43,40 @@ namespace Placemaker.Core.Layers.Parking
         public const string PlantingDensity = "plantingDensity";
         public const string Fee = "fee";
 
-        public const string KindEntrance = "entrance";
-        public const string KindEntry = "entry";
-        public const string KindExit = "exit";
+        // Zoning (PLT Randzoning / Zoningflaeche, redesigned as frontage zoning — docs/proposals/parking.md)
+        public const string EdgeZoning = "edgeZoning";             // "none" | "oneSide" | "all"
+        public const string ZoneType = "zoneType";                 // asset, category "zone" ("" = automatic)
+        public const string ZoningDepth = "zoningDepth";           // zone cells (8 m) from the street, 1..6
+        public const string ZoningPatchWidth = "zoningPatchWidth"; // cells along the edge per zoning patch marker
+
+        // Marker kinds (save format). PLT's seven entrance kinds + bus stop + zoning patch.
+        public const string KindEntrance = "entrance";   // PLT Zufahrt (two-way)
+        public const string KindEntry = "entry";         // PLT Einfahrt
+        public const string KindExit = "exit";           // PLT Ausfahrt
+        public const string KindAlley = "alley";         // PLT Gasse (two-way junction)
+        public const string KindAlleyIn = "alleyIn";     // PLT GasseEin
+        public const string KindAlleyOut = "alleyOut";   // PLT GasseAus
+        public const string KindFootpath = "footpath";   // PLT Fussweg (pedestrians only)
+        public const string KindBusStop = "busStop";
+        public const string KindZoningPatch = "zoningPatch";
+
+        /// <summary>All marker kinds in display order.</summary>
+        public static readonly string[] MarkerKinds =
+        {
+            KindEntrance, KindEntry, KindExit, KindAlley, KindAlleyIn, KindAlleyOut, KindFootpath, KindBusStop, KindZoningPatch,
+        };
+
+        /// <summary>PLT ParkingLotToolSystem.MaxEntranceCount: one quota shared by all entrance kinds.</summary>
+        public const int MaxEntrances = 15;
+        /// <summary>Vehicle entrances needed before Build (two-way/alley, or one way in plus one way out).</summary>
+        public const int MinVehicleEntrances = 1;
     }
 
     internal enum Greenery { None = 0, Edges = 1, Medians = 2 }
 
     internal enum RowAngleMode { Edge = 0, Across = 1, Fixed = 2 }
+
+    internal enum EdgeZoningMode { None = 0, OneSide = 1, All = 2 }
 
     /// <summary>Validated, clamped settings. Defaults follow PLT's measured CS2 preset (LayoutSettings.Cs2).</summary>
     internal sealed class ParkingSettings
@@ -70,6 +96,8 @@ namespace Placemaker.Core.Layers.Parking
         public const int DefaultCrossEvery = 9;
         // Measured one-way core of "Invisible Road Path - 1xOneway" (PLT Entrance.EinspurigeBreite).
         public const double OneWayWidth = 4.0;
+        // Measured cross-section of the vanilla "Invisible Pedestrian Path" (PLT Entrance.Fusswegbreite).
+        public const double FootpathWidth = 2.0;
         // CS2 drops surface pieces thinner than ~0.375 m after its 0.1 m inset (PLT Cs2Mindestkante).
         public const double Cs2MinEdge = 0.375;
 
@@ -84,6 +112,14 @@ namespace Placemaker.Core.Layers.Parking
         public readonly double LanternSpacing, EvShare, AccessibleShare, Fee, PlantingDensity;
         public readonly string AsphaltAsset, GreenAsset, LanternAsset, ChargerAsset;
         public readonly string[] Trees, Bushes;
+        public readonly EdgeZoningMode EdgeZoning;
+        public readonly string ZoneType;
+        public readonly int ZoningDepthCells, ZoningPatchCells;
+
+        /// <summary>CS2 ZoneUtils.CELL_SIZE.</summary>
+        public const double ZoneCell = 8.0;
+        /// <summary>CS2 BlockSystem hard-codes block.m_Size.y = 6: zone depth from the street (PLT Randzoning.cs).</summary>
+        public const int MaxZoneDepthCells = 6;
 
         public ParkingSettings(SettingsBag bag)
         {
@@ -119,6 +155,11 @@ namespace Placemaker.Core.Layers.Parking
             ChargerAsset = bag.S(ParkingIds.ChargerAsset, "");
             Trees = bag.L(ParkingIds.Trees);
             Bushes = bag.L(ParkingIds.Bushes);
+            var ez = bag.S(ParkingIds.EdgeZoning, "none");
+            EdgeZoning = ez == "all" ? EdgeZoningMode.All : ez == "oneSide" ? EdgeZoningMode.OneSide : EdgeZoningMode.None;
+            ZoneType = bag.S(ParkingIds.ZoneType, "");
+            ZoningDepthCells = (int)Math.Round(Clamp(bag.Num(ParkingIds.ZoningDepth, 3), 1, MaxZoneDepthCells));
+            ZoningPatchCells = (int)Math.Round(Clamp(bag.Num(ParkingIds.ZoningPatchWidth, 4), 1, 20));
         }
 
         /// <summary>Depth of a stall row perpendicular to its aisle (rotated rectangle extent).</summary>
