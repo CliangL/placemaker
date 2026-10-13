@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Netwurken",
-  "Placemaker.Roads.Group.culDeSacs": "Deadrinnende strjitten",
-  "Placemaker.Roads.Group.avenues": "Leanen",
+  "Placemaker.UI.Group.roadTypes": "Netwurken",
+  "Placemaker.UI.Group.culDeSacs": "Deadrinnende strjitten",
+  "Placemaker.UI.Group.avenues": "Leanen",
   "Placemaker.Roads.Control.pattern": "Patroan",
   "Placemaker.Roads.Option.pattern.grid": "Raster",
   "Placemaker.Roads.Option.pattern.tree": "Beam",

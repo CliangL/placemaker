@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "เครือข่าย",
-  "Placemaker.Roads.Group.culDeSacs": "ตรอกตัน",
-  "Placemaker.Roads.Group.avenues": "ถนนสายหลัก",
+  "Placemaker.UI.Group.roadTypes": "เครือข่าย",
+  "Placemaker.UI.Group.culDeSacs": "ตรอกตัน",
+  "Placemaker.UI.Group.avenues": "ถนนสายหลัก",
   "Placemaker.Roads.Control.pattern": "รูปแบบ",
   "Placemaker.Roads.Option.pattern.grid": "กริด",
   "Placemaker.Roads.Option.pattern.tree": "ต้นไม้",

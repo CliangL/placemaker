@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Hálózatok",
-  "Placemaker.Roads.Group.culDeSacs": "Zsákutcák",
-  "Placemaker.Roads.Group.avenues": "Sugárutak",
+  "Placemaker.UI.Group.roadTypes": "Hálózatok",
+  "Placemaker.UI.Group.culDeSacs": "Zsákutcák",
+  "Placemaker.UI.Group.avenues": "Sugárutak",
   "Placemaker.Roads.Control.pattern": "Minta",
   "Placemaker.Roads.Option.pattern.grid": "Rács",
   "Placemaker.Roads.Option.pattern.tree": "Fa",

@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "الشبكات",
-  "Placemaker.Roads.Group.culDeSacs": "طرق مسدودة",
-  "Placemaker.Roads.Group.avenues": "جادات",
+  "Placemaker.UI.Group.roadTypes": "الشبكات",
+  "Placemaker.UI.Group.culDeSacs": "طرق مسدودة",
+  "Placemaker.UI.Group.avenues": "جادات",
   "Placemaker.Roads.Control.pattern": "النمط",
   "Placemaker.Roads.Option.pattern.grid": "شبكة",
   "Placemaker.Roads.Option.pattern.tree": "شجرة",

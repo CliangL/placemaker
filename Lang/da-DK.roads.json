@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Netværk",
-  "Placemaker.Roads.Group.culDeSacs": "Blinde veje",
-  "Placemaker.Roads.Group.avenues": "Alléer",
+  "Placemaker.UI.Group.roadTypes": "Netværk",
+  "Placemaker.UI.Group.culDeSacs": "Blinde veje",
+  "Placemaker.UI.Group.avenues": "Alléer",
   "Placemaker.Roads.Control.pattern": "Mønster",
   "Placemaker.Roads.Option.pattern.grid": "Gitter",
   "Placemaker.Roads.Option.pattern.tree": "Træ",

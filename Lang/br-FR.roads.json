@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Rouedadoù",
-  "Placemaker.Roads.Group.culDeSacs": "Straedoù dall",
-  "Placemaker.Roads.Group.avenues": "Baliennoù",
+  "Placemaker.UI.Group.roadTypes": "Rouedadoù",
+  "Placemaker.UI.Group.culDeSacs": "Straedoù dall",
+  "Placemaker.UI.Group.avenues": "Baliennoù",
   "Placemaker.Roads.Control.pattern": "Patrom",
   "Placemaker.Roads.Option.pattern.grid": "Kael",
   "Placemaker.Roads.Option.pattern.tree": "Gwezenn",

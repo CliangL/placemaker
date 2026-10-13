@@ -1828,6 +1828,7 @@ namespace Placemaker.Tests
     /// neighbourhood) — this test locks in a generous but strict time budget to prevent any
     /// future regression towards O(n⁴) behaviour.
     /// </summary>
+    [Collection(TimingCollection.Name)]
     public class GridGeneratorPerformanceTests
     {
         [Fact]

@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Jaringan",
-  "Placemaker.Roads.Group.culDeSacs": "Jalan buntu",
-  "Placemaker.Roads.Group.avenues": "Bulevar",
+  "Placemaker.UI.Group.roadTypes": "Jaringan",
+  "Placemaker.UI.Group.culDeSacs": "Jalan buntu",
+  "Placemaker.UI.Group.avenues": "Bulevar",
   "Placemaker.Roads.Control.pattern": "Pola",
   "Placemaker.Roads.Option.pattern.grid": "Kisi",
   "Placemaker.Roads.Option.pattern.tree": "Pohon",

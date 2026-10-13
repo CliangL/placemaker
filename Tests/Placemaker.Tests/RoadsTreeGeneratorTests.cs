@@ -8,6 +8,7 @@ using Xunit;
 
 namespace Placemaker.Tests
 {
+    [Collection(TimingCollection.Name)]
     public class RoadsTreeGeneratorTests
     {
         private static GridParameters Tree(float branch = 240f, float spacing = 80f, float length = 90f, float angle = 0f)

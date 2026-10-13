@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Nätverk",
-  "Placemaker.Roads.Group.culDeSacs": "Återvändsgränder",
-  "Placemaker.Roads.Group.avenues": "Avenyer",
+  "Placemaker.UI.Group.roadTypes": "Nätverk",
+  "Placemaker.UI.Group.culDeSacs": "Återvändsgränder",
+  "Placemaker.UI.Group.avenues": "Avenyer",
   "Placemaker.Roads.Control.pattern": "Mönster",
   "Placemaker.Roads.Option.pattern.grid": "Rutnät",
   "Placemaker.Roads.Option.pattern.tree": "Träd",

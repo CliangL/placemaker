@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Placemaker.Tests
 {
+    [Collection(TimingCollection.Name)]
     public class RoadsContourGeneratorTests
     {
         private static GridParameters Contour(Func<float2, float> height, float spacing = 90f, float connectors = 250f)

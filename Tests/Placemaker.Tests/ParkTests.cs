@@ -12,6 +12,7 @@ using Xunit.Abstractions;
 
 namespace Placemaker.Tests
 {
+    [Collection(TimingCollection.Name)]
     public class ParkTests
     {
         private readonly ITestOutputHelper _out;

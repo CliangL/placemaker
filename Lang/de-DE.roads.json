@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Netze",
-  "Placemaker.Roads.Group.culDeSacs": "Stichstraßen",
-  "Placemaker.Roads.Group.avenues": "Alleen",
+  "Placemaker.UI.Group.roadTypes": "Netze",
+  "Placemaker.UI.Group.culDeSacs": "Stichstraßen",
+  "Placemaker.UI.Group.avenues": "Alleen",
   "Placemaker.Roads.Control.pattern": "Muster",
   "Placemaker.Roads.Option.pattern.grid": "Raster",
   "Placemaker.Roads.Option.pattern.tree": "Baum",

@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "شبکه‌ها",
-  "Placemaker.Roads.Group.culDeSacs": "بن‌بست‌ها",
-  "Placemaker.Roads.Group.avenues": "بلوارها",
+  "Placemaker.UI.Group.roadTypes": "شبکه‌ها",
+  "Placemaker.UI.Group.culDeSacs": "بن‌بست‌ها",
+  "Placemaker.UI.Group.avenues": "بلوارها",
   "Placemaker.Roads.Control.pattern": "الگو",
   "Placemaker.Roads.Option.pattern.grid": "شبکه",
   "Placemaker.Roads.Option.pattern.tree": "درختی",

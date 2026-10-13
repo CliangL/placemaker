@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Sieci",
-  "Placemaker.Roads.Group.culDeSacs": "Ślepe uliczki",
-  "Placemaker.Roads.Group.avenues": "Aleje",
+  "Placemaker.UI.Group.roadTypes": "Sieci",
+  "Placemaker.UI.Group.culDeSacs": "Ślepe uliczki",
+  "Placemaker.UI.Group.avenues": "Aleje",
   "Placemaker.Roads.Control.pattern": "Wzór",
   "Placemaker.Roads.Option.pattern.grid": "Siatka",
   "Placemaker.Roads.Option.pattern.tree": "Drzewo",

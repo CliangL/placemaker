@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Sareak",
-  "Placemaker.Roads.Group.culDeSacs": "Irteerarik gabeko kaleak",
-  "Placemaker.Roads.Group.avenues": "Etorbideak",
+  "Placemaker.UI.Group.roadTypes": "Sareak",
+  "Placemaker.UI.Group.culDeSacs": "Irteerarik gabeko kaleak",
+  "Placemaker.UI.Group.avenues": "Etorbideak",
   "Placemaker.Roads.Control.pattern": "Eredua",
   "Placemaker.Roads.Option.pattern.grid": "Sareta",
   "Placemaker.Roads.Option.pattern.tree": "Zuhaitza",

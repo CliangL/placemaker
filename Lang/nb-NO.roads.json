@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Nettverk",
-  "Placemaker.Roads.Group.culDeSacs": "Blindveier",
-  "Placemaker.Roads.Group.avenues": "Avenyer",
+  "Placemaker.UI.Group.roadTypes": "Nettverk",
+  "Placemaker.UI.Group.culDeSacs": "Blindveier",
+  "Placemaker.UI.Group.avenues": "Avenyer",
   "Placemaker.Roads.Control.pattern": "Mønster",
   "Placemaker.Roads.Option.pattern.grid": "Rutenett",
   "Placemaker.Roads.Option.pattern.tree": "Tre",

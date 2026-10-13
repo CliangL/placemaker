@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "网络",
-  "Placemaker.Roads.Group.culDeSacs": "街尾小巷",
-  "Placemaker.Roads.Group.avenues": "大道",
+  "Placemaker.UI.Group.roadTypes": "网络",
+  "Placemaker.UI.Group.culDeSacs": "街尾小巷",
+  "Placemaker.UI.Group.avenues": "大道",
   "Placemaker.Roads.Control.pattern": "图案",
   "Placemaker.Roads.Option.pattern.grid": "网格",
   "Placemaker.Roads.Option.pattern.tree": "树状",

@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Netwarks",
-  "Placemaker.Roads.Group.culDeSacs": "Closes",
-  "Placemaker.Roads.Group.avenues": "Avenues",
+  "Placemaker.UI.Group.roadTypes": "Netwarks",
+  "Placemaker.UI.Group.culDeSacs": "Closes",
+  "Placemaker.UI.Group.avenues": "Avenues",
   "Placemaker.Roads.Control.pattern": "Pattren",
   "Placemaker.Roads.Option.pattern.grid": "Grid",
   "Placemaker.Roads.Option.pattern.tree.Tooltip": "A collector road rins through the area, wi branch streets on baith sides an short closes aff the branches. Aw the through traffic bides on the collector.",

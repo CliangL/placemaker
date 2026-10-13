@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Redes",
-  "Placemaker.Roads.Group.culDeSacs": "Becos sem saída",
-  "Placemaker.Roads.Group.avenues": "Avenidas",
+  "Placemaker.UI.Group.roadTypes": "Redes",
+  "Placemaker.UI.Group.culDeSacs": "Becos sem saída",
+  "Placemaker.UI.Group.avenues": "Avenidas",
   "Placemaker.Roads.Control.pattern": "Padrão",
   "Placemaker.Roads.Option.pattern.grid": "Grelha",
   "Placemaker.Roads.Option.pattern.tree": "Árvore",

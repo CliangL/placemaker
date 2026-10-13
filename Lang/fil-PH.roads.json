@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Mga network",
-  "Placemaker.Roads.Group.culDeSacs": "Mga cul-de-sac",
-  "Placemaker.Roads.Group.avenues": "Mga abenida",
+  "Placemaker.UI.Group.roadTypes": "Mga network",
+  "Placemaker.UI.Group.culDeSacs": "Mga cul-de-sac",
+  "Placemaker.UI.Group.avenues": "Mga abenida",
   "Placemaker.Roads.Control.pattern": "Pattern",
   "Placemaker.Roads.Option.pattern.grid": "Grid",
   "Placemaker.Roads.Option.pattern.tree": "Puno",

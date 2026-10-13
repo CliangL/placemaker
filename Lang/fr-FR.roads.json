@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Réseaux",
-  "Placemaker.Roads.Group.culDeSacs": "Culs-de-sac",
-  "Placemaker.Roads.Group.avenues": "Avenues",
+  "Placemaker.UI.Group.roadTypes": "Réseaux",
+  "Placemaker.UI.Group.culDeSacs": "Culs-de-sac",
+  "Placemaker.UI.Group.avenues": "Avenues",
   "Placemaker.Roads.Control.pattern": "Motif",
   "Placemaker.Roads.Option.pattern.grid": "Grille",
   "Placemaker.Roads.Option.pattern.tree": "Arbre",

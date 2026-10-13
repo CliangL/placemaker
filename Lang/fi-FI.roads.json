@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Verkot",
-  "Placemaker.Roads.Group.culDeSacs": "Umpikujat",
-  "Placemaker.Roads.Group.avenues": "Bulevardit",
+  "Placemaker.UI.Group.roadTypes": "Verkot",
+  "Placemaker.UI.Group.culDeSacs": "Umpikujat",
+  "Placemaker.UI.Group.avenues": "Bulevardit",
   "Placemaker.Roads.Control.pattern": "Kuvio",
   "Placemaker.Roads.Option.pattern.grid": "Ruudukko",
   "Placemaker.Roads.Option.pattern.tree": "Puu",

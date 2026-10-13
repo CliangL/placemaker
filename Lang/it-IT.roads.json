@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Reti",
-  "Placemaker.Roads.Group.culDeSacs": "Strade senza uscita",
-  "Placemaker.Roads.Group.avenues": "Viali",
+  "Placemaker.UI.Group.roadTypes": "Reti",
+  "Placemaker.UI.Group.culDeSacs": "Strade senza uscita",
+  "Placemaker.UI.Group.avenues": "Viali",
   "Placemaker.Roads.Control.pattern": "Modello",
   "Placemaker.Roads.Option.pattern.grid": "Griglia",
   "Placemaker.Roads.Option.pattern.tree": "Albero",

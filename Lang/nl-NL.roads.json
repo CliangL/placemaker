@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Netwerken",
-  "Placemaker.Roads.Group.culDeSacs": "Doodlopende straat",
-  "Placemaker.Roads.Group.avenues": "Lanen",
+  "Placemaker.UI.Group.roadTypes": "Netwerken",
+  "Placemaker.UI.Group.culDeSacs": "Doodlopende straat",
+  "Placemaker.UI.Group.avenues": "Lanen",
   "Placemaker.Roads.Control.pattern": "Patroon",
   "Placemaker.Roads.Option.pattern.grid": "Raster",
   "Placemaker.Roads.Option.pattern.tree": "Boom",

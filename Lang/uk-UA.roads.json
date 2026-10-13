@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Мережі",
-  "Placemaker.Roads.Group.culDeSacs": "Тупики",
-  "Placemaker.Roads.Group.avenues": "Проспекти",
+  "Placemaker.UI.Group.roadTypes": "Мережі",
+  "Placemaker.UI.Group.culDeSacs": "Тупики",
+  "Placemaker.UI.Group.avenues": "Проспекти",
   "Placemaker.Roads.Control.pattern": "Шаблон",
   "Placemaker.Roads.Option.pattern.grid": "Сітка",
   "Placemaker.Roads.Option.pattern.tree": "Дерево",

@@ -1,12 +1,14 @@
 {
   "Placemaker.Roads.Name": "Roads",
 
-  "Placemaker.Roads.Group.layout": "Layout",
-  "Placemaker.Roads.Group.network": "Network",
-  "Placemaker.Roads.Group.culDeSacs": "Cul-de-sacs",
-  "Placemaker.Roads.Group.avenues": "Avenues",
-  "Placemaker.Roads.Group.upgrades": "Upgrades",
-  "Placemaker.Roads.Group.regions": "Blocks",
+  "Placemaker.UI.Group.layout": "Layout",
+  "Placemaker.UI.Group.roadTypes": "Road types",
+  "Placemaker.UI.Group.connections": "Edges and connections",
+  "Placemaker.UI.Group.culDeSacs": "Cul-de-sacs",
+  "Placemaker.UI.Group.avenues": "Avenues",
+  "Placemaker.UI.Group.frontage": "Building frontage",
+  "Placemaker.UI.Group.streetUpgrades": "Street upgrades",
+  "Placemaker.UI.Group.zoning": "Zoning",
 
   "Placemaker.Roads.Control.pattern": "Pattern",
   "Placemaker.Roads.Control.pattern.Tooltip": "How the streets are laid out inside the area.",

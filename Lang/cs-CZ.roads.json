@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Sítě",
-  "Placemaker.Roads.Group.culDeSacs": "Slepé ulice",
-  "Placemaker.Roads.Group.avenues": "Třídy",
+  "Placemaker.UI.Group.roadTypes": "Sítě",
+  "Placemaker.UI.Group.culDeSacs": "Slepé ulice",
+  "Placemaker.UI.Group.avenues": "Třídy",
   "Placemaker.Roads.Control.pattern": "Vzor",
   "Placemaker.Roads.Option.pattern.grid": "Mřížka",
   "Placemaker.Roads.Option.pattern.tree": "Strom",

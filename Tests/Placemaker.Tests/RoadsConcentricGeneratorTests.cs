@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Placemaker.Tests
 {
+    [Collection(TimingCollection.Name)]
     public class RoadsConcentricGeneratorTests
     {
         private readonly ConcentricDiagnostics _diag = new ConcentricDiagnostics();

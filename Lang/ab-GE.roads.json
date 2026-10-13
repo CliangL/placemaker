@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Ацепқәа",
-  "Placemaker.Roads.Group.culDeSacs": "Ацәаҟьақәа",
-  "Placemaker.Roads.Group.avenues": "Апроспектқәа",
+  "Placemaker.UI.Group.roadTypes": "Ацепқәа",
+  "Placemaker.UI.Group.culDeSacs": "Ацәаҟьақәа",
+  "Placemaker.UI.Group.avenues": "Апроспектқәа",
   "Placemaker.Roads.Control.pattern": "Ашаблон",
   "Placemaker.Roads.Option.pattern.grid": "Абадаҩ",
   "Placemaker.Roads.Option.pattern.tree": "Аҵла",

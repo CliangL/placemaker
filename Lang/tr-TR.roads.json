@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Ağlar",
-  "Placemaker.Roads.Group.culDeSacs": "Çıkmaz sokaklar",
-  "Placemaker.Roads.Group.avenues": "Bulvarlar",
+  "Placemaker.UI.Group.roadTypes": "Ağlar",
+  "Placemaker.UI.Group.culDeSacs": "Çıkmaz sokaklar",
+  "Placemaker.UI.Group.avenues": "Bulvarlar",
   "Placemaker.Roads.Control.pattern": "Desen",
   "Placemaker.Roads.Option.pattern.grid": "Izgara",
   "Placemaker.Roads.Option.pattern.tree": "Ağaç",

@@ -1,6 +1,6 @@
 // Placemaker roads layer — control schema and mapping to the generator parameters.
 // The ~45 GridParameters of Grid Road Generator (Ti4goc) are exposed as one clean schema:
-// a handful of essentials per pattern (VisibleWhen "pattern=…") and everything else under More.
+// a handful of essentials per pattern (VisibleWhen "pattern=…"), every option grouped under a plain heading.
 // Control ids are save format: never rename, only add.
 
 using System;
@@ -124,7 +124,8 @@ namespace Placemaker.Core.Layers.Roads
         public static string Label(string id) => KeyPrefix + "Control." + id;
         public static string Tooltip(string id) => KeyPrefix + "Control." + id + ".Tooltip";
         public static string OptionLabel(string id, string value) => KeyPrefix + "Option." + id + "." + value;
-        public static string GroupLabel(string group) => KeyPrefix + "Group." + group;
+        /// <summary>The panel reads group headings from "Placemaker.UI.Group.{id}" (shared across layers).</summary>
+        public static string GroupLabel(string group) => "Placemaker.UI.Group." + group;
 
         public static List<ControlSchema> Build()
         {
@@ -132,10 +133,10 @@ namespace Placemaker.Core.Layers.Roads
 
             // ── Essentials ────────────────────────────────────────────────
             var pattern = Choice(RoadsIds.Pattern, ControlTier.Essential, "layout", "grid", PatternValues);
-            for (int i = 0; i < pattern.Options.Count; i++)
-                pattern.Options[i].Icon = "coui://placemaker/roads/pattern-" + PatternValues[i] + ".svg";
+            // Pattern options are text choices: no "placemaker" coui host exists and vanilla has no
+            // pattern icons. Bundled icons are requested in docs/proposals/roads.md.
             c.Add(pattern);
-            c.Add(Asset(RoadsIds.StreetAsset, ControlTier.Essential, "network", AssetCategories.Road));
+            c.Add(Asset(RoadsIds.StreetAsset, ControlTier.Essential, "roadTypes", AssetCategories.Road));
 
             c.Add(Slider(RoadsIds.GridSpacing, ControlTier.Essential, "layout", 60, 300, 10, "m", 100, "pattern=grid"));
             c.Add(Slider(RoadsIds.GridAngle, ControlTier.Essential, "layout", -90, 90, 1, "deg", 0, "pattern=grid", label: "angle"));
@@ -196,34 +197,34 @@ namespace Placemaker.Core.Layers.Roads
             c.Add(Toggle(RoadsIds.SuperblockAlignTerrain, ControlTier.More, "layout", false, "pattern=superblock", label: "alignTerrain"));
 
             // ── More: network-wide ────────────────────────────────────────
-            c.Add(Choice(RoadsIds.PerimeterRoad, ControlTier.More, "network", "auto", new[] { "auto", "on", "off" }));
-            c.Add(Slider(RoadsIds.PerimeterCornerRadius, ControlTier.More, "network", 0, 80, 5, "m", FreeAreaPerimeter.CornerRadius));
-            c.Add(Toggle(RoadsIds.ConnectExisting, ControlTier.More, "network", true));
-            c.Add(Toggle(RoadsIds.AvoidObstacles, ControlTier.More, "network", true));
-            c.Add(Toggle(RoadsIds.FollowTerrain, ControlTier.More, "network", true));
-            c.Add(Asset(RoadsIds.LocalAsset, ControlTier.More, "network", AssetCategories.Road));
-            c.Add(Asset(RoadsIds.AvenueAsset, ControlTier.More, "network", AssetCategories.Road));
-            c.Add(Asset(RoadsIds.RoundaboutAsset, ControlTier.More, "network", AssetCategories.Road));
-            c.Add(Asset(RoadsIds.PathAsset, ControlTier.More, "network", AssetCategories.Pathway, "pattern=superblock"));
+            c.Add(Choice(RoadsIds.PerimeterRoad, ControlTier.More, "connections", "auto", new[] { "auto", "on", "off" }));
+            c.Add(Slider(RoadsIds.PerimeterCornerRadius, ControlTier.More, "connections", 0, 80, 5, "m", FreeAreaPerimeter.CornerRadius));
+            c.Add(Toggle(RoadsIds.ConnectExisting, ControlTier.More, "connections", true));
+            c.Add(Toggle(RoadsIds.AvoidObstacles, ControlTier.More, "connections", true));
+            c.Add(Toggle(RoadsIds.FollowTerrain, ControlTier.More, "connections", true));
+            c.Add(Asset(RoadsIds.LocalAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
+            c.Add(Asset(RoadsIds.AvenueAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
+            c.Add(Asset(RoadsIds.RoundaboutAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
+            c.Add(Asset(RoadsIds.PathAsset, ControlTier.More, "roadTypes", AssetCategories.Pathway, "pattern=superblock"));
             c.Add(Choice(RoadsIds.CapStyle, ControlTier.More, "culDeSacs", "asphalt", new[] { "none", "asphalt", "grass", "trees" }));
             c.Add(Choice(RoadsIds.CapSize, ControlTier.More, "culDeSacs", "auto", new[] { "auto", "small", "medium", "large", "xl" }));
-            c.Add(Slider(RoadsIds.EdgeDepth, ControlTier.More, "regions", 16, 64, 8, "m", 48, ""));
+            c.Add(Slider(RoadsIds.EdgeDepth, ControlTier.More, "frontage", 16, 64, 8, "m", 48, ""));
 
             // ── More: upgrades ────────────────────────────────────────────
-            c.Add(Toggle(RoadsIds.StreetTrees, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.StreetGrass, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.StreetWideSidewalks, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.StreetBikeLanes, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.AvenueMedianTrees, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.AvenueMedianGrass, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.AvenueTrees, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.AvenueGrass, ControlTier.More, "upgrades", false));
-            c.Add(Toggle(RoadsIds.AvenueBikeLanes, ControlTier.More, "upgrades", false));
+            c.Add(Toggle(RoadsIds.StreetTrees, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.StreetGrass, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.StreetWideSidewalks, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.StreetBikeLanes, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueMedianTrees, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueMedianGrass, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueTrees, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueGrass, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueBikeLanes, ControlTier.More, "streetUpgrades", false));
 
             foreach (var ctl in c)
             {
                 // Pattern geometry needs a full re-plan; asset/upgrade/cap choices keep the layout.
-                ctl.Cheap = ctl.Kind == ControlKind.Asset || ctl.Group == "upgrades"
+                ctl.Cheap = ctl.Kind == ControlKind.Asset || ctl.Group == "streetUpgrades"
                     || ctl.Id == RoadsIds.CapStyle || ctl.Id == RoadsIds.CapSize;
             }
             return c;

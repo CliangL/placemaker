@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Redes",
-  "Placemaker.Roads.Group.culDeSacs": "Balões de retorno",
-  "Placemaker.Roads.Group.avenues": "Avenidas",
+  "Placemaker.UI.Group.roadTypes": "Redes",
+  "Placemaker.UI.Group.culDeSacs": "Balões de retorno",
+  "Placemaker.UI.Group.avenues": "Avenidas",
   "Placemaker.Roads.Control.pattern": "Padrão",
   "Placemaker.Roads.Option.pattern.grid": "Grade",
   "Placemaker.Roads.Option.pattern.tree": "Árvore",

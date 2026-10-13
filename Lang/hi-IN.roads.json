@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "नेटवर्क",
-  "Placemaker.Roads.Group.culDeSacs": "बंद गलियाँ",
-  "Placemaker.Roads.Group.avenues": "एवेन्यू",
+  "Placemaker.UI.Group.roadTypes": "नेटवर्क",
+  "Placemaker.UI.Group.culDeSacs": "बंद गलियाँ",
+  "Placemaker.UI.Group.avenues": "एवेन्यू",
   "Placemaker.Roads.Control.pattern": "पैटर्न",
   "Placemaker.Roads.Option.pattern.grid": "ग्रिड",
   "Placemaker.Roads.Option.pattern.tree": "पेड़",

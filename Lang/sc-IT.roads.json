@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Retzas",
-  "Placemaker.Roads.Group.culDeSacs": "Carrelas chene essida",
-  "Placemaker.Roads.Group.avenues": "Viales",
+  "Placemaker.UI.Group.roadTypes": "Retzas",
+  "Placemaker.UI.Group.culDeSacs": "Carrelas chene essida",
+  "Placemaker.UI.Group.avenues": "Viales",
   "Placemaker.Roads.Control.pattern": "Modellu",
   "Placemaker.Roads.Option.pattern.grid": "Grìllia",
   "Placemaker.Roads.Option.pattern.tree": "Àrbore",

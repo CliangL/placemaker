@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "ネットワーク",
-  "Placemaker.Roads.Group.culDeSacs": "行き止まり",
-  "Placemaker.Roads.Group.avenues": "大通り",
+  "Placemaker.UI.Group.roadTypes": "ネットワーク",
+  "Placemaker.UI.Group.culDeSacs": "行き止まり",
+  "Placemaker.UI.Group.avenues": "大通り",
   "Placemaker.Roads.Control.pattern": "パターン",
   "Placemaker.Roads.Option.pattern.grid": "グリッド",
   "Placemaker.Roads.Option.pattern.tree": "ツリー",

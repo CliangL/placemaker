@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Δίκτυα",
-  "Placemaker.Roads.Group.culDeSacs": "Αδιέξοδα",
-  "Placemaker.Roads.Group.avenues": "Λεωφόροι",
+  "Placemaker.UI.Group.roadTypes": "Δίκτυα",
+  "Placemaker.UI.Group.culDeSacs": "Αδιέξοδα",
+  "Placemaker.UI.Group.avenues": "Λεωφόροι",
   "Placemaker.Roads.Control.pattern": "Μοτίβο",
   "Placemaker.Roads.Option.pattern.grid": "Πλέγμα",
   "Placemaker.Roads.Option.pattern.tree": "Δέντρο",

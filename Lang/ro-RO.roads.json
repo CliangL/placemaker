@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Rețele",
-  "Placemaker.Roads.Group.culDeSacs": "Fundături",
-  "Placemaker.Roads.Group.avenues": "Bulevarde",
+  "Placemaker.UI.Group.roadTypes": "Rețele",
+  "Placemaker.UI.Group.culDeSacs": "Fundături",
+  "Placemaker.UI.Group.avenues": "Bulevarde",
   "Placemaker.Roads.Control.pattern": "Model",
   "Placemaker.Roads.Option.pattern.grid": "Grilă",
   "Placemaker.Roads.Option.pattern.tree": "Arbore",

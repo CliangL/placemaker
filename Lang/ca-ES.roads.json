@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Xarxes",
-  "Placemaker.Roads.Group.culDeSacs": "Carrerons sense sortida",
-  "Placemaker.Roads.Group.avenues": "Avingudes",
+  "Placemaker.UI.Group.roadTypes": "Xarxes",
+  "Placemaker.UI.Group.culDeSacs": "Carrerons sense sortida",
+  "Placemaker.UI.Group.avenues": "Avingudes",
   "Placemaker.Roads.Control.pattern": "Patró",
   "Placemaker.Roads.Option.pattern.grid": "Quadrícula",
   "Placemaker.Roads.Option.pattern.tree": "Arbre",

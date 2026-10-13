@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Mạng lưới",
-  "Placemaker.Roads.Group.culDeSacs": "Đường cụt",
-  "Placemaker.Roads.Group.avenues": "Đại lộ",
+  "Placemaker.UI.Group.roadTypes": "Mạng lưới",
+  "Placemaker.UI.Group.culDeSacs": "Đường cụt",
+  "Placemaker.UI.Group.avenues": "Đại lộ",
   "Placemaker.Roads.Control.pattern": "Mẫu",
   "Placemaker.Roads.Option.pattern.grid": "Lưới",
   "Placemaker.Roads.Option.pattern.tree": "Cây",

@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Rets",
-  "Placemaker.Roads.Group.culDeSacs": "Carrièras sens sortida",
-  "Placemaker.Roads.Group.avenues": "Avengudas",
+  "Placemaker.UI.Group.roadTypes": "Rets",
+  "Placemaker.UI.Group.culDeSacs": "Carrièras sens sortida",
+  "Placemaker.UI.Group.avenues": "Avengudas",
   "Placemaker.Roads.Control.pattern": "Motiu",
   "Placemaker.Roads.Option.pattern.grid": "Grasilha",
   "Placemaker.Roads.Option.pattern.tree": "Arbre",

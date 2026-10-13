@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Сети",
-  "Placemaker.Roads.Group.culDeSacs": "Тупики",
-  "Placemaker.Roads.Group.avenues": "Проспекты",
+  "Placemaker.UI.Group.roadTypes": "Сети",
+  "Placemaker.UI.Group.culDeSacs": "Тупики",
+  "Placemaker.UI.Group.avenues": "Проспекты",
   "Placemaker.Roads.Control.pattern": "Шаблон",
   "Placemaker.Roads.Option.pattern.grid": "Сетка",
   "Placemaker.Roads.Option.pattern.tree": "Дерево",

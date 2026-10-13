@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Rhwydweithiau",
-  "Placemaker.Roads.Group.culDeSacs": "Strydoedd pengaead",
-  "Placemaker.Roads.Group.avenues": "Rhodfeydd",
+  "Placemaker.UI.Group.roadTypes": "Rhwydweithiau",
+  "Placemaker.UI.Group.culDeSacs": "Strydoedd pengaead",
+  "Placemaker.UI.Group.avenues": "Rhodfeydd",
   "Placemaker.Roads.Control.pattern": "Patrwm",
   "Placemaker.Roads.Option.pattern.grid": "Grid",
   "Placemaker.Roads.Option.pattern.tree": "Coeden",

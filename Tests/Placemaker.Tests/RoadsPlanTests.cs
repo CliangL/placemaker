@@ -17,6 +17,7 @@ using static Placemaker.Tests.RoadsTestUtil;
 namespace Placemaker.Tests
 {
     /// <summary>Roads layer behaviour: blocks, connections, obstacles, options, recipes, edge zoning.</summary>
+    [Collection(TimingCollection.Name)]
     public class RoadsPlanTests
     {
         private static readonly float3[] Rect600 = Ccw(Poly(0, 0, 600, 0, 600, 400, 0, 400));
@@ -100,7 +101,8 @@ namespace Placemaker.Tests
                 }
                 foreach (var p in g.Presets) yield return p.LabelKey;
             }
-            foreach (var c in new RoadsLayer().Controls) yield return RoadsSchema.GroupLabel(c.Group);
+            foreach (var id in new[] { "roads", "edgeZoning" })
+                foreach (var c in GeneratorRegistry.Get(id).Controls) yield return RoadsSchema.GroupLabel(c.Group);
             foreach (var k in new[] { RoadsPlanner.StatLength, RoadsPlanner.StatBlocks, RoadsPlanner.StatJunctions, RoadsPlanner.StatConnections,
                 RoadsPlanner.IssueNothing, RoadsPlanner.IssueFlat, RoadsPlanner.IssueObstacles, RoadsPlanner.IssueFailed, RoadsPlanner.IssueBadArea,
                 "Placemaker.Roads.Reason.NoArea", "Placemaker.EdgeZoning.Stat.Area", "Placemaker.EdgeZoning.Issue.NoFrontage" })

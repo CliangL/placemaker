@@ -748,16 +748,29 @@ namespace Placemaker.Core.Layers.Roads
         private static bool Validate(List<float2> loop, List<float2> face, List<float> widths)
         {
             int n = face.Count;
-            foreach (float2 p in loop)
-                for (int i = 0; i < n; i++)
+            float maxW = 0f;
+            var index = new SegmentIndex(16f);
+            for (int i = 0; i < n; i++)
+            {
+                if (widths[i] <= 0.05f) continue;
+                maxW = math.max(maxW, widths[i]);
+                index.Add(face[i], face[(i + 1) % n], i);
+            }
+            var scratch = new List<int>();
+            var seen = new HashSet<int>();
+            if (maxW > 0f)
+                foreach (float2 p in loop)
                 {
-                    float w = widths[i];
-                    if (w <= 0.05f) continue;
-                    // Only the corridor beside a segment counts: around a junction point the road ends
-                    // in the crossing road, not in a disc (a T junction has no bulge on its far side).
-                    float d = math.sqrt(Seg.DistSq(p, face[i], face[(i + 1) % n], out float t));
-                    if (t <= 1e-4f || t >= 1f - 1e-4f) continue;
-                    if (d < w - 0.25f) return false;
+                    index.Query(p - maxW, p + maxW, scratch, seen);
+                    foreach (int id in scratch)
+                    {
+                        int i = index.Owner[id];
+                        // Only the corridor beside a segment counts: around a junction point the road ends
+                        // in the crossing road, not in a disc (a T junction has no bulge on its far side).
+                        float d = math.sqrt(Seg.DistSq(p, face[i], face[(i + 1) % n], out float t));
+                        if (t <= 1e-4f || t >= 1f - 1e-4f) continue;
+                        if (d < widths[i] - 0.25f) return false;
+                    }
                 }
             float2 c = Poly.Centroid(loop);
             return Poly.Contains(face, c) || Poly.Contains(face, loop[0]);
@@ -876,6 +889,7 @@ namespace Placemaker.Core.Layers.Roads
                 for (int i = 1; i < n; i++) if (Turn(i) > Turn(first)) first = i;
             }
 
+            var ringIndex = new RingIndex(block);
             var pieces = new List<List<int>>();
             List<int> piece = null;
             float length = 0f, turn = 0f;
@@ -915,12 +929,18 @@ namespace Placemaker.Core.Layers.Roads
                     float cos = math.max(0.5f, math.dot(bis, useNext ? nNext : nPrev));
                     dirs.Add(bis / cos);
                 }
+                // Thickness and containment are probed at a handful of points per piece: blocks can have
+                // thousands of vertices and a full scan per vertex made frontage quadratic (seconds).
+                var probes = new List<int>();
+                int stride = math.max(1, (p.Count - 1) / 4);
+                for (int k = 0; k < p.Count; k += stride) probes.Add(k);
+                if (probes[probes.Count - 1] != p.Count - 1) probes.Add(p.Count - 1);
                 float limit = depth;
-                for (int k = 0; k < p.Count; k++)
+                foreach (int k in probes)
                 {
                     float2 nrm = math.normalizesafe(dirs[k]);
                     float2 start = k == 0 || k == p.Count - 1 ? math.lerp(p[k], p[k == 0 ? 1 : k - 1], 0.02f) : p[k];
-                    float thick = RayToBoundary(block, start + nrm * 0.05f, nrm);
+                    float thick = ringIndex.Ray(start + nrm * 0.05f, nrm, 2f * depth + 1f);
                     limit = math.min(limit, 0.5f * thick / math.max(1f, math.length(dirs[k])));
                 }
                 for (float d = limit; d >= 6f; d *= 0.8f)
@@ -934,10 +954,11 @@ namespace Placemaker.Core.Layers.Roads
                     var clean = Poly.Clean(ring, SurfaceAcceptance.MinEdge);
                     if (clean.Length < 3 || !Poly.IsSimple(clean) || Poly.SignedArea(clean) < 20f) continue;
                     bool inside = true;
-                    for (int k = 0; k < p.Count && inside; k++)
+                    foreach (int k in probes)
                     {
+                        if (!inside) break;
                         float2 q = p[k] + dirs[k] * d;
-                        if (!Poly.Contains(block, q) && Poly.DistanceToBoundary(block, q) > 0.05f) inside = false;
+                        if (!ringIndex.Contains(q) && ringIndex.Distance(q, 0.1f) > 0.05f) inside = false;
                     }
                     if (!inside) continue;
                     result.Add(clean);
@@ -947,16 +968,54 @@ namespace Placemaker.Core.Layers.Roads
             return result;
         }
 
-        /// <summary>Distance from p along dir to the first crossing of the ring (∞ when none).</summary>
-        private static float RayToBoundary(float2[] ring, float2 p, float2 dir)
+        /// <summary>Grid index over a ring's edges: containment, ray and distance queries in ~O(1).</summary>
+        private sealed class RingIndex
         {
-            float best = float.MaxValue;
-            int n = ring.Length;
-            float2 far = p + dir * 100000f;
-            for (int i = 0; i < n; i++)
-                if (Seg.Intersect(p, far, ring[i], ring[(i + 1) % n], out float t, out _) && t > 1e-7f)
-                    best = math.min(best, t * 100000f);
-            return best;
+            private readonly SegmentIndex _index = new SegmentIndex(8f);
+            private readonly List<int> _scratch = new List<int>();
+            private readonly HashSet<int> _seen = new HashSet<int>();
+            private readonly float _maxX;
+
+            public RingIndex(float2[] ring)
+            {
+                _maxX = float.MinValue;
+                for (int i = 0; i < ring.Length; i++)
+                {
+                    _index.Add(ring[i], ring[(i + 1) % ring.Length], i);
+                    _maxX = math.max(_maxX, ring[i].x);
+                }
+            }
+
+            /// <summary>Even-odd test with a +x ray, only over the edges in that row.</summary>
+            public bool Contains(float2 p)
+            {
+                _index.Query(p, new float2(_maxX + 1f, p.y), _scratch, _seen);
+                bool inside = false;
+                foreach (int id in _scratch)
+                {
+                    float2 a = _index.A[id], b = _index.B[id];
+                    if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+                }
+                return inside;
+            }
+
+            /// <summary>Distance along dir to the first edge crossing, at most maxLength (returned when none).</summary>
+            public float Ray(float2 p, float2 dir, float maxLength)
+            {
+                float2 far = p + dir * maxLength;
+                _index.Query(math.min(p, far), math.max(p, far), _scratch, _seen);
+                float best = maxLength;
+                foreach (int id in _scratch)
+                    if (Seg.Intersect(p, far, _index.A[id], _index.B[id], out float t, out _) && t > 1e-6f)
+                        best = math.min(best, t * maxLength);
+                return best;
+            }
+
+            public float Distance(float2 p, float maxDist)
+            {
+                int id = _index.Nearest(p, maxDist, out float d, out _, _scratch, _seen);
+                return id < 0 ? float.MaxValue : d;
+            }
         }
 
         private static float2 Left(float2 d)

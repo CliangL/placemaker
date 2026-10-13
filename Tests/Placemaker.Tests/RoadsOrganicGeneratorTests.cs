@@ -8,6 +8,7 @@ using Xunit;
 
 namespace Placemaker.Tests
 {
+    [Collection(TimingCollection.Name)]
     public class RoadsOrganicGeneratorTests
     {
         private static GridParameters Organic(float block = 80f, float curviness = 60f, int seed = 1, float loops = 30f)

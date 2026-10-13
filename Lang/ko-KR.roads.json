@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "네트워크",
-  "Placemaker.Roads.Group.culDeSacs": "말단 선회로 지정",
-  "Placemaker.Roads.Group.avenues": "대로",
+  "Placemaker.UI.Group.roadTypes": "네트워크",
+  "Placemaker.UI.Group.culDeSacs": "말단 선회로 지정",
+  "Placemaker.UI.Group.avenues": "대로",
   "Placemaker.Roads.Control.pattern": "패턴",
   "Placemaker.Roads.Option.pattern.grid": "그리드",
   "Placemaker.Roads.Option.pattern.tree": "나무",

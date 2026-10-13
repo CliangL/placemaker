@@ -1,7 +1,7 @@
 {
-  "Placemaker.Roads.Group.network": "Mreže",
-  "Placemaker.Roads.Group.culDeSacs": "Slijepe ulice",
-  "Placemaker.Roads.Group.avenues": "Avenije",
+  "Placemaker.UI.Group.roadTypes": "Mreže",
+  "Placemaker.UI.Group.culDeSacs": "Slijepe ulice",
+  "Placemaker.UI.Group.avenues": "Avenije",
   "Placemaker.Roads.Control.pattern": "Uzorak",
   "Placemaker.Roads.Option.pattern.grid": "Mreža",
   "Placemaker.Roads.Option.pattern.tree": "Stablo",
