@@ -366,20 +366,24 @@ namespace Placemaker.Core.Layers.Common
             var plan = new AreaPlan { GeneratorId = Id };
             if (input == null) { plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = Keys.InvalidArea }); return plan; }
             cancel.ThrowIfCancellationRequested();
+            // A bad selected area blocks the build (Error). A bad or tiny sub-region (one lawn, one split
+            // part) must not block the whole recipe: that layer just skips it with a Warning.
+            var tags = input.RegionTags;
+            var severity = tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0 ? IssueSeverity.Error : IssueSeverity.Warning;
             var region = Common.Region.From(input.Shape?.Ring);
             if (region == null)
             {
-                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = Keys.InvalidArea });
+                plan.Issues.Add(new PlanIssue { Severity = severity, Key = Keys.InvalidArea });
                 return plan;
             }
             if (region.Area < MinArea)
             {
-                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = Keys.AreaTooSmall, Args = new object[] { Math.Round(region.Area), MinArea } });
+                plan.Issues.Add(new PlanIssue { Severity = severity, Key = Keys.AreaTooSmall, Args = new object[] { Math.Round(region.Area), MinArea } });
                 return plan;
             }
             if (region.Area > MaxArea)
             {
-                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = Keys.AreaTooLarge, Args = new object[] { Math.Round(region.Area), MaxArea } });
+                plan.Issues.Add(new PlanIssue { Severity = severity, Key = Keys.AreaTooLarge, Args = new object[] { Math.Round(region.Area), MaxArea } });
                 return plan;
             }
             var ctx = new LayerContext

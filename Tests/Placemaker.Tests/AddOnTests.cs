@@ -152,6 +152,7 @@ namespace Placemaker.Tests
             Assert.True(TestKit.Stat(camp, Keys.StatRestrooms) >= 1);
             Assert.NotEmpty(camp.Nets);
             TestKit.AssertObjectsInside(camp, ring);
+            TestKit.AssertObjectsClearOfNets(camp);
             TestKit.AssertSurfacesAccepted(camp);
             Assert.Contains(plan.Layers, l => l.GeneratorId == "picnic" && l.Objects.Count > 0);
         }

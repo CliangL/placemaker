@@ -146,6 +146,26 @@ namespace Placemaker.Tests
             }
         }
 
+        [Theory]
+        [MemberData(nameof(LayerIds))]
+        public void CancellationIsHonoured(string id)
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            Assert.ThrowsAny<OperationCanceledException>(() => TestKit.Gen(id).Plan(TestKit.Input(TestKit.Rect(150, 120)), cts.Token));
+        }
+
+        [Fact]
+        public void TinySubRegionWarnsInsteadOfBlockingTheRecipe()
+        {
+            var input = TestKit.Input(TestKit.Rect(8, 8));
+            input.RegionTags = new[] { RegionTags.Green, "green:4" };
+            var plan = TestKit.Plan("park", input);
+            Assert.False(plan.HasErrors);
+            Assert.Contains(plan.Issues, i => i.Key == Keys.AreaTooSmall && i.Severity == IssueSeverity.Warning);
+            Assert.True(TestKit.Plan("park", TestKit.Input(TestKit.Rect(8, 8))).HasErrors);
+        }
+
         private static bool SameValue(object a, object b) =>
             a is string[] x && b is string[] y ? x.SequenceEqual(y) : Equals(a, b);
 

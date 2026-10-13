@@ -204,6 +204,7 @@ namespace Placemaker.Tests
             {
                 Id = root.GetProperty("id").GetString(),
                 NameKey = root.TryGetProperty("nameKey", out var nk) ? nk.GetString() : "",
+                Name = root.TryGetProperty("name", out var nm) ? nm.GetString() : "",
                 Icon = root.TryGetProperty("icon", out var ic) ? ic.GetString() : "",
                 FormatVersion = root.TryGetProperty("formatVersion", out var fv) ? fv.GetInt32() : 1,
             };
