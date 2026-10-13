@@ -1,0 +1,54 @@
+{
+ "source": "ParkingLotTool Tests/GeometryParity/Berichtsfaelle/CZHK-haarring.json (KruemelGames, GPL-3.0); real user polygon",
+ "polygonXZ": [
+  [
+   -1203.6759033203125,
+   -229.740966796875
+  ],
+  [
+   -1225.8568115234375,
+   -239.67662048339844
+  ],
+  [
+   -1235.6695556640625,
+   -217.77130126953125
+  ],
+  [
+   -1272.1920166015625,
+   -234.1321563720703
+  ],
+  [
+   -1283.83837890625,
+   -208.13369750976562
+  ],
+  [
+   -1203.3758544921875,
+   -172.58253479003906
+  ]
+ ],
+ "settings": {
+  "setback": 1,
+  "aisleWidth": 7,
+  "stallLength": 5.9,
+  "stallWidth": 3,
+  "medianDepth": 2.5,
+  "crossEveryMeters": 33,
+  "rowEndPlanting": true,
+  "perimeterRoad": false,
+  "rowAngleMode": "edge"
+ },
+ "entrances": [
+  {
+   "edge": 5,
+   "along": 40.315467834472656,
+   "kind": "Zufahrt"
+  },
+  {
+   "edge": 3,
+   "along": 12.99730110168457,
+   "kind": "Zufahrt"
+  }
+ ],
+ "pltStalls": 48,
+ "pltMilliseconds": 191.9355
+}

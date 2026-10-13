@@ -1,0 +1,62 @@
+{
+ "source": "ParkingLotTool Tests/GeometryParity/Berichtsfaelle/AJ54-spitze-ecke.json (KruemelGames, GPL-3.0); real user polygon",
+ "polygonXZ": [
+  [
+   -1109.56689453125,
+   -1836.8009033203125
+  ],
+  [
+   -1012.9072875976562,
+   -1849.0633544921875
+  ],
+  [
+   -1023.162353515625,
+   -1827.27685546875
+  ],
+  [
+   -1031.94677734375,
+   -1803.1451416015625
+  ],
+  [
+   -1036.6224365234375,
+   -1785.9522705078125
+  ],
+  [
+   -1040.9600830078125,
+   -1762.364501953125
+  ],
+  [
+   -1042.39501953125,
+   -1748.5531005859375
+  ],
+  [
+   -1097.4822998046875,
+   -1741.5638427734375
+  ]
+ ],
+ "settings": {
+  "setback": 1,
+  "aisleWidth": 7,
+  "stallLength": 5.9,
+  "stallWidth": 3,
+  "medianDepth": 0,
+  "crossEveryMeters": 33,
+  "rowEndPlanting": true,
+  "perimeterRoad": true,
+  "rowAngleMode": "edge"
+ },
+ "entrances": [
+  {
+   "edge": 7,
+   "along": 48.250614166259766,
+   "kind": "Gasse"
+  },
+  {
+   "edge": 0,
+   "along": 52.21761703491211,
+   "kind": "Gasse"
+  }
+ ],
+ "pltStalls": 151,
+ "pltMilliseconds": 133.7994
+}
