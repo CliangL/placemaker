@@ -133,6 +133,17 @@ namespace Placemaker.Core
         /// and of sibling add-ons). Layers must not place things that overlap it.
         /// </summary>
         public ReservedSpace Reserved = new ReservedSpace();
+
+        /// <summary>
+        /// Layer ids and targets of the enabled child steps (features) of this step, filled by the
+        /// composer. A parent uses them to make room for what its features need — e.g. the park
+        /// carves out the "place:plaza" region only when a child will fill it.
+        /// </summary>
+        public string[] ChildLayers = Array.Empty<string>();
+        public string[] ChildTargets = Array.Empty<string>();
+
+        public bool HasChild(string layerId) => ChildLayers != null && Array.IndexOf(ChildLayers, layerId) >= 0;
+        public bool HasChildTarget(string target) => ChildTargets != null && Array.IndexOf(ChildTargets, target) >= 0;
     }
 
     /// <summary>
@@ -344,6 +355,13 @@ namespace Placemaker.Core
         public string LabelKey = "";
         /// <summary>Settings applied on top of the feature layer's defaults when enabled from this parent.</summary>
         public SettingsBag Preset = new SettingsBag();
+        /// <summary>
+        /// Ids of the PARENT's controls that belong to this feature (e.g. the park's plaza shape /
+        /// position / size). The UI shows them under the feature toggle, only while it is on.
+        /// </summary>
+        public string[] Options = Array.Empty<string>();
+        /// <summary>Tooltip key ("" = none).</summary>
+        public string TooltipKey = "";
     }
 
     /// <summary>Optional: Fill layers that offer built-in features implement this too.</summary>
@@ -474,6 +492,12 @@ namespace Placemaker.Core
         public uint Variation;
         /// <summary>Optional: which planned net this object belongs to (index into AreaPlan.Nets), -1 none.</summary>
         public int AttachedNet = -1;
+        /// <summary>
+        /// Asset category (AssetCategories), or null/"" = the role's default (RoleCategories.ForObject).
+        /// Generic roles such as Furniture MUST set it (playground equipment, picnic tables, restrooms…);
+        /// otherwise automatic resolution falls back to "decoration" (FEEDBACK-2 #1: sandwich boards).
+        /// </summary>
+        public string Category;
     }
 
     public enum AreaRole { PedestrianArea = 0, Hangaround = 1, Lot = 2 }
@@ -540,6 +564,8 @@ namespace Placemaker.Core
         public string GeneratorId = "";
         /// <summary>Path of the recipe step that produced this (set by the composer), e.g. "0/2".</summary>
         public string StepPath = "";
+        /// <summary>Seed the step was planned with (set by the composer). Automatic assets pick one palette per step from it.</summary>
+        public uint Seed;
         public List<PlannedRegion> Regions = new List<PlannedRegion>();
         public List<PlannedSurface> Surfaces = new List<PlannedSurface>();
         public List<PlannedNet> Nets = new List<PlannedNet>();

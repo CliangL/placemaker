@@ -19,8 +19,8 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Choice("size", "medium", ControlTier.Essential, "", Sizes);
-            c.AssetMulti("equipment", AssetCategories.Playground, ControlTier.Essential);
+            c.Choice("size", "medium", ControlTier.Essential, "playground", Sizes);
+            c.AssetMulti("equipment", AssetCategories.Playground, ControlTier.Essential, "playground");
             c.Toggle("surface", true, ControlTier.More, "ground");
             c.Asset("surfaceAsset", AssetCategories.SurfaceNatural, ControlTier.More, "ground").When("surface=true");
             c.Toggle("benches", true, ControlTier.More, "extras");
@@ -78,7 +78,7 @@ namespace Placemaker.Core.Layers.AddOns
                 var p = centre + new float2(math.cos(a), math.sin(a)) * r;
                 if (!occ.Free(p, itemRadius, 0.5f, 0.6f)) continue;
                 uint v = Hashing.Mix(ctx.Seed, (uint)(placed * 7919 + 1));
-                ctx.Object(p, Facing(p, centre) + math.PI, ObjectRole.Furniture, AssetMix.Pick(ids, v), v);
+                ctx.Object(p, Facing(p, centre) + math.PI, ObjectRole.Furniture, AssetMix.Pick(ids, v), v, -1, AssetCategories.Playground);
                 occ.Take(p, itemRadius, 0);
                 placed++;
             }

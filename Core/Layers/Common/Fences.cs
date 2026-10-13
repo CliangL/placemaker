@@ -43,7 +43,11 @@ namespace Placemaker.Core.Layers.Common
                     for (int k = 0; k < pieces; k++)
                     {
                         float f0 = sp.x + runLen * k / pieces, f1 = sp.x + runLen * (k + 1) / pieces;
-                        runs.Add(new float2x2(a + t * f0, a + t * f1));
+                        // Corners must be bit-identical: CS2 merges course nodes only at EQUAL positions
+                        // (GenerateNodesSystem NodeKey), so a + t·len ≠ b would leave every corner open.
+                        var p0 = k == 0 && sp.x <= 0f ? a : a + t * f0;
+                        var p1 = k == pieces - 1 && sp.y >= len ? b : a + t * f1;
+                        runs.Add(new float2x2(p0, p1));
                     }
                 }
             }
@@ -63,6 +67,16 @@ namespace Placemaker.Core.Layers.Common
                 runs.Add(new float2x2(centre + new float2(math.cos(a0), math.sin(a0)) * radius, centre + new float2(math.cos(a1), math.sin(a1)) * radius));
             }
             return runs;
+        }
+
+        /// <summary>
+        /// Prop-fence fallback: pieces needed to cover a course of <paramref name="length"/> with no gap
+        /// (pieces may overlap slightly; the first and last end exactly at the course ends = the corners).
+        /// </summary>
+        public static int PieceCount(float length, float piece)
+        {
+            if (!(length > 0f) || !(piece > 0f)) return 0;
+            return math.max(1, (int)math.ceil(length / piece - 0.05f));
         }
 
         private static void Cut(List<float2> spans, float g0, float g1, float len)

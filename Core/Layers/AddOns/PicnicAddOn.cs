@@ -16,13 +16,13 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("groups", 3, 1, 10, 1, "count", ControlTier.Essential);
-            c.Slider("tables", 3, 1, 6, 1, "count", ControlTier.Essential).Tip();
-            c.AssetMulti("tableAssets", AssetCategories.Picnic, ControlTier.More);
-            c.Toggle("shelter", true, ControlTier.More);
-            c.Asset("shelterAsset", AssetCategories.Shelter, ControlTier.More).When("shelter=true");
-            c.Toggle("shadeTrees", true, ControlTier.More);
-            c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More).When("shadeTrees=true");
+            c.Slider("groups", 3, 1, 10, 1, "count", ControlTier.Essential, "picnic");
+            c.Slider("tables", 3, 1, 6, 1, "count", ControlTier.Essential, "picnic").Tip();
+            c.AssetMulti("tableAssets", AssetCategories.Picnic, ControlTier.More, "picnic");
+            c.Toggle("shelter", true, ControlTier.More, "extras");
+            c.Asset("shelterAsset", AssetCategories.Shelter, ControlTier.More, "extras").When("shelter=true");
+            c.Toggle("shadeTrees", true, ControlTier.More, "extras");
+            c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "extras").When("shadeTrees=true");
             c.RandomRange("groups", 1, 5);
             c.RandomRange("tables", 2, 5);
             c.Chance("shelter", 0.6f);
@@ -52,7 +52,7 @@ namespace Placemaker.Core.Layers.AddOns
                 float phase = Hashing.Unit(gs) * 2f * math.PI;
                 if (shelter && occ.Free(c, shelterRadius, 0.5f, 0.3f))
                 {
-                    ctx.Object(c, phase, ObjectRole.Furniture, shelterAsset, gs);
+                    ctx.Object(c, phase, ObjectRole.Furniture, shelterAsset, gs, -1, AssetCategories.Shelter);
                     occ.Take(c, shelterRadius, 0);
                 }
                 var positions = tables == 1 || ring <= 0f ? new List<float2> { c } : RingPoints(c, ring, tables, phase);
@@ -62,7 +62,7 @@ namespace Placemaker.Core.Layers.AddOns
                     if (!occ.Free(p, tableRadius, 0.5f, 0.4f)) continue;
                     uint v = Hashing.Mix(gs, (uint)t);
                     // Tables tangential to the ring read as arranged around the shelter.
-                    ctx.Object(p, Facing(p, c) + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.Pick(tableIds, v), v);
+                    ctx.Object(p, Facing(p, c) + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.Pick(tableIds, v), v, -1, AssetCategories.Picnic);
                     occ.Take(p, tableRadius, 1);
                     placedTables++;
                 }

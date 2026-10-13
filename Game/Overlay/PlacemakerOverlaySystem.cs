@@ -43,6 +43,8 @@ namespace Placemaker.Game.Overlay
         private static readonly Color Warning = new Color(1f, 0.75f, 0.15f, 0.95f);
         private static readonly Color Manage = new Color(0.55f, 1f, 0.55f, 0.9f);
         private static readonly Color Marker = new Color(1f, 0.85f, 0.2f, 0.95f);
+        private static readonly Color OutlineDim = new Color(0.80f, 0.92f, 1f, 0.35f);
+        private static readonly Color ClippedFill = new Color(0.12f, 0.12f, 0.14f, 0.28f);
 
         private OverlayRenderSystem _overlay;
         private ToolSystem _toolSystem;
@@ -99,12 +101,23 @@ namespace Placemaker.Game.Overlay
         private int _errors;
 
         /// <summary>Line width that stays visible from far away without being fat up close.</summary>
-        private static float LineWidth()
+        private float LineWidth()
         {
             var cam = Camera.main;
             if (cam == null) return 1f;
-            float h = math.max(10f, cam.transform.position.y);
-            return math.clamp(h * 0.0025f, 0.4f, 6f);
+            float3 camPos = cam.transform.position;
+            // Distance to what is being edited (the outline), else height above it — not the absolute
+            // altitude, so mountain cities do not get fat lines.
+            float h = camPos.y;
+            var shape = _tool.Shape;
+            if (shape != null && shape.Ring.Length > 0)
+            {
+                float3 c = float3.zero;
+                foreach (var p in shape.Ring) c += p;
+                c /= shape.Ring.Length;
+                h = math.distance(camPos, c);
+            }
+            return math.clamp(math.max(10f, h) * 0.0022f, 0.25f, 6f);
         }
 
         // ───────────── selection ─────────────
@@ -119,13 +132,23 @@ namespace Placemaker.Game.Overlay
                 _fill.SetLayer("selection", rings, Fill, -94f, FilledPreviewSystem.Signature(rings));
             }
 
+            // Keep off existing roads: the parts on roads are left out — shaded grey, the outline used is drawn solid.
+            var away = _tool.ClippedAway;
+            bool clipped = away != null && away.Count > 0 && shape != null;
+            if (clipped)
+            {
+                var list = new List<float3[]>(away);
+                _fill.SetLayer("clipped", list, ClippedFill, -93.9f, FilledPreviewSystem.Signature(list));
+            }
+
             switch (_tool.Mode)
             {
-                case SelectionMode.Draw: DrawDrawMode(buffer, w, bad); break;
+                case SelectionMode.Draw: DrawDrawMode(buffer, w, bad, clipped); break;
                 case SelectionMode.Block: DrawBlockMode(buffer, w, shape); break;
                 case SelectionMode.Perimeter: DrawPerimeterMode(buffer, w, shape); break;
                 case SelectionMode.Paint: DrawPaintMode(buffer, w, shape); break;
             }
+            if (clipped && _tool.Mode == SelectionMode.Draw) Ring(buffer, shape.Ring, Outline, w);
         }
 
         private void Ring(OverlayRenderSystem.Buffer buffer, float3[] ring, Color c, float w, bool dashed = false)
@@ -138,7 +161,7 @@ namespace Placemaker.Game.Overlay
             }
         }
 
-        private void DrawDrawMode(OverlayRenderSystem.Buffer buffer, float w, bool bad)
+        private void DrawDrawMode(OverlayRenderSystem.Buffer buffer, float w, bool bad, bool clipped)
         {
             var draw = _tool.Draw;
             var pts = draw.Points;
@@ -149,7 +172,7 @@ namespace Placemaker.Game.Overlay
                 DrawSnap(buffer, w);
                 return;
             }
-            var line = bad ? OutlineBad : Outline;
+            var line = bad ? OutlineBad : clipped ? OutlineDim : Outline;
             for (int i = 0; i + 1 < n; i++)
             {
                 var c = _tool.HoverEdge == i ? HandleHot : line;
@@ -313,6 +336,7 @@ namespace Placemaker.Game.Overlay
             if (!ReferenceEquals(plan, _filledPlan))
             {
                 _filledPlan = plan;
+                try { _assetInfo = Services.Assets?.InfoMap(); } catch (Exception) { _assetInfo = null; }
                 _surfaceGroups.Clear();
                 _areaGroups.Clear();
                 foreach (var l in plan.Layers)
@@ -341,15 +365,12 @@ namespace Placemaker.Game.Overlay
                 foreach (var n in l.Nets)
                 {
                     if (n == null || netBudget-- <= 0) break;
-                    var c = WithAlpha(NetColor(n.Role), 0.9f * alpha);
-                    float width = Composer.DefaultHalfWidth(n.Role) * 2f;
-                    buffer.DrawCurve(c, new Bezier4x3(n.A, n.B, n.C, n.D), width);
+                    DrawNet(buffer, n, w, alpha);
                 }
                 foreach (var o in l.Objects)
                 {
                     if (o == null || (k++ % stride) != 0) continue;
-                    float r = Composer.DefaultRadius(o.Role);
-                    buffer.DrawCircle(WithAlpha(ObjectColor(o.Role), 0.85f * alpha), o.Position, r * 2f * math.max(0.3f, o.Scale));
+                    DrawObject(buffer, o, w, alpha);
                 }
                 foreach (var t in l.Terraform)
                     if (t?.Ring != null) Ring(buffer, t.Ring, t.Permanent ? Warning : new Color(0.4f, 0.7f, 1f, 0.8f), w, dashed: true);
@@ -388,15 +409,88 @@ namespace Placemaker.Game.Overlay
             return new Color(r, g, b, a);
         }
 
+        // ───────────── plan: nets and objects (sketch style) ─────────────
+        //
+        // Grid Road Generator's sketch look: a thin dashed centre line in the role colour plus two faint
+        // edge lines at the real width — readable over terrain and never hiding it. Line width and dash
+        // length follow the camera height (w), so it stays crisp close up and visible from far away.
+        // Objects are small, subtle dots; trees are soft discs at crown size.
+
+        private Dictionary<string, AssetInfo> _assetInfo;
+
+        private float HalfWidth(PlannedNet n)
+        {
+            if (_assetInfo != null && !string.IsNullOrEmpty(n.Asset.Id) && _assetInfo.TryGetValue(n.Asset.Id, out var info) && info.NetWidth > 0.5f)
+                return info.NetWidth * 0.5f;
+            return Composer.DefaultHalfWidth(n.Role);
+        }
+
+        private void DrawNet(OverlayRenderSystem.Buffer buffer, PlannedNet n, float w, float alpha)
+        {
+            var curve = new Bezier4x3(n.A, n.B, n.C, n.D);
+            var col = NetColor(n.Role);
+            if (n.Role == NetRole.Fence)
+            {
+                buffer.DrawCurve(WithAlpha(col, 0.7f * alpha), curve, w * 0.6f);
+                return;
+            }
+            float hw = HalfWidth(n);
+            // Edges: faint, at the real width (skipped when narrower than the centre line would make them readable).
+            if (hw > w * 1.5f)
+            {
+                var edge = WithAlpha(col, 0.3f * alpha);
+                buffer.DrawCurve(edge, OffsetCurve(curve, hw), w * 0.45f);
+                buffer.DrawCurve(edge, OffsetCurve(curve, -hw), w * 0.45f);
+            }
+            float dash = w * 5f;
+            buffer.DrawDashedCurve(WithAlpha(col, 0.95f * alpha), curve, w * 0.8f, dash, dash * 0.7f);
+        }
+
+        /// <summary>Approximate parallel curve: end points and handles shifted along the end normals (fine for road-like curvature).</summary>
+        private static Bezier4x3 OffsetCurve(Bezier4x3 c, float d)
+        {
+            float2 t0 = math.normalizesafe(c.b.xz - c.a.xz, math.normalizesafe(c.d.xz - c.a.xz, new float2(1, 0)));
+            float2 t1 = math.normalizesafe(c.d.xz - c.c.xz, t0);
+            float3 n0 = new float3(-t0.y, 0, t0.x) * d, n1 = new float3(-t1.y, 0, t1.x) * d;
+            return new Bezier4x3(c.a + n0, c.b + n0, c.c + n1, c.d + n1);
+        }
+
+        private void DrawObject(OverlayRenderSystem.Buffer buffer, PlannedObject o, float w, float alpha)
+        {
+            var col = ObjectColor(o.Role);
+            float scale = math.max(0.3f, o.Scale);
+            if (o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush)
+            {
+                float crown = Composer.DefaultRadius(o.Role);
+                if (_assetInfo != null && !string.IsNullOrEmpty(o.Asset.Id) && _assetInfo.TryGetValue(o.Asset.Id, out var info))
+                {
+                    float r = math.cmax((info.BoundsMax - info.BoundsMin).xz) * 0.5f;
+                    if (r > 0.3f) crown = r;
+                }
+                float dia = math.max(crown * 2f * scale, w * 2f);
+                buffer.DrawCircle(WithAlpha(col, 0.35f * alpha), WithAlpha(col, 0.16f * alpha), w * 0.3f, 0, new float2(0, 1), o.Position, dia);
+                return;
+            }
+            if (o.Role == ObjectRole.Centerpiece)
+            {
+                float dia = Composer.DefaultRadius(o.Role) * 2f * scale;
+                buffer.DrawCircle(WithAlpha(col, 0.6f * alpha), WithAlpha(col, 0.12f * alpha), w * 0.4f, 0, new float2(0, 1), o.Position, dia);
+                return;
+            }
+            // Small furniture / bays: a subtle dot, a little larger than a line so it reads from afar.
+            float dot = math.clamp(w * 1.6f, 0.5f, Composer.DefaultRadius(o.Role) * 2f);
+            buffer.DrawCircle(WithAlpha(col, 0.7f * alpha), o.Position, dot);
+        }
+
         private static Color NetColor(NetRole r)
         {
             switch (r)
             {
-                case NetRole.Avenue: return new Color(0.35f, 0.8f, 1f);
-                case NetRole.Street: case NetRole.PerimeterRoad: case NetRole.CulDeSac: case NetRole.Roundabout: return new Color(0.92f, 0.92f, 0.92f);
-                case NetRole.Pathway: case NetRole.PathwayWide: return new Color(0.95f, 0.85f, 0.55f);
-                case NetRole.DriveAisle: case NetRole.DriveConnector: case NetRole.Alley: return new Color(0.7f, 0.7f, 0.75f);
-                case NetRole.Fence: return new Color(0.55f, 0.4f, 0.3f);
+                case NetRole.Avenue: return new Color(0.35f, 0.85f, 1f);                                   // cyan
+                case NetRole.Street: case NetRole.PerimeterRoad: case NetRole.CulDeSac: case NetRole.Roundabout: return new Color(0.95f, 0.95f, 0.95f);   // white
+                case NetRole.Pathway: case NetRole.PathwayWide: return new Color(1f, 0.82f, 0.45f);          // warm yellow
+                case NetRole.DriveAisle: case NetRole.DriveConnector: case NetRole.Alley: return new Color(0.4f, 0.6f, 1f);   // parking aisles: blue
+                case NetRole.Fence: return new Color(0.6f, 0.45f, 0.32f);
                 default: return Color.white;
             }
         }

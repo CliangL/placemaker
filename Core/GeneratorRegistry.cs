@@ -9,6 +9,8 @@ namespace Placemaker.Core
     public sealed class AreaGeneratorAttribute : Attribute
     {
         public int Order { get; }
+        /// <summary>Not offered in the Make row (still usable by recipes and features), e.g. split, pond.</summary>
+        public bool Hidden { get; set; }
         public AreaGeneratorAttribute(int order) { Order = order; }
     }
 
@@ -34,6 +36,14 @@ namespace Placemaker.Core
                     .ToList();
                 return _all;
             }
+        }
+
+        /// <summary>True when the layer must not get its own card in the Make row.</summary>
+        public static bool IsHidden(IAreaGenerator g)
+        {
+            if (g == null) return true;
+            var attr = (AreaGeneratorAttribute)Attribute.GetCustomAttribute(g.GetType(), typeof(AreaGeneratorAttribute));
+            return attr != null && attr.Hidden;
         }
 
         public static IAreaGenerator Get(string id)

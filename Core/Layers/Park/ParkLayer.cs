@@ -1,11 +1,14 @@
-// Park layer: paths, lawn, planting, furniture, optional fence / lake / wildlife.
+// Park layer: paths, lawn, planting, furniture, optional fence / wildlife, and built-in features
+// (central plaza, pond, playground, picnic, restrooms, fountain, big trees, flowerbeds).
 // Planners ported from ParkManager (tomkpunkt, GPL-3.0); vegetation scattering merged from
 // ParkingLotTool (KruemelGames, GPL-3.0). See the individual files for details.
 //
 // Regions for children:
-//   green:N  lawns between paths (largest first), tags {green}
-//   green:0  additionally tagged {core} — the largest lawn, which holds a protected clearing
-//   edge:N   boundary belt strips, tags {edge}
+//   green:N      lawns between paths (largest first), tags {green}
+//   green:0      additionally tagged {core} — the largest lawn, which holds a protected clearing
+//   edge:N       boundary belt strips, tags {edge}
+//   place:plaza  the plaza place (only when a child targets it), tags {place:plaza, paved}
+//   place:pond   the pond basin (only when a child targets it), tags {place:pond, water}
 
 using System;
 using System.Collections.Generic;
@@ -16,22 +19,57 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Park
 {
     [AreaGenerator(30)]
-    public sealed class ParkLayer : LayerBase
+    public sealed class ParkLayer : LayerBase, IHasFeatures
     {
         public const string LayerId = "park";
         public const string EntranceKind = "entrance";
         public const float BeltDepth = 8f;
+        public const string PlazaPlace = "place:plaza";
+        public const string PondPlace = "place:pond";
+        /// <summary>Hard limits of the plaza place (characteristic size, metres).</summary>
+        public const float PlazaMinM = 12f, PlazaMaxM = 90f;
 
         protected override string Area => "Park";
         public override string Id => LayerId;
         public override string Icon => "Media/Game/Icons/ParksAndRecreation.svg";
         public override LayerKind Kind => LayerKind.Fill;
-        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, RegionTags.Edge };
+        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, RegionTags.Edge, PlazaPlace, PondPlace };
         public override float MinArea => 150f;
+
+        private static readonly FeatureInfo[] FeatureList =
+        {
+            new FeatureInfo
+            {
+                Layer = "plaza", Target = PlazaPlace, LabelKey = "Placemaker.Park.Feature.plaza",
+                TooltipKey = "Placemaker.Park.Feature.plaza.Tooltip",
+                Options = new[] { "plazaShape", "plazaAt", "plazaSize" },
+                Preset = Bag(("centerMode", "single"), ("arrangementMode", "center"), ("furniture", 6.0), ("fence", false)),
+            },
+            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Park.Feature.playground" },
+            new FeatureInfo
+            {
+                Layer = "pond", Target = PondPlace, LabelKey = "Placemaker.Park.Feature.pond",
+                TooltipKey = "Placemaker.Park.Feature.pond.Tooltip", Options = new[] { "lakeSize" },
+            },
+            new FeatureInfo { Layer = "picnic", LabelKey = "Placemaker.Park.Feature.picnic", Preset = Bag(("groups", 2.0)) },
+            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Park.Feature.restrooms" },
+            new FeatureInfo { Layer = "fountain", LabelKey = "Placemaker.Park.Feature.fountain", Preset = Bag(("size", "medium")) },
+            new FeatureInfo { Layer = "bigtrees", LabelKey = "Placemaker.Park.Feature.bigtrees", DefaultOn = true },
+            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Park.Feature.flowerbeds" },
+        };
+
+        public IReadOnlyList<FeatureInfo> Features => FeatureList;
+
+        internal static SettingsBag Bag(params (string key, object value)[] values)
+        {
+            var b = new SettingsBag();
+            foreach (var (k, v) in values) b.Values[k] = v;
+            return b;
+        }
 
         protected override void DefineControls(ControlSet c)
         {
-            // Essentials (DESIGN.md §2: style preset, path style, planting density, furniture).
+            // Essentials first (DESIGN.md §2: style, paths, planting, furniture).
             c.Choice("style", "natural", ControlTier.Essential, "layout", "natural", "formal", "woodland", "meadow", "pocket");
             c.Choice("pathWidth", "mixed", ControlTier.Essential, "layout", "narrow", "mixed", "wide").Tip();
             c.Slider("treeDensity", 26, 0, 150, 1, "perHa", ControlTier.Essential, "planting").Tip();
@@ -49,6 +87,7 @@ namespace Placemaker.Core.Layers.Park
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.AssetMulti("bushSpecies", AssetCategories.Bush, ControlTier.More, "planting");
             c.Toggle("belt", true, ControlTier.More, "planting").Tip();
+            c.Toggle("animals", false, ControlTier.More, "planting").Tip();
             c.Toggle("lamps", true, ControlTier.More, "furniture");
             c.Toggle("bins", true, ControlTier.More, "furniture");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "furniture");
@@ -57,12 +96,18 @@ namespace Placemaker.Core.Layers.Park
             c.Toggle("groundSurface", true, ControlTier.More, "ground");
             c.Toggle("fence", false, ControlTier.More, "boundary");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
-            c.Toggle("animals", false, ControlTier.More, "planting").Tip();
-            c.Toggle("lake", false, ControlTier.More, "water").Tip();
-            c.Slider("lakeSize", 70, 20, 100, 5, "%", ControlTier.More, "water").When("lake=true");
+
+            // Feature options (shown under their feature toggle: see Features[].Options).
+            c.Choice("plazaShape", "circle", ControlTier.More, "plaza", "circle", "square", "rectangle");
+            c.Choice("plazaAt", "centre", ControlTier.More, "plaza", "centre", "corner", "edge", "entrance").Tip();
+            c.Slider("plazaSize", 15, 5, 40, 1, "%", ControlTier.More, "plaza").Tip();
+            c.Slider("lakeSize", 70, 20, 100, 5, "%", ControlTier.More, "pond").Tip();
+
             c.Chance("fence", 0.2f);
-            c.Fixed("lake");            // permanent terrain change: never switched on by a dice roll
             c.Fixed("lakeSize");
+            c.Fixed("plazaShape");
+            c.Fixed("plazaAt");
+            c.Fixed("plazaSize");
             c.Chance("animals", 0.3f);
             c.Chance("lamps", 0.85f);
             c.Chance("bins", 0.9f);
@@ -95,21 +140,54 @@ namespace Placemaker.Core.Layers.Park
         /// <summary>Always ready: without player entrances the plan uses suggested ones (never block the player).</summary>
         public override Readiness CheckReady(AreaInput input) => new Readiness { Ready = true };
 
+        /// <summary>The plaza rule described by the park's plaza options.</summary>
+        public static PlaceRule PlazaRule(SettingsBag s) => new PlaceRule
+        {
+            Shape = PlaceRule.ParseShape(s.S("plazaShape", "circle")),
+            Anchor = PlaceRule.ParseAnchor(s.S("plazaAt", "centre")),
+            SizePct = (float)s.Num("plazaSize", 15), MinM = PlazaMinM, MaxM = PlazaMaxM, Aspect = 1.6f, Margin = 3f,
+        };
+
         protected override void PlanCore(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var style = ParkStyle.Get(ctx.S("style"));
+            string pathMode = ctx.S("paths");
+            int wantedGates = Entrances.WantedByArea(region.Area);
+            var gates = Entrances.Resolve(ctx.Input, region, EntranceKind, wantedGates);
+
+            // 0. Places carved out for features (only when a child will fill them).
+            float2[] plaza = Array.Empty<float2>();
+            if (ctx.Input.HasChildTarget(PlazaPlace))
+            {
+                var toward = new List<float2>();
+                foreach (var g in gates) toward.Add(g.Position);
+                var placed = PlaceSolver.Solve(region, ctx.Input.Reserved?.Polygons, PlazaRule(ctx.Settings), toward, Hashing.Mix(ctx.Seed, 0x91A2u));
+                if (placed.Ok)
+                {
+                    plaza = placed.Ring;
+                    if (placed.Shrunk) ctx.Issue(IssueSeverity.Info, "Placemaker.Park.Issue.PlazaSmaller");
+                }
+                else ctx.Issue(IssueSeverity.Warning, "Placemaker.Park.Issue.NoRoomForPlaza");
+            }
+            var reserved = ctx.Input.Reserved?.Clone() ?? new ReservedSpace();
+            if (plaza.Length >= 3) reserved.Polygons.Add(plaza);
             var s = new ParkSite
             {
-                LayerRegion = region, Occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site),
+                LayerRegion = region, Occ = new Occupancy(region, reserved, ctx.Site),
                 Seed = ctx.Seed, Cancel = ctx.Cancel,
             };
+            if (plaza.Length >= 3)
+            {
+                // The plaza (outline and interior) is an obstacle for the lake planner and the belt/edge logic too.
+                for (int i = 0; i < plaza.Length; i++) s.Occ.Corridors.Add(plaza[i], plaza[(i + 1) % plaza.Length], 0.5f, 101);
+                foreach (var run in Poly.FillRuns(plaza, 3f)) s.Occ.Corridors.Add(run.a, run.b, 2f, 101);
+            }
 
-            // 1. Entrances and paths.
-            string pathMode = ctx.S("paths");
+            // 1. Entrances and paths (paths end at the plaza's edge instead of crossing it).
             if (pathMode != "none")
             {
-                s.Gates = Entrances.Resolve(ctx.Input, region, EntranceKind, Entrances.WantedByArea(region.Area));
+                s.Gates = gates;
                 var gatePoints = new List<float2>();
                 foreach (var g in s.Gates) gatePoints.Add(g.Position);
                 var options = new ParkPathPlanner.Options { Loops = LoopsFor(pathMode, region.Area), StretchLoop = pathMode == "network" || pathMode == "auto" && region.Area > 12000f };
@@ -117,21 +195,31 @@ namespace Placemaker.Core.Layers.Park
                 // Formal parks are axial by definition; every other style follows the toggle.
                 bool curved = ctx.B("curvedPaths") && !style.Formal;
                 s.Curves = ParkPaths.Build(s.Graph, region, curved, ctx.S("pathWidth"));
+                if (plaza.Length >= 3)
+                {
+                    s.Curves = ParkPlaces.ClipAndConnect(s.Curves, plaza, region, out int joins);
+                    ctx.Plan.Facts["plazaJoins"] = joins;
+                }
                 ParkPaths.Index(s.Curves, s.Occ.Corridors, 100);
             }
             ctx.Check();
 
-            // 2. Optional lake (permanent terraform, off by default).
-            if (ctx.B("lake"))
+            // 2. Pond (permanent terraform): a "pond" feature fills the place; the old "lake" setting emits it here.
+            bool pondFeature = ctx.Input.HasChildTarget(PondPlace);
+            if (pondFeature || ctx.B("lake"))
             {
-                s.Lake = ParkLakePlanner.Generate(region, s.Occ.Corridors, s.Gates, ctx.F("lakeSize") / 100f, Hashing.Mix(ctx.Seed, 0x1A4Eu));
-                if (s.Lake.Length >= 3) EmitLake(ctx, s.Lake);
-                else ctx.Issue(IssueSeverity.Info, "Placemaker.Park.Issue.NoRoomForLake");
+                var lake = ParkLakePlanner.Generate(region, s.Occ.Corridors, s.Gates, ctx.F("lakeSize") / 100f, Hashing.Mix(ctx.Seed, 0x1A4Eu));
+                if (lake.Length >= 3 && plaza.Length >= 3 && (Poly.Contains(plaza, Poly.Centroid(lake)) || Poly.Contains(lake, Poly.Centroid(plaza))))
+                    lake = Array.Empty<float2>();
+                s.Lake = lake;
+                if (s.Lake.Length < 3) ctx.Issue(IssueSeverity.Info, "Placemaker.Park.Issue.NoRoomForLake");
+                else if (pondFeature) ctx.Plan.Facts["pondArea"] = Poly.Area(s.Lake);
+                else EmitLake(ctx, s.Lake);
             }
             ctx.Check();
 
             // 3. Lawns between paths (regions) and the protected clearing on the largest one.
-            var lawns = Lawns(ctx, s);
+            var lawns = Lawns(ctx, s, plaza);
             if (lawns.Count > 0 && style.ClearingFactor > 0f)
             {
                 var largest = LayerRegion.From(lawns[0]);
@@ -156,7 +244,8 @@ namespace Placemaker.Core.Layers.Park
             ctx.Check();
 
             // 5. Vegetation.
-            float plantedHa = math.max(0f, region.Area - (s.Lake.Length >= 3 ? Poly.Area(s.Lake) : 0f)) / 10000f;
+            float carved = (s.Lake.Length >= 3 ? Poly.Area(s.Lake) : 0f) + (plaza.Length >= 3 ? Poly.Area(plaza) : 0f);
+            float plantedHa = math.max(0f, region.Area - carved) / 10000f;
             int trees = math.min(4000, (int)math.round(plantedHa * ctx.F("treeDensity")));
             int bushes = math.min(6000, (int)math.round(plantedHa * ctx.F("bushDensity")));
             bool belt = ctx.B("belt");
@@ -176,14 +265,16 @@ namespace Placemaker.Core.Layers.Park
             if (ctx.B("fence"))
             {
                 var fence = AssetMix.One(ctx.S("fenceAsset"));
-                foreach (var run in Fences.Runs(region, s.Gates, 3.75f))
+                foreach (var run in Fences.Runs(region, gates, 3.75f))
                     ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
             }
             EmitItems(ctx, s, treeIds, bushIds);
-            foreach (var g in s.Gates)
+            foreach (var g in gates)
                 if (g.Suggested) ctx.Plan.Facts["suggestedEntrances"] = (ctx.Plan.Facts.TryGetValue("suggestedEntrances", out var n) ? n : 0) + 1;
 
             // 7. Regions for children.
+            if (plaza.Length >= 3) ctx.AddRegion(plaza, PlazaPlace, PlazaPlace, RegionTags.Paved);
+            if (pondFeature && s.Lake.Length >= 3) ctx.AddRegion(s.Lake, PondPlace, PondPlace, "water");
             for (int i = 0; i < lawns.Count; i++)
                 if (i == 0) ctx.AddRegion(lawns[i], "green:0", RegionTags.Green, RegionTags.Core);
                 else ctx.AddRegion(lawns[i], "green:" + i, RegionTags.Green);
@@ -199,7 +290,8 @@ namespace Placemaker.Core.Layers.Park
             ctx.Stat(Keys.StatLamps, s.Count(ParkItemKind.Lamp), Keys.UnitCount);
             ctx.Stat(Keys.StatBins, s.Count(ParkItemKind.Bin), Keys.UnitCount);
             ctx.Plan.Facts["parkArea"] = region.Area;
-            ctx.Plan.Facts["entrances"] = s.Gates.Count;
+            ctx.Plan.Facts["entrances"] = gates.Count;
+            if (plaza.Length >= 3) ctx.Plan.Facts["plazaArea"] = Poly.Area(plaza);
         }
 
         private static int LoopsFor(string mode, float area)
@@ -213,18 +305,21 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        private static List<float2[]> Lawns(LayerContext ctx, ParkSite s)
+        private static List<float2[]> Lawns(LayerContext ctx, ParkSite s, float2[] plaza)
         {
-            if (s.Curves.Count == 0 && s.Lake.Length < 3)
+            bool hasPlaza = plaza.Length >= 3;
+            if (s.Curves.Count == 0 && s.Lake.Length < 3 && !hasPlaza)
                 return new List<float2[]> { s.LayerRegion.Ring };
             var corridors = s.Occ.Corridors;
             var lake = s.Lake;
             return FreeSpace.Pieces(s.LayerRegion, p =>
-                    corridors.Overlaps(p, 0.75f) || lake.Length >= 3 && (Poly.Contains(lake, p) || ParkSite.MinDistToRing(lake, p) < 2f),
+                    corridors.Overlaps(p, 0.75f) || lake.Length >= 3 && (Poly.Contains(lake, p) || ParkSite.MinDistToRing(lake, p) < 2f)
+                    || hasPlaza && (Poly.Contains(plaza, p) || ParkSite.MinDistToRing(plaza, p) < 1f),
                 2f, 120f, ctx.Cancel);
         }
 
-        private static void EmitLake(LayerContext ctx, float2[] lake)
+        /// <summary>Lake terraform + water + permanent warning. Shared with the pond feature layer.</summary>
+        public static void EmitLake(LayerContext ctx, float2[] lake, float depth = 3f)
         {
             // Water must sit below the lowest bank, otherwise it spills: level = lowest shore − 0.5 m.
             float shore = float.MaxValue;
@@ -234,7 +329,7 @@ namespace Placemaker.Core.Layers.Park
             var anchor = ParkLakePlanner.WaterAnchor(lake, out _);
             ctx.Plan.Terraform.Add(new PlannedTerraform
             {
-                Ring = Poly.To3D(lake, ctx.H), Kind = TerraformKind.Lower, TargetHeight = level - 3f,
+                Ring = Poly.To3D(lake, ctx.H), Kind = TerraformKind.Lower, TargetHeight = level - depth,
                 Permanent = true, WaterLevel = level, WaterAnchor = new float3(anchor.x, level, anchor.y),
             });
             ctx.Surface(lake, SurfaceRole.Water, new AssetRef("", Array.Empty<string>()));

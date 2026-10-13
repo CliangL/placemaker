@@ -13,7 +13,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Park
 {
     [AreaGenerator(40)]
-    public sealed class CampgroundLayer : LayerBase
+    public sealed class CampgroundLayer : LayerBase, IHasFeatures
     {
         public const string LayerId = "campground";
 
@@ -23,6 +23,15 @@ namespace Placemaker.Core.Layers.Park
         public override LayerKind Kind => LayerKind.Fill;
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core };
         public override float MinArea => 600f;
+
+        private static readonly FeatureInfo[] FeatureList =
+        {
+            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Campground.Feature.restrooms", TooltipKey = "Placemaker.Campground.Feature.restrooms.Tooltip" },
+            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.playground", Preset = ParkLayer.Bag(("size", "small")) },
+            new FeatureInfo { Layer = "picnic", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.picnic", Preset = ParkLayer.Bag(("groups", 2.0), ("shelter", true)) },
+        };
+
+        public IReadOnlyList<FeatureInfo> Features => FeatureList;
 
         protected override void DefineControls(ControlSet c)
         {
@@ -102,7 +111,8 @@ namespace Placemaker.Core.Layers.Park
 
             // Facilities: one restroom per 25 pitches near the paths, plus one near the entrance.
             int restrooms = 0;
-            if (ctx.B("facilities") && pitches.Count > 0 &&
+            // The restrooms feature replaces the built-in restroom block.
+            if (ctx.B("facilities") && !ctx.Input.HasChild("restrooms") && pitches.Count > 0 &&
                 AssetAvailability.Require(ctx.Plan, AssetCategories.Restroom, new[] { ctx.S("restroomAsset") }, Keys.Category(AssetCategories.Restroom)))
             {
                 var asset = AssetMix.One(ctx.S("restroomAsset"));
@@ -112,7 +122,7 @@ namespace Placemaker.Core.Layers.Park
                 {
                     if (!Spots.Find(occ, r, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, (uint)i + 50u), out var spot, null, 0f, 1f)) break;
                     var toward = occ.Corridors.Nearest(spot, 300f, out var q) >= 0 ? q : region.Centroid;
-                    ctx.Object(spot, math.atan2(toward.x - spot.x, toward.y - spot.y), ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)i));
+                    ctx.Object(spot, math.atan2(toward.x - spot.x, toward.y - spot.y), ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)i), -1, AssetCategories.Restroom);
                     occ.Take(spot, r, 2);
                     restrooms++;
                 }
@@ -130,9 +140,9 @@ namespace Placemaker.Core.Layers.Park
                 if (ctx.B("pads")) ctx.Surface(LayerRegion.Rect(c, t, size * 0.5f, size * 0.5f), SurfaceRole.Decorative, AssetMix.One(ctx.S("padSurface")));
                 uint v = Hashing.Mix(ctx.Seed, (uint)i + 7u);
                 var tent = c - toPath * size * 0.15f;
-                ctx.Object(tent, math.atan2(toPath.x, toPath.y), ObjectRole.Furniture, AssetMix.Pick(pitchIds, v), v);
-                if (fires) ctx.Object(c + toPath * size * 0.28f + t * size * 0.28f, 0f, ObjectRole.Furniture, campfire, Hashing.Mix(v, 1u));
-                if (tables) ctx.Object(c + toPath * size * 0.25f - t * size * 0.25f, math.atan2(t.x, t.y), ObjectRole.Furniture, table, Hashing.Mix(v, 2u));
+                ctx.Object(tent, math.atan2(toPath.x, toPath.y), ObjectRole.Furniture, AssetMix.Pick(pitchIds, v), v, -1, AssetCategories.CampingPitch);
+                if (fires) ctx.Object(c + toPath * size * 0.28f + t * size * 0.28f, 0f, ObjectRole.Furniture, campfire, Hashing.Mix(v, 1u), -1, AssetCategories.CampingFire);
+                if (tables) ctx.Object(c + toPath * size * 0.25f - t * size * 0.25f, math.atan2(t.x, t.y), ObjectRole.Furniture, table, Hashing.Mix(v, 2u), -1, AssetCategories.Picnic);
             }
             ctx.Check();
 

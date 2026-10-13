@@ -38,6 +38,10 @@ namespace Placemaker.Core.Build
             }
         }
 
+        /// <summary>The object's explicit category when set, else the role's default category.</summary>
+        public static string ForObject(PlannedObject o) =>
+            o == null ? AssetCategories.Decoration : !string.IsNullOrEmpty(o.Category) ? o.Category : ForObject(o.Role);
+
         public static string ForObject(ObjectRole role)
         {
             switch (role)
@@ -187,7 +191,7 @@ namespace Placemaker.Core.Build
                     if (!math.all(math.isfinite(o.Position))) continue;
                     Add(w.Objects, excluded, new WorkItem
                     {
-                        Kind = WorkKind.Object, Layer = li, Index = i, Category = RoleCategories.ForObject(o.Role), Asset = o.Asset,
+                        Kind = WorkKind.Object, Layer = li, Index = i, Category = RoleCategories.ForObject(o), Asset = o.Asset,
                         GeneratorId = gen, Anchor = o.Position.xz,
                     });
                     if (o.Role == ObjectRole.ParkingBay) w.HasParking = true;

@@ -114,14 +114,26 @@ namespace Placemaker.Game.Assets
 
         // ───────────────────────── automatic assets (US5) ─────────────────────────
 
-        private const int VarietyPoolSize = 8;
-        private readonly Dictionary<string, IReadOnlyList<string>> _pools = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
-        private int _poolsVersion = -1;
+        // FEEDBACK-2 #1: automatic picks come ONLY from items tagged "auto:<category>" (AssetHeuristics.
+        // AutoEligible: no stadium seats, signs, advertising, construction props…), vanilla before
+        // modded, and from one vanilla park palette per step (AutoAssets). Explicit picks may use any
+        // item of the category (Items()).
+        private const int AutoPoolSize = 12;
+        private Dictionary<string, List<string>> _autoPools = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        private Dictionary<string, Dictionary<string, List<string>>> _paletteItems = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.Ordinal);
+        private List<string> _palettes = new List<string>();
+        private static readonly IReadOnlyList<string> NoNames = Array.Empty<string>();
 
         public int ResolveAutomatic(ComposedPlan plan)
         {
             if (!_ready || plan == null) return 0;
-            try { return AutoAssets.Resolve(plan, AutomaticPool, PrefabExists); }
+            try
+            {
+                return AutoAssets.Resolve(plan, new AutoAssetSource
+                {
+                    Pool = AutomaticPool, Exists = PrefabExists, Palettes = _palettes, PaletteItems = PaletteItems,
+                });
+            }
             catch (Exception e)
             {
                 Mod.Log.Warn("Placemaker could not resolve automatic assets: " + e.Message);
@@ -130,32 +142,132 @@ namespace Placemaker.Game.Assets
         }
 
         /// <summary>
-        /// Ordered candidates for automatic refs of a category: the category default first; variety
-        /// categories (trees, bushes, flowerbeds) add the best-scored vanilla items (stable across
-        /// playsets and sessions). Rebuilt when the catalog version changes.
+        /// Ordered automatic candidates of a category (eligible items only; vanilla first, then by
+        /// score; fences: network fences first). The first item is the category default.
         /// </summary>
         public IReadOnlyList<string> AutomaticPool(string category)
         {
-            if (_poolsVersion != _version) { _pools.Clear(); _poolsVersion = _version; }
-            if (category == null) return Array.Empty<string>();
-            if (_pools.TryGetValue(category, out var cached)) return cached;
-            var list = new List<string>();
-            var defName = NameOf(DefaultFor(category));
-            if (!string.IsNullOrEmpty(defName)) list.Add(defName);
-            if (list.Count > 0 && AutoAssets.VarietyCategories.Contains(category) && _byCategory.TryGetValue(category, out var items))
+            if (category != null && _autoPools.TryGetValue(category, out var list)) return list;
+            // Sub-categories fall back to their parent ("surface.grass" → "surface").
+            int dot = category?.LastIndexOf('.') ?? -1;
+            if (dot > 0 && category.StartsWith("surface", StringComparison.Ordinal)) return AutomaticPool(category.Substring(0, dot));
+            return NoNames;
+        }
+
+        /// <summary>Eligible items of a category seen in a vanilla park palette (best first).</summary>
+        public IReadOnlyList<string> PaletteItems(string palette, string category) =>
+            palette != null && category != null && _paletteItems.TryGetValue(palette, out var byCat) && byCat.TryGetValue(category, out var list)
+                ? list : NoNames;
+
+        /// <summary>Sort key of an automatic candidate: lower tier first, then higher score, then name.</summary>
+        private (int tier, int score) AutoRank(string category, CatalogItem it, bool vanilla)
+        {
+            int score = AssetHeuristics.DefaultScore(category, it.Id, it.Info.NetWidth);
+            int tier = vanilla ? 0 : 1;
+            // Fences: a network fence is one continuous, corner-joined fence — always before prop pieces.
+            if (category == AssetCategories.Fence && !EntityManager.HasComponent<NetData>(it.Prefab)) tier += 2;
+            return (tier, score);
+        }
+
+        private int CompareAuto(string category, CatalogItem a, CatalogItem b)
+        {
+            var ra = AutoRank(category, a, IsVanilla(a)); var rb = AutoRank(category, b, IsVanilla(b));
+            if (ra.tier != rb.tier) return ra.tier.CompareTo(rb.tier);
+            if (ra.score != rb.score) return rb.score.CompareTo(ra.score);
+            return string.CompareOrdinal(a.Id, b.Id);
+        }
+
+        private static bool IsVanilla(CatalogItem it) => it.Tags != null && Array.IndexOf(it.Tags, "source:vanilla") >= 0;
+        private static bool IsAutoFor(CatalogItem it, string category) => it.Tags != null && Array.IndexOf(it.Tags, "auto:" + category) >= 0;
+
+        /// <summary>Builds the automatic pools, palette index and defaults from the classified items.</summary>
+        private void BuildAutomatic(Dictionary<string, List<CatalogItem>> byCategory, Dictionary<string, Entity> defaults)
+        {
+            var pools = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (var kv in byCategory)
             {
-                var ranked = new List<CatalogItem>();
-                foreach (var it in items)
-                    if (Array.IndexOf(it.Tags, "source:vanilla") >= 0 && it.Id != defName && Usable(it.Prefab)) ranked.Add(it);
-                ranked.Sort((a, b) =>
+                var eligible = new List<CatalogItem>();
+                foreach (var it in kv.Value) if (IsAutoFor(it, kv.Key)) eligible.Add(it);
+                // A category with no eligible item keeps a default (layers may still name it), but no automatic pool.
+                var ranked = eligible.Count > 0 ? eligible : new List<CatalogItem>(kv.Value);
+                ranked.Sort((a, b) => CompareAuto(kv.Key, a, b));
+                if (ranked.Count > 0) defaults[kv.Key] = ranked[0].Prefab;
+                if (eligible.Count == 0) continue;
+                // Vanilla only when vanilla has something: modded items join a pool only if no vanilla exists.
+                bool anyVanilla = false;
+                foreach (var it in ranked) if (IsVanilla(it)) { anyVanilla = true; break; }
+                var names = new List<string>();
+                foreach (var it in ranked)
                 {
-                    int sa = AssetHeuristics.DefaultScore(category, a.Id, a.Info.NetWidth), sb = AssetHeuristics.DefaultScore(category, b.Id, b.Info.NetWidth);
-                    return sa != sb ? sb.CompareTo(sa) : string.CompareOrdinal(a.Id, b.Id);
-                });
-                for (int i = 0; i < ranked.Count && list.Count < VarietyPoolSize; i++) list.Add(ranked[i].Id);
+                    if (anyVanilla && !IsVanilla(it) && !(kv.Key == AssetCategories.Fence && EntityManager.HasComponent<NetData>(it.Prefab))) continue;
+                    names.Add(it.Id);
+                    if (names.Count >= AutoPoolSize) break;
+                }
+                pools[kv.Key] = names;
             }
-            _pools[category] = list;
-            return list;
+
+            // Palette index: palette → category → eligible items (same ranking).
+            var palettes = new Dictionary<string, Dictionary<string, List<CatalogItem>>>(StringComparer.Ordinal);
+            foreach (var kv in byCategory)
+            {
+                if (!AutoAssets.PaletteCategories.Contains(kv.Key)) continue;
+                foreach (var it in kv.Value)
+                {
+                    if (!IsAutoFor(it, kv.Key) || it.Tags == null) continue;
+                    foreach (var tag in it.Tags)
+                    {
+                        if (!tag.StartsWith("palette:", StringComparison.Ordinal)) continue;
+                        if (!palettes.TryGetValue(tag, out var byCat)) palettes[tag] = byCat = new Dictionary<string, List<CatalogItem>>(StringComparer.Ordinal);
+                        if (!byCat.TryGetValue(kv.Key, out var l)) byCat[kv.Key] = l = new List<CatalogItem>();
+                        l.Add(it);
+                    }
+                }
+            }
+            var paletteItems = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.Ordinal);
+            var usable = new List<string>();
+            foreach (var kv in palettes)
+            {
+                var byCat = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+                foreach (var c in kv.Value)
+                {
+                    c.Value.Sort((a, b) => CompareAuto(c.Key, a, b));
+                    var names = new List<string>(c.Value.Count);
+                    foreach (var it in c.Value) names.Add(it.Id);
+                    byCat[c.Key] = names;
+                }
+                paletteItems[kv.Key] = byCat;
+                // A palette worth dressing a park with: general (not a sports ground / skate park…) and
+                // offering at least two of the everyday categories.
+                int core = 0;
+                foreach (var c in new[] { AssetCategories.Tree, AssetCategories.Bush, AssetCategories.Bench, AssetCategories.Lamp, AssetCategories.Bin })
+                    if (byCat.ContainsKey(c)) core++;
+                if (core >= 2 && AssetHeuristics.IsGeneralParkPalette(kv.Key.Substring("palette:".Length))) usable.Add(kv.Key);
+            }
+            usable.Sort(string.CompareOrdinal);
+
+            _autoPools = pools;
+            _paletteItems = paletteItems;
+            _palettes = usable;
+            LogAutomatic(byCategory);
+        }
+
+        private void LogAutomatic(Dictionary<string, List<CatalogItem>> byCategory)
+        {
+            var sb = new StringBuilder("Placemaker automatic pools (eligible/total: first picks):");
+            var keys = new List<string>(byCategory.Keys);
+            keys.Sort(string.CompareOrdinal);
+            foreach (var c in keys)
+            {
+                int eligible = 0;
+                foreach (var it in byCategory[c]) if (IsAutoFor(it, c)) eligible++;
+                sb.Append("\n  ").Append(c).Append(' ').Append(eligible).Append('/').Append(byCategory[c].Count).Append(": ");
+                if (_autoPools.TryGetValue(c, out var pool))
+                    for (int i = 0; i < pool.Count && i < 4; i++) sb.Append(i == 0 ? "" : ", ").Append(pool[i]);
+                else sb.Append("(none — explicit picks only)");
+            }
+            sb.Append("\n  palettes usable for automatic dressing: ").Append(_palettes.Count).Append(" of ").Append(_paletteItems.Count);
+            for (int i = 0; i < _palettes.Count && i < 6; i++) sb.Append(i == 0 ? " (" : ", ").Append(_palettes[i]).Append(i == Math.Min(_palettes.Count, 6) - 1 ? ")" : "");
+            Mod.Log.Info(sb.ToString());
         }
 
         // ───────────────────────── extra API for build/groups ─────────────────────────
@@ -252,6 +364,11 @@ namespace Placemaker.Game.Assets
                     };
                     var t = new List<string>(categories);
                     t.Add(prefab.isBuiltin ? "source:vanilla" : "source:mod");
+                    // Automatic eligibility per category ("auto" = eligible for at least one).
+                    bool anyAuto = false;
+                    foreach (var c in categories)
+                        if (AssetHeuristics.AutoEligible(c, prefab.name, traits)) { t.Add("auto:" + c); anyAuto = true; }
+                    if (anyAuto) t.Add("auto");
                     tags[prefab.name] = t;
                     byName[prefab.name] = item;
                     info[prefab.name] = item.Info;
@@ -272,21 +389,11 @@ namespace Placemaker.Game.Assets
 
             foreach (var kv in byName) kv.Value.Tags = tags.TryGetValue(kv.Key, out var t) ? t.ToArray() : Array.Empty<string>();
 
-            // Prefer native network fences when the game has them (PM): prop pieces stay as fallback.
+            // Defaults = best automatic-eligible item (vanilla first; network fences before prop pieces, PM).
             var defaults = new Dictionary<string, Entity>(StringComparer.Ordinal);
             foreach (var kv in byCategory)
-            {
                 kv.Value.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
-                CatalogItem best = null; int bestScore = int.MinValue;
-                foreach (var it in kv.Value)
-                {
-                    int s = AssetHeuristics.DefaultScore(kv.Key, it.Id, it.Info.NetWidth);
-                    if (Array.IndexOf(it.Tags, "source:vanilla") >= 0) s += 5;   // stable defaults across playsets
-                    if (kv.Key == AssetCategories.Fence && EntityManager.HasComponent<NetData>(it.Prefab)) s += 300;
-                    if (s > bestScore || (s == bestScore && best != null && string.CompareOrdinal(it.Id, best.Id) < 0)) { best = it; bestScore = s; }
-                }
-                if (best != null) defaults[kv.Key] = best.Prefab;
-            }
+            BuildAutomatic(byCategory, defaults);
 
             bool changed = !SameContent(byName);
             _byCategory.Clear(); foreach (var kv in byCategory) _byCategory[kv.Key] = kv.Value;
@@ -354,12 +461,33 @@ namespace Placemaker.Game.Assets
             if (EntityManager.HasComponent<StreetLightData>(e)) t |= AssetTraits.StreetLight;
             if (prefab.TryGet<ObjectSubObjects>(out var subs) && subs?.m_SubObjects != null && subs.m_SubObjects.Length > 0) t |= AssetTraits.HasSubObjects;
 
+            if (prefab.isBuiltin) t |= AssetTraits.Vanilla;
+            if (EntityManager.HasComponent<BrandObjectData>(e)) t |= AssetTraits.BrandObject;
+            if (EntityManager.HasComponent<PlaceableObjectData>(e))
+            {
+                var flags = EntityManager.GetComponentData<PlaceableObjectData>(e).m_Flags;
+                const global::Game.Objects.PlacementFlags netAttached = global::Game.Objects.PlacementFlags.RoadSide | global::Game.Objects.PlacementFlags.RoadNode
+                    | global::Game.Objects.PlacementFlags.RoadEdge | global::Game.Objects.PlacementFlags.NetObject;
+                const global::Game.Objects.PlacementFlags wall = global::Game.Objects.PlacementFlags.Wall | global::Game.Objects.PlacementFlags.Hanging;
+                const global::Game.Objects.PlacementFlags water = global::Game.Objects.PlacementFlags.Shoreline | global::Game.Objects.PlacementFlags.Floating
+                    | global::Game.Objects.PlacementFlags.Underwater | global::Game.Objects.PlacementFlags.Waterway;
+                if ((flags & netAttached) != 0) t |= AssetTraits.NetAttached;
+                if ((flags & wall) != 0) t |= AssetTraits.WallOrHanging;
+                if ((flags & water) != 0) t |= AssetTraits.WaterPlacement;
+            }
+
             if (EntityManager.HasBuffer<ActivityLocationElement>(e))
             {
                 uint sitting = new ActivityMask(ActivityType.BenchSitting).m_Mask;
+                uint exercise = 0;
+                foreach (var a in new[] { ActivityType.PushUps, ActivityType.PullUps, ActivityType.SitUps, ActivityType.JumpingJacks, ActivityType.Squats })
+                    exercise |= new ActivityMask(a).m_Mask;
                 var locations = EntityManager.GetBuffer<ActivityLocationElement>(e, true);
                 for (int i = 0; i < locations.Length; i++)
-                    if ((locations[i].m_ActivityMask.m_Mask & sitting) != 0) { t |= AssetTraits.BenchActivity; break; }
+                {
+                    if ((locations[i].m_ActivityMask.m_Mask & sitting) != 0) t |= AssetTraits.BenchActivity;
+                    if ((locations[i].m_ActivityMask.m_Mask & exercise) != 0) t |= AssetTraits.ExerciseActivity;
+                }
             }
 
             if (EntityManager.HasBuffer<SubLane>(e))

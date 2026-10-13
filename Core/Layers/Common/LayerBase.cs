@@ -109,7 +109,7 @@ namespace Placemaker.Core.Layers.Common
 
         public ControlSchema Markers(string id, ControlTier tier, params string[] kinds)
         {
-            var c = Add(id, ControlKind.Markers, tier, "", null);
+            var c = Add(id, ControlKind.Markers, tier, "entrances", null);
             c.MarkerKinds = kinds;
             NoRandom.Add(id);
             return c;
@@ -131,6 +131,8 @@ namespace Placemaker.Core.Layers.Common
     public static class ControlSchemaExtensions
     {
         public static ControlSchema Tip(this ControlSchema c) { c.TooltipKey = c.LabelKey + ".Tooltip"; return c; }
+        /// <summary>Puts the control in a section (heading "Placemaker.UI.Group.{group}").</summary>
+        public static ControlSchema In(this ControlSchema c, string group) { c.Group = group ?? ""; return c; }
         public static ControlSchema When(this ControlSchema c, string condition) { c.VisibleWhen = condition; return c; }
         public static ControlSchema Cheap(this ControlSchema c) { c.Cheap = true; return c; }
         public static ControlSchema WithIcon(this ControlSchema c, string icon) { c.Icon = icon; return c; }
@@ -164,9 +166,10 @@ namespace Placemaker.Core.Layers.Common
 
         public void Stat(string key, double value, string unit) => Plan.Stats.Add(new PlanStat(key, value, unit));
 
-        public PlannedObject Object(float2 p, float yaw, ObjectRole role, AssetRef asset, uint variation, int age = -1)
+        /// <param name="category">Asset category (AssetCategories) when the role does not imply it — required for ObjectRole.Furniture.</param>
+        public PlannedObject Object(float2 p, float yaw, ObjectRole role, AssetRef asset, uint variation, int age = -1, string category = null)
         {
-            var o = new PlannedObject { Position = P3(p), Yaw = yaw, Role = role, Asset = asset, Variation = variation, Age = age };
+            var o = new PlannedObject { Position = P3(p), Yaw = yaw, Role = role, Asset = asset, Variation = variation, Age = age, Category = category };
             Plan.Objects.Add(o);
             return o;
         }

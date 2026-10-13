@@ -18,10 +18,10 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("density", 8, 1, 40, 1, "perHa", ControlTier.Essential).Tip();
-            c.AssetMulti("assets", AssetCategories.Flowerbed, ControlTier.Essential);
-            c.Slider("bedSize", 5, 2, 12, 1, "count", ControlTier.More).Tip();
-            c.Toggle("nearPaths", true, ControlTier.More).Tip();
+            c.Slider("density", 8, 1, 40, 1, "perHa", ControlTier.Essential, "flowers").Tip();
+            c.AssetMulti("assets", AssetCategories.Flowerbed, ControlTier.Essential, "flowers");
+            c.Slider("bedSize", 5, 2, 12, 1, "count", ControlTier.More, "flowers").Tip();
+            c.Toggle("nearPaths", true, ControlTier.More, "flowers").Tip();
             c.RandomRange("density", 4, 20);
             c.RandomRange("bedSize", 3, 8);
             c.Chance("nearPaths", 0.75f);

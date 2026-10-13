@@ -93,6 +93,8 @@ export interface LayerType {
   emits: string[];          // region tags it produces
   controls: Control[];
   presets: { id: string; name: string; icon?: string }[];
+  /** Not offered as its own card in the Make row (split, pond): used by recipes / features only. */
+  hidden?: boolean;
 }
 
 export interface RecipeInfo {
@@ -121,6 +123,13 @@ export interface FeatureView {
   enabled: boolean;
   /** Path of the child step when enabled (its controls are shown under the toggle, collapsed by default). */
   path?: string;
+  /** Tooltip key (explanation lives here, labels stay short). */
+  tooltip?: string;
+  /** Ids of the PARENT step's controls that belong to this feature (e.g. park plaza shape / position / size):
+   *  render them under the toggle while it is on, and hide them from the parent's own groups. */
+  options?: string[];
+  /** On by default for new designs. */
+  defaultOn?: boolean;
 }
 
 export interface StepView {
