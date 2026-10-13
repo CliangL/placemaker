@@ -245,7 +245,6 @@ namespace Placemaker.Game.Groups
             EntityManager.AddComponentData(e, new PlacemakerGroup { GroupId = rec.GroupId, Flags = (int)rec.Flags });
             EntityManager.AddBuffer<PlacemakerGroupBlob>(e);
             if (underConstruction) EntityManager.AddComponent<PlacemakerUnderConstruction>(e);
-            EntityManager.AddComponent<Created>(e);
             WriteRecord(e, rec);
             _records[rec.GroupId] = e;
             if (!_allIds.Contains(rec.GroupId)) _allIds.Add(rec.GroupId);
