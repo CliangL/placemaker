@@ -16,8 +16,8 @@ namespace Placemaker.Game.Settings
     public enum PreviewDetail { Simple = 0, Normal = 1, Detailed = 2 }
 
     [FileLocation("ModsSettings/Placemaker/Placemaker")]
-    [SettingsUIGroupOrder(GroupGeneral, GroupKeys, GroupMaintenance)]
-    [SettingsUIShowGroupName(GroupGeneral, GroupKeys, GroupMaintenance)]
+    [SettingsUIGroupOrder(GroupGeneral, GroupBuild, GroupKeys, GroupMaintenance)]
+    [SettingsUIShowGroupName(GroupGeneral, GroupBuild, GroupKeys, GroupMaintenance)]
     [SettingsUIKeyboardAction(ActionToggleTool, ActionType.Button)]
     [SettingsUIKeyboardAction(ActionPrimary, ActionType.Button)]
     [SettingsUIKeyboardAction(ActionUndo, ActionType.Button)]
@@ -29,6 +29,7 @@ namespace Placemaker.Game.Settings
         public const string GroupGeneral = "General";
         public const string GroupKeys = "Keys";
         public const string GroupMaintenance = "Maintenance";
+        public const string GroupBuild = "Build";
 
         public const string ActionToggleTool = "ToggleTool";
         public const string ActionPrimary = "Primary";
@@ -117,6 +118,55 @@ namespace Placemaker.Game.Settings
             }
         }
 
+        // ───────────── Building (forwarded to the build workstream's systems) ─────────────
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool AutoExcludeCollisions { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool SurfaceClones { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool ParkingEconomy { get; set; }
+
+        [SettingsUISlider(min = 0, max = 50, step = 1, scalarMultiplier = 1)]
+        [SettingsUISection(SectionMain, GroupBuild)]
+        [SettingsUIDisableByCondition(typeof(PlacemakerSettings), nameof(ParkingEconomyOff))]
+        public int DefaultParkingFee { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool ExperimentalParkingCompanion { get; set; }
+
+        [SettingsUISlider(min = 0.5f, max = 3f, step = 0.1f, scalarMultiplier = 1)]
+        [SettingsUICustomFormat(fractionDigits = 1)]
+        [SettingsUISection(SectionMain, GroupBuild)]
+        [SettingsUIDisableByCondition(typeof(PlacemakerSettings), nameof(CompanionOff))]
+        public float CompanionUpkeepFactor { get; set; }
+
+        public bool ParkingEconomyOff() => !ParkingEconomy;
+        public bool CompanionOff() => !ExperimentalParkingCompanion;
+
+        public override void Apply()
+        {
+            base.Apply();
+            PushToServices();
+        }
+
+        /// <summary>The build/economy systems read static switches (docs/proposals/gamebuild.md §6).</summary>
+        public void PushToServices()
+        {
+            try
+            {
+                global::Placemaker.Game.Build.BuildService.AutoExcludeCollisions = AutoExcludeCollisions;
+                global::Placemaker.Game.Build.SurfaceCloneSystem.FeatureEnabled = SurfaceClones;
+                global::Placemaker.Game.Economy.ParkingEconomySystem.FeatureEnabled = ParkingEconomy;
+                global::Placemaker.Game.Economy.ParkingEconomySystem.DefaultFee = DefaultParkingFee;
+                global::Placemaker.Game.Economy.ParkingCompanionSystem.CompanionEnabled = ExperimentalParkingCompanion;
+                global::Placemaker.Game.Economy.ParkingCompanionUpkeepSystem.UpkeepFactor = CompanionUpkeepFactor;
+            }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: build options not applied: " + e.Message); }
+        }
+
         // ───────────── Persisted tool state (not shown) ─────────────
 
         /// <summary>CS2 resets a tool's selectedSnap to "all" whenever it is created; we restore the player's choice.</summary>
@@ -138,6 +188,12 @@ namespace Placemaker.Game.Settings
             LastAreaMode = 0;
             LastRecipe = "";
             PanelCollapsed = false;
+            AutoExcludeCollisions = false;
+            SurfaceClones = true;
+            ParkingEconomy = true;
+            DefaultParkingFee = 0;
+            ExperimentalParkingCompanion = false;
+            CompanionUpkeepFactor = 1f;
             // Snap mask and bindings are intentionally not reset here: the snap mask keeps the
             // player's last choice, bindings have their own reset button.
         }

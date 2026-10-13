@@ -134,7 +134,12 @@ namespace Placemaker.Game.Tool
         public void PollBuildWhileInactive()
         {
             if (!_building || IsActive) return;
-            try { UpdateBuild(); }
+            try
+            {
+                UpdateBuild();
+                // Finished while another tool is active: give ignoreErrors back now.
+                if (!_building && !IsActive && _anarchyApplied && !(m_ToolSystem.activeTool is global::Placemaker.Game.Build.BuildToolSystem)) ApplyAnarchy(false);
+            }
             catch (Exception e) { Mod.Log.Warn("Placemaker: build poll failed: " + e.Message); }
         }
 

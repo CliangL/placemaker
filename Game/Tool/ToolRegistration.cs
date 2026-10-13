@@ -31,6 +31,7 @@ namespace Placemaker.Game.Tool
                 AssetDatabase.global.LoadSettings(nameof(Placemaker), Settings, new PlacemakerSettings(mod));
             }
             catch (Exception e) { Mod.Log.Warn("Placemaker: settings not loaded, using defaults: " + e.Message); }
+            Settings.PushToServices();
             Settings.RegisterInOptionsUI();
             // Must run before any GetAction() (actions come from the ProxyBinding properties).
             Settings.RegisterKeyBindings();
@@ -76,7 +77,7 @@ namespace Placemaker.Game.Tool
 
             r[s.GetSettingsLocaleID()] = T("Placemaker.Name", "Placemaker");
             r[s.GetOptionTabLocaleID(PlacemakerSettings.SectionMain)] = T("Placemaker.Settings.Tab.Main", "Placemaker");
-            foreach (var g in new[] { PlacemakerSettings.GroupGeneral, PlacemakerSettings.GroupKeys, PlacemakerSettings.GroupMaintenance })
+            foreach (var g in new[] { PlacemakerSettings.GroupGeneral, PlacemakerSettings.GroupBuild, PlacemakerSettings.GroupKeys, PlacemakerSettings.GroupMaintenance })
                 r[s.GetOptionGroupLocaleID(g)] = T("Placemaker.Settings.Group." + g, g);
             foreach (var p in new[]
             {
@@ -84,6 +85,8 @@ namespace Placemaker.Game.Tool
                 nameof(PlacemakerSettings.ToggleToolBinding), nameof(PlacemakerSettings.PrimaryBinding), nameof(PlacemakerSettings.UndoBinding),
                 nameof(PlacemakerSettings.RedoBinding), nameof(PlacemakerSettings.RedoAltBinding), nameof(PlacemakerSettings.ResetKeys),
                 nameof(PlacemakerSettings.RemoveEverything), nameof(PlacemakerSettings.ResetDefaults),
+                nameof(PlacemakerSettings.AutoExcludeCollisions), nameof(PlacemakerSettings.SurfaceClones), nameof(PlacemakerSettings.ParkingEconomy),
+                nameof(PlacemakerSettings.DefaultParkingFee), nameof(PlacemakerSettings.ExperimentalParkingCompanion), nameof(PlacemakerSettings.CompanionUpkeepFactor),
             })
             {
                 r[s.GetOptionLabelLocaleID(p)] = T("Placemaker.Settings." + p, p);

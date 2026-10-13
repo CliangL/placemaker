@@ -68,6 +68,7 @@ namespace Placemaker.Game.Tool
         private bool _panelCollapsed;
         private bool _anarchy;
         private bool _savedIgnoreErrors;
+        private bool _anarchyApplied;
 
         private float _brushSize = 150f;
         private bool _brushSquare;
@@ -153,12 +154,14 @@ namespace Placemaker.Game.Tool
 
         public void Toggle()
         {
-            if (m_ToolSystem == null) return;
+            // While a build runs the build service owns the tool slot; switching tools would abort it.
+            if (m_ToolSystem == null || _building) return;
             m_ToolSystem.activeTool = m_ToolSystem.activeTool == this ? (ToolBaseSystem)m_DefaultToolSystem : this;
         }
 
         public void Close()
         {
+            if (_building) return;
             if (m_ToolSystem != null && m_ToolSystem.activeTool == this) m_ToolSystem.activeTool = m_DefaultToolSystem;
         }
 
@@ -181,7 +184,8 @@ namespace Placemaker.Game.Tool
             _markerPath = _markerKind = null;
             _hoverGroup = 0;
             EnableActions(false);
-            if (_anarchy) ApplyAnarchy(false);
+            // While the build service holds the tool slot for our build, Anarchy must stay in effect.
+            if (_anarchy && !_building) ApplyAnarchy(false);
             LockSnapMask();
             _wasRunning = false;
             Touch();
@@ -496,6 +500,8 @@ namespace Placemaker.Game.Tool
         private void ApplyAnarchy(bool on)
         {
             if (m_ToolSystem == null) return;
+            if (on == _anarchyApplied) return;
+            _anarchyApplied = on;
             if (on) { _savedIgnoreErrors = m_ToolSystem.ignoreErrors; m_ToolSystem.ignoreErrors = true; }
             else m_ToolSystem.ignoreErrors = _savedIgnoreErrors;
         }
