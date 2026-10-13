@@ -25,6 +25,7 @@ namespace Placemaker.Game.UI
 
         private int _stateStamp = -1;
         private int _designStamp = -1, _designPlanStamp = -1;
+        private int _designPushFrame = -100;
         private string _summaryStamp;
         private int _catalogStamp = -1, _catalogGenerators = -1;
         private string _assetsStamp;
@@ -37,6 +38,7 @@ namespace Placemaker.Game.UI
         {
             base.OnCreate();
             _tool = World.GetOrCreateSystemManaged<PlacemakerToolSystem>();
+            UiModels.IconFilter = IconPaths.Fix;
 
             AddBinding(_state = new ValueBinding<string>(Group, "state", "{}"));
             AddBinding(_catalog = new ValueBinding<string>(Group, "catalog", "{\"layers\":[],\"recipes\":[]}"));
@@ -85,6 +87,10 @@ namespace Placemaker.Game.UI
             Trigger<double>("removeGroup", id => _tool.RemoveGroup((int)id));
             Trigger<double, string>("renameGroup", (id, name) => _tool.RenameGroup((int)id, name));
             Trigger<bool>("setAnarchy", on => _tool.SetAnarchy(on));
+            Trigger<double, double, double>("locate", (x, y, z) => _tool.Locate((float)x, (float)y, (float)z));
+            Trigger<bool>("acknowledgePermanent", ack => _tool.AcknowledgePermanent(ack));
+            Trigger<string, string>("setMarkerKind", (p, kind) => _tool.SetMarkerKind(p, kind));
+            Trigger<string, double>("removeMarker", (p, i) => _tool.RemoveMarker(p, (int)Math.Round(i)));
         }
 
         // Every trigger is wrapped: an exception from a UI call must never escape into the binding layer.
@@ -166,6 +172,10 @@ namespace Placemaker.Game.UI
         private void PushDesign()
         {
             if (_designStamp == _tool.DesignVersion && _designPlanStamp == _tool.PlanRevision && _frame % 30 != 0) return;
+            // While a slider drags (previewValue) the panel already shows the dragged value: push the design at
+            // most every 6th frame so the drag stays smooth; endPreview bumps the version and the final state goes out.
+            if (_tool.ValuePreviewActive && _designPlanStamp == _tool.PlanRevision && _frame - _designPushFrame < 6) return;
+            _designPushFrame = _frame;
             _designStamp = _tool.DesignVersion;
             _designPlanStamp = _tool.PlanRevision;
             _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan).ToString());
@@ -175,7 +185,9 @@ namespace Placemaker.Game.UI
         {
             bool afford = _tool.CanAfford();
             var failure = _tool.BuildFailure;
-            string stamp = _tool.PlanRevision + "|" + _tool.PlanStale + "|" + afford + "|" + (failure?.Key ?? "") + "|" + (Services.Assets?.Version ?? -1);
+            bool ack = _tool.PermanentAcknowledged;
+            string stamp = _tool.PlanRevision + "|" + _tool.PlanStale + "|" + afford + "|" + _tool.FeedbackVersion + "|" + (failure?.Key ?? "") + "|"
+                + (Services.Assets?.Version ?? -1) + "|" + _tool.AssetsResolvedStamp + "|" + ack;
             if (stamp == _summaryStamp) return;
             _summaryStamp = stamp;
             var input = new SummaryInput
@@ -185,8 +197,13 @@ namespace Placemaker.Game.UI
                 Assets = SafeInfoMap(),
                 Stale = _tool.PlanStale || (_tool.Plan == null && _tool.Planning),
                 CanAfford = afford,
+                PermanentAcknowledged = ack,
             };
-            if (failure != null) input.ExtraIssues.Add(failure);
+            if (failure != null)
+            {
+                input.ExtraIssues.Add(failure);
+                input.ExtraIssues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = "Placemaker.Issue.BuildFailedNext" });
+            }
             _summary.Update(UiModels.Summary(input).ToString());
         }
 

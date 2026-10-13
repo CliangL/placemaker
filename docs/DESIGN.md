@@ -150,3 +150,33 @@ ParkManager's lake default-on. Some may return later, one at a time.
 Paradox's **Park Adventures** DLC (later 2026) adds official drawable parks. Plan for it: keep effects
 behind an "effect provider" so we can emit the DLC's park areas when they exist; our edge is one tool
 for four outcomes + parking + roads.
+
+## 9. Places inside (round 3) — user request 2026-10-13, revised
+
+Inner places are **described, not drawn** (user: "you wouldn't be drawing on the board again, you'd be describing
+how the inner layers act, behave"). A recipe like "park with a round plaza in the centre" works on any area.
+
+Each place inside is a rule:
+- **What:** any layer (Plaza, Parking, Pond, Playground, Campground…), with its own options.
+- **Shape:** circle · square · rectangle (aspect) · follows the outline (inset ring) · strip along an edge.
+- **Where:** centre · a corner (nearest the best road / chosen corner) · along an edge · next to an entrance ·
+  at the end of the main path · spread (several copies).
+- **Size:** % of the area or fixed metres, with min/max; shrinks to fit, reported if it can't fit.
+- **Connection:** how it joins the parent (paths to it, driveway through to the nearest road for parking,
+  open edge vs fenced).
+
+UX: in Design, under the type cards, a **"Places inside"** list: "+ Add" → pick a type card → a compact row
+"[Plaza] [● circle] [centre] [25 %]" with its options below when selected. Preview updates live on the map;
+nothing is drawn by hand. Shipped recipes use it ("Park with central plaza", "Park & ride" = park with parking
+in the corner nearest the road, "Town square" = plaza with a ring of trees).
+
+Engine: `RecipeStep.Places` = list of PlaceRule {Key, Layer step, Shape, Anchor, Size, Connection}. A pure
+PlaceSolver turns rules into rings inside the parent region (respecting each other and the outline); the
+composer reserves them for the parent (Reserved.Polygons + connection markers on their outlines) and runs each
+place's step on its ring with tag "place:<key>". Parents route paths/drives to place entrances.
+
+**Formula vs hand-tuning (user, same day):** recipes stay formulas ("park with a circle in it", "split down the
+middle with a campsite", "corner square that's a parking lot"). Optionally, per build, the player can grab a
+formula-placed place on the map and move/resize/reshape it or redraw it freehand. That override belongs to this
+build only (stored in the build receipt as `PlaceOverride {Key, Ring}`; Edit restores it), never to the recipe.
+A "Reset to formula" button drops the override.

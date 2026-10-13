@@ -15,16 +15,16 @@ namespace Placemaker.Game.Tool
     {
         private bool _building;
         private BuildStatus _buildStatus;
-        private PlanIssue _buildFailure;
-        private List<float3> _buildErrors;
+        private readonly BuildFeedback _feedback = new BuildFeedback();
         private int _hoverGroup, _managedGroup;
         private readonly List<Entity> _members = new List<Entity>();
         private int _membersGroup = -1;
 
         public bool Building => _building;
         public float BuildProgress => _building ? math.saturate(_buildStatus.Progress) : 0f;
-        public PlanIssue BuildFailure => _buildFailure;
-        public IReadOnlyList<float3> BuildErrorPositions => _buildErrors;
+        public PlanIssue BuildFailure => _feedback.Failure;
+        public IReadOnlyList<float3> BuildErrorPositions => _feedback.ErrorPositions;
+        public int FeedbackVersion => _feedback.Version;
         public int HoverGroup => _hoverGroup;
         public int ManagedGroup => _managedGroup;
 
@@ -33,8 +33,10 @@ namespace Placemaker.Game.Tool
             var svc = Services.Build;
             if (svc == null) { Flash(new LocText("Placemaker.Reason.BuildUnavailable")); return; }
             if (_plan == null || _shape == null || _recipe == null) return;
-            _buildFailure = null;
-            _buildErrors = null;
+            if (PermanentPending()) { Flash(new LocText("Placemaker.Reason.AcknowledgePermanent")); return; }
+            // Price = build: the plan carries concrete prefab names for every automatic asset.
+            ResolveAssets();
+            _feedback.Started();
             var request = new BuildRequest
             {
                 Plan = _plan,
@@ -53,13 +55,9 @@ namespace Placemaker.Game.Tool
             {
                 BuildStatus st = default;
                 try { st = svc.Status; } catch (Exception) { }
-                _buildFailure = new PlanIssue
-                {
-                    Severity = IssueSeverity.Error,
-                    Key = string.IsNullOrEmpty(st.MessageKey) ? "Placemaker.Issue.BuildRefused" : st.MessageKey,
-                    Args = st.MessageArgs ?? Array.Empty<object>(),
-                };
-                Flash(new LocText(_buildFailure.Key, _buildFailure.Args));
+                _feedback.Failed(st.MessageKey, st.MessageArgs, st.ErrorPositions, "Placemaker.Issue.BuildRefused");
+                Flash(new LocText(_feedback.Failure.Key, _feedback.Failure.Args), 8f);
+                Touch();
                 return;
             }
             _building = true;
@@ -81,8 +79,8 @@ namespace Placemaker.Game.Tool
             if (svc == null)
             {
                 _building = false;
-                _buildFailure = new PlanIssue { Severity = IssueSeverity.Error, Key = "Placemaker.Reason.BuildUnavailable" };
                 SetStage(ToolStage.Review);
+                _feedback.Failed("Placemaker.Reason.BuildUnavailable", null, null);
                 return;
             }
             BuildStatus st;
@@ -100,16 +98,12 @@ namespace Placemaker.Game.Tool
                 case BuildPhase.Failed:
                     Acknowledge(svc);
                     _building = false;
-                    _buildFailure = new PlanIssue
-                    {
-                        Severity = IssueSeverity.Error,
-                        Key = string.IsNullOrEmpty(st.MessageKey) ? "Placemaker.Issue.BuildFailed" : st.MessageKey,
-                        Args = st.MessageArgs ?? Array.Empty<object>(),
-                        At = st.ErrorPositions != null && st.ErrorPositions.Count > 0 ? st.ErrorPositions[0] : (float3?)null,
-                    };
-                    _buildErrors = st.ErrorPositions != null ? new List<float3>(st.ErrorPositions) : null;
+                    // Land in Review (fix or retry, Esc goes back to Design) — then record the failure, so the
+                    // stage change does not clear it. Any later change clears message and red markers.
                     SetStage(ToolStage.Review);
-                    Flash(new LocText(_buildFailure.Key, _buildFailure.Args), 8f);
+                    _feedback.Failed(st.MessageKey, st.MessageArgs, st.ErrorPositions);
+                    Flash(new LocText(_feedback.Failure.Key, _feedback.Failure.Args), 8f);
+                    Touch();
                     break;
                 case BuildPhase.Cancelled:
                     Acknowledge(svc);
@@ -154,6 +148,10 @@ namespace Placemaker.Game.Tool
         /// <summary>Built: the tool stays open with a fresh selection; design and recipe stay for the next one.</summary>
         private void OnBuilt(int groupId)
         {
+            _feedback.Succeeded();
+            _markersEdited.Clear();
+            _permanentAck = null;
+            _worker.Cancel();
             ClearSelectionState();
             _roads.InvalidateGraph();   // the new roads must be pickable right away
             if (_recipe != null) foreach (var kv in RecipePaths.Walk(_recipe)) kv.Value.Markers.Clear();
@@ -236,6 +234,10 @@ namespace Placemaker.Game.Tool
             _shapeDirty = false;
             ShapeChanged(alreadyBuilt: true);
             _recipe = receipt.Recipe.Clone();
+            // Markers of a built group were chosen (or accepted) by the player: keep them as they are.
+            _markersEdited.Clear();
+            foreach (var kv in RecipePaths.Walk(_recipe)) if (kv.Value.Markers.Count > 0) _markersEdited.Add(kv.Key);
+            _permanentAck = null;
             _recipeId = _recipes.Find(receipt.Recipe.Id) != null ? receipt.Recipe.Id : "";
             _focus = RecipePaths.Root;
             _editingGroup = groupId;

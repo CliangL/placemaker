@@ -41,6 +41,8 @@ namespace Placemaker.Core.Tool
         public string UnreadyMarkerKind;
 
         public bool CanAfford = true;
+        /// <summary>The plan has permanent effects (lake excavation…) the player has not acknowledged yet.</summary>
+        public bool PermanentPending;
         public bool BuildServiceAvailable = true;
         public bool BuildRunning;
         public bool MarkerModeActive;
@@ -188,6 +190,7 @@ namespace Placemaker.Core.Tool
                     if (!f.BuildServiceAvailable) return Make(kind, label, false, "Placemaker.Reason.BuildUnavailable");
                     if (f.Planning || !f.PlanReady) return Make(kind, label, false, "Placemaker.Reason.Planning");
                     if (f.PlanHasErrors) return Make(kind, label, false, "Placemaker.Reason.PlanErrors");
+                    if (f.PermanentPending) return Make(kind, label, false, "Placemaker.Reason.AcknowledgePermanent");
                     if (!f.CanAfford) return Make(kind, label, false, "Placemaker.Reason.NoMoney");
                     return Make(kind, label, true, null);
                 }
