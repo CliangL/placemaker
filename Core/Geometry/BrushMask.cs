@@ -1,6 +1,6 @@
 // Placemaker — painted area selection ("Paint" mode).
 //
-// Adapted from Grid Road Generator (Ti4goc), Core/BrushMask.cs (MIT): tiled bool cells, round /
+// Adapted from Grid Road Generator (Ti4goc), Core/BrushMask.cs: tiled bool cells, round /
 // rotated-square stamps, gap-free strokes, incrementally maintained edge cells for a cheap live
 // boundary preview, fill runs for the filled preview, and the grid → smooth outline pipeline.
 // Added here: several islands and holes (Outlines), configurable cell size, typed snapshots,

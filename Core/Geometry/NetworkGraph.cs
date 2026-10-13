@@ -1,6 +1,6 @@
 // Placemaker — graph algorithms over the existing road network (engine-free).
 //
-// Adapted from Grid Road Generator (Ti4goc), Core/NetworkGraph.cs (MIT): INetworkGraph abstraction,
+// Adapted from Grid Road Generator (Ti4goc), Core/NetworkGraph.cs: INetworkGraph abstraction,
 // Dijkstra path fill between two clicked nodes, and the "hug the wall" closed-boundary trace with
 // short-detour (cul-de-sac / turning loop) suppression. Changes: binary-heap Dijkstra (no linear scan),
 // deterministic tie-breaks, English documentation. For picking the block under the cursor see

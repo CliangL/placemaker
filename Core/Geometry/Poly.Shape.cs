@@ -1,7 +1,7 @@
 // Placemaker — ring shaping: simplify, smooth, resample, preview fill runs, pole of inaccessibility.
 //
 // SmoothCorners, FillRuns and the moving-average loop smoothing are adapted from Grid Road Generator
-// (Ti4goc), Core/FreeAreaPerimeter.cs and Core/BrushMask.cs (MIT).
+// (Ti4goc), Core/FreeAreaPerimeter.cs and Core/BrushMask.cs.
 // PoleOfInaccessibility follows the published "polylabel" idea (Mapbox, 2016): best-first search over
 // square cells bounded by their centre distance + half diagonal. Own implementation.
 
