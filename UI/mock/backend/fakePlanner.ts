@@ -478,6 +478,31 @@ const LAYERS: Record<string, (i: Input) => Out> = {
         return o;
     },
 
+    pond(i) {
+        const o = empty();
+        const A = area(i.ring);
+        const r = Math.sqrt((A * num(i.v, "size", 15)) / 100 / Math.PI);
+        const p = findSpot(i.ring, r, i.reserved, o);
+        if (!p) {
+            o.issues.push({ severity: "warning", text: { key: "Placemaker.Issue.NoRoom", args: ["Pond"] } });
+            return o;
+        }
+        const lake = circle(p, r, 24);
+        o.surfaces.push({ role: "Water", ring: lake });
+        o.terraform.push({ kind: "Lower", permanent: true, ring: lake });
+        return o;
+    },
+
+    kiosk(i) {
+        const o = empty();
+        const n = num(i.v, "count", 1);
+        for (let k = 0; k < n; k++) {
+            const p = findSpot(i.ring, 3, i.reserved, o);
+            if (p) o.objects.push({ role: "Furniture", p, yaw: 0, r: 3 });
+        }
+        return o;
+    },
+
     picnic(i) {
         const o = empty();
         const want = num(i.v, "tables", 6);

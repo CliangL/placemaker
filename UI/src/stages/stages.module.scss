@@ -2,6 +2,7 @@
 
 .stage {
     @include col;
+    min-width: 0;
 }
 
 .flex {
@@ -9,8 +10,8 @@
 }
 
 .emptyNote {
-    padding: 14rem 0;
-    font-size: var(--fontSizeS);
+    padding: 10rem 0;
+    font-size: $fs;
     color: $c-text-dim;
     text-align: center;
 }
@@ -37,76 +38,85 @@
 .readout {
     @include row;
     flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
 }
 
 .readoutBig {
-    margin-left: 6rem;
-    font-size: var(--fontSizeM);
+    margin-left: 5rem;
+    font-size: $fs;
     font-weight: bold;
     color: #ffffff;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .readoutDim {
-    margin-left: 10rem;
-    font-size: var(--fontSizeS);
+    flex: 1 1 auto;
+    margin-left: 8rem;
+    font-size: $fs-s;
     color: $c-text-dim;
     @include ellipsis;
 }
 
 .readoutHint {
-    font-size: var(--fontSizeS);
+    flex: 1 1 auto;
+    font-size: $fs-s;
     color: $c-text-dim;
     @include ellipsis;
 }
 
 .problem {
-    margin-left: 6rem;
-    font-size: var(--fontSizeS);
+    flex: 1 1 auto;
+    margin-left: 5rem;
+    font-size: $fs-s;
     color: #ffd59a;
     @include ellipsis;
 }
 
 .brushRow {
     @include row;
-    min-height: 32rem;
+    min-width: 0;
+    min-height: $row-h;
 }
 
 .brushLabel {
-    width: 80rem;
-    font-size: var(--fontSizeS);
+    width: 70rem;
+    font-size: $fs;
+    color: $c-text-dim;
     flex-shrink: 0;
+    @include ellipsis;
 }
 
 .first {
     margin-top: 0;
 }
 
-// ── area mode cards (2 × 2) ──
+// ── area modes: one row of four ──
 .modes {
     @include row(stretch);
-    flex-wrap: wrap;
-    margin: -4rem;
+    min-width: 0;
 }
 
 .modeCell {
     @include row(stretch);
-    width: 50%;
+    flex: 1 1 0;
+    min-width: 0;
+    margin-right: 3rem;
 }
 
 .mode {
     @include row;
     @include button-reset;
     flex: 1 1 auto;
+    justify-content: center;
     min-width: 0;
-    height: 58rem;
-    margin: 4rem;
-    padding: 0 10rem;
-    border-radius: $radius + 2rem;
+    height: 28rem;
+    padding: 0 4rem;
+    border-radius: $radius;
     background-color: rgba(255, 255, 255, 0.06);
-    @include border(1rem, rgba(255, 255, 255, 0.1));
-    text-align: left;
+    @include border(1rem, rgba(255, 255, 255, 0.08));
+    overflow: hidden;
     transition-property: background-color;
     transition-duration: $t-fast;
     &:hover {
@@ -115,93 +125,68 @@
 }
 
 .modeOn {
-    background-color: rgba(143, 209, 255, 0.16);
+    background-color: var(--accentColorNormal);
     @include border-color(var(--accentColorNormal));
-    .modeIcon {
-        background-color: var(--accentColorNormal);
+    .modeName {
+        color: #0b1d26;
     }
     &:hover {
-        background-color: rgba(143, 209, 255, 0.2);
+        background-color: var(--accentColorLight);
     }
-}
-
-.modeIcon {
-    @include row;
-    justify-content: center;
-    width: 36rem;
-    height: 36rem;
-    border-radius: $radius;
-    background-color: rgba(255, 255, 255, 0.08);
-    flex-shrink: 0;
-}
-
-.modeText {
-    @include col;
-    min-width: 0;
-    margin-left: 10rem;
 }
 
 .modeName {
-    font-size: var(--fontSizeS);
+    margin-left: 5rem;
+    font-size: $fs;
     font-weight: bold;
     color: #ffffff;
     @include ellipsis;
 }
 
-.modeDesc {
-    margin-top: 1rem;
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
-    @include ellipsis;
-}
-
-.areaCard {
-    @include col;
-    padding: 12rem;
-    border-radius: $radius-l;
-    background-color: rgba(0, 0, 0, 0.18);
-    @include border(1rem, $c-line);
-}
-
 .areaStats {
     @include row(stretch);
-    margin-bottom: 10rem;
+    min-width: 0;
+    margin-bottom: 4rem;
 }
 
 .areaStat {
     @include col;
     flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .areaStatValue {
-    font-size: var(--fontSizeL);
+    font-size: $fs + 2rem;
     font-weight: bold;
     color: #ffffff;
-    white-space: nowrap;
+    @include ellipsis;
 }
 
 .areaStatLabel {
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
+    font-size: 11rem;
+    color: $c-text-faint;
+    @include ellipsis;
 }
 
 .areaFoot {
-    @include row(flex-start);
+    @include row;
+    min-width: 0;
 }
 
 .areaHint {
     flex: 1 1 auto;
-    margin-left: 8rem;
-    font-size: var(--fontSizeS);
-    line-height: 19rem;
-    color: var(--menuText1Normal);
+    margin-left: 6rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    @include ellipsis;
 }
 
 // ── review breakdown ──
 .treeBar {
     width: 3rem;
-    height: 18rem;
-    margin-right: 7rem;
+    height: 14rem;
+    margin-right: 5rem;
     border-radius: 2rem;
     flex-shrink: 0;
 }
@@ -210,17 +195,19 @@
 .saveRow {
     @include row;
     flex: 1 1 auto;
+    min-width: 0;
 }
 
 .textInput {
     flex: 1 1 auto;
-    height: 30rem;
-    padding: 0 10rem;
-    margin-right: 6rem;
+    min-width: 0;
+    height: 24rem;
+    padding: 0 8rem;
+    margin-right: 4rem;
     border-radius: $radius;
     background-color: $c-shade;
     @include border(1rem, $c-line-strong);
-    font-size: var(--fontSizeS);
+    font-size: $fs;
     font-family: var(--fontFamily);
     color: #ffffff;
     outline-width: 0;
@@ -229,8 +216,9 @@
 // ── review ──
 .bigRow {
     @include row(stretch);
-    padding: 14rem 14rem;
-    border-radius: $radius-l;
+    min-width: 0;
+    padding: 6rem 8rem;
+    border-radius: $radius;
     background-color: rgba(0, 0, 0, 0.2);
     @include border(1rem, $c-line);
 }
@@ -239,24 +227,26 @@
     @include col;
     flex: 1 1 0;
     min-width: 0;
+    overflow: hidden;
 }
 
 .bigSep {
     width: 1rem;
-    margin: 2rem 12rem;
+    margin: 2rem 10rem;
     background-color: $c-line-strong;
 }
 
 .bigLabel {
-    font-size: var(--fontSizeXS);
+    font-size: 11rem;
     color: $c-text-dim;
     text-transform: uppercase;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.06em;
+    @include ellipsis;
 }
 
 .bigValue {
-    margin-top: 4rem;
-    font-size: var(--fontSizeL);
+    margin-top: 1rem;
+    font-size: $fs + 4rem;
     font-weight: bold;
     color: #ffffff;
     @include ellipsis;
@@ -269,16 +259,19 @@
 .stats {
     @include row;
     flex-wrap: wrap;
-    margin-bottom: 6rem;
+    min-width: 0;
+    margin-bottom: 2rem;
 }
 
 .stat {
     @include row;
-    height: 30rem;
-    padding: 0 10rem 0 8rem;
-    margin: 0 6rem 6rem 0;
+    min-width: 0;
+    height: 22rem;
+    padding: 0 7rem 0 5rem;
+    margin: 0 3rem 3rem 0;
     border-radius: $radius;
     background-color: $c-surface;
+    overflow: hidden;
 }
 
 .statIcon {
@@ -286,24 +279,25 @@
 }
 
 .statValue {
-    margin-left: 6rem;
-    font-size: var(--fontSizeS);
+    margin-left: 4rem;
+    font-size: $fs;
     font-weight: bold;
     color: #ffffff;
     white-space: nowrap;
 }
 
 .statLabel {
-    margin-left: 5rem;
-    font-size: var(--fontSizeS);
+    margin-left: 4rem;
+    font-size: $fs-s;
     color: $c-text-dim;
-    white-space: nowrap;
+    @include ellipsis;
 }
 
 .callout {
     @include row(flex-start);
-    margin-bottom: 8rem;
-    padding: 8rem 10rem;
+    min-width: 0;
+    margin-top: 6rem;
+    padding: 5rem 8rem;
     border-radius: $radius;
 }
 
@@ -318,40 +312,45 @@
 
 .calloutBody {
     @include col;
-    margin-left: 8rem;
+    margin-left: 6rem;
     flex: 1 1 auto;
+    min-width: 0;
 }
 
 .calloutTitle {
-    font-size: var(--fontSizeS);
+    font-size: $fs;
     font-weight: bold;
     color: #ffd59a;
     margin-bottom: 2rem;
+    @include ellipsis;
 }
 
 .calloutText {
-    margin-left: 0;
-    margin-bottom: 6rem;
-    font-size: var(--fontSizeS);
+    margin-bottom: 4rem;
+    font-size: $fs-s;
     color: var(--menuText1Normal);
-    line-height: 1.35;
+    line-height: 1.3;
 }
 
 .callout > .calloutText {
-    margin-left: 8rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 6rem;
     margin-bottom: 0;
 }
 
 .issues {
     @include col;
-    margin-bottom: 6rem;
+    min-width: 0;
+    margin-top: 6rem;
 }
 
 .issue {
     @include row;
-    min-height: 30rem;
-    padding: 2rem 4rem 2rem 10rem;
-    margin-bottom: 4rem;
+    min-width: 0;
+    min-height: 24rem;
+    padding: 1rem 2rem 1rem 6rem;
+    margin-bottom: 2rem;
     border-radius: $radius;
     background-color: $c-surface;
     border-left-width: 3rem;
@@ -370,19 +369,21 @@
 
 .issueText {
     flex: 1 1 auto;
-    margin-left: 8rem;
-    font-size: var(--fontSizeS);
+    min-width: 0;
+    margin-left: 6rem;
+    font-size: $fs-s;
     line-height: 1.3;
 }
 
 .breakRow {
     @include row;
-    height: 28rem;
+    min-width: 0;
+    height: 22rem;
 }
 
 .breakName {
-    margin-left: 6rem;
-    font-size: var(--fontSizeS);
+    margin-left: 5rem;
+    font-size: $fs;
     @include ellipsis;
     flex: 0 1 auto;
 }
@@ -393,107 +394,122 @@
 
 .breakStats {
     flex: 1 1 auto;
-    margin-left: 10rem;
-    font-size: var(--fontSizeXS);
+    margin-left: 8rem;
+    font-size: $fs-s;
     color: $c-text-dim;
     @include ellipsis;
 }
 
 .breakCost {
-    margin-left: 10rem;
-    font-size: var(--fontSizeS);
+    margin-left: 8rem;
+    font-size: $fs;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .allGood {
     @include row;
-    padding: 4rem 2rem;
+    min-width: 0;
+    padding: 4rem 0;
 }
 
 .allGoodText {
-    margin-left: 6rem;
-    font-size: var(--fontSizeS);
+    flex: 1 1 auto;
+    margin-left: 5rem;
+    font-size: $fs-s;
     color: #b8f2c8;
+    @include ellipsis;
 }
 
 // ── building ──
 .buildHead {
     @include row;
-    margin-bottom: 8rem;
+    min-width: 0;
+    margin-bottom: 6rem;
 }
 
 .buildTitle {
-    margin-left: 8rem;
-    font-size: var(--fontSizeM);
+    margin-left: 6rem;
+    font-size: $fs;
     font-weight: bold;
+    @include ellipsis;
 }
 
 .buildPct {
-    font-size: var(--fontSizeM);
+    font-size: $fs;
     color: #ffffff;
+    flex-shrink: 0;
 }
 
 .progress {
     @include row;
-    height: 8rem;
-    border-radius: 4rem;
+    height: 6rem;
+    border-radius: 3rem;
     background-color: rgba(255, 255, 255, 0.1);
     overflow: hidden;
 }
 
 .progressFill {
-    height: 8rem;
-    border-radius: 4rem;
+    height: 6rem;
+    border-radius: 3rem;
     background-color: var(--accentColorNormal);
     transition-property: width;
     transition-duration: 0.25s;
 }
 
 .buildHint {
-    margin-top: 8rem;
-    font-size: var(--fontSizeXS);
+    margin-top: 6rem;
+    font-size: $fs-s;
     color: $c-text-dim;
+    @include ellipsis;
 }
 
 // ── manage ──
 .manageHead {
     @include row;
-    min-height: 34rem;
+    min-width: 0;
+    min-height: 28rem;
 }
 
 .manageName {
-    margin-left: 8rem;
-    font-size: var(--fontSizeL);
+    flex: 0 1 auto;
+    margin-left: 6rem;
+    font-size: $fs + 3rem;
     font-weight: bold;
     color: #ffffff;
     @include ellipsis;
 }
 
 .manageKind {
-    margin-left: 8rem;
-    font-size: var(--fontSizeS);
+    flex: 1 1 auto;
+    margin-left: 6rem;
+    font-size: $fs-s;
     color: $c-text-dim;
+    @include ellipsis;
 }
 
 .manageUpkeep {
     @include row;
-    margin: 4rem 0 8rem 0;
+    min-width: 0;
+    margin: 4rem 0 6rem 0;
 }
 
 .manageUpkeepValue {
-    margin-left: 10rem;
-    font-size: var(--fontSizeM);
+    margin-left: 8rem;
+    font-size: $fs;
     font-weight: bold;
+    white-space: nowrap;
 }
 
 .manageActions {
     @include row;
-    padding-top: 8rem;
+    min-width: 0;
+    padding-top: 6rem;
     border-top-width: 1rem;
     border-top-style: solid;
     border-top-color: $c-line;
     > button,
     > div {
-        margin-right: 6rem;
+        margin-right: 4rem;
     }
 }

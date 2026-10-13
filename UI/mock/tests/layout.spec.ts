@@ -41,7 +41,8 @@ for (const [w, h] of [
         await drawPolygon(page, FIELD);
         await noHorizontalOverflow(page);
         await page.getByTestId("primary").click();
-        await page.getByTestId("recipe-roads-with-parks").click();
+        await page.getByTestId("recipe-park").click();
+        await page.getByTestId("feature-toggle-playground").click();
         await waitPlanned(page);
         await noHorizontalOverflow(page);
         await shot(page, `layout-${w}x${h}-design`);

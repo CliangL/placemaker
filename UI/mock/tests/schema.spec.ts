@@ -8,7 +8,14 @@ async function design(page: import("@playwright/test").Page, recipe: string) {
     await waitPlanned(page);
 }
 
-test("every control kind renders from the schema, ALL visible and grouped (no foldouts)", async ({ page }) => {
+/** Unfold a control group of the root step (groups are folded by default, round 3). */
+async function unfold(page: import("@playwright/test").Page, group: string) {
+    const g = page.getByTestId("step-0").getByTestId("group-" + group).first();
+    if ((await g.getAttribute("data-open")) !== "true") await g.getByTestId("group-" + group + "-toggle").click();
+    await expect(g).toHaveAttribute("data-open", "true");
+}
+
+test("every control kind renders from the schema, grouped into foldable sections", async ({ page }) => {
     const errors = await open(page);
     await design(page, "parking");
     await expect(page.getByTestId("control-angle")).toHaveAttribute("data-kind", "choice");
@@ -17,7 +24,9 @@ test("every control kind renders from the schema, ALL visible and grouped (no fo
     // typed entrances replace the generic markers control
     await expect(page.getByTestId("control-entrances")).toHaveCount(0);
     await expect(page.getByTestId("entrances-0")).toBeVisible();
-    // "more" tier is visible right away, under group headings, essentials first
+    // "more" tier lives in folded groups, essentials first; unfolding shows the rows
+    await expect(page.getByTestId("control-aisle")).toHaveCount(0);
+    for (const g of ["layout", "extras", "zoning"]) await unfold(page, g);
     await expect(page.getByTestId("control-aisle")).toHaveAttribute("data-kind", "slider");
     await expect(page.getByTestId("slider-aisle-value")).toHaveText("6.0 m");
     await expect(page.getByTestId("slider-chargers-value")).toHaveText("0");
@@ -27,16 +36,16 @@ test("every control kind renders from the schema, ALL visible and grouped (no fo
     await expect(page.getByTestId("group-zoning")).toContainText("Zoning");
     const groups = await page.locator('[data-testid^="group-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
     expect(groups[0]).toBe("group-basics");
-    // nothing collapsible anywhere in the panel
-    await expect(page.getByTestId("placemaker-panel").locator("[aria-expanded]")).toHaveCount(0);
     await expect(page.getByTestId("more-options")).toHaveCount(0);
     await panelShot(page, "panel-parking-options");
 
     await page.getByTestId("recipe-plaza").click();
     await expect(page.getByTestId("control-arrangement")).toHaveAttribute("data-kind", "arrangement");
     await page.getByTestId("recipe-park").click();
+    await unfold(page, "planting");
     await expect(page.getByTestId("control-treeSpecies")).toHaveAttribute("data-kind", "assetMulti");
     // untyped markers control still works as before (park entrances)
+    await unfold(page, "paths");
     await expect(page.getByTestId("control-entrances")).toHaveAttribute("data-kind", "markers");
     expect(errors).toEqual([]);
 });
@@ -44,6 +53,7 @@ test("every control kind renders from the schema, ALL visible and grouped (no fo
 test("visibleWhen, lock indicator, reset-to-default, randomize keeps locked values", async ({ page }) => {
     await open(page);
     await design(page, "park");
+    await unfold(page, "water");
     await expect(page.getByTestId("control-lakeSize")).toHaveCount(0);
     await page.getByTestId("toggle-lake").click();
     await expect(page.getByTestId("control-lakeSize")).toBeVisible();
@@ -90,7 +100,7 @@ test("asset picker: search, thumbnails, automatic; closes with X, Esc and a clic
 
     // X
     await page.getByTestId("asset-button-surface").click();
-    await expect(picker).toContainText("Recently used");
+    await expect(picker).toContainText("Recent");
     await expect(page.getByTestId("asset-picker-close").locator("img")).toHaveCount(1);
     await panelShot(page, "panel-asset-picker");
     await page.getByTestId("asset-picker-close").click();
@@ -116,6 +126,7 @@ test("asset picker: search, thumbnails, automatic; closes with X, Esc and a clic
     await expect(page.getByTestId("asset-button-surface")).toContainText("Automatic");
 
     await page.getByTestId("recipe-park").click();
+    await unfold(page, "planting");
     await page.getByTestId("assetmulti-add-treeSpecies").click();
     await page.getByTestId("asset-linden").click();
     await page.getByTestId("asset-ginkgo").click();

@@ -10,7 +10,7 @@ import {
 import { publish, setTriggerHandler } from "../cs2/api";
 import { addStrings } from "../cs2/l10n";
 import { BLOCKS, blocksRing, Block, cellsOutline, NODES, paintCells } from "./city";
-import { FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, MockLayer, MockRecipe, RecipeTemplate } from "./fakeCatalog";
+import { FAKE_FEATURES, FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, FeatureDef, MockLayer, MockRecipe, RecipeTemplate } from "./fakeCatalog";
 import { composeFake, FAKE_LAYER_IDS } from "./fakePlanner";
 import { area, closestOnRing, dist, perimeter, selfIntersects, simplify, V2 } from "./geometry";
 import { GRID } from "./city";
@@ -194,7 +194,7 @@ export class MockBackend {
     }
 
     instantiate(t: RecipeTemplate): StepModel {
-        return {
+        const step: StepModel = {
             layer: t.layer,
             target: t.target ?? "",
             enabled: true,
@@ -205,6 +205,21 @@ export class MockBackend {
             children: (t.children ?? []).map((c) => this.instantiate(c)),
             overrides: Object.fromEntries(Object.entries(t.overrides ?? {}).map(([k, v]) => [k, this.instantiate(v)])),
         };
+        for (const f of this.featuresOf(t.layer)) if (f.defaultOn) step.children.push(this.featureStep(f));
+        return step;
+    }
+
+    /** Features a layer offers (Core IHasFeatures), limited to feature layers this catalog has. */
+    featuresOf(layerId: string): FeatureDef[] {
+        const own = this.layer(layerId)?.features;
+        const defs = own && own.length ? own : FAKE_FEATURES[layerId] ?? FAKE_FEATURES[layerId.toLowerCase()] ?? [];
+        return defs.filter((f) => !!this.layer(f.layer));
+    }
+
+    featureStep(f: FeatureDef): StepModel {
+        const c = this.instantiate({ layer: f.layer, target: f.target ?? "", values: f.preset });
+        c.feature = f.layer;
+        return c;
     }
 
     toTemplate(s: StepModel): RecipeTemplate {
@@ -538,6 +553,19 @@ export class MockBackend {
                 if (!step) break;
                 this.edit({ key: a[1] ? "Placemaker.Undo.EnableLayer" : "Placemaker.Undo.DisableLayer", args: [this.layerName(step.layer)] }, () => {
                     step.enabled = !!a[1];
+                    this.modified = true;
+                });
+                return;
+            }
+            case "setFeature": {
+                const step = this.get(String(a[0]));
+                const def = step ? this.featuresOf(step.layer).find((f) => f.layer === a[1]) : undefined;
+                if (!step || !def) break;
+                const on = !!a[2];
+                this.edit({ key: on ? "Placemaker.Undo.EnableLayer" : "Placemaker.Undo.DisableLayer", args: [this.layerName(def.layer)] }, () => {
+                    const child = step.children.find((c) => c.feature === def.layer);
+                    if (child) child.enabled = on;
+                    else if (on) step.children.push(this.featureStep(def));
                     this.modified = true;
                 });
                 return;
@@ -1154,7 +1182,7 @@ export class MockBackend {
 
     catalog(): Catalog {
         return {
-            layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, ...l }) => l) as any,
+            layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, features, ...l }) => l) as any,
             recipes: this.recipes.map((r) => r.info),
         };
     }
@@ -1182,9 +1210,18 @@ export class MockBackend {
             const [p, id] = k.split("|");
             if (p === path) values[id] = v;
         }
+        const features = this.featuresOf(s.layer).map((f) => {
+            const i = s.children.findIndex((c) => c.feature === f.layer);
+            const on = i >= 0 && s.children[i].enabled;
+            return {
+                layer: f.layer, label: f.labelKey ?? "", icon: this.layer(f.layer)?.icon ?? f.layer, enabled: on, path: on ? path + "/" + i : undefined,
+                tooltip: f.tooltip || undefined, options: f.options && f.options.length ? f.options : undefined, defaultOn: !!f.defaultOn,
+            };
+        });
         return {
             path,
             layer: s.layer,
+            features: features.length ? features : undefined,
             target: s.target,
             enabled: s.enabled,
             values,

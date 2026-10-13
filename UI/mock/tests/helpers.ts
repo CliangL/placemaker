@@ -90,3 +90,42 @@ export async function panelShot(page: Page, name: string) {
 export function stage(page: Page) {
     return page.getByTestId("placemaker-panel").getAttribute("data-stage");
 }
+
+/**
+ * Every text in the panel fits its box (scrollWidth ≤ clientWidth: nothing cut or ellipsised) and
+ * stays inside each of its ancestors horizontally (nothing spills onto a neighbour, as the card
+ * descriptions did in Gameface).
+ */
+export async function noTextOverflow(page: Page, where: string) {
+    const bad = await page.evaluate(() => {
+        const root = document.querySelector('[data-testid="placemaker-wrap"]') as HTMLElement;
+        const out: string[] = [];
+        const seen = new Set<Element>();
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            const text = (node.textContent ?? "").trim();
+            const el = node.parentElement;
+            if (!text || !el || seen.has(el)) continue;
+            seen.add(el);
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            const inline = getComputedStyle(el).display === "inline";
+            if (!inline && el.scrollWidth > el.clientWidth + 1) out.push(`cut: "${text}" (${el.scrollWidth} > ${el.clientWidth})`);
+            for (let a = el.parentElement; a && a !== root.parentElement; a = a.parentElement) {
+                const ar = a.getBoundingClientRect();
+                if (ar.width === 0) continue;
+                if (r.left < ar.left - 1 || r.right > ar.right + 1) {
+                    out.push(`spills: "${text}" out of ${String(a.className).split(" ")[0] || a.tagName}`);
+                    break;
+                }
+                // the panel and the picker flyout beside it are the outermost boxes
+                const id = a.getAttribute("data-testid");
+                if (id === "placemaker-panel" || id === "picker-flyout") break;
+            }
+        }
+        return out;
+    });
+    expect(bad, where).toEqual([]);
+}
+

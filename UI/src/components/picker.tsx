@@ -76,7 +76,7 @@ export function useAssetList(category: string | undefined): AssetItem[] | undefi
     return list;
 }
 
-export const Thumb = ({ item, size = 44 }: { item?: AssetItem; size?: number }) => {
+export const Thumb = ({ item, size = 34 }: { item?: AssetItem; size?: number }) => {
     const style = { width: size + "rem", height: size + "rem" };
     if (item?.icon) return <img className={s.thumbImg} style={style} src={item.icon} />;
     const initials = (item?.name ?? "?")
@@ -170,12 +170,12 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                                 onClose();
                             }}
                         >
-                            <Icon name="close" size={18} />
+                            <Icon name="close" size={13} />
                         </button>
                     </Tip>
                 </div>
                 <div className={s.search}>
-                    <Icon name="search" size={15} tint="dim" />
+                    <Icon name="search" size={12} tint="dim" />
                     <input
                         className={s.searchInput}
                         data-testid="asset-search"
@@ -196,7 +196,7 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                     <>
                         {recent.length ? (
                             <>
-                                <div className={s.section}>{t("Placemaker.UI.Picker.Recent", "Recently used")}</div>
+                                <div className={s.section}>{t("Placemaker.UI.Picker.Recent", "Recent")}</div>
                                 <div className={s.grid}>{recent.map((a) => tile(a, "r-"))}</div>
                             </>
                         ) : null}
@@ -217,10 +217,10 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                                     }}
                                 >
                                     <div className={s.autoIcon}>
-                                        <Icon name="auto" size={26} tint="accent" />
+                                        <Icon name="auto" size={20} tint="accent" />
                                     </div>
                                     <div className={s.tileName}>
-                                        {req.mode === "multi" ? t("Placemaker.UI.Picker.AutoMix", "Automatic mix") : t("Placemaker.UI.Picker.Auto", "Automatic")}
+                                        {req.mode === "multi" ? t("Placemaker.UI.Picker.AutoMix", "Auto mix") : t("Placemaker.UI.Picker.Auto", "Automatic")}
                                     </div>
                                 </button>
                             ) : null}
@@ -235,7 +235,7 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                     <div className={s.footInfo}>
                         {selected.length
                             ? t("Placemaker.UI.Picker.SelectedN", "{0} selected", [selected.length])
-                            : t("Placemaker.UI.Picker.AutoMixHint", "None selected: a fitting mix is chosen for you")}
+                            : t("Placemaker.UI.Picker.AutoMixHint", "None: automatic mix")}
                     </div>
                     <Btn variant="accent" label={t("Placemaker.UI.Done", "Done")} onClick={onClose} testId="asset-picker-done" />
                 </div>

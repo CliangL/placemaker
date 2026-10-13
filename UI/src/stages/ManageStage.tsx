@@ -65,14 +65,14 @@ export const ManageStage = ({ group }: { group: ManagedGroup | null }) => {
     if (!group) {
         return (
             <div className={s.stage} data-testid="stage-manage">
-                <div className={s.emptyNote}>{t("Placemaker.UI.Manage.Hover", "Hover or click something you built with Placemaker to edit or remove it.")}</div>
+                <div className={s.emptyNote}>{t("Placemaker.UI.Manage.Hover", "Click something you built to edit it")}</div>
             </div>
         );
     }
     return (
         <div className={s.stage} data-testid="stage-manage">
             <div className={s.manageHead}>
-                <Icon name="logo" size={20} tint="accent" />
+                <Icon name="logo" size={15} tint="accent" />
                 {renaming ? (
                     <RenameField id={group.id} name={group.customName ?? ""} onDone={() => setRenaming(false)} />
                 ) : (
@@ -101,16 +101,16 @@ export const ManageStage = ({ group }: { group: ManagedGroup | null }) => {
                 <Btn
                     variant="accent"
                     icon="edit"
-                    iconSize={15}
+                    iconSize={12}
                     label={t("Placemaker.UI.Manage.Edit", "Edit")}
                     disabled={!group.canEdit}
                     description={!group.canEdit ? t("Placemaker.UI.Manage.CantEdit", "This was built by an older version and can only be removed.") : undefined}
                     onClick={() => act.editGroup(group.id)}
                     testId="manage-edit"
                 />
-                <Btn variant="solid" icon="edit" iconSize={15} label={t("Placemaker.UI.Manage.Rename", "Rename")} onClick={() => setRenaming(true)} testId="manage-rename" />
+                <Btn variant="solid" icon="edit" iconSize={12} label={t("Placemaker.UI.Manage.Rename", "Rename")} onClick={() => setRenaming(true)} testId="manage-rename" />
                 <div className={s.flex} />
-                <Btn variant="danger" icon="trash" iconSize={15} label={t("Placemaker.UI.Manage.Remove", "Remove")} onClick={askRemove} testId="manage-remove" />
+                <Btn variant="danger" icon="trash" iconSize={12} label={t("Placemaker.UI.Manage.Remove", "Remove")} onClick={askRemove} testId="manage-remove" />
             </div>
             {dialog}
         </div>

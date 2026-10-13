@@ -12,6 +12,8 @@ export type MockLayer = Omit<LayerType, "controls" | "presets"> & {
     markerKinds?: { kind: string; label: string; icon?: string; tooltip?: string }[];
     markersRequired?: number;
     real?: boolean;
+    /** Built-in features (the mock host sends Core's IHasFeatures; fake layers use FAKE_FEATURES). */
+    features?: FeatureDef[];
 };
 
 const opt = (value: string, label: string, icon?: string, tooltip?: string) => ({ value, label, icon, tooltip });
@@ -31,6 +33,11 @@ export const FAKE_LAYERS: MockLayer[] = [
             { id: "lake", kind: "toggle", tier: "more", group: "water", label: "Placemaker.Park.Lake", tooltip: "Placemaker.Park.LakeTip", default: false },
             { id: "lakeSize", kind: "slider", tier: "more", group: "water", label: "Placemaker.Park.LakeSize", min: 10, max: 40, step: 5, unit: "%", default: 20, visibleWhen: "lake=true" },
             { id: "fence", kind: "toggle", tier: "more", group: "edge", label: "Placemaker.Park.Fence", default: false },
+            { id: "plazaShape", kind: "choice", tier: "more", group: "plaza", label: "Placemaker.Park.PlazaShape",
+              options: [opt("circle", "Placemaker.Shape.Circle"), opt("square", "Placemaker.Shape.Square"), opt("rectangle", "Placemaker.Shape.Rect")], default: "circle" },
+            { id: "plazaAt", kind: "choice", tier: "more", group: "plaza", label: "Placemaker.Park.PlazaAt",
+              options: [opt("centre", "Placemaker.At.Centre"), opt("corner", "Placemaker.At.Corner"), opt("edge", "Placemaker.At.Edge"), opt("entrance", "Placemaker.At.Entrance")], default: "centre" },
+            { id: "plazaSize", kind: "slider", tier: "more", group: "plaza", label: "Placemaker.Park.PlazaSize", min: 5, max: 40, step: 1, unit: "%", default: 15 },
             { id: "fenceAsset", kind: "asset", tier: "more", group: "edge", label: "Placemaker.Park.FenceAsset", assetCategory: "fence", default: "", visibleWhen: "fence=true" },
         ],
         presets: [
@@ -104,7 +111,7 @@ export const FAKE_LAYERS: MockLayer[] = [
         minArea: 4000,
     },
     {
-        id: "split", name: "Placemaker.Split.Name", icon: "split", kind: "split", accepts: [], emits: ["part"],
+        id: "split", hidden: true, name: "Placemaker.Split.Name", icon: "split", kind: "split", accepts: [], emits: ["part"],
         controls: [
             { id: "ratio", kind: "slider", tier: "essential", group: "", label: "Placemaker.Split.Ratio", min: 20, max: 80, step: 5, unit: "%", default: 50 },
             { id: "direction", kind: "choice", tier: "essential", group: "", label: "Placemaker.Split.Direction",
@@ -159,6 +166,20 @@ export const FAKE_LAYERS: MockLayer[] = [
         presets: [],
     },
     {
+        id: "pond", hidden: true, name: "Placemaker.Pond.Name", icon: "water", kind: "addOn", accepts: ["green"], emits: [],
+        controls: [
+            { id: "size", kind: "slider", tier: "essential", group: "", label: "Placemaker.Pond.Size", tooltip: "Placemaker.Pond.SizeTip", min: 5, max: 40, step: 5, unit: "%", default: 15 },
+            { id: "shore", kind: "choice", tier: "more", group: "", label: "Placemaker.Pond.Shore",
+              options: [opt("grass", "Placemaker.Pond.Shore.Grass"), opt("stone", "Placemaker.Pond.Shore.Stone")], default: "grass" },
+        ],
+        presets: [],
+    },
+    {
+        id: "kiosk", name: "Placemaker.Kiosk.Name", icon: "building", kind: "addOn", accepts: ["paved", "core"], emits: [],
+        controls: [{ id: "count", kind: "slider", tier: "essential", group: "", label: "Placemaker.Kiosk.Count", min: 1, max: 4, step: 1, unit: "count", default: 1 }],
+        presets: [],
+    },
+    {
         id: "picnic", name: "Placemaker.Picnic.Name", icon: "picnic", kind: "addOn", accepts: ["green"], emits: [],
         controls: [{ id: "tables", kind: "slider", tier: "essential", group: "", label: "Placemaker.Picnic.Tables", min: 2, max: 16, step: 1, unit: "count", default: 6 }],
         presets: [],
@@ -177,6 +198,38 @@ export interface RecipeTemplate {
     children?: RecipeTemplate[];
     overrides?: Record<string, RecipeTemplate>;
 }
+
+/** Built-in features of fill layers (mirrors Core.FeatureInfo): a toggle that adds a child step. */
+export interface FeatureDef {
+    layer: string;
+    target?: string;
+    defaultOn?: boolean;
+    labelKey?: string;
+    tooltip?: string;
+    /** Ids of the PARENT's controls that belong to the feature (shown under its toggle). */
+    options?: string[];
+    preset?: Record<string, SettingValue>;
+}
+
+/** Playtest 2 decision: refine each type with features instead of free mixing. */
+export const FAKE_FEATURES: Record<string, FeatureDef[]> = {
+    park: [
+        { layer: "plaza", target: "core", labelKey: "Placemaker.Feature.CentralPlaza", tooltip: "Placemaker.Feature.CentralPlazaTip", options: ["plazaShape", "plazaAt", "plazaSize"], preset: { pattern: "radial", furniture: 40 } },
+        { layer: "playground" },
+        { layer: "pond", labelKey: "Placemaker.Feature.Pond", tooltip: "Placemaker.Pond.SizeTip" },
+        { layer: "picnic" },
+        { layer: "restrooms" },
+        { layer: "fountain" },
+        { layer: "bigTrees" },
+    ],
+    plaza: [
+        { layer: "bigTrees", labelKey: "Placemaker.Feature.Trees", defaultOn: true },
+        { layer: "playground" },
+        { layer: "fountain" },
+        { layer: "kiosk" },
+    ],
+    roads: [{ layer: "edgeZoning", target: "edge", labelKey: "Placemaker.Feature.StreetZoning" }],
+};
 
 export const FAKE_RECIPES: MockRecipe[] = [
     { info: { id: "parking", name: "Placemaker.Parking.Name", icon: "parking", custom: false, description: "Placemaker.Recipe.ParkingTip" }, root: { layer: "parking" } },
@@ -225,12 +278,21 @@ export const FAKE_STRINGS: Record<string, string> = {
     "Placemaker.Playground.Name": "Playground", "Placemaker.Playground.Size": "Size", "Placemaker.Playground.Equipment": "Equipment",
     "Placemaker.Size.Small": "Small", "Placemaker.Size.Medium": "Medium", "Placemaker.Size.Large": "Large",
     "Placemaker.Fountain.Name": "Fountain", "Placemaker.Fountain.Asset": "Fountain",
-    "Placemaker.Restrooms.Name": "Restrooms", "Placemaker.Restrooms.Count": "How many",
-    "Placemaker.BigTrees.Name": "Big trees", "Placemaker.BigTrees.Count": "How many", "Placemaker.BigTrees.Species": "Species",
+    "Placemaker.Restrooms.Name": "Restrooms", "Placemaker.Restrooms.Count": "Buildings",
+    "Placemaker.BigTrees.Name": "Big trees", "Placemaker.BigTrees.Count": "Trees", "Placemaker.BigTrees.Species": "Species",
     "Placemaker.EdgeZoning.Name": "Edge zoning", "Placemaker.EdgeZoning.Zone": "Zone", "Placemaker.EdgeZoning.Depth": "Depth (cells)",
     "Placemaker.Zone.ResidentialLow": "Low res.", "Placemaker.Zone.ResidentialHigh": "High res.", "Placemaker.Zone.Commercial": "Commercial",
     "Placemaker.Zone.Mixed": "Mixed", "Placemaker.Zone.Office": "Office", "Placemaker.Zone.Industry": "Industry",
     "Placemaker.Picnic.Name": "Picnic area", "Placemaker.Picnic.Tables": "Tables",
+    "Placemaker.Pond.Name": "Pond", "Placemaker.Pond.Size": "Size", "Placemaker.Pond.SizeTip": "Share of the park. Digging is permanent.",
+    "Placemaker.Pond.Shore": "Shore", "Placemaker.Pond.Shore.Grass": "Grass", "Placemaker.Pond.Shore.Stone": "Stone",
+    "Placemaker.Kiosk.Name": "Kiosk", "Placemaker.Kiosk.Count": "Kiosks",
+    "Placemaker.Feature.CentralPlaza": "Central plaza", "Placemaker.Feature.Pond": "Pond", "Placemaker.Feature.Trees": "Trees",
+    "Placemaker.Feature.StreetZoning": "Zoning along streets",
+    "Placemaker.Feature.CentralPlazaTip": "A paved plaza inside the park; pick its shape, place and size.",
+    "Placemaker.Park.PlazaShape": "Shape", "Placemaker.Park.PlazaAt": "Position", "Placemaker.Park.PlazaSize": "Size",
+    "Placemaker.Shape.Circle": "Circle", "Placemaker.Shape.Square": "Square", "Placemaker.Shape.Rect": "Rect",
+    "Placemaker.At.Centre": "Centre", "Placemaker.At.Corner": "Corner", "Placemaker.At.Edge": "Edge", "Placemaker.At.Entrance": "Entrance",
     "Placemaker.Recipe.RoadsParks": "Roads + parks", "Placemaker.Recipe.ParkPlaza": "Park | plaza", "Placemaker.Recipe.NeighbourhoodPark": "Family park",
     "Placemaker.Marker.TwoWay": "Two-way", "Placemaker.Marker.Entry": "Entry only", "Placemaker.Marker.Exit": "Exit only",
     "Placemaker.Marker.Alley": "Alley", "Placemaker.Marker.Footpath": "Footpath", "Placemaker.Reason.NeedEntrance": "Place at least one entrance",

@@ -1,7 +1,7 @@
 // Against the REAL Core layers served by the mock host (whatever GeneratorRegistry.All returns).
 // Skips itself when the host has no layers, so the suite stays green on a branch without them.
 import { expect, test } from "@playwright/test";
-import { drawPolygon, FIELD, open, panelShot, shot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
 
 async function realLayers(page: import("@playwright/test").Page) {
     await page.waitForFunction(() => (window as any).pm.backend.hostUp !== undefined);
@@ -21,12 +21,20 @@ test("real Core: shipped recipes in the Make row, real plans on the map", async 
 
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    for (const id of ["park", "plaza", "campground", "split-park-plaza", "park-with-playground"])
+    for (const id of ["park", "plaza", "campground"])
         if (await page.evaluate((r) => (window as any).pm.backend.recipes.some((x: any) => x.info.id === r), id))
             await expect(page.getByTestId(`recipe-${id}`)).toBeVisible();
 
     await page.getByTestId("recipe-park").click();
     await waitCore(page);
+    // Core features: the park offers a central plaza with its shape / position / size under the toggle
+    if (await page.getByTestId("feature-toggle-plaza").count()) {
+        await page.getByTestId("feature-toggle-plaza").click();
+        await waitCore(page);
+        await expect(page.getByTestId("feature-options-plaza").getByTestId("control-plazaShape")).toBeVisible();
+        await expect(page.getByTestId("step-0").getByTestId("group-plaza")).toHaveCount(0);
+    }
+    await noTextOverflow(page, "real park design");
     await shot(page, "real-01-park-design");
     await panelShot(page, "real-panel-park-design");
 

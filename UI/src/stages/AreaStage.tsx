@@ -1,5 +1,5 @@
-// Stage 1 — choose the area: Draw / Pick block / Paint / Road loop as four cards, brush settings,
-// and a card describing the current area (size, perimeter, corners) with what to do next.
+// Stage 1 — choose the area: Draw / Block / Paint / Roads as one row of compact buttons (descriptions
+// in tooltips), brush settings, and a one-line readout of the current area with what to do next.
 import React from "react";
 import classNames from "classnames";
 import { AreaMode, BrushShape, ToolState } from "../contract";
@@ -17,45 +17,38 @@ export function modeOptions(t: TFunc) {
             value: "draw",
             icon: "draw",
             label: t("Placemaker.UI.Mode.Draw", "Draw"),
-            short: t("Placemaker.UI.Mode.DrawShort", "Click the corners"),
             title: t("Placemaker.UI.Mode.Draw", "Draw"),
-            description: t(
-                "Placemaker.UI.Mode.DrawTip",
-                "Click corners on the map; click the first corner to close. Snaps to curbs, buildings and right angles. Drag corners or edges to adjust.",
-            ),
+            description: t("Placemaker.UI.Mode.DrawTip", "Click corners; click the first one to close. Snaps to curbs and right angles."),
         },
         {
             value: "block",
             icon: "block",
-            label: t("Placemaker.UI.Mode.Block", "Pick block"),
-            short: t("Placemaker.UI.Mode.BlockShort", "Take a city block"),
-            title: t("Placemaker.UI.Mode.Block", "Pick block"),
-            description: t("Placemaker.UI.Mode.BlockTip", "Hover a city block and click to take it. Shift+click adds neighbouring blocks."),
+            label: t("Placemaker.UI.Mode.Block", "Block"),
+            title: t("Placemaker.UI.Mode.Block", "Block"),
+            description: t("Placemaker.UI.Mode.BlockTip", "Click a city block. Shift+click adds neighbours."),
         },
         {
             value: "paint",
             icon: "paint",
             label: t("Placemaker.UI.Mode.Paint", "Paint"),
-            short: t("Placemaker.UI.Mode.PaintShort", "Brush over the map"),
             title: t("Placemaker.UI.Mode.Paint", "Paint"),
-            description: t("Placemaker.UI.Mode.PaintTip", "Hold left mouse to paint the area, right mouse to erase."),
+            description: t("Placemaker.UI.Mode.PaintTip", "Left mouse paints, right mouse erases."),
         },
         {
             value: "perimeter",
             icon: "perimeter",
-            label: t("Placemaker.UI.Mode.Perimeter", "Road loop"),
-            short: t("Placemaker.UI.Mode.PerimeterShort", "Follow existing roads"),
-            title: t("Placemaker.UI.Mode.Perimeter", "Road loop"),
-            description: t("Placemaker.UI.Mode.PerimeterTip", "Click road intersections around the area, one after another, to follow existing roads exactly."),
+            label: t("Placemaker.UI.Mode.Perimeter", "Roads"),
+            title: t("Placemaker.UI.Mode.Perimeter", "Roads"),
+            description: t("Placemaker.UI.Mode.PerimeterTip", "Click the intersections around the area to follow its roads."),
         },
     ];
 }
 
 const HOWTO: Record<string, [string, string]> = {
-    draw: ["Placemaker.UI.Area.HowDraw", "Click corners on the map, then click the first corner to finish."],
-    block: ["Placemaker.UI.Area.HowBlock", "Click a city block. Shift+click adds the next one."],
-    paint: ["Placemaker.UI.Area.HowPaint", "Paint over the map with the left mouse button; the right one erases."],
-    perimeter: ["Placemaker.UI.Area.HowPerimeter", "Click the intersections around the area, one after another."],
+    draw: ["Placemaker.UI.Area.HowDraw", "Click corners; click the first to finish"],
+    block: ["Placemaker.UI.Area.HowBlock", "Click a block; Shift+click adds more"],
+    paint: ["Placemaker.UI.Area.HowPaint", "Paint with left mouse; right erases"],
+    perimeter: ["Placemaker.UI.Area.HowPerimeter", "Click intersections around the area"],
 };
 
 /** One-line area readout for the footer. */
@@ -65,7 +58,7 @@ export const AreaReadout = ({ state }: { state: ToolState; compact?: boolean }) 
     if (a.problem) {
         return (
             <div className={s.readout} data-testid="area-readout">
-                <Icon name="warning" size={16} tint="warn" />
+                <Icon name="warning" size={13} tint="warn" />
                 <div className={s.problem}>{tl(a.problem)}</div>
             </div>
         );
@@ -75,7 +68,7 @@ export const AreaReadout = ({ state }: { state: ToolState; compact?: boolean }) 
             <div className={s.readout} data-testid="area-readout">
                 <div className={s.readoutHint}>
                     {a.pointCount > 0
-                        ? t("Placemaker.UI.Area.Corners", "{0} corners — close the outline to continue", [a.pointCount])
+                        ? t("Placemaker.UI.Area.Corners", "{0} corners · close the outline", [a.pointCount])
                         : t("Placemaker.UI.Area.Empty", "No area yet")}
                 </div>
             </div>
@@ -83,9 +76,9 @@ export const AreaReadout = ({ state }: { state: ToolState; compact?: boolean }) 
     }
     return (
         <div className={s.readout} data-testid="area-readout">
-            <Icon name="area" size={16} tint="accent" />
+            <Icon name="area" size={13} tint="accent" />
             <div className={s.readoutBig}>{fmtArea(a.areaM2)}</div>
-            <div className={s.readoutDim}>{t("Placemaker.UI.Area.Perimeter", "{0} m around", [group(a.perimeterM)])}</div>
+            <div className={s.readoutDim}>{t("Placemaker.UI.Area.Perimeter", "{0} m edge", [group(a.perimeterM)])}</div>
         </div>
     );
 };
@@ -96,7 +89,7 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
     const a = state.area;
     return (
         <div className={s.stage} data-testid="stage-area">
-            <Section title={t("Placemaker.UI.Area.How", "Choose the area")} className={s.first}>
+            <Section title={t("Placemaker.UI.Area.How", "Select by")} className={s.first}>
                 <div className={s.modes} data-testid="area-mode">
                     {modeOptions(t).map((o) => {
                         const on = o.value === state.areaMode;
@@ -113,13 +106,8 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                                             if (!on) act.setAreaMode(o.value as AreaMode);
                                         }}
                                     >
-                                        <div className={s.modeIcon}>
-                                            <Icon name={o.icon} size={22} tint={on ? "dark" : "light"} />
-                                        </div>
-                                        <div className={s.modeText}>
-                                            <div className={s.modeName}>{o.label}</div>
-                                            <div className={s.modeDesc}>{o.short}</div>
-                                        </div>
+                                        <Icon name={o.icon} size={14} tint={on ? "dark" : "light"} />
+                                        <div className={s.modeName}>{o.label}</div>
                                     </button>
                                 </Tip>
                             </div>
@@ -133,6 +121,7 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                         <div className={s.brushLabel}>{t("Placemaker.UI.Brush.Shape", "Shape")}</div>
                         <Segmented
                             testId="brush-shape"
+                            stretch
                             value={b.shape}
                             onChange={(v) => act.setBrush(v as BrushShape, b.size, b.angle)}
                             options={[
@@ -172,46 +161,37 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                 </Section>
             ) : null}
             <Section
-                title={t("Placemaker.UI.Area.Selected", "Your area")}
+                title={t("Placemaker.UI.Area.Selected", "Area")}
                 right={
                     a.pointCount > 0 ? (
-                        <Btn
-                            icon="trash"
-                            iconSize={15}
-                            variant="solid"
-                            label={t("Placemaker.UI.Area.Clear", "Clear")}
-                            onClick={act.clearArea}
-                            testId="clear-area"
-                        />
+                        <Btn icon="trash" iconSize={12} variant="solid" label={t("Placemaker.UI.Area.Clear", "Clear")} onClick={act.clearArea} testId="clear-area" />
                     ) : undefined
                 }
             >
-                <div className={s.areaCard}>
-                    {a.closed && a.areaM2 > 0 ? (
-                        <div className={s.areaStats}>
-                            <div className={s.areaStat}>
-                                <div className={s.areaStatValue}>{fmtArea(a.areaM2)}</div>
-                                <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.Size", "size")}</div>
-                            </div>
-                            <div className={s.areaStat}>
-                                <div className={s.areaStatValue}>{group(a.perimeterM) + " m"}</div>
-                                <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.Around", "around")}</div>
-                            </div>
-                            <div className={s.areaStat}>
-                                <div className={s.areaStatValue}>{group(a.pointCount)}</div>
-                                <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.CornersLabel", "corners")}</div>
-                            </div>
+                {a.closed && a.areaM2 > 0 ? (
+                    <div className={s.areaStats}>
+                        <div className={s.areaStat}>
+                            <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.Size", "Size")}</div>
+                            <div className={s.areaStatValue}>{fmtArea(a.areaM2)}</div>
                         </div>
-                    ) : null}
-                    <div className={s.areaFoot}>
-                        <Icon name={a.closed ? "check" : "info"} size={16} tint={a.closed ? "ok" : "accent"} />
-                        <div className={s.areaHint} data-testid="area-hint">
-                            {a.closed
-                                ? t("Placemaker.UI.Area.Adjust", "Drag corners to adjust. You can change the shape at any time, even later.")
-                                : HOWTO[state.areaMode]
-                                  ? t(HOWTO[state.areaMode][0], HOWTO[state.areaMode][1])
-                                  : ""}
+                        <div className={s.areaStat}>
+                            <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.Around", "Edge")}</div>
+                            <div className={s.areaStatValue}>{group(a.perimeterM) + " m"}</div>
                         </div>
+                        <div className={s.areaStat}>
+                            <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.CornersLabel", "Corners")}</div>
+                            <div className={s.areaStatValue}>{group(a.pointCount)}</div>
+                        </div>
+                    </div>
+                ) : null}
+                <div className={s.areaFoot}>
+                    <Icon name={a.closed ? "check" : "info"} size={12} tint={a.closed ? "ok" : "accent"} />
+                    <div className={s.areaHint} data-testid="area-hint">
+                        {a.closed
+                            ? t("Placemaker.UI.Area.Adjust", "Drag corners to adjust, any time")
+                            : HOWTO[state.areaMode]
+                              ? t(HOWTO[state.areaMode][0], HOWTO[state.areaMode][1])
+                              : ""}
                     </div>
                 </div>
             </Section>

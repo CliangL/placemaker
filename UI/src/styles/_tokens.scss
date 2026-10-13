@@ -35,9 +35,14 @@ $c-shade: rgba(0, 0, 0, 0.22);
 $c-text-dim: rgba(234, 242, 246, 0.74);
 $c-text-faint: rgba(234, 242, 246, 0.52);
 
-$radius: 6rem;
-$radius-s: 4rem;
-$radius-l: 10rem;
+$radius: 4rem;
+$radius-s: 3rem;
+$radius-l: 6rem;
+
+// Compact "engineering tool" type scale (rem ≈ px at 1080p, scaled by the game).
+$fs: 13rem; // rows, buttons, values
+$fs-s: 12rem; // secondary text, hints, captions
+$row-h: 26rem; // one property row
 
 $ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 $t-fast: 0.12s;
@@ -74,7 +79,10 @@ $t-med: 0.2s;
     flex-direction: column;
 }
 
+// Gameface does not clip flex children like browsers do: every text box that can be squeezed needs
+// min-width:0 + overflow:hidden (and flex: 1 when it should take the remaining room).
 @mixin ellipsis {
+    min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -98,11 +106,11 @@ $t-med: 0.2s;
 @mixin chip {
     @include row;
     @include button-reset;
-    height: 28rem;
-    padding: 0 10rem;
+    height: 24rem;
+    padding: 0 8rem;
     border-radius: $radius;
     background-color: $c-surface;
-    font-size: var(--fontSizeS);
+    font-size: $fs;
     transition-property: background-color, opacity, transform;
     transition-duration: $t-fast;
     &:hover {

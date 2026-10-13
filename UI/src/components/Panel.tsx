@@ -7,7 +7,7 @@
 //   hints   — shortcut strip from state.hints
 // While drawing, C# may collapse it to a slim header + primary button (state.panelCollapsed); it then
 // shows an obvious "Show options" button.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import classNames from "classnames";
 import { Stage, StepView, Summary, ToolState } from "../contract";
 import { act, useCatalog, useDesign, useManaged, useSummary, useToolState } from "../lib/bindings";
@@ -36,7 +36,7 @@ const STAGES: { id: Stage; key: string; en: string }[] = [
 
 const POS_KEY = "placemaker.panelPos.v2";
 /** Panel width in rem (keep in sync with .wrap in panel.module.scss). */
-export const PANEL_REM = 450;
+export const PANEL_REM = 400;
 /** Docked insets in rem (keep in sync with .wrap): below the top bar, above the bottom toolbar. */
 const DOCK_TOP = 64;
 const DOCK_BOTTOM = 112;
@@ -173,7 +173,7 @@ const StageBar = ({ state }: { state: ToolState }) => {
                             if (reachable) act.goToStage(st.id);
                         }}
                     >
-                        <div className={classNames(s.stageNum, { [s.stageNumDone]: done })}>{done ? <Icon name="check" size={12} tint="dark" /> : i + 1}</div>
+                        <div className={classNames(s.stageNum, { [s.stageNumDone]: done })}>{done ? <Icon name="check" size={10} tint="dark" /> : i + 1}</div>
                         <div className={s.stageLabel}>{t(st.key, st.en)}</div>
                     </button>
                 );
@@ -192,7 +192,7 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
         <div className={s.undoRedo}>
             <Btn
                 icon="undo"
-                iconSize={17}
+                iconSize={14}
                 disabled={!state.canUndo}
                 testId="undo"
                 title={undo ? t("Placemaker.UI.UndoWhat", "Undo: {0}", [cap(undo)]) : t("Placemaker.UI.Undo", "Undo")}
@@ -201,7 +201,7 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
             />
             <Btn
                 icon="redo"
-                iconSize={17}
+                iconSize={14}
                 disabled={!state.canRedo}
                 testId="redo"
                 title={redo ? t("Placemaker.UI.RedoWhat", "Redo: {0}", [cap(redo)]) : t("Placemaker.UI.Redo", "Redo")}
@@ -257,7 +257,7 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
     if (!enabled && reason) {
         info = (
             <div className={s.reason} data-testid="primary-reason">
-                <Icon name="info" size={16} tint="warn" />
+                <Icon name="info" size={13} tint="warn" />
                 <div className={s.reasonText}>{reason}</div>
             </div>
         );
@@ -265,21 +265,21 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
         info = (
             <div className={classNames(s.quick, { [s.quickStale]: pending })} data-testid="quick-numbers">
                 <div className={s.quickItem}>
-                    <Icon name="area" size={15} tint="dim" />
+                    <Icon name="area" size={12} tint="dim" />
                     <div className={s.quickText}>{fmtArea(state.area.areaM2)}</div>
                 </div>
                 {quickStats(summary).map((st) => (
                     <div key={st.key} className={s.quickItem}>
-                        <Icon name={statIcon(st.key)} size={15} tint="dim" />
+                        <Icon name={statIcon(st.key)} size={12} tint="dim" />
                         <div className={s.quickText}>{formatValue(st.value, "count") + " " + t(st.key, "").toLowerCase()}</div>
                     </div>
                 ))}
                 <div className={classNames(s.quickItem, { [s.quickBad]: !summary.canAfford })}>
-                    <Icon name="cost" size={15} tint={summary.canAfford ? "dim" : "danger"} />
+                    <Icon name="cost" size={12} tint={summary.canAfford ? "dim" : "danger"} />
                     <div className={s.quickText}>{compactMoney(summary.cost)}</div>
                 </div>
                 <div className={s.quickItem}>
-                    <Icon name="upkeep" size={15} tint="dim" />
+                    <Icon name="upkeep" size={12} tint="dim" />
                     <div className={s.quickText}>{compactMoney(summary.upkeep) + t("Placemaker.UI.PerMonth", "/mo")}</div>
                 </div>
             </div>
@@ -301,13 +301,27 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
     );
 };
 
+/**
+ * One line of shortcut hints: the first (most relevant) up to three that fit whole — hints that would
+ * be cut are dropped rather than clipped (measured after layout, works in Gameface too).
+ */
 const Hints = ({ state }: { state: ToolState }) => {
     const { tl } = useT();
-    if (!state.hints.length) return null;
+    const ref = useRef<HTMLDivElement | null>(null);
+    const list = state.hints.slice(0, 3);
+    const sig = list.map((h) => h.text.key + (h.keys ?? []).join("+")).join("|");
+    const [fit, setFit] = useState(3);
+    useEffect(() => setFit(3), [sig]);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (el && fit > 1 && el.scrollWidth > el.clientWidth + 1) setFit(fit - 1);
+    });
+    if (!list.length) return null;
+    const shown = list.slice(0, fit);
     return (
-        <div className={s.hints} data-testid="hints">
-            {state.hints.map((h, i) => (
-                <div key={i} className={s.hint}>
+        <div className={s.hints} data-testid="hints" ref={ref}>
+            {shown.map((h, i) => (
+                <div key={i} className={classNames(s.hint, { [s.hintOnly]: shown.length === 1 })}>
                     {h.keys && h.keys.length ? <Keys keys={h.keys} /> : null}
                     <div className={s.hintText}>{tl(h.text)}</div>
                 </div>
@@ -328,11 +342,11 @@ const MarkerBanner = ({ state, root }: { state: ToolState; root: StepView | null
     });
     return (
         <div className={s.banner} data-testid="marker-banner">
-            <Icon name="marker" size={18} tint="warn" />
+            <Icon name="marker" size={14} tint="warn" />
             <div className={s.bannerText}>
                 <div className={s.bannerTitle}>{t("Placemaker.UI.Markers.BannerTitle", "Placing: {0}", [kindLabel])}</div>
                 <div className={s.bannerSub}>
-                    {t("Placemaker.UI.Markers.BannerHint", "Click the outline next to a road. Right-click an entrance to remove it.")}
+                    {t("Placemaker.UI.Markers.BannerHint", "Click the outline by a road · right-click removes")}
                 </div>
             </div>
             <Btn variant="accent" label={t("Placemaker.UI.Done", "Done")} onClick={act.endMarkers} testId="marker-done" />
@@ -377,7 +391,7 @@ export const PlacemakerPanel = () => {
                 ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need])
                 : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance");
     } else if (needsAck) {
-        blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick the box to confirm the permanent changes first");
+        blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick the box to confirm permanent changes");
     }
 
     let body: React.ReactNode = null;
@@ -424,19 +438,19 @@ export const PlacemakerPanel = () => {
             >
                 <Tip
                     title={t("Placemaker.UI.Move", "Move the panel")}
-                    description={t("Placemaker.UI.MoveTip", "Drag the header to move the panel anywhere. Double-click it to dock it on the right again.")}
+                    description={t("Placemaker.UI.MoveTip", "Drag to move. Double-click to dock.")}
                 >
                     <div className={s.grip} data-testid="panel-grip">
-                        <Icon name="grip" size={16} tint="dim" />
+                        <Icon name="grip" size={12} tint="dim" />
                     </div>
                 </Tip>
-                <Icon name="logo" size={22} tint="accent" />
+                <Icon name="logo" size={16} tint="accent" />
                 <div className={s.title}>
                     {state.stage === "manage" ? t("Placemaker.UI.Manage.Title", "Built with Placemaker") : t("Placemaker.Name", "Placemaker")}
                 </div>
                 {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
                 {state.planning ? (
-                    <Tip title={t("Placemaker.UI.Planning", "Updating the preview…")}>
+                    <Tip title={t("Placemaker.UI.Planning", "Updating…")}>
                         <div className={s.planningDot} data-testid="planning" />
                     </Tip>
                 ) : null}
@@ -445,10 +459,10 @@ export const PlacemakerPanel = () => {
                 {state.anarchy?.available ? (
                     <Btn
                         icon="anarchy"
-                        iconSize={16}
+                        iconSize={14}
                         selected={state.anarchy.enabled}
                         title={t("Placemaker.UI.Anarchy", "Anarchy")}
-                        description={t("Placemaker.UI.AnarchyTip", "Build even where the game reports a collision (Anarchy mod).")}
+                        description={t("Placemaker.UI.AnarchyTip", "Ignore collisions (Anarchy mod).")}
                         onClick={() => act.setAnarchy(!state.anarchy?.enabled)}
                         testId="anarchy"
                     />
@@ -457,16 +471,15 @@ export const PlacemakerPanel = () => {
                 {collapsed ? null : (
                     <Btn
                         icon="collapse"
-                        iconSize={17}
-                        title={t("Placemaker.UI.Collapse", "Make smaller")}
-                        description={t("Placemaker.UI.CollapseTip", "Shrinks the panel to its header and main button.")}
-                        onClick={() => act.setPanelCollapsed(true)}
+                        iconSize={14}
+                        title={t("Placemaker.UI.Collapse", "Minimize")}
+                                                onClick={() => act.setPanelCollapsed(true)}
                         testId="collapse"
                     />
                 )}
                 <Btn
                     icon="close"
-                    iconSize={17}
+                    iconSize={14}
                     title={t("Placemaker.UI.Close", "Close")}
                     description={<Keys keys={["Esc"]} />}
                     onClick={act.close}
@@ -510,8 +523,8 @@ export const PlacemakerPanel = () => {
                                                 <Btn
                                                     variant="solid"
                                                     icon="expand"
-                                                    iconSize={16}
-                                                    label={t("Placemaker.UI.Expand", "Show options")}
+                                                    iconSize={14}
+                                                    label={t("Placemaker.UI.Expand", "Options")}
                                                     onClick={() => act.setPanelCollapsed(false)}
                                                     testId="expand"
                                                 />

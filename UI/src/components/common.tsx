@@ -5,6 +5,7 @@ import classNames from "classnames";
 import { bundledName, resolveIcon, Tint, tintFor } from "../lib/icons";
 import { playSound } from "../lib/bindings";
 import { Tip } from "../lib/tips";
+import { useOpen } from "../lib/collapse";
 import s from "./common.module.scss";
 
 export const Icon = ({
@@ -59,7 +60,7 @@ type BtnProps = {
 };
 
 export const Btn = ({
-    icon, label, title, description, onClick, disabled, selected, className, iconColor, iconSize = 18,
+    icon, label, title, description, onClick, disabled, selected, className, iconColor, iconSize = 15,
     variant = "ghost", testId, children, tipDirection,
 }: BtnProps) => {
     const el = (
@@ -132,7 +133,7 @@ export const Segmented = ({
                         }
                     }}
                 >
-                    {o.icon ? <Icon name={o.icon} size={18} tint={o.value === value ? "light" : "dim"} /> : null}
+                    {o.icon ? <Icon name={o.icon} size={14} tint={o.value === value ? "light" : "dim"} /> : null}
                     {!iconOnly && o.label ? <div className={s.segLabel}>{o.label}</div> : null}
                 </button>
             </Tip>
@@ -176,7 +177,7 @@ export const Check = ({
             onChange(!checked);
         }}
     >
-        <div className={s.checkBox}>{checked ? <Icon name="check" size={13} tint="dark" /> : null}</div>
+        <div className={s.checkBox}>{checked ? <Icon name="check" size={12} tint="dark" /> : null}</div>
         {label ? <div className={s.checkLabel}>{label}</div> : null}
     </button>
 );
@@ -218,7 +219,7 @@ export const Section = ({
 }) => (
     <div className={classNames(s.section, className)} data-testid={testId}>
         <div className={s.sectionHead}>
-            {icon ? <Icon name={icon} size={16} tint="dim" className={s.sectionIcon} /> : null}
+            {icon ? <Icon name={icon} size={13} tint="dim" className={s.sectionIcon} /> : null}
             <div className={s.sectionTitle}>{title}</div>
             {count !== undefined && count !== null ? <div className={s.sectionCount}>{count}</div> : null}
             <div className={s.sectionRule} />
@@ -228,4 +229,65 @@ export const Section = ({
     </div>
 );
 
-export const Dot = ({ color }: { color: string }) => <div className={s.dot} style={{ backgroundColor: color }} />;
+/**
+ * A foldable section: one 24rem header line (chevron · icon · title · summary when folded · actions).
+ * Open/closed is remembered per `id` (lib/collapse). `summary` is what the player reads instead of
+ * unfolding ("90° · 6.0 m"), so it should hold the key values.
+ */
+export const Collapsible = ({
+    id,
+    title,
+    icon,
+    summary,
+    right,
+    defaultOpen = false,
+    children,
+    testId,
+    nested,
+    className,
+}: {
+    id: string;
+    title: ReactNode;
+    icon?: string;
+    summary?: ReactNode;
+    right?: ReactNode;
+    defaultOpen?: boolean;
+    children?: ReactNode;
+    testId?: string;
+    nested?: boolean;
+    className?: string;
+}) => {
+    const [open, setOpen] = useOpen(id, defaultOpen);
+    return (
+        <div className={classNames(s.fold, { [s.foldNested]: nested }, className)} data-testid={testId} data-open={open ? "true" : "false"}>
+            <div className={s.foldHead}>
+                <button
+                    type="button"
+                    aria-expanded={open ? "true" : "false"}
+                    data-testid={testId ? testId + "-toggle" : undefined}
+                    className={s.foldToggle}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        playSound(open ? "toggle-off" : "toggle-on");
+                        setOpen(!open);
+                    }}
+                >
+                    <Icon name={open ? "chevronDown" : "chevronRight"} size={12} tint="dim" />
+                    {icon ? <Icon name={icon} size={14} tint="dim" className={s.foldIcon} /> : null}
+                    <div className={s.foldTitle}>{title}</div>
+                    {!open && summary ? (
+                        <div className={s.foldSummary} data-testid={testId ? testId + "-summary" : undefined}>
+                            {summary}
+                        </div>
+                    ) : (
+                        <div className={s.foldSpacer} />
+                    )}
+                </button>
+                {right ? <div className={s.foldRight}>{right}</div> : null}
+            </div>
+            {open ? <div className={s.foldBody}>{children}</div> : null}
+        </div>
+    );
+};
+
+export const Dot =({ color }: { color: string }) => <div className={s.dot} style={{ backgroundColor: color }} />;

@@ -128,6 +128,9 @@ function normalizeStep(s: Record<string, any>): StepView {
             .map((k) => (typeof k === "string" ? { kind: k, label: "" } : k))
             .filter((k) => isObj(k) && typeof k.kind === "string"),
         markersRequired: Number(s.markersRequired) || 0,
+        features: arr<any>(s.features)
+            .filter((f) => isObj(f) && typeof f.layer === "string" && f.layer)
+            .map((f) => ({ layer: String(f.layer), label: String(f.label ?? ""), icon: String(f.icon ?? ""), enabled: f.enabled === true, path: typeof f.path === "string" && f.path ? f.path : undefined, tooltip: typeof f.tooltip === "string" && f.tooltip ? f.tooltip : undefined, options: arr<any>(f.options).filter((o) => typeof o === "string"), defaultOn: f.defaultOn === true })),
         ready: s.ready !== false,
         nextStep: s.nextStep,
         children: arr<any>(s.children).filter(isObj).map(normalizeStep),
@@ -245,6 +248,8 @@ export const act = {
     endMarkers: () => fire(Triggers.primary),
     /** The player ticked the permanent-effects box (C# also guards Enter with it). */
     acknowledgePermanent: (ack: boolean) => fire(Triggers.acknowledgePermanent, ack),
+    /** Turn a built-in feature of a fill step on/off (adds/enables its child step in C#). */
+    setFeature: (path: string, featureLayerId: string, enabled: boolean) => fire(Triggers.setFeature, path, featureLayerId, enabled),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */
