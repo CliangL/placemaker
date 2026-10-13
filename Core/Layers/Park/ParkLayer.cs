@@ -44,7 +44,9 @@ namespace Placemaker.Core.Layers.Park
                 Layer = "plaza", Target = PlazaPlace, LabelKey = "Placemaker.Park.Feature.plaza",
                 TooltipKey = "Placemaker.Park.Feature.plaza.Tooltip",
                 Options = new[] { "plazaShape", "plazaAt", "plazaSize" },
-                Preset = Bag(("centerMode", "single"), ("arrangementMode", "center"), ("furniture", 6.0), ("fence", false)),
+                // A park's plaza is a small, dressed square: patterned border, planters, trees round the edge.
+                Preset = Bag(("centerMode", "single"), ("arrangementMode", "center"), ("furniture", 6.0), ("fence", false),
+                    ("pattern", "border"), ("planters", 6.0), ("treeLayout", "edge"), ("beds", 2.0), ("centerKind", "fountain")),
             },
             new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Park.Feature.playground", Options = new[] { "playgroundPath" } },
             new FeatureInfo
