@@ -49,7 +49,7 @@ namespace Placemaker.Core.Geometry
             for (int i = 1; i < n; i++) if (math.distancesq(loop[i], loop[0]) > math.distancesq(loop[far], loop[0])) far = i;
             for (int i = 0; i < n; i++) if (math.distancesq(loop[i], loop[far]) > math.distancesq(loop[first], loop[far])) first = i;
             keep[first] = keep[far] = true;
-            var stack = new Stack<int2>();
+            var stack = new ListStack<int2>();
             stack.Push(new int2(first, far));
             stack.Push(new int2(far, first));
             double tol2 = (double)tolerance * tolerance;
@@ -84,7 +84,7 @@ namespace Placemaker.Core.Geometry
             if (n <= 2) return n == 0 ? Array.Empty<float2>() : ToArray(line);
             var keep = new bool[n];
             keep[0] = keep[n - 1] = true;
-            var stack = new Stack<int2>();
+            var stack = new ListStack<int2>();
             stack.Push(new int2(0, n - 1));
             double tol2 = (double)tolerance * tolerance;
             while (stack.Count > 0)

@@ -474,7 +474,7 @@ namespace Placemaker.Core.Geometry
         {
             var result = new List<float2[]>();
             if (region == null || region.Outer == null || region.Outer.Length < 3) return result;
-            var pending = new Queue<Region>();
+            var pending = new ListQueue<Region>();
             if (!region.HasHoles) { result.Add(EnsureCcw(region.Outer)); return result; }
             foreach (var r in Boolean(new[] { region }, null, BoolOp.Union)) pending.Enqueue(r);
             int guard = 64 + 8 * region.Holes.Count;

@@ -306,7 +306,7 @@ namespace Placemaker.Core.Geometry
                 (incident[_edges[k].U] ??= new List<int>(4)).Add(k);
                 (incident[_edges[k].V] ??= new List<int>(4)).Add(k);
             }
-            var stack = new Stack<int>();
+            var stack = new ListStack<int>();
             for (int v = 0; v < nv; v++) if (deg[v] == 1) stack.Push(v);
             bool removed = false;
             while (stack.Count > 0)
@@ -391,7 +391,7 @@ namespace Placemaker.Core.Geometry
                 if (!outerOf.TryGetValue(comp, out int cur0) || a < area[cur0]) outerOf[comp] = c;
             }
             var done = new bool[nc];
-            var queue = new Queue<int>();
+            var queue = new ListQueue<int>();
             foreach (var kv in outerOf)
             {
                 int c0 = kv.Value;
@@ -571,7 +571,7 @@ namespace Placemaker.Core.Geometry
             var prev = new int[n];
             var next = new int[n];
             var alive = new bool[n];
-            var stack = new Stack<int>(n);
+            var stack = new ListStack<int>(n);
             for (int i = 0; i < n; i++) { prev[i] = (i - 1 + n) % n; next[i] = (i + 1) % n; alive[i] = true; stack.Push(i); }
             int count = n;
             while (stack.Count > 0 && count > 3)

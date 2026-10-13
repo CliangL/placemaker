@@ -431,7 +431,7 @@ namespace Placemaker.Core.Geometry
             var prev = new int[n];
             var next = new int[n];
             var alive = new bool[n];
-            var stack = new Stack<int>(n);
+            var stack = new ListStack<int>(n);
             for (int i = 0; i < n; i++)
             {
                 prev[i] = (i - 1 + n) % n; next[i] = (i + 1) % n; alive[i] = true;

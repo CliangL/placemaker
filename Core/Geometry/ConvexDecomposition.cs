@@ -35,7 +35,7 @@ namespace Placemaker.Core.Geometry
             var start = new List<int>(c.Length);
             for (int i = 0; i < c.Length; i++) start.Add(i);
 
-            var stack = new Stack<List<int>>();
+            var stack = new ListStack<List<int>>();
             stack.Push(start);
             int guard = 4 * c.Length + 16;
             var parts = new List<List<int>>();
