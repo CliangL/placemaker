@@ -280,7 +280,7 @@ namespace Placemaker.Game.Tool
             if (_stage == ToolStage.Manage) { _hoverGroup = 0; }
             _stage = s;
             // Red markers and the failure message describe the attempt the player just saw; moving on clears them (US8).
-            _feedback.StageChanged();
+            ClearBuildFeedback(true);
             if (s != ToolStage.Design && s != ToolStage.Review) ExitMarkerMode();
             Touch();
         }

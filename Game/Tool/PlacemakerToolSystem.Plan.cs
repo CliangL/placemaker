@@ -56,7 +56,7 @@ namespace Placemaker.Game.Tool
             _inputRevision++;
             _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
             _inputFromDrag = throttled;
-            _feedback.InputChanged();
+            ClearBuildFeedback(false);
             Touch();
         }
 
