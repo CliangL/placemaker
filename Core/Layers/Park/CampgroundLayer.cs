@@ -59,13 +59,13 @@ namespace Placemaker.Core.Layers.Park
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
         {
-            var region = Region.From(input?.Shape?.Ring);
+            var region = LayerRegion.From(input?.Shape?.Ring);
             return region == null ? new List<EdgeMarker>() : Entrances.Suggest(input, region, ParkLayer.EntranceKind, 1);
         }
 
         protected override void PlanCore(LayerContext ctx)
         {
-            var region = ctx.Region;
+            var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             // One entrance is typical for a campground (a reception point); more only if the player places them.
             var gates = Entrances.Resolve(ctx.Input, region, ParkLayer.EntranceKind, 1);
@@ -127,7 +127,7 @@ namespace Placemaker.Core.Layers.Park
             {
                 var (c, t, side) = pitches[i];
                 var toPath = new float2(t.y, -t.x) * side;   // unit vector from the pitch towards its path
-                if (ctx.B("pads")) ctx.Surface(Region.Rect(c, t, size * 0.5f, size * 0.5f), SurfaceRole.Decorative, AssetMix.One(ctx.S("padSurface")));
+                if (ctx.B("pads")) ctx.Surface(LayerRegion.Rect(c, t, size * 0.5f, size * 0.5f), SurfaceRole.Decorative, AssetMix.One(ctx.S("padSurface")));
                 uint v = Hashing.Mix(ctx.Seed, (uint)i + 7u);
                 var tent = c - toPath * size * 0.15f;
                 ctx.Object(tent, math.atan2(toPath.x, toPath.y), ObjectRole.Furniture, AssetMix.Pick(pitchIds, v), v);
@@ -140,7 +140,7 @@ namespace Placemaker.Core.Layers.Park
             // the woodland leaves free, so a picnic area or playground add-on has room in a dense forest camp.
             var lawns = FreeSpace.Pieces(region, p => occ.Corridors.Overlaps(p, 0.75f) || NearPitch(pitches, p, size), 2f, 150f, ctx.Cancel);
             float2 clearing = float2.zero; float clearingRadius = 0f;
-            var largest = lawns.Count > 0 ? Region.From(lawns[0]) : null;
+            var largest = lawns.Count > 0 ? LayerRegion.From(lawns[0]) : null;
             if (largest != null)
             {
                 clearing = largest.DeepestPoint(out float inscribed, (q, cap) => occ.Clearance(q, cap), 16);
@@ -195,9 +195,9 @@ namespace Placemaker.Core.Layers.Park
             return false;
         }
 
-        private static bool PitchFits(Region region, Occupancy occ, float2 c, float2 t, float size, List<float2> gates)
+        private static bool PitchFits(LayerRegion region, Occupancy occ, float2 c, float2 t, float size, List<float2> gates)
         {
-            foreach (var corner in Region.Rect(c, t, size * 0.5f, size * 0.5f))
+            foreach (var corner in LayerRegion.Rect(c, t, size * 0.5f, size * 0.5f))
                 if (!region.ContainsDisc(corner, 1f) || occ.Corridors.Overlaps(corner, 0f, 0.3f)) return false;
             foreach (var g in gates) if (math.distancesq(g, c) < (size + 8f) * (size + 8f)) return false;
             // The pad (half-diagonal ≈ 0.71·size) must not touch earlier pitches or reserved items.

@@ -21,7 +21,7 @@ namespace Placemaker.Core.Layers.Park
         private const float RayStep = 1f;
 
         /// <param name="sizeFactor">0.2..1 of the free space the lake may take.</param>
-        public static float2[] Generate(Region region, SegmentIndex paths, IReadOnlyList<Gate> gates, float sizeFactor, uint seed)
+        public static float2[] Generate(LayerRegion region, SegmentIndex paths, IReadOnlyList<Gate> gates, float sizeFactor, uint seed)
         {
             float area = region.Area;
             float step = math.max(3f, math.sqrt(area) / 80f);
@@ -90,12 +90,12 @@ namespace Placemaker.Core.Layers.Park
         /// <summary>Deepest point of the lake (water source position) and its distance to the shore.</summary>
         public static float2 WaterAnchor(float2[] lake, out float innerRadius)
         {
-            var r = Region.From(lake);
+            var r = LayerRegion.From(lake);
             if (r == null) { innerRadius = 0; return lake.Length > 0 ? lake[0] : float2.zero; }
             return r.DeepestPoint(out innerRadius, null, 16);
         }
 
-        private static float Clearance(float2 p, Region region, SegmentIndex paths, IReadOnlyList<Gate> gates, float cap)
+        private static float Clearance(float2 p, LayerRegion region, SegmentIndex paths, IReadOnlyList<Gate> gates, float cap)
         {
             if (!region.Contains(p)) return 0f;
             float c = region.BoundaryDistance(p, cap);

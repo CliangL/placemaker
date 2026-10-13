@@ -32,11 +32,11 @@ namespace Placemaker.Core.Layers.AddOns
             var ids = ctx.L("assets");
             if (!AssetAvailability.Require(ctx.Plan, AssetCategories.Flowerbed, ids, Keys.Category(AssetCategories.Flowerbed))) return;
             var occ = Occupancy(ctx);
-            int beds = math.max(1, (int)math.round(ctx.Region.Area / 10000f * ctx.F("density")));
+            int beds = math.max(1, (int)math.round(ctx.LayerRegion.Area / 10000f * ctx.F("density")));
             int perBed = ctx.I("bedSize");
             var anchors = ctx.B("nearPaths") && occ.Paths.Count > 0 ? PathAnchors(occ, ctx.Seed) : new List<float2>();
             uint clump = Hashing.Mix(ctx.Seed, 0xF1u);
-            foreach (var p in Scatter.Candidates(ctx.Region, 6f, ctx.Seed, 4000, ctx.Cancel))
+            foreach (var p in Scatter.Candidates(ctx.LayerRegion, 6f, ctx.Seed, 4000, ctx.Cancel))
                 if (Hashing.Unit(Hashing.Mix(clump, (uint)anchors.Count)) < Scatter.Clustering(p, 25f, clump, 0.1f)) anchors.Add(p);
 
             int placedBeds = 0, placedItems = 0;

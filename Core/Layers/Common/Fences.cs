@@ -14,7 +14,7 @@ namespace Placemaker.Core.Layers.Common
         /// <summary>Longest single fence course; longer runs are split so the net tool never rejects a segment.</summary>
         public const float MaxCourse = 60f;
 
-        public static List<float2x2> Runs(Region region, IReadOnlyList<Gate> gates, float gapHalfWidth)
+        public static List<float2x2> Runs(LayerRegion region, IReadOnlyList<Gate> gates, float gapHalfWidth)
         {
             var runs = new List<float2x2>();
             var inset = region.InsetVertices(Inset, 3f);

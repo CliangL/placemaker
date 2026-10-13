@@ -87,7 +87,7 @@ namespace Placemaker.Core.Layers.Park
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
         {
-            var region = Region.From(input?.Shape?.Ring);
+            var region = LayerRegion.From(input?.Shape?.Ring);
             if (region == null) return new List<EdgeMarker>();
             return Entrances.Suggest(input, region, EntranceKind, Entrances.WantedByArea(region.Area));
         }
@@ -97,11 +97,11 @@ namespace Placemaker.Core.Layers.Park
 
         protected override void PlanCore(LayerContext ctx)
         {
-            var region = ctx.Region;
+            var region = ctx.LayerRegion;
             var style = ParkStyle.Get(ctx.S("style"));
             var s = new ParkSite
             {
-                Region = region, Occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site),
+                LayerRegion = region, Occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site),
                 Seed = ctx.Seed, Cancel = ctx.Cancel,
             };
 
@@ -134,7 +134,7 @@ namespace Placemaker.Core.Layers.Park
             var lawns = Lawns(ctx, s);
             if (lawns.Count > 0 && style.ClearingFactor > 0f)
             {
-                var largest = Region.From(lawns[0]);
+                var largest = LayerRegion.From(lawns[0]);
                 if (largest != null)
                 {
                     var centre = largest.DeepestPoint(out float inscribed, null, 16);
@@ -216,10 +216,10 @@ namespace Placemaker.Core.Layers.Park
         private static List<float2[]> Lawns(LayerContext ctx, ParkSite s)
         {
             if (s.Curves.Count == 0 && s.Lake.Length < 3)
-                return new List<float2[]> { s.Region.Ring };
+                return new List<float2[]> { s.LayerRegion.Ring };
             var corridors = s.Occ.Corridors;
             var lake = s.Lake;
-            return FreeSpace.Pieces(s.Region, p =>
+            return FreeSpace.Pieces(s.LayerRegion, p =>
                     corridors.Overlaps(p, 0.75f) || lake.Length >= 3 && (Poly.Contains(lake, p) || ParkSite.MinDistToRing(lake, p) < 2f),
                 2f, 120f, ctx.Cancel);
         }

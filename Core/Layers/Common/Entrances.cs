@@ -27,7 +27,7 @@ namespace Placemaker.Core.Layers.Common
         public const float FrontageReach = 6f;
 
         /// <summary>Player markers of <paramref name="kind"/>, else suggestions; never empty for a valid region.</summary>
-        public static List<Gate> Resolve(AreaInput input, Region region, string kind, int wanted)
+        public static List<Gate> Resolve(AreaInput input, LayerRegion region, string kind, int wanted)
         {
             var gates = new List<Gate>();
             foreach (var m in input.Markers)
@@ -63,7 +63,7 @@ namespace Placemaker.Core.Layers.Common
         /// farthest-point selection. Falls back to the longest edge's midpoint (and the point
         /// farthest from it) when no road touches the area.
         /// </summary>
-        public static List<EdgeMarker> Suggest(AreaInput input, Region region, string kind, int wanted)
+        public static List<EdgeMarker> Suggest(AreaInput input, LayerRegion region, string kind, int wanted)
         {
             var result = new List<EdgeMarker>();
             if (region == null || wanted <= 0) return result;

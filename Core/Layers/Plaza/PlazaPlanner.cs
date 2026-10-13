@@ -67,7 +67,7 @@ namespace Placemaker.Core.Layers.Plaza
             public List<ArrangementItem> Arrangement;
         }
 
-        public static PlazaLayout Generate(Region region, Occupancy occ, IReadOnlyList<float2> entrances, Options o)
+        public static PlazaLayout Generate(LayerRegion region, Occupancy occ, IReadOnlyList<float2> entrances, Options o)
         {
             var layout = new PlazaLayout();
             float spacing = math.clamp(o.CenterSpacing, 5f, 60f);
@@ -136,7 +136,7 @@ namespace Placemaker.Core.Layers.Plaza
 
         private struct Anchor { public float2 Position; public float Rotation; public float2 Tangent; }
 
-        private static void Circular(PlazaLayout layout, Region region, Occupancy occ, IReadOnlyList<float2> entrances, float2 center,
+        private static void Circular(PlazaLayout layout, LayerRegion region, Occupancy occ, IReadOnlyList<float2> entrances, float2 center,
             float protectedRadius, float spacing, float width, float maxRadius, float majorSpan, float minorSpan, int desiredPairs,
             List<ArrangementItem> arrangement)
         {
@@ -176,7 +176,7 @@ namespace Placemaker.Core.Layers.Plaza
                 }
         }
 
-        private static bool TryPair(List<PlacedFurniture> trial, PlazaLayout layout, Region region, Occupancy occ, Anchor anchor,
+        private static bool TryPair(List<PlacedFurniture> trial, PlazaLayout layout, LayerRegion region, Occupancy occ, Anchor anchor,
             List<ArrangementItem> arrangement, float2 center, IReadOnlyList<float2> entrances, float spacing, int id)
         {
             float width = 0f;
@@ -202,7 +202,7 @@ namespace Placemaker.Core.Layers.Plaza
             return true;
         }
 
-        private static bool TryBoundaryGroup(PlazaLayout layout, Region region, Occupancy occ, Anchor anchor, List<ArrangementItem> arrangement,
+        private static bool TryBoundaryGroup(PlazaLayout layout, LayerRegion region, Occupancy occ, Anchor anchor, List<ArrangementItem> arrangement,
             IReadOnlyList<float2> entrances, float spacing, int id, bool mirrored, float2 mirrorNormal, float mirrorOffset)
         {
             float width = 0f;
@@ -355,7 +355,7 @@ namespace Placemaker.Core.Layers.Plaza
             return axis;
         }
 
-        private static bool Valid(float2 p, float footprint, PlazaLayout layout, Region region, Occupancy occ, IReadOnlyList<float2> entrances,
+        private static bool Valid(float2 p, float footprint, PlazaLayout layout, LayerRegion region, Occupancy occ, IReadOnlyList<float2> entrances,
             List<PlacedFurniture> accepted, int arrangementId, ArrangementMode mode, float spacing)
         {
             float boundaryGap = mode == ArrangementMode.AlongEdges ? spacing : FurnitureBoundaryClearance;
@@ -379,7 +379,7 @@ namespace Placemaker.Core.Layers.Plaza
         }
 
         /// <summary>Centroid when it has the clearance, else the most open interior point.</summary>
-        private static bool TryChooseCenter(Region region, Occupancy occ, float required, out float2 center, out float clearance)
+        private static bool TryChooseCenter(LayerRegion region, Occupancy occ, float required, out float2 center, out float clearance)
         {
             center = region.Centroid;
             if (region.Contains(center))

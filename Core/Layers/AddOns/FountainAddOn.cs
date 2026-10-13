@@ -72,7 +72,7 @@ namespace Placemaker.Core.Layers.AddOns
         {
             ctx.Object(c, Hashing.Unit(ctx.Seed) * 2f * math.PI, ObjectRole.Centerpiece, asset, Hashing.Mix(ctx.Seed, 0xF0u));
             occ.Take(c, basin, 0);
-            if (ctx.B("apron")) ctx.Surface(Region.Circle(c, apron, 32), SurfaceRole.Paving, AssetMix.One(ctx.S("apronSurface")));
+            if (ctx.B("apron")) ctx.Surface(LayerRegion.Circle(c, apron, 32), SurfaceRole.Paving, AssetMix.One(ctx.S("apronSurface")));
 
             float seatRing = apron - 1.6f;
             float phase = Hashing.Unit(Hashing.Mix(ctx.Seed, 0x5Eu)) * 2f * math.PI;

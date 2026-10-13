@@ -55,7 +55,7 @@ namespace Placemaker.Core.Layers.Split
 
         protected override void PlanCore(LayerContext ctx)
         {
-            var region = ctx.Region;
+            var region = ctx.LayerRegion;
             var parts = new List<float2[]> { region.Ring };
             var cuts = new List<Chord>();
             var markers = new List<EdgeMarker>();
@@ -93,7 +93,7 @@ namespace Placemaker.Core.Layers.Split
                 bool done = false;
                 for (int k = 0; k < parts.Count && !done; k++)
                 {
-                    var part = Region.From(parts[k]);
+                    var part = LayerRegion.From(parts[k]);
                     if (part == null) continue;
                     var pa = part.ClosestOnBoundary(a, out int sa, out _);
                     var pb = part.ClosestOnBoundary(b, out int sb, out _);
@@ -110,7 +110,7 @@ namespace Placemaker.Core.Layers.Split
             return all;
         }
 
-        private static bool CutByRatio(LayerContext ctx, Region region, List<float2[]> parts, List<Chord> cuts)
+        private static bool CutByRatio(LayerContext ctx, LayerRegion region, List<float2[]> parts, List<Chord> cuts)
         {
             int count = math.clamp(ctx.I("parts"), 2, MaxParts);
             region.PrincipalAxes(out _, out var major, out _, out _);

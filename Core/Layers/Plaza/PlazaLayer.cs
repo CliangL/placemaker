@@ -78,14 +78,14 @@ namespace Placemaker.Core.Layers.Plaza
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
         {
-            var region = Region.From(input?.Shape?.Ring);
+            var region = LayerRegion.From(input?.Shape?.Ring);
             if (region == null) return new List<EdgeMarker>();
             return Entrances.Suggest(input, region, AccessKind, WantedAccess(region));
         }
 
         public override Readiness CheckReady(AreaInput input) => new Readiness { Ready = true };
 
-        private static int WantedAccess(Region r) => math.clamp((int)(r.Perimeter / 80f), 2, 8);
+        private static int WantedAccess(LayerRegion r) => math.clamp((int)(r.Perimeter / 80f), 2, 8);
 
         /// <summary>
         /// ParkManager's variant roller, per control: centre mode (15 % none), spacing, arrangement
@@ -117,7 +117,7 @@ namespace Placemaker.Core.Layers.Plaza
 
         protected override void PlanCore(LayerContext ctx)
         {
-            var region = ctx.Region;
+            var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Entrances.Resolve(ctx.Input, region, AccessKind, WantedAccess(region));
             var gatePoints = new List<float2>();
@@ -169,7 +169,7 @@ namespace Placemaker.Core.Layers.Plaza
             // Regions.
             ctx.AddRegion(region.Ring, "paved", RegionTags.Paved);
             float coreRadius = layout.CoreRadius;
-            if (coreRadius >= 4f) ctx.AddRegion(Region.Circle(layout.Center, coreRadius, 24), "core", RegionTags.Core, RegionTags.Paved);
+            if (coreRadius >= 4f) ctx.AddRegion(LayerRegion.Circle(layout.Center, coreRadius, 24), "core", RegionTags.Core, RegionTags.Paved);
             var strips = region.BoundaryStrips(4f, math.clamp((int)math.round(region.Perimeter / 200f), 2, 6));
             for (int i = 0; i < strips.Count; i++) ctx.AddRegion(strips[i], "edge:" + i, RegionTags.Edge, RegionTags.Paved);
 

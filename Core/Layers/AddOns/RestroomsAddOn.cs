@@ -36,14 +36,14 @@ namespace Placemaker.Core.Layers.AddOns
             var kioskAsset = AssetMix.One(ctx.S("kioskAsset"));
             float kioskRadius = AssetMix.FootprintRadius(ctx.Site, kioskAsset, 2.5f);
             int wanted = ctx.I("count");
-            float minDistance = math.max(30f, math.sqrt(ctx.Region.Area) / (wanted + 1));
+            float minDistance = math.max(30f, math.sqrt(ctx.LayerRegion.Area) / (wanted + 1));
             var pref = occ.Paths.Count > 0 ? Spots.Preference.NearPaths : Spots.Preference.NearBoundary;
             var spots = Spread(occ, radius + (kiosk ? kioskRadius * 2f + 0.5f : 0f), wanted, pref, ctx.Seed, minDistance);
             int placed = 0;
             foreach (var spot in spots)
             {
                 // Face the nearest path (or the region centre): the door should open to where people walk.
-                var toward = occ.Paths.Count > 0 && occ.Paths.Nearest(spot, 500f, out var q) >= 0 ? q : ctx.Region.Centroid;
+                var toward = occ.Paths.Count > 0 && occ.Paths.Nearest(spot, 500f, out var q) >= 0 ? q : ctx.LayerRegion.Centroid;
                 float yaw = Facing(spot, toward);
                 if (!occ.Free(spot, radius, 0.5f, 0.3f)) continue;
                 ctx.Object(spot, yaw, ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)placed));

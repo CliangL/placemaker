@@ -25,7 +25,7 @@ namespace Placemaker.Core.Layers.Common
         /// Free connected pieces of <paramref name="region"/> where <paramref name="isBlocked"/> is false
         /// at cell centres. Sorted by area, largest first. Pieces smaller than minArea are dropped.
         /// </summary>
-        public static List<float2[]> Pieces(Region region, Func<float2, bool> isBlocked, float cellSize, float minArea,
+        public static List<float2[]> Pieces(LayerRegion region, Func<float2, bool> isBlocked, float cellSize, float minArea,
             CancellationToken cancel)
         {
             var result = new List<float2[]>();

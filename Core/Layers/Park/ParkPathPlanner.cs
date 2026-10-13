@@ -69,7 +69,7 @@ namespace Placemaker.Core.Layers.Park
         }
 
         /// <summary>Best of <see cref="CandidateCount"/> seeded candidates by naturalness score.</summary>
-        public static ParkPathGraph PlanBest(Region region, IReadOnlyList<float2> gates, Options options, uint seed,
+        public static ParkPathGraph PlanBest(LayerRegion region, IReadOnlyList<float2> gates, Options options, uint seed,
             CancellationToken cancel)
         {
             if (gates == null || gates.Count == 0) return ParkPathGraph.Empty();
@@ -93,7 +93,7 @@ namespace Placemaker.Core.Layers.Park
 
         public static int LoopsByArea(float area) => area > 12000f ? 2 : area > 1800f ? 1 : 0;
 
-        private static ParkPathGraph Generate(Region region, IReadOnlyList<float2> gates, float2 hub, uint seed,
+        private static ParkPathGraph Generate(LayerRegion region, IReadOnlyList<float2> gates, float2 hub, uint seed,
             int loops, bool stretch, List<Triangle> triangles, CancellationToken cancel)
         {
 
@@ -195,7 +195,7 @@ namespace Placemaker.Core.Layers.Park
         /// triangulation adds one roadmap node per sliver along the edge, which tripled planning time
         /// without adding useful routes. Nodes are kept only when inside the real region.
         /// </summary>
-        private static List<Triangle> Triangulate(Region region, int start)
+        private static List<Triangle> Triangulate(LayerRegion region, int start)
         {
             var ring = region.Ring;
             float tol = math.clamp(math.sqrt(region.Area) / 150f, 0.5f, 3f);
@@ -214,7 +214,7 @@ namespace Placemaker.Core.Layers.Park
             return tris;
         }
 
-        private static double SamplingSpacing(Region region)
+        private static double SamplingSpacing(LayerRegion region)
         {
             var size = region.Max - region.Min;
             double spacing = Math.Max(16.0, Math.Min(38.0, Math.Sqrt(region.Area) / 5.0));
@@ -223,7 +223,7 @@ namespace Placemaker.Core.Layers.Park
             return spacing;
         }
 
-        private static void AddInteriorSamples(List<Node> nodes, Region region, double spacing, int terminals, uint seed)
+        private static void AddInteriorSamples(List<Node> nodes, LayerRegion region, double spacing, int terminals, uint seed)
         {
             var rng = Hashing.Rng(seed, 0x2d2816feu);
             double phaseX = spacing * (0.25 + rng.NextDouble() * 0.5);
@@ -249,7 +249,7 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        private static int[] AddGateApproachNodes(List<Node> nodes, Region region, int terminals, double spacing)
+        private static int[] AddGateApproachNodes(List<Node> nodes, LayerRegion region, int terminals, double spacing)
         {
             var result = new int[terminals];
             for (int t = 0; t < terminals; t++)
@@ -271,7 +271,7 @@ namespace Placemaker.Core.Layers.Park
         }
 
         private static void ConnectTriangleEdge(Dictionary<long, int> owners, int a, int b, int node, Graph graph,
-            List<Node> nodes, Region region, uint seed)
+            List<Node> nodes, LayerRegion region, uint seed)
         {
             if (node < 0) return;
             long key = Key(a, b);
@@ -281,7 +281,7 @@ namespace Placemaker.Core.Layers.Park
                 Connect(graph, nodes, node, neighbour, false, seed);
         }
 
-        private static void ConnectInteriorRoadmap(Graph graph, List<Node> nodes, Region region, int terminals,
+        private static void ConnectInteriorRoadmap(Graph graph, List<Node> nodes, LayerRegion region, int terminals,
             double spacing, uint seed)
         {
             double maxLink = spacing * 2.35;
@@ -313,7 +313,7 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        private static void ConnectTerminals(Graph graph, List<Node> nodes, Region region, int terminals,
+        private static void ConnectTerminals(Graph graph, List<Node> nodes, LayerRegion region, int terminals,
             int[] approaches, uint seed)
         {
             var candidates = new List<(double d, int i)>();
@@ -378,7 +378,7 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        private static int SelectCoverageAnchor(List<Node> nodes, int terminals, HashSet<int> netNodes, Region region, uint seed)
+        private static int SelectCoverageAnchor(List<Node> nodes, int terminals, HashSet<int> netNodes, LayerRegion region, uint seed)
         {
             int bestNode = -1; double bestScore = double.MinValue;
             var netList = new List<int>(netNodes);
@@ -399,7 +399,7 @@ namespace Placemaker.Core.Layers.Park
             return bestNode;
         }
 
-        private static bool AddCoverageLoop(List<Node> nodes, int terminals, Graph graph, Region region,
+        private static bool AddCoverageLoop(List<Node> nodes, int terminals, Graph graph, LayerRegion region,
             HashSet<int> netNodes, HashSet<long> netEdges, List<float2> output, uint seed)
         {
             if (netNodes.Count == 0) return false;
@@ -584,7 +584,7 @@ namespace Placemaker.Core.Layers.Park
         // ───────────── geometry helpers ─────────────
 
         /// <summary>Inside when it crosses no outline edge and its midpoint is inside (or on the outline).</summary>
-        private static bool SegmentInside(float2 a, float2 b, Region region, bool allowBoundaryStart)
+        private static bool SegmentInside(float2 a, float2 b, LayerRegion region, bool allowBoundaryStart)
         {
             // Samples catch the rare segment that leaves through an outline vertex (no proper crossing).
             for (int s = 1; s < 4; s++)
@@ -595,7 +595,7 @@ namespace Placemaker.Core.Layers.Park
             return !region.CrossesBoundary(a, b, allowBoundaryStart);
         }
 
-        private static float2 InwardNormal(float2 gate, Region region)
+        private static float2 InwardNormal(float2 gate, LayerRegion region)
         {
             region.ClosestOnBoundary(gate, out int seg, out _);
             return region.InwardNormal(seg);

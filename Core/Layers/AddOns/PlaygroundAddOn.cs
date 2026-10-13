@@ -62,9 +62,9 @@ namespace Placemaker.Core.Layers.AddOns
             float cluster, string[] ids)
         {
             if (ctx.B("surface"))
-                ctx.Surface(Region.Circle(centre, cluster, 20, Hashing.Unit(ctx.Seed)), SurfaceRole.Decorative, AssetMix.One(ctx.S("surfaceAsset")));
+                ctx.Surface(LayerRegion.Circle(centre, cluster, 20, Hashing.Unit(ctx.Seed)), SurfaceRole.Decorative, AssetMix.One(ctx.S("surfaceAsset")));
             // Where people come from: the nearest path, else the region centre.
-            var toward = occ.Paths.Count > 0 && occ.Paths.Nearest(centre, 200f, out var onPath) >= 0 ? onPath : ctx.Region.Centroid;
+            var toward = occ.Paths.Count > 0 && occ.Paths.Nearest(centre, 200f, out var onPath) >= 0 ? onPath : ctx.LayerRegion.Centroid;
             var dir = math.normalizesafe(toward - centre, new float2(0, 1));
 
             int placed = 0;

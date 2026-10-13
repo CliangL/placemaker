@@ -29,9 +29,9 @@ namespace Placemaker.Core.Layers.AddOns
             var ids = ctx.L("species");
             if (!AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, ids, Keys.Category(AssetCategories.Tree))) return;
             var occ = Occupancy(ctx);
-            int target = math.max(1, (int)math.round(ctx.Region.Area / 10000f * ctx.F("density")));
+            int target = math.max(1, (int)math.round(ctx.LayerRegion.Area / 10000f * ctx.F("density")));
             float spacing = ctx.F("spacing"), clearance = ctx.F("clearance");
-            var candidates = Scatter.Candidates(ctx.Region, math.max(3f, spacing * 0.35f), ctx.Seed, 6000, ctx.Cancel);
+            var candidates = Scatter.Candidates(ctx.LayerRegion, math.max(3f, spacing * 0.35f), ctx.Seed, 6000, ctx.Cancel);
             // Rank by openness (with a little seeded noise so equal lawns do not always pick the same corner).
             var ranked = new List<(float score, float2 p)>(candidates.Count);
             foreach (var p in candidates)

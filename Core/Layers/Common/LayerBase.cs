@@ -140,7 +140,7 @@ namespace Placemaker.Core.Layers.Common
     public sealed class LayerContext
     {
         public AreaInput Input;
-        public Region Region;
+        public LayerRegion LayerRegion;
         public AreaPlan Plan;
         public SettingsBag Settings;
         public CancellationToken Cancel;
@@ -370,7 +370,7 @@ namespace Placemaker.Core.Layers.Common
             // part) must not block the whole recipe: that layer just skips it with a Warning.
             var tags = input.RegionTags;
             var severity = tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0 ? IssueSeverity.Error : IssueSeverity.Warning;
-            var region = Common.Region.From(input.Shape?.Ring);
+            var region = Common.LayerRegion.From(input.Shape?.Ring);
             if (region == null)
             {
                 plan.Issues.Add(new PlanIssue { Severity = severity, Key = Keys.InvalidArea });
@@ -388,7 +388,7 @@ namespace Placemaker.Core.Layers.Common
             }
             var ctx = new LayerContext
             {
-                Input = input, Region = region, Plan = plan, Settings = Merge(input.Settings),
+                Input = input, LayerRegion = region, Plan = plan, Settings = Merge(input.Settings),
                 Cancel = cancel, Seed = Hashing.Mix(input.Seed == 0 ? 1u : input.Seed, Seeds.Hash(Id)),
             };
             PlanCore(ctx);

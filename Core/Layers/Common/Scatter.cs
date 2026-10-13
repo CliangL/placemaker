@@ -21,7 +21,7 @@ namespace Placemaker.Core.Layers.Common
         /// Candidate points over the region on a jittered grid of pitch <paramref name="cell"/>, in a
         /// deterministic pseudo-random visiting order. At most <paramref name="maxCandidates"/>.
         /// </summary>
-        public static List<float2> Candidates(Region region, float cell, uint seed, int maxCandidates, CancellationToken cancel)
+        public static List<float2> Candidates(LayerRegion region, float cell, uint seed, int maxCandidates, CancellationToken cancel)
         {
             var result = new List<float2>();
             var size = region.Max - region.Min;

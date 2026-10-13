@@ -9,7 +9,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Common
 {
-    public sealed class Region
+    public sealed class LayerRegion
     {
         public readonly float2[] Ring;
         public readonly float Area;
@@ -18,7 +18,7 @@ namespace Placemaker.Core.Layers.Common
         private readonly SegmentIndex _edges;
         private readonly float[] _cumulative;   // perimeter length at the start of each edge
 
-        private Region(float2[] ring)
+        private LayerRegion(float2[] ring)
         {
             Ring = ring;
             Area = Poly.Area(ring);
@@ -36,16 +36,16 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>Builds a region from any ring; null when nothing valid remains (degenerate, self-intersecting).</summary>
-        public static Region From(IReadOnlyList<float2> ring)
+        public static LayerRegion From(IReadOnlyList<float2> ring)
         {
             if (ring == null || ring.Count < 3) return null;
             foreach (var p in ring) if (!math.all(math.isfinite(p))) return null;
             var clean = Poly.Clean(ring, 0.05f);
             if (clean.Length < 3 || !Poly.IsSimple(clean)) return null;
-            return new Region(clean);
+            return new LayerRegion(clean);
         }
 
-        public static Region From(float3[] ring) => ring == null ? null : From(Poly.To2D(ring));
+        public static LayerRegion From(float3[] ring) => ring == null ? null : From(Poly.To2D(ring));
 
         public bool Contains(float2 p)
         {

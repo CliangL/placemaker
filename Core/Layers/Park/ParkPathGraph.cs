@@ -130,7 +130,7 @@ namespace Placemaker.Core.Layers.Park
         }
 
         /// <summary>Lower is better. Penalises stubs, sharp bends, crowded junctions, wrong loop count and poor coverage.</summary>
-        public double NaturalnessScore(Common.Region region, int wantedLoops)
+        public double NaturalnessScore(Common.LayerRegion region, int wantedLoops)
         {
             if (Nodes.Count == 0 || Edges.Count == 0) return double.MaxValue;
             var adjacency = Adjacency(Nodes.Count, Edges);
@@ -166,7 +166,7 @@ namespace Placemaker.Core.Layers.Park
             return score;
         }
 
-        private double CoveragePenalty(Common.Region region)
+        private double CoveragePenalty(Common.LayerRegion region)
         {
             double total = 0; int samples = 0;
             const int steps = 8;

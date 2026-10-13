@@ -34,7 +34,7 @@ namespace Placemaker.Core.Layers.Park
     /// <summary>Shared state of one park planning run.</summary>
     public sealed class ParkSite
     {
-        public Region Region;
+        public LayerRegion LayerRegion;
         public Occupancy Occ;
         public List<Gate> Gates = new List<Gate>();
         public ParkPathGraph Graph = ParkPathGraph.Empty();
@@ -108,7 +108,7 @@ namespace Placemaker.Core.Layers.Park
         {
             if (style.GroveCoverage <= 0f) return;
             var rng = Hashing.Rng(s.Seed, 0x3c6ef372u);
-            var region = s.Region;
+            var region = s.LayerRegion;
             float side = math.sqrt(region.Area);
             float baseRadius = math.clamp(side * 0.16f, 12f, 30f);
             float largest = math.max(8f, side * 0.28f);
@@ -149,7 +149,7 @@ namespace Placemaker.Core.Layers.Park
             if (target <= 0) return;
             if (style.Formal) { FormalVegetation(s, target, tree, belt); return; }
             var rng = Hashing.Rng(s.Seed, tree ? 0x51f15e21u : 0x9e3779b9u);
-            var region = s.Region;
+            var region = s.LayerRegion;
             var beltShape = belt ? new Belt(region, Hashing.Mix(s.Seed, 0x1234567u)) : null;
             float boundaryClearance = tree ? 4f : 2.2f;
             float baseSpacing = tree ? 7.5f : 4f;
@@ -219,7 +219,7 @@ namespace Placemaker.Core.Layers.Park
 
         private static bool PlantFits(ParkSite s, float2 p, bool tree, float radius, float spacing, float boundaryClearance)
         {
-            if (!s.Region.ContainsDisc(p, boundaryClearance)) return false;
+            if (!s.LayerRegion.ContainsDisc(p, boundaryClearance)) return false;
             if (s.GateDistanceSq(p) < 100f) return false;
             if (s.InLake(p, radius) || s.InClearing(p, radius)) return false;
             if (s.Occ.Corridors.Overlaps(p, radius, 0.35f)) return false;
@@ -295,9 +295,9 @@ namespace Placemaker.Core.Layers.Park
         {
             int placed = 0;
             float radius = tree ? 2.5f : 1.0f;
-            for (float along = interval * 0.5f; along < s.Region.Perimeter && placed < target; along += interval)
+            for (float along = interval * 0.5f; along < s.LayerRegion.Perimeter && placed < target; along += interval)
             {
-                var p = s.Region.PointAt(along, out _, out var inward, out _) + inward * inset;
+                var p = s.LayerRegion.PointAt(along, out _, out var inward, out _) + inward * inset;
                 if (!PlantFits(s, p, tree, radius, interval * 0.9f, inset * 0.8f)) continue;
                 s.Add(new ParkItem { Kind = tree ? ParkItemKind.Tree : ParkItemKind.Bush, Position = p, Radius = radius, Yaw = 0f, Variant = species, Age = tree ? 3 : -1 });
                 placed++;
@@ -307,11 +307,11 @@ namespace Placemaker.Core.Layers.Park
 
         private static void GridFill(ParkSite s, int target, bool tree, uint species, ref Unity.Mathematics.Random rng)
         {
-            s.Region.PrincipalAxes(out var c, out var axis, out _, out _);
+            s.LayerRegion.PrincipalAxes(out var c, out var axis, out _, out _);
             var n = new float2(-axis.y, axis.x);
             float pitch = tree ? 12f : 5f;
             float radius = tree ? 2.5f : 1.0f;
-            var region = s.Region;
+            var region = s.LayerRegion;
             float ext = math.length(region.Max - region.Min);
             int placed = 0;
             for (float u = -ext; u <= ext && placed < target; u += pitch)
@@ -345,13 +345,13 @@ namespace Placemaker.Core.Layers.Park
         /// </summary>
         private sealed class Belt
         {
-            private readonly Region _region;
+            private readonly LayerRegion _region;
             private readonly uint _seed;
             private readonly int _coverageCells, _depthCells, _sectionCells;
             private readonly float _depthScale;
             public readonly float Perimeter;
 
-            public Belt(Region region, uint seed)
+            public Belt(LayerRegion region, uint seed)
             {
                 _region = region; _seed = seed; Perimeter = region.Perimeter;
                 _coverageCells = Math.Max(1, (int)Math.Round(Perimeter / 70f));
@@ -407,7 +407,7 @@ namespace Placemaker.Core.Layers.Park
 
         private static bool FurnitureFits(ParkSite s, float2 p, float footprint, ParkItemKind kind, float sameKindSpacing)
         {
-            if (!s.Region.ContainsDisc(p, 1.5f)) return false;
+            if (!s.LayerRegion.ContainsDisc(p, 1.5f)) return false;
             if (s.GateDistanceSq(p) < 64f) return false;
             if (s.InLake(p, footprint + 0.5f)) return false;
             if (s.Occ.Corridors.Overlaps(p, footprint, 0.1f)) return false;
@@ -484,7 +484,7 @@ namespace Placemaker.Core.Layers.Park
 
         private static bool TryBin(ParkSite s, float2 p, float2 tangent, ref Unity.Mathematics.Random rng)
         {
-            if (!s.Region.ContainsDisc(p, 1f) || s.InLake(p, 1f)) return false;
+            if (!s.LayerRegion.ContainsDisc(p, 1f) || s.InLake(p, 1f)) return false;
             if (s.Occ.Corridors.Overlaps(p, BinRadius, 0.1f)) return false;
             var near = s.Scratch;
             s.Occ.Discs.Query(p, 9f, near);
@@ -505,7 +505,7 @@ namespace Placemaker.Core.Layers.Park
         /// <summary>Forest animal spawners in the largest groves: one per 2 ha, at most 8 (ParkManager).</summary>
         public static void AnimalSpawners(ParkSite s)
         {
-            int target = math.min(8, (int)Math.Round(s.Region.Area / 20000.0));
+            int target = math.min(8, (int)Math.Round(s.LayerRegion.Area / 20000.0));
             if (target <= 0) return;
             var order = new List<Grove>(s.Groves);
             order.Sort((a, b) => b.Area.CompareTo(a.Area));
@@ -513,7 +513,7 @@ namespace Placemaker.Core.Layers.Park
             foreach (var g in order)
             {
                 if (placed >= target) break;
-                if (!s.Region.Contains(g.Center) || s.InLake(g.Center, 4f) || s.Occ.Corridors.Overlaps(g.Center, 4f, 0f)) continue;
+                if (!s.LayerRegion.Contains(g.Center) || s.InLake(g.Center, 4f) || s.Occ.Corridors.Overlaps(g.Center, 4f, 0f)) continue;
                 s.Items.Add(new ParkItem { Kind = ParkItemKind.Spawner, Position = g.Center, Radius = 0.5f, Age = -1 });
                 placed++;
             }

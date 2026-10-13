@@ -12,16 +12,16 @@ namespace Placemaker.Core.Layers.Common
     {
         public const int KindReserved = -1;
 
-        public readonly Region Region;
+        public readonly LayerRegion LayerRegion;
         public readonly DiscIndex Discs = new DiscIndex(8f);
         public readonly SegmentIndex Corridors = new SegmentIndex(10f);
         /// <summary>Reserved corridors whose tag says they are walkable paths (useful anchors for add-ons).</summary>
         public readonly SegmentIndex Paths = new SegmentIndex(10f);
         private readonly List<float2[]> _polygons = new List<float2[]>();
 
-        public Occupancy(Region region, ReservedSpace reserved, SiteContext site = null)
+        public Occupancy(LayerRegion region, ReservedSpace reserved, SiteContext site = null)
         {
-            Region = region;
+            LayerRegion = region;
             // Existing buildings/utilities inside the selection are hard obstacles for placements.
             if (site?.Obstacles != null)
                 foreach (var o in site.Obstacles)
@@ -45,11 +45,11 @@ namespace Placemaker.Core.Layers.Common
         }
 
         private bool Near(float2 p, float r) =>
-            p.x + r >= Region.Min.x && p.y + r >= Region.Min.y && p.x - r <= Region.Max.x && p.y - r <= Region.Max.y;
+            p.x + r >= LayerRegion.Min.x && p.y + r >= LayerRegion.Min.y && p.x - r <= LayerRegion.Max.x && p.y - r <= LayerRegion.Max.y;
 
         private bool NearSegment(float2 a, float2 b, float hw) =>
-            math.max(a.x, b.x) + hw >= Region.Min.x && math.max(a.y, b.y) + hw >= Region.Min.y &&
-            math.min(a.x, b.x) - hw <= Region.Max.x && math.min(a.y, b.y) - hw <= Region.Max.y;
+            math.max(a.x, b.x) + hw >= LayerRegion.Min.x && math.max(a.y, b.y) + hw >= LayerRegion.Min.y &&
+            math.min(a.x, b.x) - hw <= LayerRegion.Max.x && math.min(a.y, b.y) - hw <= LayerRegion.Max.y;
 
         /// <summary>
         /// A disc of radius r at p fits: inside the region with <paramref name="boundaryMargin"/>, and
@@ -57,7 +57,7 @@ namespace Placemaker.Core.Layers.Common
         /// </summary>
         public bool Free(float2 p, float r, float boundaryMargin, float gap = 0.3f)
         {
-            if (!Region.ContainsDisc(p, math.max(0f, boundaryMargin))) return false;
+            if (!LayerRegion.ContainsDisc(p, math.max(0f, boundaryMargin))) return false;
             if (Discs.Overlaps(p, r, gap)) return false;
             if (Corridors.Overlaps(p, r, gap)) return false;
             foreach (var poly in _polygons)
@@ -68,8 +68,8 @@ namespace Placemaker.Core.Layers.Common
         /// <summary>Distance to the nearest occupied thing or the outline, capped.</summary>
         public float Clearance(float2 p, float cap)
         {
-            if (!Region.Contains(p)) return -1f;
-            float c = Region.BoundaryDistance(p, cap);
+            if (!LayerRegion.Contains(p)) return -1f;
+            float c = LayerRegion.BoundaryDistance(p, cap);
             c = math.min(c, Discs.Clearance(p, c));
             c = math.min(c, Corridors.Clearance(p, c));
             foreach (var poly in _polygons)
@@ -116,7 +116,7 @@ namespace Placemaker.Core.Layers.Common
         public static bool Find(Occupancy occ, float radius, Preference pref, uint seed, out float2 spot,
             IReadOnlyList<float2> avoid = null, float avoidDistance = 0f, float boundaryMargin = 0.5f)
         {
-            var region = occ.Region;
+            var region = occ.LayerRegion;
             spot = region.Centroid;
             var size = region.Max - region.Min;
             float step = math.max(1.5f, math.sqrt(size.x * size.y / 2500f));

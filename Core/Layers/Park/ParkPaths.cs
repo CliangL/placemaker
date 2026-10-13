@@ -68,7 +68,7 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        public static List<PathCurve> Build(ParkPathGraph graph, Region region, bool curved, string widthMode)
+        public static List<PathCurve> Build(ParkPathGraph graph, LayerRegion region, bool curved, string widthMode)
         {
             var result = new List<PathCurve>();
             if (graph == null || graph.IsEmpty) return result;
@@ -123,7 +123,7 @@ namespace Placemaker.Core.Layers.Park
             return t;
         }
 
-        private static bool CurveOk(PathCurve c, Region region, float chord)
+        private static bool CurveOk(PathCurve c, LayerRegion region, float chord)
         {
             float bulge = 0;
             foreach (var p in c.Samples)

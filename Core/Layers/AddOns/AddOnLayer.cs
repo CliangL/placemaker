@@ -15,7 +15,7 @@ namespace Placemaker.Core.Layers.AddOns
         public override LayerKind Kind => LayerKind.AddOn;
         public override float MinArea => 20f;
 
-        protected Occupancy Occupancy(LayerContext ctx) => new Occupancy(ctx.Region, ctx.Input.Reserved, ctx.Site);
+        protected Occupancy Occupancy(LayerContext ctx) => new Occupancy(ctx.LayerRegion, ctx.Input.Reserved, ctx.Site);
 
         protected static void NoSpace(LayerContext ctx, string what) =>
             ctx.Issue(IssueSeverity.Warning, Keys.NoSpace, what);
