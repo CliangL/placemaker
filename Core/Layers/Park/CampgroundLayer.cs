@@ -28,7 +28,7 @@ namespace Placemaker.Core.Layers.Park
         {
             new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Campground.Feature.restrooms", TooltipKey = "Placemaker.Campground.Feature.restrooms.Tooltip" },
             new FeatureInfo { Layer = "playground", LabelKey = "Placemaker.Campground.Feature.playground", Preset = ParkLayer.Bag(("size", "small")) },
-            new FeatureInfo { Layer = "picnic", LabelKey = "Placemaker.Campground.Feature.picnic", Preset = ParkLayer.Bag(("groups", 2.0), ("shelter", true)) },
+            new FeatureInfo { Layer = "picnic", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.picnic", Preset = ParkLayer.Bag(("groups", 2.0), ("shelter", true)) },
         };
 
         public IReadOnlyList<FeatureInfo> Features => FeatureList;

@@ -193,7 +193,13 @@ namespace Placemaker.Tests
             return _lang = all;
         }
 
-        public static Recipe LoadRecipe(string fileName) => ParseRecipe(File.ReadAllText(Path.Combine(RepoRoot(), "Recipes", fileName)));
+        /// <summary>Shipped recipe (Recipes/), else an engine-only mix kept as a test fixture (Fixtures/Recipes/).</summary>
+        public static Recipe LoadRecipe(string fileName)
+        {
+            var shipped = Path.Combine(RepoRoot(), "Recipes", fileName);
+            var path = File.Exists(shipped) ? shipped : Path.Combine(RepoRoot(), "Tests", "Placemaker.Tests", "Fixtures", "Recipes", fileName);
+            return ParseRecipe(File.ReadAllText(path));
+        }
 
         /// <summary>Reference reader for docs/proposals/recipe-json.md.</summary>
         public static Recipe ParseRecipe(string json)

@@ -6,6 +6,9 @@
   "icon": "Media/Game/Icons/ParksAndRecreation.svg",
   "root": {
     "layer": "park",
-    "settings": {}
+    "settings": {},
+    "children": [
+      { "layer": "bigtrees", "target": "" }
+    ]
   }
 }

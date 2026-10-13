@@ -17,10 +17,10 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("count", 1, 1, 4, 1, "count", ControlTier.Essential);
-            c.Asset("asset", AssetCategories.Restroom, ControlTier.Essential);
-            c.Toggle("kiosk", false, ControlTier.More);
-            c.Asset("kioskAsset", AssetCategories.Kiosk, ControlTier.More).When("kiosk=true");
+            c.Slider("count", 1, 1, 4, 1, "count", ControlTier.Essential, "restrooms");
+            c.Asset("asset", AssetCategories.Restroom, ControlTier.Essential, "restrooms");
+            c.Toggle("kiosk", false, ControlTier.More, "extras").Tip();
+            c.Asset("kioskAsset", AssetCategories.Kiosk, ControlTier.More, "extras").When("kiosk=true");
             c.RandomRange("count", 1, 2);
             c.Chance("kiosk", 0.4f);
         }

@@ -16,13 +16,13 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("groups", 3, 1, 10, 1, "count", ControlTier.Essential);
-            c.Slider("tables", 3, 1, 6, 1, "count", ControlTier.Essential).Tip();
-            c.AssetMulti("tableAssets", AssetCategories.Picnic, ControlTier.More);
-            c.Toggle("shelter", true, ControlTier.More);
-            c.Asset("shelterAsset", AssetCategories.Shelter, ControlTier.More).When("shelter=true");
-            c.Toggle("shadeTrees", true, ControlTier.More);
-            c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More).When("shadeTrees=true");
+            c.Slider("groups", 3, 1, 10, 1, "count", ControlTier.Essential, "picnic");
+            c.Slider("tables", 3, 1, 6, 1, "count", ControlTier.Essential, "picnic").Tip();
+            c.AssetMulti("tableAssets", AssetCategories.Picnic, ControlTier.More, "picnic");
+            c.Toggle("shelter", true, ControlTier.More, "extras");
+            c.Asset("shelterAsset", AssetCategories.Shelter, ControlTier.More, "extras").When("shelter=true");
+            c.Toggle("shadeTrees", true, ControlTier.More, "extras");
+            c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "extras").When("shadeTrees=true");
             c.RandomRange("groups", 1, 5);
             c.RandomRange("tables", 2, 5);
             c.Chance("shelter", 0.6f);
