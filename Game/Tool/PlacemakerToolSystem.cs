@@ -64,6 +64,8 @@ namespace Placemaker.Game.Tool
         private string _focus = RecipePaths.Root;
         private ToolStage _stage = ToolStage.Area;
         private string _markerPath, _markerKind;
+        private HashSet<string> _markersEdited = new HashSet<string>(StringComparer.Ordinal);
+        private int _autoShapeVersion = -1, _autoDesignVersion = -1;
         private int _editingGroup;
         private bool _panelCollapsed;
         private bool _anarchy;
@@ -262,6 +264,8 @@ namespace Placemaker.Game.Tool
             var facts = Facts();
             var normalized = StageMachine.Normalize(_stage, facts);
             if (normalized != _stage) SetStage(normalized);
+            UpdateAutoMarkers();
+            ResolveAssets();
             if (_markerKind != null && (_shape == null || RecipePaths.Resolve(_recipe, _markerPath) == null)) ExitMarkerMode();
             UpdateHintActions();
         }
@@ -275,6 +279,8 @@ namespace Placemaker.Game.Tool
             if (s == _stage) return;
             if (_stage == ToolStage.Manage) { _hoverGroup = 0; }
             _stage = s;
+            // Red markers and the failure message describe the attempt the player just saw; moving on clears them (US8).
+            _feedback.StageChanged();
             if (s != ToolStage.Design && s != ToolStage.Review) ExitMarkerMode();
             Touch();
         }
@@ -336,6 +342,7 @@ namespace Placemaker.Game.Tool
                 Recipe = _recipe?.Clone(),
                 RecipeId = _recipeId ?? "",
                 Focus = _focus ?? RecipePaths.Root,
+                MarkersEdited = new HashSet<string>(_markersEdited, StringComparer.Ordinal),
             };
         }
 
@@ -377,6 +384,7 @@ namespace Placemaker.Game.Tool
             _recipe = s.Recipe?.Clone();
             _recipeId = s.RecipeId ?? "";
             _focus = s.Focus ?? RecipePaths.Root;
+            _markersEdited = s.MarkersEdited != null ? new HashSet<string>(s.MarkersEdited, StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
             ShapeChanged(alreadyBuilt: true);
             DesignChanged();
             _hoverFace = null;
@@ -428,6 +436,7 @@ namespace Placemaker.Game.Tool
             ClearSelectionState();
             // Markers belong to the old outline.
             if (_recipe != null) foreach (var kv in RecipePaths.Walk(_recipe)) kv.Value.Markers.Clear();
+            _markersEdited.Clear();
             DesignChanged();
             Commit("Placemaker.Undo.ClearArea");
             SetStage(ToolStage.Area);
