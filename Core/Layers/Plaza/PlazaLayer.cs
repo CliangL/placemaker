@@ -152,7 +152,7 @@ namespace Placemaker.Core.Layers.Plaza
             foreach (var f in layout.Furniture)
             {
                 uint v = Hashing.Mix(variant, (uint)f.ArrangementId * 31u + (uint)Array.IndexOf(ItemKinds, f.Item.Kind));
-                ctx.Object(f.Position, f.Yaw, f.Item.Role, f.Item.Asset, v, f.Item.Role == ObjectRole.Tree ? 3 : -1);
+                ctx.Object(f.Position, f.Yaw, f.Item.Role, f.Item.Asset, v, f.Item.Role == ObjectRole.Tree ? 3 : -1, f.Item.Category);
             }
             foreach (var g in gates)
             {

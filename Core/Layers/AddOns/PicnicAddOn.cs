@@ -52,7 +52,7 @@ namespace Placemaker.Core.Layers.AddOns
                 float phase = Hashing.Unit(gs) * 2f * math.PI;
                 if (shelter && occ.Free(c, shelterRadius, 0.5f, 0.3f))
                 {
-                    ctx.Object(c, phase, ObjectRole.Furniture, shelterAsset, gs);
+                    ctx.Object(c, phase, ObjectRole.Furniture, shelterAsset, gs, -1, AssetCategories.Shelter);
                     occ.Take(c, shelterRadius, 0);
                 }
                 var positions = tables == 1 || ring <= 0f ? new List<float2> { c } : RingPoints(c, ring, tables, phase);
@@ -62,7 +62,7 @@ namespace Placemaker.Core.Layers.AddOns
                     if (!occ.Free(p, tableRadius, 0.5f, 0.4f)) continue;
                     uint v = Hashing.Mix(gs, (uint)t);
                     // Tables tangential to the ring read as arranged around the shelter.
-                    ctx.Object(p, Facing(p, c) + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.Pick(tableIds, v), v);
+                    ctx.Object(p, Facing(p, c) + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.Pick(tableIds, v), v, -1, AssetCategories.Picnic);
                     occ.Take(p, tableRadius, 1);
                     placedTables++;
                 }

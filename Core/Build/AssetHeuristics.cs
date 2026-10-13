@@ -34,6 +34,13 @@ namespace Placemaker.Core.Build
         Charger = 1 << 19,             // EV charger (ChargingStation-like data)
         Marker = 1 << 20,              // marker object (invisible in game)
         Net = 1 << 21,
+        // Component signals for automatic eligibility (FEEDBACK-2 #1). Read by the game layer.
+        BrandObject = 1 << 22,         // BrandObjectData: advertising / company branding props
+        NetAttached = 1 << 23,         // PlacementFlags RoadSide/RoadNode/RoadEdge/NetObject: street furniture (signs, signals)
+        WallOrHanging = 1 << 24,       // PlacementFlags Wall/Hanging: building dressing, not free-standing
+        WaterPlacement = 1 << 25,      // PlacementFlags Shoreline/Floating/Underwater/Waterway
+        ExerciseActivity = 1 << 26,    // activity locations for push-ups, pull-ups…: outdoor gym
+        Vanilla = 1 << 27,             // built-in content (prefab.isBuiltin)
     }
 
     public static class AssetHeuristics
@@ -144,7 +151,12 @@ namespace Placemaker.Core.Build
             { r.Add(AssetCategories.Sports); return r; }
             if (ContainsAny(lower, "toilet", "restroom", "wc", "portapotty", "porta potty")) { r.Add(AssetCategories.Restroom); return r; }
             if (ContainsAny(lower, "picnic", "bbq", "barbecue", "grill")) { r.Add(AssetCategories.Picnic); return r; }
-            if (ContainsAny(lower, "tent", "campfire", "camp fire", "caravan", "camping")) { r.Add(AssetCategories.Camping); return r; }
+            if ((t & AssetTraits.ExerciseActivity) != 0) { r.Add(AssetCategories.Sports); return r; }
+            if (ContainsAny(lower, "campfire", "camp fire", "firepit", "fire pit", "bonfire"))
+            { r.Add(AssetCategories.Camping); r.Add(AssetCategories.CampingFire); return r; }
+            if (ContainsAny(lower, "tent", "caravan", "camper"))
+            { r.Add(AssetCategories.Camping); r.Add(AssetCategories.CampingPitch); return r; }
+            if (ContainsAny(lower, "camping")) { r.Add(AssetCategories.Camping); return r; }
             if (ContainsAny(lower, "kiosk", "food stand", "foodstand", "ice cream", "icecream", "hotdog", "vendor", "stall", "foodtruck", "food truck"))
             { r.Add(AssetCategories.Kiosk); return r; }
             if (ContainsAny(lower, "pavilion", "gazebo", "shelter", "pergola", "canopy", "bandstand")) { r.Add(AssetCategories.Shelter); return r; }
@@ -155,6 +167,90 @@ namespace Placemaker.Core.Build
             if ((t & AssetTraits.HasIcon) != 0 && ContainsAny(lower, "park", "plaza", "garden", "decor", "flag", "bird", "rock", "stone", "boulder"))
                 r.Add(AssetCategories.Decoration);
             return r;
+        }
+
+        // ───────────────────────── automatic eligibility (FEEDBACK-2 #1) ─────────────────────────
+
+        /// <summary>Never picked automatically for any object category (explicit picks still may).</summary>
+        private static readonly string[] AutoExcludedNames =
+        {
+            "advert", "billboard", "poster", "banner", "sign", "board", "sandwich", "menu", "logo", "neon", "screen",
+            "stadium", "spectator", "bleacher", "grandstand", "tribune", "stand0", "standlarge", "standsmall",
+            "construction", "roadwork", "road work", "traffic", "cone", "barricade", "scaffold", "excavat",
+            "crate", "pallet", "cardboard", "pile", "debris", "rubble", "garbage bag", "trashbag", "dumpster",
+            "vehicle", "truck", "trailer", "forklift", "boat", "atm", "mailbox", "phonebooth", "phone booth", "vending",
+            "random", "placeholder", "template", "lightsource", "light source", "chirper", "dummy", "test",
+        };
+
+        /// <summary>Per-category extra exclusions for automatic picks.</summary>
+        private static string[] AutoExcludedFor(string category)
+        {
+            switch (category)
+            {
+                case AssetCategories.Bench: return new[] { "sport", "tennis", "dugout", "pier", "bus", "stop", "car seat", "toilet" };
+                case AssetCategories.Fence: return new[] { "barrier", "construction", "temporary", "security", "crowd", "jump", "industrial", "barbed", "police", "random" };
+                case AssetCategories.Lamp: return new[] { "flood", "stadium", "sport", "wall", "neon", "christmas", "decoration" };
+                case AssetCategories.Centerpiece: return new[] { "drinking", "dog", "logo" };
+                case AssetCategories.Playground: return new[] { "dog" };
+                case AssetCategories.Bin: return new[] { "container", "dumpster", "industrial" };
+                default: return Array.Empty<string>();
+            }
+        }
+
+        /// <summary>Decoration is a grab bag: only these are safe to scatter automatically.</summary>
+        private static readonly string[] AutoDecorationNames = { "rock", "boulder", "stone", "birdbath", "bird bath", "sculpture" };
+
+        /// <summary>
+        /// May an item of <paramref name="category"/> be picked when the player chose nothing? Component
+        /// data first (brand/advertising, wall/hanging, street-attached and water placement are never
+        /// automatic for objects), names as a fallback with exclusion lists. Nets, surfaces and areas
+        /// are always eligible except fences, which share the name exclusions.
+        /// </summary>
+        public static bool AutoEligible(string category, string name, AssetTraits t)
+        {
+            if (string.IsNullOrEmpty(category) || string.IsNullOrWhiteSpace(name)) return false;
+            var lower = name.ToLowerInvariant();
+            if ((t & AssetTraits.Placeholder) != 0 || lower.Contains("placeholder")) return false;
+            bool isNet = (t & AssetTraits.Net) != 0;
+            bool isArea = (t & (AssetTraits.Surface | AssetTraits.SpaceArea | AssetTraits.LotArea | AssetTraits.Zone)) != 0;
+            if (category == AssetCategories.Fence)
+            {
+                if (ContainsAny(lower, AutoExcludedFor(category))) return false;
+                return isNet || ContainsAny(lower, "fence", "railing", "hedge");
+            }
+            if (isNet || isArea) return true;
+            // Objects.
+            if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
+            if ((t & AssetTraits.NetAttached) != 0 && category != AssetCategories.Lamp && category != AssetCategories.Bollard
+                && category != AssetCategories.ParkingDecal && category != AssetCategories.Charger) return false;
+            if (category == AssetCategories.ParkingDecal || category == AssetCategories.Charger || category.StartsWith("object.", StringComparison.Ordinal))
+                return true;   // functional parking/road objects: classified by sub lanes / names already
+            if (ContainsAny(lower, AutoExcludedNames)) return false;
+            if (ContainsAny(lower, AutoExcludedFor(category))) return false;
+            switch (category)
+            {
+                case AssetCategories.Bench:
+                    // A real bench: says so, or has a bench-sitting spot and is not just "a seat".
+                    return lower.Contains("bench") || lower.Contains("bank") ||
+                           ((t & AssetTraits.BenchActivity) != 0 && !lower.Contains("seat") && !lower.Contains("chair"));
+                case AssetCategories.Decoration:
+                    return ContainsAny(lower, AutoDecorationNames);
+                default:
+                    return true;
+            }
+        }
+
+        /// <summary>
+        /// Vanilla park palettes suitable for dressing a general park: themed facilities (sports grounds,
+        /// skate/dog/gym parks, water parks, schools) bring signs, stands and equipment that do not belong
+        /// in an ordinary park.
+        /// </summary>
+        public static bool IsGeneralParkPalette(string paletteOrParkName)
+        {
+            if (string.IsNullOrEmpty(paletteOrParkName)) return false;
+            var lower = paletteOrParkName.ToLowerInvariant();
+            return !ContainsAny(lower, "sport", "skate", "dog", "gym", "water", "school", "university", "college",
+                "stadium", "arena", "zoo", "farm", "cemetery", "golf", "beach", "marina", "harbor", "harbour", "landmark");
         }
 
         public static string SurfaceKind(string lower)
@@ -209,6 +305,8 @@ namespace Placemaker.Core.Build
                     break;
                 case AssetCategories.Bench:
                     if (lower.Contains("bench")) score += 50;
+                    if (lower.Contains("garden")) score += 40;
+                    if (ContainsAny(lower, "sport", "tennis", "stadium", "pier")) score -= 100;
                     if (lower.Contains("park")) score += 30;
                     break;
                 case AssetCategories.Lamp:

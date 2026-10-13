@@ -46,7 +46,7 @@ namespace Placemaker.Core.Layers.AddOns
                 var toward = occ.Paths.Count > 0 && occ.Paths.Nearest(spot, 500f, out var q) >= 0 ? q : ctx.LayerRegion.Centroid;
                 float yaw = Facing(spot, toward);
                 if (!occ.Free(spot, radius, 0.5f, 0.3f)) continue;
-                ctx.Object(spot, yaw, ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)placed));
+                ctx.Object(spot, yaw, ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)placed), -1, AssetCategories.Restroom);
                 occ.Take(spot, radius, 0);
                 placed++;
                 if (!kiosk) continue;
@@ -55,7 +55,7 @@ namespace Placemaker.Core.Layers.AddOns
                 {
                     var k = spot + side * s * (radius + kioskRadius + 0.5f);
                     if (!occ.Free(k, kioskRadius, 0.5f, 0.3f)) continue;
-                    ctx.Object(k, yaw, ObjectRole.Furniture, kioskAsset, Hashing.Mix(ctx.Seed, 0x4B00u + (uint)placed));
+                    ctx.Object(k, yaw, ObjectRole.Furniture, kioskAsset, Hashing.Mix(ctx.Seed, 0x4B00u + (uint)placed), -1, AssetCategories.Kiosk);
                     occ.Take(k, kioskRadius, 1);
                     break;
                 }

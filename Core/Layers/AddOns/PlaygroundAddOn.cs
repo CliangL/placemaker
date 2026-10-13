@@ -78,7 +78,7 @@ namespace Placemaker.Core.Layers.AddOns
                 var p = centre + new float2(math.cos(a), math.sin(a)) * r;
                 if (!occ.Free(p, itemRadius, 0.5f, 0.6f)) continue;
                 uint v = Hashing.Mix(ctx.Seed, (uint)(placed * 7919 + 1));
-                ctx.Object(p, Facing(p, centre) + math.PI, ObjectRole.Furniture, AssetMix.Pick(ids, v), v);
+                ctx.Object(p, Facing(p, centre) + math.PI, ObjectRole.Furniture, AssetMix.Pick(ids, v), v, -1, AssetCategories.Playground);
                 occ.Take(p, itemRadius, 0);
                 placed++;
             }
