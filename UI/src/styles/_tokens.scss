@@ -1,0 +1,111 @@
+// Placemaker design tokens.
+//
+// Gameface (Coherent 2.2.1) rules, enforced by tools/css-lint.js at build time:
+//  * flexbox only (no grid), no `gap` — spacing is done with margins;
+//  * no hsl()/hsla(); colours are hex / rgba;
+//  * var() only in longhand properties (background-color, border-top-color…), never in shorthands;
+//  * transitions name their properties; no :not / :disabled / :focus-within / clamp / min / max;
+//  * rem units (1rem ≈ 1px at 1080p; the game scales rem with resolution and UI scale).
+// Vanilla variables (--panelColorNormal, --panelBlur, --accentColorNormal, --menuText1Normal…) carry
+// the player's UI scale / transparency settings, so the panel inherits them.
+
+// Role colours — identical to the map overlay roles so the panel and the preview read as one system.
+$c-park: #6cc56a;
+$c-green: #6cc56a;
+$c-plaza: #e2b47e;
+$c-parking: #5f9dff;
+$c-roads: #8fe3ff;
+$c-paths: #f5c542;
+$c-zoning: #b48cff;
+$c-addon: #ffa94d;
+$c-split: #c9d3da;
+$c-water: #4fb8e8;
+
+$c-danger: #ff6b5b;
+$c-warning: #ffb547;
+$c-ok: #6fdc8c;
+$c-info: #8fd1ff;
+
+$c-surface: rgba(255, 255, 255, 0.05);
+$c-surface-hover: rgba(255, 255, 255, 0.1);
+$c-surface-strong: rgba(255, 255, 255, 0.14);
+$c-line: rgba(255, 255, 255, 0.09);
+$c-line-strong: rgba(255, 255, 255, 0.18);
+$c-shade: rgba(0, 0, 0, 0.22);
+$c-text-dim: rgba(234, 242, 246, 0.62);
+$c-text-faint: rgba(234, 242, 246, 0.4);
+
+$radius: 6rem;
+$radius-s: 4rem;
+$radius-l: 10rem;
+
+$ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+$t-fast: 0.12s;
+$t-med: 0.2s;
+
+// Four longhands so var() never sits in a shorthand.
+@mixin border-color($c) {
+    border-top-color: $c;
+    border-right-color: $c;
+    border-bottom-color: $c;
+    border-left-color: $c;
+}
+
+@mixin border($w, $c) {
+    border-top-width: $w;
+    border-right-width: $w;
+    border-bottom-width: $w;
+    border-left-width: $w;
+    border-top-style: solid;
+    border-right-style: solid;
+    border-bottom-style: solid;
+    border-left-style: solid;
+    @include border-color($c);
+}
+
+@mixin row($align: center) {
+    display: flex;
+    flex-direction: row;
+    align-items: $align;
+}
+
+@mixin col {
+    display: flex;
+    flex-direction: column;
+}
+
+@mixin ellipsis {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+@mixin text($size: var(--fontSizeS)) {
+    font-size: $size;
+    color: var(--menuText1Normal);
+}
+
+@mixin button-reset {
+    @include border(0, transparent);
+    background-color: transparent;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font-family: var(--fontFamily);
+    color: var(--menuText1Normal);
+}
+
+@mixin chip {
+    @include row;
+    @include button-reset;
+    height: 28rem;
+    padding: 0 10rem;
+    border-radius: $radius;
+    background-color: $c-surface;
+    font-size: var(--fontSizeS);
+    transition-property: background-color, opacity, transform;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+    }
+}

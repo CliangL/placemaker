@@ -80,6 +80,8 @@ export interface Control {
   markerKinds?: string[];
   visibleWhen?: string;     // "otherId=value"
   cheap?: boolean;
+  /** Default value (for per-control reset). */
+  default?: SettingValue;
 }
 
 export interface LayerType {
@@ -119,6 +121,12 @@ export interface StepView {
   values: Record<string, SettingValue>;
   locked: string[];         // ids set explicitly by the player
   markers: { kind: string; count: number }[];
+  /** Every placed marker in placement order (index = removeMarker index). */
+  markerList?: { kind: string; index: number; position: [number, number, number] }[];
+  /** Marker kinds this step accepts, in display order (e.g. entrance, entry, exit, alley, footpath). */
+  markerKinds?: { kind: string; label: string; icon?: string; tooltip?: string }[];
+  /** Minimum markers needed before Build (0 = optional). */
+  markersRequired?: number;
   /** Readiness from IAreaGenerator.CheckReady for this step. */
   ready: boolean;
   nextStep?: LocText;
@@ -233,6 +241,10 @@ export const Triggers = {
   removeGroup: "removeGroup",               // (groupId: number)
   renameGroup: "renameGroup",               // (groupId: number, name: string)
   setAnarchy: "setAnarchy",                 // (enabled: boolean)
+  locate: "locate",                         // (x: number, y: number, z: number) — move camera to an issue
+  acknowledgePermanent: "acknowledgePermanent", // (ack: boolean) — required before Build when summary.permanent is non-empty (Enter included)
+  setMarkerKind: "setMarkerKind",           // (path: string, kind: string) — which marker type the next click places (entrance types etc.)
+  removeMarker: "removeMarker",             // (path: string, index: number)
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────

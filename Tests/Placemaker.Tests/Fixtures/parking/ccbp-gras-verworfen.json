@@ -1,0 +1,54 @@
+{
+ "source": "ParkingLotTool Tests/GeometryParity/Berichtsfaelle/CCBP-gras-verworfen.json (KruemelGames, GPL-3.0); real user polygon",
+ "polygonXZ": [
+  [
+   -1203.67578125,
+   -229.74082946777344
+  ],
+  [
+   -1225.85693359375,
+   -239.67630004882812
+  ],
+  [
+   -1235.6693115234375,
+   -217.77120971679688
+  ],
+  [
+   -1272.178466796875,
+   -234.1625213623047
+  ],
+  [
+   -1283.859375,
+   -208.1429901123047
+  ],
+  [
+   -1203.375732421875,
+   -172.58251953125
+  ]
+ ],
+ "settings": {
+  "setback": 1,
+  "aisleWidth": 7,
+  "stallLength": 5.9,
+  "stallWidth": 3,
+  "medianDepth": 2.5,
+  "crossEveryMeters": 33,
+  "rowEndPlanting": true,
+  "perimeterRoad": false,
+  "rowAngleMode": "edge"
+ },
+ "entrances": [
+  {
+   "edge": 3,
+   "along": 13.031204223632812,
+   "kind": "Zufahrt"
+  },
+  {
+   "edge": 5,
+   "along": 40.31494140625,
+   "kind": "Gasse"
+  }
+ ],
+ "pltStalls": 49,
+ "pltMilliseconds": 127.121
+}

@@ -2,17 +2,14 @@ const path = require("path");
 const MOD = require("./mod.json");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const { CSSPresencePlugin } = require("./tools/css-presence");
+const { CssLintPlugin } = require("./tools/css-lint");
 const TerserPlugin = require("terser-webpack-plugin");
 const gray = (text) => `\x1b[90m${text}\x1b[0m`;
 
 // Output: PLACEMAKER_UI_OUT (set by the csproj) > CSII_USERDATAPATH Mods folder > ./build
 const CSII_USERDATAPATH = process.env.CSII_USERDATAPATH;
 
-if (false) {
-  throw "CSII_USERDATAPATH environment variable is not set, ensure the CSII Modding Toolchain is installed correctly";
-}
-
-const OUTPUT_DIR = process.env.PLACEMAKER_UI_OUT || (CSII_USERDATAPATH ? `${CSII_USERDATAPATH}\Mods\${MOD.id}` : path.join(__dirname, "build"));
+const OUTPUT_DIR = process.env.PLACEMAKER_UI_OUT || (CSII_USERDATAPATH ? path.join(CSII_USERDATAPATH, "Mods", MOD.id) : path.join(__dirname, "build"));
 
 const banner = `
  * Cities: Skylines II UI Module
@@ -66,7 +63,11 @@ module.exports = {
               },
             },
           },
-          "sass-loader",
+          {
+            loader: "sass-loader",
+            // Expanded output, no colour rewriting (Gameface rejects hsla, which minifiers may emit).
+            options: { api: "modern", sassOptions: { style: "expanded" } },
+          },
         ],
       },
       {
@@ -108,6 +109,8 @@ module.exports = {
   plugins: [
     new MiniCssExtractPlugin(),
     new CSSPresencePlugin(),
+    // Fails the build on CSS Gameface rejects (grid, hsla, var() in shorthands, :not, clamp…).
+    new CssLintPlugin(),
     {
       apply(compiler) {
         let runCount = 0;

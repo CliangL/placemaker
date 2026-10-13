@@ -1,0 +1,61 @@
+@use "../styles/tokens" as *;
+
+.section {
+    @include col;
+    padding: 8rem 10rem;
+}
+
+.head {
+    @include row;
+    min-height: 28rem;
+}
+
+.title {
+    margin-left: 8rem;
+    font-size: var(--fontSizeS);
+    color: #ffffff;
+    @include ellipsis;
+}
+
+.partOf {
+    color: $c-text-dim;
+}
+
+.actions {
+    @include row;
+    margin-top: 6rem;
+    > button {
+        margin-right: 6rem;
+    }
+}
+
+.flex {
+    flex: 1 1 auto;
+}
+
+.kind {
+    margin-left: 26rem;
+    font-size: var(--fontSizeXS);
+    color: $c-text-dim;
+}
+
+.facts {
+    margin-top: 4rem;
+    margin-left: 26rem;
+    font-size: var(--fontSizeXS);
+    color: var(--menuText1Normal);
+}
+
+.note {
+    @include row(flex-start);
+    margin-top: 6rem;
+    padding: 5rem 8rem;
+    border-radius: $radius;
+    background-color: $c-surface;
+}
+
+.noteText {
+    margin-left: 6rem;
+    font-size: var(--fontSizeXS);
+    line-height: 1.3;
+}

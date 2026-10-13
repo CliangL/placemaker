@@ -1,0 +1,479 @@
+// Turns the parking layout into an AreaPlan (world space): surfaces through SurfaceAcceptance, drive
+// nets split at every junction, stall/charger/lamp/plant/arrow objects, the lot owner area,
+// regions for add-ons, stats and economy facts.
+//
+// Conventions for the game layer (from ParkingLotTool, KruemelGames, GPL-3.0 — see docs/proposals/parking.md):
+//  * ParkingBay object at the stall centre; +Z (yaw 0 = +Z) points from the aisle to the back of the
+//    stall. PLT measured BayDecalFacesAisle=false: the vanilla decal's +Z must point away from the aisle.
+//  * Nets are straight Béziers; endpoints of joining nets are identical (split at every junction).
+//  * DriveConnector A→B is the driving direction for one-way entrances.
+
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Placemaker.Core.Geometry;
+using Unity.Mathematics;
+
+namespace Placemaker.Core.Layers.Parking
+{
+    internal static class PlanBuilder
+    {
+        private const string K = "Placemaker.Parking.";
+
+        private sealed class Seg
+        {
+            public double2 A, B;
+            public NetRole Role;
+            public AssetRef Asset;
+            public long StartAttach = -1, EndAttach = -1;
+            public float StartT, EndT;
+        }
+
+        public static AreaPlan Build(AreaInput input, ParkingSettings s, ParkingLayer gen, CancellationToken cancel, Action<Layout> inspect = null)
+        {
+            var plan = new AreaPlan { GeneratorId = ParkingLayer.LayerId };
+            var site = input.Site ?? new SiteContext();
+            Func<float2, float> h = site.HeightAt ?? (_ => 0f);
+            float H(double2 p) { try { return h(new float2((float)p.x, (float)p.y)); } catch (Exception) { return 0f; } }
+
+            // ── outline ──
+            var world = new List<double2>(input.Shape.Ring.Length);
+            foreach (var p in input.Shape.Ring)
+            {
+                if (!math.all(math.isfinite(p)))
+                {
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = K + "Issue.BadShape" });
+                    return plan;
+                }
+                world.Add(new double2(p.x, p.z));
+            }
+            world = PGeo.EnsureCcw(PGeo.Simplify(world, 1e-3, 1e-6));
+            double area = world.Count >= 3 ? PGeo.Area(world) : 0;
+            if (world.Count < 3 || !PGeo.IsSimple(world))
+            {
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = K + "Issue.BadShape" });
+                return plan;
+            }
+            if (area < gen.MinArea)
+            {
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = K + "Issue.TooSmall", Args = new object[] { Math.Round(area), gen.MinArea } });
+                return plan;
+            }
+            if (area > gen.MaxArea)
+            {
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = K + "Issue.TooLarge", Args = new object[] { Math.Round(area), gen.MaxArea } });
+                return plan;
+            }
+
+            // ── entrances ──
+            var markers = new List<EdgeMarker>();
+            if (input.Markers != null)
+                foreach (var m in input.Markers)
+                    if (m.Kind == ParkingIds.KindEntrance || m.Kind == ParkingIds.KindEntry || m.Kind == ParkingIds.KindExit) markers.Add(m);
+            if (markers.Count == 0)
+            {
+                markers = EntranceSuggest.Suggest(input, s);
+                plan.Issues.Add(new PlanIssue
+                {
+                    Severity = markers.Count > 0 ? IssueSeverity.Info : IssueSeverity.Warning,
+                    Key = markers.Count > 0 ? K + "Issue.EntrancesSuggested" : K + "Issue.NoEntrance",
+                });
+            }
+            var rq = new LayoutRequest { LotWorld = world, Settings = s, LeftHandTraffic = site.LeftHandTraffic };
+            var reserved = input.Reserved;
+            if (reserved != null && (reserved.Discs.Count > 0 || reserved.Corridors.Count > 0 || reserved.Polygons.Count > 0))
+                rq.Blocked = (p, r) => reserved.Blocks(new float2((float)p.x, (float)p.y), (float)r);
+            foreach (var m in markers)
+                rq.Entrances.Add(new EntranceRequest
+                {
+                    Kind = m.Kind == ParkingIds.KindEntry ? EntranceKind.Entry : m.Kind == ParkingIds.KindExit ? EntranceKind.Exit : EntranceKind.TwoWay,
+                    World = new double2(m.Position.x, m.Position.z),
+                });
+
+            // ── layout ──
+            cancel.ThrowIfCancellationRequested();
+            var layout = LayoutEngine.Build(rq, cancel, out var pieces, out var zones);
+            var f = layout.Frame;
+            if (layout.Lot.Count < 3)
+            {
+                Issues(plan, layout);
+                return plan;
+            }
+            cancel.ThrowIfCancellationRequested();
+            layout.Surfaces = SurfaceCells.Build(layout.Lot, zones, pieces, s.Greenery == Greenery.None, cancel);
+            cancel.ThrowIfCancellationRequested();
+
+            var greens = new List<List<double2>>();
+            var asphalts = new List<List<double2>>();
+            foreach (var sp in layout.Surfaces) (sp.Asphalt ? asphalts : greens).Add(sp.Ring);
+            var greenIndex = new RingIndex(greens);
+            var asphaltIndex = new RingIndex(asphalts);
+            bool IsGreen(double2 p) => greenIndex.Contains(p) && !asphaltIndex.Contains(p);
+            bool Reserved(double2 local, double r) => rq.Blocked(f.ToWorld(local), r);
+
+            // ── lanterns ──
+            if (s.Lanterns)
+            {
+                Lanterns.Plan(layout, s.LanternSpacing, IsGreen);
+                layout.Lanterns.RemoveAll(l =>
+                {
+                    foreach (var c in layout.Chargers) if (math.distance(c.Position, l.Position) < 1.5) return true;
+                    return Reserved(l.Position, 0.8);
+                });
+            }
+            cancel.ThrowIfCancellationRequested();
+
+            // ── planting ──
+            var species = new List<Species>();
+            if (s.Greenery != Greenery.None && s.PlantingDensity > 0)
+            {
+                void Add(string id, bool tree)
+                {
+                    double spacing = tree ? 7 : 2.5, height = tree ? 10 : 1;
+                    if (!string.IsNullOrEmpty(id) && site.Assets != null && site.Assets.TryGetValue(id, out var info))
+                    {
+                        var ext = info.BoundsMax - info.BoundsMin;
+                        double sz = Math.Max(ext.x, ext.z);
+                        if (sz > 0.1) spacing = Math.Max(tree ? 4 : 1, Math.Min(tree ? 14 : 5, sz * (tree ? 0.8 : 1.0)));
+                        if (ext.y > 0.1) height = ext.y;
+                    }
+                    species.Add(new Species { Tree = tree, Spacing = spacing, Height = height });
+                }
+                if (s.Trees.Length == 0) Add("", true); else foreach (var t in s.Trees) Add(t, true);
+                if (s.Bushes.Length == 0) Add("", false); else foreach (var b in s.Bushes) Add(b, false);
+                layout.Plants = Vegetation.Plan(greens, species, (int)Math.Round(s.PlantingDensity), input.Seed, layout.Lanterns,
+                    p =>
+                    {
+                        foreach (var c in layout.Chargers) if (math.distance(c.Position, p) < 1.5) return true;
+                        return Reserved(p, 1.0);
+                    });
+            }
+            cancel.ThrowIfCancellationRequested();
+
+            Emit(plan, layout, s, site, H, input, cancel);
+            Issues(plan, layout);
+            inspect?.Invoke(layout);
+            return plan;
+        }
+
+        private static void Issues(AreaPlan plan, Layout layout)
+        {
+            foreach (var i in layout.Issues)
+            {
+                var pi = new PlanIssue { Severity = i.Severity, Key = i.Key, Args = i.Args ?? Array.Empty<object>() };
+                if (i.At.HasValue)
+                {
+                    var w = layout.Frame.ToWorld(i.At.Value);
+                    pi.At = new float3((float)w.x, 0, (float)w.y);
+                }
+                plan.Issues.Add(pi);
+            }
+        }
+
+        private static float Yaw(double2 worldDir) => (float)Math.Atan2(worldDir.x, worldDir.y);
+
+        private static void Emit(AreaPlan plan, Layout layout, ParkingSettings s, SiteContext site, Func<double2, float> H, AreaInput input, CancellationToken cancel)
+        {
+            var f = layout.Frame;
+            Func<float2, float> h2 = p => H(new double2(p.x, p.y));
+            float3 P3(double2 local) { var w = f.ToWorld(local); return new float3((float)w.x, H(w), (float)w.y); }
+            float2[] W2(List<double2> ring)
+            {
+                var r = new float2[ring.Count];
+                for (int i = 0; i < r.Length; i++) { var w = f.ToWorld(ring[i]); r[i] = new float2((float)w.x, (float)w.y); }
+                return r;
+            }
+
+            // ── surfaces & regions ──
+            var asphaltAsset = ParkingAssets.Pick(s.AsphaltAsset, ParkingAssets.Asphalt);
+            var greenAsset = ParkingAssets.Pick(s.GreenAsset, ParkingAssets.Grass);
+            double covered = 0;
+            int lotRegion = 0, greenRegion = 0;
+            foreach (var sp in layout.Surfaces)
+            {
+                cancel.ThrowIfCancellationRequested();
+                var rings = Acceptable(sp, W2, h2, cancel);
+                foreach (var ring in rings)
+                {
+                    plan.Surfaces.Add(new PlannedSurface
+                    {
+                        Ring = ring, Role = sp.Asphalt ? SurfaceRole.Asphalt : SurfaceRole.Grass,
+                        Asset = sp.Asphalt ? asphaltAsset : greenAsset,
+                    });
+                    covered += Pricing.PolygonArea(ring);
+                    plan.Regions.Add(new PlannedRegion
+                    {
+                        Ring = ring,
+                        Tags = new[] { sp.Asphalt ? RegionTags.Lot : RegionTags.Green },
+                        Key = sp.Asphalt ? "lot:" + lotRegion++ : "green:" + greenRegion++,
+                    });
+                }
+            }
+            double uncovered = Math.Max(0, layout.LotArea - covered);
+            if (layout.LotArea > 0 && uncovered / layout.LotArea > 0.005)
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.SurfaceGaps", Args = new object[] { Math.Round(uncovered) } });
+
+            // ── lot owner area ──
+            var lotRings = SurfaceAcceptance.MakeAcceptable(W2(layout.Lot), h2);
+            if (lotRings.Count > 0)
+            {
+                var best = lotRings[0];
+                foreach (var r in lotRings) if (Pricing.PolygonArea(r) > Pricing.PolygonArea(best)) best = r;
+                plan.Areas.Add(new PlannedArea { Ring = best, Role = AreaRole.Lot, Asset = new AssetRef("") });
+            }
+            else plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.LotOwnerRejected" });
+
+            // ── nets ──
+            var roads = Roads.From(site);
+            var segs = new List<Seg>();
+            foreach (var l in layout.LiveLines)
+            {
+                switch (l.Kind)
+                {
+                    case LineKind.Ring:
+                    case LineKind.Aisle:
+                    case LineKind.Cross:
+                        segs.Add(new Seg { A = f.ToWorld(l.A), B = f.ToWorld(l.B), Role = NetRole.DriveAisle, Asset = new AssetRef(ParkingAssets.DrivePath(l.Width)) });
+                        break;
+                    case LineKind.Footpath:
+                        segs.Add(new Seg { A = f.ToWorld(l.A), B = f.ToWorld(l.B), Role = NetRole.Pathway, Asset = new AssetRef(ParkingAssets.PedestrianPath) });
+                        break;
+                }
+            }
+            for (int ei = 0; ei < layout.Entrances.Count; ei++)
+            {
+                var e = layout.Entrances[ei];
+                if (!e.Connected || e.ConnectorLine < 0 || layout.Lines[e.ConnectorLine].Removed) continue;
+                var E = f.ToWorld(e.Point); var J = f.ToWorld(e.Junction);
+                var inward = f.DirToWorld(e.Inward);
+                bool exit = e.Kind == EntranceKind.Exit;
+                var asset = e.Kind == EntranceKind.TwoWay ? new AssetRef(ParkingAssets.DrivePath(e.Width)) : new AssetRef(ParkingAssets.OneWayPath, ParkingAssets.DrivePath(e.Width));
+                double2 outer = E;
+                bool hasRoad = Roads.ForEntrance(roads, E, inward, out var hit);
+                if (hasRoad && s.Alleys)
+                {
+                    var road = roads[hit.Road];
+                    var alley = new Seg { Role = NetRole.Alley, Asset = new AssetRef(ParkingAssets.Alley) };
+                    if (exit) { alley.A = E; alley.B = hit.Point; alley.EndAttach = road.Id; alley.EndT = (float)hit.T; }
+                    else { alley.A = hit.Point; alley.B = E; alley.StartAttach = road.Id; alley.StartT = (float)hit.T; }
+                    if (PGeo.Len(hit.Point - E) > 0.5) segs.Add(alley);
+                }
+                else if (hasRoad)
+                {
+                    // LocalConnect needs a dead end at the kerb: run the connector to the road edge (PLT NetDefinitions).
+                    double gap = PGeo.Len(hit.Point - E) - roads[hit.Road].Width / 2;
+                    if (gap > 0.3) outer = E + PGeo.Norm(hit.Point - E) * gap;
+                }
+                else
+                {
+                    var at = new float3((float)E.x, H(E), (float)E.y);
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.EntranceNoRoad", Args = new object[] { ei + 1 }, At = at });
+                }
+                segs.Add(exit
+                    ? new Seg { A = J, B = outer, Role = NetRole.DriveConnector, Asset = asset }
+                    : new Seg { A = outer, B = J, Role = NetRole.DriveConnector, Asset = asset });
+
+                if (e.Kind != EntranceKind.TwoWay)
+                {
+                    var mid = (E + J) * 0.5;
+                    var dir = exit ? -inward : inward;
+                    plan.Objects.Add(new PlannedObject
+                    {
+                        Position = new float3((float)mid.x, H(mid), (float)mid.y), Yaw = Yaw(dir), Role = ObjectRole.Arrow,
+                        Asset = new AssetRef(ParkingAssets.Arrows[0], ParkingAssets.Arrows[1], ParkingAssets.Arrows[2]),
+                    });
+                }
+            }
+            foreach (var sg in SplitAtJunctions(segs))
+            {
+                var a = new float3((float)sg.A.x, H(sg.A), (float)sg.A.y);
+                var d = new float3((float)sg.B.x, H(sg.B), (float)sg.B.y);
+                plan.Nets.Add(new PlannedNet
+                {
+                    A = a, B = math.lerp(a, d, 1f / 3f), C = math.lerp(a, d, 2f / 3f), D = d,
+                    Role = sg.Role, Asset = sg.Asset,
+                    StartAttach = sg.StartAttach, StartAttachT = sg.StartT, EndAttach = sg.EndAttach, EndAttachT = sg.EndT,
+                });
+            }
+
+            // ── objects ──
+            int bays = 0, ev = 0, acc = 0;
+            foreach (var b in layout.LiveBays)
+            {
+                AssetRef asset;
+                switch (b.Role)
+                {
+                    case BayRole.Disabled: asset = new AssetRef(ParkingAssets.DisabledDecal, ParkingAssets.Decal); acc++; break;
+                    case BayRole.Electric: asset = new AssetRef(ParkingAssets.ElectricDecal, ParkingAssets.Decal); ev++; break;
+                    default: asset = new AssetRef(ParkingAssets.Decal); break;
+                }
+                bays++;
+                plan.Objects.Add(new PlannedObject
+                {
+                    Position = P3(b.Center), Yaw = Yaw(f.DirToWorld(b.Axis)), Role = ObjectRole.ParkingBay, Asset = asset,
+                    Scale = 1f, Variation = (uint)bays,
+                });
+            }
+            var chargerAsset = ParkingAssets.Pick(s.ChargerAsset, ParkingAssets.Charger);
+            foreach (var c in layout.Chargers)
+                plan.Objects.Add(new PlannedObject { Position = P3(c.Position), Yaw = Yaw(f.DirToWorld(c.Facing)), Role = ObjectRole.Charger, Asset = chargerAsset });
+            foreach (var l in layout.Lanterns)
+            {
+                var asset = !string.IsNullOrEmpty(s.LanternAsset) ? new AssetRef(s.LanternAsset, ParkingAssets.LampSingle)
+                    : l.Double ? new AssetRef(ParkingAssets.LampDouble, ParkingAssets.LampSingle) : new AssetRef(ParkingAssets.LampSingle);
+                // single heads face along Facing; double heads light both sides, so they stand across it (PLT LaternenKatalog.Vorwaerts)
+                var face = l.Double ? PGeo.Perp(l.Facing) : l.Facing;
+                plan.Objects.Add(new PlannedObject { Position = P3(l.Position), Yaw = Yaw(f.DirToWorld(face)), Role = ObjectRole.Lamp, Asset = asset });
+            }
+            int trees = 0;
+            var speciesAssets = SpeciesAssets(s);
+            foreach (var p in layout.Plants)
+            {
+                // PLT default: no aging, ages "young/medium" (mask 6) picked per seed
+                plan.Objects.Add(new PlannedObject
+                {
+                    Position = P3(p.Position), Yaw = (float)(Vegetation.Unit(Vegetation.Hash(p.Seed + 5)) * 2 * Math.PI),
+                    Role = p.Tree ? ObjectRole.Tree : ObjectRole.Bush,
+                    Asset = p.Species < speciesAssets.Count ? speciesAssets[p.Species] : new AssetRef(""),
+                    Age = p.Tree ? 1 + (int)(p.Seed % 2) : -1, Variation = p.Seed,
+                });
+                if (p.Tree) trees++;
+            }
+
+            // ── stats & facts ──
+            plan.Stats.Add(new PlanStat(K + "Stat.Stalls", bays, "count"));
+            plan.Stats.Add(new PlanStat(K + "Stat.EvStalls", ev, "count"));
+            plan.Stats.Add(new PlanStat(K + "Stat.AccessibleStalls", acc, "count"));
+            plan.Stats.Add(new PlanStat(K + "Stat.Area", Math.Round(layout.LotArea), "m2"));
+            plan.Stats.Add(new PlanStat(K + "Stat.AisleLength", Math.Round(layout.AisleLength), "m"));
+            plan.Stats.Add(new PlanStat(K + "Stat.Trees", trees, "count"));
+            plan.Facts["capacity"] = bays;
+            plan.Facts["evCapacity"] = ev;
+            plan.Facts["disabledCapacity"] = acc;
+            // Same key as Game/Economy/ParkingEconomySystem.FeeFact. Note: the build receipt sums facts
+            // over layers, so a recipe with two parking steps would add their fees (docs/proposals/parking.md).
+            plan.Facts["parking.fee"] = s.Fee;
+            layout.UncoveredArea = uncovered;
+        }
+
+        /// <summary>
+        /// Rings CS2 keeps for one merged surface. When the game model trims the big ring (it splits
+        /// and drops pieces it cannot rescue), the same cells are regrouped into smaller rings and the
+        /// variant covering more area wins; cells are the last resort.
+        /// </summary>
+        private static List<float3[]> Acceptable(SurfacePoly sp, Func<List<double2>, float2[]> w2, Func<float2, float> h2, CancellationToken cancel)
+        {
+            double want = PGeo.Area(sp.Ring);
+            var best = SurfaceAcceptance.MakeAcceptable(w2(sp.Ring), h2);
+            double got = Sum(best);
+            if (want - got <= 0.05 || sp.Cells == null || sp.Cells.Count == 0) return best;
+            foreach (int cap in new[] { 48, 16 })
+            {
+                var alt = new List<float3[]>();
+                foreach (var ring in SurfaceCells.Regroup(sp.Cells, cap, cancel))
+                {
+                    var acc = SurfaceAcceptance.MakeAcceptable(w2(ring), h2);
+                    alt.AddRange(acc);
+                }
+                double a = Sum(alt);
+                if (a > got + 1e-3) { best = alt; got = a; }
+                if (want - got <= 0.05) return best;
+            }
+            var cells = new List<float3[]>();
+            foreach (var cell in sp.Cells) cells.AddRange(SurfaceAcceptance.MakeAcceptable(w2(cell), h2));
+            if (Sum(cells) > got + 1e-3) best = cells;
+            return best;
+        }
+
+        private static double Sum(List<float3[]> rings)
+        {
+            double a = 0;
+            foreach (var r in rings) a += Pricing.PolygonArea(r);
+            return a;
+        }
+
+        private static List<AssetRef> SpeciesAssets(ParkingSettings s)
+        {
+            // must mirror the species order built in Build()
+            var r = new List<AssetRef>();
+            if (s.Trees.Length == 0) r.Add(new AssetRef("", ParkingAssets.Trees)); else foreach (var t in s.Trees) r.Add(new AssetRef(t));
+            if (s.Bushes.Length == 0) r.Add(new AssetRef("", ParkingAssets.Bushes)); else foreach (var b in s.Bushes) r.Add(new AssetRef(b));
+            return r;
+        }
+
+        /// <summary>
+        /// Welds endpoints closer than 0.75 m (no sub-metre courses — PLT dropped courses under 1 m)
+        /// and splits every segment at endpoints of others lying on it, so junctions share one node.
+        /// </summary>
+        private static List<Seg> SplitAtJunctions(List<Seg> segs)
+        {
+            var reps = new List<double2>();
+            double2 Weld(double2 p)
+            {
+                foreach (var r in reps) if (PGeo.Len(r - p) < 0.75) return r;
+                reps.Add(p);
+                return p;
+            }
+            // attached road ends must not move: weld only lot-side ends
+            foreach (var sg in segs)
+            {
+                if (sg.StartAttach < 0) sg.A = Weld(sg.A);
+                if (sg.EndAttach < 0) sg.B = Weld(sg.B);
+            }
+            var outList = new List<Seg>();
+            foreach (var sg in segs)
+            {
+                if (PGeo.Len(sg.B - sg.A) < 0.5) continue;
+                var ts = new List<double>();
+                var ab = sg.B - sg.A; double l2 = PGeo.Dot(ab, ab);
+                foreach (var p in reps)
+                {
+                    double t = PGeo.Dot(p - sg.A, ab) / l2;
+                    if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+                    if (PGeo.Len(sg.A + ab * t - p) > 2e-3) continue;
+                    ts.Add(t);
+                }
+                if (ts.Count == 0) { outList.Add(sg); continue; }
+                ts.Sort();
+                double prev = 0; var prevP = sg.A;
+                for (int i = 0; i <= ts.Count; i++)
+                {
+                    double t = i < ts.Count ? ts[i] : 1;
+                    var p = i < ts.Count ? sg.A + ab * t : sg.B;
+                    if (i < ts.Count) foreach (var r in reps) if (PGeo.Len(r - p) < 2e-3) { p = r; break; }
+                    if (PGeo.Len(p - prevP) < 1e-6) continue;
+                    outList.Add(new Seg
+                    {
+                        A = prevP, B = p, Role = sg.Role, Asset = sg.Asset,
+                        StartAttach = prev == 0 ? sg.StartAttach : -1, StartT = sg.StartT,
+                        EndAttach = t == 1 ? sg.EndAttach : -1, EndT = sg.EndT,
+                    });
+                    prev = t; prevP = p;
+                }
+            }
+            return outList;
+        }
+
+        /// <summary>Point-in-rings lookup with bounding boxes.</summary>
+        private sealed class RingIndex
+        {
+            private readonly List<List<double2>> _rings;
+            private readonly List<(double2 Min, double2 Max)> _bounds = new List<(double2, double2)>();
+            public RingIndex(List<List<double2>> rings)
+            {
+                _rings = rings;
+                foreach (var r in rings) { PGeo.Bounds(r, out var mn, out var mx); _bounds.Add((mn, mx)); }
+            }
+            public bool Contains(double2 p)
+            {
+                for (int i = 0; i < _rings.Count; i++)
+                {
+                    var b = _bounds[i];
+                    if (p.x < b.Min.x || p.x > b.Max.x || p.y < b.Min.y || p.y > b.Max.y) continue;
+                    if (PGeo.Contains(_rings[i], p)) return true;
+                }
+                return false;
+            }
+        }
+    }
+}

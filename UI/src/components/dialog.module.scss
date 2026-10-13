@@ -1,0 +1,45 @@
+@use "../styles/tokens" as *;
+
+.backdrop {
+    @include row;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+    z-index: 100;
+}
+
+.dialog {
+    @include col;
+    width: 420rem;
+    padding: 18rem 20rem 16rem 20rem;
+    border-radius: $radius-l;
+    background-color: var(--panelColorNormal);
+    backdrop-filter: var(--panelBlur);
+    @include border(1rem, $c-line-strong);
+}
+
+.title {
+    @include text(var(--fontSizeL));
+    font-weight: bold;
+    margin-bottom: 8rem;
+}
+
+.message {
+    @include text(var(--fontSizeS));
+    line-height: 1.4;
+    color: $c-text-dim;
+}
+
+.buttons {
+    @include row;
+    margin-top: 18rem;
+}
+
+.spacer {
+    flex: 1 1 auto;
+}

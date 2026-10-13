@@ -1,0 +1,19 @@
+{
+  "id": "parking-compact",
+  "nameKey": "Placemaker.Recipe.ParkingCompact",
+  "icon": "Media/Game/Icons/ParkingFacility.svg",
+  "formatVersion": 1,
+  "root": {
+    "layer": "parking",
+    "settings": {
+      "stallAngle": "90",
+      "greenery": "edges",
+      "rowEndPlanting": false,
+      "perimeterRoad": true,
+      "crossEvery": 0
+    },
+    "target": "",
+    "children": [],
+    "regionOverrides": {}
+  }
+}

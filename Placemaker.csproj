@@ -16,7 +16,9 @@
     <Nullable>disable</Nullable>
     <CS2ToolPath Condition="'$(CSII_TOOLPATH)' != ''">$(CSII_TOOLPATH)</CS2ToolPath>
     <CS2ToolPath Condition="'$(CS2ToolPath)' == ''">$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))</CS2ToolPath>
-    <UseToolchain Condition="'$(CS2ToolPath)' != '' AND Exists('$(CS2ToolPath)\Mod.props')">true</UseToolchain>
+    <!-- Opt-in (-p:UseToolchain=true): the code base has no Burst jobs, so standalone output is
+         equivalent, and the toolchain's post-processor needs a .NET 6 runtime many machines lack. -->
+    <UseToolchain Condition="'$(UseToolchain)' == 'true' AND ('$(CS2ToolPath)' == '' OR !Exists('$(CS2ToolPath)\Mod.props'))">false</UseToolchain>
     <PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
   </PropertyGroup>
 
@@ -54,6 +56,7 @@
     <Compile Remove="UI\**;Tests\**;docs\**;bin\**;obj\**" />
     <None Remove="UI\**;Tests\**;docs\**" />
     <None Include="Lang\*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Lang" />
+    <None Include="Recipes\*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Recipes" />
     <None Include="LICENSE" CopyToOutputDirectory="PreserveNewest" Condition="Exists('LICENSE')" />
   </ItemGroup>
 
