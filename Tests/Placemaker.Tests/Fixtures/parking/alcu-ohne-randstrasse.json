@@ -1,0 +1,49 @@
+{
+ "source": "ParkingLotTool Tests/GeometryParity/Berichtsfaelle/ALCU-ohne-randstrasse.json (KruemelGames, GPL-3.0); real user polygon",
+ "polygonXZ": [
+  [
+   -1203.6759033203125,
+   -229.7408447265625
+  ],
+  [
+   -1225.85791015625,
+   -239.67422485351562
+  ],
+  [
+   -1235.666748046875,
+   -217.77003479003906
+  ],
+  [
+   -1272.1944580078125,
+   -234.12681579589844
+  ],
+  [
+   -1283.8348388671875,
+   -208.13201904296875
+  ],
+  [
+   -1203.3758544921875,
+   -172.58262634277344
+  ]
+ ],
+ "settings": {
+  "setback": 1,
+  "aisleWidth": 7,
+  "stallLength": 5.9,
+  "stallWidth": 3,
+  "medianDepth": 2.5,
+  "crossEveryMeters": 33,
+  "rowEndPlanting": true,
+  "perimeterRoad": false,
+  "rowAngleMode": "edge"
+ },
+ "entrances": [
+  {
+   "edge": 5,
+   "along": 40.313743591308594,
+   "kind": "Gasse"
+  }
+ ],
+ "pltStalls": 54,
+ "pltMilliseconds": 73.5654
+}

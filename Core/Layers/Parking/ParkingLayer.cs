@@ -1,0 +1,239 @@
+// Parking lot layer. Layout engine ported from ParkingLotTool (KruemelGames, GPL-3.0); see
+// LayoutEngine.cs, SurfaceCells.cs, SpecialStalls.cs, Lanterns.cs, Vegetation.cs.
+//
+// Pure and reentrant: no static mutable state (PLT's PhaseLog / SonderplatzSpur statics are gone),
+// every run builds its own settings snapshot and engine instance. Never throws for bad geometry;
+// cancellation is honoured between phases (OperationCanceledException propagates to the composer).
+
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Unity.Mathematics;
+
+namespace Placemaker.Core.Layers.Parking
+{
+    [AreaGenerator(10)]
+    public sealed class ParkingLayer : IAreaGenerator
+    {
+        public const string LayerId = "parking";
+        private const string K = "Placemaker.Parking.";
+
+        public string Id => LayerId;
+        public string NameKey => K + "Name";
+        public string Icon => "Media/Game/Icons/ParkingFacility.svg";
+        public LayerKind Kind => LayerKind.Fill;
+        public string[] Accepts => Array.Empty<string>();
+        public string[] Emits => new[] { RegionTags.Lot, RegionTags.Green };
+        public int Version => 1;
+        public float MinArea => 400f;
+        public float MaxArea => 300000f;
+
+        private static readonly IReadOnlyList<ControlSchema> _controls = BuildControls();
+        private static readonly IReadOnlyList<PresetInfo> _presets = BuildPresets();
+
+        public IReadOnlyList<ControlSchema> Controls => _controls;
+        public IReadOnlyList<PresetInfo> Presets => _presets;
+
+        public SettingsBag Defaults()
+        {
+            var b = new SettingsBag();
+            foreach (var c in _controls)
+                if (c.Default != null) b.Values[c.Id] = c.Default is string[] a ? (string[])a.Clone() : c.Default;
+            return b;
+        }
+
+        // ───────────────────────────── schema ─────────────────────────────
+
+        private static ControlOption Opt(string value, string label, string icon = "") =>
+            new ControlOption { Value = value, LabelKey = K + label, TooltipKey = K + label + ".Tip", Icon = icon };
+
+        private static ControlSchema C(string id, ControlKind kind, ControlTier tier, string group, object def)
+        {
+            string label = char.ToUpperInvariant(id[0]) + id.Substring(1);
+            return new ControlSchema
+            {
+                Id = id, Kind = kind, Tier = tier, Group = group, Default = def,
+                LabelKey = K + "Control." + label, TooltipKey = K + "Control." + label + ".Tip",
+            };
+        }
+
+        private static ControlSchema Slider(string id, ControlTier tier, string group, double def, double min, double max, double step, string unit, bool cheap = false)
+        {
+            var c = C(id, ControlKind.Slider, tier, group, def);
+            c.Min = min; c.Max = max; c.Step = step; c.Unit = unit; c.Cheap = cheap;
+            return c;
+        }
+
+        private static IReadOnlyList<ControlSchema> BuildControls()
+        {
+            var l = new List<ControlSchema>();
+            // Essential
+            var angle = C(ParkingIds.StallAngle, ControlKind.Choice, ControlTier.Essential, "layout", "90");
+            angle.Options.Add(Opt("90", "StallAngle.90"));
+            angle.Options.Add(Opt("60", "StallAngle.60"));
+            angle.Options.Add(Opt("45", "StallAngle.45"));
+            l.Add(angle);
+            var ent = C(ParkingIds.Entrances, ControlKind.Markers, ControlTier.Essential, "layout", null);
+            ent.MarkerKinds = new[] { ParkingIds.KindEntrance, ParkingIds.KindEntry, ParkingIds.KindExit };
+            ent.Options.Add(Opt(ParkingIds.KindEntrance, "Marker.Entrance"));
+            ent.Options.Add(Opt(ParkingIds.KindEntry, "Marker.Entry"));
+            ent.Options.Add(Opt(ParkingIds.KindExit, "Marker.Exit"));
+            l.Add(ent);
+            var asphalt = C(ParkingIds.AsphaltSurface, ControlKind.Asset, ControlTier.Essential, "surfaces", "");
+            asphalt.AssetCategory = AssetCategories.SurfaceAsphalt; asphalt.Cheap = true;
+            l.Add(asphalt);
+            var green = C(ParkingIds.Greenery, ControlKind.Choice, ControlTier.Essential, "planting", "medians");
+            green.Options.Add(Opt("none", "Greenery.None"));
+            green.Options.Add(Opt("edges", "Greenery.Edges"));
+            green.Options.Add(Opt("medians", "Greenery.Medians"));
+            l.Add(green);
+
+            // More: layout
+            l.Add(Slider(ParkingIds.AisleWidth, ControlTier.More, "layout", ParkingSettings.DefaultAisle, 4, 10, 0.5, "m"));
+            l.Add(Slider(ParkingIds.StallWidth, ControlTier.More, "layout", ParkingSettings.DefaultStallWidth, 2.5, 4, 0.1, "m"));
+            l.Add(Slider(ParkingIds.StallLength, ControlTier.More, "layout", ParkingSettings.DefaultStallLength, 4.5, 7, 0.1, "m"));
+            l.Add(Slider(ParkingIds.Setback, ControlTier.More, "layout", ParkingSettings.DefaultSetback, 0, 6, 0.5, "m"));
+            var mode = C(ParkingIds.RowAngleMode, ControlKind.Choice, ControlTier.More, "layout", "edge");
+            mode.Options.Add(Opt("edge", "RowAngleMode.Edge"));
+            mode.Options.Add(Opt("across", "RowAngleMode.Across"));
+            mode.Options.Add(Opt("fixed", "RowAngleMode.Fixed"));
+            l.Add(mode);
+            var rowAngle = Slider(ParkingIds.RowAngle, ControlTier.More, "layout", 0, 0, 179, 1, "deg");
+            rowAngle.VisibleWhen = ParkingIds.RowAngleMode + "=fixed";
+            l.Add(rowAngle);
+            l.Add(C(ParkingIds.PerimeterRoad, ControlKind.Toggle, ControlTier.More, "layout", true));
+            l.Add(Slider(ParkingIds.CrossEvery, ControlTier.More, "layout", ParkingSettings.DefaultCrossEvery, 0, 30, 1, "count"));
+            var style = C(ParkingIds.EntranceStyle, ControlKind.Choice, ControlTier.More, "layout", "connect");
+            style.Options.Add(Opt("connect", "EntranceStyle.Connect"));
+            style.Options.Add(Opt("alley", "EntranceStyle.Alley"));
+            l.Add(style);
+            // More: planting
+            var ends = C(ParkingIds.RowEndPlanting, ControlKind.Toggle, ControlTier.More, "planting", true);
+           
+            l.Add(ends);
+            var median = Slider(ParkingIds.MedianDepth, ControlTier.More, "planting", ParkingSettings.DefaultMedian, 0.5, 8, 0.5, "m");
+            median.VisibleWhen = ParkingIds.Greenery + "=medians";
+            l.Add(median);
+            var gs = C(ParkingIds.GreenSurface, ControlKind.Asset, ControlTier.More, "planting", "");
+            gs.AssetCategory = AssetCategories.SurfaceGrass; gs.Cheap = true;
+            l.Add(gs);
+            var trees = C(ParkingIds.Trees, ControlKind.AssetMulti, ControlTier.More, "planting", Array.Empty<string>());
+            trees.AssetCategory = AssetCategories.Tree;
+            l.Add(trees);
+            var bushes = C(ParkingIds.Bushes, ControlKind.AssetMulti, ControlTier.More, "planting", Array.Empty<string>());
+            bushes.AssetCategory = AssetCategories.Bush;
+            l.Add(bushes);
+            var dens = Slider(ParkingIds.PlantingDensity, ControlTier.More, "planting", 50, 0, 100, 5, "%");
+
+            l.Add(dens);
+            // More: lighting
+            l.Add(C(ParkingIds.Lanterns, ControlKind.Toggle, ControlTier.More, "lighting", true));
+            var la = C(ParkingIds.LanternAsset, ControlKind.Asset, ControlTier.More, "lighting", "");
+            la.AssetCategory = AssetCategories.Lamp; la.Cheap = true; la.VisibleWhen = ParkingIds.Lanterns + "=true";
+            l.Add(la);
+            var ls = Slider(ParkingIds.LanternSpacing, ControlTier.More, "lighting", 30, 20, 40, 1, "m");
+            ls.VisibleWhen = ParkingIds.Lanterns + "=true";
+            l.Add(ls);
+            // More: special stalls & economy
+            l.Add(Slider(ParkingIds.EvShare, ControlTier.More, "stalls", 4, 0, 30, 1, "%"));
+            var ch = C(ParkingIds.ChargerAsset, ControlKind.Asset, ControlTier.More, "stalls", "");
+            ch.AssetCategory = AssetCategories.Charger; ch.Cheap = true;
+            l.Add(ch);
+            l.Add(Slider(ParkingIds.AccessibleShare, ControlTier.More, "stalls", 2, 0, 10, 1, "%"));
+            l.Add(Slider(ParkingIds.Fee, ControlTier.More, "economy", 10, 0, 50, 1, "money", cheap: true));
+            return l;
+        }
+
+        private static IReadOnlyList<PresetInfo> BuildPresets()
+        {
+            PresetInfo P(string id, params (string Key, object Value)[] values)
+            {
+                var p = new PresetInfo { Id = id, LabelKey = K + "Preset." + id };
+                foreach (var v in values) p.Values.Values[v.Key] = v.Value;
+                return p;
+            }
+            return new[]
+            {
+                P("standard", (ParkingIds.StallAngle, "90"), (ParkingIds.Greenery, "medians"), (ParkingIds.PerimeterRoad, true)),
+                P("compact", (ParkingIds.StallAngle, "90"), (ParkingIds.Greenery, "edges"), (ParkingIds.PerimeterRoad, true), (ParkingIds.CrossEvery, 0.0)),
+                P("green", (ParkingIds.StallAngle, "90"), (ParkingIds.Greenery, "medians"), (ParkingIds.MedianDepth, 4.0), (ParkingIds.PlantingDensity, 80.0), (ParkingIds.CrossEvery, 8.0)),
+                P("angled", (ParkingIds.StallAngle, "60"), (ParkingIds.Greenery, "medians"), (ParkingIds.PerimeterRoad, true)),
+            };
+        }
+
+        public SettingsBag Randomize(SettingsBag current, uint seed, ICollection<string> locked)
+        {
+            var r = (current ?? Defaults()).Clone();
+            var rng = Seeds.Rng(seed == 0 ? 1u : seed, "parking.randomize");
+            bool Free(string id) => locked == null || !locked.Contains(id);
+            string[] angles = { "90", "90", "60", "45" };
+            if (Free(ParkingIds.StallAngle)) r.Values[ParkingIds.StallAngle] = angles[rng.NextInt(angles.Length)];
+            string[] greens = { "medians", "medians", "edges", "none" };
+            if (Free(ParkingIds.Greenery)) r.Values[ParkingIds.Greenery] = greens[rng.NextInt(greens.Length)];
+            if (Free(ParkingIds.MedianDepth)) r.Values[ParkingIds.MedianDepth] = Math.Round(rng.NextDouble(1.5, 4.5) * 2) / 2;
+            if (Free(ParkingIds.CrossEvery)) r.Values[ParkingIds.CrossEvery] = (double)rng.NextInt(0, 15);
+            if (Free(ParkingIds.PerimeterRoad)) r.Values[ParkingIds.PerimeterRoad] = rng.NextFloat() < 0.75f;
+            if (Free(ParkingIds.RowEndPlanting)) r.Values[ParkingIds.RowEndPlanting] = rng.NextFloat() < 0.7f;
+            if (Free(ParkingIds.LanternSpacing)) r.Values[ParkingIds.LanternSpacing] = (double)rng.NextInt(20, 41);
+            if (Free(ParkingIds.PlantingDensity)) r.Values[ParkingIds.PlantingDensity] = (double)(rng.NextInt(6, 17) * 5);
+            return r;
+        }
+
+        // ───────────────────────────── readiness & markers ─────────────────────────────
+
+        public Readiness CheckReady(AreaInput input)
+        {
+            int two = 0, entry = 0, exit = 0;
+            if (input?.Markers != null)
+                foreach (var m in input.Markers)
+                {
+                    if (m.Kind == ParkingIds.KindEntrance) two++;
+                    else if (m.Kind == ParkingIds.KindEntry) entry++;
+                    else if (m.Kind == ParkingIds.KindExit) exit++;
+                }
+            if (two > 0 || (entry > 0 && exit > 0)) return new Readiness { Ready = true };
+            string reason = entry > 0 ? K + "Reason.EntryWithoutExit"
+                : exit > 0 ? K + "Reason.ExitWithoutEntry"
+                : K + "Reason.NeedsEntrance";
+            return new Readiness { Ready = false, NextStepKey = K + "Step.PlaceEntrance", ReasonKey = reason };
+        }
+
+        public List<EdgeMarker> SuggestMarkers(AreaInput input)
+        {
+            try
+            {
+                return EntranceSuggest.Suggest(input, new ParkingSettings(input?.Settings));
+            }
+            catch (Exception)
+            {
+                return new List<EdgeMarker>();
+            }
+        }
+
+        // ───────────────────────────── plan ─────────────────────────────
+
+        public AreaPlan Plan(AreaInput input, CancellationToken cancel)
+        {
+            var plan = new AreaPlan { GeneratorId = LayerId };
+            if (input?.Shape?.Ring == null || input.Shape.Ring.Length < 3)
+            {
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = K + "Issue.BadShape" });
+                return plan;
+            }
+            try
+            {
+                return PlanBuilder.Build(input, new ParkingSettings(input.Settings), this, cancel);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception e)
+            {
+                plan.Issues.Add(new PlanIssue
+                {
+                    Severity = IssueSeverity.Error, Key = K + "Issue.LayoutFailed",
+                    Args = new object[] { e.GetType().Name + ": " + e.Message },
+                });
+                return plan;
+            }
+        }
+    }
+}
