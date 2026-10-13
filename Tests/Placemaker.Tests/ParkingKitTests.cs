@@ -249,7 +249,7 @@ namespace Placemaker.Tests
                 if (!SurfaceAcceptance.IsAccepted(r2)) q.RejectedSurfaces++;
                 for (int i = 0; i < r2.Length; i++) q.MinSurfaceEdge = Math.Min(q.MinSurfaceEdge, math.distance(r2[i], r2[(i + 1) % r2.Length]));
             }
-            q.UncoveredFraction = plan.Facts.GetValueOrDefault("uncoveredArea", 0) / Math.Max(1, L.LotArea);
+            q.UncoveredFraction = L.UncoveredArea / Math.Max(1, L.LotArea);
             if (sampleCoverage) SampleCoverage(run, q);
             return q;
         }

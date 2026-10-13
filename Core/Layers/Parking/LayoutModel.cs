@@ -125,6 +125,8 @@ namespace Placemaker.Core.Layers.Parking
         public double RowAngleDeg;
         public double LotArea;
         public double AisleLength;
+        /// <summary>Lot area not covered by an accepted surface (m²), set when the plan is emitted.</summary>
+        public double UncoveredArea;
 
         public IEnumerable<Bay> LiveBays { get { foreach (var b in Bays) if (!b.Removed) yield return b; } }
         public IEnumerable<DriveLine> LiveLines { get { foreach (var l in Lines) if (!l.Removed) yield return l; } }

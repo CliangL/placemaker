@@ -275,7 +275,7 @@ namespace Placemaker.Tests
             Assert.Equal(p.Objects.Count(o => o.Role == ObjectRole.ParkingBay && o.Asset.Id == "ParkingLotDisabledDecal01"), (int)p.Facts["disabledCapacity"]);
             Assert.True(p.Facts["evCapacity"] >= 2 && p.Facts["disabledCapacity"] >= 3);
             Assert.Equal(p.Facts["evCapacity"] / 2, p.Objects.Count(o => o.Role == ObjectRole.Charger));
-            Assert.Equal(10, p.Facts["fee"]);
+            Assert.Equal(10, p.Facts["parking.fee"]);
             Assert.Single(p.Areas);
             Assert.Equal(AreaRole.Lot, p.Areas[0].Role);
             Assert.Contains(p.Surfaces, s => s.Role == SurfaceRole.Asphalt && s.Asset.Id == "Pavement Surface 01");
@@ -321,7 +321,7 @@ namespace Placemaker.Tests
             AssertClean(r);
             Assert.All(r.Plan.Surfaces, s => Assert.Equal(SurfaceRole.Asphalt, s.Role));
             Assert.DoesNotContain(r.Plan.Objects, o => o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush);
-            Assert.True(r.Plan.Facts["uncoveredArea"] < 1);
+            Assert.True(r.Layout.UncoveredArea < 1);
         }
 
         [Fact]
@@ -370,9 +370,9 @@ namespace Placemaker.Tests
         {
             var r = ParkingKit.Run(Rect, With(("rowAngleMode", "fixed"), ("rowAngle", 30.0)), OneEntrance(Rect));
             AssertClean(r);
-            Assert.Equal(30, r.Plan.Facts["rowAngle"], 3);
+            Assert.Equal(30, r.Layout.RowAngleDeg, 3);
             var across = ParkingKit.Run(Rect, With(("rowAngleMode", "across")), OneEntrance(Rect));
-            Assert.Equal(90, across.Plan.Facts["rowAngle"], 3);
+            Assert.Equal(90, across.Layout.RowAngleDeg, 3);
         }
 
         [Fact]

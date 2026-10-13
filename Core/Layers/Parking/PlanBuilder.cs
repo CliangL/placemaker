@@ -350,9 +350,10 @@ namespace Placemaker.Core.Layers.Parking
             plan.Facts["capacity"] = bays;
             plan.Facts["evCapacity"] = ev;
             plan.Facts["disabledCapacity"] = acc;
-            plan.Facts["fee"] = s.Fee;
-            plan.Facts["uncoveredArea"] = Math.Round(uncovered, 2);
-            plan.Facts["rowAngle"] = Math.Round(layout.RowAngleDeg, 3);
+            // Same key as Game/Economy/ParkingEconomySystem.FeeFact. Note: the build receipt sums facts
+            // over layers, so a recipe with two parking steps would add their fees (docs/proposals/parking.md).
+            plan.Facts["parking.fee"] = s.Fee;
+            layout.UncoveredArea = uncovered;
         }
 
         /// <summary>
