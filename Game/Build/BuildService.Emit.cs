@@ -304,6 +304,8 @@ namespace Placemaker.Game.Build
             {
                 m_Prefab = prefab,
                 m_RandomSeed = randomSeed ?? (int)Seeds.Mix(variation, (uint)key),
+                // Ghost: a colliding object is silently cancelled (hidden, no error icon) like a vanilla brush.
+                m_Flags = _gEmission ? CreationFlags.Optional : 0,
             });
             EntityManager.AddComponent<Updated>(def);
             EntityManager.AddComponentData(def, new ObjectDefinition

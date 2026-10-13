@@ -66,7 +66,7 @@ namespace Placemaker.Game.Build
 
         private enum Step
         {
-            Idle, Prepare, WaitReplaced, ActivateTool, Terraform, EmitNets, EmitRest, WaitTemps, Validate,
+            Idle, Prepare, WaitReplaced, ActivateTool, Terraform, Paint, EmitNets, EmitRest, WaitTemps, Validate,
             ResetForRetry, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
         }
 
@@ -133,6 +133,7 @@ namespace Placemaker.Game.Build
             _registry = World.GetOrCreateSystemManaged<GroupRegistrySystem>();
             _clones = World.GetOrCreateSystemManaged<SurfaceCloneSystem>();
             InitOwner();
+            InitGhost();
             _tempQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<PrefabRef>() },
@@ -161,6 +162,7 @@ namespace Placemaker.Game.Build
         protected override void OnDestroy()
         {
             if (ReferenceEquals(Services.Build, this)) Services.Build = null;
+            Placemaker.Game.Preview.GhostPreview.Unregister(this);
             base.OnDestroy();
         }
 
@@ -172,6 +174,7 @@ namespace Placemaker.Game.Build
             _toolActivated = false;
             _previousTool = null;
             ResetTransaction();
+            ResetGhost();   // the temporaries die with the old world
             _status = new BuildStatus { Phase = BuildPhase.Idle };
         }
 
@@ -199,6 +202,7 @@ namespace Placemaker.Game.Build
                 SetFailed("Placemaker.Build.CatalogNotReady");
                 return false;
             }
+            DropGhostForBuild();   // the build's first Clear frame removes the ghost's temporaries
             ResetTransaction();
             _request = request;
             _startFrame = UnityEngine.Time.frameCount;
@@ -268,7 +272,7 @@ namespace Placemaker.Game.Build
         [Preserve]
         protected override void OnUpdate()
         {
-            if (_step == Step.Idle) return;
+            if (_step == Step.Idle) { GhostWatchdog(); return; }
             int frame = UnityEngine.Time.frameCount;
             _heightsValid = false;   // terrain data handles are only valid within the frame they were fetched
             try
@@ -285,6 +289,7 @@ namespace Placemaker.Game.Build
                     case Step.WaitReplaced: DoWaitReplaced(frame); break;
                     case Step.ActivateTool: DoActivateTool(frame); break;
                     case Step.Terraform: DoTerraform(frame); break;
+                    case Step.Paint: DoPaint(frame); break;
                     case Step.EmitNets: DoEmitNets(); break;
                     case Step.EmitRest: DoEmitRest(); break;
                     case Step.WaitTemps: DoWaitTemps(frame); break;
@@ -316,7 +321,7 @@ namespace Placemaker.Game.Build
         private void DoPrepare()
         {
             _work = PlanWork.Flatten(_request.Plan, _excluded);
-            if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0)
+            if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0 && !HasPaint())
             {
                 ForceIdle(BuildPhase.Failed, "Placemaker.Build.NothingToBuild");
                 return;
@@ -355,6 +360,18 @@ namespace Placemaker.Game.Build
                 return;
             }
             if (_toolSystem.activeTool != _tool) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Interrupted"); return; }
+            if (_instant)
+            {
+                // Instant build: the ghost's temporaries ARE the build — no Clear, no re-emission.
+                if (frame - _stepFrame < ToolSwitchFrames + 1) return;
+                CreateRecord();
+                EmitOwnerArea();
+                _status.Phase = BuildPhase.Materializing;
+                _status.Progress = 0.4f;
+                _lastMatched = -1;
+                Go(Step.WaitTemps);
+                return;
+            }
             if (frame - _stepFrame == 1)
             {
                 // Clear leftovers of the previous tool so our single Apply never applies them.
@@ -365,7 +382,7 @@ namespace Placemaker.Game.Build
             if (frame - _stepFrame < ToolSwitchFrames + 1) return;
             CreateRecord();
             _status.Phase = BuildPhase.Materializing;
-            Go(_work.Terraform.Count > 0 ? Step.Terraform : Step.EmitNets);
+            Go(_work.Terraform.Count > 0 ? Step.Terraform : AfterTerraform());
             if (_step == Step.Terraform) BeginTerraform();
         }
 
@@ -668,6 +685,7 @@ namespace Placemaker.Game.Build
             _ownerSuppressed = false;
             _skipped.Clear();
             _notedRings.Clear();
+            _instant = false;
             if (_toolActivated) RestoreTool();
         }
 

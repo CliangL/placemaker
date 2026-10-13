@@ -37,6 +37,18 @@ namespace Placemaker.Core
         public const string Decoration = "decoration";     // misc props
         public const string Fence = "fence";               // net fences or fence props
         public const string Bollard = "bollard";
+        public const string Rock = "rock";                 // rocks, boulders, cliffs (natural decor, "rocky outcrop")
+
+        // Decals (static objects whose meshes are all decal meshes). "decal" = every usable decal;
+        // the themed sub-categories are automatic pools for decal scatter.
+        public const string Decal = "decal";
+        public const string DecalLeaves = "decal.leaves";
+        public const string DecalDirt = "decal.dirt";
+        public const string DecalCracks = "decal.cracks";
+        public const string DecalPuddles = "decal.puddles";
+        public const string DecalPaving = "decal.paving";
+        public const string DecalMarkings = "decal.markings";
+        public const string DecalGraffiti = "decal.graffiti";
 
         // Networks
         public const string Road = "net.road";

@@ -76,6 +76,11 @@ namespace Placemaker.Game.Assets
         [Preserve]
         protected override void OnUpdate()
         {
+            if (_ready)
+            {
+                try { UpdateIcons(); MaybeWriteDump(false); }
+                catch (Exception e) { Mod.Log.Warn("Placemaker icon update failed: " + e.Message); }
+            }
             if (!_scanRequested && ++_framesSinceCheck < RecheckFrames) return;
             _framesSinceCheck = 0;
             int count = _prefabQuery.CalculateEntityCount();
@@ -339,6 +344,7 @@ namespace Placemaker.Game.Assets
             var allByName = new Dictionary<string, Entity>(StringComparer.Ordinal);
             var info = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
             var tags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            var iconSources = new Dictionary<string, string>(StringComparer.Ordinal);
             int failed = 0;
             using var entities = _prefabQuery.ToEntityArray(Allocator.Temp);
 
@@ -358,7 +364,7 @@ namespace Placemaker.Game.Assets
                     {
                         Id = prefab.name,
                         DisplayName = DisplayName(prefab),
-                        Icon = Icon(prefab),
+                        Icon = ResolveIcon(prefab, entity, (traits & AssetTraits.Surface) != 0, iconSources),
                         Prefab = entity,
                         Info = Info(entity, prefab.name),
                     };
@@ -369,6 +375,9 @@ namespace Placemaker.Game.Assets
                     foreach (var c in categories)
                         if (AssetHeuristics.AutoEligible(c, prefab.name, traits)) { t.Add("auto:" + c); anyAuto = true; }
                     if (anyAuto) t.Add("auto");
+                    // Decal picker tabs (UI): "theme:leaves", "theme:dirt", … from the themed sub-category.
+                    foreach (var c in categories)
+                        if (c.StartsWith(AssetCategories.Decal + ".", StringComparison.Ordinal)) t.Add("theme:" + c.Substring(AssetCategories.Decal.Length + 1));
                     tags[prefab.name] = t;
                     byName[prefab.name] = item;
                     info[prefab.name] = item.Info;
@@ -403,6 +412,8 @@ namespace Placemaker.Game.Assets
             _infoMap = info;
             if (changed || !_ready) _version++;
             _ready = true;
+            QueueIconWork(_byName, iconSources);
+            MaybeWriteDump(true);
 
             var summary = new StringBuilder();
             foreach (var kv in _byCategory) summary.Append(kv.Key).Append('=').Append(kv.Value.Count).Append(' ');
@@ -456,6 +467,7 @@ namespace Placemaker.Game.Assets
             t |= AssetTraits.StaticObject;
             if (prefab is BuildingPrefab || EntityManager.HasComponent<BuildingData>(e)) t |= AssetTraits.Building;
             if (prefab is ObjectGeometryPrefab g && g.m_Meshes != null && g.m_Meshes.Length > 0) t |= AssetTraits.HasMesh;
+            if (IsDecalOnly(e)) t |= AssetTraits.DecalMesh;
             if (EntityManager.HasComponent<PlantData>(e)) t |= AssetTraits.Plant;
             if (EntityManager.HasComponent<TreeData>(e)) t |= AssetTraits.Tree;
             if (EntityManager.HasComponent<StreetLightData>(e)) t |= AssetTraits.StreetLight;
@@ -504,6 +516,25 @@ namespace Placemaker.Game.Assets
             return t;
         }
 
+        /// <summary>
+        /// A decal object: it has sub meshes and every one is a decal mesh. MeshSystem sets MeshFlags.Decal
+        /// on a RenderPrefab's MeshData when the prefab has DecalProperties (decal material/projector), so
+        /// this is the game's own signal, independent of names.
+        /// </summary>
+        private bool IsDecalOnly(Entity e)
+        {
+            if (!EntityManager.HasBuffer<SubMesh>(e)) return false;
+            var meshes = EntityManager.GetBuffer<SubMesh>(e, true);
+            if (meshes.Length == 0) return false;
+            for (int i = 0; i < meshes.Length; i++)
+            {
+                var m = meshes[i].m_SubMesh;
+                if (m == Entity.Null || !EntityManager.HasComponent<MeshData>(m)) return false;
+                if ((EntityManager.GetComponentData<MeshData>(m).m_State & MeshFlags.Decal) == 0) return false;
+            }
+            return true;
+        }
+
         private AssetInfo Info(Entity e, string name)
         {
             var info = new AssetInfo { Id = name };
@@ -538,12 +569,6 @@ namespace Placemaker.Game.Assets
             }
             catch (Exception) { }
             return prefab.name;
-        }
-
-        private static string Icon(PrefabBase prefab)
-        {
-            try { return ImageSystem.GetThumbnail(prefab) ?? ""; }
-            catch (Exception) { return ""; }
         }
 
         /// <summary>

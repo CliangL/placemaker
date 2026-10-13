@@ -180,7 +180,7 @@ namespace Placemaker.Tests
         [InlineData(AssetCategories.Decoration, "SportParkScoreboard01", false)]
         [InlineData(AssetCategories.Decoration, "ParkInfosign01", false)]
         [InlineData(AssetCategories.Decoration, "DogParkPlatform01", false)]
-        [InlineData(AssetCategories.Decoration, "ParkBoulder01", true)]
+        [InlineData(AssetCategories.Rock, "ParkBoulder01", true)]
         [InlineData(AssetCategories.Decoration, "ConstructionCone01", false)]
         [InlineData(AssetCategories.Fence, "EU_FenceResidentialPieceLow01", true)]
         [InlineData(AssetCategories.Fence, "FenceIndustrialPieceLow01", false)]
@@ -222,6 +222,55 @@ namespace Placemaker.Tests
             Assert.False(AssetHeuristics.IsGeneralParkPalette("SportPark01"));
             Assert.False(AssetHeuristics.IsGeneralParkPalette("SkatePark01"));
             Assert.False(AssetHeuristics.IsGeneralParkPalette("DogPark02"));
+        }
+
+        [Theory]
+        [InlineData("PortableToilet01", true)]
+        [InlineData("Outhouse01", true)]
+        [InlineData("PublicWC01", true)]
+        [InlineData("WindowCleaningPlatform01", false)]          // "windowCleaning" contains "wC" (playtest 2)
+        [InlineData("WindowCleaningPlatformHoists01", false)]
+        [InlineData("ToiletPaperSign01", false)]
+        public void RestroomsAreRealRestroomsOnly(string name, bool restroom)
+        {
+            Assert.Equal(restroom, AssetHeuristics.Classify(name, Prop).Contains(AssetCategories.Restroom));
+        }
+
+        [Fact]
+        public void PlanterBoxesAreNotBushes()
+        {
+            var plant = Prop | AssetTraits.Plant;
+            Assert.DoesNotContain(AssetCategories.Bush, AssetHeuristics.Classify("GreenBushCity01", plant));
+            Assert.Contains(AssetCategories.Planter, AssetHeuristics.Classify("FlowerBushCity02", plant));
+            Assert.Contains(AssetCategories.Bush, AssetHeuristics.Classify("GreenBushWild01", plant));
+            Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Bush, "FlowerBushCity01", plant));
+            Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Bush, "FlowerBushWildDead02", plant));
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Bush, "GreenBushWildAdult01", plant));
+        }
+
+        [Fact]
+        public void RocksAreTheirOwnCategory()
+        {
+            Assert.Contains(AssetCategories.Rock, AssetHeuristics.Classify("Rock12", Prop));
+            Assert.Contains(AssetCategories.Rock, AssetHeuristics.Classify("Boulder03", Prop));
+            Assert.DoesNotContain(AssetCategories.Rock, AssetHeuristics.Classify("SpaceRocket01", Prop));
+            Assert.DoesNotContain(AssetCategories.Rock, AssetHeuristics.Classify("BillboardHuge01 - GrindARock", Prop));
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Rock, "Boulder03", Prop));
+        }
+
+        [Fact]
+        public void DecalsAreClassifiedByMeshAndThemedByName()
+        {
+            var decal = Prop | AssetTraits.DecalMesh;
+            var leaves = AssetHeuristics.Classify("LeavesDecal01", decal);
+            Assert.Contains(AssetCategories.Decal, leaves);
+            Assert.Contains(AssetCategories.DecalLeaves, leaves);
+            Assert.Contains(AssetCategories.DecalMarkings, AssetHeuristics.Classify("AlphabetDecalA", decal));
+            Assert.Contains(AssetCategories.DecalGraffiti, AssetHeuristics.Classify("Graffiti03", decal));
+            Assert.Empty(AssetHeuristics.Classify("Graffiti03", Prop));           // not a decal mesh: still excluded
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Decal, "OilStain01", decal));
+            Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Decal, "AlphabetDecalA", decal));
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.DecalMarkings, "AlphabetDecalA", decal));
         }
 
         [Fact]

@@ -27,6 +27,8 @@
   "Placemaker.Build.PartsExcluded": "Built. Parts that collided with existing things were left out.",
   "Placemaker.Build.AssetsMissing": "Built. Some assets are not available in this playset and were skipped.",
   "Placemaker.Build.TerraformUnavailable": "Built without terrain changes: the terrain tools are not available.",
+  "Placemaker.Build.PaintUnavailable": "Built without terrain painting: the terrain material brush is not available.",
+  "Placemaker.Ghost.Failed": "The live preview could not be built; showing the sketch instead.",
   "Placemaker.Build.TerraformIncomplete": "Built. The terrain could not be fully shaped in time.",
   "Placemaker.Build.NoWater": "Built. The lake basin is too shallow, so no water was added.",
 
