@@ -174,3 +174,9 @@ Engine: `RecipeStep.Places` = list of PlaceRule {Key, Layer step, Shape, Anchor,
 PlaceSolver turns rules into rings inside the parent region (respecting each other and the outline); the
 composer reserves them for the parent (Reserved.Polygons + connection markers on their outlines) and runs each
 place's step on its ring with tag "place:<key>". Parents route paths/drives to place entrances.
+
+**Formula vs hand-tuning (user, same day):** recipes stay formulas ("park with a circle in it", "split down the
+middle with a campsite", "corner square that's a parking lot"). Optionally, per build, the player can grab a
+formula-placed place on the map and move/resize/reshape it or redraw it freehand. That override belongs to this
+build only (stored in the build receipt as `PlaceOverride {Key, Ring}`; Edit restores it), never to the recipe.
+A "Reset to formula" button drops the override.
