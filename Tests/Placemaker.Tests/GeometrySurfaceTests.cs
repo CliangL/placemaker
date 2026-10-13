@@ -70,7 +70,7 @@ namespace Placemaker.Tests
             Assert.Equal(SurfaceVerdict.ShortEdge, SurfaceAcceptance.Diagnose(new[] { new float2(0, 0), new float2(10, 0), new float2(10, 10), new float2(9.86f, 10) , new float2(0, 10) }));
             Assert.Equal(SurfaceVerdict.NotSimple, SurfaceAcceptance.Diagnose(new[] { new float2(0, 0), new float2(10, 10), new float2(10, 0), new float2(0, 10) }));
             // 15 cm wide strip: the 0.1 m inset from both sides crosses over.
-            var strip = new[] { new float2(0, 0), new float2(50, 0), new float2(50.3f, 0.075f), new float2(50, 0.15f), new float2(0, 0.15f), new float2(-0.3f, 0.075f) };
+            var strip = new[] { new float2(0, 0), new float2(50, 0), new float2(50.5f, 0.075f), new float2(50, 0.15f), new float2(0, 0.15f), new float2(-0.5f, 0.075f) };
             Assert.Equal(SurfaceVerdict.InsetCollapses, SurfaceAcceptance.Diagnose(strip));
             Assert.Equal(SurfaceVerdict.InsetCollapses, SurfaceAcceptance.Diagnose(G.Dumbbell(20, 5, 0.15f, World)));
             // Small triangle (inradius 9 cm): the 0.1 m inset flips it.
@@ -85,7 +85,7 @@ namespace Placemaker.Tests
         [Fact]
         public void GameWouldKeep_IgnoresOurMargins()
         {
-            // 0.2 m edge: our policy refuses (< 0.3 m), the plain model keeps it.
+            // 0.2 m edge: our policy refuses (< 0.4 m), the plain model keeps it.
             var ring = new[] { new float2(0, 0), new float2(10, 0), new float2(10, 10), new float2(9.8f, 10), new float2(0, 10) };
             Assert.False(SurfaceAcceptance.IsAccepted(ring));
             Assert.True(SurfaceAcceptance.GameWouldKeep(ring));

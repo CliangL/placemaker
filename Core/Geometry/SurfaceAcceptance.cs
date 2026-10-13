@@ -36,7 +36,7 @@ namespace Placemaker.Core.Geometry
     public static class SurfaceAcceptance
     {
         public const float GameInset = 0.1f;
-        public const float MinEdge = 0.3f;
+        public const float MinEdge = 0.4f;
         /// <summary>Rings whose mean width 2A/P is below this (m) are hairlines: dropped, never rescued.</summary>
         public const float HairlineWidth = 0.05f;
 
