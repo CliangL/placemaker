@@ -16,4 +16,5 @@
       "mod.json": ["../mod.json"]
     }
   },
-} 
+  "exclude": ["node_modules", "build", "mock/dist", "mock/tests", "playwright.config.js"]
+}

@@ -202,7 +202,7 @@
 // ── body ──
 .bodyWrap {
     @include col;
-    max-height: 440rem;
+    max-height: 380rem;
     overflow-y: auto;
 }
 
@@ -241,12 +241,29 @@
 .footInfo {
     @include row;
     flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     margin-right: 10rem;
 }
 
 .reason {
     @include row;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.reassure {
+    @include row;
+    min-width: 0;
+    color: $c-text-faint;
+}
+
+.reassureText {
+    margin-left: 6rem;
+    font-size: var(--fontSizeXS);
+    color: $c-text-dim;
+    @include ellipsis;
 }
 
 .reasonText {
@@ -258,7 +275,8 @@
 
 .quick {
     @include row;
-    flex-wrap: wrap;
+    min-width: 0;
+    overflow: hidden;
     transition-property: opacity;
     transition-duration: $t-med;
 }
@@ -419,6 +437,7 @@
 .compactInfo {
     @include row;
     flex: 1 1 auto;
+    min-width: 0;
     margin-left: 10rem;
     margin-right: 4rem;
     overflow: hidden;

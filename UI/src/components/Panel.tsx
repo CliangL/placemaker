@@ -42,7 +42,7 @@ const StageBar = ({ state }: { state: ToolState }) => {
                 const el = (
                     <button
                         type="button"
-                        data-testid={`stage-${st.id}`}
+                        data-testid={`stagebar-${st.id}`}
                         data-state={current ? "current" : reachable ? "reachable" : "locked"}
                         className={classNames(s.stageItem, { [s.stageCurrent]: current, [s.stageReachable]: reachable, [s.stageLocked]: !current && !reachable })}
                         onClick={(e) => {
@@ -101,7 +101,7 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
 };
 
 function quickStats(summary: Summary) {
-    return summary.stats.filter((x) => x.unit === "count").slice(0, 2);
+    return summary.stats.filter((x) => x.unit === "count").slice(0, 1);
 }
 
 const Footer = ({ state, summary, blockedReason }: { state: ToolState; summary: Summary; blockedReason: string | null }) => {
@@ -110,7 +110,7 @@ const Footer = ({ state, summary, blockedReason }: { state: ToolState; summary: 
     const enabled = p.enabled && !blockedReason;
     const reason = blockedReason ?? (p.reason ? tl(p.reason) : "");
     const pending = summary.stale || state.planning;
-    const showNumbers = (state.stage === "design" || state.stage === "review") && summary.ready;
+    const showNumbers = state.stage === "design" && summary.ready;
     const label = tl(p.label, t("Placemaker.UI.Primary.Next", "Next"));
     const button = (
         <button
@@ -160,6 +160,11 @@ const Footer = ({ state, summary, blockedReason }: { state: ToolState; summary: 
                     </div>
                 ) : state.stage === "area" ? (
                     <AreaReadout state={state} compact />
+                ) : state.stage === "review" ? (
+                    <div className={s.reassure}>
+                        <Icon name="undo" size={14} />
+                        <div className={s.reassureText}>{t("Placemaker.UI.Review.Reassure", "Not quite right? Click Design or Area above — nothing is lost.")}</div>
+                    </div>
                 ) : null}
             </div>
             {!enabled && reason ? (
@@ -307,7 +312,7 @@ export const PlacemakerPanel = () => {
                                     )}
                                     {state.anarchy?.available ? (
                                         <Btn
-                                            icon="warning"
+                                            icon="anarchy"
                                             iconSize={15}
                                             selected={state.anarchy.enabled}
                                             title={t("Placemaker.UI.Anarchy", "Anarchy")}

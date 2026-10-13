@@ -41,7 +41,14 @@ export function modeOptions(t: TFunc) {
     ];
 }
 
-export const AreaReadout = ({ state, compact }: { state: ToolState; compact?: boolean }) => {
+const HOWTO: Record<string, [string, string]> = {
+    draw: ["Placemaker.UI.Area.HowDraw", "Click corners on the map, then click the first corner to finish."],
+    block: ["Placemaker.UI.Area.HowBlock", "Click a city block. Shift+click adds the next one."],
+    paint: ["Placemaker.UI.Area.HowPaint", "Paint over the map with the left mouse button; the right one erases."],
+    perimeter: ["Placemaker.UI.Area.HowPerimeter", "Click the intersections around the area, one after another."],
+};
+
+export const AreaReadout =({ state, compact }: { state: ToolState; compact?: boolean }) => {
     const { t, tl } = useT();
     const a = state.area;
     if (a.problem) {
@@ -136,7 +143,14 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                 </div>
             ) : null}
             <div className={s.areaFoot}>
-                <AreaReadout state={state} />
+                <Icon name={state.area.closed ? "check" : "info"} size={15} color={state.area.closed ? "#6fdc8c" : "#8fd1ff"} />
+                <div className={s.areaHint} data-testid="area-hint">
+                    {state.area.closed
+                        ? t("Placemaker.UI.Area.Adjust", "Drag corners to adjust. You can change the shape at any time, even later.")
+                        : HOWTO[state.areaMode]
+                        ? t(HOWTO[state.areaMode][0], HOWTO[state.areaMode][1])
+                        : ""}
+                </div>
                 {state.area.pointCount > 0 ? (
                     <Btn icon="trash" iconSize={15} label={t("Placemaker.UI.Area.Clear", "Clear")} onClick={act.clearArea} testId="clear-area" />
                 ) : null}

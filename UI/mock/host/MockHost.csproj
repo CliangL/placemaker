@@ -11,6 +11,8 @@
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>Placemaker.MockHost</AssemblyName>
+    <!-- net9.0 as specified, but run on whatever newer runtime is installed (e.g. only .NET 10). -->
+    <RollForward>Major</RollForward>
     <RootNamespace>Placemaker.MockHost</RootNamespace>
     <NoWarn>$(NoWarn);CS1591;CS0649</NoWarn>
     <ManagedPath Condition="'$(ManagedPath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II\Cities2_Data\Managed</ManagedPath>

@@ -308,7 +308,7 @@ const MarkersEditor = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
                             testId={`markers-${kind}`}
                             label={
                                 active
-                                    ? t("Placemaker.UI.Markers.Placing", "Placing {0}… click the outline", [plural])
+                                    ? t("Placemaker.UI.Markers.Active", "Done — {1} placed", [plural, count])
                                     : count
                                     ? t("Placemaker.UI.Markers.PlaceN", "Place {0} ({1})", [plural, count])
                                     : t("Placemaker.UI.Markers.Place", "Place {0}", [plural])
@@ -352,7 +352,7 @@ export const ControlList = ({ step, layer, state }: RowCtx) => {
                 <ControlRow key={c.id} c={c} ctx={ctx} />
             ))}
             {more.length ? (
-                <Foldout title={t("Placemaker.UI.MoreOptions", "More options")} count={more.length} testId="more-options">
+                <Foldout title={t("Placemaker.UI.MoreOptions", "More options")} count={more.length} testId="more-options" memoryKey={"more:" + layer.id}>
                     {groups.map(([g, list]) => (
                         <div key={g || "_"} className={s.group}>
                             {groups.length > 1 && g ? <div className={s.groupTitle}>{t("Placemaker.UI.Group." + g, humanize(g))}</div> : null}

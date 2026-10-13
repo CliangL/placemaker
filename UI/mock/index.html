@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Placemaker – UI mock</title>
+<link rel="stylesheet" href="dist/mock.css">
+<style>
+/* Stand-ins for the game's CSS variables (values close to CS2 1.6 defaults) and 1rem = 1px at 1080p
+   (main.tsx rescales the root font-size with the window height, like the game does). */
+html {
+  font-size: 1px;
+  --panelColorNormal: rgba(26, 36, 44, 0.84);
+  --panelColorDark: rgba(16, 24, 30, 0.9);
+  --panelBlur: blur(12px);
+  --accentColorNormal: rgb(75, 195, 241);
+  --accentColorLight: rgb(128, 214, 247);
+  --menuText1Normal: #eef4f7;
+  --menuText2Normal: #b6c4cb;
+  --menuBorderColor1: #71848d;
+  --menuHoverColor: #546673;
+  --dividerColor: rgba(255, 255, 255, 0.1);
+  --stroke2: 2rem;
+  --fontFamily: "Overpass", "Segoe UI", Arial, sans-serif;
+  --fontSizeXS: 12rem;
+  --fontSizeS: 14rem;
+  --fontSizeM: 16rem;
+  --fontSizeL: 20rem;
+  --fontSizeXL: 26rem;
+}
+body { margin: 0; overflow: hidden; background: #1c2620; color: #eef4f7; font-family: var(--fontFamily); font-size: 14rem; }
+button, input, select { font: inherit; }
+.game { position: fixed; inset: 0; overflow: hidden; }
+.map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.game-layer { position: absolute; inset: 0; pointer-events: none; }
+.top-left { position: absolute; top: 12rem; left: 12rem; display: flex; gap: 8rem; z-index: 5; }
+.vanilla-round { width: 44rem; height: 44rem; border-radius: 22rem; background: rgba(26, 36, 44, 0.84); }
+.mock-floating { width: 44rem; height: 44rem; border-radius: 22rem; border: 0; background: rgba(26, 36, 44, 0.84); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 9rem; }
+.mock-floating img { width: 26rem; height: 26rem; }
+.mock-floating:hover { background: rgba(60, 80, 92, 0.95); }
+.mock-floating.selected { background: rgb(75, 195, 241); }
+.mock-floating.selected img { filter: brightness(0.15); }
+.vanilla-toolbar { position: absolute; left: 50%; bottom: 14rem; transform: translateX(-50%); display: flex; gap: 2rem; padding: 6rem; border-radius: 12rem; background: rgba(26, 36, 44, 0.84); backdrop-filter: blur(12px); }
+.vt-btn { width: 66rem; height: 66rem; border-radius: 8rem; display: flex; align-items: center; justify-content: center; }
+.vt-btn img { width: 34rem; height: 34rem; opacity: 0.75; }
+.devbar { position: absolute; top: 10rem; right: 10rem; display: flex; align-items: center; gap: 10rem; padding: 6rem 10rem; border-radius: 8rem; background: rgba(8, 14, 18, 0.82); font-size: 12rem; color: #b6c4cb; z-index: 5; }
+.devbar strong { color: #fff; }
+.devbar .ok { color: #6fdc8c; } .devbar .warn { color: #ffb547; }
+.devbar input[type=number] { width: 80rem; background: #0e171c; color: #fff; border: 1px solid #2c3a42; border-radius: 4rem; }
+.devbar select { background: #0e171c; color: #fff; border: 1px solid #2c3a42; border-radius: 4rem; }
+.devbar button { background: #23343d; color: #fff; border: 0; border-radius: 4rem; padding: 3rem 8rem; cursor: pointer; }
+.info-panel { position: absolute; top: 70rem; right: 12rem; width: 340rem; border-radius: 6rem; background: rgba(26, 36, 44, 0.9); backdrop-filter: blur(12px); overflow: hidden; }
+.ip-title { padding: 12rem 14rem; font-size: 18rem; font-weight: bold; background: rgba(0, 0, 0, 0.25); }
+.ip-general { padding: 8rem 14rem; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.ip-row { display: flex; justify-content: space-between; font-size: 13rem; color: #b6c4cb; }
+.mock-tooltip { z-index: 1000; pointer-events: none; padding: 8rem 11rem; max-width: 300rem; border-radius: 4rem; background: rgba(240, 246, 248, 0.97); color: #13222b; font-size: 13rem; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+.mock-tooltip [class^="title"], .mock-tooltip [class*=" title"] { color: #0b1d26 !important; }
+.mock-tooltip [class^="description"], .mock-tooltip [class*=" description"] { color: #2a3c45 !important; }
+.mock-tooltip [class^="key_"] { color: #13222b !important; background: rgba(0,0,0,0.08) !important; border-color: rgba(0,0,0,0.15) !important; }
+.toast { position: absolute; top: 64rem; left: 50%; transform: translateX(-50%); padding: 8rem 16rem; border-radius: 18rem; background: rgba(26, 36, 44, 0.92); color: #fff; font-size: 14rem; }
+</style>
+</head>
+<body><div id="root"></div><script src="dist/mock.js"></script></body>
+</html>

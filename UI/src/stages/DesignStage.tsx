@@ -57,7 +57,7 @@ const RecipeRow = ({ catalog, design }: { catalog: Catalog; design: DesignState 
                             }}
                         >
                             <div className={s.recipeIcon} style={on ? { backgroundColor: color } : undefined}>
-                                <Icon name={r.icon || r.id} size={20} color={on ? "#0b1d26" : color} />
+                                <Icon name={r.icon || r.id} size={18} color={on ? "#0b1d26" : color} />
                             </div>
                             <div className={s.recipeName}>{name}</div>
                             {r.custom ? (

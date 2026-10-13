@@ -188,20 +188,31 @@ export const Switch = ({ on, onChange, testId }: { on: boolean; onChange: (v: bo
     </button>
 );
 
+/** Open/closed state of foldouts that should be remembered per layer for the session. */
+const FOLDOUT_MEMORY = new Map<string, boolean>();
+
 export const Foldout = ({
     title,
     count,
     children,
     initiallyOpen = false,
     testId,
+    memoryKey,
 }: {
     title: ReactNode;
     count?: number;
     children: ReactNode;
     initiallyOpen?: boolean;
     testId?: string;
+    /** Remember open/closed under this key (e.g. "more:park") across recipe switches. */
+    memoryKey?: string;
 }) => {
-    const [open, setOpen] = useState(initiallyOpen);
+    const [openState, setOpenState] = useState(initiallyOpen);
+    const open = memoryKey ? FOLDOUT_MEMORY.get(memoryKey) ?? initiallyOpen : openState;
+    const setOpen = (v: boolean) => {
+        if (memoryKey) FOLDOUT_MEMORY.set(memoryKey, v);
+        setOpenState(v);
+    };
     return (
         <div className={s.foldout} data-testid={testId}>
             <button
