@@ -71,6 +71,15 @@ namespace Placemaker.Core.Geometry
         {
             var inset = GameInsetRing(r);
             if (!Poly.IsSimple(inset) || Poly.SignedAreaD(inset) <= 0) return SurfaceVerdict.InsetCollapses;
+            // An edge running backwards after the inset means that part of the ring collapsed through
+            // itself. A triangle even comes out point-mirrored but still CCW (the game would keep it as
+            // a garbage triangle); policy: refuse.
+            int n = r.Length;
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                if (math.dot(inset[j] - inset[i], r[j] - r[i]) <= 0) return SurfaceVerdict.InsetCollapses;
+            }
             return EarClip.GameTriangulate(inset) == r.Length - 2 ? SurfaceVerdict.Accepted : SurfaceVerdict.EarClipFails;
         }
 
