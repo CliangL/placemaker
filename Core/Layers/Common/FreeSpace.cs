@@ -117,7 +117,7 @@ namespace Placemaker.Core.Layers.Common
         {
             // b may equal ring.Length (wraps to 0)
             int n = ring.Length;
-            var stack = new Stack<int2>();
+            var stack = new WorkStack<int2>();
             stack.Push(new int2(a, b));
             while (stack.Count > 0)
             {
@@ -152,7 +152,7 @@ namespace Placemaker.Core.Layers.Common
             {
                 Array.Clear(label, 0, label.Length);
                 int next = 0;
-                var stack = new Stack<int>();
+                var stack = new WorkStack<int>();
                 for (int i = 0; i < m.Length; i++)
                 {
                     if (!m[i] || label[i] != 0) continue;
@@ -229,7 +229,7 @@ namespace Placemaker.Core.Layers.Common
             public bool CutHoles(bool[] m)
             {
                 var outside = new bool[m.Length];
-                var stack = new Stack<int>();
+                var stack = new WorkStack<int>();
                 for (int x = 0; x < _nx; x++) { Seed(x); Seed((_ny - 1) * _nx + x); }
                 for (int y = 0; y < _ny; y++) { Seed(y * _nx); Seed(y * _nx + _nx - 1); }
                 while (stack.Count > 0)

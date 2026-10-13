@@ -176,7 +176,7 @@ namespace Placemaker.Core.Layers.Park
             if (ctx.B("fence"))
             {
                 var fence = AssetMix.One(ctx.S("fenceAsset"));
-                foreach (var run in ParkPlanting.FenceRuns(region, s.Gates, 3.75f))
+                foreach (var run in Fences.Runs(region, s.Gates, 3.75f))
                     ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
             }
             EmitItems(ctx, s, treeIds, bushIds);

@@ -1,0 +1,208 @@
+// Campground layer (Fill): a loop of narrow paths with pitches along it — each pitch a gravel
+// pad with a tent/caravan, campfire and optional table — restrooms near the paths, and woodland
+// between the pitches. Reuses the park path planner (ported from ParkManager, tomkpunkt,
+// GPL-3.0) and the shared scatter sampler (from ParkingLotTool, KruemelGames, GPL-3.0).
+//
+// Regions: green:N (open ground between pitches, largest also {core}), like the park.
+
+using System;
+using System.Collections.Generic;
+using Placemaker.Core.Layers.Common;
+using Unity.Mathematics;
+
+namespace Placemaker.Core.Layers.Park
+{
+    [AreaGenerator(40)]
+    public sealed class CampgroundLayer : LayerBase
+    {
+        public const string LayerId = "campground";
+
+        protected override string Area => "Campground";
+        public override string Id => LayerId;
+        public override string Icon => "Media/Game/Icons/Forest.svg";
+        public override LayerKind Kind => LayerKind.Fill;
+        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core };
+        public override float MinArea => 600f;
+
+        protected override void DefineControls(ControlSet c)
+        {
+            c.Slider("pitchSize", 10, 7, 16, 0.5, "m", ControlTier.Essential, "pitches").Tip();
+            c.AssetMulti("pitchAssets", AssetCategories.Camping, ControlTier.Essential, "pitches");
+            c.Slider("treeDensity", 60, 0, 200, 5, "perHa", ControlTier.Essential, "planting");
+            c.Toggle("facilities", true, ControlTier.Essential, "facilities").Tip();
+            c.Toggle("campfires", true, ControlTier.More, "pitches");
+            c.Asset("campfireAsset", AssetCategories.Camping, ControlTier.More, "pitches").When("campfires=true");
+            c.Toggle("tables", true, ControlTier.More, "pitches");
+            c.Asset("tableAsset", AssetCategories.Picnic, ControlTier.More, "pitches").When("tables=true");
+            c.Toggle("pads", true, ControlTier.More, "pitches");
+            c.Asset("padSurface", AssetCategories.SurfaceNatural, ControlTier.More, "pitches").When("pads=true");
+            c.Choice("pathWidth", "narrow", ControlTier.More, "layout", "narrow", "wide");
+            c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
+            c.Markers("entrances", ControlTier.More, ParkLayer.EntranceKind);
+            c.Asset("restroomAsset", AssetCategories.Restroom, ControlTier.More, "facilities").When("facilities=true");
+            c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
+            c.Toggle("groundSurface", false, ControlTier.More, "ground");
+            c.Asset("surface", AssetCategories.SurfaceNatural, ControlTier.More, "ground").When("groundSurface=true");
+            c.Toggle("fence", false, ControlTier.More, "boundary");
+            c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
+            c.RandomRange("pitchSize", 8, 13);
+            c.RandomRange("treeDensity", 30, 120);
+            c.Fixed("facilities");
+        }
+
+        protected override void DefinePresets()
+        {
+            Preset("forest", ("treeDensity", 110.0), ("pitchSize", 9.0), ("pads", true));
+            Preset("meadow", ("treeDensity", 20.0), ("pitchSize", 12.0), ("tables", true));
+            Preset("caravan", ("treeDensity", 35.0), ("pitchSize", 14.0), ("pathWidth", "wide"), ("campfires", false));
+        }
+
+        public override List<EdgeMarker> SuggestMarkers(AreaInput input)
+        {
+            var region = Region.From(input?.Shape?.Ring);
+            return region == null ? new List<EdgeMarker>() : Entrances.Suggest(input, region, ParkLayer.EntranceKind, 1);
+        }
+
+        protected override void PlanCore(LayerContext ctx)
+        {
+            var region = ctx.Region;
+            var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
+            // One entrance is typical for a campground (a reception point); more only if the player places them.
+            var gates = Entrances.Resolve(ctx.Input, region, ParkLayer.EntranceKind, 1);
+            var gatePoints = new List<float2>();
+            foreach (var g in gates) gatePoints.Add(g.Position);
+            var graph = ParkPathPlanner.PlanBest(region, gatePoints,
+                new ParkPathPlanner.Options { Loops = math.max(1, ParkPathPlanner.LoopsByArea(region.Area)), StretchLoop = region.Area > 20000f },
+                Hashing.Mix(ctx.Seed, 0xCA4Fu), ctx.Cancel);
+            var curves = ParkPaths.Build(graph, region, true, ctx.S("pathWidth") == "wide" ? "wide" : "narrow");
+            ParkPaths.Index(curves, occ.Corridors, 100);
+            ctx.Check();
+
+            // Pitches along the paths.
+            var pitchIds = ctx.L("pitchAssets");
+            bool canPitch = AssetAvailability.Require(ctx.Plan, AssetCategories.Camping, pitchIds, Keys.Category(AssetCategories.Camping));
+            float size = ctx.F("pitchSize");
+            var pitches = new List<(float2 c, float2 t, float side)>();
+            if (canPitch)
+                foreach (var cv in curves)
+                    for (float along = 4f + size * 0.5f; along < cv.Length - 4f - size * 0.5f; along += size + 2.5f)
+                    {
+                        var p = cv.At(along, out var t);
+                        var n = new float2(-t.y, t.x);
+                        for (int sideIndex = 0; sideIndex < 2; sideIndex++)
+                        {
+                            float side = sideIndex == 0 ? 1f : -1f;
+                            var c = p + n * side * (cv.HalfWidth + 0.8f + size * 0.5f);
+                            if (!PitchFits(region, occ, c, t, size, gatePoints)) continue;
+                            pitches.Add((c, t, side));
+                            occ.Take(c, size * 0.5f, 1);
+                        }
+                    }
+            ctx.Check();
+
+            // Facilities: one restroom per 25 pitches near the paths, plus one near the entrance.
+            int restrooms = 0;
+            if (ctx.B("facilities") && pitches.Count > 0 &&
+                AssetAvailability.Require(ctx.Plan, AssetCategories.Restroom, new[] { ctx.S("restroomAsset") }, Keys.Category(AssetCategories.Restroom)))
+            {
+                var asset = AssetMix.One(ctx.S("restroomAsset"));
+                float r = AssetMix.FootprintRadius(ctx.Site, asset, 4f);
+                int wanted = math.max(1, (pitches.Count + 24) / 25);
+                for (int i = 0; i < wanted; i++)
+                {
+                    if (!Spots.Find(occ, r, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, (uint)i + 50u), out var spot, null, 0f, 1f)) break;
+                    var toward = occ.Corridors.Nearest(spot, 300f, out var q) >= 0 ? q : region.Centroid;
+                    ctx.Object(spot, math.atan2(toward.x - spot.x, toward.y - spot.y), ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)i));
+                    occ.Take(spot, r, 2);
+                    restrooms++;
+                }
+            }
+
+            // Pitch contents.
+            var campfire = AssetMix.One(ctx.S("campfireAsset"));
+            var table = AssetMix.One(ctx.S("tableAsset"));
+            bool fires = ctx.B("campfires");
+            bool tables = ctx.B("tables") && (ctx.S("tableAsset") != "" || AssetAvailability.Has(AssetCategories.Picnic));
+            for (int i = 0; i < pitches.Count; i++)
+            {
+                var (c, t, side) = pitches[i];
+                var toPath = new float2(t.y, -t.x) * side;   // unit vector from the pitch towards its path
+                if (ctx.B("pads")) ctx.Surface(Region.Rect(c, t, size * 0.5f, size * 0.5f), SurfaceRole.Decorative, AssetMix.One(ctx.S("padSurface")));
+                uint v = Hashing.Mix(ctx.Seed, (uint)i + 7u);
+                var tent = c - toPath * size * 0.15f;
+                ctx.Object(tent, math.atan2(toPath.x, toPath.y), ObjectRole.Furniture, AssetMix.Pick(pitchIds, v), v);
+                if (fires) ctx.Object(c + toPath * size * 0.28f + t * size * 0.28f, 0f, ObjectRole.Furniture, campfire, Hashing.Mix(v, 1u));
+                if (tables) ctx.Object(c + toPath * size * 0.25f - t * size * 0.25f, math.atan2(t.x, t.y), ObjectRole.Furniture, table, Hashing.Mix(v, 2u));
+            }
+            ctx.Check();
+
+            // Open ground between pitches (regions for children) and a clearing on the largest piece that
+            // the woodland leaves free, so a picnic area or playground add-on has room in a dense forest camp.
+            var lawns = FreeSpace.Pieces(region, p => occ.Corridors.Overlaps(p, 0.75f) || NearPitch(pitches, p, size), 2f, 150f, ctx.Cancel);
+            float2 clearing = float2.zero; float clearingRadius = 0f;
+            var largest = lawns.Count > 0 ? Region.From(lawns[0]) : null;
+            if (largest != null)
+            {
+                clearing = largest.DeepestPoint(out float inscribed, (q, cap) => occ.Clearance(q, cap), 16);
+                clearingRadius = math.min(inscribed - 1f, 16f);
+            }
+
+            // Woodland between the pitches.
+            var treeIds = ctx.L("treeSpecies");
+            int trees = (int)math.round(region.Area / 10000f * ctx.F("treeDensity"));
+            int placedTrees = 0;
+            if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
+            {
+                uint clump = Hashing.Mix(ctx.Seed, 0x7EEu);
+                foreach (var p in Scatter.Candidates(region, 4f, Hashing.Mix(ctx.Seed, 0x7EFu), math.min(40000, trees * 25 + 200), ctx.Cancel))
+                {
+                    if (placedTrees >= trees) break;
+                    float chance = Scatter.Clustering(p, 20f, clump, 0.3f);
+                    if (Hashing.Unit(Hashing.Mix(clump, (uint)placedTrees * 131u + (uint)(p.x * 7f))) > chance) continue;
+                    if (clearingRadius >= 6f && math.distance(p, clearing) < clearingRadius + 2.5f) continue;
+                    if (!occ.Free(p, 2.5f, 3f, 1.5f)) continue;
+                    uint v = Hashing.Mix(ctx.Seed, 0x7000u + (uint)placedTrees);
+                    ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(treeIds, v), v, 2 + (int)(v % 2u));
+                    occ.Take(p, 2.5f, 3);
+                    placedTrees++;
+                }
+            }
+
+            if (ctx.B("groundSurface")) ctx.Surface(region.Ring, SurfaceRole.Ground, AssetMix.One(ctx.S("surface")));
+            float pathLength = ParkPaths.Emit(ctx, curves, gates, AssetMix.One(ctx.S("pathAsset")));
+            if (ctx.B("fence"))
+            {
+                var fence = AssetMix.One(ctx.S("fenceAsset"));
+                foreach (var run in Fences.Runs(region, gates, 3.75f)) ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
+            }
+
+            for (int i = 0; i < lawns.Count; i++)
+                if (i == 0) ctx.AddRegion(lawns[i], "green:0", RegionTags.Green, RegionTags.Core);
+                else ctx.AddRegion(lawns[i], "green:" + i, RegionTags.Green);
+
+            ctx.Stat(Keys.StatArea, Math.Round(region.Area), Keys.UnitM2);
+            ctx.Stat(Keys.StatPitches, pitches.Count, Keys.UnitCount);
+            ctx.Stat(Keys.StatPathLength, Math.Round(pathLength), Keys.UnitM);
+            ctx.Stat(Keys.StatTrees, placedTrees, Keys.UnitCount);
+            ctx.Stat(Keys.StatRestrooms, restrooms, Keys.UnitCount);
+            if (pitches.Count == 0 && canPitch) ctx.Issue(IssueSeverity.Warning, "Placemaker.Campground.Issue.NoPitches");
+        }
+
+        private static bool NearPitch(List<(float2 c, float2 t, float side)> pitches, float2 p, float size)
+        {
+            float r = size * 0.75f;
+            foreach (var pi in pitches) if (math.distancesq(pi.c, p) < r * r) return true;
+            return false;
+        }
+
+        private static bool PitchFits(Region region, Occupancy occ, float2 c, float2 t, float size, List<float2> gates)
+        {
+            foreach (var corner in Region.Rect(c, t, size * 0.5f, size * 0.5f))
+                if (!region.ContainsDisc(corner, 1f) || occ.Corridors.Overlaps(corner, 0f, 0.3f)) return false;
+            foreach (var g in gates) if (math.distancesq(g, c) < (size + 8f) * (size + 8f)) return false;
+            // The pad (half-diagonal ≈ 0.71·size) must not touch earlier pitches or reserved items.
+            if (occ.Discs.Overlaps(c, size * 0.5f, 1f)) return false;
+            return occ.Free(c, size * 0.45f, 1f, 0.2f);
+        }
+    }
+}

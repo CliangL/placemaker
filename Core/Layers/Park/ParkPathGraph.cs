@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Park
@@ -233,7 +234,7 @@ namespace Placemaker.Core.Layers.Park
         {
             var seen = new bool[adjacency.Length];
             int count = 0;
-            var stack = new Stack<int>();
+            var stack = new WorkStack<int>();
             for (int s = 0; s < adjacency.Length; s++)
             {
                 if (seen[s] || adjacency[s].Count == 0) continue;
@@ -290,7 +291,7 @@ namespace Placemaker.Core.Layers.Park
         private static void Bridges(int root, int parentEdge, List<int>[] adj, List<PathEdge> edges,
             int[] disc, int[] low, ref int time, HashSet<int> bridges)
         {
-            var stack = new Stack<(int node, int parentEdge, int next)>();
+            var stack = new WorkStack<(int node, int parentEdge, int next)>();
             disc[root] = low[root] = ++time;
             stack.Push((root, parentEdge, 0));
             while (stack.Count > 0)

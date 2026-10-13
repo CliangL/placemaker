@@ -502,56 +502,6 @@ namespace Placemaker.Core.Layers.Park
 
         // ───────────── fence & wildlife ─────────────
 
-        /// <summary>Fence runs along the outline (0.2 m inside), with gaps at gates; long runs split ≤ 60 m per course.</summary>
-        public static List<float2x2> FenceRuns(Region region, List<Gate> gates, float gapHalfWidth)
-        {
-            var runs = new List<float2x2>();
-            var inset = region.InsetVertices(0.2f, 3f);
-            int n = region.Ring.Length;
-            for (int e = 0; e < n; e++)
-            {
-                var a = inset[e]; var b = inset[(e + 1) % n];
-                float len = math.distance(a, b);
-                if (len < 1f) continue;
-                var t = (b - a) / len;
-                var spans = new List<float2> { new float2(0, len) };
-                foreach (var g in gates)
-                {
-                    float proj = math.dot(g.Position - a, t);
-                    var closest = a + t * math.clamp(proj, 0f, len);
-                    if (math.distancesq(g.Position, closest) > 4f) continue;
-                    Cut(spans, proj - gapHalfWidth, proj + gapHalfWidth, len);
-                }
-                spans.Sort((x, y) => x.x.CompareTo(y.x));
-                foreach (var sp in spans)
-                {
-                    float runLen = sp.y - sp.x;
-                    if (runLen < 0.5f) continue;
-                    int pieces = math.max(1, (int)math.ceil(runLen / 60f));
-                    for (int k = 0; k < pieces; k++)
-                    {
-                        float f0 = sp.x + runLen * k / pieces, f1 = sp.x + runLen * (k + 1) / pieces;
-                        runs.Add(new float2x2(a + t * f0, a + t * f1));
-                    }
-                }
-            }
-            return runs;
-        }
-
-        private static void Cut(List<float2> spans, float g0, float g1, float len)
-        {
-            g0 = math.clamp(g0, 0f, len); g1 = math.clamp(g1, 0f, len);
-            if (g1 <= g0) return;
-            for (int i = spans.Count - 1; i >= 0; i--)
-            {
-                var r = spans[i];
-                if (g1 <= r.x || g0 >= r.y) continue;
-                spans.RemoveAt(i);
-                if (g0 - r.x >= 0.5f) spans.Add(new float2(r.x, g0));
-                if (r.y - g1 >= 0.5f) spans.Add(new float2(g1, r.y));
-            }
-        }
-
         /// <summary>Forest animal spawners in the largest groves: one per 2 ha, at most 8 (ParkManager).</summary>
         public static void AnimalSpawners(ParkSite s)
         {
