@@ -54,6 +54,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupGeneral)]
         public bool SnapToRoadsWhenDrawing { get; set; }
 
+        /// <summary>Drawn/painted areas are trimmed to the edge of existing roads before planning (AreaClip).</summary>
+        [SettingsUISection(SectionMain, GroupGeneral)]
+        public bool KeepOffExistingRoads { get; set; }
+
         // ───────────── Keys ─────────────
 
         [SettingsUIKeyboardBinding(BindingKeyboard.A, ActionToggleTool, ctrl: true, shift: true)]
@@ -208,6 +212,7 @@ namespace Placemaker.Game.Settings
             ShowCursorTooltips = true;
             PreviewDetail = PreviewDetail.Normal;
             SnapToRoadsWhenDrawing = true;
+            KeepOffExistingRoads = true;
             BrushSize = 150f;
             BrushSquare = false;
             LastAreaMode = 0;

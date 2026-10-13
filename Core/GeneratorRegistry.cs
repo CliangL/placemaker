@@ -46,10 +46,6 @@ namespace Placemaker.Core
             return attr != null && attr.Hidden;
         }
 
-        /// <summary>Built-in features a layer offers (empty when it implements no IHasFeatures).</summary>
-        public static IReadOnlyList<FeatureInfo> FeaturesOf(IAreaGenerator g) =>
-            g is IHasFeatures f && f.Features != null ? f.Features : (IReadOnlyList<FeatureInfo>)Array.Empty<FeatureInfo>();
-
         public static IAreaGenerator Get(string id)
         {
             foreach (var g in All) if (g.Id == id) return g;

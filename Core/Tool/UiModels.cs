@@ -281,7 +281,7 @@ namespace Placemaker.Core.Tool
             }
             o.Set("markerKinds", kinds);
             o.Set("markersRequired", MarkerKinds.Required(gen, s.Settings));
-            o.Set("features", Features(s, path, gen, generators));
+            o.Set("features", FeatureViews(s, path, gen, generators));
             StepStatus st = null;
             if (status != null) status.TryGetValue(path, out st);
             o.Set("ready", st == null || st.Ready);
@@ -306,10 +306,10 @@ namespace Placemaker.Core.Tool
         }
 
         /// <summary>Built-in features of a step (mirrors UI FeatureView): toggle state, child path and the parent options shown under it.</summary>
-        public static JsonValue Features(RecipeStep s, string path, IAreaGenerator gen, Func<string, IAreaGenerator> generators)
+        public static JsonValue FeatureViews(RecipeStep s, string path, IAreaGenerator gen, Func<string, IAreaGenerator> generators)
         {
             var arr = JsonValue.Arr();
-            foreach (var f in GeneratorRegistry.FeaturesOf(gen))
+            foreach (var f in Features.Of(gen))
             {
                 if (f == null || string.IsNullOrEmpty(f.Layer)) continue;
                 IAreaGenerator fg = null;

@@ -45,7 +45,7 @@ namespace Placemaker.Core.Layers.Park
                 Options = new[] { "plazaShape", "plazaAt", "plazaSize" },
                 Preset = Bag(("centerMode", "single"), ("arrangementMode", "center"), ("furniture", 6.0), ("fence", false)),
             },
-            new FeatureInfo { Layer = "playground", LabelKey = "Placemaker.Park.Feature.playground" },
+            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Park.Feature.playground" },
             new FeatureInfo
             {
                 Layer = "pond", Target = PondPlace, LabelKey = "Placemaker.Park.Feature.pond",
