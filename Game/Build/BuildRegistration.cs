@@ -18,6 +18,8 @@ namespace Placemaker.Game.Build
             // run unconditionally so saves that reference the clones by name always resolve (rule 3).
             updateSystem.UpdateBefore<SurfaceCloneSystem, global::Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
             updateSystem.UpdateBefore<ParkingCompanionPrefabSystem, global::Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
+            // "Placemaker Area" owner lot (US7): one selectable/bulldozable thing per build.
+            updateSystem.UpdateBefore<OwnerAreaPrefabSystem, global::Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
 
             // ── Catalog & selection UI ─────────────────────────────────────────────────
             // UIUpdate ticks while the simulation is paused (GameSimulation does not), and

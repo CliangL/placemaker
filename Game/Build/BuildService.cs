@@ -47,7 +47,7 @@ namespace Placemaker.Game.Build
         private const int ReplaceTimeoutFrames = 900;
         private const int TerraformTimeoutFrames = 900;
         private const int ZoningWaitFrames = 24;
-        private const int MaxAutoExcludeAttempts = 4;
+        private const int MaxAutoExcludeAttempts = 6;
         /// <summary>Objects/areas emitted per frame; nets always go in one frame so junctions merge.</summary>
         public const int DefinitionsPerFrame = 1500;
 
@@ -55,7 +55,14 @@ namespace Placemaker.Game.Build
         /// GridRoadGenerator-style "auto-exclude colliding pieces": instead of failing on game errors,
         /// drop the pieces the game marked and try again (≤ 4 attempts). Set by the tool's settings.
         /// </summary>
-        public static bool AutoExcludeCollisions;
+        public static bool AutoExcludeCollisions = true;
+
+        /// <summary>
+        /// US8: pieces the game rejects (InvalidShape, collisions, …) are fixed or skipped and the build
+        /// retried; the build only fails when nothing sensible remains. On by default. When off, only
+        /// <see cref="AutoExcludeCollisions"/> decides (round-1 behaviour).
+        /// </summary>
+        public static bool RecoverRejectedPieces = true;
 
         private enum Step
         {
@@ -125,6 +132,7 @@ namespace Placemaker.Game.Build
             _catalog = World.GetOrCreateSystemManaged<AssetCatalogSystem>();
             _registry = World.GetOrCreateSystemManaged<GroupRegistrySystem>();
             _clones = World.GetOrCreateSystemManaged<SurfaceCloneSystem>();
+            InitOwner();
             _tempQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<PrefabRef>() },
@@ -194,7 +202,10 @@ namespace Placemaker.Game.Build
             ResetTransaction();
             _request = request;
             _startFrame = UnityEngine.Time.frameCount;
-            _status = new BuildStatus { Phase = BuildPhase.Preparing, Progress = 0f, ErrorPositions = new List<float3>() };
+            _status = new BuildStatus { Phase = BuildPhase.Preparing, Progress = 0f, ErrorPositions = new List<float3>(), Warnings = new List<PlanIssue>() };
+            // US5: the same concrete assets as preview and price (idempotent if the tool already did it).
+            int auto = _catalog.ResolveAutomatic(request.Plan);
+            if (auto > 0) Mod.Log.Info($"Placemaker resolved {auto} automatic assets at build start (the tool should do this before preview/pricing).");
             Go(Step.Prepare);
             Mod.Log.Info($"Placemaker build started: {request.Plan.Layers.Count} layers, replace={request.ReplaceGroup}.");
             return true;
@@ -211,7 +222,42 @@ namespace Placemaker.Game.Build
         {
             if (Busy) return;
             if (_status.Phase == BuildPhase.Done || _status.Phase == BuildPhase.Failed || _status.Phase == BuildPhase.Cancelled)
-                _status = new BuildStatus { Phase = BuildPhase.Idle };
+                _status = new BuildStatus { Phase = BuildPhase.Idle, ErrorPositions = new List<float3>(), Warnings = new List<PlanIssue>() };
+        }
+
+        /// <summary>US8: red markers vanish as soon as the user changes anything (tool calls this).</summary>
+        public void ClearErrors()
+        {
+            _status.ErrorPositions = new List<float3>();
+        }
+
+        // ───────────────────────── fixed / skipped pieces (US8) ─────────────────────────
+
+        private sealed class SkipInfo { public int Count; public float3? At; public IssueSeverity Severity; }
+        private readonly Dictionary<string, SkipInfo> _skipped = new Dictionary<string, SkipInfo>(StringComparer.Ordinal);
+
+        /// <summary>Counts a fixed (Info) or skipped (Warning) piece under a localisation key; arg 0 = count.</summary>
+        private void NoteSkip(string key, float3? at, IssueSeverity severity = IssueSeverity.Warning, int count = 1)
+        {
+            if (!_skipped.TryGetValue(key, out var s)) _skipped[key] = s = new SkipInfo { Severity = severity };
+            s.Count += count;
+            if (!s.At.HasValue && at.HasValue) s.At = at;
+        }
+
+        private List<PlanIssue> ComposeWarnings(int dropped)
+        {
+            var list = new List<PlanIssue>();
+            foreach (var kv in _skipped)
+                list.Add(new PlanIssue { Severity = kv.Value.Severity, Key = kv.Key, Args = new object[] { kv.Value.Count }, At = kv.Value.At });
+            foreach (var key in _warnings)
+            {
+                bool dup = false;
+                foreach (var i in list) if (i.Key == key) { dup = true; break; }
+                if (!dup) list.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = key, Args = new object[] { dropped } });
+            }
+            // Warnings (left out) before infos (repaired/cleared).
+            list.Sort((a, b) => b.Severity.CompareTo(a.Severity));
+            return list;
         }
 
         /// <summary>Warnings of the last build (e.g. pieces the game dropped), as localisation keys.</summary>
@@ -334,6 +380,13 @@ namespace Placemaker.Game.Build
         private void DoEmitRest()
         {
             int total = _work.Surfaces.Count + _work.Areas.Count + _work.Objects.Count;
+            if (_emitCursor == 0)
+            {
+                // Same transaction as the build: the owner lot appears and old trees/props vanish on
+                // the one Apply, or not at all.
+                EmitOwnerArea();
+                EmitClearDefinitions();
+            }
             int end = math.min(total, _emitCursor + DefinitionsPerFrame);
             for (int i = _emitCursor; i < end; i++)
             {
@@ -398,18 +451,21 @@ namespace Placemaker.Game.Build
             if (errors)
             {
                 CollectErrors();
-                if (AutoExcludeCollisions && !BuildErrorKeys.IsGlobal(_errorTypeName) && _excludeAttempts < MaxAutoExcludeAttempts)
+                // US8: skip what the game rejects and try again; fail only when nothing changes or
+                // nothing remains (DoResetForRetry). Money is global: excluding pieces cannot fix it.
+                bool recover = (RecoverRejectedPieces || AutoExcludeCollisions) && !BuildErrorKeys.IsGlobal(_errorTypeName);
+                if (recover && _excludeAttempts < MaxAutoExcludeAttempts)
                 {
                     int newly = ExcludeErroneousItems();
                     if (newly > 0)
                     {
                         _excludeAttempts++;
-                        _warnings.Add("Placemaker.Build.PartsExcluded");
-                        Mod.Log.Info($"Placemaker auto-excluded {newly} colliding parts (attempt {_excludeAttempts}).");
+                        Mod.Log.Info($"Placemaker left out {newly} rejected parts ({_errorTypeName}, attempt {_excludeAttempts}); retrying.");
                         Go(Step.ResetForRetry);
                         return;
                     }
                 }
+                Mod.Log.Warn($"Placemaker build rejected by the game: {_errorTypeName} ({_status.ErrorPositions?.Count ?? 0} markers).");
                 BeginCleanup(BuildPhase.Failed, _errorKey, _errorArgs);
                 return;
             }
@@ -480,16 +536,27 @@ namespace Placemaker.Game.Build
             RestoreTool();
             var groupId = _groupId;
             int dropped = _dropped;
+            if (_cleared > 0) NoteSkip("Placemaker.Build.Cleared", null, IssueSeverity.Info, _cleared);
+            if (_ownerTemp == Entity.Null) NoteSkip("Placemaker.Build.OwnerUnavailable", null, IssueSeverity.Info, 0);
+            var issues = ComposeWarnings(dropped);
             var warnings = new List<string>(_warnings);
             ResetTransaction();
             _warnings.AddRange(warnings);
-            _status.Phase = BuildPhase.Done;
-            _status.Progress = 1f;
-            _status.GroupId = groupId;
-            _status.MessageKey = warnings.Count > 0 ? warnings[0] : "Placemaker.Build.Done";
-            _status.MessageArgs = new object[] { dropped };
+            PlanIssue headline = null;
+            foreach (var i in issues) if (i.Severity == IssueSeverity.Warning) { headline = i; break; }
+            _status = new BuildStatus
+            {
+                Phase = BuildPhase.Done,
+                Progress = 1f,
+                GroupId = groupId,
+                MessageKey = headline != null ? headline.Key : "Placemaker.Build.Done",
+                MessageArgs = headline != null ? headline.Args : new object[] { dropped },
+                // A successful build never shows red markers (US8).
+                ErrorPositions = new List<float3>(),
+                Warnings = issues,
+            };
             Mod.Log.Info($"Placemaker build finished: group {groupId}, {_registry.CountMembers(groupId, true)} members, "
-                + $"{UnityEngine.Time.frameCount - _startFrame} frames.");
+                + $"{issues.Count} notes, {UnityEngine.Time.frameCount - _startFrame} frames.");
         }
 
         // ───────────────────────── failure / cleanup ─────────────────────────
@@ -531,17 +598,19 @@ namespace Placemaker.Game.Build
         private void ForceIdle(BuildPhase phase, string key, params object[] args)
         {
             RestoreTool();
-            var errors = _status.ErrorPositions ?? new List<float3>();
+            var errors = phase == BuildPhase.Failed ? _status.ErrorPositions ?? new List<float3>() : new List<float3>();
+            var issues = ComposeWarnings(_dropped);
             ResetTransaction();
             _status = new BuildStatus
             {
                 Phase = phase, Progress = 0f, MessageKey = key, MessageArgs = args ?? Array.Empty<object>(), ErrorPositions = errors,
+                Warnings = issues,
             };
         }
 
         private void SetFailed(string key)
         {
-            _status = new BuildStatus { Phase = BuildPhase.Failed, MessageKey = key, MessageArgs = Array.Empty<object>(), ErrorPositions = new List<float3>() };
+            _status = new BuildStatus { Phase = BuildPhase.Failed, MessageKey = key, MessageArgs = Array.Empty<object>(), ErrorPositions = new List<float3>(), Warnings = new List<PlanIssue>() };
         }
 
         private void RestoreTool()
@@ -588,6 +657,9 @@ namespace Placemaker.Game.Build
             _errorArgs = Array.Empty<object>();
             _errorTypeName = "";
             ResetTerraform();
+            ResetOwner();
+            _ownerSuppressed = false;
+            _skipped.Clear();
             if (_toolActivated) RestoreTool();
         }
 

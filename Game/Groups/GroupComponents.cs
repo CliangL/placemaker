@@ -53,17 +53,21 @@ namespace Placemaker.Game.Groups
         WaterSource = 5,
         Surface = 6,
         Zoning = 7,
+        /// <summary>The "Placemaker Area" lot covering the outline: the ONE selectable/bulldozable thing (US7).</summary>
+        OwnerArea = 8,
     }
 
     /// <summary>The group record. Lives on a headless entity together with <see cref="PlacemakerGroupBlob"/>.</summary>
     public struct PlacemakerGroup : IComponentData, IQueryTypeParameter, ISerializable
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
         public int GroupId;
         public int Flags;          // GroupFlags
         public Entity Carrier;     // parking carrier or Entity.Null
         public Entity Companion;   // economy companion building or Entity.Null
         public int BuiltMembers;   // members at build time (Modified detection)
+        /// <summary>v2: owner lot area ("Placemaker Area" prefab) or Entity.Null (old groups, prefab unavailable).</summary>
+        public Entity Owner;
 
         public void Serialize<TWriter>(TWriter writer) where TWriter : IWriter
         {
@@ -73,6 +77,7 @@ namespace Placemaker.Game.Groups
             writer.Write(Carrier);
             writer.Write(Companion);
             writer.Write(BuiltMembers);
+            writer.Write(Owner);
         }
 
         public void Deserialize<TReader>(TReader reader) where TReader : IReader
@@ -83,6 +88,8 @@ namespace Placemaker.Game.Groups
             reader.Read(out Carrier);
             reader.Read(out Companion);
             reader.Read(out BuiltMembers);
+            Owner = Entity.Null;
+            if (version >= 2) reader.Read(out Owner);
         }
     }
 

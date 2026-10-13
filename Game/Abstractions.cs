@@ -32,8 +32,16 @@ namespace Placemaker.Game
         /// <summary>Localisation key + args explaining a failure (game rejection reason etc.).</summary>
         public string MessageKey;
         public object[] MessageArgs;
-        /// <summary>World positions of game errors (red markers) when validation failed.</summary>
+        /// <summary>
+        /// World positions of game errors (red markers). Only set while Phase == Failed and cleared by
+        /// Start, Acknowledge and ClearErrors — draw them only while they are present.
+        /// </summary>
         public List<float3> ErrorPositions;
+        /// <summary>
+        /// (gamebuild round 2) What was fixed or skipped (Done) — localisation key + args, optional map
+        /// position. Severity Warning = something left out, Info = repaired. Never null after Start.
+        /// </summary>
+        public List<PlanIssue> Warnings;
     }
 
     public interface IBuildService
@@ -44,6 +52,8 @@ namespace Placemaker.Game
         void Cancel();
         /// <summary>Clears Done/Failed back to Idle after the tool consumed the result.</summary>
         void Acknowledge();
+        /// <summary>(gamebuild round 2) Drops the error positions of a failed build (the user changed something).</summary>
+        void ClearErrors();
     }
 
     // ───────────────────────── Groups (built things) ─────────────────────────
@@ -102,6 +112,13 @@ namespace Placemaker.Game
         Entity Resolve(AssetRef asset, string category);
         /// <summary>AssetInfo for every catalogued item (for SiteContext / pricing).</summary>
         Dictionary<string, AssetInfo> InfoMap();
+        /// <summary>
+        /// (gamebuild round 2, US5) Replaces every automatic AssetRef (empty Id) in the plan, in place,
+        /// with a concrete catalog prefab name — deterministic per (category, Variation / net index) —
+        /// so preview, Pricing.Of and the build use the same assets. Idempotent; explicit Ids are kept.
+        /// Call after Compose, before preview/pricing/Start. Returns the number of refs resolved.
+        /// </summary>
+        int ResolveAutomatic(ComposedPlan plan);
     }
 
     // ───────────────────────── Service locator ─────────────────────────
