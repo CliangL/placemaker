@@ -147,6 +147,8 @@
 
   "Placemaker.Issue.PlanFailed": "The layout could not be planned: {0}",
   "Placemaker.Issue.PlanTimeout": "Planning took longer than {0} s and was stopped. Try a smaller area.",
+  "Placemaker.Issue.KeptOffRoads": "The area was trimmed to keep off existing roads ({0} m² left out).",
+  "Placemaker.Issue.AreaSplitByRoad": "A road runs through the area: the largest part is used, {0} smaller part(s) ({1} m²) left out. Select them separately if you want them too.",
   "Placemaker.Issue.BuildRefused": "Building could not start.",
   "Placemaker.Issue.BuildFailed": "Building failed.",
   "Placemaker.Issue.BuildFailedNext": "Red circles show where it went wrong. Adjust the outline or the settings and build again, or go back. The circles disappear as soon as you change something.",
@@ -195,6 +197,8 @@
   "Placemaker.Settings.PreviewDetail.Detailed": "Detailed",
   "Placemaker.Settings.SnapToRoadsWhenDrawing": "Snap to curbs when drawing",
   "Placemaker.Settings.SnapToRoadsWhenDrawing.Desc": "Corners snap to the edges of nearby roads. The other snapping options are in the game's snapping menu.",
+  "Placemaker.Settings.KeepOffExistingRoads": "Keep off existing roads",
+  "Placemaker.Settings.KeepOffExistingRoads.Desc": "Drawn and painted areas stop at the edge of existing roads and sidewalks, so nothing is planned on the asphalt. Entrances move to the new edge.",
   "Placemaker.Settings.ToggleToolBinding": "Open / close Placemaker",
   "Placemaker.Settings.ToggleToolBinding.Desc": "Opens or closes the Placemaker tool.",
   "Placemaker.Settings.PrimaryBinding": "Next step / build",

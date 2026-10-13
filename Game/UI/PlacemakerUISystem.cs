@@ -205,6 +205,8 @@ namespace Placemaker.Game.UI
                 PermanentAcknowledged = ack,
             };
             foreach (var n in _tool.BuildNotes) input.ExtraIssues.Add(n);
+            var clipIssue = _tool.ClipIssue;
+            if (clipIssue != null) input.ExtraIssues.Add(clipIssue);
             if (failure != null)
             {
                 input.ExtraIssues.Add(failure);

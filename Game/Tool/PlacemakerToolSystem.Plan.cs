@@ -84,9 +84,58 @@ namespace Placemaker.Game.Tool
                 Mod.Log.Warn("Placemaker: outline rebuild failed: " + e.Message);
                 s = null;
             }
+            s = KeepOffRoads(s);
+            var old = _shape;
             _shape = s;
             _shapeVersion++;
+            FollowOutline(old, s);
             Touch();
+        }
+
+        // ───────────── keep off existing roads (AreaClip) ─────────────
+
+        private AreaClipResult _clip;
+        private bool _keepOffApplied = true;
+
+        /// <summary>Parts of the selection left out because they lie on existing roads (for the overlay), or null.</summary>
+        public IReadOnlyList<float3[]> ClippedAway => _clip != null && _clip.Clipped && ReferenceEquals(_clip.Shape, _shape) ? _clip.Removed : null;
+
+        /// <summary>Info about the trimmed outline for the summary, or null.</summary>
+        public PlanIssue ClipIssue => _clip != null && _clip.Clipped && ReferenceEquals(_clip.Shape, _shape) ? _clip.Issue : null;
+
+        private AreaShape KeepOffRoads(AreaShape s)
+        {
+            _keepOffApplied = _settings == null || _settings.KeepOffExistingRoads;
+            _clip = null;
+            if (s == null || !_keepOffApplied || !AreaClip.ClipsSource(s.Source)) return s;
+            try
+            {
+                _clip = AreaClip.Apply(s, _site.NetsAround(s.Ring), p => _site.SampleHeight(p));
+                return _clip.Shape ?? s;
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker: keep-off-roads clip failed: " + e.Message);
+                _clip = null;
+                return s;
+            }
+        }
+
+        /// <summary>Re-checks the setting (toggled in the options while the tool is open).</summary>
+        private void CheckKeepOffSetting()
+        {
+            bool want = _settings == null || _settings.KeepOffExistingRoads;
+            if (want != _keepOffApplied && _shape != null && !_shapeDirty) { _keepOffApplied = want; ShapeChanged(); }
+        }
+
+        /// <summary>Markers follow the edited outline (MarkerFollow); part of the same undo step as the outline edit.</summary>
+        private void FollowOutline(AreaShape old, AreaShape now)
+        {
+            if (old == null || now == null || _recipe == null || ReferenceEquals(old, now)) return;
+            bool changed;
+            try { changed = MarkerFollow.Reproject(_recipe, old.Ring, now.Ring, _markersEdited, () => _site.NetsAround(now.Ring)); }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: markers could not follow the outline: " + e.Message); return; }
+            if (changed) _designVersion++;
         }
 
         private AreaShape BuildDrawShape()
