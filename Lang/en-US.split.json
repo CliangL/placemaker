@@ -9,7 +9,7 @@
   "Placemaker.Split.angle": "Direction",
   "Placemaker.Split.angle.Tooltip": "0° cuts across the long side; 90° cuts lengthwise.",
   "Placemaker.Split.parts": "Parts",
-  "Placemaker.Split.divider": "Path along the cut",
+  "Placemaker.Split.divider": "Cut path",
   "Placemaker.Split.divider.Tooltip": "Adds a footpath along each dividing line.",
   "Placemaker.Split.divider.none": "None",
   "Placemaker.Split.divider.path": "Path",

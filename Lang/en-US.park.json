@@ -50,7 +50,7 @@
   "Placemaker.Park.animals.Tooltip": "Lets forest animals appear in the larger groves.",
   "Placemaker.Park.lake": "Lake",
   "Placemaker.Park.lake.Tooltip": "Digs a lake into the largest open lawn. The terrain change is permanent: removing the park does not fill it back in.",
-  "Placemaker.Park.lakeSize": "Lake size",
+  "Placemaker.Park.lakeSize": "Pond size",
   "Placemaker.Park.Preset.natural": "Natural",
   "Placemaker.Park.Preset.formal": "Formal",
   "Placemaker.Park.Preset.woodland": "Woodland",

@@ -39,7 +39,7 @@
   "Placemaker.AddOn.Restrooms.Name": "Restrooms",
   "Placemaker.AddOn.Restrooms.count": "Restrooms",
   "Placemaker.AddOn.Restrooms.asset": "Building",
-  "Placemaker.AddOn.Restrooms.kiosk": "Kiosk next to it",
+  "Placemaker.AddOn.Restrooms.kiosk": "Add kiosk",
   "Placemaker.AddOn.Restrooms.kioskAsset": "Kiosk",
   "Placemaker.AddOn.Restrooms.Issue.Fewer": "Only {0} of {1} restrooms fit.",
 
