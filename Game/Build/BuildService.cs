@@ -1,0 +1,611 @@
+// Placemaker — build transaction: ComposedPlan → game entities → one group (GPL-3.0).
+//
+// The transaction shape follows ParkManager's build workflow (tomkpunkt, GPL-3.0): definitions →
+// temporaries → game validation → apply → adopt. Improvements over the sources:
+//  * Ownership follows the game's own Temp→permanent mechanism: Apply turns a Temp entity with no
+//    original into the permanent entity IN PLACE (ApplyObjects/Net/AreasSystem.Create), so a tag
+//    added to our temporaries before Apply survives. Temporaries are recognised by prefab AND
+//    geometry against the plan (PlanIndex) — never by a baseline diff that could adopt foreign
+//    entities or split pieces of an existing road.
+//  * Validation uses vanilla's own gate (Error entities / GetAllowApply) and reports the game's
+//    error type and positions; money is charged by vanilla ToolApplySystem from Temp.m_Cost.
+//  * Every step is frame-bounded with timeouts and wrapped in try/catch; a failure before Apply
+//    clears the temporaries, a failure after Apply rolls the group back through the removal system.
+//
+// Phase: ToolUpdate, before BuildToolSystem (it hands our requested applyMode to the game in the
+// same frame). Runs while paused (ToolSystem updates every frame).
+
+using System;
+using System.Collections.Generic;
+using Colossal.Serialization.Entities;
+using Game;
+using Game.Common;
+using Game.Prefabs;
+using Game.Simulation;
+using Game.Tools;
+using Placemaker.Core;
+using Placemaker.Core.Build;
+using Placemaker.Game.Assets;
+using Placemaker.Game.Groups;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
+using UnityEngine.Scripting;
+
+namespace Placemaker.Game.Build
+{
+    public sealed partial class BuildService : GameSystemBase, IBuildService
+    {
+        // Frame budgets (measured in source mods: definitions materialise next frame; validation
+        // marks errors within ~3 frames; zone blocks of new roads appear within ~20 frames).
+        private const int ToolSwitchFrames = 2;
+        private const int MaterializeTimeoutFrames = 180;
+        private const int MaterializeStableFrames = 12;
+        private const int ValidationSettleFrames = 3;
+        private const int ApplySettleFrames = 3;
+        private const int ApplyTimeoutFrames = 90;
+        private const int ReplaceTimeoutFrames = 900;
+        private const int TerraformTimeoutFrames = 900;
+        private const int ZoningWaitFrames = 24;
+        private const int MaxAutoExcludeAttempts = 4;
+        /// <summary>Objects/areas emitted per frame; nets always go in one frame so junctions merge.</summary>
+        public const int DefinitionsPerFrame = 1500;
+
+        /// <summary>
+        /// GridRoadGenerator-style "auto-exclude colliding pieces": instead of failing on game errors,
+        /// drop the pieces the game marked and try again (≤ 4 attempts). Set by the tool's settings.
+        /// </summary>
+        public static bool AutoExcludeCollisions;
+
+        private enum Step
+        {
+            Idle, Prepare, WaitReplaced, ActivateTool, Terraform, EmitNets, EmitRest, WaitTemps, Validate,
+            ResetForRetry, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
+        }
+
+        private ToolSystem _toolSystem;
+        private BuildToolSystem _tool;
+        private PrefabSystem _prefabs;
+        private TerrainSystem _terrain;
+        private WaterSystem _water;
+        private AssetCatalogSystem _catalog;
+        private GroupRegistrySystem _registry;
+        private SurfaceCloneSystem _clones;
+
+        private EntityQuery _tempQuery;
+        private EntityQuery _errorQuery;
+        private EntityQuery _iconQuery;
+        private EntityQuery _definitionQuery;
+
+        private BuildStatus _status;
+        private Step _step;
+        private int _stepFrame;
+        private int _startFrame;
+        private BuildRequest _request;
+        private BuildWork _work;
+        private readonly HashSet<long> _excluded = new HashSet<long>();
+        private int _excludeAttempts;
+        private ToolBaseSystem _previousTool;
+        private bool _toolActivated;
+        private bool _applied;
+        private int _groupId;
+        private Entity _record;
+        private Entity _carrier;
+        private BuildPhase _cleanupPhase;
+        private string _cleanupKey;
+        private object[] _cleanupArgs;
+        private int _emitCursor;
+        private int _lastMatched = -1;
+        private int _stableSince;
+        private int _dropped;
+        private readonly List<string> _warnings = new List<string>();
+
+        public BuildStatus Status => _status;
+
+        /// <summary>True while a build is between Start and Done/Failed/Cancelled.</summary>
+        public bool Busy => _step != Step.Idle;
+
+        public bool IsBuildingGroup(int groupId) => Busy && groupId != 0 && groupId == _groupId;
+
+        /// <summary>
+        /// True while the build has taken over the active tool. A tool that is deactivated for the
+        /// build should keep its state when this is true (it gets reactivated afterwards).
+        /// </summary>
+        public bool HoldsTool => _toolActivated;
+
+        [Preserve]
+        protected override void OnCreate()
+        {
+            base.OnCreate();
+            _toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
+            _tool = World.GetOrCreateSystemManaged<BuildToolSystem>();
+            _prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
+            _terrain = World.GetOrCreateSystemManaged<TerrainSystem>();
+            _water = World.GetOrCreateSystemManaged<WaterSystem>();
+            _catalog = World.GetOrCreateSystemManaged<AssetCatalogSystem>();
+            _registry = World.GetOrCreateSystemManaged<GroupRegistrySystem>();
+            _clones = World.GetOrCreateSystemManaged<SurfaceCloneSystem>();
+            _tempQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<PrefabRef>() },
+                None = new[] { ComponentType.ReadOnly<Deleted>() },
+            });
+            _errorQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Error>() },
+                None = new[] { ComponentType.ReadOnly<Deleted>() },
+            });
+            _iconQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<global::Game.Notifications.Icon>(), ComponentType.ReadOnly<PrefabRef>() },
+                None = new[] { ComponentType.ReadOnly<Deleted>() },
+            });
+            _definitionQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<CreationDefinition>() },
+                None = new[] { ComponentType.ReadOnly<Deleted>() },
+            });
+            _status = new BuildStatus { Phase = BuildPhase.Idle };
+            Services.Build = this;
+        }
+
+        [Preserve]
+        protected override void OnDestroy()
+        {
+            if (ReferenceEquals(Services.Build, this)) Services.Build = null;
+            base.OnDestroy();
+        }
+
+        protected override void OnGamePreload(Purpose purpose, GameMode mode)
+        {
+            base.OnGamePreload(purpose, mode);
+            // The world is being replaced: nothing to clean up, just forget the transaction (and do
+            // not touch the tool system while it is being reset for the new world).
+            _toolActivated = false;
+            _previousTool = null;
+            ResetTransaction();
+            _status = new BuildStatus { Phase = BuildPhase.Idle };
+        }
+
+        // ───────────────────────── IBuildService ─────────────────────────
+
+        public bool Start(BuildRequest request)
+        {
+            if (Busy)
+            {
+                _status.MessageKey = "Placemaker.Build.Busy";
+                return false;
+            }
+            if (request?.Plan == null)
+            {
+                SetFailed("Placemaker.Build.NothingToBuild");
+                return false;
+            }
+            if (request.Plan.HasErrors)
+            {
+                SetFailed("Placemaker.Build.PlanHasErrors");
+                return false;
+            }
+            if (_catalog == null || !_catalog.Ready)
+            {
+                SetFailed("Placemaker.Build.CatalogNotReady");
+                return false;
+            }
+            ResetTransaction();
+            _request = request;
+            _startFrame = UnityEngine.Time.frameCount;
+            _status = new BuildStatus { Phase = BuildPhase.Preparing, Progress = 0f, ErrorPositions = new List<float3>() };
+            Go(Step.Prepare);
+            Mod.Log.Info($"Placemaker build started: {request.Plan.Layers.Count} layers, replace={request.ReplaceGroup}.");
+            return true;
+        }
+
+        public void Cancel()
+        {
+            if (!Busy || _step == Step.Cleanup) return;
+            if (_step == Step.Finish) return;   // last frame: let it finish
+            BeginCleanup(BuildPhase.Cancelled, "Placemaker.Build.Cancelled");
+        }
+
+        public void Acknowledge()
+        {
+            if (Busy) return;
+            if (_status.Phase == BuildPhase.Done || _status.Phase == BuildPhase.Failed || _status.Phase == BuildPhase.Cancelled)
+                _status = new BuildStatus { Phase = BuildPhase.Idle };
+        }
+
+        /// <summary>Warnings of the last build (e.g. pieces the game dropped), as localisation keys.</summary>
+        public IReadOnlyList<string> LastWarnings => _warnings;
+
+        // ───────────────────────── state machine ─────────────────────────
+
+        [Preserve]
+        protected override void OnUpdate()
+        {
+            if (_step == Step.Idle) return;
+            int frame = UnityEngine.Time.frameCount;
+            _heightsValid = false;   // terrain data handles are only valid within the frame they were fetched
+            try
+            {
+                if (_toolActivated && _step != Step.Cleanup && _toolSystem.activeTool != _tool)
+                {
+                    // The player (or a mod hotkey) switched tools mid-build.
+                    if (!_applied) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Interrupted"); return; }
+                    _toolSystem.activeTool = _tool;   // after Apply we only need a few quiet frames
+                }
+                switch (_step)
+                {
+                    case Step.Prepare: DoPrepare(); break;
+                    case Step.WaitReplaced: DoWaitReplaced(frame); break;
+                    case Step.ActivateTool: DoActivateTool(frame); break;
+                    case Step.Terraform: DoTerraform(frame); break;
+                    case Step.EmitNets: DoEmitNets(); break;
+                    case Step.EmitRest: DoEmitRest(); break;
+                    case Step.WaitTemps: DoWaitTemps(frame); break;
+                    case Step.Validate: DoValidate(frame); break;
+                    case Step.ResetForRetry: DoResetForRetry(frame); break;
+                    case Step.Apply: DoApply(); break;
+                    case Step.Settle: DoSettle(frame); break;
+                    case Step.ZoningWait: if (frame - _stepFrame >= ZoningWaitFrames) Go(Step.ZoningEmit); break;
+                    case Step.ZoningEmit: DoZoningEmit(); break;
+                    case Step.ZoningApply: DoZoningApply(frame); break;
+                    case Step.Finish: DoFinish(); break;
+                    case Step.Cleanup: DoCleanup(frame); break;
+                }
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Error(e, $"Placemaker build failed in step {_step}");
+                if (_step == Step.Cleanup) ForceIdle(BuildPhase.Failed, "Placemaker.Build.Failed");
+                else BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Failed", e.GetType().Name);
+            }
+        }
+
+        private void Go(Step step)
+        {
+            _step = step;
+            _stepFrame = UnityEngine.Time.frameCount;
+        }
+
+        private void DoPrepare()
+        {
+            _work = PlanWork.Flatten(_request.Plan, _excluded);
+            if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0)
+            {
+                ForceIdle(BuildPhase.Failed, "Placemaker.Build.NothingToBuild");
+                return;
+            }
+            ResolvePrefabs();
+            if (_request.ReplaceGroup != 0 && _registry.TryGetRecordEntity(_request.ReplaceGroup, out _))
+            {
+                // Edit = remove the old group, then build the new one. The old receipt stays in the
+                // tool's hands (GetReceipt before Start) so a failed rebuild can be retried/restored.
+                if (!_registry.RequestRemove(_request.ReplaceGroup))
+                {
+                    ForceIdle(BuildPhase.Failed, "Placemaker.Build.ReplaceFailed");
+                    return;
+                }
+                Go(Step.WaitReplaced);
+                return;
+            }
+            Go(Step.ActivateTool);
+        }
+
+        private void DoWaitReplaced(int frame)
+        {
+            _status.Progress = 0.05f;
+            if (!_registry.TryGetRecordEntity(_request.ReplaceGroup, out _)) { Go(Step.ActivateTool); return; }
+            if (frame - _stepFrame > ReplaceTimeoutFrames) ForceIdle(BuildPhase.Failed, "Placemaker.Build.ReplaceFailed");
+        }
+
+        private void DoActivateTool(int frame)
+        {
+            if (!_toolActivated)
+            {
+                _previousTool = _toolSystem.activeTool;
+                _toolSystem.activeTool = _tool;
+                _toolActivated = true;
+                _stepFrame = frame;
+                return;
+            }
+            if (_toolSystem.activeTool != _tool) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Interrupted"); return; }
+            if (frame - _stepFrame == 1)
+            {
+                // Clear leftovers of the previous tool so our single Apply never applies them.
+                DestroyForeignDefinitions();
+                _tool.Requested = ApplyMode.Clear;
+                return;
+            }
+            if (frame - _stepFrame < ToolSwitchFrames + 1) return;
+            CreateRecord();
+            _status.Phase = BuildPhase.Materializing;
+            Go(_work.Terraform.Count > 0 ? Step.Terraform : Step.EmitNets);
+            if (_step == Step.Terraform) BeginTerraform();
+        }
+
+        private void DoEmitNets()
+        {
+            _status.Progress = 0.2f;
+            EmitNets();
+            _emitCursor = 0;
+            Go(Step.EmitRest);
+        }
+
+        private void DoEmitRest()
+        {
+            int total = _work.Surfaces.Count + _work.Areas.Count + _work.Objects.Count;
+            int end = math.min(total, _emitCursor + DefinitionsPerFrame);
+            for (int i = _emitCursor; i < end; i++)
+            {
+                if (i < _work.Surfaces.Count) EmitSurface(_work.Surfaces[i]);
+                else if (i < _work.Surfaces.Count + _work.Areas.Count) EmitArea(_work.Areas[i - _work.Surfaces.Count]);
+                else EmitObject(_work.Objects[i - _work.Surfaces.Count - _work.Areas.Count]);
+            }
+            _emitCursor = end;
+            _status.Progress = 0.2f + 0.2f * (total == 0 ? 1f : end / (float)total);
+            if (_emitCursor >= total)
+            {
+                _lastMatched = -1;
+                if (_itemByKey.Count == 0)
+                {
+                    if (_work.DefinitionCount > 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.AssetsUnavailable"); return; }
+                    // Terraform/zoning-only plan: nothing to adopt, nothing to apply.
+                    _applied = true;
+                    AfterApply();
+                    Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
+                    return;
+                }
+                Go(Step.WaitTemps);
+            }
+        }
+
+        private void DoWaitTemps(int frame)
+        {
+            if (frame - _stepFrame < 2) return;
+            var census = Census();
+            _status.Progress = 0.4f + 0.15f * (census.Expected == 0 ? 1f : math.saturate(census.Matched / (float)census.Expected));
+            if (census.Matched >= census.Expected)
+            {
+                Go(Step.Validate);
+                _status.Phase = BuildPhase.Validating;
+                return;
+            }
+            if (census.Matched != _lastMatched) { _lastMatched = census.Matched; _stableSince = frame; }
+            bool stable = frame - _stableSince >= MaterializeStableFrames && census.Matched > 0;
+            if (stable)
+            {
+                // Some pieces never materialised (the game silently drops e.g. surfaces it cannot
+                // triangulate). Build what exists and report the gap.
+                _dropped = census.Expected - census.Matched;
+                _warnings.Add("Placemaker.Build.PartsDropped");
+                Mod.Log.Warn($"Placemaker: {_dropped} of {census.Expected} planned parts did not materialise; continuing.");
+                Go(Step.Validate);
+                _status.Phase = BuildPhase.Validating;
+                return;
+            }
+            if (frame - _stepFrame > MaterializeTimeoutFrames)
+            {
+                CollectErrors();
+                BeginCleanup(BuildPhase.Failed, _status.ErrorPositions.Count > 0 ? _errorKey : "Placemaker.Build.Timeout");
+            }
+        }
+
+        private void DoValidate(int frame)
+        {
+            CollectErrors();
+            if (frame - _stepFrame < ValidationSettleFrames) return;
+            bool errors = !_errorQuery.IsEmptyIgnoreFilter || !_tool.AllowApply;
+            if (errors)
+            {
+                CollectErrors();
+                if (AutoExcludeCollisions && !BuildErrorKeys.IsGlobal(_errorTypeName) && _excludeAttempts < MaxAutoExcludeAttempts)
+                {
+                    int newly = ExcludeErroneousItems();
+                    if (newly > 0)
+                    {
+                        _excludeAttempts++;
+                        _warnings.Add("Placemaker.Build.PartsExcluded");
+                        Mod.Log.Info($"Placemaker auto-excluded {newly} colliding parts (attempt {_excludeAttempts}).");
+                        Go(Step.ResetForRetry);
+                        return;
+                    }
+                }
+                BeginCleanup(BuildPhase.Failed, _errorKey, _errorArgs);
+                return;
+            }
+            int tagged = TagTemporaries();
+            if (tagged == 0)
+            {
+                BeginCleanup(BuildPhase.Failed, "Placemaker.Build.NothingMaterialized");
+                return;
+            }
+            _status.ErrorPositions.Clear();   // transient errors seen while settling are not real
+            _status.Phase = BuildPhase.Applying;
+            _status.Progress = 0.65f;
+            Go(Step.Apply);
+        }
+
+        private void DoResetForRetry(int frame)
+        {
+            if (frame == _stepFrame)
+            {
+                DestroyOwnDefinitions();
+                ClearCarrierSubNets();
+                _tool.Requested = ApplyMode.Clear;
+                return;
+            }
+            if (frame - _stepFrame < 2) return;
+            ResetIndexes();
+            _errorTypeName = "";
+            _work = PlanWork.Flatten(_request.Plan, _excluded);
+            ResolvePrefabs();
+            if (_work.DefinitionCount == 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.EverythingCollides"); return; }
+            _status.Phase = BuildPhase.Materializing;
+            _status.ErrorPositions.Clear();
+            Go(Step.EmitNets);
+        }
+
+        private void DoApply()
+        {
+            _tool.Requested = ApplyMode.Apply;
+            _applied = true;   // from here on, failures roll back through group removal
+            _status.Progress = 0.75f;
+            _status.Phase = BuildPhase.Settling;
+            Go(Step.Settle);
+        }
+
+        private void DoSettle(int frame)
+        {
+            if (frame - _stepFrame < ApplySettleFrames) return;
+            if (frame - _stepFrame == ApplySettleFrames) DestroyOwnDefinitions();
+            int stillTemp = CountTaggedTemporaries();
+            if (stillTemp > 0 && frame - _stepFrame < ApplyTimeoutFrames) return;
+            if (stillTemp > 0) Mod.Log.Warn($"Placemaker: {stillTemp} parts stayed temporary after Apply; they are discarded.");
+            _registry.MarkDirty();
+            int members = _registry.CountMembers(_groupId, false);
+            if (members == 0)
+            {
+                CollectErrors();
+                BeginCleanup(BuildPhase.Failed, _status.ErrorPositions.Count > 0 ? _errorKey : "Placemaker.Build.ApplyRejected", _errorArgs);
+                return;
+            }
+            AfterApply();
+            _status.Progress = 0.85f;
+            Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
+        }
+
+        private void DoFinish()
+        {
+            FinishRecord();
+            RestoreTool();
+            var groupId = _groupId;
+            int dropped = _dropped;
+            var warnings = new List<string>(_warnings);
+            ResetTransaction();
+            _warnings.AddRange(warnings);
+            _status.Phase = BuildPhase.Done;
+            _status.Progress = 1f;
+            _status.GroupId = groupId;
+            _status.MessageKey = warnings.Count > 0 ? warnings[0] : "Placemaker.Build.Done";
+            _status.MessageArgs = new object[] { dropped };
+            Mod.Log.Info($"Placemaker build finished: group {groupId}, {_registry.CountMembers(groupId, true)} members, "
+                + $"{UnityEngine.Time.frameCount - _startFrame} frames.");
+        }
+
+        // ───────────────────────── failure / cleanup ─────────────────────────
+
+        private void BeginCleanup(BuildPhase phase, string key, params object[] args)
+        {
+            _cleanupPhase = phase;
+            _cleanupKey = string.IsNullOrEmpty(key) ? "Placemaker.Build.Failed" : key;
+            _cleanupArgs = args ?? Array.Empty<object>();
+            Go(Step.Cleanup);
+            Mod.Log.Warn($"Placemaker build {phase}: {_cleanupKey}");
+        }
+
+        /// <summary>
+        /// Frame 0: destroy definitions, request Clear (removes our temporaries) unless Apply already
+        /// ran; after Apply, roll back through the regular group removal. Frame 2: restore the tool.
+        /// </summary>
+        private void DoCleanup(int frame)
+        {
+            if (frame == _stepFrame)
+            {
+                DestroyOwnDefinitions();
+                ClearCarrierSubNets();
+                DiscardTerraformBrushes();
+                if (_toolActivated && _toolSystem.activeTool == _tool) _tool.Requested = ApplyMode.Clear;
+                if (_applied && _groupId != 0)
+                {
+                    RemoveUnderConstruction();
+                    _registry.MarkDirty();
+                    _registry.RemoveInternal(_groupId);   // bypasses the "being built" guard on purpose
+                }
+                return;
+            }
+            if (frame - _stepFrame < 2) return;
+            if (!_applied) DeleteRecordAndCarrier();
+            ForceIdle(_cleanupPhase, _cleanupKey, _cleanupArgs);
+        }
+
+        private void ForceIdle(BuildPhase phase, string key, params object[] args)
+        {
+            RestoreTool();
+            var errors = _status.ErrorPositions ?? new List<float3>();
+            ResetTransaction();
+            _status = new BuildStatus
+            {
+                Phase = phase, Progress = 0f, MessageKey = key, MessageArgs = args ?? Array.Empty<object>(), ErrorPositions = errors,
+            };
+        }
+
+        private void SetFailed(string key)
+        {
+            _status = new BuildStatus { Phase = BuildPhase.Failed, MessageKey = key, MessageArgs = Array.Empty<object>(), ErrorPositions = new List<float3>() };
+        }
+
+        private void RestoreTool()
+        {
+            if (!_toolActivated) return;
+            _toolActivated = false;
+            try
+            {
+                if (_toolSystem.activeTool == _tool)
+                {
+                    var prev = _previousTool;
+                    _toolSystem.activeTool = prev != null && prev != _tool && prev.World == World ? prev : World.GetOrCreateSystemManaged<DefaultToolSystem>();
+                }
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker could not restore the previous tool: " + e.Message);
+            }
+            _previousTool = null;
+        }
+
+        private void ResetTransaction()
+        {
+            _step = Step.Idle;
+            _request = null;
+            _work = null;
+            _excluded.Clear();
+            _excludeAttempts = 0;
+            _applied = false;
+            _groupId = 0;
+            _record = Entity.Null;
+            _carrier = Entity.Null;
+            _emitCursor = 0;
+            _lastMatched = -1;
+            _dropped = 0;
+            _warnings.Clear();
+            _ownDefinitions.Clear();
+            _itemPrefab.Clear();
+            _itemByKey.Clear();
+            _tagged.Clear();
+            _usedPrefabNames.Clear();
+            ResetIndexes();
+            _errorKey = BuildErrorKeys.Other;
+            _errorArgs = Array.Empty<object>();
+            _errorTypeName = "";
+            ResetTerraform();
+            if (_toolActivated) RestoreTool();
+        }
+
+        private void DestroyForeignDefinitions()
+        {
+            using var defs = _definitionQuery.ToEntityArray(Allocator.Temp);
+            for (int i = 0; i < defs.Length; i++)
+                if (!_ownDefinitions.Contains(defs[i])) EntityManager.AddComponent<Deleted>(defs[i]);
+        }
+
+        private void DestroyOwnDefinitions()
+        {
+            foreach (var d in _ownDefinitions)
+                if (EntityManager.Exists(d) && !EntityManager.HasComponent<Deleted>(d)) EntityManager.AddComponent<Deleted>(d);
+            _ownDefinitions.Clear();
+            // CourseSplitSystem derives extra definitions from ours without any mark (PLT measured
+            // this). While our tool is active every definition is ours, so remove them all.
+            if (_toolActivated && _toolSystem.activeTool == _tool) DestroyForeignDefinitions();
+        }
+    }
+}
