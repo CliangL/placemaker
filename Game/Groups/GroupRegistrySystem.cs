@@ -181,9 +181,17 @@ namespace Placemaker.Game.Groups
 
         public bool RequestRemove(int groupId)
         {
+            // The group a build is creating right now cannot be removed from outside; the build
+            // rolls it back itself on failure.
+            if (Services.Build is Build.BuildService b && b.IsBuildingGroup(groupId)) return false;
+            return RemoveInternal(groupId);
+        }
+
+        internal bool RemoveInternal(int groupId)
+        {
             EnsureIndex();
             if (!_records.TryGetValue(groupId, out var record) || !EntityManager.Exists(record)) return false;
-            if (Services.Build is Build.BuildService b && b.IsBuildingGroup(groupId)) return false;
+            if (EntityManager.HasComponent<PlacemakerUnderConstruction>(record)) EntityManager.RemoveComponent<PlacemakerUnderConstruction>(record);
             if (!EntityManager.HasComponent<PlacemakerRemoval>(record))
                 EntityManager.AddComponentData(record, new PlacemakerRemoval());
             Mod.Log.Info($"Placemaker: removal of group {groupId} requested ({CountMembers(groupId, true)} members).");

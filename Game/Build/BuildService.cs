@@ -105,7 +105,7 @@ namespace Placemaker.Game.Build
         /// <summary>True while a build is between Start and Done/Failed/Cancelled.</summary>
         public bool Busy => _step != Step.Idle;
 
-        public bool IsBuildingGroup(int groupId) => Busy && groupId != 0 && (groupId == _groupId || (_request != null && groupId == _request.ReplaceGroup));
+        public bool IsBuildingGroup(int groupId) => Busy && groupId != 0 && groupId == _groupId;
 
         /// <summary>
         /// True while the build has taken over the active tool. A tool that is deactivated for the
@@ -159,7 +159,10 @@ namespace Placemaker.Game.Build
         protected override void OnGamePreload(Purpose purpose, GameMode mode)
         {
             base.OnGamePreload(purpose, mode);
-            // The world is being replaced: nothing to clean up, just forget the transaction.
+            // The world is being replaced: nothing to clean up, just forget the transaction (and do
+            // not touch the tool system while it is being reset for the new world).
+            _toolActivated = false;
+            _previousTool = null;
             ResetTransaction();
             _status = new BuildStatus { Phase = BuildPhase.Idle };
         }
@@ -221,6 +224,7 @@ namespace Placemaker.Game.Build
         {
             if (_step == Step.Idle) return;
             int frame = UnityEngine.Time.frameCount;
+            _heightsValid = false;   // terrain data handles are only valid within the frame they were fetched
             try
             {
                 if (_toolActivated && _step != Step.Cleanup && _toolSystem.activeTool != _tool)
@@ -342,6 +346,15 @@ namespace Placemaker.Game.Build
             if (_emitCursor >= total)
             {
                 _lastMatched = -1;
+                if (_itemByKey.Count == 0)
+                {
+                    if (_work.DefinitionCount > 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.AssetsUnavailable"); return; }
+                    // Terraform/zoning-only plan: nothing to adopt, nothing to apply.
+                    _applied = true;
+                    AfterApply();
+                    Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
+                    return;
+                }
                 Go(Step.WaitTemps);
             }
         }
@@ -406,6 +419,7 @@ namespace Placemaker.Game.Build
                 BeginCleanup(BuildPhase.Failed, "Placemaker.Build.NothingMaterialized");
                 return;
             }
+            _status.ErrorPositions.Clear();   // transient errors seen while settling are not real
             _status.Phase = BuildPhase.Applying;
             _status.Progress = 0.65f;
             Go(Step.Apply);
@@ -421,6 +435,8 @@ namespace Placemaker.Game.Build
                 return;
             }
             if (frame - _stepFrame < 2) return;
+            ResetIndexes();
+            _errorTypeName = "";
             _work = PlanWork.Flatten(_request.Plan, _excluded);
             ResolvePrefabs();
             if (_work.DefinitionCount == 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.EverythingCollides"); return; }
@@ -463,6 +479,7 @@ namespace Placemaker.Game.Build
             FinishRecord();
             RestoreTool();
             var groupId = _groupId;
+            int dropped = _dropped;
             var warnings = new List<string>(_warnings);
             ResetTransaction();
             _warnings.AddRange(warnings);
@@ -470,7 +487,7 @@ namespace Placemaker.Game.Build
             _status.Progress = 1f;
             _status.GroupId = groupId;
             _status.MessageKey = warnings.Count > 0 ? warnings[0] : "Placemaker.Build.Done";
-            _status.MessageArgs = new object[] { _dropped };
+            _status.MessageArgs = new object[] { dropped };
             Mod.Log.Info($"Placemaker build finished: group {groupId}, {_registry.CountMembers(groupId, true)} members, "
                 + $"{UnityEngine.Time.frameCount - _startFrame} frames.");
         }
@@ -502,7 +519,7 @@ namespace Placemaker.Game.Build
                 {
                     RemoveUnderConstruction();
                     _registry.MarkDirty();
-                    _registry.RequestRemove(_groupId);   // IsBuildingGroup is checked: release first
+                    _registry.RemoveInternal(_groupId);   // bypasses the "being built" guard on purpose
                 }
                 return;
             }
@@ -565,6 +582,8 @@ namespace Placemaker.Game.Build
             _itemPrefab.Clear();
             _itemByKey.Clear();
             _tagged.Clear();
+            _usedPrefabNames.Clear();
+            ResetIndexes();
             _errorKey = BuildErrorKeys.Other;
             _errorArgs = Array.Empty<object>();
             _errorTypeName = "";

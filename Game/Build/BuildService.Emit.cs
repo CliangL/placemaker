@@ -53,6 +53,13 @@ namespace Placemaker.Game.Build
             }
         }
 
+        private void ResetIndexes()
+        {
+            _netIndex = _objectIndex = _areaIndex = null;
+            _itemByKey.Clear();
+            _heightsValid = false;
+        }
+
         private Entity PrefabOf(WorkItem w) => _itemPrefab.TryGetValue(PlanWork.Key(w), out var e) ? e : Entity.Null;
 
         private void NoteUsed(Entity prefab)
