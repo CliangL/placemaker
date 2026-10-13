@@ -82,7 +82,7 @@ namespace Placemaker.Core.Tool
     {
         public SelectionMode Mode;
         public PolygonEditor.Snapshot Draw = new PolygonEditor.Snapshot();
-        public PaintMask.Snapshot Paint;
+        public Placemaker.Core.Geometry.BrushMask.Snapshot Paint;
         public BlockSelectionState Block = new BlockSelectionState();
         public PerimeterSelectionState Perimeter = new PerimeterSelectionState();
         /// <summary>The resulting area, or null when there is none.</summary>

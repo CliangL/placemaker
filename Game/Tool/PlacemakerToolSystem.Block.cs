@@ -1,6 +1,6 @@
 // Block mode: hover inside a city block → it highlights; click takes it; Shift+click adds or
 // removes an adjacent block (the union must stay one simple outline). Face tracing is pure
-// (Core/Tool/RoadGraph, idea from Grid Road Generator's TraceBoundary) and starts on the cursor's
+// (Core/Geometry/PlanarGraph.PickFace, cursor-aware) and starts on the cursor's
 // side of the nearest road, so the exact block under the mouse is picked even at X junctions.
 
 using System;
@@ -15,21 +15,19 @@ namespace Placemaker.Game.Tool
 {
     public sealed partial class PlacemakerToolSystem
     {
-        private const int MaxFaceSteps = 400;
-        private const float MaxBlockSearch = 600f;
 
-        public sealed class FacePick
+        public sealed class BlockPick
         {
             public List<HalfEdge> Loop;
             public AreaShape Area;              // curb outline of this block
             public HashSet<long> Edges;
         }
 
-        private FacePick _hoverFace;
+        private BlockPick _hoverFace;
         private float2 _hoverFaceAt;
         private LocText _hoverFaceProblem;
 
-        public FacePick HoverFace => _hoverFace;
+        public BlockPick HoverFace => _hoverFace;
         public LocText HoverFaceProblem => _hoverFaceProblem;
         public BlockSelectionState Blocks => _blocks;
 
@@ -70,7 +68,7 @@ namespace Placemaker.Game.Tool
             }
         }
 
-        private int IndexOfFace(FacePick face)
+        private int IndexOfFace(BlockPick face)
         {
             for (int i = 0; i < _blocks.Faces.Count; i++)
             {
@@ -83,7 +81,7 @@ namespace Placemaker.Game.Tool
             return -1;
         }
 
-        private void ToggleBlock(FacePick face)
+        private void ToggleBlock(BlockPick face)
         {
             var next = _blocks.Clone();
             int idx = IndexOfFace(face);
@@ -116,40 +114,32 @@ namespace Placemaker.Game.Tool
         }
 
         /// <summary>The block (face of the road graph) containing <paramref name="p"/>, or null with a reason.</summary>
-        private FacePick PickFace(float2 p, out LocText problem)
+        private BlockPick PickFace(float2 p, out LocText problem)
         {
             problem = null;
-            List<RoadNetwork.NearestEdge> near;
-            try { near = _roads.NearestEdges(p, MaxBlockSearch, 6); }
-            catch (Exception e) { Mod.Log.Warn("Placemaker: road query failed: " + e.Message); problem = new LocText("Placemaker.Problem.NoBlockHere"); return null; }
-            if (near.Count == 0) { problem = new LocText("Placemaker.Problem.NoRoadsNearby"); return null; }
             var loop = new List<HalfEdge>();
-            foreach (var n in near)
+            FacePickStatus status;
+            try { status = _roads.PickBlock(p, UnityEngine.Time.realtimeSinceStartup, loop); }
+            catch (Exception e)
             {
-                if (!_roads.TryCurve(EntityIds.Pack(n.Edge), out _, out var edgeEntity)) continue;
-                var edge = EntityManager.GetComponentData<global::Game.Net.Edge>(edgeEntity);
-                float2 toP = p - n.Position.xz;
-                bool left = n.Tangent.x * toP.y - n.Tangent.y * toP.x > 0f;
-                long id = EntityIds.Pack(n.Edge), a = EntityIds.Pack(edge.m_Start), b = EntityIds.Pack(edge.m_End);
-                var start = left ? new HalfEdge(id, a, b) : new HalfEdge(id, b, a);
-                var r = RoadGraphAlgorithms.TraceLeftFace(_roads, start, MaxFaceSteps, loop);
-                if (r == FaceResult.TooLarge) { problem = new LocText("Placemaker.Problem.BlockTooLarge"); continue; }
-                if (r != FaceResult.Ok || loop.Count < 2) continue;
-                var center = Poly.To2D(_roads.CenterRing(loop));
-                if (center.Length < 3 || Poly.SignedArea(center) <= 0f || !Poly.Contains(center, p))
-                {
-                    problem = new LocText("Placemaker.Problem.NotEnclosed");
-                    continue;
-                }
-                var area = _roads.BuildArea(loop, AreaSource.Block);
-                if (area == null) { problem = new LocText("Placemaker.Problem.NoBlockHere"); continue; }
-                var edges = new HashSet<long>();
-                foreach (var h in loop) edges.Add(h.Edge);
-                problem = null;
-                return new FacePick { Loop = new List<HalfEdge>(loop), Area = area, Edges = edges };
+                Mod.Log.Warn("Placemaker: block pick failed: " + e.Message);
+                problem = new LocText("Placemaker.Problem.NoBlockHere");
+                return null;
             }
-            problem ??= new LocText("Placemaker.Problem.NotEnclosed");
-            return null;
+            switch (status)
+            {
+                case FacePickStatus.Ok: break;
+                case FacePickStatus.EmptyGraph:
+                case FacePickStatus.NoRoadNearby: problem = new LocText("Placemaker.Problem.NoRoadsNearby"); return null;
+                case FacePickStatus.TooLarge: problem = new LocText("Placemaker.Problem.BlockTooLarge"); return null;
+                case FacePickStatus.OutsideNetwork: problem = new LocText("Placemaker.Problem.NotEnclosed"); return null;
+                default: problem = new LocText("Placemaker.Problem.NoBlockHere"); return null;
+            }
+            var area = _roads.BuildArea(loop, AreaSource.Block);
+            if (area == null) { problem = new LocText("Placemaker.Problem.NoBlockHere"); return null; }
+            var edges = new HashSet<long>();
+            foreach (var h in loop) edges.Add(h.Edge);
+            return new BlockPick { Loop = loop, Area = area, Edges = edges };
         }
 
         /// <summary>Shape for the picked blocks (union of faces).</summary>

@@ -45,6 +45,29 @@ namespace Placemaker.Core.Tool
             return bag;
         }
 
+        /// <summary>
+        /// Recipe files store only overrides (docs/proposals/recipe-json.md): every step's settings
+        /// become generator defaults (+ saved defaults) with the file values on top. Unknown ids are
+        /// kept for forward compatibility; known ids are coerced to their control type.
+        /// </summary>
+        public void ApplyDefaults(Recipe recipe)
+        {
+            if (recipe?.Root == null) return;
+            foreach (var kv in RecipePaths.Walk(recipe))
+            {
+                var step = kv.Value;
+                var gen = Generator(step.Layer);
+                var merged = DefaultsFor(step.Layer);
+                foreach (var v in step.Settings.Values)
+                {
+                    var schema = FindControl(gen, v.Key);
+                    var coerced = schema != null ? Coerce(schema, v.Value) : v.Value;
+                    if (coerced != null) merged.Values[v.Key] = coerced;
+                }
+                step.Settings = merged;
+            }
+        }
+
         public RecipeStep NewStep(string layerId, string target, uint seed) => new RecipeStep
         {
             Layer = layerId ?? "",

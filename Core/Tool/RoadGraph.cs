@@ -1,14 +1,12 @@
-// Placemaker — planar road-graph algorithms for block picking and perimeter selection.
+// Placemaker — road-graph helpers for perimeter and multi-block selection.
 //
-// Ideas from Grid Road Generator Core/NetworkGraph.cs (Ti4goc, MIT): Dijkstra fill between
-// clicked nodes and face tracing by always taking the sharpest turn. Differences that matter for
-// the player: (1) tracing starts from the half-edge on the CURSOR's side of the nearest road, so
-// hovering inside any block of an X junction picks exactly that block (GRG's double-click could
-// not choose); (2) links carry the curve tangent at the node, not the straight chord, so curved
-// roads turn correctly; (3) parallel edges between the same two nodes are distinguished by edge
-// id; (4) dead-end spurs inside a block are walked around and then removed from the loop.
+// Block picking itself is Core/Geometry/PlanarGraph.PickFace. This file keeps what the selection
+// needs on top of it, working on an ON-DEMAND graph (IRoadGraph reads the ECS lazily, so perimeter
+// path fill never builds a whole-map graph): Dijkstra fill between clicked nodes (idea from Grid
+// Road Generator, Ti4goc, MIT; links carry curve tangents and edge ids so parallel edges stay
+// distinct), the union of several picked blocks, and stitching per-edge polylines into a ring.
 //
-// Ids are opaque longs (the game packs Entity index/version into them).
+// Ids are opaque longs (NetRefs.Encode of the entity).
 
 using System;
 using System.Collections.Generic;
@@ -42,75 +40,9 @@ namespace Placemaker.Core.Tool
         public override string ToString() => From + "-[" + Edge + "]->" + To;
     }
 
-    public enum FaceResult { Ok = 0, NoRoad = 1, TooLarge = 2, Open = 3, NotEnclosing = 4 }
 
     public static class RoadGraphAlgorithms
     {
-        /// <summary>
-        /// Walks the face lying to the LEFT of <paramref name="start"/> (counter-clockwise for a
-        /// bounded face in XZ with x right, z up). At every node the walk takes the outgoing edge
-        /// with the smallest clockwise angle from the way back, which keeps the face on the left.
-        /// Dead ends are walked around (u-turn) and their spurs removed afterwards.
-        /// </summary>
-        public static FaceResult TraceLeftFace(IRoadGraph graph, HalfEdge start, int maxSteps, List<HalfEdge> loop)
-        {
-            loop.Clear();
-            var cur = start;
-            for (int step = 0; step < maxSteps; step++)
-            {
-                loop.Add(cur);
-                var links = graph.Links(cur.To);
-                if (links == null || links.Count == 0) return FaceResult.Open;
-
-                // Direction at cur.To pointing back along the edge we arrived on.
-                float2 back = float2.zero;
-                bool foundBack = false;
-                foreach (var l in links)
-                    if (l.Edge == cur.Edge && l.Other == cur.From) { back = l.Direction; foundBack = true; break; }
-                if (!foundBack) return FaceResult.Open;
-
-                RoadLink chosen = default;
-                bool any = false;
-                float bestAngle = float.MaxValue;
-                foreach (var l in links)
-                {
-                    if (l.Edge == cur.Edge && l.Other == cur.From) continue;
-                    float a = ClockwiseAngle(back, l.Direction);
-                    if (a < bestAngle) { bestAngle = a; chosen = l; any = true; }
-                }
-                var next = any ? new HalfEdge(chosen.Edge, cur.To, chosen.Other) : cur.Reversed;   // dead end: turn around
-                if (next.Equals(start))
-                {
-                    RemoveSpurs(loop);
-                    return loop.Count >= 2 ? FaceResult.Ok : FaceResult.Open;
-                }
-                cur = next;
-            }
-            loop.Clear();
-            return FaceResult.TooLarge;
-        }
-
-        /// <summary>Removes half-edges walked in both directions (dead-end spurs, bridges) from a closed walk.</summary>
-        public static void RemoveSpurs(List<HalfEdge> loop)
-        {
-            if (loop.Count == 0) return;
-            var set = new HashSet<HalfEdge>(loop);
-            loop.RemoveAll(h => set.Contains(h.Reversed));
-        }
-
-        /// <summary>
-        /// Rotation (radians, [0, 2π)) turning <paramref name="from"/> clockwise onto <paramref name="to"/>,
-        /// in the XZ plane seen from above (x right, z up). A u-turn (to == from) is 2π-ε, i.e. last.
-        /// </summary>
-        public static float ClockwiseAngle(float2 from, float2 to)
-        {
-            const float TwoPi = 2f * math.PI;
-            float theta = math.atan2(from.y, from.x) - math.atan2(to.y, to.x);
-            theta %= TwoPi;
-            if (theta <= 1e-6f) theta += TwoPi;
-            return theta;
-        }
-
         /// <summary>
         /// Shortest path over the graph (Dijkstra with a binary heap; cost = edge length). Returns the
         /// half-edges from <paramref name="start"/> to <paramref name="end"/>; false when unreachable

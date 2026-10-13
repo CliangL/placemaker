@@ -138,40 +138,60 @@ namespace Placemaker.Game.Selection
 
         private readonly List<Entity> _scratch = new List<Entity>();
 
-        public struct NearestEdge
+        // ───────────── block picking (Core PlanarGraph) ─────────────
+
+        private const float GraphRadius = 900f;
+        private const float GraphRebuildDistance = 350f;
+        private const float GraphMaxAge = 2f;
+        private PlanarGraph _planar;
+        private float2 _planarCenter;
+        private float _planarBuilt = -100f;
+        private readonly List<float2> _geomScratch = new List<float2>();
+
+        /// <summary>
+        /// Planar graph of block-bounding roads around <paramref name="p"/>. Rebuilt when the cursor
+        /// leaves the covered area or every couple of seconds (the network may have changed) —
+        /// a bounded query, never the whole map.
+        /// </summary>
+        private PlanarGraph GraphAround(float2 p, float now)
         {
-            public Entity Edge;
-            public float T;
-            public float Distance;
-            public float3 Position;
-            public float2 Tangent;
+            if (_planar != null && math.distance(p, _planarCenter) < GraphRebuildDistance && now - _planarBuilt < GraphMaxAge) return _planar;
+            var g = new PlanarGraph();
+            Query(p - GraphRadius, p + GraphRadius, _scratch);
+            var seen = new HashSet<Entity>();
+            foreach (var e in _scratch)
+            {
+                if (!seen.Add(e) || !IsBoundaryEdge(e)) continue;
+                var edge = _em.GetComponentData<Edge>(e);
+                if (!_em.HasComponent<Node>(edge.m_Start) || !_em.HasComponent<Node>(edge.m_End)) continue;
+                long a = EntityIds.Pack(edge.m_Start), b = EntityIds.Pack(edge.m_End);
+                if (!g.HasNode(a)) g.AddNode(a, _em.GetComponentData<Node>(edge.m_Start).m_Position.xz);
+                if (!g.HasNode(b)) g.AddNode(b, _em.GetComponentData<Node>(edge.m_End).m_Position.xz);
+                _geomScratch.Clear();
+                foreach (var q in SampleCurve(_em.GetComponentData<Curve>(e).m_Bezier, true, 6)) _geomScratch.Add(q.xz);
+                g.AddEdge(EntityIds.Pack(e), a, b, _geomScratch);
+            }
+            g.Prepare();
+            _planar = g;
+            _planarCenter = p;
+            _planarBuilt = now;
+            return g;
         }
 
-        /// <summary>Boundary road edges near <paramref name="p"/>, nearest first (searches outwards up to maxRadius).</summary>
-        public List<NearestEdge> NearestEdges(float2 p, float maxRadius, int maxCount)
+        /// <summary>Forget the cached graph (after a build changed the roads).</summary>
+        public void InvalidateGraph() => _planar = null;
+
+        /// <summary>The block containing <paramref name="p"/> as a CCW loop of half-edges (face on the left).</summary>
+        public FacePickStatus PickBlock(float2 p, float now, List<HalfEdge> loop)
         {
-            var found = new List<NearestEdge>();
-            for (float r = 40f; r <= maxRadius * 1.01f && found.Count == 0; r *= 2.5f)
-            {
-                Query(p - r, p + r, _scratch);
-                var seen = new HashSet<Entity>();
-                foreach (var e in _scratch)
-                {
-                    if (!seen.Add(e) || !IsBoundaryEdge(e)) continue;
-                    var curve = _em.GetComponentData<Curve>(e).m_Bezier;
-                    float d = MathUtils.Distance(curve.xz, p, out float t);
-                    if (d > r) continue;
-                    found.Add(new NearestEdge
-                    {
-                        Edge = e, T = t, Distance = d,
-                        Position = MathUtils.Position(curve, t),
-                        Tangent = math.normalizesafe(MathUtils.Tangent(curve, t).xz),
-                    });
-                }
-            }
-            found.Sort((a, b) => a.Distance.CompareTo(b.Distance));
-            if (found.Count > maxCount) found.RemoveRange(maxCount, found.Count - maxCount);
-            return found;
+            loop.Clear();
+            var g = GraphAround(p, now);
+            var pick = g.PickFace(p, GraphRadius, 4000, true);
+            if (!pick.Ok) return pick.Status;
+            int n = pick.EdgeIds.Count;
+            for (int i = 0; i < n; i++)
+                loop.Add(new HalfEdge(pick.EdgeIds[i], pick.NodeIds[i], pick.NodeIds[(i + 1) % n]));
+            return loop.Count >= 2 ? FacePickStatus.Ok : FacePickStatus.Degenerate;
         }
 
         // ───────────── loop → area ─────────────

@@ -126,6 +126,26 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void ShippedRecipeFilesParseWithTheToolReader()
+        {
+            var dir = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
+            while (dir != null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "Recipes"))) dir = dir.Parent;
+            Assert.NotNull(dir);
+            var files = System.IO.Directory.GetFiles(System.IO.Path.Combine(dir.FullName, "Recipes"), "*.json");
+            Assert.NotEmpty(files);
+            foreach (var f in files)
+            {
+                var file = RecipeJson.Parse(System.IO.File.ReadAllText(f));
+                Assert.Equal(System.IO.Path.GetFileNameWithoutExtension(f), file.Recipe.Id);
+                Assert.False(string.IsNullOrEmpty(file.Recipe.Root.Layer));
+                Assert.True(file.FormatVersion <= RecipeJson.CurrentFormatVersion);
+                // Writing and reading back keeps the tree.
+                var back = RecipeJson.Parse(RecipeJson.Write(file.Recipe, file.DescriptionKey).ToString()).Recipe;
+                Assert.Equal(RecipeJson.WriteStep(file.Recipe.Root).ToString(), RecipeJson.WriteStep(back.Root).ToString());
+            }
+        }
+
+        [Fact]
         public void DefaultsFileRoundTrip()
         {
             var d = new System.Collections.Generic.Dictionary<string, SettingsBag>();

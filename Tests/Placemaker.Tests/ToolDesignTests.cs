@@ -154,6 +154,19 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void FileSettingsOverlayDefaults()
+        {
+            var r = RecipeJson.Parse("{\"id\":\"x\",\"root\":{\"layer\":\"fake\",\"settings\":{\"size\":500,\"future\":3},"
+                + "\"children\":[{\"layer\":\"plaza\",\"settings\":{\"style\":\"wild\"}}]}}").Recipe;
+            Editor().ApplyDefaults(r);
+            Assert.Equal(100.0, r.Root.Settings.Values["size"]);          // clamped override
+            Assert.Equal("formal", r.Root.Settings.Values["style"]);      // default
+            Assert.Equal(3.0, r.Root.Settings.Values["future"]);          // unknown id kept
+            Assert.Equal(true, r.Root.Children[0].Settings.Values["trees"]);
+            Assert.Equal("wild", r.Root.Children[0].Settings.Values["style"]);
+        }
+
+        [Fact]
         public void MarkersAddRemoveClear()
         {
             var e = Editor();

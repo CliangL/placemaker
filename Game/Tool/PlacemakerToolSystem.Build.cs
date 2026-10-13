@@ -125,6 +125,22 @@ namespace Placemaker.Game.Tool
             }
         }
 
+        /// <summary>
+        /// The build service activates its own invisible tool while it builds (CS2 applies temporaries
+        /// through the ACTIVE tool's applyMode — docs/proposals/gamebuild.md), so this tool is stopped
+        /// for those frames. Our state is kept (OnStopRunning resets nothing persistent) and the UI
+        /// system keeps polling the build through this, so progress and the result still arrive.
+        /// </summary>
+        public void PollBuildWhileInactive()
+        {
+            if (!_building || IsActive) return;
+            try { UpdateBuild(); }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: build poll failed: " + e.Message); }
+        }
+
+        /// <summary>True while the build service holds the tool slot for us (we will be reactivated).</summary>
+        public bool BuildHoldsTool => _building && Services.Build is global::Placemaker.Game.Build.BuildService bs && bs.HoldsTool;
+
         private static void Acknowledge(IBuildService svc)
         {
             try { svc.Acknowledge(); } catch (Exception e) { Mod.Log.Warn("Placemaker: acknowledge failed: " + e.Message); }
@@ -134,6 +150,7 @@ namespace Placemaker.Game.Tool
         private void OnBuilt(int groupId)
         {
             ClearSelectionState();
+            _roads.InvalidateGraph();   // the new roads must be pickable right away
             if (_recipe != null) foreach (var kv in RecipePaths.Walk(_recipe)) kv.Value.Markers.Clear();
             _editingGroup = 0;
             _plan = null;

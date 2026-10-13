@@ -66,7 +66,7 @@ namespace Placemaker.Game.Recipes
                 {
                     var r = editor.SingleLayerRecipe(g, 0);
                     seen.Add(r.Id);
-                    _entries.Add(new Entry { Recipe = r, Order = 500 + _entries.Count });
+                    _entries.Add(new Entry { Recipe = r, Order = LayerOrder(g.Id) });
                 }
                 catch (Exception ex) { Mod.Log.Warn("Placemaker: layer " + g.Id + " has no usable defaults: " + ex.Message); }
             }
@@ -83,7 +83,7 @@ namespace Placemaker.Game.Recipes
             Version++;
         }
 
-        private static IEnumerable<Entry> LoadFolder(string folder, bool custom)
+        private IEnumerable<Entry> LoadFolder(string folder, bool custom)
         {
             var list = new List<Entry>();
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return list;
@@ -91,19 +91,28 @@ namespace Placemaker.Game.Recipes
             try { files = Directory.GetFiles(folder, "*.json"); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: cannot list " + folder + ": " + e.Message); return list; }
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+            var editor = _editor();
             foreach (var path in files)
             {
                 try
                 {
                     var file = RecipeJson.Parse(File.ReadAllText(path));
                     var r = file.Recipe;
-                    if (string.IsNullOrEmpty(r.Id)) r.Id = Path.GetFileNameWithoutExtension(path);
                     if (file.FormatVersion > RecipeJson.CurrentFormatVersion)
-                        Mod.Log.Warn("Placemaker: " + Path.GetFileName(path) + " is from a newer version (format " + file.FormatVersion + "); loading what we understand");
+                    {
+                        // A newer format may mean something different: skip rather than build the wrong thing.
+                        Mod.Log.Warn("Placemaker: skipping " + Path.GetFileName(path) + " — format " + file.FormatVersion + " is newer than this version understands");
+                        continue;
+                    }
+                    if (string.IsNullOrEmpty(r.Id)) r.Id = Path.GetFileNameWithoutExtension(path);
                     if (GeneratorRegistry.Get(r.Root.Layer) == null)
                         Mod.Log.Info("Placemaker: recipe " + r.Id + " uses unknown layer '" + r.Root.Layer + "' (mod missing?) — listed, will report an issue");
                     if (custom && string.IsNullOrEmpty(r.Name) && string.IsNullOrEmpty(r.NameKey)) r.Name = r.Id;
-                    list.Add(new Entry { Recipe = r, Custom = custom, DescriptionKey = file.DescriptionKey, Order = file.Order, FilePath = custom ? path : null });
+                    // Files hold overrides only (player recipes hold full values; overlaying is harmless).
+                    editor.ApplyDefaults(r);
+                    foreach (var kv in RecipePaths.Walk(r)) kv.Value.Markers.Clear();
+                    int order = file.Order != 1000 ? file.Order : LayerOrder(r.Root.Layer);
+                    list.Add(new Entry { Recipe = r, Custom = custom, DescriptionKey = file.DescriptionKey, Order = order, FilePath = custom ? path : null });
                 }
                 catch (Exception e)
                 {
@@ -111,6 +120,14 @@ namespace Placemaker.Game.Recipes
                 }
             }
             return list;
+        }
+
+        /// <summary>Make-row order: the root layer's [AreaGenerator(order)] position (spec: then file name).</summary>
+        private static int LayerOrder(string layer)
+        {
+            var all = GeneratorRegistry.All;
+            for (int i = 0; i < all.Count; i++) if (all[i].Id == layer) return i * 10;
+            return 10000;
         }
 
         /// <summary>Saves the design as a player recipe. Returns its id, or null on failure.</summary>

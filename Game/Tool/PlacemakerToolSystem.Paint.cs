@@ -13,7 +13,7 @@ namespace Placemaker.Game.Tool
     {
         private float2 _lastStroke;
 
-        public PaintMask Paint => _paint;
+        public BrushMask Paint => _paint;
         public bool Painting => _gesture == Gesture.Paint || _gesture == Gesture.Erase;
 
         private void UpdatePaint()
@@ -69,8 +69,12 @@ namespace Placemaker.Game.Tool
             if (_paint.IsEmpty) return null;
             var outline = _paint.Outline();
             if (outline.Count < 3) return null;
-            var ring = Poly.To3D(outline, p => _site.SampleHeight(p));
-            return new AreaShape { Ring = ring, Source = AreaSource.Painted };
+            // Largest island, holes filled (CS2 areas cannot have holes), y = 0 → terrain height.
+            var ring = new float3[outline.Count];
+            for (int i = 0; i < ring.Length; i++) ring[i] = new float3(outline[i].x, _site.SampleHeight(outline[i].xz), outline[i].z);
+            var shape = new AreaShape { Ring = ring, Source = AreaSource.Painted };
+            WithFoundAttachments(shape);
+            return shape;
         }
     }
 }

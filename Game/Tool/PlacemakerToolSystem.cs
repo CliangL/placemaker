@@ -17,6 +17,7 @@ using Game.Input;
 using Game.Prefabs;
 using Game.Tools;
 using Placemaker.Core;
+using Placemaker.Core.Geometry;
 using Placemaker.Core.Tool;
 using Placemaker.Game.Preview;
 using Placemaker.Game.Recipes;
@@ -54,7 +55,7 @@ namespace Placemaker.Game.Tool
         private History<ToolSnapshot> _history;
         private SelectionMode _mode;
         private readonly PolygonEditor _draw = new PolygonEditor();
-        private readonly PaintMask _paint = new PaintMask();
+        private readonly BrushMask _paint = new BrushMask();
         private BlockSelectionState _blocks = new BlockSelectionState();
         private PerimeterSelectionState _perimeter = new PerimeterSelectionState();
         private AreaShape _shape;
@@ -80,12 +81,6 @@ namespace Placemaker.Game.Tool
         private bool _wasRunning;
         private int _errorCount;
 
-        /// <summary>
-        /// The build service may need the active tool to apply its Temp entities (CS2 applies them
-        /// through ToolSystem.applyMode, which reads the ACTIVE tool). It sets this for the frames it
-        /// needs; null = the tool's own default (None: Placemaker never creates definitions itself).
-        /// </summary>
-        public ApplyMode? ApplyModeOverride { get; set; }
 
         /// <summary>Bumped whenever anything the UI shows may have changed (cheap change detection for bindings).</summary>
         public int ViewVersion { get; private set; }
@@ -108,7 +103,7 @@ namespace Placemaker.Game.Tool
             CreateHintActions();
             if (_settings != null)
             {
-                _brushSize = math.clamp(_settings.BrushSize, PaintMask.MinDiameter, PaintMask.MaxDiameter);
+                _brushSize = math.clamp(_settings.BrushSize, BrushMask.MinDiameter, BrushMask.MaxDiameter);
                 _brushSquare = _settings.BrushSquare;
                 _mode = (SelectionMode)math.clamp(_settings.LastAreaMode, 0, 3);
                 _panelCollapsed = _settings.PanelCollapsed;
@@ -220,7 +215,8 @@ namespace Placemaker.Game.Tool
         [Preserve]
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
-            applyMode = ApplyModeOverride ?? ApplyMode.None;
+            // Placemaker never creates definitions itself; the build service applies through its own tool.
+            applyMode = ApplyMode.None;
             try
             {
                 GetAvailableSnapMask(out m_SnapOnMask, out m_SnapOffMask);
@@ -339,10 +335,10 @@ namespace Placemaker.Game.Tool
             };
         }
 
-        private PaintMask.Snapshot _paintSnap;
+        private BrushMask.Snapshot _paintSnap;
         private int _paintSnapVersion = -1;
 
-        private PaintMask.Snapshot PaintSnapshot()
+        private BrushMask.Snapshot PaintSnapshot()
         {
             if (_paint.IsEmpty) return null;
             if (_paintSnap == null || _paintSnapVersion != _paint.Version)
@@ -451,7 +447,7 @@ namespace Placemaker.Game.Tool
         public void SetBrush(bool square, float size, float angle)
         {
             _brushSquare = square;
-            _brushSize = math.clamp(size, PaintMask.MinDiameter, PaintMask.MaxDiameter);
+            _brushSize = math.clamp(size, BrushMask.MinDiameter, BrushMask.MaxDiameter);
             _brushAngle = ((angle % 360f) + 360f) % 360f;
             if (_settings != null) { _settings.BrushSize = _brushSize; _settings.BrushSquare = _brushSquare; _settings.ApplyAndSave(); }
             Touch();

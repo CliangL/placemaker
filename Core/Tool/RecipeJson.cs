@@ -1,22 +1,17 @@
-// Placemaker — recipe files (shipped Recipes/*.json and player recipes in ModsData).
+// Placemaker — recipe files (shipped Recipes/*.json and player recipes in ModsData/Placemaker/Recipes).
 //
-// Format (flat; the root step's fields sit next to the recipe metadata so a hand-written
-// single-layer recipe is three lines):
+// Format: docs/proposals/recipe-json.md (park-plaza workstream) — recipe metadata plus a nested
+// "root" step:
 //
-//   {
-//     "formatVersion": 1,
-//     "id": "roads-with-parks",            // stable; player recipes get a GUID
-//     "nameKey": "Placemaker.Recipe.RoadsWithParks",   // or "name": "My grid" for player recipes
-//     "icon": "coui://...", "descriptionKey": "...", "order": 40,
-//     "layer": "roads", "settings": { "spacing": 90 }, "locked": ["spacing"], "seed": 0,
-//     "target": "", "enabled": true,
-//     "markers": [ { "kind": "entrance", "segment": 2, "t": 0.5, "position": [x, y, z] } ],
-//     "children": [ { "layer": "park", "target": "block" } ],
-//     "regionOverrides": { "block:3": { "layer": "plaza" } }
-//   }
+//   { "formatVersion": 1, "id": "split-park-plaza", "nameKey": "...", "descriptionKey": "...", "icon": "...",
+//     "root": { "layer": "split", "settings": { "ratio": 60 },
+//               "children": [ { "layer": "park", "target": "part:0" } ],
+//               "regionOverrides": { "part:1": { "layer": "plaza" } } } }
 //
-// A nested "root": { ...step... } object is accepted as well. Unknown fields are ignored and
-// missing ones take defaults, so older/newer files load as far as they can.
+// Step settings in files are OVERRIDES on the generator defaults (the game-side RecipeStore
+// overlays them). The reader also accepts the root step's fields flat at top level, and an
+// optional "order". Markers are written only for receipts, never into recipe files. Unknown
+// fields are ignored, missing ones take defaults.
 
 using System;
 using System.Collections.Generic;
@@ -125,7 +120,7 @@ namespace Placemaker.Core.Tool
             if (!string.IsNullOrEmpty(r.Icon)) o.Set("icon", r.Icon);
             if (!string.IsNullOrEmpty(descriptionKey)) o.Set("descriptionKey", descriptionKey);
             if (order.HasValue) o.Set("order", order.Value);
-            WriteStepInto(o, r.Root ?? new RecipeStep());
+            o.Set("root", WriteStep(r.Root ?? new RecipeStep()));
             return o;
         }
 

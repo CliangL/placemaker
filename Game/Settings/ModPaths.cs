@@ -58,7 +58,7 @@ namespace Placemaker.Game.Settings
         {
             get
             {
-                var dir = Path.Combine(DataFolder, "recipes");
+                var dir = Path.Combine(DataFolder, "Recipes");
                 try { Directory.CreateDirectory(dir); } catch (Exception) { }
                 return dir;
             }

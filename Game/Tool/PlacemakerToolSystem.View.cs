@@ -89,7 +89,7 @@ namespace Placemaker.Game.Tool
             var facts = Facts();
             var s = new ToolStateInput
             {
-                Open = IsActive,
+                Open = IsActive || _building,
                 Stage = _stage,
                 Reachable = StageMachine.Reachable(facts),
                 Mode = _mode,
