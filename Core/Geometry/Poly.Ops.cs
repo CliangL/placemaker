@@ -413,7 +413,6 @@ namespace Placemaker.Core.Geometry
         public static List<(float2 a, float2 b)> ClipSegmentToPolygon(Region region, float2 a, float2 b)
         {
             var result = new List<(float2, float2)>();
-            var rings = new List<float2>();
             // Even-odd over all rings = inside outer and outside holes.
             var ts = new List<float> { 0, 1 };
             foreach (var ring in region.Rings())

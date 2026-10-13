@@ -350,7 +350,6 @@ namespace Placemaker.Core.Geometry
             for (double x = mn.x - o.x; x < mx.x - o.x; x += cell)
                 for (double y = mn.y - o.y; y < mx.y - o.y; y += cell)
                     heap.Push(MakeCell(new double2(x + h, y + h), h, Sd));
-            if (heap.Count > 20000) { /* degenerate thin shape: the search below stays bounded anyway */ }
 
             var c0 = Centroid(region.Outer);
             var best = MakeCell((double2)c0 - o, 0, Sd);

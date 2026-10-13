@@ -291,7 +291,7 @@ namespace Placemaker.Core.Geometry
             for (int round = 0; round < 4 * leaves.Count + 4; round++)
             {
                 var edgeOwner = new Dictionary<long, int>();
-                int bestA = -1, bestB = -1; long bestKey = 0; double bestArea = -1;
+                int bestA = -1, bestB = -1;
                 var candidates = new List<KeyValuePair<double, int2>>();
                 var keys = new List<long>();
                 for (int li = 0; li < leaves.Count; li++)
@@ -320,7 +320,7 @@ namespace Placemaker.Core.Geometry
                     int2 pair = candidates[ci].Value;
                     var m = MergeAlong(leaves[pair.x], leaves[pair.y], keys[ci]);
                     if (m == null || !IsAccepted(Emit(c, m))) continue;
-                    bestA = pair.x; bestB = pair.y; bestKey = keys[ci]; bestArea = candidates[ci].Key; merged = m;
+                    bestA = pair.x; bestB = pair.y; merged = m;
                     break;
                 }
                 if (merged == null) return;

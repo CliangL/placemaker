@@ -77,8 +77,9 @@ namespace Placemaker.Core.Geometry
         public CubicBezier Cut(float t0, float t1)
         {
             if (t1 < t0) { var t = t0; t0 = t1; t1 = t; }
-            Split(t1, out var l, out _);
+            t0 = math.saturate(t0); t1 = math.saturate(t1);
             if (t1 <= 0) return new CubicBezier(A, A, A, A);
+            Split(t1, out var l, out _);
             l.Split(t0 / t1, out _, out var mid);
             return mid;
         }
@@ -208,8 +209,8 @@ namespace Placemaker.Core.Geometry
                     if (pts.Count == 0 || math.distancesq(pts[pts.Count - 1], p) > 1e-10f) pts.Add(p);
             if (pts.Count < 2) return result;
             if (pts.Count == 2) { result.Add(CubicBezier.Line(pts[0], pts[1])); return result; }
-            float3 t1 = math.normalizesafe(pts[1] - pts[0]);
-            float3 t2 = math.normalizesafe(pts[pts.Count - 2] - pts[pts.Count - 1]);
+            float3 t1 = EndTangent(pts, true);
+            float3 t2 = EndTangent(pts, false);
             FitRange(pts, 0, pts.Count - 1, t1, t2, math.max(maxError, 1e-4f), result, 0);
             return result;
         }
@@ -220,7 +221,7 @@ namespace Placemaker.Core.Geometry
             var pts = new List<float3>(points);
             if (pts.Count < 2) return default;
             if (pts.Count == 2) return CubicBezier.Line(pts[0], pts[1]);
-            float3 t1 = math.normalizesafe(pts[1] - pts[0]), t2 = math.normalizesafe(pts[pts.Count - 2] - pts[pts.Count - 1]);
+            float3 t1 = EndTangent(pts, true), t2 = EndTangent(pts, false);
             var u = ChordParams(pts, 0, pts.Count - 1);
             var bez = Generate(pts, 0, pts.Count - 1, u, t1, t2);
             for (int it = 0; it < 4; it++)
@@ -229,6 +230,25 @@ namespace Placemaker.Core.Geometry
                 bez = Generate(pts, 0, pts.Count - 1, u, t1, t2);
             }
             return bez;
+        }
+
+        /// <summary>
+        /// Unit tangent at an end of the polyline (pointing into it), from the one-sided 3-point
+        /// derivative of the parabola through the first/last three points (chord-length spaced). Far
+        /// better than the first chord on sampled arcs; falls back to the chord.
+        /// </summary>
+        private static float3 EndTangent(List<float3> p, bool atStart)
+        {
+            int n = p.Count;
+            float3 a = atStart ? p[0] : p[n - 1], b = atStart ? p[1] : p[n - 2];
+            float3 chord = math.normalizesafe(b - a);
+            if (n < 3) return chord;
+            float3 c = atStart ? p[2] : p[n - 3];
+            float h1 = math.distance(a, b), h2 = math.distance(b, c);
+            if (h1 < 1e-6f || h2 < 1e-6f) return chord;
+            float3 d = -(2 * h1 + h2) / (h1 * (h1 + h2)) * a + (h1 + h2) / (h1 * h2) * b - h1 / (h2 * (h1 + h2)) * c;
+            float3 t = math.normalizesafe(d);
+            return math.dot(t, chord) > 0.5f ? t : chord;
         }
 
         private static void FitRange(List<float3> d, int first, int last, float3 tHat1, float3 tHat2, float error, List<CubicBezier> output, int depth)
