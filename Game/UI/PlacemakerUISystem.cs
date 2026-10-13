@@ -25,6 +25,7 @@ namespace Placemaker.Game.UI
 
         private int _stateStamp = -1;
         private int _designStamp = -1, _designPlanStamp = -1;
+        private int _designPushFrame = -100;
         private string _summaryStamp;
         private int _catalogStamp = -1, _catalogGenerators = -1;
         private string _assetsStamp;
@@ -171,6 +172,10 @@ namespace Placemaker.Game.UI
         private void PushDesign()
         {
             if (_designStamp == _tool.DesignVersion && _designPlanStamp == _tool.PlanRevision && _frame % 30 != 0) return;
+            // While a slider drags (previewValue) the panel already shows the dragged value: push the design at
+            // most every 6th frame so the drag stays smooth; endPreview bumps the version and the final state goes out.
+            if (_tool.ValuePreviewActive && _designPlanStamp == _tool.PlanRevision && _frame - _designPushFrame < 6) return;
+            _designPushFrame = _frame;
             _designStamp = _tool.DesignVersion;
             _designPlanStamp = _tool.PlanRevision;
             _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan).ToString());
@@ -194,7 +199,11 @@ namespace Placemaker.Game.UI
                 CanAfford = afford,
                 PermanentAcknowledged = ack,
             };
-            if (failure != null) input.ExtraIssues.Add(failure);
+            if (failure != null)
+            {
+                input.ExtraIssues.Add(failure);
+                input.ExtraIssues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = "Placemaker.Issue.BuildFailedNext" });
+            }
             _summary.Update(UiModels.Summary(input).ToString());
         }
 
