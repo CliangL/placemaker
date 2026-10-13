@@ -1,5 +1,5 @@
 // Placemaker roads layer — contour (terrain-following) pattern.
-// Adapted from Grid Road Generator (Ti4goc), Core/GridGenerator.Contour.cs (MIT); part of Placemaker (GPL-3.0).
+// Adapted from Grid Road Generator (Ti4goc), Core/GridGenerator.Contour.cs; part of Placemaker (GPL-3.0).
 // Changes for Placemaker: no static caches or global lock (thread-safe, reentrant), cooperative
 // cancellation through GridParameters.Cancel, per-call diagnostics objects instead of statics.
 using System;

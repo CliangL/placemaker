@@ -1,5 +1,5 @@
 // Placemaker roads layer — drawn-area outline smoothing and perimeter road.
-// Adapted from Grid Road Generator (Ti4goc), Core/FreeAreaPerimeter.cs (MIT); part of Placemaker (GPL-3.0).
+// Adapted from Grid Road Generator (Ti4goc), Core/FreeAreaPerimeter.cs; part of Placemaker (GPL-3.0).
 // Changes for Placemaker: no static caches or global lock (thread-safe, reentrant), cooperative
 // cancellation through GridParameters.Cancel, per-call diagnostics objects instead of statics.
 using System;
