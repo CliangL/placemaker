@@ -1,0 +1,11 @@
+bin/
+obj/
+UI/node_modules/
+UI/build/
+UI/mock/dist/
+UI/test-results/
+UI/playwright-report/
+*.user
+.vs/
+Tests/**/bin/
+Tests/**/obj/

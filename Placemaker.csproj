@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Two build modes:
+      * Toolchain mode (CSII_TOOLPATH set by Options > Modding in game): the official
+        Mod.props/Mod.targets run the post-processor, Burst and deploy.
+      * Standalone mode (no toolchain): compiles against the installed game's own
+        Managed assemblies (including its mscorlib) and copies the result to the
+        local Mods folder. No Burst, no Entities source generators: the code base
+        deliberately avoids SystemAPI/IJobEntity so both modes compile the same sources.
+  -->
+  <PropertyGroup>
+    <AssemblyName>Placemaker</AssemblyName>
+    <RootNamespace>Placemaker</RootNamespace>
+    <Version>0.1.0</Version>
+    <Configurations>Debug;Release</Configurations>
+    <Nullable>disable</Nullable>
+    <CS2ToolPath Condition="'$(CSII_TOOLPATH)' != ''">$(CSII_TOOLPATH)</CS2ToolPath>
+    <CS2ToolPath Condition="'$(CS2ToolPath)' == ''">$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))</CS2ToolPath>
+    <UseToolchain Condition="'$(CS2ToolPath)' != '' AND Exists('$(CS2ToolPath)\Mod.props')">true</UseToolchain>
+    <PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
+  </PropertyGroup>
+
+  <Import Project="$(CS2ToolPath)\Mod.props" Condition="'$(UseToolchain)' == 'true'" />
+
+  <!-- Standalone mode -->
+  <PropertyGroup Condition="'$(UseToolchain)' != 'true'">
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <OutputType>Library</OutputType>
+    <ManagedPath Condition="'$(ManagedPath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II\Cities2_Data\Managed</ManagedPath>
+    <UserDataPath Condition="'$(UserDataPath)' == ''">$(USERPROFILE)\AppData\LocalLow\Colossal Order\Cities Skylines II</UserDataPath>
+    <DeployDir>$(UserDataPath)\Mods\$(AssemblyName)</DeployDir>
+    <NoStdLib>true</NoStdLib>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UseToolchain)' != 'true'">
+    <Reference Include="mscorlib"><HintPath>$(ManagedPath)\mscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System"><HintPath>$(ManagedPath)\System.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Core"><HintPath>$(ManagedPath)\System.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard"><HintPath>$(ManagedPath)\netstandard.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <GameReference Include="Game;Colossal.Core;Colossal.Collections;Colossal.Logging;Colossal.Localization;Colossal.Mathematics;Colossal.IO.AssetDatabase;Colossal.UI;Colossal.UI.Binding;Colossal.PSI.Common;Unity.Collections;Unity.Entities;Unity.Mathematics;Unity.Burst;UnityEngine.CoreModule;UnityEngine.InputLegacyModule;Unity.InputSystem;Newtonsoft.Json" />
+    <Reference Include="@(GameReference)">
+      <HintPath Condition="'$(UseToolchain)' != 'true'">$(ManagedPath)\%(Identity).dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="UI\**;Tests\**;docs\**;bin\**;obj\**" />
+    <None Remove="UI\**;Tests\**;docs\**" />
+    <None Include="Lang\*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Lang" />
+    <None Include="LICENSE" CopyToOutputDirectory="PreserveNewest" Condition="Exists('LICENSE')" />
+  </ItemGroup>
+
+  <Import Project="$(CS2ToolPath)\Mod.targets" Condition="'$(UseToolchain)' == 'true'" />
+
+  <!-- UI bundle: built before the C# output is gathered so deploy never ships a stale bundle. -->
+  <Target Name="BuildUserInterface" BeforeTargets="BeforeBuild" Condition="'$(SkipUI)' != 'true'">
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)\UI\node_modules')" Text="UI dependencies missing: run 'npm ci' in UI\ (or build with -p:SkipUI=true)." />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\UI" Command="npm run build" EnvironmentVariables="PLACEMAKER_UI_OUT=$(MSBuildProjectDirectory)\UI\build" />
+  </Target>
+
+  <Target Name="DeployStandalone" AfterTargets="Build" Condition="'$(UseToolchain)' != 'true' AND '$(Deploy)' != 'false'">
+    <ItemGroup>
+      <PlacemakerOut Include="$(OutDir)**\*.*" />
+      <PlacemakerUi Include="$(MSBuildProjectDirectory)\UI\build\**\*.*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(DeployDir)" />
+    <Copy SourceFiles="@(PlacemakerOut)" DestinationFiles="@(PlacemakerOut->'$(DeployDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(PlacemakerUi)" DestinationFiles="@(PlacemakerUi->'$(DeployDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Message Importance="high" Text="Placemaker deployed (standalone, no Burst) to $(DeployDir)" />
+  </Target>
+
+  <Target Name="DeployUserInterface" AfterTargets="DeployWIP" Condition="'$(UseToolchain)' == 'true'">
+    <ItemGroup>
+      <PlacemakerUiTc Include="$(MSBuildProjectDirectory)\UI\build\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PlacemakerUiTc)" DestinationFiles="@(PlacemakerUiTc->'$(DeployDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+</Project>

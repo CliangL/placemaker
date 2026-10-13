@@ -1,0 +1,6 @@
+{
+  "Placemaker.Name": "Placemaker",
+  "Placemaker.Issue.RecipeTooDeep": "This design has too many nested layers.",
+  "Placemaker.Issue.UnknownLayer": "Unknown layer \"{0}\" — is a mod missing?",
+  "Placemaker.Issue.LayerFailed": "{0} could not be planned: {1}"
+}

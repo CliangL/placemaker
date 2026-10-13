@@ -1,0 +1,390 @@
+// Recipes: composable layers. A recipe is data (serialisable), so built-in types are just
+// shipped recipes and player-made recipes later are just saved files.
+//
+//   Park                     = park
+//   Park + restrooms         = park ─┬─ restrooms (add-on, same region)
+//   Roads with parks         = roads ─ park (target "block")
+//   Split park | plaza       = split ─┬─ park  (target "part:0")
+//                                     └─ plaza (target "part:1")
+//   Plaza with edge zoning   = plaza ─ edgeZoning (target "edge")
+
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Unity.Mathematics;
+
+namespace Placemaker.Core
+{
+    public sealed class RecipeStep
+    {
+        /// <summary>IAreaGenerator.Id of the layer.</summary>
+        public string Layer = "";
+        public SettingsBag Settings = new SettingsBag();
+        /// <summary>Ids of settings the player set explicitly (Randomize must not touch them).</summary>
+        public HashSet<string> Locked = new HashSet<string>(StringComparer.Ordinal);
+        public uint Seed;
+        /// <summary>
+        /// Which regions of the parent this step runs in. "" = the parent's own region (add-ons).
+        /// Otherwise a tag ("block") or an exact region key ("part:1", "block:3").
+        /// </summary>
+        public string Target = "";
+        public bool Enabled = true;
+        /// <summary>Markers placed by the player for this step (entrances, access points, split lines…).</summary>
+        public List<EdgeMarker> Markers = new List<EdgeMarker>();
+        public List<RecipeStep> Children = new List<RecipeStep>();
+        /// <summary>
+        /// Per-region replacement: region key → step that runs there instead of the matching child.
+        /// Lets the player turn "block:3" of a road grid into a plaza while other blocks stay parks.
+        /// </summary>
+        public Dictionary<string, RecipeStep> RegionOverrides = new Dictionary<string, RecipeStep>(StringComparer.Ordinal);
+
+        public RecipeStep Clone()
+        {
+            var c = new RecipeStep
+            {
+                Layer = Layer, Settings = Settings.Clone(), Seed = Seed, Target = Target, Enabled = Enabled,
+                Locked = new HashSet<string>(Locked, StringComparer.Ordinal),
+                Markers = new List<EdgeMarker>(Markers),
+            };
+            foreach (var ch in Children) c.Children.Add(ch.Clone());
+            foreach (var kv in RegionOverrides) c.RegionOverrides[kv.Key] = kv.Value.Clone();
+            return c;
+        }
+    }
+
+    public sealed class Recipe
+    {
+        /// <summary>Stable id for shipped recipes ("park", "roads-with-parks"); a GUID for player recipes.</summary>
+        public string Id = "";
+        public string NameKey = "";
+        /// <summary>Player-facing name for player recipes (NameKey empty).</summary>
+        public string Name = "";
+        public string Icon = "";
+        public int FormatVersion = 1;
+        public RecipeStep Root = new RecipeStep();
+
+        public Recipe Clone() => new Recipe { Id = Id, NameKey = NameKey, Name = Name, Icon = Icon, FormatVersion = FormatVersion, Root = Root.Clone() };
+
+        /// <summary>The simplest recipe: one layer with its defaults.</summary>
+        public static Recipe Single(IAreaGenerator g, uint seed) => new Recipe
+        {
+            Id = g.Id, NameKey = g.NameKey, Icon = g.Icon,
+            Root = new RecipeStep { Layer = g.Id, Settings = g.Defaults(), Seed = seed },
+        };
+    }
+
+    /// <summary>Result of running a recipe: one AreaPlan per executed step × region.</summary>
+    public sealed class ComposedPlan
+    {
+        public List<AreaPlan> Layers = new List<AreaPlan>();
+        public List<PlanIssue> Issues = new List<PlanIssue>();
+
+        public bool HasErrors
+        {
+            get
+            {
+                foreach (var i in Issues) if (i.Severity == IssueSeverity.Error) return true;
+                foreach (var l in Layers) if (l.HasErrors) return true;
+                return false;
+            }
+        }
+
+        /// <summary>Stats summed across layers by (key, unit), in first-seen order.</summary>
+        public List<PlanStat> MergedStats()
+        {
+            var order = new List<(string, string)>();
+            var sums = new Dictionary<(string, string), double>();
+            foreach (var l in Layers)
+                foreach (var s in l.Stats)
+                {
+                    var k = (s.Key, s.Unit ?? "");
+                    if (!sums.ContainsKey(k)) { sums[k] = 0; order.Add(k); }
+                    sums[k] += s.Value;
+                }
+            var r = new List<PlanStat>(order.Count);
+            foreach (var k in order) r.Add(new PlanStat(k.Item1, sums[k], k.Item2));
+            return r;
+        }
+
+        public IEnumerable<PlanIssue> AllIssues()
+        {
+            foreach (var i in Issues) yield return i;
+            foreach (var l in Layers) foreach (var i in l.Issues) yield return i;
+        }
+    }
+
+    /// <summary>
+    /// Runs a recipe tree over an area. Pure and deterministic; safe on a worker thread.
+    /// Failure of one layer never kills the recipe: the failing step reports an Error issue and
+    /// its children are skipped.
+    /// </summary>
+    public static class Composer
+    {
+        public const int MaxDepth = 6;
+        public const int MaxSteps = 512;
+
+        public static ComposedPlan Compose(Recipe recipe, AreaShape area, SiteContext site, CancellationToken cancel)
+        {
+            var result = new ComposedPlan();
+            var reserved = new ReservedSpace();
+            int budget = MaxSteps;
+            Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, "0", 0, result, ref budget, cancel);
+            return result;
+        }
+
+        private static void Run(RecipeStep step, AreaShape shape, string[] tags, string regionKey, SiteContext site,
+            ReservedSpace reserved, string path, int depth, ComposedPlan result, ref int budget, CancellationToken cancel)
+        {
+            cancel.ThrowIfCancellationRequested();
+            if (!step.Enabled) return;
+            if (depth > MaxDepth || --budget < 0)
+            {
+                result.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = "Placemaker.Issue.RecipeTooDeep" });
+                return;
+            }
+
+            var gen = GeneratorRegistry.Get(step.Layer);
+            if (gen == null)
+            {
+                result.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = "Placemaker.Issue.UnknownLayer", Args = new object[] { step.Layer } });
+                return;
+            }
+
+            var input = new AreaInput
+            {
+                Shape = shape,
+                Site = site,
+                Settings = step.Settings,
+                Seed = Seeds.Mix(step.Seed, Seeds.Hash(path + "|" + regionKey)),
+                Markers = MarkersOn(step.Markers, shape.Ring),
+                RegionTags = tags,
+                Reserved = reserved.Clone(),
+            };
+
+            AreaPlan plan;
+            try
+            {
+                plan = gen.Plan(input, cancel) ?? new AreaPlan();
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception e)
+            {
+                result.Issues.Add(new PlanIssue
+                {
+                    Severity = IssueSeverity.Error, Key = "Placemaker.Issue.LayerFailed",
+                    Args = new object[] { gen.Id, e.GetType().Name + ": " + e.Message },
+                });
+                return;
+            }
+
+            plan.GeneratorId = gen.Id;
+            plan.StepPath = path + "@" + regionKey;
+            result.Layers.Add(plan);
+            Reserve(plan, reserved);
+
+            for (int ci = 0; ci < step.Children.Count; ci++)
+            {
+                var child = step.Children[ci];
+                string childPath = path + "/" + ci;
+                if (string.IsNullOrEmpty(child.Target))
+                {
+                    Run(child, shape, tags, regionKey, site, reserved, childPath, depth + 1, result, ref budget, cancel);
+                    continue;
+                }
+                foreach (var region in plan.Regions)
+                {
+                    if (!Matches(child.Target, region)) continue;
+                    var effective = step.RegionOverrides.TryGetValue(region.Key, out var ov) ? ov : child;
+                    var sub = new AreaShape { Ring = region.Ring, Source = shape.Source, Attachments = AttachmentsOn(shape.Attachments, region.Ring) };
+                    Run(effective, sub, region.Tags, region.Key, site, reserved, childPath, depth + 1, result, ref budget, cancel);
+                }
+            }
+        }
+
+        public static bool Matches(string target, PlannedRegion region)
+        {
+            if (target == region.Key) return true;
+            foreach (var t in region.Tags) if (t == target) return true;
+            return false;
+        }
+
+        /// <summary>Claims space for everything a plan builds so later layers avoid it.</summary>
+        public static void Reserve(AreaPlan plan, ReservedSpace reserved)
+        {
+            foreach (var n in plan.Nets)
+            {
+                float hw = DefaultHalfWidth(n.Role);
+                // Approximate the Bézier by 4 chords — enough for clearance checks.
+                float3 prev = n.A;
+                for (int i = 1; i <= 4; i++)
+                {
+                    float t = i / 4f;
+                    float3 p = Bezier(n.A, n.B, n.C, n.D, t);
+                    reserved.AddCorridor(prev.xz, p.xz, hw, n.Role.ToString());
+                    prev = p;
+                }
+            }
+            foreach (var o in plan.Objects)
+                reserved.AddDisc(o.Position.xz, DefaultRadius(o.Role), o.Role.ToString());
+            foreach (var a in plan.Areas)
+                if (a.Role == AreaRole.Lot)
+                {
+                    var r = new float2[a.Ring.Length];
+                    for (int i = 0; i < r.Length; i++) r[i] = a.Ring[i].xz;
+                    reserved.Polygons.Add(r);
+                }
+        }
+
+        public static float DefaultHalfWidth(NetRole role)
+        {
+            switch (role)
+            {
+                case NetRole.Avenue: return 14f;
+                case NetRole.Street: case NetRole.PerimeterRoad: case NetRole.Roundabout: return 8f;
+                case NetRole.CulDeSac: return 6f;
+                case NetRole.DriveAisle: case NetRole.DriveConnector: case NetRole.Alley: return 3.5f;
+                case NetRole.PathwayWide: return 2.5f;
+                case NetRole.Pathway: return 1.5f;
+                case NetRole.Fence: return 0.3f;
+                default: return 2f;
+            }
+        }
+
+        public static float DefaultRadius(ObjectRole role)
+        {
+            switch (role)
+            {
+                case ObjectRole.Tree: return 2.5f;
+                case ObjectRole.Bush: return 1f;
+                case ObjectRole.Centerpiece: return 6f;
+                case ObjectRole.ParkingBay: return 1.5f;
+                case ObjectRole.Bench: case ObjectRole.Bin: case ObjectRole.Lamp: return 0.8f;
+                default: return 1f;
+            }
+        }
+
+        public static float3 Bezier(float3 a, float3 b, float3 c, float3 d, float t)
+        {
+            float u = 1 - t;
+            return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
+        }
+
+        /// <summary>Keeps markers lying on (within 1.5 m of) the region outline, re-indexed to its segments.</summary>
+        public static List<EdgeMarker> MarkersOn(List<EdgeMarker> markers, float3[] ring)
+        {
+            var r = new List<EdgeMarker>();
+            if (markers == null || ring.Length < 2) return r;
+            foreach (var m in markers)
+            {
+                if (ClosestSegment(ring, m.Position.xz, out int seg, out float t, out float d) && d <= 1.5f)
+                {
+                    var mm = m; mm.RingSegment = seg; mm.RingT = t; r.Add(mm);
+                }
+            }
+            return r;
+        }
+
+        public static List<BoundaryAttachment> AttachmentsOn(List<BoundaryAttachment> atts, float3[] ring)
+        {
+            var r = new List<BoundaryAttachment>();
+            if (atts == null || ring.Length < 2) return r;
+            foreach (var a in atts)
+            {
+                if (ClosestSegment(ring, a.Position.xz, out int seg, out float t, out float d) && d <= 2f)
+                {
+                    var aa = a; aa.RingSegment = seg; aa.RingT = t; r.Add(aa);
+                }
+            }
+            return r;
+        }
+
+        public static bool ClosestSegment(float3[] ring, float2 p, out int seg, out float t, out float dist)
+        {
+            seg = -1; t = 0; dist = float.MaxValue;
+            for (int i = 0; i < ring.Length; i++)
+            {
+                float2 a = ring[i].xz, b = ring[(i + 1) % ring.Length].xz;
+                var ab = b - a;
+                float len = math.lengthsq(ab);
+                float tt = len > 1e-9f ? math.saturate(math.dot(p - a, ab) / len) : 0f;
+                float d = math.distance(p, a + ab * tt);
+                if (d < dist) { dist = d; seg = i; t = tt; }
+            }
+            return seg >= 0;
+        }
+    }
+
+    /// <summary>Deterministic seed helpers (no System.Random state shared across threads).</summary>
+    public static class Seeds
+    {
+        /// <summary>FNV-1a 32-bit — stable across runtimes (unlike string.GetHashCode).</summary>
+        public static uint Hash(string s)
+        {
+            unchecked
+            {
+                uint h = 2166136261;
+                foreach (char c in s) { h ^= c; h *= 16777619; }
+                return h;
+            }
+        }
+
+        /// <summary>Mix two values into an independent stream seed (splitmix-style finaliser).</summary>
+        public static uint Mix(uint a, uint b)
+        {
+            unchecked
+            {
+                uint x = a * 0x9E3779B1u ^ (b + 0x7F4A7C15u + (a << 6) + (a >> 2));
+                x ^= x >> 16; x *= 0x85EBCA6Bu; x ^= x >> 13; x *= 0xC2B2AE35u; x ^= x >> 16;
+                return x == 0 ? 1u : x;
+            }
+        }
+
+        public static uint Mix(uint a, string salt) => Mix(a, Hash(salt));
+
+        public static Unity.Mathematics.Random Rng(uint seed, string salt) => new Unity.Mathematics.Random(Mix(seed, salt));
+    }
+
+    /// <summary>
+    /// Price estimate from the catalog's AssetInfo. Units: objects per item, nets per metre,
+    /// surfaces/areas per m². Pure, so the UI summary and tests agree.
+    /// </summary>
+    public static class Pricing
+    {
+        public struct Estimate { public double Cost; public double Upkeep; }
+
+        public static Estimate Of(ComposedPlan plan, Dictionary<string, AssetInfo> assets)
+        {
+            var e = new Estimate();
+            foreach (var l in plan.Layers)
+            {
+                foreach (var o in l.Objects) Add(ref e, assets, o.Asset.Id, 1);
+                foreach (var n in l.Nets) Add(ref e, assets, n.Asset.Id, CurveLength(n));
+                foreach (var s in l.Surfaces) Add(ref e, assets, s.Asset.Id, PolygonArea(s.Ring));
+                foreach (var a in l.Areas) Add(ref e, assets, a.Asset.Id, PolygonArea(a.Ring));
+            }
+            return e;
+        }
+
+        private static void Add(ref Estimate e, Dictionary<string, AssetInfo> assets, string id, double qty)
+        {
+            if (string.IsNullOrEmpty(id) || assets == null || !assets.TryGetValue(id, out var info)) return;
+            e.Cost += info.Cost * qty;
+            e.Upkeep += info.Upkeep * qty;
+        }
+
+        public static double CurveLength(PlannedNet n)
+        {
+            double len = 0; float3 prev = n.A;
+            for (int i = 1; i <= 8; i++) { var p = Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f); len += math.distance(prev, p); prev = p; }
+            return len;
+        }
+
+        public static double PolygonArea(float3[] ring)
+        {
+            double a = 0;
+            for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+                a += (double)ring[j].x * ring[i].z - (double)ring[i].x * ring[j].z;
+            return Math.Abs(a) * 0.5;
+        }
+    }
+}
