@@ -428,28 +428,63 @@ namespace Placemaker.Core.Layers.Roads
             return p;
         }
 
-        /// <summary>Existing road clipped to the area (plus a small margin so roads on the outline stay).</summary>
+        /// <summary>
+        /// Existing road clipped to the area. Pieces stop just beyond the outline (so they cross a road
+        /// lying on it and get noded there); roads running along the outline within a small margin stay.
+        /// </summary>
         private static void AddClipped(List<RoadBlocks.Line> lines, ExistingRoad r, float2[] boundary)
         {
             var pts = new List<float3>();
             r.Curve.Flatten(pts, null, 4f, 6f);
+            bool Keep(float2 p) => Poly.Contains(boundary, p) || Poly.DistanceToBoundary(boundary, p) <= RingClipMargin;
             List<float2> current = null;
-            foreach (var p in pts)
+            void Flush()
             {
-                bool keep = Poly.Contains(boundary, p.xz) || Poly.DistanceToBoundary(boundary, p.xz) <= RingClipMargin;
+                if (current != null && current.Count >= 2)
+                    lines.Add(new RoadBlocks.Line { Points = current, HalfWidth = r.HalfWidth, Kind = RoadBlocks.KindExisting, Role = NetRole.Street });
+                current = null;
+            }
+            for (int i = 0; i < pts.Count; i++)
+            {
+                float2 p = pts[i].xz;
+                bool keep = Keep(p);
+                if (i > 0)
+                {
+                    float2 q = pts[i - 1].xz;
+                    bool keptBefore = current != null;
+                    if (keep != keptBefore && BoundaryCrossing(boundary, q, p, out float t))
+                    {
+                        // Extend 0.5 m past the outline crossing.
+                        float2 dir = math.normalizesafe(p - q);
+                        float2 x = math.lerp(q, p, t);
+                        if (keep)
+                        {
+                            current = new List<float2> { x - dir * (RingClipMargin + 0.5f) };
+                        }
+                        else
+                        {
+                            current.Add(x + dir * (RingClipMargin + 0.5f));
+                            Flush();
+                        }
+                    }
+                }
                 if (keep)
                 {
                     if (current == null) current = new List<float2>();
-                    current.Add(p.xz);
+                    current.Add(p);
                 }
-                else if (current != null)
-                {
-                    if (current.Count >= 2) lines.Add(new RoadBlocks.Line { Points = current, HalfWidth = r.HalfWidth, Kind = RoadBlocks.KindExisting, Role = NetRole.Street });
-                    current = null;
-                }
+                else Flush();
             }
-            if (current != null && current.Count >= 2)
-                lines.Add(new RoadBlocks.Line { Points = current, HalfWidth = r.HalfWidth, Kind = RoadBlocks.KindExisting, Role = NetRole.Street });
+            Flush();
+        }
+
+        private static bool BoundaryCrossing(float2[] ring, float2 a, float2 b, out float t)
+        {
+            t = 0f;
+            float best = float.MaxValue;
+            for (int i = 0; i < ring.Length; i++)
+                if (Seg.Intersect(a, b, ring[i], ring[(i + 1) % ring.Length], out float ta, out _) && ta < best) { best = ta; t = ta; }
+            return best <= 1f;
         }
 
         private static Func<float2, float> SafeHeight(Func<float2, float> h)

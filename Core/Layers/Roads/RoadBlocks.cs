@@ -162,23 +162,21 @@ namespace Placemaker.Core.Layers.Roads
                 foreach (float2 p in new[] { a, mid, b })
                 {
                     roadIndex.Query(p - 40f, p + 40f, scratch, seen);
-                    float best = float.MaxValue, bestW = 0f;
+                    // Covered = some road running alongside (parallel) passes this point; a road crossing
+                    // the outline covers the crossing point, not the outline.
+                    bool alongside = false;
                     foreach (int id in scratch)
                     {
                         float d = Seg.Dist(p, roadIndex.A[id], roadIndex.B[id]);
                         float hw = roadSegs[roadIndex.Owner[id]].W;
-                        if (d < best) { best = d; bestW = hw; }
-                        // A road alongside the outline eats into the land up to its curb; a road crossing it
-                        // bounds the face itself and must not widen the outline.
                         float2 rd = math.normalizesafe(roadIndex.B[id] - roadIndex.A[id]);
-                        if (math.abs(math.dot(dir, rd)) > 0.7f) w = math.max(w, hw - d);
+                        if (math.abs(math.dot(dir, rd)) <= 0.7f) continue;
+                        // A road alongside the outline eats into the land up to its curb.
+                        w = math.max(w, hw - d);
+                        if (d <= math.max(2f, 0.6f * hw)) alongside = true;
                     }
-                    float tol = math.max(2f, 0.6f * bestW);
-                    if (best > tol) all = false;
+                    if (!alongside) all = false;
                 }
-                // Only outline pieces parallel to the road count as covered (a road crossing the outline
-                // covers the crossing point, not the outline).
-                if (all && !Parallel(a, b, roadIndex, scratch, seen)) all = false;
                 covered[i] = all;
                 width[i] = math.max(0f, w);
                 if (alongEdge != null)
@@ -200,15 +198,6 @@ namespace Placemaker.Core.Layers.Roads
                 if (covered[(i - 1 + m) % m]) Connect(pieces[i].a, roadIndex, scratch, seen, output);
                 if (covered[(i + 1) % m]) Connect(pieces[i].b, roadIndex, scratch, seen, output);
             }
-        }
-
-        private static bool Parallel(float2 a, float2 b, SegmentIndex roadIndex, List<int> scratch, HashSet<int> seen)
-        {
-            float2 mid = 0.5f * (a + b), dir = math.normalizesafe(b - a);
-            int id = roadIndex.Nearest(mid, 40f, out _, out _, scratch, seen);
-            if (id < 0) return false;
-            float2 rd = math.normalizesafe(roadIndex.B[id] - roadIndex.A[id]);
-            return math.abs(math.dot(dir, rd)) > 0.7f;
         }
 
         private static void Connect(float2 p, SegmentIndex roadIndex, List<int> scratch, HashSet<int> seen, List<S> output)

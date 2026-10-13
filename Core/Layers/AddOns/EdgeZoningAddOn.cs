@@ -23,6 +23,7 @@ namespace Placemaker.Core.Layers.AddOns
         /// <summary>CS2 zone cells are 8 m; blocks reach 6 cells deep.</summary>
         public const float CellSize = 8f;
         public const float PieceLength = 24f;
+        public const string NoFrontageKey = "Placemaker.EdgeZoning.Issue.NoFrontage";
         /// <summary>Quads start this far on the road side of the frontage so the first cell row is caught.</summary>
         private const float RoadSideOverlap = 1f;
         /// <summary>Frontage = region edge within road half-width + this of a road centre line.</summary>
@@ -88,7 +89,11 @@ namespace Placemaker.Core.Layers.AddOns
             Func<float2, float> h = input.Site?.HeightAt ?? (_ => 0f);
 
             var roads = CollectRoads(input);
-            if (roads.Count == 0) return plan;
+            if (roads.Count == 0)
+            {
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = NoFrontageKey });
+                return plan;
+            }
 
             int n = ring.Length;
             int quads = 0;
@@ -107,8 +112,9 @@ namespace Placemaker.Core.Layers.AddOns
                     float2 dir = math.normalizesafe(p1 - p0);
                     float2 inward = new float2(-dir.y, dir.x); // CCW ring: interior on the left
                     float d = FitDepth(ring, p0, p1, inward, depth);
+                    // Stop short of anything an earlier layer placed; whole cells only.
+                    while (d >= CellSize * 0.75f && Occupied(input.Reserved, p0, p1, inward, d)) d -= CellSize;
                     if (d < CellSize * 0.75f) continue;
-                    if (Occupied(input.Reserved, p0, p1, inward, d)) continue;
                     float2 q0 = p0 - inward * RoadSideOverlap, q1 = p1 - inward * RoadSideOverlap;
                     float2 q2 = p1 + inward * d, q3 = p0 + inward * d;
                     plan.Zoning.Add(new PlannedZoning
@@ -125,7 +131,7 @@ namespace Placemaker.Core.Layers.AddOns
             plan.Stats.Add(new PlanStat("Placemaker.EdgeZoning.Stat.Area", Math.Round(ZonedArea(plan)), "m2"));
             plan.Facts["edgeZoning.quads"] = quads;
             if (quads == 0)
-                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = "Placemaker.EdgeZoning.Issue.NoFrontage" });
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = NoFrontageKey });
             return plan;
         }
 
@@ -155,15 +161,22 @@ namespace Placemaker.Core.Layers.AddOns
         private static bool Occupied(ReservedSpace reserved, float2 p0, float2 p1, float2 inward, float d)
         {
             if (reserved == null) return false;
-            for (int i = 0; i <= 4; i++)
-                for (int j = 1; j <= 4; j++)
-                {
-                    float2 p = math.lerp(p0, p1, i / 4f) + inward * (d * j / 4f);
-                    foreach (var disc in reserved.Discs)
-                        if (math.distancesq(p, disc.Center) < disc.Radius * disc.Radius) return true;
-                    foreach (var poly in reserved.Polygons)
-                        if (poly != null && poly.Length >= 3 && Poly.Contains(poly, p)) return true;
-                }
+            var quad = new[] { p0, p1, p1 + inward * d, p0 + inward * d };
+            foreach (var disc in reserved.Discs)
+            {
+                if (Poly.Contains(quad, disc.Center)) return true;
+                for (int i = 0; i < 4; i++)
+                    if (Dist(disc.Center, quad[i], quad[(i + 1) % 4]) < disc.Radius) return true;
+            }
+            foreach (var poly in reserved.Polygons)
+            {
+                if (poly == null || poly.Length < 3) continue;
+                foreach (var p in poly) if (Poly.Contains(quad, p)) return true;
+                foreach (var q in quad) if (Poly.Contains(poly, q)) return true;
+                for (int i = 0; i < poly.Length; i++)
+                    for (int k = 0; k < 4; k++)
+                        if (StrictCross(poly[i], poly[(i + 1) % poly.Length], quad[k], quad[(k + 1) % 4])) return true;
+            }
             return false;
         }
 
