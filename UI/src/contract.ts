@@ -63,6 +63,10 @@ export interface ToolState {
   /** Anarchy mod detected → show its toggle. */
   anarchy?: { available: boolean; enabled: boolean };
   panelCollapsed: boolean;
+  /** "sketch" = fast overlay lines/dots; "ghost" = real translucent game models + surfaces (Review uses ghost by default). */
+  previewMode?: "sketch" | "ghost";
+  /** True while the ghost is being (re)built after a change. */
+  ghostPending?: boolean;
 }
 
 /** One control, mirrors Core.ControlSchema. */
@@ -269,6 +273,7 @@ export const Triggers = {
   setMarkerKind: "setMarkerKind",           // (path: string, kind: string) — which marker type the next click places (entrance types etc.)
   removeMarker: "removeMarker",             // (path: string, index: number)
   setFeature: "setFeature",                 // (path: string, featureLayerId: string, enabled: boolean)
+  setPreviewMode: "setPreviewMode",         // (mode: "sketch" | "ghost")
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────
