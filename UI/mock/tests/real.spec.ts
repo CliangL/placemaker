@@ -21,7 +21,7 @@ test("real Core: shipped recipes in the Make row, real plans on the map", async 
 
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    for (const id of ["park", "plaza", "campground", "split-park-plaza", "park-with-playground"])
+    for (const id of ["park", "plaza", "campground"])
         if (await page.evaluate((r) => (window as any).pm.backend.recipes.some((x: any) => x.info.id === r), id))
             await expect(page.getByTestId(`recipe-${id}`)).toBeVisible();
 

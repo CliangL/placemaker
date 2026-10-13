@@ -39,6 +39,9 @@ export async function noTextOverflow(page: Page, where: string) {
                     out.push(`spills: "${text}" out of ${String(a.className).split(" ")[0] || a.tagName}`);
                     break;
                 }
+                // the panel and the picker flyout beside it are the outermost boxes
+                const id = a.getAttribute("data-testid");
+                if (id === "placemaker-panel" || id === "picker-flyout") break;
             }
         }
         return out;
@@ -184,6 +187,10 @@ test("no text overflows or is cut anywhere in the panel (every stage, every type
         await noTextOverflow(page, id + " expanded");
     }
     await page.getByTestId("recipe-parking").click();
+    await page.getByTestId("asset-button-surface").click();
+    await expect(page.getByTestId("asset-picker")).toBeVisible();
+    await noTextOverflow(page, "asset picker");
+    await page.keyboard.press("Escape");
     await page.getByTestId("marker-remove-0").click();
     await noTextOverflow(page, "entrance required");
     await page.getByTestId("marker-kind-exit").click();

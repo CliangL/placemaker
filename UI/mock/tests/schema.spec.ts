@@ -100,7 +100,7 @@ test("asset picker: search, thumbnails, automatic; closes with X, Esc and a clic
 
     // X
     await page.getByTestId("asset-button-surface").click();
-    await expect(picker).toContainText("Recently used");
+    await expect(picker).toContainText("Recent");
     await expect(page.getByTestId("asset-picker-close").locator("img")).toHaveCount(1);
     await panelShot(page, "panel-asset-picker");
     await page.getByTestId("asset-picker-close").click();

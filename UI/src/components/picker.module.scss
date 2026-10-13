@@ -15,7 +15,7 @@
 .head {
     @include col;
     flex-shrink: 0;
-    padding: 6rem 6rem 10rem 14rem;
+    padding: 4rem 4rem 6rem 10rem;
     background-color: rgba(0, 0, 0, 0.22);
     border-bottom-width: 1rem;
     border-bottom-style: solid;
@@ -24,17 +24,17 @@
 
 .headRow {
     @include row;
-    height: 36rem;
-    margin-bottom: 4rem;
+    height: 28rem;
+    margin-bottom: 2rem;
 }
 
 .closeBtn {
     @include row;
     @include button-reset;
     justify-content: center;
-    width: 32rem;
-    height: 32rem;
-    margin-left: 8rem;
+    width: 24rem;
+    height: 24rem;
+    margin-left: 6rem;
     border-radius: $radius;
     background-color: rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
@@ -44,7 +44,7 @@
 }
 
 .title {
-    @include text(var(--fontSizeM));
+    @include text($fs);
     font-weight: bold;
     color: #ffffff;
     @include ellipsis;
@@ -53,9 +53,9 @@
 
 .search {
     @include row;
-    height: 32rem;
-    padding: 0 10rem;
-    margin-right: 8rem;
+    height: 24rem;
+    padding: 0 8rem;
+    margin-right: 6rem;
     @include border(1rem, $c-line-strong);
     border-radius: $radius;
     background-color: $c-shade;
@@ -67,7 +67,7 @@
     margin-left: 6rem;
     background-color: transparent;
     @include border(0, transparent);
-    font-size: var(--fontSizeS);
+    font-size: $fs;
     font-family: var(--fontFamily);
     color: var(--menuText1Normal);
     outline-width: 0;
@@ -75,15 +75,15 @@
 
 .body {
     @include col;
-    padding: 4rem 10rem 10rem 10rem;
+    padding: 2rem 8rem 8rem 8rem;
     overflow-y: auto;
     flex: 1 1 auto;
 }
 
 .section {
-    margin-top: 8rem;
-    margin-bottom: 4rem;
-    font-size: var(--fontSizeXS);
+    margin-top: 6rem;
+    margin-bottom: 3rem;
+    font-size: 11rem;
     color: $c-text-dim;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -99,9 +99,10 @@
     @include button-reset;
     align-items: center;
     position: relative;
-    width: 90rem;
-    padding: 6rem 4rem;
-    margin: 0 4rem 4rem 0;
+    width: 70rem;
+    padding: 4rem 2rem;
+    margin: 0 3rem 3rem 0;
+    overflow: hidden;
     border-radius: $radius;
     background-color: $c-surface;
     @include border(2rem, transparent);
@@ -118,9 +119,9 @@
 }
 
 .tileName {
-    margin-top: 4rem;
+    margin-top: 2rem;
     width: 100%;
-    font-size: var(--fontSizeXS);
+    font-size: 11rem;
     color: var(--menuText1Normal);
     text-align: center;
     @include ellipsis;
@@ -165,8 +166,8 @@
 .autoIcon {
     @include row;
     justify-content: center;
-    width: 44rem;
-    height: 44rem;
+    width: 34rem;
+    height: 34rem;
     color: var(--accentColorNormal);
 }
 
@@ -179,7 +180,7 @@
 
 .foot {
     @include row;
-    padding: 8rem 10rem 8rem 14rem;
+    padding: 4rem 6rem 4rem 10rem;
     border-top-width: 1rem;
     border-top-style: solid;
     border-top-color: $c-line;
@@ -187,6 +188,7 @@
 
 .footInfo {
     flex: 1 1 auto;
-    font-size: var(--fontSizeXS);
+    font-size: 11rem;
+    @include ellipsis;
     color: $c-text-dim;
 }
