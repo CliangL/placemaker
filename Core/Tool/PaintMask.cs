@@ -445,7 +445,7 @@ namespace Placemaker.Core.Tool
             int far = 0;
             for (int i = 1; i < n; i++) if (math.distancesq(loop[i], loop[0]) > math.distancesq(loop[far], loop[0])) far = i;
             keep[0] = keep[far] = true;
-            var work = new Stack<int2>();
+            var work = new WorkStack<int2>();
             work.Push(new int2(0, far));
             work.Push(new int2(far, 0));
             while (work.Count > 0)

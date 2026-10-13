@@ -104,6 +104,17 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void AreaProblemBlocksBuild()
+        {
+            var f = ReadyFacts();
+            f.AreaProblem = new LocText("Placemaker.Problem.TooSmallFor", 400);
+            var p = StageMachine.Primary(ToolStage.Review, f);
+            Assert.False(p.Enabled);
+            Assert.Equal("Placemaker.Problem.TooSmallFor", p.Reason.Key);
+            Assert.False(StageMachine.Primary(ToolStage.Area, f).Enabled);
+        }
+
+        [Fact]
         public void EditingBuildsAsFinishEdit()
         {
             var f = ReadyFacts();

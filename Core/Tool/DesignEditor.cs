@@ -281,7 +281,15 @@ namespace Placemaker.Core.Tool
         /// </summary>
         public ReadinessResult FirstUnready(Recipe recipe, AreaShape area, SiteContext site)
         {
-            if (recipe?.Root == null || area == null) return null;
+            var all = AllUnready(recipe, area, site);
+            return all.Count > 0 ? all[0] : null;
+        }
+
+        /// <summary>Every enabled step that is not ready, in walk order (first = what the main button asks for).</summary>
+        public List<ReadinessResult> AllUnready(Recipe recipe, AreaShape area, SiteContext site)
+        {
+            var list = new List<ReadinessResult>();
+            if (recipe?.Root == null || area == null) return list;
             foreach (var kv in RecipePaths.Walk(recipe))
             {
                 var step = kv.Value;
@@ -303,16 +311,16 @@ namespace Placemaker.Core.Tool
                 }
                 catch (Exception) { continue; }
                 if (r == null || r.Ready) continue;
-                return new ReadinessResult
+                list.Add(new ReadinessResult
                 {
                     StepPath = kv.Key,
                     NextStepKey = r.NextStepKey ?? "",
                     ReasonKey = r.ReasonKey ?? "",
                     ReasonArgs = r.ReasonArgs ?? Array.Empty<object>(),
                     MarkerKind = FirstMarkerKind(gen),
-                };
+                });
             }
-            return null;
+            return list;
         }
 
         private static bool AncestorsEnabled(Recipe recipe, string path)
@@ -467,7 +475,7 @@ namespace Placemaker.Core.Tool
 
         private static IEnumerable<RecipeStep> WalkFrom(RecipeStep start)
         {
-            var stack = new Stack<RecipeStep>();
+            var stack = new WorkStack<RecipeStep>();
             stack.Push(start);
             while (stack.Count > 0)
             {

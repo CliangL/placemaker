@@ -1,0 +1,264 @@
+// Placemaker — UI bindings, exactly as UI/src/contract.ts defines them (group "Placemaker").
+//
+// Six values, each a ValueBinding<string> carrying JSON (never string[] — that broke mod load in
+// PLT; RESEARCH-NOTES rule 22). The UI parses them (JSON.parse). Values are rebuilt only when
+// their inputs changed (version stamps) and pushed only when the JSON actually differs
+// (ValueBinding compares) — not ~100 bindings per frame like GRG.
+
+using System;
+using System.Collections.Generic;
+using Colossal.UI.Binding;
+using Game.UI;
+using Placemaker.Core;
+using Placemaker.Core.Tool;
+using Placemaker.Game.Tool;
+using UnityEngine.Scripting;
+
+namespace Placemaker.Game.UI
+{
+    public sealed partial class PlacemakerUISystem : UISystemBase
+    {
+        public const string Group = "Placemaker";
+
+        private PlacemakerToolSystem _tool;
+        private ValueBinding<string> _state, _catalog, _design, _summary, _assets, _managed;
+
+        private int _stateStamp = -1;
+        private int _designStamp = -1, _designPlanStamp = -1;
+        private string _summaryStamp;
+        private int _catalogStamp = -1, _catalogGenerators = -1;
+        private string _assetsStamp;
+        private string _managedStamp;
+        private int _frame;
+        private readonly SortedSet<string> _requestedCategories = new SortedSet<string>(StringComparer.Ordinal);
+
+        [Preserve]
+        protected override void OnCreate()
+        {
+            base.OnCreate();
+            _tool = World.GetOrCreateSystemManaged<PlacemakerToolSystem>();
+
+            AddBinding(_state = new ValueBinding<string>(Group, "state", "{}"));
+            AddBinding(_catalog = new ValueBinding<string>(Group, "catalog", "{\"layers\":[],\"recipes\":[]}"));
+            AddBinding(_design = new ValueBinding<string>(Group, "design", "{\"recipeId\":\"\",\"modified\":false,\"root\":null,\"focus\":\"0\"}"));
+            AddBinding(_summary = new ValueBinding<string>(Group, "summary", UiModels.Summary(new SummaryInput()).ToString()));
+            AddBinding(_assets = new ValueBinding<string>(Group, "assets", "{}"));
+            AddBinding(_managed = new ValueBinding<string>(Group, "managed", "null"));
+
+            Trigger("toggleTool", () => _tool.Toggle());
+            Trigger("close", () => _tool.Close());
+            Trigger<bool>("setPanelCollapsed", c => _tool.SetPanelCollapsed(c));
+            Trigger<string>("goToStage", s => { if (StageMachine.TryParse(s, out var st)) _tool.GoToStage(st); });
+            Trigger("primary", () => _tool.Primary());
+            Trigger("undo", () => _tool.Undo());
+            Trigger("redo", () => _tool.Redo());
+            Trigger<string>("setAreaMode", m => { if (SelectionModes.TryParse(m, out var mode)) _tool.SetAreaMode(mode); });
+            Trigger<string, double, double>("setBrush", (shape, size, angle) => _tool.SetBrush(shape == "square", (float)size, (float)angle));
+            Trigger("clearArea", () => _tool.ClearArea());
+
+            Trigger<string>("selectRecipe", id => _tool.SelectRecipe(id));
+            Trigger<string>("focusStep", p => _tool.FocusStep(p));
+            Trigger<string, string, string>("addLayer", (parent, layer, target) => _tool.AddLayer(parent, layer, target));
+            Trigger<string>("removeStep", p => _tool.RemoveStep(p));
+            Trigger<string, double>("moveStep", (p, d) => _tool.MoveStep(p, (int)Math.Round(d)));
+            Trigger<string, bool>("setStepEnabled", (p, e) => _tool.SetStepEnabled(p, e));
+            Trigger<string, string>("setStepTarget", (p, t) => _tool.SetStepTarget(p, t));
+            Trigger<string, string, string>("overrideRegion", (p, region, layer) => _tool.OverrideRegion(p, region, layer));
+            Trigger<string, string, string>("setValue", (p, id, json) => _tool.SetValue(p, id, json));
+            Trigger<string, string, string>("previewValue", (p, id, json) => _tool.PreviewValue(p, id, json));
+            Trigger("endPreview", () => _tool.EndPreview());
+            Trigger<string>("resetStep", p => _tool.ResetStep(p));
+            Trigger<string, string>("applyPreset", (p, preset) => _tool.ApplyPreset(p, preset));
+            Trigger<string>("randomize", p => _tool.Randomize(p));
+            Trigger<string, string>("unlockValue", (p, id) => _tool.UnlockValue(p, id));
+            Trigger<string, string>("startMarkers", (p, kind) => _tool.StartMarkers(p, kind));
+            Trigger<string, string>("clearMarkers", (p, kind) => _tool.ClearMarkers(p, kind));
+
+            Trigger<string>("saveRecipeAs", name => _tool.SaveRecipeAs(name));
+            Trigger<string>("deleteRecipe", id => _tool.DeleteRecipe(id));
+            Trigger<string>("saveAsDefault", p => _tool.SaveAsDefault(p));
+
+            Trigger<string>("requestAssets", RequestAssets);
+
+            Trigger<double>("manageGroup", id => _tool.ManageGroup((int)id));
+            Trigger<double>("editGroup", id => _tool.EditGroup((int)id));
+            Trigger<double>("removeGroup", id => _tool.RemoveGroup((int)id));
+            Trigger<double, string>("renameGroup", (id, name) => _tool.RenameGroup((int)id, name));
+            Trigger<bool>("setAnarchy", on => _tool.SetAnarchy(on));
+        }
+
+        // Every trigger is wrapped: an exception from a UI call must never escape into the binding layer.
+        private void Trigger(string name, Action a) =>
+            AddBinding(new TriggerBinding(Group, name, () => Safe(name, a)));
+        private void Trigger<T>(string name, Action<T> a) =>
+            AddBinding(new TriggerBinding<T>(Group, name, x => Safe(name, () => a(x))));
+        private void Trigger<T1, T2>(string name, Action<T1, T2> a) =>
+            AddBinding(new TriggerBinding<T1, T2>(Group, name, (x, y) => Safe(name, () => a(x, y))));
+        private void Trigger<T1, T2, T3>(string name, Action<T1, T2, T3> a) =>
+            AddBinding(new TriggerBinding<T1, T2, T3>(Group, name, (x, y, z) => Safe(name, () => a(x, y, z))));
+
+        private static void Safe(string name, Action a)
+        {
+            try { a(); }
+            catch (Exception e) { Mod.Log.Error(e, "Placemaker: UI trigger '" + name + "' failed"); }
+        }
+
+        [Preserve]
+        protected override void OnUpdate()
+        {
+            base.OnUpdate();
+            _frame++;
+            try
+            {
+                PollHotkey();
+                // While the tool is closed only "open" changes; refresh rarely.
+                if (!_tool.IsActive && _stateStamp == _tool.ViewVersion && _frame % 30 != 0) return;
+                PushState();
+                PushCatalog();
+                PushDesign();
+                PushSummary();
+                PushAssets();
+                PushManaged();
+            }
+            catch (Exception e)
+            {
+                if (_frame % 600 == 1) Mod.Log.Error(e, "Placemaker: UI update failed");
+            }
+        }
+
+        private void PollHotkey()
+        {
+            var a = ToolRegistration.ToggleAction;
+            if (a == null) return;
+            if (!a.shouldBeEnabled) a.shouldBeEnabled = true;
+            if (a.WasPerformedThisFrame() && ToolRegistration.InGame) _tool.Toggle();
+        }
+
+        private void PushState()
+        {
+            // Money, planning and hover states change without an edit: also refresh twice a second.
+            if (_stateStamp == _tool.ViewVersion && _frame % 30 != 0) return;
+            _stateStamp = _tool.ViewVersion;
+            _state.Update(UiModels.State(_tool.StateInput()).ToString());
+        }
+
+        private void PushCatalog()
+        {
+            int generators = GeneratorRegistry.All.Count;
+            int stamp = _tool.Recipes.Version;
+            if (stamp == _catalogStamp && generators == _catalogGenerators) return;
+            _catalogStamp = stamp;
+            _catalogGenerators = generators;
+            var entries = new List<RecipeListEntry>();
+            foreach (var e in _tool.Recipes.Entries)
+                entries.Add(new RecipeListEntry
+                {
+                    Id = e.Recipe.Id,
+                    Name = e.Custom || string.IsNullOrEmpty(e.Recipe.NameKey) ? (string.IsNullOrEmpty(e.Recipe.Name) ? e.Recipe.Id : e.Recipe.Name) : e.Recipe.NameKey,
+                    Icon = e.Recipe.Icon,
+                    Custom = e.Custom,
+                    DescriptionKey = e.DescriptionKey,
+                });
+            _catalog.Update(UiModels.Catalog(GeneratorRegistry.All, entries).ToString());
+        }
+
+        private void PushDesign()
+        {
+            if (_designStamp == _tool.DesignVersion && _designPlanStamp == _tool.PlanRevision && _frame % 30 != 0) return;
+            _designStamp = _tool.DesignVersion;
+            _designPlanStamp = _tool.PlanRevision;
+            _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan).ToString());
+        }
+
+        private void PushSummary()
+        {
+            bool afford = _tool.CanAfford();
+            var failure = _tool.BuildFailure;
+            string stamp = _tool.PlanRevision + "|" + _tool.PlanStale + "|" + afford + "|" + (failure?.Key ?? "") + "|" + (Services.Assets?.Version ?? -1);
+            if (stamp == _summaryStamp) return;
+            _summaryStamp = stamp;
+            var input = new SummaryInput
+            {
+                Plan = _tool.Plan,
+                Recipe = _tool.CurrentRecipe,
+                Assets = SafeInfoMap(),
+                Stale = _tool.PlanStale || (_tool.Plan == null && _tool.Planning),
+                CanAfford = afford,
+            };
+            if (failure != null) input.ExtraIssues.Add(failure);
+            _summary.Update(UiModels.Summary(input).ToString());
+        }
+
+        private static Dictionary<string, AssetInfo> SafeInfoMap()
+        {
+            try { return Services.Assets?.InfoMap(); } catch (Exception) { return null; }
+        }
+
+        private void RequestAssets(string category)
+        {
+            if (string.IsNullOrEmpty(category)) return;
+            _requestedCategories.Add(category);
+            _assetsStamp = null;
+        }
+
+        private void PushAssets()
+        {
+            var cat = Services.Assets;
+            bool ready = cat != null && cat.Ready;
+            string stamp = (ready ? cat.Version : -1) + "|" + _requestedCategories.Count;
+            if (stamp == _assetsStamp) return;
+            _assetsStamp = stamp;
+            var o = JsonValue.Obj();
+            if (ready)
+            {
+                foreach (var category in _requestedCategories)
+                {
+                    var arr = JsonValue.Arr();
+                    IReadOnlyList<CatalogItem> items = null;
+                    try { items = cat.Items(category); } catch (Exception) { }
+                    if (items != null)
+                        foreach (var it in items)
+                        {
+                            if (it == null) continue;
+                            var io = JsonValue.Obj().Set("id", it.Id ?? "").Set("name", string.IsNullOrEmpty(it.DisplayName) ? it.Id ?? "" : it.DisplayName)
+                                .Set("icon", it.Icon ?? "");
+                            if (it.Tags != null && it.Tags.Length > 0) io.Set("tags", UiModels.Strings(it.Tags));
+                            if (it.Info.Cost > 0) io.Set("cost", Math.Round(it.Info.Cost, 2));
+                            arr.Add(io);
+                        }
+                    o.Set(category, arr);
+                }
+            }
+            // Categories missing from the object = still loading (the panel shows "Asset catalog loading…").
+            _assets.Update(o.ToString());
+        }
+
+        private readonly Dictionary<int, bool> _canEdit = new Dictionary<int, bool>();
+
+        private void PushManaged()
+        {
+            int id = _tool.ManagedGroup != 0 ? _tool.ManagedGroup : _tool.HoverGroup;
+            var groups = Services.Groups;
+            string stamp = id + "|" + (groups != null) + "|" + (_frame / 60);
+            if (stamp == _managedStamp) return;
+            _managedStamp = stamp;
+            if (id == 0 || groups == null) { _managed.Update("null"); return; }
+            GroupInfo info;
+            try { info = groups.Get(id); } catch (Exception) { info = null; }
+            if (info == null) { _managed.Update("null"); return; }
+            if (!_canEdit.TryGetValue(id, out bool canEdit))
+            {
+                try { canEdit = groups.GetReceipt(id)?.Recipe != null; } catch (Exception) { canEdit = false; }
+                _canEdit[id] = canEdit;
+            }
+            var o = JsonValue.Obj()
+                .Set("id", info.Id)
+                .Set("recipeName", new LocText(string.IsNullOrEmpty(info.RecipeNameKey) ? "Placemaker.Recipe.Unknown" : info.RecipeNameKey).ToJson());
+            if (!string.IsNullOrEmpty(info.CustomName)) o.Set("customName", info.CustomName);
+            o.Set("stats", UiModels.Stats(info.Stats));
+            o.Set("upkeep", Math.Round(info.Upkeep));
+            o.Set("canEdit", canEdit);
+            _managed.Update(o.ToString());
+        }
+    }
+}

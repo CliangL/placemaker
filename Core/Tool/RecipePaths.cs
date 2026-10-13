@@ -96,7 +96,7 @@ namespace Placemaker.Core.Tool
         public static IEnumerable<KeyValuePair<string, RecipeStep>> Walk(Recipe recipe)
         {
             if (recipe?.Root == null) yield break;
-            var stack = new Stack<KeyValuePair<string, RecipeStep>>();
+            var stack = new WorkStack<KeyValuePair<string, RecipeStep>>();
             stack.Push(new KeyValuePair<string, RecipeStep>(Root, recipe.Root));
             while (stack.Count > 0)
             {

@@ -179,6 +179,12 @@ namespace Placemaker.Core.Tool
                         p.StepPath = f.UnreadyStepPath;
                         return p;
                     }
+                    if (f.AreaProblem != null)
+                    {
+                        var bad = Make(kind, label, false, null);
+                        bad.Reason = f.AreaProblem;
+                        return bad;
+                    }
                     if (!f.BuildServiceAvailable) return Make(kind, label, false, "Placemaker.Reason.BuildUnavailable");
                     if (f.Planning || !f.PlanReady) return Make(kind, label, false, "Placemaker.Reason.Planning");
                     if (f.PlanHasErrors) return Make(kind, label, false, "Placemaker.Reason.PlanErrors");

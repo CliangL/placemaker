@@ -1,0 +1,319 @@
+// Shape rebuild, preview planning and the facts the stage machine decides on.
+
+using System;
+using System.Collections.Generic;
+using Game.City;
+using Game.Simulation;
+using Placemaker.Core;
+using Placemaker.Core.Geometry;
+using Placemaker.Core.Tool;
+using Placemaker.Game.Settings;
+using Unity.Entities;
+using Unity.Mathematics;
+
+namespace Placemaker.Game.Tool
+{
+    public sealed partial class PlacemakerToolSystem
+    {
+        private bool _shapeDirty, _shapeThrottled;
+        private float _lastShapeBuild = -10f;
+        private int _shapeVersion;
+        private int _inputRevision, _requestedRevision = -1, _planRevision = -1;
+        private float _lastInputChange;
+        private bool _inputFromDrag;
+        private ComposedPlan _plan;
+        private double _planMs;
+        private SiteContext _siteCache;
+        private int _siteShapeVersion = -1;
+        private DesignEditor.ReadinessResult _unready;
+        private int _unreadyRevision = -1;
+        private int _affordRevision = -1;
+        private bool _canAfford = true;
+        private double _planCost, _planUpkeep;
+
+        public ComposedPlan Plan => _plan;
+        public int PlanRevision => _planRevision;
+        public int InputRevision => _inputRevision;
+        public int ShapeVersion => _shapeVersion;
+        public bool PlanStale => _plan != null && _planRevision != _inputRevision;
+        public double PlanMilliseconds => _planMs;
+        public double PlanCost => _planCost;
+        public double PlanUpkeep => _planUpkeep;
+
+        public bool Planning
+        {
+            get
+            {
+                if (_shape == null || _recipe == null || _stage == ToolStage.Building) return false;
+                return _worker.Busy || _planRevision != _inputRevision;
+            }
+        }
+
+        private void ShapeChanged(bool throttled = false, bool alreadyBuilt = false)
+        {
+            if (alreadyBuilt) _shapeVersion++;
+            else { _shapeDirty = true; _shapeThrottled = throttled; }
+            _inputRevision++;
+            _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
+            _inputFromDrag = throttled;
+            Touch();
+        }
+
+        /// <summary>Recomputes the AreaShape from the active mode's selection (throttled during drags).</summary>
+        private void RebuildShapeIfDirty(bool force)
+        {
+            if (!_shapeDirty) return;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (!force && _shapeThrottled && now - _lastShapeBuild < 0.15f) return;
+            _shapeDirty = false;
+            _lastShapeBuild = now;
+            AreaShape s = null;
+            try
+            {
+                switch (_mode)
+                {
+                    case SelectionMode.Draw: s = BuildDrawShape(); break;
+                    case SelectionMode.Block: s = BuildBlockShape(); break;
+                    case SelectionMode.Perimeter: s = BuildPerimeterShape(); break;
+                    case SelectionMode.Paint: s = BuildPaintShape(); break;
+                }
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker: outline rebuild failed: " + e.Message);
+                s = null;
+            }
+            _shape = s;
+            _shapeVersion++;
+            Touch();
+        }
+
+        private AreaShape BuildDrawShape()
+        {
+            if (!_draw.Closed) return null;
+            var ring = _draw.RingCcw();
+            if (ring.Length < 3) return null;
+            for (int i = 0; i < ring.Length; i++) ring[i].y = _site.SampleHeight(ring[i].xz);
+            var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
+            WithFoundAttachments(shape);
+            return shape;
+        }
+
+        private void WithFoundAttachments(AreaShape shape)
+        {
+            try { shape.Attachments = AttachmentFinder.Find(shape.Ring, _site.NetsAround(shape.Ring)); }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: attachments failed: " + e.Message); }
+        }
+
+        // ───────────── preview ─────────────
+
+        private void PumpPreview()
+        {
+            var r = _worker.Pump();
+            if (r == null) return;
+            if (r.Revision != _requestedRevision) return;
+            _plan = r.Plan;
+            _planRevision = r.Revision;
+            _planMs = r.Milliseconds;
+            _affordRevision = -1;
+            Touch();
+        }
+
+        private void UpdatePlanning()
+        {
+            bool canPlan = _shape != null && _recipe != null && _stage != ToolStage.Building;
+            if (!canPlan)
+            {
+                if (_plan != null || _requestedRevision >= 0)
+                {
+                    _worker.Cancel();
+                    _plan = null;
+                    _requestedRevision = -1;
+                    _planRevision = -1;
+                    Touch();
+                }
+                return;
+            }
+            if (_shapeDirty || _planRevision == _inputRevision || _requestedRevision == _inputRevision) return;
+
+            bool live = _gesture != Gesture.None || _previewBase != null || _inputFromDrag;
+            var detail = _settings?.PreviewDetail ?? PreviewDetail.Normal;
+            if (live && detail == PreviewDetail.Simple && (_gesture != Gesture.None || _previewBase != null)) return;   // re-plan only when the drag ends
+            float debounce = !live ? 0f : detail == PreviewDetail.Detailed ? 0.06f : 0.15f;
+            if (UnityEngine.Time.realtimeSinceStartup - _lastInputChange < debounce) return;
+
+            var site = SiteFor(_shape);
+            _requestedRevision = _inputRevision;
+            _worker.Request(_inputRevision, _recipe.Clone(), _shape, site);
+            Touch();
+        }
+
+        private SiteContext SiteFor(AreaShape shape)
+        {
+            // Re-capture only when the outline changed (or the catalog delivered new asset info).
+            bool assetsWereReady = _site.AssetsReady;
+            _site.Assets();
+            if (_siteCache != null && _siteShapeVersion == _shapeVersion && assetsWereReady == _site.AssetsReady) return _siteCache;
+            try { _siteCache = _site.Capture(shape); }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker: site capture failed: " + e.Message);
+                _siteCache = new SiteContext();
+            }
+            _siteShapeVersion = _shapeVersion;
+            return _siteCache;
+        }
+
+        // ───────────── facts ─────────────
+
+        public LocText AreaProblem()
+        {
+            if (_mode == SelectionMode.Draw && _draw.Closed)
+            {
+                var p = _draw.Problem();
+                if (p != null) return new LocText(p);
+            }
+            if (_shape == null)
+            {
+                if (_mode == SelectionMode.Paint && !_paint.IsEmpty) return new LocText("Placemaker.Problem.PaintTooSmall");
+                return null;
+            }
+            var gen = _recipe != null ? GeneratorRegistry.Get(_recipe.Root.Layer) : null;
+            if (gen != null)
+            {
+                double area = Pricing.PolygonArea(_shape.Ring);
+                try
+                {
+                    if (gen.MinArea > 0 && area < gen.MinArea) return new LocText("Placemaker.Problem.TooSmallFor", Math.Round(gen.MinArea));
+                    if (gen.MaxArea > 0 && area > gen.MaxArea) return new LocText("Placemaker.Problem.TooLargeFor", Math.Round(gen.MaxArea));
+                }
+                catch (Exception) { }
+            }
+            return null;
+        }
+
+        private List<DesignEditor.ReadinessResult> _unreadyAll = new List<DesignEditor.ReadinessResult>();
+
+        private DesignEditor.ReadinessResult Unready()
+        {
+            if (_unreadyRevision == _inputRevision) return _unready;
+            _unreadyRevision = _inputRevision;
+            _unreadyAll = _shape != null && _recipe != null ? _editor.AllUnready(_recipe, _shape, _siteCache) : new List<DesignEditor.ReadinessResult>();
+            _unready = _unreadyAll.Count > 0 ? _unreadyAll[0] : null;
+            return _unready;
+        }
+
+        /// <summary>Readiness per step path for the design view (missing = ready).</summary>
+        public Dictionary<string, UiModels.StepStatus> StepStatuses()
+        {
+            Unready();
+            var d = new Dictionary<string, UiModels.StepStatus>(StringComparer.Ordinal);
+            foreach (var u in _unreadyAll)
+                d[u.StepPath] = new UiModels.StepStatus { Ready = false, NextStep = LocText.Of(u.NextStepKey) ?? LocText.Of(u.ReasonKey, u.ReasonArgs) };
+            return d;
+        }
+
+        public bool CanAfford()
+        {
+            if (_plan == null) return true;
+            if (_affordRevision == _planRevision) return _canAfford;
+            _affordRevision = _planRevision;
+            var est = Pricing.Of(_plan, _site.Assets());
+            _planCost = est.Cost;
+            _planUpkeep = est.Upkeep;
+            _canAfford = true;
+            try
+            {
+                var city = World.GetExistingSystemManaged<CitySystem>();
+                if (city != null && city.City != Entity.Null && EntityManager.HasComponent<PlayerMoney>(city.City))
+                {
+                    var money = EntityManager.GetComponentData<PlayerMoney>(city.City);
+                    _canAfford = money.m_Unlimited || money.money >= est.Cost;
+                }
+            }
+            catch (Exception) { _canAfford = true; }
+            return _canAfford;
+        }
+
+        public StageFacts Facts()
+        {
+            var f = new StageFacts
+            {
+                AreaValid = _shape != null,
+                HasSelection = HasSelection(),
+                AreaInProgress = (_mode == SelectionMode.Draw && !_draw.Closed && _draw.Count > 0)
+                                 || (_mode == SelectionMode.Perimeter && !_perimeter.Closed && _perimeter.Nodes.Count > 0),
+                AreaProblem = AreaProblem(),
+                HasRecipe = _recipe != null,
+                Planning = Planning,
+                PlanReady = _plan != null && _planRevision == _inputRevision,
+                PlanHasErrors = _plan != null && _plan.HasErrors,
+                CanAfford = CanAfford(),
+                BuildServiceAvailable = Services.Build != null,
+                BuildRunning = _building,
+                MarkerModeActive = _markerKind != null,
+                Editing = _editingGroup > 0,
+                GestureActive = _gesture != Gesture.None || _previewBase != null,
+            };
+            var u = Unready();
+            if (u != null)
+            {
+                f.UnreadyStepPath = u.StepPath;
+                f.UnreadyMarkerKind = u.MarkerKind;
+                f.UnreadyNextStep = LocText.Of(u.NextStepKey);
+                f.UnreadyReason = LocText.Of(u.ReasonKey, u.ReasonArgs);
+            }
+            return f;
+        }
+
+        /// <summary>Area of the current outline in m² (live while dragging a drawn outline).</summary>
+        public double AreaM2
+        {
+            get
+            {
+                if (_mode == SelectionMode.Draw && _draw.Closed) return _draw.Area();
+                if (_shape != null) return Pricing.PolygonArea(_shape.Ring);
+                if (_mode == SelectionMode.Paint) return _paint.Area;
+                return 0;
+            }
+        }
+
+        public double PerimeterM
+        {
+            get
+            {
+                if (_mode == SelectionMode.Draw && _draw.Count > 0) return _draw.Perimeter();
+                if (_shape != null) return Poly.Perimeter(_shape.Ring2D());
+                return 0;
+            }
+        }
+
+        public bool AreaClosed
+        {
+            get
+            {
+                switch (_mode)
+                {
+                    case SelectionMode.Draw: return _draw.Closed;
+                    case SelectionMode.Perimeter: return _perimeter.Closed;
+                    case SelectionMode.Block: return _blocks.Faces.Count > 0;
+                    default: return _shape != null;
+                }
+            }
+        }
+
+        public int PointCount
+        {
+            get
+            {
+                switch (_mode)
+                {
+                    case SelectionMode.Draw: return _draw.Count;
+                    case SelectionMode.Perimeter: return _perimeter.Nodes.Count;
+                    case SelectionMode.Block: return _blocks.Faces.Count;
+                    default: return _shape?.Ring.Length ?? 0;
+                }
+            }
+        }
+    }
+}
