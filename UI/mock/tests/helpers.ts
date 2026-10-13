@@ -111,7 +111,8 @@ export async function noTextOverflow(page: Page, where: string) {
             const r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0) continue;
             const inline = getComputedStyle(el).display === "inline";
-            if (!inline && el.scrollWidth > el.clientWidth + 1) out.push(`cut: "${text}" (${el.scrollWidth} > ${el.clientWidth})`);
+            // data-ellipsis: a deliberate one-line cut whose full text is in the tooltip (Review issues).
+            if (!inline && !el.closest("[data-ellipsis]") && el.scrollWidth > el.clientWidth + 1) out.push(`cut: "${text}" (${el.scrollWidth} > ${el.clientWidth})`);
             for (let a = el.parentElement; a && a !== root.parentElement; a = a.parentElement) {
                 const ar = a.getBoundingClientRect();
                 if (ar.width === 0) continue;

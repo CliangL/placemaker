@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import register from "../src/index";
 import { INFO_SECTION_TYPE } from "../src/components/InfoSection";
 import { icon } from "../src/lib/icons";
-import { publish, trigger } from "./cs2/api";
+import { publish, trigger, triggerLog } from "./cs2/api";
 import { setShowKeys, showKeys } from "./cs2/l10n";
 import { createRegistry, SELECTED_INFO_SECTIONS } from "./cs2/modding";
 import { MockBackend } from "./backend/backend";
@@ -14,7 +14,7 @@ import { MapView } from "./map";
 const backend = new MockBackend();
 const registry = createRegistry();
 register(registry as any);
-(window as any).pm = { backend, registry, trigger };
+(window as any).pm = { backend, registry, trigger, triggerLog };
 (window as any).pmPublish = publish;
 
 function useBackend() {

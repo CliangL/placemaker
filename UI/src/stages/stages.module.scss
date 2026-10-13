@@ -260,7 +260,7 @@
     @include row;
     flex-wrap: wrap;
     min-width: 0;
-    margin-bottom: 2rem;
+    margin-top: 6rem;
 }
 
 .stat {
@@ -342,14 +342,15 @@
 .issues {
     @include col;
     min-width: 0;
-    margin-top: 6rem;
+    margin-top: 3rem;
+    margin-bottom: 4rem;
 }
 
 .issue {
     @include row;
     min-width: 0;
-    min-height: 24rem;
-    padding: 1rem 2rem 1rem 6rem;
+    height: 22rem;
+    padding: 0 2rem 0 5rem;
     margin-bottom: 2rem;
     border-radius: $radius;
     background-color: $c-surface;
@@ -367,12 +368,38 @@
     border-left-color: $c-warning;
 }
 
+// One line, never wrapping (wrapped lines overlapped in Gameface): the tooltip has the full text.
 .issueText {
     flex: 1 1 auto;
     min-width: 0;
-    margin-left: 6rem;
+    margin-left: 5rem;
     font-size: $fs-s;
-    line-height: 1.3;
+    @include ellipsis;
+}
+
+.issueBtn {
+    width: 20rem;
+    height: 20rem;
+    flex-shrink: 0;
+}
+
+.issuesMore {
+    @include button-reset;
+    align-self: flex-start;
+    height: 18rem;
+    padding: 0 6rem;
+    font-size: $fs-s;
+    color: var(--accentColorNormal);
+    &:hover {
+        color: #ffffff;
+    }
+}
+
+.calloutLine {
+    margin-bottom: 3rem;
+    font-size: $fs-s;
+    color: var(--menuText1Normal);
+    @include ellipsis;
 }
 
 .breakRow {

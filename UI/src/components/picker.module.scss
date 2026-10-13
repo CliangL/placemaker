@@ -99,9 +99,9 @@
     @include button-reset;
     align-items: center;
     position: relative;
-    width: 70rem;
-    padding: 4rem 2rem;
-    margin: 0 3rem 3rem 0;
+    width: 86rem;
+    padding: 5rem 3rem 4rem 3rem;
+    margin: 0 3rem 4rem 0;
     overflow: hidden;
     border-radius: $radius;
     background-color: $c-surface;
@@ -110,7 +110,13 @@
     transition-duration: $t-fast;
     &:hover {
         background-color: $c-surface-hover;
+        @include border-color(rgba(255, 255, 255, 0.35));
     }
+}
+
+// Surfaces: the texture fills the tile like a swatch.
+.tileSwatch {
+    padding: 2rem 2rem 3rem 2rem;
 }
 
 .tileOn {
@@ -118,13 +124,16 @@
     background-color: rgba(63, 182, 240, 0.12);
 }
 
+// Up to two lines, never cut sideways ("Two-Lane Road with Trees").
 .tileName {
-    margin-top: 2rem;
+    margin-top: 3rem;
     width: 100%;
+    height: 26rem;
     font-size: 11rem;
+    line-height: 13rem;
     color: var(--menuText1Normal);
     text-align: center;
-    @include ellipsis;
+    overflow: hidden;
 }
 
 .tileCost {
@@ -146,16 +155,19 @@
 }
 
 .thumbImg {
+    flex-shrink: 0;
     border-radius: $radius-s;
 }
 
 .thumbBlank {
     @include row;
+    flex-shrink: 0;
+    overflow: hidden;
     justify-content: center;
     border-radius: $radius-s;
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: rgba(255, 255, 255, 0.1);
+    @include border(1rem, rgba(255, 255, 255, 0.12));
     color: $c-text-dim;
-    font-size: var(--fontSizeS);
     font-weight: bold;
 }
 
@@ -163,12 +175,70 @@
     background-color: rgba(63, 182, 240, 0.08);
 }
 
-.autoIcon {
+.mosaic {
+    @include row(flex-start);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: $radius-s;
+}
+
+.mosaicCell {
+    border-radius: 0;
+    flex-shrink: 0;
+}
+
+.mosaicAuto {
     @include row;
     justify-content: center;
-    width: 34rem;
-    height: 34rem;
-    color: var(--accentColorNormal);
+    background-color: rgba(63, 182, 240, 0.18);
+}
+
+.mosaicEmpty {
+    @include row;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: $radius-s;
+    background-color: rgba(63, 182, 240, 0.12);
+}
+
+.tabs {
+    @include row;
+    flex-wrap: wrap;
+    margin-top: 5rem;
+    margin-right: 6rem;
+}
+
+.tab {
+    @include row;
+    @include button-reset;
+    height: 22rem;
+    padding: 0 9rem;
+    margin: 0 3rem 2rem 0;
+    border-radius: 11rem;
+    background-color: $c-surface;
+    color: $c-text-dim;
+    font-size: $fs-s;
+    transition-property: background-color, color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+        color: #ffffff;
+    }
+}
+
+.tabOn {
+    background-color: var(--accentColorNormal);
+    color: #0b1d26;
+    &:hover {
+        background-color: var(--accentColorNormal);
+        color: #0b1d26;
+    }
+}
+
+.tabText {
+    @include ellipsis;
+    max-width: 120rem;
 }
 
 .empty {

@@ -250,6 +250,8 @@ export const act = {
     acknowledgePermanent: (ack: boolean) => fire(Triggers.acknowledgePermanent, ack),
     /** Turn a built-in feature of a fill step on/off (adds/enables its child step in C#). */
     setFeature: (path: string, featureLayerId: string, enabled: boolean) => fire(Triggers.setFeature, path, featureLayerId, enabled),
+    /** Map preview: fast sketch overlay or the real translucent ghost (models + surfaces). */
+    setPreviewMode: (mode: "sketch" | "ghost") => fire(Triggers.setPreviewMode, mode),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */

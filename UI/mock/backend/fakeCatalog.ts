@@ -1,7 +1,7 @@
 // Fallback catalog for the mock: plausible layers covering every control kind, used whenever the
 // mock host has no real layer with that id (other workstreams write the real ones in parallel).
 // Shapes follow contract.ts plus the proposed `default` on controls and preset `values`.
-import { AssetItem, Control, LayerType, RecipeInfo, SettingValue } from "../../src/contract";
+import { Control, LayerType, RecipeInfo, SettingValue } from "../../src/contract";
 
 export type MockControl = Control & { default?: SettingValue };
 export type MockLayer = Omit<LayerType, "controls" | "presets"> & {
@@ -39,6 +39,10 @@ export const FAKE_LAYERS: MockLayer[] = [
               options: [opt("centre", "Placemaker.At.Centre"), opt("corner", "Placemaker.At.Corner"), opt("edge", "Placemaker.At.Edge"), opt("entrance", "Placemaker.At.Entrance")], default: "centre" },
             { id: "plazaSize", kind: "slider", tier: "more", group: "plaza", label: "Placemaker.Park.PlazaSize", min: 5, max: 40, step: 1, unit: "%", default: 15 },
             { id: "fenceAsset", kind: "asset", tier: "more", group: "edge", label: "Placemaker.Park.FenceAsset", assetCategory: "fence", default: "", visibleWhen: "fence=true" },
+            { id: "ground", kind: "asset", tier: "more", group: "ground", label: "Placemaker.Park.Ground", tooltip: "Placemaker.Park.GroundTip", assetCategory: "surface.grass", default: "" },
+            { id: "decals", kind: "assetMulti", tier: "more", group: "ground", label: "Placemaker.Decals.Pick", tooltip: "Placemaker.Decals.PickTip", assetCategory: "decal", default: [] },
+            { id: "decalDensity", kind: "slider", tier: "more", group: "ground", label: "Placemaker.Decals.Density", min: 0, max: 100, step: 5, unit: "%", default: 30 },
+            { id: "decalClustering", kind: "slider", tier: "more", group: "ground", label: "Placemaker.Decals.Clustering", tooltip: "Placemaker.Decals.ClusteringTip", min: 0, max: 100, step: 5, unit: "%", default: 50 },
         ],
         presets: [
             { id: "formal", name: "Placemaker.Park.Preset.Formal", values: { style: "formal", pathWidth: 5, trees: 40, furniture: true } },
@@ -57,6 +61,9 @@ export const FAKE_LAYERS: MockLayer[] = [
             { id: "surface", kind: "asset", tier: "more", group: "", label: "Placemaker.Plaza.Surface", assetCategory: "surface.paving", default: "" },
             { id: "arrangement", kind: "arrangement", tier: "more", group: "", label: "Placemaker.Plaza.Arrangement", assetCategory: "bench", default: ["bench-wood", "lamp-classic", "bench-wood", "planter-square"] },
             { id: "edgeTrees", kind: "toggle", tier: "more", group: "", label: "Placemaker.Plaza.EdgeTrees", default: true },
+            { id: "decals", kind: "assetMulti", tier: "more", group: "decals", label: "Placemaker.Decals.Pick", tooltip: "Placemaker.Decals.PickTip", assetCategory: "decal", default: [] },
+            { id: "decalDensity", kind: "slider", tier: "more", group: "decals", label: "Placemaker.Decals.Density", min: 0, max: 100, step: 5, unit: "%", default: 30 },
+            { id: "decalClustering", kind: "slider", tier: "more", group: "decals", label: "Placemaker.Decals.Clustering", tooltip: "Placemaker.Decals.ClusteringTip", min: 0, max: 100, step: 5, unit: "%", default: 50 },
         ],
         presets: [
             { id: "market", name: "Placemaker.Plaza.Preset.Market", values: { pattern: "open", furniture: 30 } },
@@ -297,6 +304,10 @@ export const FAKE_STRINGS: Record<string, string> = {
     "Placemaker.Marker.TwoWay": "Two-way", "Placemaker.Marker.Entry": "Entry only", "Placemaker.Marker.Exit": "Exit only",
     "Placemaker.Marker.Alley": "Alley", "Placemaker.Marker.Footpath": "Footpath", "Placemaker.Reason.NeedEntrance": "Place at least one entrance",
     "Placemaker.Parking.PerimeterRoad": "Perimeter road", "Placemaker.Parking.ZoningEdges": "Zone the edges", "Placemaker.Parking.ZoningEdgesTip": "Zones a strip along the lot so buildings can grow next to it.",
+    "Placemaker.Park.Ground": "Lawn", "Placemaker.Park.GroundTip": "Ground texture under the lawn.",
+    "Placemaker.Decals.Pick": "Decals", "Placemaker.Decals.PickTip": "Leaves, cracks, puddles, markings, scattered over the ground.",
+    "Placemaker.Decals.Density": "Density", "Placemaker.Decals.Clustering": "Clustering", "Placemaker.Decals.ClusteringTip": "Low: spread evenly. High: in patches.",
+    "Placemaker.UI.Group.ground": "Ground", "Placemaker.UI.Group.decals": "Decals",
     "Placemaker.UI.Group.zoning": "Zoning", "Placemaker.UI.Group.layout": "Layout", "Placemaker.UI.Group.extras": "Extras", "Placemaker.UI.Group.paths": "Paths",
     "Placemaker.UI.Group.planting": "Planting", "Placemaker.UI.Group.water": "Water", "Placemaker.UI.Group.edge": "Edge",
     "Placemaker.Recipe.ParkingTip": "A surface parking lot with stalls, aisles and entrances.",
@@ -318,41 +329,21 @@ export const FAKE_STRINGS: Record<string, string> = {
     "Placemaker.Marker.entrance.Plural": "entrances",
 };
 
-// ───────────── fake assets ─────────────
+// ───────────── fake assets (fakeAssets.ts) ─────────────
 
-const PALETTE: Record<string, string> = {
-    tree: "#4f9a4c", "net.pathway": "#c7a35a", "net.road": "#6d7a86", centerpiece: "#4fb8e8", bench: "#a0754b", fence: "#8a8f96",
-    "surface.paving": "#b9a58c", "surface.asphalt": "#4a5258", playground: "#e2774f", "surface.grass": "#5ea85a",
-};
+export { fakeAssets, surfaceColor } from "./fakeAssets";
 
-const NAMES: Record<string, string[]> = {
-    tree: ["English Oak", "Silver Birch", "Linden", "Red Maple", "Scots Pine", "Japanese Cherry", "Horse Chestnut", "London Plane", "Weeping Willow", "Ginkgo"],
-    "net.pathway": ["Gravel Path", "Paved Path", "Wide Pedestrian Street", "Boardwalk", "Cobblestone Path"],
-    "net.road": ["Two-Lane Road", "Two-Lane Road with Trees", "Four-Lane Road", "Small Avenue", "Gravel Road"],
-    centerpiece: ["Classic Fountain", "Modern Fountain", "Founder Statue", "Obelisk", "Bronze Horse", "Abstract Sculpture"],
-    bench: ["Wooden Bench", "Classic Lamp", "Modern Bench", "Square Planter", "Bin", "Bollard"],
-    fence: ["Iron Fence", "Hedge", "Low Wall", "Picket Fence"],
-    "surface.paving": ["Light Pavers", "Herringbone Brick", "Granite Slabs", "Terracotta Tiles"],
-    "surface.asphalt": ["Asphalt", "Concrete", "Gravel Lot"],
-    playground: ["Swing Set", "Slide Tower", "Sandbox", "Climbing Frame", "Seesaw"],
-};
+// ───────────── more types (the Make row at scale) ─────────────
 
-const IDS: Record<string, string[]> = { bench: ["bench-wood", "lamp-classic", "bench-modern", "planter-square", "bin", "bollard"] };
-
-function thumb(name: string, color: string) {
-    const initials = name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("");
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="#1b262c"/></linearGradient></defs><rect width="64" height="64" rx="8" fill="url(#g)"/><text x="32" y="40" font-family="Arial" font-size="22" font-weight="bold" fill="#ffffff" fill-opacity="0.92" text-anchor="middle">${initials}</text></svg>`;
-    return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
-}
-
-export function fakeAssets(category: string): AssetItem[] {
-    const names = NAMES[category] ?? ["Sample A", "Sample B", "Sample C"];
-    const color = PALETTE[category] ?? "#557";
-    return names.map((n, i) => ({
-        id: IDS[category]?.[i] ?? n.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-        name: n,
-        icon: thumb(n, color),
-        cost: 50 + ((i * 137) % 400),
-        tags: [category],
-    }));
-}
+/** Types other workstreams are adding: backend.addMoreTypes() puts them in the catalog (Make-row tests). */
+export const MORE_TYPES: [string, string, string][] = [
+    ["botanicalGarden", "Botanical garden", "flower"],
+    ["sportsPark", "Sports park", "people"],
+    ["dogPark", "Dog park", "park"],
+    ["picnicGrounds", "Picnic grounds", "picnic"],
+    ["natureReserve", "Nature reserve", "tree"],
+    ["formalGarden", "Formal garden", "flower"],
+    ["communityGarden", "Community garden", "leaf"],
+    ["marketSquare", "Market square", "plaza"],
+    ["parkingGarage", "Parking garage", "parking"],
+];

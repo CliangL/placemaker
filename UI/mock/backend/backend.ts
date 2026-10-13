@@ -10,8 +10,9 @@ import {
 import { publish, setTriggerHandler } from "../cs2/api";
 import { addStrings } from "../cs2/l10n";
 import { BLOCKS, blocksRing, Block, cellsOutline, NODES, paintCells } from "./city";
-import { FAKE_FEATURES, FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, FeatureDef, MockLayer, MockRecipe, RecipeTemplate } from "./fakeCatalog";
+import { FAKE_FEATURES, FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, FeatureDef, MockLayer, MockRecipe, MORE_TYPES, RecipeTemplate } from "./fakeCatalog";
 import { composeFake, FAKE_LAYER_IDS } from "./fakePlanner";
+import { defaultSurface, surfaceColor } from "./fakeAssets";
 import { area, closestOnRing, dist, perimeter, selfIntersects, simplify, V2 } from "./geometry";
 import { GRID } from "./city";
 
@@ -96,6 +97,14 @@ export class MockBackend {
     preview = new Map<string, SettingValue>();
     markerMode: { stepPath: string; kind: string } | null = null;
     ackPermanent = false;
+    /** Player's preview choice and the stage it was made on (a new stage starts from its default again). */
+    previewChoice: { mode: "sketch" | "ghost"; stage: Stage } | null = null;
+    /** Real preview being rebuilt after a change (spinner on the toggle). */
+    ghostPending = false;
+    ghostMs = 450;
+    /** state.planningProgress while planning (the fake planner is instant; tests set it). */
+    planProgress = 0.5;
+    private ghostTimer: number | null = null;
 
     // ── plan ──
     plan: ComposeResult | null = null;
@@ -619,6 +628,12 @@ export class MockBackend {
                 this.changed(true);
                 return;
             }
+            case "setPreviewMode":
+                if (a[0] === "sketch" || a[0] === "ghost") {
+                    this.previewChoice = { mode: a[0], stage: this.stage };
+                    this.touchGhost();
+                }
+                break;
             case "endPreview":
                 this.preview.clear();
                 this.changed(true);
@@ -1017,8 +1032,59 @@ export class MockBackend {
 
     // ───────────── planning ─────────────
 
+    /** Sketch before Review, Real (ghost) on Review — unless the player chose on this stage. */
+    previewMode(): "sketch" | "ghost" {
+        if (this.previewChoice && this.previewChoice.stage === this.stage) return this.previewChoice.mode;
+        return this.stage === "review" || this.stage === "building" ? "ghost" : "sketch";
+    }
+
+    /** The ghost (real models + textures) takes a moment to rebuild after each change. */
+    touchGhost() {
+        if (this.previewMode() !== "ghost") return;
+        this.ghostPending = true;
+        if (this.ghostTimer != null) window.clearTimeout(this.ghostTimer);
+        this.ghostTimer = window.setTimeout(() => {
+            this.ghostTimer = null;
+            this.ghostPending = false;
+            this.publishAll();
+        }, this.ghostMs);
+    }
+
+    /** Ground colour of the real preview: the root step's surface (hover-previewed value included). */
+    ghostSurfaceColor(): string {
+        const root = this.effectiveRoot();
+        const layer = root ? this.layer(root.layer) : undefined;
+        const c = layer?.controls.find((x) => x.kind === "asset" && (x.assetCategory ?? "").startsWith("surface"));
+        if (!root || !c) return "#7d8a7a";
+        const v = root.values[c.id];
+        const id = typeof v === "string" && v ? v : defaultSurface(c.assetCategory ?? "surface");
+        return surfaceColor(id) ?? "#7d8a7a";
+    }
+
+    /** Adds the types other workstreams are bringing (botanical garden, dog park…) to show the Make row at scale. */
+    addMoreTypes() {
+        const extra: Record<string, string> = {};
+        for (const [id, name, icon] of MORE_TYPES) {
+            if (this.layers.some((l) => l.id === id)) continue;
+            const key = "Placemaker." + id.charAt(0).toUpperCase() + id.slice(1) + ".Name";
+            extra[key] = name;
+            this.layers.push({
+                id, name: key, icon, kind: "fill", accepts: [], emits: ["green"], presets: [], minArea: 400,
+                controls: [
+                    { id: "ground", kind: "asset", tier: "essential", group: "", label: "Placemaker.Park.Ground", assetCategory: id === "marketSquare" ? "surface.paving" : "surface.grass", default: "" },
+                    { id: "trees", kind: "slider", tier: "essential", group: "", label: "Placemaker.Park.TreeDensity", min: 0, max: 100, step: 5, unit: "%", default: 50 },
+                ],
+            });
+            this.recipes.push({ info: { id, name: key, icon, custom: false }, root: { layer: id } });
+        }
+        Object.assign(EN, extra);
+        addStrings(extra);
+        this.publishAll();
+    }
+
     changed(cheap = false) {
         this.autoMarkers();
+        this.touchGhost();
         this.stale = true;
         this.schedulePlan(cheap ? 30 : 60);
         this.publishAll();
@@ -1177,6 +1243,9 @@ export class MockBackend {
             editingGroup: this.editingGroup ?? undefined,
             anarchy: this.anarchy,
             panelCollapsed: this.collapsed(),
+            previewMode: this.previewMode(),
+            planningProgress: this.planning ? this.planProgress : undefined,
+            ghostPending: this.previewMode() === "ghost" && this.ghostPending,
         };
     }
 
