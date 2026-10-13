@@ -73,11 +73,15 @@ namespace Placemaker.Core.Layers.Parking
 
         private sealed class ModuleSpec { public double Y0; public bool Lower, Upper; }
 
+        /// <summary>A cross lane between two stops; Module -1 = the ring road.</summary>
+        private sealed class PlannedLane { public double X, Y0, Y1; public int ModuleA, ModuleB; }
+
         private sealed class InteriorResult
         {
             public List<Bay> Bays = new List<Bay>();
             /// <summary>Per module: aisle band + its valid x-intervals; bay.Line = index into this list (temporary).</summary>
             public List<(double Y0, double Y1, int Module, double2 Interval)> AisleIntervals = new List<(double, double, int, double2)>();
+            public List<PlannedLane> Lanes = new List<PlannedLane>();
             public int Count => Bays.Count;
         }
 
@@ -110,6 +114,7 @@ namespace Placemaker.Core.Layers.Parking
             var entrances = ProjectEntrances();
 
             // interior grid
+            if (_ring) BuildRingLines();
             InteriorResult interior = null;
             if (_g != null && _g.Count >= 3)
             {
@@ -119,9 +124,9 @@ namespace Placemaker.Core.Layers.Parking
             }
             _cancel.ThrowIfCancellationRequested();
 
-            if (_ring) BuildRingLines();
             if (interior != null) BuildAisles(interior);
-            BuildCrossLanes();
+            BuildCrossLanes(interior);
+            if (_ring) PlaceInnerPerimeterRow();
             if (!_ring) BuildSpines();
             _cancel.ThrowIfCancellationRequested();
 
@@ -397,50 +402,80 @@ namespace Placemaker.Core.Layers.Parking
         private InteriorResult PlaceInterior(List<ModuleSpec> modules)
         {
             var res = new InteriorResult();
-            double d = _s.RowDepth, ai = _s.Aisle, p = _s.Pitch, span = _s.StallSpan;
+            double d = _s.RowDepth, ai = _s.Aisle, p = _s.Pitch, span = _s.StallSpan, cw = _s.Cross;
             double cap = _s.RowEndPlanting ? p : 0;
-            var cuts = new List<double2>();
-            foreach (var c in _crossCenters) cuts.Add(new double2(c - _s.Cross / 2, c + _s.Cross / 2));
             double sgn = _rq.LeftHandTraffic ? -1 : 1;
             double ca = Math.Cos(_s.AngleRad), sa = Math.Sin(_s.AngleRad);
             if (_s.StallAngleDeg == 90) { ca = 0; sa = 1; }
 
+            // 1. aisle bands and their valid x-intervals
+            var aisleY = new double2[modules.Count];
+            var aisleIv = new List<double2>[modules.Count];
+            var aisleIndexBase = new int[modules.Count];
             for (int mi = 0; mi < modules.Count; mi++)
             {
                 var m = modules[mi];
-                double y = m.Y0;
-                double lowY0 = y; if (m.Lower) y += d;
-                double ay0 = y, ay1 = y + ai; y = ay1;
-                double upY0 = y;
-                var ai_iv = PGeo.StripInside(_g, ay0, ay1);
-                var aisleIndexOf = new int[ai_iv.Count];
-                for (int k = 0; k < ai_iv.Count; k++)
+                double ay0 = m.Y0 + (m.Lower ? d : 0);
+                aisleY[mi] = new double2(ay0, ay0 + ai);
+                aisleIv[mi] = PGeo.StripInside(_g, ay0, ay0 + ai);
+                aisleIndexBase[mi] = res.AisleIntervals.Count;
+                foreach (var iv in aisleIv[mi]) res.AisleIntervals.Add((ay0, ay0 + ai, mi, iv));
+            }
+
+            // 2. cross lanes between vertically consecutive stops (aisles, ring axis) at each centre.
+            // Rows are only cut where a lane really passes, so no stall-less gap is left where no
+            // lane can be built.
+            foreach (var c in _crossCenters)
+            {
+                var stops = new List<(double Y, int Module)>();
+                for (int mi = 0; mi < modules.Count; mi++)
+                    foreach (var iv in aisleIv[mi])
+                        if (c - cw / 2 >= iv.x - 1e-6 && c + cw / 2 <= iv.y + 1e-6) { stops.Add(((aisleY[mi].x + aisleY[mi].y) / 2, mi)); break; }
+                if (_ring) foreach (var y in RingCrossings(c)) stops.Add((y, -1));
+                stops.Sort((u, v) => u.Y.CompareTo(v.Y));
+                for (int k = 0; k + 1 < stops.Count; k++)
                 {
-                    aisleIndexOf[k] = res.AisleIntervals.Count;
-                    res.AisleIntervals.Add((ay0, ay1, mi, ai_iv[k]));
+                    var a = stops[k]; var b = stops[k + 1];
+                    if (a.Module < 0 && b.Module < 0) continue;
+                    if (b.Y - a.Y < 0.5) continue;
+                    if (!LaneFits(c, a.Y, b.Y)) continue;
+                    res.Lanes.Add(new PlannedLane { X = c, Y0 = a.Y, Y1 = b.Y, ModuleA = a.Module, ModuleB = b.Module });
                 }
+            }
+
+            // 3. stall rows
+            for (int mi = 0; mi < modules.Count; mi++)
+            {
+                var m = modules[mi];
+                var ai_iv = aisleIv[mi];
                 for (int side = 0; side < 2; side++)
                 {
                     bool lower = side == 0;
                     if (lower && !m.Lower) continue;
                     if (!lower && !m.Upper) continue;
-                    double by0 = lower ? lowY0 : upY0, by1 = by0 + d;
-                    var ri = PGeo.Intersect(PGeo.StripInside(_g, by0, by1), ai_iv);
-                    ri = PGeo.Subtract(ri, cuts);
+                    double by0 = lower ? m.Y0 : aisleY[mi].y, by1 = by0 + d;
+                    var strip = PGeo.Intersect(PGeo.StripInside(_g, by0, by1), ai_iv);
+                    var cuts = new List<double2>();
+                    foreach (var lane in res.Lanes)
+                        if (lane.Y0 < by1 - 1e-6 && lane.Y1 > by0 + 1e-6) cuts.Add(new double2(lane.X - cw / 2, lane.X + cw / 2));
+                    var ri = PGeo.Subtract(strip, cuts);
                     var axis = lower ? new double2(sgn * ca, -sa) : new double2(-sgn * ca, sa);
                     double cy = (by0 + by1) / 2;
                     int row = _nextRow++;
                     int order = 0;
                     foreach (var iv in ri)
                     {
-                        double len = iv.y - iv.x - 2 * cap;
+                        // planting at a row end next to a cross lane, or next to the ring road
+                        bool atLaneL = cuts.Exists(q => Math.Abs(q.y - iv.x) < 1e-6), atLaneR = cuts.Exists(q => Math.Abs(q.x - iv.y) < 1e-6);
+                        double capL = (atLaneL || _ring) ? cap : 0, capR = (atLaneR || _ring) ? cap : 0;
+                        double len = iv.y - iv.x - capL - capR;
                         if (len < span - 1e-9) continue;
                         int n = (int)Math.Floor((len - span) / p + 1e-9) + 1;
                         double total = (n - 1) * p + span;
-                        double x0 = iv.x + cap + (len - total) / 2;
+                        double x0 = iv.x + capL + (len - total) / 2;
                         int aisleIdx = -1;
                         for (int k = 0; k < ai_iv.Count; k++)
-                            if (iv.x >= ai_iv[k].x - 1e-6 && iv.y <= ai_iv[k].y + 1e-6) { aisleIdx = aisleIndexOf[k]; break; }
+                            if (iv.x >= ai_iv[k].x - 1e-6 && iv.y <= ai_iv[k].y + 1e-6) { aisleIdx = aisleIndexBase[mi] + k; break; }
                         for (int i = 0; i < n; i++)
                         {
                             var c = new double2(x0 + i * p + span / 2, cy);
@@ -451,6 +486,20 @@ namespace Placemaker.Core.Layers.Parking
                 }
             }
             return res;
+        }
+
+        private List<double> RingCrossings(double x)
+        {
+            var ys = new List<double>();
+            if (_caNet == null) return ys;
+            for (int i = 0; i < _caNet.Count; i++)
+            {
+                var a = _caNet[i]; var b = _caNet[(i + 1) % _caNet.Count];
+                if ((a.x - x) * (b.x - x) >= 0) continue;
+                if (Math.Abs(PGeo.Norm(b - a).x) < 0.17) continue; // nearly parallel to the lane: no clean junction
+                ys.Add(a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x));
+            }
+            return ys;
         }
 
         private Bay MakeBay(double2 c, double2 axis, double2 rowDir, BayKind kind, int row, int order, int line)
@@ -571,33 +620,39 @@ namespace Placemaker.Core.Layers.Parking
             return stops;
         }
 
-        private bool LaneFits(double x, Stop a, Stop b)
+        private bool LaneFits(double x, Stop a, Stop b) => LaneFits(x, a.Y, b.Y);
+
+        private bool LaneFits(double x, double ya, double yb)
         {
             double hw = _s.Cross / 2;
-            double y0 = a.Y + _s.Aisle / 2, y1 = b.Y - _s.Aisle / 2;
-            if (y1 - y0 < 1e-3)
-            {
-                var mid = new double2(x, (a.Y + b.Y) / 2);
-                return PGeo.Contains(_ring ? _c2 : _g, mid);
-            }
+            double y0 = ya + _s.Aisle / 2, y1 = yb - _s.Aisle / 2;
+            var domain = _ring ? _c2 : _g;
+            if (y1 - y0 < 1e-3) return PGeo.Contains(domain, new double2(x, (ya + yb) / 2));
             var rect = new List<double2> { new double2(x - hw, y0), new double2(x + hw, y0), new double2(x + hw, y1), new double2(x - hw, y1) };
-            return PGeo.ConvexInside(rect, _ring ? _c2 : _g, 1e-3);
+            return PGeo.ConvexInside(rect, domain, 1e-3);
         }
 
-        private void BuildCrossLanes()
+        private void BuildCrossLanes(InteriorResult interior)
         {
-            foreach (var x in _crossCenters)
+            if (interior == null) return;
+            foreach (var lane in interior.Lanes)
             {
-                var stops = StopsAt(x);
-                for (int i = 0; i + 1 < stops.Count; i++)
-                {
-                    var a = stops[i]; var b = stops[i + 1];
-                    if (a.Ring && b.Ring) continue;
-                    if (b.Y - a.Y < 0.5) continue;
-                    if (!LaneFits(x, a, b)) continue;
-                    AddLine(new double2(x, a.Y), new double2(x, b.Y), LineKind.Cross, _s.Cross);
-                }
+                // both ends must still exist (an aisle without stalls was dropped)
+                if (!EndExists(lane.ModuleA, lane.X, lane.Y0) || !EndExists(lane.ModuleB, lane.X, lane.Y1)) continue;
+                AddLine(new double2(lane.X, lane.Y0), new double2(lane.X, lane.Y1), LineKind.Cross, _s.Cross);
             }
+        }
+
+        private bool EndExists(int module, double x, double y)
+        {
+            if (module < 0) return _ring;
+            foreach (var a in _aisles)
+            {
+                if (a.Module != module) continue;
+                var l = _out.Lines[a.Line];
+                if (Math.Abs(l.A.y - y) < 1e-6 && x >= l.A.x - 1e-6 && x <= l.B.x + 1e-6) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -672,37 +727,45 @@ namespace Placemaker.Core.Layers.Parking
         private bool FindJunction(double2 p, double2 inward, out double2 junction, out int line)
         {
             junction = p; line = -1;
-            double bestT = double.PositiveInfinity;
+            // straight in, perpendicular to the edge (PLT's entrance axis)
+            double bestT = double.PositiveInfinity; int rayLine = -1;
             var far = p + inward;
             foreach (var l in _out.Lines)
             {
                 if (l.Removed || l.Kind == LineKind.Connector || l.Kind == LineKind.Footpath) continue;
                 if (!PGeo.LineLine(p, far, l.A, l.B, out double t, out double u)) continue;
                 if (u < -1e-9 || u > 1 + 1e-9 || t <= 1e-6) continue;
-                if (t < bestT) { bestT = t; line = l.Id; }
+                if (t < bestT) { bestT = t; rayLine = l.Id; }
             }
             double limit = _ring ? _s.Setback + _s.StallLength + _s.Aisle + 10 : 80;
-            if (line >= 0 && bestT <= limit)
-            {
-                junction = p + inward * bestT;
-                // a cut point closer than 1.5 m to the line's end becomes that end (no sub-metre courses)
-                var l = _out.Lines[line];
-                if (PGeo.Len(junction - l.A) < 1.5) junction = l.A;
-                else if (PGeo.Len(junction - l.B) < 1.5) junction = l.B;
-                return SegmentInLot(p, junction);
-            }
-            // nearest point on any drive line, if the straight path stays inside the lot
-            double bestD = double.PositiveInfinity; double2 bestP = p; int bestL = -1;
+            double2 rayJ = p;
+            bool ray = rayLine >= 0 && bestT <= limit;
+            if (ray) { rayJ = SnapToEnd(p + inward * bestT, _out.Lines[rayLine]); ray = SegmentInLot(p, rayJ); }
+
+            // or the nearest point of any drive line (an aisle end next to the entrance)
+            double bestD = double.PositiveInfinity; double2 nearJ = p; int nearLine = -1;
             foreach (var l in _out.Lines)
             {
                 if (l.Removed || l.Kind == LineKind.Connector || l.Kind == LineKind.Footpath) continue;
-                var q = PGeo.ClosestOnSeg(p, l.A, l.B, out _);
+                var q = SnapToEnd(PGeo.ClosestOnSeg(p, l.A, l.B, out _), l);
                 double dd = PGeo.Len(q - p);
-                if (dd < bestD && SegmentInLot(p, q)) { bestD = dd; bestP = q; bestL = l.Id; }
+                if (dd < bestD && dd > 1e-6 && SegmentInLot(p, q)) { bestD = dd; nearJ = q; nearLine = l.Id; }
             }
-            if (bestL < 0 || bestD > 120) return false;
-            junction = bestP; line = bestL;
+            bool near = nearLine >= 0 && bestD <= 120;
+            if (!ray && !near) return false;
+            // A perpendicular lane that is much longer than the direct one would run along a stall
+            // row and wipe it out (seen on PLT report CCBP: an entrance on a short side edge).
+            if (ray && (!near || PGeo.Len(rayJ - p) <= 1.5 * bestD + 2)) { junction = rayJ; line = rayLine; }
+            else { junction = nearJ; line = nearLine; }
             return true;
+        }
+
+        /// <summary>A cut point closer than 1.5 m to a line end becomes that end (no sub-metre courses).</summary>
+        private static double2 SnapToEnd(double2 q, DriveLine l)
+        {
+            if (PGeo.Len(q - l.A) < 1.5) return l.A;
+            if (PGeo.Len(q - l.B) < 1.5) return l.B;
+            return q;
         }
 
         private bool SegmentInLot(double2 a, double2 b)
@@ -799,6 +862,84 @@ namespace Placemaker.Core.Layers.Parking
                 }
             }
             _out.Bays.AddRange(accepted);
+        }
+
+        /// <summary>
+        /// Stalls along the inside of the ring road, wherever the module grid left room: above the
+        /// last module, in the wedges a slanted ring edge leaves (PLT's "InnerPerimeter" stalls).
+        /// Greedy along each inner ring edge; a stall must fit the grid contour and touch nothing
+        /// already planned (stalls, aisle bands, cross lanes).
+        /// </summary>
+        private void PlaceInnerPerimeterRow()
+        {
+            double sw = _s.StallWidth, sl = _s.StallLength;
+            var blockers = new List<double2[]>();
+            foreach (var b in _out.Bays) blockers.Add(b.Quad);
+            foreach (var a in _aisles)
+            {
+                var l = _out.Lines[a.Line];
+                blockers.Add(new[] { new double2(l.A.x, a.Y0), new double2(l.B.x, a.Y0), new double2(l.B.x, a.Y1), new double2(l.A.x, a.Y1) });
+            }
+            foreach (var l in _out.Lines)
+                if (l.Kind == LineKind.Cross) blockers.Add(PGeo.Corridor(l.A, l.B, l.Width / 2));
+            var index = new Dictionary<long, List<int>>();
+            const double cell = 10;
+            long Key(long x, long y) => (x << 32) ^ (y & 0xffffffffL);
+            void Index(int i)
+            {
+                PGeo.Bounds(blockers[i], out var mn, out var mx);
+                for (long x = (long)Math.Floor(mn.x / cell); x <= (long)Math.Floor(mx.x / cell); x++)
+                    for (long y = (long)Math.Floor(mn.y / cell); y <= (long)Math.Floor(mx.y / cell); y++)
+                    {
+                        if (!index.TryGetValue(Key(x, y), out var list)) index[Key(x, y)] = list = new List<int>();
+                        list.Add(i);
+                    }
+            }
+            for (int i = 0; i < blockers.Count; i++) Index(i);
+            bool Free(double2[] q)
+            {
+                PGeo.Bounds(q, out var mn, out var mx);
+                var seen = new HashSet<int>();
+                for (long x = (long)Math.Floor(mn.x / cell); x <= (long)Math.Floor(mx.x / cell); x++)
+                    for (long y = (long)Math.Floor(mn.y / cell); y <= (long)Math.Floor(mx.y / cell); y++)
+                        if (index.TryGetValue(Key(x, y), out var list))
+                            foreach (int i in list)
+                                if (seen.Add(i) && PGeo.ConvexOverlap(q, blockers[i], 1e-4)) return false;
+                return true;
+            }
+
+            int ringLine = _ringLines.Count > 0 ? _ringLines[0] : -1;
+            int n = _g.Count;
+            for (int k = 0; k < n; k++)
+            {
+                var o = _g[k];
+                var dir = _g[(k + 1) % n] - o;
+                double len = PGeo.Len(dir);
+                if (len < sw) continue;
+                var tan = dir / len;
+                var nrm = PGeo.Perp(tan);
+                int row = _nextRow++, order = 0;
+                for (double x = 0; x + sw <= len + 1e-9;)
+                {
+                    var q = new[]
+                    {
+                        o + tan * x, o + tan * (x + sw), o + tan * (x + sw) + nrm * sl, o + tan * x + nrm * sl,
+                    };
+                    if (PGeo.ConvexInside(q, _g, 1e-4) && Free(q))
+                    {
+                        var bay = new Bay
+                        {
+                            Quad = q, Center = (q[0] + q[2]) * 0.5, Axis = nrm, RowDir = tan, Width = sw, Length = sl,
+                            Kind = BayKind.InnerPerimeter, Row = row, Order = order++, Line = ringLine,
+                        };
+                        _out.Bays.Add(bay);
+                        blockers.Add(q);
+                        Index(blockers.Count - 1);
+                        x += sw;
+                    }
+                    else { x += 0.5; order++; }
+                }
+            }
         }
 
         // ───────────────────────────── clean-up ─────────────────────────────

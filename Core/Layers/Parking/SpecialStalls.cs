@@ -99,6 +99,10 @@ namespace Placemaker.Core.Layers.Parking
                     for (int ri = 0; ri < runs.Count; ri++)
                     {
                         var run = runs[ri];
+                        // A wider stall at 45°/60° grows deeper than its row and would poke into the
+                        // aisle, so accessible stalls only replace square (90°) stalls.
+                        var b0 = layout.Bays[run[0]];
+                        if (Math.Abs(PGeo.Dot(b0.Axis, b0.RowDir)) > 1e-6) continue;
                         foreach (var size in sizes)
                         {
                             for (int k = 0; k + size.Fields <= run.Count; k++)
@@ -111,7 +115,11 @@ namespace Placemaker.Core.Layers.Parking
                             }
                         }
                     }
-                    if (bestRun < 0) break;
+                    if (bestRun < 0)
+                    {
+                        if (gi == 0) layout.Issues.Add(new LayoutIssue(IssueSeverity.Info, "Placemaker.Parking.Issue.NoRoomForAccessible"));
+                        break;
+                    }
                     Replace(layout, runs[bestRun].GetRange(bestStart, bestSize.Fields), bestSize);
                 }
             }

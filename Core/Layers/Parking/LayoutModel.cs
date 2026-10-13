@@ -7,7 +7,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Parking
 {
-    internal enum BayKind { Perimeter = 0, Inner = 1 }
+    internal enum BayKind { Perimeter = 0, Inner = 1, InnerPerimeter = 2 }
 
     internal enum BayRole { Normal = 0, Disabled = 1, Electric = 2 }
 

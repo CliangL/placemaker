@@ -457,9 +457,10 @@ namespace Placemaker.Core.Layers.Parking
                     {
                         if (j == ip || j == ic || j == inx) continue;
                         var p = ring[j];
-                        if (Cross(b - a, p - a) > 1e-12 && Cross(c - b, p - b) > 1e-12 && Cross(a - c, p - c) > 1e-12) { ear = false; break; }
-                        // point exactly on a diagonal also blocks the ear
-                        if (Len(p - a) < 1e-9 || Len(p - c) < 1e-9) { ear = false; break; }
+                        // inside or ON the triangle blocks the ear: a reflex vertex lying exactly on the
+                        // diagonal a-c (e.g. an L-shape's inner corner) would otherwise be cut off.
+                        if (Len(p - a) < 1e-9 || Len(p - b) < 1e-9 || Len(p - c) < 1e-9) { ear = false; break; }
+                        if (Cross(b - a, p - a) >= -1e-9 && Cross(c - b, p - b) >= -1e-9 && Cross(a - c, p - c) >= -1e-9) { ear = false; break; }
                     }
                     if (!ear) continue;
                     tris.Add(new int3(ip, ic, inx));

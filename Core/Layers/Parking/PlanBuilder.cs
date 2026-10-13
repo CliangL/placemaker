@@ -29,7 +29,7 @@ namespace Placemaker.Core.Layers.Parking
             public float StartT, EndT;
         }
 
-        public static AreaPlan Build(AreaInput input, ParkingSettings s, ParkingLayer gen, CancellationToken cancel)
+        public static AreaPlan Build(AreaInput input, ParkingSettings s, ParkingLayer gen, CancellationToken cancel, Action<Layout> inspect = null)
         {
             var plan = new AreaPlan { GeneratorId = ParkingLayer.LayerId };
             var site = input.Site ?? new SiteContext();
@@ -144,6 +144,7 @@ namespace Placemaker.Core.Layers.Parking
 
             Emit(plan, layout, s, site, H, input, cancel);
             Issues(plan, layout);
+            inspect?.Invoke(layout);
             return plan;
         }
 

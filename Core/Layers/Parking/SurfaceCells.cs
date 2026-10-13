@@ -203,6 +203,9 @@ namespace Placemaker.Core.Layers.Parking
             }
             cancel.ThrowIfCancellationRequested();
 
+            CollapseShortEdges(polys, mats, verts);
+            cancel.ThrowIfCancellationRequested();
+
             // edge → cells adjacency
             var edgeOwner = new Dictionary<long, int>();   // directed edge → cell
             long EKey(int a, int b) => ((long)a << 32) | (uint)b;
@@ -324,6 +327,56 @@ namespace Placemaker.Core.Layers.Parking
                 result.Add(new SurfacePoly { Ring = ring, Asphalt = mats[seed], Cells = cellPts });
             }
             return result;
+        }
+
+        /// <summary>
+        /// Collapses every edge shorter than CS2's minimum (PLT Cs2Mindestkante 0.375 m) into one
+        /// shared vertex. Doing it on the welded vertex graph keeps neighbours consistent: CS2-side
+        /// cleaning would move one ring's corner and open a gap or an overlap with the next ring.
+        /// Clusters are capped at 0.8 m across so a chain of short edges cannot drag a corner far.
+        /// </summary>
+        private static void CollapseShortEdges(List<List<int>> polys, List<bool> mats, List<double2> verts)
+        {
+            const double minEdge = 0.4, maxSpread = 0.8;
+            int n = verts.Count;
+            var parent = new int[n];
+            var lo = new double2[n]; var hi = new double2[n];
+            for (int i = 0; i < n; i++) { parent[i] = i; lo[i] = hi[i] = verts[i]; }
+            int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+            bool any = false;
+            foreach (var r in polys)
+                for (int e = 0; e < r.Count; e++)
+                {
+                    int a = Find(r[e]), b = Find(r[(e + 1) % r.Count]);
+                    if (a == b) continue;
+                    if (PGeo.Len(verts[r[e]] - verts[r[(e + 1) % r.Count]]) >= minEdge) continue;
+                    var l2 = math.min(lo[a], lo[b]); var h2 = math.max(hi[a], hi[b]);
+                    if (PGeo.Len(h2 - l2) > maxSpread) continue;
+                    int root = Math.Min(a, b), other = Math.Max(a, b);
+                    parent[other] = root; lo[root] = l2; hi[root] = h2;
+                    any = true;
+                }
+            if (!any) return;
+            var sum = new double2[n]; var cnt = new int[n];
+            for (int i = 0; i < n; i++) { int r = Find(i); sum[r] += verts[i]; cnt[r]++; }
+            for (int i = 0; i < n; i++) { int r = Find(i); if (r == i && cnt[r] > 1) verts[i] = sum[r] / cnt[r]; }
+            for (int pi = polys.Count - 1; pi >= 0; pi--)
+            {
+                var r = polys[pi];
+                var nr = new List<int>(r.Count);
+                foreach (int v in r) { int q = Find(v); if (nr.Count == 0 || nr[nr.Count - 1] != q) nr.Add(q); }
+                while (nr.Count > 1 && nr[0] == nr[nr.Count - 1]) nr.RemoveAt(nr.Count - 1);
+                bool ok = nr.Count >= 3;
+                if (ok)
+                {
+                    var pts = Points(nr, verts);
+                    ok = PGeo.SignedArea(pts) > 1e-6;
+                    // a vertex visited twice makes the ring non-simple: drop the cell (tiny by construction)
+                    if (ok && new HashSet<int>(nr).Count != nr.Count) ok = false;
+                }
+                if (ok) polys[pi] = nr;
+                else { polys.RemoveAt(pi); mats.RemoveAt(pi); }
+            }
         }
 
         private static void Inc(Dictionary<int, int> d, int k) { d.TryGetValue(k, out int v); d[k] = v + 1; }
