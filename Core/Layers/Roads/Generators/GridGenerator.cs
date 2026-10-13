@@ -1,3 +1,9 @@
+// Placemaker roads layer — grid and loop/superblock patterns, shared clipping and node merging.
+// Adapted from Grid Road Generator (Ti4goc), Core/GridGenerator.cs (MIT); part of Placemaker (GPL-3.0).
+// Changes for Placemaker: no static caches or global lock (thread-safe, reentrant), cooperative
+// cancellation through GridParameters.Cancel, per-call diagnostics objects instead of statics.
+// The "merge with the nearest accepted node" rule follows the "super node" idea of CS2-NetworkTools
+// (Luca Rager, MIT).
 using System;
 using System.Collections.Generic;
 using System.Threading;
