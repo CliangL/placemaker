@@ -124,13 +124,16 @@
     background-color: rgba(63, 182, 240, 0.12);
 }
 
+// Up to two lines, never cut sideways ("Two-Lane Road with Trees").
 .tileName {
-    margin-top: 2rem;
+    margin-top: 3rem;
     width: 100%;
+    height: 26rem;
     font-size: 11rem;
+    line-height: 13rem;
     color: var(--menuText1Normal);
     text-align: center;
-    @include ellipsis;
+    overflow: hidden;
 }
 
 .tileCost {

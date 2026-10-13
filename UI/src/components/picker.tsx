@@ -271,7 +271,7 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
     const items = (list ?? []).filter((a) =>
         q ? a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q) || (a.tags ?? []).some((x) => x.toLowerCase().includes(q)) : tabMatch(a),
     );
-    const recent = q || activeTab ? [] : recentIds.map((id) => list?.find((a) => a.id === id)).filter((a): a is AssetItem => !!a);
+    const recent = q ? [] : recentIds.map((id) => list?.find((a) => a.id === id)).filter((a): a is AssetItem => !!a && tabMatch(a));
 
     const pick = (id: string) => {
         // The commit (setValue) replaces the preview: nothing to end afterwards.
@@ -398,7 +398,7 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                                 : t("Placemaker.UI.Picker.All", "All ({0})", [items.length])}
                         </div>
                         <div className={s.grid}>
-                            {req.allowAutomatic && !q && !activeTab ? (
+                            {req.allowAutomatic && !q ? (
                                 <button
                                     type="button"
                                     data-testid="asset-automatic"

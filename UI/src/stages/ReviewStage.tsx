@@ -1,6 +1,8 @@
-// Stage 3 — "you're told the price, it's all there": cost, upkeep, what you get, per-layer breakdown,
-// issues (click to locate), and an explicit acknowledgement for permanent effects before Build.
-import React from "react";
+// Stage 3 — "you're told the price, it's all there", compact (playtest: Review was too wordy and its
+// text overlapped): one key-numbers row (cost · upkeep) and one row of stat chips; issues as single
+// lines (ellipsis, the full text in a tooltip, click to locate, first few with "N more"); the per-layer
+// breakdown folded by default; an explicit acknowledgement for permanent effects before Build.
+import React, { useState } from "react";
 import classNames from "classnames";
 import { Catalog, Issue, Summary, ToolState } from "../contract";
 import { act } from "../lib/bindings";
@@ -8,7 +10,8 @@ import { area as fmtArea, formatValue, Money } from "../lib/format";
 import { entityIcon, layerColor, statIcon } from "../lib/icons";
 import { humanize, useT } from "../lib/l10n";
 import { layerOf } from "../lib/schema";
-import { Btn, Check, Icon, Section } from "../components/common";
+import { Btn, Check, Collapsible, Icon } from "../components/common";
+import { Tip } from "../lib/tips";
 import { layerName, targetLabel } from "./DesignStage";
 import s from "./stages.module.scss";
 
@@ -66,35 +69,20 @@ export const ReviewStage = ({
                             <div className={s.calloutText}>{t("Placemaker.UI.Review.CantAfford", "Not enough money")}</div>
                         </div>
                     ) : null}
-                    <Section title={t("Placemaker.UI.Review.What", "Contents")}>
-                        <div className={classNames(s.stats, { [s.shimmer]: pending })} data-testid="review-stats">
-                            {summary.stats.some((st) => /(^|.)area$/i.test(st.key)) ? null : <StatChip k="Placemaker.Stat.Area" value={state.area.areaM2} unit="m2" />}
-                            {summary.stats.map((st) => (
-                                <StatChip key={st.key + st.unit} k={st.key} value={st.value} unit={st.unit} />
-                            ))}
-                        </div>
-                    </Section>
-                    {summary.issues.length ? (
-                        <div className={s.issues} data-testid="issues">
-                            {summary.issues.map((i, n) => {
-                                const sev = SEVERITY[i.severity] ?? SEVERITY.info;
-                                return (
-                                    <div key={n} className={classNames(s.issue, s["issue_" + i.severity])} data-testid={`issue-${i.severity}`}>
-                                        <Icon name={sev.icon} size={13} tint={sev.tint} />
-                                        <div className={s.issueText}>{tl(i.text)}</div>
-                                        {i.stepPath ? (
-                                            <Btn icon="edit" iconSize={12} title={t("Placemaker.UI.Review.EditLayer", "Edit")} onClick={() => { act.focusStep(i.stepPath as string); act.goToStage("design"); }} />
-                                        ) : null}
-                                        {i.at ? (
-                                            <Btn icon="marker" iconSize={12} title={t("Placemaker.UI.Review.Show", "Show")} onClick={() => act.locate(i.at as [number, number, number])} testId="issue-locate" />
-                                        ) : null}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : null}
+                    <div className={classNames(s.stats, { [s.shimmer]: pending })} data-testid="review-stats">
+                        {summary.stats.some((st) => /(^|.)area$/i.test(st.key)) ? null : <StatChip k="Placemaker.Stat.Area" value={state.area.areaM2} unit="m2" />}
+                        {summary.stats.map((st) => (
+                            <StatChip key={st.key + st.unit} k={st.key} value={st.value} unit={st.unit} />
+                        ))}
+                    </div>
+                    <Issues issues={summary.issues} />
                     {summary.layers.length > 1 ? (
-                        <Section title={t("Placemaker.UI.Review.Breakdown", "Breakdown")} count={summary.layers.length} testId="breakdown">
+                        <Collapsible
+                            id="review:breakdown"
+                            title={t("Placemaker.UI.Review.Breakdown", "Breakdown")}
+                            summary={String(summary.layers.length)}
+                            testId="breakdown"
+                        >
                             {summary.layers.map((l, n) => {
                                 const layer = layerOf(catalog, l.layer);
                                 return (
@@ -114,7 +102,7 @@ export const ReviewStage = ({
                                     </div>
                                 );
                             })}
-                        </Section>
+                        </Collapsible>
                     ) : null}
                     {summary.permanent.length ? (
                         <div className={classNames(s.callout, s.calloutWarn)} data-testid="permanent">
@@ -122,9 +110,11 @@ export const ReviewStage = ({
                             <div className={s.calloutBody}>
                                 <div className={s.calloutTitle}>{t("Placemaker.UI.Review.Permanent", "Permanent changes")}</div>
                                 {summary.permanent.map((p, n) => (
-                                    <div key={n} className={s.calloutText}>
-                                        {tl(p)}
-                                    </div>
+                                    <Tip key={n} title={tl(p)}>
+                                        <div className={s.calloutLine} data-ellipsis="tooltip">
+                                            {tl(p)}
+                                        </div>
+                                    </Tip>
                                 ))}
                                 <Check
                                     testId="ack-permanent"
@@ -143,6 +133,72 @@ export const ReviewStage = ({
                     ) : null}
                 </>
             )}
+        </div>
+    );
+};
+
+/** Issues shown before "N more". */
+const ISSUES_SHOWN = 4;
+
+/** One line per issue (worst first): icon, text cut with an ellipsis (full text in the tooltip), edit / locate. */
+const Issues = ({ issues }: { issues: Issue[] }) => {
+    const { t, tl } = useT();
+    const [all, setAll] = useState(false);
+    if (!issues.length) return null;
+    const rank = { error: 0, warning: 1, info: 2 } as Record<string, number>;
+    const sorted = issues.map((i, n) => ({ i, n })).sort((a, b) => (rank[a.i.severity] ?? 3) - (rank[b.i.severity] ?? 3) || a.n - b.n);
+    const shown = all ? sorted : sorted.slice(0, ISSUES_SHOWN);
+    return (
+        <div className={s.issues} data-testid="issues">
+            {shown.map(({ i, n }) => {
+                const sev = SEVERITY[i.severity] ?? SEVERITY.info;
+                const text = tl(i.text);
+                return (
+                    <div key={n} className={classNames(s.issue, s["issue_" + i.severity])} data-testid={`issue-${i.severity}`}>
+                        <Icon name={sev.icon} size={12} tint={sev.tint} />
+                        <Tip title={text}>
+                            <div className={s.issueText} data-ellipsis="tooltip">
+                                {text}
+                            </div>
+                        </Tip>
+                        {i.stepPath ? (
+                            <Btn
+                                icon="edit"
+                                iconSize={12}
+                                className={s.issueBtn}
+                                title={t("Placemaker.UI.Review.EditLayer", "Edit")}
+                                onClick={() => {
+                                    act.focusStep(i.stepPath as string);
+                                    act.goToStage("design");
+                                }}
+                            />
+                        ) : null}
+                        {i.at ? (
+                            <Btn
+                                icon="marker"
+                                iconSize={12}
+                                className={s.issueBtn}
+                                title={t("Placemaker.UI.Review.Show", "Show")}
+                                onClick={() => act.locate(i.at as [number, number, number])}
+                                testId="issue-locate"
+                            />
+                        ) : null}
+                    </div>
+                );
+            })}
+            {sorted.length > ISSUES_SHOWN ? (
+                <button
+                    type="button"
+                    className={s.issuesMore}
+                    data-testid="issues-more"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setAll(!all);
+                    }}
+                >
+                    {all ? t("Placemaker.UI.Review.Fewer", "Show fewer") : t("Placemaker.UI.Review.MoreN", "{0} more", [sorted.length - ISSUES_SHOWN])}
+                </button>
+            ) : null}
         </div>
     );
 };

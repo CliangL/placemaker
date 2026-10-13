@@ -366,7 +366,36 @@
 }
 
 .quickStale {
-    opacity: 0.5;
+    opacity: 0.4;
+}
+
+.quickWrap {
+    @include row;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+// "Planning…": spinner + label, so a slow plan never looks like nothing is happening.
+.busy {
+    @include row;
+    flex-shrink: 0;
+    height: 18rem;
+    padding: 0 7rem 0 4rem;
+    margin-right: 8rem;
+    border-radius: 9rem;
+    background-color: rgba(63, 182, 240, 0.16);
+}
+
+.busyText {
+    margin-left: 5rem;
+    font-size: $fs-s;
+    color: #cfeeff;
+    white-space: nowrap;
+}
+
+.headSpinner {
+    margin-left: 8rem;
 }
 
 .quickItem {

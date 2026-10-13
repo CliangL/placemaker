@@ -292,7 +292,18 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
     const enabled = p.enabled && !blockedReason;
     const reason = blockedReason ?? (p.reason ? tl(p.reason) : "");
     const pending = summary.stale || state.planning;
+    const ghostBusy = !!state.ghostPending && effectivePreviewMode(state) === "ghost";
+    const busy = (pending || ghostBusy) && (state.stage === "design" || state.stage === "review");
     const showNumbers = state.stage === "design" && summary.ready && !compact;
+    // Planning can take a moment: a clear spinner + label (not just a dot), stale numbers dimmed beside it.
+    const busyChip = busy ? (
+        <div className={s.busy} data-testid="busy">
+            <div className={s.spinner} />
+            <div className={s.busyText}>
+                {pending ? t("Placemaker.UI.Planning", "Planning…") : t("Placemaker.UI.PreviewUpdating", "Updating preview…")}
+            </div>
+        </div>
+    ) : null;
     const label = tl(p.label, t("Placemaker.UI.Primary.Next", "Next"));
     const button = (
         <button
@@ -320,11 +331,15 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
         );
     } else if (showNumbers) {
         info = (
-            <div className={classNames(s.quick, { [s.quickStale]: pending })} data-testid="quick-numbers">
-                <div className={s.quickItem}>
-                    <Icon name="area" size={12} tint="dim" />
-                    <div className={s.quickText}>{fmtArea(state.area.areaM2)}</div>
-                </div>
+            <div className={s.quickWrap}>
+            {busyChip}
+            <div className={classNames(s.quick, { [s.quickStale]: pending })} data-testid="quick-numbers" data-stale={pending ? "true" : "false"}>
+                {busy ? null : (
+                    <div className={s.quickItem}>
+                        <Icon name="area" size={12} tint="dim" />
+                        <div className={s.quickText}>{fmtArea(state.area.areaM2)}</div>
+                    </div>
+                )}
                 {quickStats(summary).map((st) => (
                     <div key={st.key} className={s.quickItem}>
                         <Icon name={statIcon(st.key)} size={12} tint="dim" />
@@ -340,7 +355,10 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
                     <div className={s.quickText}>{compactMoney(summary.upkeep) + t("Placemaker.UI.PerMonth", "/mo")}</div>
                 </div>
             </div>
+            </div>
         );
+    } else if (busyChip && !compact) {
+        info = busyChip;
     } else if (state.stage === "area" && !compact) {
         info = <AreaReadout state={state} compact />;
     }
@@ -521,9 +539,9 @@ export const PlacemakerPanel = () => {
                     </div>
                 )}
                 {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
-                {state.planning ? (
+                {state.planning && !showPreviewToggle ? (
                     <Tip title={t("Placemaker.UI.Planning", "Updating…")}>
-                        <div className={s.planningDot} data-testid="planning" />
+                        <div className={classNames(s.spinner, s.headSpinner)} data-testid="planning" />
                     </Tip>
                 ) : null}
                 <div className={s.flex} />

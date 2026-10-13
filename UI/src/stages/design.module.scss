@@ -38,7 +38,7 @@
     @include button-reset;
     flex: 1 1 auto;
     min-width: 0;
-    height: 28rem;
+    height: 32rem;
     margin: 0 3rem 3rem 0;
     padding: 0 6rem 0 3rem;
     border-radius: $radius;
@@ -70,13 +70,17 @@
     flex-shrink: 0;
 }
 
+// Two short lines when needed ("Community garden"): never cut, the card stays one height.
 .cardName {
     flex: 1 1 auto;
+    min-width: 0;
     margin-left: 6rem;
-    font-size: $fs;
+    max-height: 28rem;
+    overflow: hidden;
+    font-size: $fs-s;
+    line-height: 14rem;
     font-weight: bold;
     color: #ffffff;
-    @include ellipsis;
 }
 
 .placesEmpty {
