@@ -11,6 +11,8 @@ export interface StepModel {
     seed: number;
     markers: { kind: string; p: V2 }[];
     children: StepModel[];
+    /** Set when this child is a built-in feature of its parent (FeatureDef.layer). */
+    feature?: string;
     overrides: Record<string, StepModel>;
 }
 

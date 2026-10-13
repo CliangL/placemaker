@@ -39,8 +39,8 @@ test("docked right, tall, near-opaque; header drag moves it, position is remembe
     const vp = page.viewportSize()!;
     let b = (await wrap.boundingBox())!;
     expect(vp.width - (b.x + b.width)).toBeLessThan(20); // right edge
-    expect(b.width).toBeGreaterThanOrEqual(420);
-    expect(b.width).toBeLessThanOrEqual(480);
+    expect(b.width).toBeGreaterThanOrEqual(380); // compact (round 3)
+    expect(b.width).toBeLessThanOrEqual(420);
     expect(b.y).toBeGreaterThan(40); // below the top bar
     expect(b.height).toBeGreaterThan(vp.height * 0.7); // tall
     expect(b.y + b.height).toBeLessThan(vp.height - 90); // above the bottom toolbar
@@ -112,7 +112,8 @@ test("every icon button shows an icon, in every stage; icon files are namespaced
     await expect(page.getByTestId("asset-picker")).toBeVisible();
     await iconButtonsHaveIcons(page);
     await page.keyboard.press("Escape");
-    await page.getByTestId("recipe-roads-with-parks").click();
+    await page.getByTestId("recipe-roads").click();
+    await page.getByTestId("feature-toggle-edgeZoning").click();
     await waitPlanned(page);
     await iconButtonsHaveIcons(page);
     await page.getByTestId("primary").click();
