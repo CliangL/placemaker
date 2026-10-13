@@ -105,7 +105,12 @@ namespace Placemaker.Game.Overlay
         public void EndFrame()
         {
             foreach (var l in _layers.Values)
-                if (!l.Used && l.Mesh != null) l.Mesh.Clear();
+                if (!l.Used && l.Mesh != null && l.Signature != long.MinValue)
+                {
+                    // Forget the signature too: the same rings shown again later must rebuild the (now empty) mesh.
+                    l.Mesh.Clear();
+                    l.Signature = long.MinValue;
+                }
         }
 
         public void ClearAll()

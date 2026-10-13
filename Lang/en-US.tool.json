@@ -30,6 +30,7 @@
   "Placemaker.Reason.StepNotReady": "A layer of this design still needs something from you.",
   "Placemaker.Reason.Planning": "Planning the layout…",
   "Placemaker.Reason.PlanErrors": "Fix the problems listed in the review first.",
+  "Placemaker.Reason.AcknowledgePermanent": "Confirm the permanent changes below before building.",
   "Placemaker.Reason.NoMoney": "Not enough money.",
   "Placemaker.Reason.BuildUnavailable": "Building is not available right now.",
   "Placemaker.Reason.GroupsUnavailable": "Built areas cannot be managed right now.",
@@ -136,6 +137,10 @@
   "Placemaker.Marker.entrance": "Entrances",
   "Placemaker.Marker.access": "Access points",
   "Placemaker.Marker.split": "Dividing line",
+  "Placemaker.Park.Marker.Entrance": "Entrance",
+  "Placemaker.Campground.Marker.Entrance": "Entrance",
+  "Placemaker.Plaza.Marker.Access": "Access point",
+  "Placemaker.Split.Marker.Split": "Dividing line",
 
   "Placemaker.Issue.PlanFailed": "The layout could not be planned: {0}",
   "Placemaker.Issue.PlanTimeout": "Planning took longer than {0} s and was stopped. Try a smaller area.",
