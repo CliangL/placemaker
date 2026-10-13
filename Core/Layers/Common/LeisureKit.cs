@@ -180,7 +180,7 @@ namespace Placemaker.Core.Layers.Common
 
         /// <summary>Scatter trees/bushes in free space (value-noise clumps). Returns the count placed.</summary>
         public static int Plant(LayerContext ctx, Occupancy occ, LayerRegion region, int wanted, ObjectRole role, string[] ids, float radius,
-            float clumpScale, float floor, uint salt, Func<float2, bool> reject = null, int ageMin = 1, int ageMax = 3)
+            float clumpScale, float floor, uint salt, Func<float2, bool> reject = null, int ageMin = 1, int ageMax = 3, string category = null)
         {
             if (wanted <= 0) return 0;
             int placed = 0;
@@ -194,7 +194,7 @@ namespace Placemaker.Core.Layers.Common
                 if (!occ.Free(p, radius, radius * 0.6f, 0.4f)) continue;
                 uint v = Hashing.Mix(ctx.Seed, salt * 31u + (uint)placed);
                 int age = role == ObjectRole.Tree ? ageMin + (int)(v % (uint)math.max(1, ageMax - ageMin + 1)) : -1;
-                ctx.Object(p, Hashing.Unit(v) * 6.283f, role, AssetMix.Pick(ids, v), v, age);
+                ctx.Object(p, Hashing.Unit(v) * 6.283f, role, AssetMix.Pick(ids, v), v, age, category);
                 occ.Take(p, radius, role == ObjectRole.Tree ? 3 : 4);
                 placed++;
             }
