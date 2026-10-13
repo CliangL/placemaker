@@ -92,3 +92,50 @@ call `AreaRings.IsValid(ring, AreaRings.SurfaceMinNodeDistance + AreaRings.Margi
 40. Unknown prefabs in a save (mod removed): `ResolvePrefabsSystem` keeps the loaded prefab entity
     disabled under an "obsolete" id; entities referencing it keep their PrefabRef. Children owned by
     such an entity are at risk, therefore Placemaker members are never owned by the owner lot.
+
+## Ghost preview, decals, icons, terrain painting (gamebuild round 4, decompiled 1.6.2f1)
+
+41. **Tool cadence.** `ToolOutputSystem` runs the `ClearTool` phase (only `ToolClearSystem`: Deleted on
+    every Temp, un-hides Hidden originals) when the *active* tool's `applyMode` is Clear, `ApplyTool`
+    when Apply, nothing when None. Vanilla tools (ObjectToolSystem.Update) set Clear + `DestroyDefinitions`
+    (all `CreationDefinition` *without* Updated) + new definitions in the same update when something
+    changed, None otherwise — temporaries then persist unchanged. `Generate*Systems` only consume
+    definitions that carry `Updated`, so definitions emitted on later frames under None ADD temporaries.
+    `ToolSystem.activeTool` switch: old tool disabled (OnStopRunning), temporaries survive until the new
+    tool clears.
+42. **Error icons without spam.** `ValidationSystem.CancelOptional`: an error on a temp with
+    `TempFlags.Optional` (from `CreationFlags.Optional`, only honoured by `GenerateObjectsSystem`) cancels
+    it — `TempFlags.Hidden | Cancel`, cost removed, **no icon** (icons only for brushes when everything is
+    cancelled). Nets/areas have no Optional: their Temp icons can be hidden with `Game.Tools.Hidden`
+    (`NotificationIconBufferSystem` excludes Hidden; IconCommandSystem re-adds/removes Hidden only when it
+    re-processes that icon's command).
+43. **Temp surfaces are never textured.** `AreaBatchSystem.m_UpdatedQuery`/`m_BatchQuery`,
+    `AreaColorSystem` (infoviews only) and `Game.Areas.SearchSystem` (culling tree) all have `None Temp`;
+    the jobs themselves never read Temp. The area tool shows Temp areas only via `AreaBufferSystem`'s
+    overlay fill (when `activeTool.requireAreas` has the type). Fix used by Placemaker
+    (`GhostSurfaceSystem`): tag our Temp surfaces (`PlacemakerGhostSurface`, ModificationEnd, while
+    Updated) and replace the two AreaBatchSystem queries by a union with `{Batch, Temp, tag}` built by
+    that system's own `GetEntityQuery` (reflection). `QueryCullingJob` allocates/marks visible directly
+    from the updated query, so untreed temporaries render; Deleted+tag frees them.
+44. **Decals** are static object prefabs whose `RenderPrefab`s have `DecalProperties`; `MeshSystem` then
+    sets `MeshFlags.Decal` on the mesh's `MeshData.m_State`. Reliable test: every `SubMesh` of the object
+    has that flag (`AssetCatalogSystem.IsDecalOnly`). Building decals (court markings) are
+    `BuildingExtensionPrefab`s, not static objects.
+45. **Icons.** `ImageSystem.GetIcon` = `UIObject.m_Icon` (resolved); `GetThumbnail` falls back to
+    `thumbnail://ThumbnailCamera/<id>` which renders nothing useful for areas. Asset Icon Library (79634)
+    writes `UIObject.m_Icon` for ~14k prefabs (only 17 SurfacePrefabs) from its `.Thumbnails` folder in
+    its first update after `OnGamePreload` — possibly after our scan, hence the periodic recheck.
+    Surface textures: `RenderedArea.m_BaseColorMap` (`AssetReference<TextureAsset>`, `Load()`/`Unload()`,
+    tinted by `m_BaseColor`); a PNG can be served to the UI with
+    `Colossal.UI.UIManager.defaultUISystem.AddHostLocation(host, folder)` → `coui://host/file.png`.
+46. **Terrain texture painting exists.** `TerraformingTarget.Material` + `TerrainMaterialProperties.m_Type`
+    (`TerrainMaterialType.None` = erase, `Extra1..Extra4`). `GenerateBrushesSystem` passes the strength
+    through for Material; `ApplyBrushesSystem` → `TerrainMaterialSystem.ApplyBrush` blits the BrushPrefab
+    texture into `m_UserSplatmap` (4096², R8G8, playable area) and `m_UserSplatmapWorld` (1024²), both
+    serialized with the save (`TerrainMaterialSystem : ISerializable`). The base grass/dirt/rock is
+    procedural (`_SplatRockLimit`, `_SplatGrassLimit`, height variance); the four extra layers use the map's
+    `colossal_TerrainExtra{1..4}Diffuse`, so their look is map dependent. Drivable from a plan exactly like
+    terraform (BrushDefinition with the material tool + one Apply) → `PlannedPaint` /
+    `BuildService.Paint.cs`. Whether the material TerraformingPrefabs are loaded in game mode (not only the
+    editor) must be confirmed in-game: the build logs "terrain paint layers available: …" or warns
+    `Placemaker.Build.PaintUnavailable`. Painting is permanent (not undone when the group is removed).
