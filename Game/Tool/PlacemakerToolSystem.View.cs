@@ -126,6 +126,8 @@ namespace Placemaker.Game.Tool
                 AnarchyAvailable = AnarchyAvailable,
                 AnarchyEnabled = _anarchy,
                 PanelCollapsed = _panelCollapsed,
+                PreviewMode = PreviewModeSelected,
+                GhostPending = GhostPending,
             };
             return s;
         }

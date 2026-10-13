@@ -189,7 +189,8 @@ namespace Placemaker.Game.Tool
 
             bool live = _gesture != Gesture.None || _previewBase != null || _inputFromDrag;
             var detail = _settings?.PreviewDetail ?? PreviewDetail.Normal;
-            if (live && detail == PreviewDetail.Simple && (_gesture != Gesture.None || _previewBase != null)) return;   // re-plan only when the drag ends
+            // Simple detail: re-plan only when the drag ends (a hovered asset still re-plans: that is the point of hovering).
+            if (live && detail == PreviewDetail.Simple && (_gesture != Gesture.None || ValuePreviewKind == ValuePreviewKind.Drag)) return;
             float debounce = !live ? 0f : detail == PreviewDetail.Detailed ? 0.06f : 0.15f;
             if (UnityEngine.Time.realtimeSinceStartup - _lastInputChange < debounce) return;
 

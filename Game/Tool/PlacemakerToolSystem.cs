@@ -158,13 +158,17 @@ namespace Placemaker.Game.Tool
         {
             // While a build runs the build service owns the tool slot; switching tools would abort it.
             if (m_ToolSystem == null || _building) return;
-            m_ToolSystem.activeTool = m_ToolSystem.activeTool == this ? (ToolBaseSystem)m_DefaultToolSystem : this;
+            if (m_ToolSystem.activeTool == this) Close();
+            else { _closeAfterGhost = 0; m_ToolSystem.activeTool = this; }
         }
 
         public void Close()
         {
             if (_building) return;
-            if (m_ToolSystem != null && m_ToolSystem.activeTool == this) m_ToolSystem.activeTool = m_DefaultToolSystem;
+            if (m_ToolSystem == null || m_ToolSystem.activeTool != this) return;
+            // A visible ghost needs one Clear frame of ours to disappear: hide it and switch a frame later.
+            if (BeginGhostHideForClose()) return;
+            m_ToolSystem.activeTool = m_DefaultToolSystem;
         }
 
         [Preserve]
@@ -185,6 +189,9 @@ namespace Placemaker.Game.Tool
             CancelGesture();
             _markerPath = _markerKind = null;
             _hoverGroup = 0;
+            EndValuePreview(true);      // hovers revert, drags commit
+            HideGhost();
+            _closeAfterGhost = 0;
             EnableActions(false);
             // While the build service holds the tool slot for our build, Anarchy must stay in effect.
             if (_anarchy && !_building) ApplyAnarchy(false);
@@ -221,7 +228,8 @@ namespace Placemaker.Game.Tool
         [Preserve]
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
-            // Placemaker never creates definitions itself; the build service applies through its own tool.
+            // Placemaker never applies: the ghost preview (when shown) needs None to keep its temporaries and asks for a
+            // Clear frame only when it replaces them (GhostFrame); the build applies through its own BuildToolSystem.
             applyMode = ApplyMode.None;
             try
             {
@@ -231,9 +239,8 @@ namespace Placemaker.Game.Tool
                 UpdateBuild();
                 ReadInput();
 
-                if (HandleKeys()) { FinishFrame(); return inputDeps; }
-
-                if (_stage == ToolStage.Building) { /* input ignored while building */ }
+                if (HandleKeys()) { /* key handled: no tool input this frame */ }
+                else if (_stage == ToolStage.Building) { /* input ignored while building */ }
                 else if (_markerKind != null) UpdateMarkers();
                 else if (_stage == ToolStage.Manage) UpdateManage();
                 else
@@ -254,6 +261,7 @@ namespace Placemaker.Game.Tool
                 if (_errorCount++ < 20) Mod.Log.Error(e, "Placemaker: tool update failed");
                 try { CancelGesture(); } catch (Exception) { }
             }
+            applyMode = GhostFrame();
             return inputDeps;
         }
 

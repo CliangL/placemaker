@@ -41,6 +41,10 @@ namespace Placemaker.Core.Tool
         public int EditingGroup;
         public bool AnarchyAvailable, AnarchyEnabled;
         public bool PanelCollapsed;
+        /// <summary>contract: state.previewMode — the player's choice for the current stage.</summary>
+        public PreviewMode PreviewMode;
+        /// <summary>contract: state.ghostPending.</summary>
+        public bool GhostPending;
     }
 
     public sealed class RecipeListEntry
@@ -110,6 +114,8 @@ namespace Placemaker.Core.Tool
             if (s.EditingGroup > 0) o.Set("editingGroup", s.EditingGroup);
             if (s.AnarchyAvailable) o.Set("anarchy", JsonValue.Obj().Set("available", true).Set("enabled", s.AnarchyEnabled));
             o.Set("panelCollapsed", s.PanelCollapsed);
+            o.Set("previewMode", PreviewModes.Id(s.PreviewMode));
+            o.Set("ghostPending", s.GhostPending);
             return o;
         }
 

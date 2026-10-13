@@ -34,6 +34,7 @@ namespace Placemaker.Game.Overlay
         private static readonly Color OutlineBad = new Color(1f, 0.35f, 0.3f, 0.95f);
         private static readonly Color Fill = new Color(0.30f, 0.62f, 1f, 0.16f);
         private static readonly Color FillHover = new Color(1f, 1f, 1f, 0.10f);
+        private static readonly Color FillUnderGhost = new Color(0.30f, 0.62f, 1f, 0.05f);   // barely tint the real surfaces
         private static readonly Color Handle = new Color(0.30f, 0.62f, 1f, 0.95f);
         private static readonly Color HandleHot = new Color(1f, 1f, 1f, 0.95f);
         private static readonly Color Ghost = new Color(1f, 1f, 1f, 0.55f);
@@ -129,7 +130,7 @@ namespace Placemaker.Game.Overlay
             if (shape != null && shape.Ring.Length >= 3)
             {
                 var rings = new[] { shape.Ring };
-                _fill.SetLayer("selection", rings, Fill, -94f, FilledPreviewSystem.Signature(rings));
+                _fill.SetLayer("selection", rings, _tool.SketchObjects == SketchObjects.Hidden ? FillUnderGhost : Fill, -94f, FilledPreviewSystem.Signature(rings));
             }
 
             // Keep off existing roads: the parts on roads are left out — shaded grey, the outline used is drawn solid.
@@ -332,6 +333,12 @@ namespace Placemaker.Game.Overlay
             if (plan == null) return;
             bool stale = _tool.PlanStale;
             float alpha = stale ? 0.45f : 1f;
+            // Ghost on the map (real models/surfaces): the sketch steps back — hidden when the ghost shows this plan,
+            // dimmed while it catches up. Fills keep their meshes (alpha 0) so switching back is instant.
+            var objects = _tool.SketchObjects;
+            if (objects == SketchObjects.Dimmed) alpha *= 0.3f;
+            bool content = objects != SketchObjects.Hidden;
+            float fillAlpha = content ? alpha : 0f;
 
             if (!ReferenceEquals(plan, _filledPlan))
             {
@@ -349,9 +356,9 @@ namespace Placemaker.Game.Overlay
                 }
             }
             foreach (var kv in _surfaceGroups)
-                _fill.SetLayer("surface:" + kv.Key, kv.Value, WithAlpha(SurfaceColor((SurfaceRole)kv.Key), 0.55f * alpha), -93f + kv.Key * 0.01f, FilledPreviewSystem.Signature(kv.Value));
+                _fill.SetLayer("surface:" + kv.Key, kv.Value, WithAlpha(SurfaceColor((SurfaceRole)kv.Key), 0.55f * fillAlpha), -93f + kv.Key * 0.01f, FilledPreviewSystem.Signature(kv.Value));
             foreach (var kv in _areaGroups)
-                _fill.SetLayer("area:" + kv.Key, kv.Value, WithAlpha(AreaColor((AreaRole)kv.Key), 0.3f * alpha), -93.5f, FilledPreviewSystem.Signature(kv.Value));
+                _fill.SetLayer("area:" + kv.Key, kv.Value, WithAlpha(AreaColor((AreaRole)kv.Key), 0.3f * fillAlpha), -93.5f, FilledPreviewSystem.Signature(kv.Value));
 
             int netBudget = detail == PreviewDetail.Detailed ? 20000 : 6000;
             int objBudget = detail == PreviewDetail.Simple ? 0 : detail == PreviewDetail.Detailed ? 30000 : 8000;
@@ -364,12 +371,12 @@ namespace Placemaker.Game.Overlay
                 if (l == null) continue;
                 foreach (var n in l.Nets)
                 {
-                    if (n == null || netBudget-- <= 0) break;
+                    if (n == null || !content || netBudget-- <= 0) break;
                     DrawNet(buffer, n, w, alpha);
                 }
                 foreach (var o in l.Objects)
                 {
-                    if (o == null || (k++ % stride) != 0) continue;
+                    if (o == null || !content || (k++ % stride) != 0) continue;
                     DrawObject(buffer, o, w, alpha);
                 }
                 foreach (var t in l.Terraform)
