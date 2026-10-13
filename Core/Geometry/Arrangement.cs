@@ -1,0 +1,589 @@
+// Placemaker — planar arrangement: the one robust engine behind booleans, offsets, self-intersection
+// removal, polygon splitting and hole cutting.
+//
+// Why one engine: every "polygon with problems" case (self-touching rings, pinching offsets, split
+// lines, overlapping operands) reduces to the same question — cut all segments at all crossings,
+// build the planar map, and decide per face whether it is inside. Doing that once, carefully, beats
+// five special-case clippers.
+//
+// Method: segments are snapped to a vertex grid (tolerance eps, ~4 float ulps at the input's
+// magnitude), split at every crossing / near-incidence in repeated sweep rounds until stable
+// (a snap-rounding style fixpoint), merged into undirected edges carrying a winding delta per
+// operand, then faces are traced with a half-edge walk. Each face's winding number is measured at
+// an interior sample point (ray-cast against the arrangement itself, so snapping can never make the
+// classification inconsistent). Output rings are re-traced along the boundary between selected and
+// unselected faces and split at repeated vertices, so every emitted ring is simple.
+//
+// All math is double relative to a local origin: world coordinates in CS2 reach ±7 km where float
+// has only ~0.5 mm resolution.
+
+using System;
+using System.Collections.Generic;
+using Unity.Mathematics;
+
+namespace Placemaker.Core.Geometry
+{
+    internal sealed class Arrangement
+    {
+        private struct Edge
+        {
+            public int U, V;
+            public int DA, DB;   // winding change from right to left of U→V, per operand
+            public bool Cut;     // a split line (no winding change) that separates output pieces
+        }
+
+        private readonly double2 _origin;
+        private readonly double _eps, _eps2, _cell;
+        private readonly List<double2> _pts = new List<double2>();
+        private readonly Dictionary<long, List<int>> _grid = new Dictionary<long, List<int>>();
+        private List<Edge> _edges = new List<Edge>();
+
+        // Built state
+        private bool _built;
+        private int[] _cycleOf;          // half-edge → cycle
+        private List<int[]> _cycles;     // cycle → half-edges in order
+        private int[] _windA, _windB;    // winding of the region left of each cycle
+        private List<int>[] _out;        // vertex → outgoing half-edges sorted by angle (CCW)
+        private int[] _posInOut;         // half-edge → index in _out[origin]
+
+        public double2 Origin => _origin;
+        public double Eps => _eps;
+
+        public Arrangement(double2 min, double2 max)
+        {
+            _origin = (min + max) * 0.5;
+            double extent = math.max(math.cmax(math.abs(min)), math.cmax(math.abs(max)));
+            // ~4 float ulps at the input's magnitude, never below 0.1 mm.
+            _eps = math.max(1e-4, extent * 2.4e-7);
+            _eps2 = _eps * _eps;
+            _cell = _eps * 2;
+        }
+
+        public static Arrangement For(IEnumerable<IReadOnlyList<float2>> rings)
+        {
+            double2 mn = new double2(double.MaxValue), mx = new double2(double.MinValue);
+            bool any = false;
+            foreach (var r in rings)
+            {
+                if (r == null) continue;
+                foreach (var p in r)
+                {
+                    if (!Poly.IsFinite(p)) continue;
+                    mn = math.min(mn, (double2)p); mx = math.max(mx, (double2)p); any = true;
+                }
+            }
+            if (!any) { mn = double2.zero; mx = double2.zero; }
+            return new Arrangement(mn, mx);
+        }
+
+        public double2 ToLocal(float2 p) => (double2)p - _origin;
+        public float2 ToWorld(double2 p) => new float2((float)(p.x + _origin.x), (float)(p.y + _origin.y));
+
+        // ───────────────────────────── input ─────────────────────────────
+
+        private static long Key(long ix, long iy) => (ix << 32) ^ (iy & 0xffffffffL);
+
+        public int VertexLocal(double2 p)
+        {
+            long ix = (long)math.floor(p.x / _cell), iy = (long)math.floor(p.y / _cell);
+            for (long dx = -1; dx <= 1; dx++)
+                for (long dy = -1; dy <= 1; dy++)
+                {
+                    if (!_grid.TryGetValue(Key(ix + dx, iy + dy), out var list)) continue;
+                    foreach (int v in list)
+                        if (math.distancesq(_pts[v], p) <= _eps2) return v;
+                }
+            int id = _pts.Count;
+            _pts.Add(p);
+            long k = Key(ix, iy);
+            if (!_grid.TryGetValue(k, out var l)) _grid[k] = l = new List<int>(2);
+            l.Add(id);
+            return id;
+        }
+
+        public void AddRing(IReadOnlyList<float2> ring, int operand, int weight = 1)
+        {
+            if (ring == null || ring.Count < 3) return;
+            var local = new List<double2>(ring.Count);
+            foreach (var p in ring) if (Poly.IsFinite(p)) local.Add(ToLocal(p));
+            AddRingLocal(local, operand, weight);
+        }
+
+        public void AddRingLocal(IReadOnlyList<double2> ring, int operand, int weight = 1)
+        {
+            if (ring == null || ring.Count < 2) return;
+            int n = ring.Count;
+            int first = VertexLocal(ring[0]), prev = first;
+            for (int i = 1; i <= n; i++)
+            {
+                int v = i == n ? first : VertexLocal(ring[i]);
+                AddEdge(prev, v, operand == 0 ? weight : 0, operand == 1 ? weight : 0, false);
+                prev = v;
+            }
+        }
+
+        public void AddPolyline(IReadOnlyList<float2> line)
+        {
+            if (line == null || line.Count < 2) return;
+            int prev = VertexLocal(ToLocal(line[0]));
+            for (int i = 1; i < line.Count; i++)
+            {
+                if (!Poly.IsFinite(line[i])) continue;
+                int v = VertexLocal(ToLocal(line[i]));
+                AddEdge(prev, v, 0, 0, true);
+                prev = v;
+            }
+        }
+
+        public void AddSegmentLocal(double2 a, double2 b) => AddEdge(VertexLocal(a), VertexLocal(b), 0, 0, true);
+
+        private void AddEdge(int u, int v, int da, int db, bool cut)
+        {
+            if (u == v) return;
+            _edges.Add(new Edge { U = u, V = v, DA = da, DB = db, Cut = cut });
+            _built = false;
+        }
+
+        // ───────────────────────────── build ─────────────────────────────
+
+        public void Build()
+        {
+            if (_built) return;
+            MergeDuplicates();
+            for (int round = 0; round < 8; round++)
+                if (!SplitRound()) break;
+            // Edges whose windings cancel (shared boundaries of a union) carry no information.
+            _edges.RemoveAll(e => e.DA == 0 && e.DB == 0 && !e.Cut);
+            PruneDangling();
+            BuildFaces();
+            _built = true;
+        }
+
+        private void MergeDuplicates()
+        {
+            var map = new Dictionary<long, int>(_edges.Count);
+            var merged = new List<Edge>(_edges.Count);
+            foreach (var e0 in _edges)
+            {
+                var e = e0;
+                if (e.U == e.V) continue;
+                if (e.U > e.V) { int t = e.U; e.U = e.V; e.V = t; e.DA = -e.DA; e.DB = -e.DB; }
+                long k = ((long)e.U << 32) | (uint)e.V;
+                if (map.TryGetValue(k, out int idx))
+                {
+                    var m = merged[idx];
+                    m.DA += e.DA; m.DB += e.DB; m.Cut |= e.Cut;
+                    merged[idx] = m;
+                }
+                else
+                {
+                    map[k] = merged.Count;
+                    merged.Add(e);
+                }
+            }
+            _edges = merged;
+        }
+
+        /// <summary>One sweep: split every edge at every crossing / vertex lying on it. True if anything changed.</summary>
+        private bool SplitRound()
+        {
+            int n = _edges.Count;
+            var minX = new double[n];
+            var order = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                minX[i] = math.min(_pts[_edges[i].U].x, _pts[_edges[i].V].x);
+                order[i] = i;
+            }
+            Array.Sort(order, (a, b) => minX[a].CompareTo(minX[b]));
+            var splits = new List<int>[n];
+            var active = new List<int>();
+            bool any = false;
+            foreach (int i in order)
+            {
+                double x0 = minX[i] - _eps;
+                for (int k = active.Count - 1; k >= 0; k--)
+                {
+                    var ea = _edges[active[k]];
+                    if (math.max(_pts[ea.U].x, _pts[ea.V].x) < x0)
+                    {
+                        active[k] = active[active.Count - 1];
+                        active.RemoveAt(active.Count - 1);
+                    }
+                }
+                var e = _edges[i];
+                double2 a = _pts[e.U], b = _pts[e.V];
+                double ey0 = math.min(a.y, b.y) - _eps, ey1 = math.max(a.y, b.y) + _eps;
+                foreach (int j in active)
+                {
+                    var f = _edges[j];
+                    double2 c = _pts[f.U], d = _pts[f.V];
+                    if (math.max(c.y, d.y) < ey0 || math.min(c.y, d.y) > ey1) continue;
+                    any |= Intersect(i, e, a, b, j, f, c, d, splits);
+                }
+                active.Add(i);
+            }
+            if (!any) return false;
+
+            var result = new List<Edge>(n + 16);
+            for (int i = 0; i < n; i++)
+            {
+                var e = _edges[i];
+                var s = splits[i];
+                if (s == null) { result.Add(e); continue; }
+                double2 a = _pts[e.U], ab = _pts[e.V] - a;
+                double len2 = math.max(math.lengthsq(ab), 1e-300);
+                var ts = new List<KeyValuePair<double, int>>(s.Count);
+                foreach (int v in s) ts.Add(new KeyValuePair<double, int>(math.dot(_pts[v] - a, ab) / len2, v));
+                ts.Sort((p, q) => p.Key.CompareTo(q.Key));
+                int prev = e.U;
+                foreach (var kv in ts)
+                {
+                    if (kv.Value == prev || kv.Value == e.V) continue;
+                    result.Add(new Edge { U = prev, V = kv.Value, DA = e.DA, DB = e.DB, Cut = e.Cut });
+                    prev = kv.Value;
+                }
+                if (prev != e.V) result.Add(new Edge { U = prev, V = e.V, DA = e.DA, DB = e.DB, Cut = e.Cut });
+            }
+            _edges = result;
+            MergeDuplicates();
+            return true;
+        }
+
+        private bool Intersect(int i, Edge e, double2 a, double2 b, int j, Edge f, double2 c, double2 d, List<int>[] splits)
+        {
+            bool any = false;
+            // Vertices of one edge lying on the other (T-junctions, collinear overlaps).
+            if (f.U != e.U && f.U != e.V && NearInterior(c, a, b)) { AddSplit(splits, i, f.U); any = true; }
+            if (f.V != e.U && f.V != e.V && NearInterior(d, a, b)) { AddSplit(splits, i, f.V); any = true; }
+            if (e.U != f.U && e.U != f.V && NearInterior(a, c, d)) { AddSplit(splits, j, e.U); any = true; }
+            if (e.V != f.U && e.V != f.V && NearInterior(b, c, d)) { AddSplit(splits, j, e.V); any = true; }
+            if (e.U == f.U || e.U == f.V || e.V == f.U || e.V == f.V) return any;
+
+            // Proper crossing.
+            double2 r = b - a, s = d - c;
+            double den = Cross(r, s);
+            if (den == 0) return any;
+            double t = Cross(c - a, s) / den, u = Cross(c - a, r) / den;
+            if (t <= 0 || t >= 1 || u <= 0 || u >= 1) return any;
+            double2 p = a + r * t;
+            // Crossings within eps of an endpoint were handled as incidences above.
+            if (math.distancesq(p, a) <= _eps2 || math.distancesq(p, b) <= _eps2 ||
+                math.distancesq(p, c) <= _eps2 || math.distancesq(p, d) <= _eps2) return any;
+            int x = VertexLocal(p);
+            if (x != e.U && x != e.V) { AddSplit(splits, i, x); any = true; }
+            if (x != f.U && x != f.V) { AddSplit(splits, j, x); any = true; }
+            return any;
+        }
+
+        private bool NearInterior(double2 p, double2 a, double2 b)
+        {
+            double2 ab = b - a;
+            double len2 = math.lengthsq(ab);
+            if (len2 <= 0) return false;
+            double t = math.dot(p - a, ab) / len2;
+            if (t <= 0 || t >= 1) return false;
+            if (math.distancesq(p, a) <= _eps2 || math.distancesq(p, b) <= _eps2) return false;
+            return math.distancesq(p, a + ab * t) <= _eps2;
+        }
+
+        private static void AddSplit(List<int>[] splits, int edge, int v)
+        {
+            var l = splits[edge] ?? (splits[edge] = new List<int>(2));
+            if (!l.Contains(v)) l.Add(v);
+        }
+
+        private void PruneDangling()
+        {
+            int nv = _pts.Count;
+            var deg = new int[nv];
+            foreach (var e in _edges) { deg[e.U]++; deg[e.V]++; }
+            var alive = new bool[_edges.Count];
+            var incident = new List<int>[nv];
+            for (int k = 0; k < _edges.Count; k++)
+            {
+                alive[k] = true;
+                (incident[_edges[k].U] ??= new List<int>(4)).Add(k);
+                (incident[_edges[k].V] ??= new List<int>(4)).Add(k);
+            }
+            var stack = new Stack<int>();
+            for (int v = 0; v < nv; v++) if (deg[v] == 1) stack.Push(v);
+            bool removed = false;
+            while (stack.Count > 0)
+            {
+                int v = stack.Pop();
+                if (deg[v] != 1) continue;
+                foreach (int k in incident[v])
+                {
+                    if (!alive[k]) continue;
+                    alive[k] = false; removed = true;
+                    int o = _edges[k].U == v ? _edges[k].V : _edges[k].U;
+                    deg[v]--; deg[o]--;
+                    if (deg[o] == 1) stack.Push(o);
+                    break;
+                }
+            }
+            if (!removed) return;
+            var kept = new List<Edge>(_edges.Count);
+            for (int k = 0; k < _edges.Count; k++) if (alive[k]) kept.Add(_edges[k]);
+            _edges = kept;
+        }
+
+        private int Org(int h) => (h & 1) == 0 ? _edges[h >> 1].U : _edges[h >> 1].V;
+        private int Dst(int h) => (h & 1) == 0 ? _edges[h >> 1].V : _edges[h >> 1].U;
+
+        private void BuildFaces()
+        {
+            int nh = _edges.Count * 2;
+            _out = new List<int>[_pts.Count];
+            var angle = new double[nh];
+            for (int h = 0; h < nh; h++)
+            {
+                double2 dvec = _pts[Dst(h)] - _pts[Org(h)];
+                angle[h] = math.atan2(dvec.y, dvec.x);
+                int o = Org(h);
+                (_out[o] ??= new List<int>(4)).Add(h);
+            }
+            _posInOut = new int[nh];
+            foreach (var list in _out)
+            {
+                if (list == null) continue;
+                list.Sort((p, q) => angle[p] != angle[q] ? angle[p].CompareTo(angle[q]) : p.CompareTo(q));
+                for (int k = 0; k < list.Count; k++) _posInOut[list[k]] = k;
+            }
+
+            _cycleOf = new int[nh];
+            for (int h = 0; h < nh; h++) _cycleOf[h] = -1;
+            _cycles = new List<int[]>();
+            var cur = new List<int>();
+            for (int h0 = 0; h0 < nh; h0++)
+            {
+                if (_cycleOf[h0] >= 0) continue;
+                cur.Clear();
+                int h = h0, guard = nh + 1;
+                while (_cycleOf[h] < 0 && guard-- > 0)
+                {
+                    _cycleOf[h] = _cycles.Count;
+                    cur.Add(h);
+                    h = NextInFace(h);
+                }
+                _cycles.Add(cur.ToArray());
+            }
+
+            int nc = _cycles.Count;
+            _windA = new int[nc];
+            _windB = new int[nc];
+            for (int c = 0; c < nc; c++)
+            {
+                double2 sample = SampleLeft(_cycles[c]);
+                Winding(sample, out _windA[c], out _windB[c]);
+            }
+        }
+
+        /// <summary>Next half-edge around the face on the left: the outgoing edge clockwise-adjacent to the twin.</summary>
+        private int NextInFace(int h)
+        {
+            int twin = h ^ 1;
+            var list = _out[Dst(h)];
+            int k = _posInOut[twin];
+            return list[(k - 1 + list.Count) % list.Count];
+        }
+
+        /// <summary>A point strictly inside the region on the left of the cycle (between its longest edge and the next edge hit).</summary>
+        private double2 SampleLeft(int[] cycle)
+        {
+            int best = cycle[0];
+            double bestLen = -1;
+            foreach (int h in cycle)
+            {
+                double l = math.distancesq(_pts[Org(h)], _pts[Dst(h)]);
+                if (l > bestLen) { bestLen = l; best = h; }
+            }
+            double2 a = _pts[Org(best)], b = _pts[Dst(best)];
+            double len = math.sqrt(bestLen);
+            double2 m = (a + b) * 0.5, n = new double2(-(b.y - a.y), b.x - a.x) / len;
+            double tMin = len;
+            int own = best >> 1;
+            for (int k = 0; k < _edges.Count; k++)
+            {
+                if (k == own) continue;
+                double2 p = _pts[_edges[k].U], q = _pts[_edges[k].V], s = q - p;
+                double den = Cross(n, s);
+                if (den == 0) continue;
+                double t = Cross(p - m, s) / den, u = Cross(p - m, n) / den;
+                if (u < 0 || u > 1 || t <= 0) continue;
+                if (t < tMin) tMin = t;
+            }
+            return m + n * (tMin * 0.5);
+        }
+
+        private void Winding(double2 p, out int wa, out int wb)
+        {
+            wa = 0; wb = 0;
+            foreach (var e in _edges)
+            {
+                if (e.DA == 0 && e.DB == 0) continue;
+                double2 a = _pts[e.U], b = _pts[e.V];
+                if ((a.y > p.y) == (b.y > p.y)) continue;
+                double x = a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y);
+                if (x <= p.x) continue;
+                int sgn = b.y > a.y ? 1 : -1;
+                wa += sgn * e.DA; wb += sgn * e.DB;
+            }
+        }
+
+        private static double Cross(double2 a, double2 b) => a.x * b.y - a.y * b.x;
+
+        // ───────────────────────────── output ─────────────────────────────
+
+        /// <summary>
+        /// Regions where inside(windingA, windingB) holds. With splitByCuts, polyline edges separate
+        /// pieces (each face becomes its own region); otherwise adjacent inside faces merge.
+        /// </summary>
+        public List<Region> Extract(Func<int, int, bool> inside, bool splitByCuts = false)
+        {
+            Build();
+            int nh = _edges.Count * 2;
+            var regions = new List<Region>();
+            if (nh == 0) return regions;
+            var sel = new bool[_cycles.Count];
+            for (int c = 0; c < sel.Length; c++) sel[c] = inside(_windA[c], _windB[c]);
+
+            var boundary = new bool[nh];
+            for (int h = 0; h < nh; h++)
+            {
+                int c = _cycleOf[h], ct = _cycleOf[h ^ 1];
+                if (!sel[c]) continue;
+                if (!sel[ct]) boundary[h] = true;
+                else if (splitByCuts && _edges[h >> 1].Cut && c != ct) boundary[h] = true;
+            }
+
+            var used = new bool[nh];
+            var loops = new List<List<int>>();
+            for (int h0 = 0; h0 < nh; h0++)
+            {
+                if (!boundary[h0] || used[h0]) continue;
+                var verts = new List<int>();
+                int h = h0, guard = nh + 1;
+                while (!used[h] && guard-- > 0)
+                {
+                    used[h] = true;
+                    verts.Add(Org(h));
+                    h = NextBoundary(h, boundary);
+                    if (h < 0) break;
+                }
+                SplitAtRepeats(verts, loops);
+            }
+
+            var outers = new List<KeyValuePair<double, float2[]>>();
+            var holes = new List<float2[]>();
+            foreach (var loop in loops)
+            {
+                var ring = ToWorldRing(loop, out double area);
+                if (ring == null) continue;
+                if (area > 0) outers.Add(new KeyValuePair<double, float2[]>(area, ring));
+                else holes.Add(ring);
+            }
+            outers.Sort((p, q) => q.Key.CompareTo(p.Key));
+            foreach (var o in outers) regions.Add(new Region(o.Value));
+            if (holes.Count > 0) AssignHoles(regions, outers, holes);
+            return regions;
+        }
+
+        private int NextBoundary(int h, bool[] boundary)
+        {
+            var list = _out[Dst(h)];
+            int k = _posInOut[h ^ 1];
+            for (int step = 1; step <= list.Count; step++)
+            {
+                int g = list[((k - step) % list.Count + list.Count) % list.Count];
+                if (boundary[g]) return g;
+            }
+            return -1;
+        }
+
+        private static void SplitAtRepeats(List<int> verts, List<List<int>> loops)
+        {
+            var stack = new List<int>(verts.Count);
+            var pos = new Dictionary<int, int>();
+            foreach (int v in verts)
+            {
+                if (pos.TryGetValue(v, out int p))
+                {
+                    var sub = stack.GetRange(p, stack.Count - p);
+                    for (int k = p + 1; k < stack.Count; k++) pos.Remove(stack[k]);
+                    stack.RemoveRange(p + 1, stack.Count - p - 1);
+                    if (sub.Count >= 3) loops.Add(sub);
+                }
+                else
+                {
+                    pos[v] = stack.Count;
+                    stack.Add(v);
+                }
+            }
+            if (stack.Count >= 3) loops.Add(stack);
+        }
+
+        private float2[] ToWorldRing(List<int> loop, out double area)
+        {
+            area = 0;
+            var pts = new List<double2>(loop.Count);
+            foreach (int v in loop) pts.Add(_pts[v]);
+            // Drop straight-through vertices introduced by splitting (keeps rings minimal).
+            bool changed = true;
+            while (changed && pts.Count > 3)
+            {
+                changed = false;
+                for (int i = 0; i < pts.Count && pts.Count > 3; i++)
+                {
+                    double2 a = pts[(i - 1 + pts.Count) % pts.Count], b = pts[i], c = pts[(i + 1) % pts.Count];
+                    double2 ac = c - a;
+                    double lac = math.length(ac);
+                    if (lac <= 0) continue;
+                    if (math.abs(Cross(b - a, ac)) / lac <= _eps * 0.25 && math.dot(b - a, c - b) > 0)
+                    {
+                        pts.RemoveAt(i); i--; changed = true;
+                    }
+                }
+            }
+            var ring = new List<float2>(pts.Count);
+            foreach (var p in pts)
+            {
+                var w = ToWorld(p);
+                if (ring.Count > 0 && math.all(ring[ring.Count - 1] == w)) continue;
+                ring.Add(w);
+            }
+            while (ring.Count > 1 && math.all(ring[0] == ring[ring.Count - 1])) ring.RemoveAt(ring.Count - 1);
+            if (ring.Count < 3) return null;
+            for (int i = 0, j = pts.Count - 1; i < pts.Count; j = i++) area += Cross(pts[j], pts[i]);
+            area *= 0.5;
+            if (math.abs(area) < 1e-7) return null;
+            return ring.ToArray();
+        }
+
+        private static void AssignHoles(List<Region> regions, List<KeyValuePair<double, float2[]>> outers, List<float2[]> holes)
+        {
+            foreach (var h in holes)
+            {
+                // Probe just left of the hole's longest edge: that side is material, inside the owning outer.
+                int best = 0; float bl = -1;
+                for (int i = 0; i < h.Length; i++)
+                {
+                    float l = math.distancesq(h[i], h[(i + 1) % h.Length]);
+                    if (l > bl) { bl = l; best = i; }
+                }
+                double2 a = h[best], b = h[(best + 1) % h.Length];
+                double len = math.sqrt(bl);
+                double2 probe = (a + b) * 0.5 + new double2(-(b.y - a.y), b.x - a.x) / len * math.min(1e-3, len * 0.01);
+                int owner = -1;
+                double ownerArea = double.MaxValue;
+                for (int k = 0; k < outers.Count; k++)
+                {
+                    if (outers[k].Key >= ownerArea) continue;
+                    if (Poly.ContainsD(outers[k].Value, probe)) { owner = k; ownerArea = outers[k].Key; }
+                }
+                if (owner >= 0) regions[owner].Holes.Add(h);
+            }
+        }
+    }
+}
