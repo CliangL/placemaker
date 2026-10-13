@@ -322,7 +322,7 @@ namespace Placemaker.Core.Layers.Roads
         /// </summary>
         private static void PruneDangles(Graph g, float2[] ring)
         {
-            var queue = new Queue<int>();
+            var queue = new ListQueue<int>();
             for (int n = 0; n < g.Pos.Count; n++) if (Degree(g, n) == 1) queue.Enqueue(n);
             while (queue.Count > 0)
             {
@@ -350,7 +350,7 @@ namespace Placemaker.Core.Layers.Roads
             var comp = new int[nodes];
             for (int i = 0; i < nodes; i++) comp[i] = -1;
             int count = 0;
-            var stack = new Stack<int>();
+            var stack = new ListStack<int>();
             var sizes = new List<float>();
             for (int s = 0; s < nodes; s++)
             {
@@ -693,7 +693,7 @@ namespace Placemaker.Core.Layers.Roads
         public static List<List<float2>> SplitSelfIntersections(List<float2> pts)
         {
             var done = new List<List<float2>>();
-            var stack = new Stack<List<float2>>();
+            var stack = new ListStack<List<float2>>();
             stack.Push(pts);
             int budget = 400;
             while (stack.Count > 0)

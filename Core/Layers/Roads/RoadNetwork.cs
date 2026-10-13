@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using Placemaker.Core.Geometry;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Roads
@@ -116,7 +117,7 @@ namespace Placemaker.Core.Layers.Roads
             int[] before = Degrees(false);
             int[] after = Degrees(true);
             var incident = Incidence(true);
-            var queue = new Queue<int>();
+            var queue = new ListQueue<int>();
             for (int n = 0; n < Nodes.Count; n++)
                 if (IsStub(n, before, after)) queue.Enqueue(n);
             int removed = 0;
@@ -168,7 +169,7 @@ namespace Placemaker.Core.Layers.Roads
             for (int i = 0; i < comp.Length; i++) comp[i] = -1;
             int removed = 0;
             int c = 0;
-            var stack = new Stack<int>();
+            var stack = new ListStack<int>();
             for (int start = 0; start < Nodes.Count; start++)
             {
                 if (comp[start] >= 0 || inc[start].Count == 0) continue;
