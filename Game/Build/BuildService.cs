@@ -66,7 +66,7 @@ namespace Placemaker.Game.Build
 
         private enum Step
         {
-            Idle, Prepare, WaitReplaced, ActivateTool, Terraform, EmitNets, EmitRest, WaitTemps, Validate,
+            Idle, Prepare, WaitReplaced, ActivateTool, Terraform, Paint, EmitNets, EmitRest, WaitTemps, Validate,
             ResetForRetry, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
         }
 
@@ -289,6 +289,7 @@ namespace Placemaker.Game.Build
                     case Step.WaitReplaced: DoWaitReplaced(frame); break;
                     case Step.ActivateTool: DoActivateTool(frame); break;
                     case Step.Terraform: DoTerraform(frame); break;
+                    case Step.Paint: DoPaint(frame); break;
                     case Step.EmitNets: DoEmitNets(); break;
                     case Step.EmitRest: DoEmitRest(); break;
                     case Step.WaitTemps: DoWaitTemps(frame); break;
@@ -320,7 +321,7 @@ namespace Placemaker.Game.Build
         private void DoPrepare()
         {
             _work = PlanWork.Flatten(_request.Plan, _excluded);
-            if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0)
+            if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0 && !HasPaint())
             {
                 ForceIdle(BuildPhase.Failed, "Placemaker.Build.NothingToBuild");
                 return;
@@ -381,7 +382,7 @@ namespace Placemaker.Game.Build
             if (frame - _stepFrame < ToolSwitchFrames + 1) return;
             CreateRecord();
             _status.Phase = BuildPhase.Materializing;
-            Go(_work.Terraform.Count > 0 ? Step.Terraform : Step.EmitNets);
+            Go(_work.Terraform.Count > 0 ? Step.Terraform : AfterTerraform());
             if (_step == Step.Terraform) BeginTerraform();
         }
 

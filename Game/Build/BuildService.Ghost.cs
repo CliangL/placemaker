@@ -197,6 +197,7 @@ namespace Placemaker.Game.Build
             if (Busy || request?.Plan == null || !_gWanted || _gStep != GhostStep.Shown || _gShown != revision || revision != _gRequested) return false;
             if (_gDetails.Partial || request.ReplaceGroup != 0 || request.Plan.HasErrors) return false;
             if (_catalog == null || !_catalog.Ready || _work == null || _work.Terraform.Count > 0) return false;
+            foreach (var l in request.Plan.Layers) if (l?.Paint != null && l.Paint.Count > 0) return false;   // the ghost never paints
             if (!ReferenceEquals(request.Plan, _gPlan)) return false;   // must be the very plan the ghost shows
             // Adopt: keep _work, prefabs, indexes, own definitions and the temporaries.
             _request = request;
