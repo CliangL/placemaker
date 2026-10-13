@@ -298,7 +298,7 @@ const MarkersEditor = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
             {kinds.map((kind) => {
                 const count = ctx.step.markers.find((m) => m.kind === kind)?.count ?? 0;
                 const active = ctx.state.markerMode?.stepPath === ctx.step.path && ctx.state.markerMode?.kind === kind;
-                const plural = t(`Placemaker.Marker.${kind}.Plural`, humanize(kind).toLowerCase() + "s");
+                const plural = t(`Placemaker.Marker.${kind}`, humanize(kind) + "s").toLowerCase();
                 return (
                     <div key={kind} className={s.markerRow}>
                         <Btn

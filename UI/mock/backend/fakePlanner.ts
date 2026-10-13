@@ -567,7 +567,7 @@ export function composeFake(root: StepModel, ring: V2[]): ComposeResult {
             sums.get(k)!.value += s.value;
         }
     result.stats = order.map((k) => sums.get(k)!);
-    for (const l of result.layers) for (const t of l.terraform) if (t.permanent) result.permanent.push({ key: "Placemaker.UI.Permanent.Terraform" });
+    for (const l of result.layers) for (const t of l.terraform) if (t.permanent) result.permanent.push({ key: "Placemaker.Permanent.Terraform" });
     result.cost = Math.round(result.cost);
     result.upkeep = Math.round(result.upkeep);
     result.ms = performance.now() - t0;
