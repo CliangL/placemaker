@@ -75,7 +75,26 @@ namespace Placemaker.Core.Layers.Parking
                 Subtract(cells, poly, piece.ZoneMask, c => c.Asphalt = true);
             }
             cancel.ThrowIfCancellationRequested();
-            return Merge(cells, cancel);
+            return Merge(cells, lot, cancel, MaxRingVertices, true);
+        }
+
+        /// <summary>
+        /// Re-merges the cells of one surface into smaller rings (at most maxRingVertices boundary
+        /// edges each). Used when the game model rejects or trims a large ring: smaller pieces of
+        /// the same cells usually pass as they are.
+        /// </summary>
+        public static List<List<double2>> Regroup(List<List<double2>> cellRings, int maxRingVertices, CancellationToken cancel)
+        {
+            var cells = new List<Cell>(cellRings.Count);
+            foreach (var r in cellRings)
+            {
+                var c = new Cell { P = new List<double2>(r), Asphalt = true };
+                c.UpdateBounds();
+                cells.Add(c);
+            }
+            var result = new List<List<double2>>();
+            foreach (var sp in Merge(cells, new List<double2>(), cancel, maxRingVertices, false)) result.Add(sp.Ring);
+            return result;
         }
 
         /// <summary>
@@ -118,7 +137,7 @@ namespace Placemaker.Core.Layers.Parking
 
         // ───────────────────────────── merge ─────────────────────────────
 
-        private static List<SurfacePoly> Merge(List<Cell> cells, CancellationToken cancel)
+        private static List<SurfacePoly> Merge(List<Cell> cells, List<double2> lot, CancellationToken cancel, int maxRingVertices, bool collapse)
         {
             // weld vertices (1e-5 m grid, neighbours within 2e-5 m merge)
             var verts = new List<double2>();
@@ -203,7 +222,7 @@ namespace Placemaker.Core.Layers.Parking
             }
             cancel.ThrowIfCancellationRequested();
 
-            CollapseShortEdges(polys, mats, verts);
+            if (collapse) CollapseShortEdges(polys, mats, verts, lot);
             cancel.ThrowIfCancellationRequested();
 
             // edge → cells adjacency
@@ -277,7 +296,7 @@ namespace Placemaker.Core.Layers.Parking
                             bool onChain = shared[e] || shared[PGeo.Mod(e - 1, n)];
                             if (!onChain && vcount.TryGetValue(v, out int cnt) && cnt > 0) return false;
                         }
-                        if (boundary.Count + n - 2 * sharedCount > MaxRingVertices) return false;
+                        if (boundary.Count + n - 2 * sharedCount > maxRingVertices) return false;
                     }
                     for (int e = 0; e < n; e++)
                     {
@@ -335,10 +354,11 @@ namespace Placemaker.Core.Layers.Parking
         /// cleaning would move one ring's corner and open a gap or an overlap with the next ring.
         /// Clusters are capped at 0.8 m across so a chain of short edges cannot drag a corner far.
         /// </summary>
-        private static void CollapseShortEdges(List<List<int>> polys, List<bool> mats, List<double2> verts)
+        private static void CollapseShortEdges(List<List<int>> polys, List<bool> mats, List<double2> verts, List<double2> lot)
         {
-            const double minEdge = 0.4, maxSpread = 0.8;
+            const double minEdge = 0.4, maxSpread = 0.8, droppable = 0.05;
             int n = verts.Count;
+            var orig = new List<double2>(verts);
             var parent = new int[n];
             var lo = new double2[n]; var hi = new double2[n];
             for (int i = 0; i < n; i++) { parent[i] = i; lo[i] = hi[i] = verts[i]; }
@@ -347,33 +367,159 @@ namespace Placemaker.Core.Layers.Parking
             foreach (var r in polys)
                 for (int e = 0; e < r.Count; e++)
                 {
-                    int a = Find(r[e]), b = Find(r[(e + 1) % r.Count]);
-                    if (a == b) continue;
+                    int a0 = Find(r[e]), b0 = Find(r[(e + 1) % r.Count]);
+                    if (a0 == b0) continue;
                     if (PGeo.Len(verts[r[e]] - verts[r[(e + 1) % r.Count]]) >= minEdge) continue;
-                    var l2 = math.min(lo[a], lo[b]); var h2 = math.max(hi[a], hi[b]);
+                    var l2 = math.min(lo[a0], lo[b0]); var h2 = math.max(hi[a0], hi[b0]);
                     if (PGeo.Len(h2 - l2) > maxSpread) continue;
-                    int root = Math.Min(a, b), other = Math.Max(a, b);
+                    int root = Math.Min(a0, b0), other = Math.Max(a0, b0);
                     parent[other] = root; lo[root] = l2; hi[root] = h2;
                     any = true;
                 }
             if (!any) return;
-            var sum = new double2[n]; var cnt = new int[n];
-            for (int i = 0; i < n; i++) { int r = Find(i); sum[r] += verts[i]; cnt[r]++; }
-            for (int i = 0; i < n; i++) { int r = Find(i); if (r == i && cnt[r] > 1) verts[i] = sum[r] / cnt[r]; }
-            for (int pi = polys.Count - 1; pi >= 0; pi--)
+
+            // The outline must not move: a cluster holding a lot corner collapses onto it, one holding
+            // outline points collapses onto their mean (they lie on the same outline edge).
+            var weight = new int[n];
+            for (int i = 0; i < n; i++)
             {
-                var r = polys[pi];
+                double best = double.MaxValue;
+                foreach (var c in lot) best = Math.Min(best, PGeo.Len(c - orig[i]));
+                weight[i] = best < 1e-6 ? 2 : PGeo.DistToBoundary(lot, orig[i]) < 1e-6 ? 1 : 0;
+            }
+
+            List<int> Remap(List<int> r)
+            {
                 var nr = new List<int>(r.Count);
                 foreach (int v in r) { int q = Find(v); if (nr.Count == 0 || nr[nr.Count - 1] != q) nr.Add(q); }
                 while (nr.Count > 1 && nr[0] == nr[nr.Count - 1]) nr.RemoveAt(nr.Count - 1);
-                bool ok = nr.Count >= 3;
-                if (ok)
+                return nr;
+            }
+            // choice[root]: -1 = mean of the cluster's highest-weight members, k ≥ 0 = its k-th such member
+            var choice = new int[n];
+            for (int i = 0; i < n; i++) choice[i] = -1;
+            void Place()
+            {
+                var top = new int[n];
+                for (int i = 0; i < n; i++) { int r = Find(i); top[r] = Math.Max(top[r], weight[i]); }
+                var sum = new double2[n]; var cnt = new int[n];
+                var pick = new double2?[n];
+                for (int i = 0; i < n; i++)
                 {
-                    var pts = Points(nr, verts);
-                    ok = PGeo.SignedArea(pts) > 1e-6;
-                    // a vertex visited twice makes the ring non-simple: drop the cell (tiny by construction)
-                    if (ok && new HashSet<int>(nr).Count != nr.Count) ok = false;
+                    int r = Find(i);
+                    if (weight[i] != top[r]) continue;
+                    if (choice[r] >= 0 && cnt[r] == choice[r]) pick[r] = orig[i];
+                    sum[r] += orig[i]; cnt[r]++;
                 }
+                for (int i = 0; i < n; i++)
+                {
+                    int r = Find(i);
+                    verts[i] = r == i && cnt[r] > 0 ? (pick[r] ?? sum[r] / cnt[r]) : orig[i];
+                }
+            }
+
+            // Moving vertices can fold a neighbouring cell over its neighbour (seen as 2 cm overlaps on
+            // a rotated T-shape). A cluster that folds a cell first tries each member's own position,
+            // then gives up (keeps its short edges; CS2-side cleaning handles those).
+            for (int round = 0; round < 12; round++)
+            {
+                Place();
+                bool changed = false;
+                var badRoots = new HashSet<int>();
+                foreach (var r in polys)
+                {
+                    bool touched = false;
+                    foreach (int v in r) if (Find(v) != v || !verts[v].Equals(orig[v])) { touched = true; break; }
+                    if (!touched) continue;
+                    var nr = Remap(r);
+                    double area0 = PGeo.SignedArea(Points(r, orig));
+                    bool ok;
+                    // Fully collapsed (fewer than 3 distinct vertices): its neighbours moved with it, so
+                    // nothing opens up. A remnant must stay a valid ring; thin is fine (the sliver
+                    // relabelling and merging below absorb it).
+                    if (nr.Count < 3) ok = true;
+                    else
+                    {
+                        var pts = Points(nr, verts);
+                        bool dup = new HashSet<int>(nr).Count != nr.Count;
+                        ok = !dup && PGeo.SignedArea(pts) > 1e-9 && PGeo.IsSimple(pts);
+                        if (!ok && area0 < droppable) ok = true; // a tiny cell may vanish
+                    }
+                    if (ok) continue;
+                    foreach (int v in r) { int root = Find(v); if (root != v || HasCluster(root)) badRoots.Add(root); }
+                    changed = true;
+                }
+                // A moved corner can also push a cell across a neighbour that did not move (no fold,
+                // but an overlap): look for edges of moved cells crossing any other edge.
+                if (!changed)
+                {
+                    const double bucket = 2.0;
+                    var grid = new Dictionary<long, List<(int A, int B)>>();
+                    long GKey(long x, long y) => (x * 73856093L) ^ (y * 19349663L);
+                    var remapped = new List<List<int>>(polys.Count);
+                    foreach (var r in polys) remapped.Add(Remap(r));
+                    void Cells(int a, int b, Action<long> f)
+                    {
+                        var p0 = verts[a]; var p1 = verts[b];
+                        long x0 = (long)Math.Floor(Math.Min(p0.x, p1.x) / bucket), x1 = (long)Math.Floor(Math.Max(p0.x, p1.x) / bucket);
+                        long y0 = (long)Math.Floor(Math.Min(p0.y, p1.y) / bucket), y1 = (long)Math.Floor(Math.Max(p0.y, p1.y) / bucket);
+                        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 2000) return;
+                        for (long x = x0; x <= x1; x++) for (long y = y0; y <= y1; y++) f(GKey(x, y));
+                    }
+                    foreach (var r in remapped)
+                        for (int e = 0; e < r.Count; e++)
+                        {
+                            int a = r[e], b = r[(e + 1) % r.Count];
+                            if (a > b) continue; // each undirected edge once (shared edges appear in both directions)
+                            Cells(a, b, k => { if (!grid.TryGetValue(k, out var l)) grid[k] = l = new List<(int, int)>(); l.Add((a, b)); });
+                        }
+                    for (int pi = 0; pi < polys.Count; pi++)
+                    {
+                        var r = remapped[pi];
+                        bool moved = false;
+                        foreach (int v in r) if (!verts[v].Equals(orig[v])) { moved = true; break; }
+                        if (!moved || r.Count < 2) continue;
+                        bool cross = false;
+                        for (int e = 0; e < r.Count && !cross; e++)
+                        {
+                            int a = r[e], b = r[(e + 1) % r.Count];
+                            Cells(a, b, k =>
+                            {
+                                if (cross || !grid.TryGetValue(k, out var l)) return;
+                                foreach (var (c, d) in l)
+                                {
+                                    if (c == a || c == b || d == a || d == b) continue;
+                                    if (PGeo.SegmentsCross(verts[a], verts[b], verts[c], verts[d], 1e-12)) { cross = true; break; }
+                                }
+                            });
+                        }
+                        if (!cross) continue;
+                        foreach (int v in polys[pi]) { int root = Find(v); if (root != v || HasCluster(root)) badRoots.Add(root); }
+                        changed = true;
+                    }
+                }
+                if (!changed) break;
+                var size = new int[n];
+                for (int i = 0; i < n; i++) size[Find(i)]++;
+                var roots = new int[n];
+                for (int i = 0; i < n; i++) roots[i] = Find(i);
+                foreach (int r in badRoots)
+                {
+                    choice[r]++;
+                    if (choice[r] >= size[r] || round >= 10)
+                        for (int i = 0; i < n; i++) if (roots[i] == r) { parent[i] = i; choice[i] = -1; }
+                }
+            }
+            bool HasCluster(int root)
+            {
+                return !verts[root].Equals(orig[root]);
+            }
+            Place();
+
+            for (int pi = polys.Count - 1; pi >= 0; pi--)
+            {
+                var nr = Remap(polys[pi]);
+                bool ok = nr.Count >= 3 && new HashSet<int>(nr).Count == nr.Count && PGeo.SignedArea(Points(nr, verts)) > 1e-9;
                 if (ok) polys[pi] = nr;
                 else { polys.RemoveAt(pi); mats.RemoveAt(pi); }
             }

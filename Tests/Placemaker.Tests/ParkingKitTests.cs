@@ -274,7 +274,8 @@ namespace Placemaker.Tests
                     {
                         var b = bounds[i];
                         if (p.x < b.a.x || p.x > b.b.x || p.y < b.a.y || p.y > b.b.y) continue;
-                        if (PGeo.Contains(rings[i], p)) hits++;
+                        // float rings at world coordinates: ignore millimetre contact along shared edges
+                        if (PGeo.Contains(rings[i], p) && PGeo.DistToBoundary(rings[i], p) > 0.01) hits++;
                     }
                     if (hits > 1) over++;
                 }

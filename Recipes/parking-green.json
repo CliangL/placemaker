@@ -1,0 +1,20 @@
+{
+  "id": "parking-green",
+  "nameKey": "Placemaker.Recipe.ParkingGreen",
+  "icon": "Media/Game/Icons/ParkingFacility.svg",
+  "formatVersion": 1,
+  "root": {
+    "layer": "parking",
+    "settings": {
+      "stallAngle": "60",
+      "greenery": "medians",
+      "medianDepth": 4,
+      "plantingDensity": 80,
+      "perimeterRoad": true,
+      "crossEvery": 8
+    },
+    "target": "",
+    "children": [],
+    "regionOverrides": {}
+  }
+}

@@ -77,7 +77,7 @@ namespace Placemaker.Core.Layers.Parking
             result.Add(Marker(first));
             if (area > 6000 || perimeter > 320)
             {
-                double minApart = Math.Max(40, perimeter * 0.25);
+                double minApart = Math.Max(40, perimeter * 0.15);
                 Candidate? best = null; double bestScore = double.MaxValue;
                 foreach (var c in cands)
                 {

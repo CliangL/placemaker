@@ -38,7 +38,15 @@ namespace Placemaker.Core.Layers.Parking
 
             // ── outline ──
             var world = new List<double2>(input.Shape.Ring.Length);
-            foreach (var p in input.Shape.Ring) world.Add(new double2(p.x, p.z));
+            foreach (var p in input.Shape.Ring)
+            {
+                if (!math.all(math.isfinite(p)))
+                {
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = K + "Issue.BadShape" });
+                    return plan;
+                }
+                world.Add(new double2(p.x, p.z));
+            }
             world = PGeo.EnsureCcw(PGeo.Simplify(world, 1e-3, 1e-6));
             double area = world.Count >= 3 ? PGeo.Area(world) : 0;
             if (world.Count < 3 || !PGeo.IsSimple(world))
@@ -184,9 +192,7 @@ namespace Placemaker.Core.Layers.Parking
             foreach (var sp in layout.Surfaces)
             {
                 cancel.ThrowIfCancellationRequested();
-                var rings = SurfaceAcceptance.MakeAcceptable(W2(sp.Ring), h2);
-                if (rings.Count == 0 && sp.Cells != null && sp.Cells.Count > 0)
-                    foreach (var cell in sp.Cells) rings.AddRange(SurfaceAcceptance.MakeAcceptable(W2(cell), h2));
+                var rings = Acceptable(sp, W2, h2, cancel);
                 foreach (var ring in rings)
                 {
                     plan.Surfaces.Add(new PlannedSurface
@@ -347,6 +353,42 @@ namespace Placemaker.Core.Layers.Parking
             plan.Facts["fee"] = s.Fee;
             plan.Facts["uncoveredArea"] = Math.Round(uncovered, 2);
             plan.Facts["rowAngle"] = Math.Round(layout.RowAngleDeg, 3);
+        }
+
+        /// <summary>
+        /// Rings CS2 keeps for one merged surface. When the game model trims the big ring (it splits
+        /// and drops pieces it cannot rescue), the same cells are regrouped into smaller rings and the
+        /// variant covering more area wins; cells are the last resort.
+        /// </summary>
+        private static List<float3[]> Acceptable(SurfacePoly sp, Func<List<double2>, float2[]> w2, Func<float2, float> h2, CancellationToken cancel)
+        {
+            double want = PGeo.Area(sp.Ring);
+            var best = SurfaceAcceptance.MakeAcceptable(w2(sp.Ring), h2);
+            double got = Sum(best);
+            if (want - got <= 0.05 || sp.Cells == null || sp.Cells.Count == 0) return best;
+            foreach (int cap in new[] { 48, 16 })
+            {
+                var alt = new List<float3[]>();
+                foreach (var ring in SurfaceCells.Regroup(sp.Cells, cap, cancel))
+                {
+                    var acc = SurfaceAcceptance.MakeAcceptable(w2(ring), h2);
+                    alt.AddRange(acc);
+                }
+                double a = Sum(alt);
+                if (a > got + 1e-3) { best = alt; got = a; }
+                if (want - got <= 0.05) return best;
+            }
+            var cells = new List<float3[]>();
+            foreach (var cell in sp.Cells) cells.AddRange(SurfaceAcceptance.MakeAcceptable(w2(cell), h2));
+            if (Sum(cells) > got + 1e-3) best = cells;
+            return best;
+        }
+
+        private static double Sum(List<float3[]> rings)
+        {
+            double a = 0;
+            foreach (var r in rings) a += Pricing.PolygonArea(r);
+            return a;
         }
 
         private static List<AssetRef> SpeciesAssets(ParkingSettings s)
