@@ -59,6 +59,8 @@ namespace Placemaker.Core.Tool
         public Dictionary<string, AssetInfo> Assets;
         public bool Stale;
         public bool CanAfford = true;
+        /// <summary>acknowledgePermanent(true) was given for the current permanent effects.</summary>
+        public bool PermanentAcknowledged;
         /// <summary>Extra issues from the tool itself (build failure, timeout…).</summary>
         public List<PlanIssue> ExtraIssues = new List<PlanIssue>();
     }
@@ -136,7 +138,7 @@ namespace Placemaker.Core.Tool
             var list = JsonValue.Arr();
             foreach (var r in recipes)
             {
-                var ro = JsonValue.Obj().Set("id", r.Id).Set("name", r.Name).Set("icon", r.Icon ?? "").Set("custom", r.Custom);
+                var ro = JsonValue.Obj().Set("id", r.Id).Set("name", r.Name).Set("icon", IconPath(r.Icon)).Set("custom", r.Custom);
                 if (!string.IsNullOrEmpty(r.DescriptionKey)) ro.Set("description", r.DescriptionKey);
                 list.Add(ro);
             }
@@ -148,7 +150,7 @@ namespace Placemaker.Core.Tool
             var o = JsonValue.Obj()
                 .Set("id", g.Id ?? "")
                 .Set("name", g.NameKey ?? "")
-                .Set("icon", g.Icon ?? "")
+                .Set("icon", IconPath(g.Icon))
                 .Set("kind", g.Kind == LayerKind.Split ? "split" : g.Kind == LayerKind.AddOn ? "addOn" : "fill")
                 .Set("accepts", Strings(g.Accepts))
                 .Set("emits", Strings(g.Emits));
@@ -161,7 +163,7 @@ namespace Placemaker.Core.Tool
                 {
                     if (p == null) continue;
                     var po = JsonValue.Obj().Set("id", p.Id ?? "").Set("name", p.LabelKey ?? "");
-                    if (!string.IsNullOrEmpty(p.Icon)) po.Set("icon", p.Icon);
+                    if (!string.IsNullOrEmpty(p.Icon)) po.Set("icon", IconPath(p.Icon));
                     presets.Add(po);
                 }
             o.Set("presets", presets);
@@ -191,7 +193,7 @@ namespace Placemaker.Core.Tool
                 .Set("group", c.Group ?? "")
                 .Set("label", c.LabelKey ?? "");
             if (!string.IsNullOrEmpty(c.TooltipKey)) o.Set("tooltip", c.TooltipKey);
-            if (!string.IsNullOrEmpty(c.Icon)) o.Set("icon", c.Icon);
+            if (!string.IsNullOrEmpty(c.Icon)) o.Set("icon", IconPath(c.Icon));
             if (c.Kind == ControlKind.Slider)
             {
                 o.Set("min", c.Min).Set("max", c.Max).Set("step", c.Step);
@@ -204,7 +206,7 @@ namespace Placemaker.Core.Tool
                 {
                     if (op == null) continue;
                     var oo = JsonValue.Obj().Set("value", op.Value ?? "").Set("label", op.LabelKey ?? "");
-                    if (!string.IsNullOrEmpty(op.Icon)) oo.Set("icon", op.Icon);
+                    if (!string.IsNullOrEmpty(op.Icon)) oo.Set("icon", IconPath(op.Icon));
                     if (!string.IsNullOrEmpty(op.TooltipKey)) oo.Set("tooltip", op.TooltipKey);
                     opts.Add(oo);
                 }
@@ -214,6 +216,7 @@ namespace Placemaker.Core.Tool
             if (c.MarkerKinds != null && c.MarkerKinds.Length > 0) o.Set("markerKinds", Strings(c.MarkerKinds));
             if (!string.IsNullOrEmpty(c.VisibleWhen)) o.Set("visibleWhen", c.VisibleWhen);
             if (c.Cheap) o.Set("cheap", true);
+            if (c.Default != null && c.Kind != ControlKind.Markers) o.Set("default", DesignEditor.ToJson(c.Default));
             return o;
         }
 
@@ -228,15 +231,16 @@ namespace Placemaker.Core.Tool
         /// <param name="status">Readiness per step path (missing = ready).</param>
         /// <param name="plan">Latest finished plan (for the regions each step produced), may be null.</param>
         public static JsonValue Design(Recipe recipe, string recipeId, bool modified, string focus,
-            IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan)
+            IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, Func<string, IAreaGenerator> generators = null)
         {
             var o = JsonValue.Obj().Set("recipeId", recipeId ?? "").Set("modified", modified);
-            o.Set("root", recipe?.Root != null ? Step(recipe, recipe.Root, RecipePaths.Root, status, plan, 0) : JsonValue.Null);
+            o.Set("root", recipe?.Root != null ? Step(recipe, recipe.Root, RecipePaths.Root, status, plan, 0, generators ?? GeneratorRegistry.Get) : JsonValue.Null);
             o.Set("focus", focus ?? RecipePaths.Root);
             return o;
         }
 
-        private static JsonValue Step(Recipe recipe, RecipeStep s, string path, IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, int depth)
+        private static JsonValue Step(Recipe recipe, RecipeStep s, string path, IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, int depth,
+            Func<string, IAreaGenerator> generators)
         {
             var o = JsonValue.Obj()
                 .Set("path", path)
@@ -256,6 +260,26 @@ namespace Placemaker.Core.Tool
             var markers = JsonValue.Arr();
             foreach (var kv in counts) markers.Add(JsonValue.Obj().Set("kind", kv.Key).Set("count", kv.Value));
             o.Set("markers", markers);
+            var markerList = JsonValue.Arr();
+            for (int i = 0; i < s.Markers.Count; i++)
+            {
+                var p = s.Markers[i].Position;
+                markerList.Add(JsonValue.Obj().Set("kind", s.Markers[i].Kind ?? "").Set("index", i)
+                    .Set("position", JsonValue.Arr().Add(Round(p.x, 2)).Add(Round(p.y, 2)).Add(Round(p.z, 2))));
+            }
+            o.Set("markerList", markerList);
+            IAreaGenerator gen = null;
+            try { gen = generators?.Invoke(s.Layer); } catch (Exception) { gen = null; }
+            var kinds = JsonValue.Arr();
+            foreach (var k in MarkerKinds.For(gen))
+            {
+                var ko = JsonValue.Obj().Set("kind", k.Kind).Set("label", k.LabelKey);
+                if (!string.IsNullOrEmpty(k.Icon)) ko.Set("icon", IconPath(k.Icon));
+                if (!string.IsNullOrEmpty(k.TooltipKey)) ko.Set("tooltip", k.TooltipKey);
+                kinds.Add(ko);
+            }
+            o.Set("markerKinds", kinds);
+            o.Set("markersRequired", MarkerKinds.Required(gen, s.Settings));
             StepStatus st = null;
             if (status != null) status.TryGetValue(path, out st);
             o.Set("ready", st == null || st.Ready);
@@ -263,7 +287,7 @@ namespace Placemaker.Core.Tool
             var children = JsonValue.Arr();
             if (depth < Composer.MaxDepth + 2)
                 for (int i = 0; i < s.Children.Count; i++)
-                    if (s.Children[i] != null) children.Add(Step(recipe, s.Children[i], RecipePaths.Child(path, i), status, plan, depth + 1));
+                    if (s.Children[i] != null) children.Add(Step(recipe, s.Children[i], RecipePaths.Child(path, i), status, plan, depth + 1, generators));
             o.Set("children", children);
             var overrides = JsonValue.Obj();
             if (depth < Composer.MaxDepth + 2)
@@ -272,7 +296,7 @@ namespace Placemaker.Core.Tool
                 ok.Sort(StringComparer.Ordinal);
                 foreach (var k in ok)
                     if (s.RegionOverrides[k] != null)
-                        overrides.Set(k, Step(recipe, s.RegionOverrides[k], RecipePaths.Override(path, s, k), status, plan, depth + 1));
+                        overrides.Set(k, Step(recipe, s.RegionOverrides[k], RecipePaths.Override(path, s, k), status, plan, depth + 1, generators));
             }
             o.Set("overrides", overrides);
             o.Set("regions", Regions(plan, path));
@@ -330,7 +354,7 @@ namespace Placemaker.Core.Tool
                  .Set("layers", JsonValue.Arr());
                 var noIssues = JsonValue.Arr();
                 foreach (var i in s.ExtraIssues) noIssues.Add(Issue(i, null, s.Recipe));
-                o.Set("issues", noIssues).Set("permanent", JsonValue.Arr());
+                o.Set("issues", noIssues).Set("permanent", JsonValue.Arr()).Set("permanentAcknowledged", true);
                 return o;
             }
             o.Set("stats", Stats(plan.MergedStats()));
@@ -362,6 +386,19 @@ namespace Placemaker.Core.Tool
             foreach (var i in s.ExtraIssues) issues.Add(Issue(i, null, s.Recipe));
             o.Set("issues", issues);
             var permanent = JsonValue.Arr();
+            var effects = Permanent(plan);
+            foreach (var p in effects) permanent.Add(p.ToJson());
+            o.Set("permanent", permanent);
+            // Extension (docs/proposals/gametool.md): whether acknowledgePermanent(true) covers the current effects.
+            o.Set("permanentAcknowledged", effects.Count == 0 || s.PermanentAcknowledged);
+            return o;
+        }
+
+        /// <summary>Permanent effects of a plan the player must acknowledge before Build (lake excavation, terraforming).</summary>
+        public static List<LocText> Permanent(ComposedPlan plan)
+        {
+            var list = new List<LocText>();
+            if (plan == null) return list;
             foreach (var l in plan.Layers)
             {
                 if (l == null) continue;
@@ -369,12 +406,33 @@ namespace Placemaker.Core.Tool
                 {
                     if (t == null || !t.Permanent) continue;
                     double area = Pricing.PolygonArea(t.Ring ?? Array.Empty<float3>());
-                    permanent.Add(new LocText(float.IsNaN(t.WaterLevel) ? "Placemaker.Permanent.Terraform" : "Placemaker.Permanent.Water",
-                        Math.Round(area)).ToJson());
+                    list.Add(new LocText(float.IsNaN(t.WaterLevel) ? "Placemaker.Permanent.Terraform" : "Placemaker.Permanent.Water", Math.Round(area)));
                 }
             }
-            o.Set("permanent", permanent);
-            return o;
+            return list;
+        }
+
+        /// <summary>Identity of a set of permanent effects: an acknowledgement covers exactly these (reset when they change).</summary>
+        public static string PermanentFingerprint(List<LocText> effects)
+        {
+            if (effects == null || effects.Count == 0) return "";
+            var sb = new System.Text.StringBuilder();
+            foreach (var e in effects) sb.Append(e.ToJson().ToString()).Append('|');
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Icon path filter installed by the game (verifies vanilla Media files exist, fixes known
+        /// renames). Identity in tests. Never returns null.
+        /// </summary>
+        public static Func<string, string> IconFilter;
+
+        public static string IconPath(string icon)
+        {
+            if (string.IsNullOrEmpty(icon)) return "";
+            var f = IconFilter;
+            if (f == null) return icon;
+            try { return f(icon) ?? ""; } catch (Exception) { return icon; }
         }
 
         public static void SplitPlanPath(string planPath, out string stepPath, out string regionKey)

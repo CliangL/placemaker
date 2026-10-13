@@ -31,6 +31,26 @@ namespace Placemaker.Game.Tool
             Touch();
         }
 
+        /// <summary>UI: which marker type the next click places (entrance, entry, exit…). Enters placement for that step.</summary>
+        public void SetMarkerKind(string path, string kind)
+        {
+            if (string.IsNullOrEmpty(kind)) { ExitMarkerMode(); return; }
+            if (_markerKind != null && _markerPath == path) { _markerKind = kind; Touch(); return; }
+            StartMarkers(path, kind);
+        }
+
+        /// <summary>UI: remove one marker by its index in StepView.markerList.</summary>
+        public void RemoveMarker(string path, int index)
+        {
+            EndValuePreview(true);
+            var step = RecipePaths.Resolve(_recipe, path);
+            if (step == null || index < 0 || index >= step.Markers.Count) return;
+            step.Markers.RemoveAt(index);
+            MarkMarkersEdited(path);
+            DesignChanged();
+            Commit("Placemaker.Undo.RemoveMarker");
+        }
+
         public void ExitMarkerMode()
         {
             if (_markerKind == null) return;
@@ -45,6 +65,7 @@ namespace Placemaker.Game.Tool
             if (_recipe == null) return;
             if (_editor.ClearMarkers(_recipe, path, kind))
             {
+                MarkMarkersEdited(path);
                 DesignChanged();
                 Commit("Placemaker.Undo.ClearMarkers");
             }
@@ -69,6 +90,7 @@ namespace Placemaker.Game.Tool
                 var m = new EdgeMarker { Kind = _markerKind, RingSegment = _markerHoverSegment, RingT = _markerHoverT, Position = _markerHover };
                 if (_editor.AddMarker(_recipe, _markerPath, m))
                 {
+                    MarkMarkersEdited(_markerPath);
                     DesignChanged();
                     Commit("Placemaker.Undo.AddMarker");
                 }
@@ -76,8 +98,10 @@ namespace Placemaker.Game.Tool
             }
             if (_in.RightPressed)
             {
-                if (_editor.RemoveMarkerNear(_recipe, _markerPath, _in.Hit.xz, radius, _markerKind))
+                // Right-click removes the nearest marker of this step, whatever its kind (one rule: right-click removes).
+                if (_editor.RemoveMarkerNear(_recipe, _markerPath, _in.Hit.xz, radius))
                 {
+                    MarkMarkersEdited(_markerPath);
                     DesignChanged();
                     Commit("Placemaker.Undo.RemoveMarker");
                 }

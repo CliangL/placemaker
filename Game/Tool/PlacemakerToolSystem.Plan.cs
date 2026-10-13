@@ -56,6 +56,7 @@ namespace Placemaker.Game.Tool
             _inputRevision++;
             _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
             _inputFromDrag = throttled;
+            _feedback.InputChanged();
             Touch();
         }
 
@@ -116,6 +117,7 @@ namespace Placemaker.Game.Tool
             _planRevision = r.Revision;
             _planMs = r.Milliseconds;
             _affordRevision = -1;
+            ResolveAssets();
             Touch();
         }
 
@@ -249,6 +251,7 @@ namespace Placemaker.Game.Tool
                 PlanReady = _plan != null && _planRevision == _inputRevision,
                 PlanHasErrors = _plan != null && _plan.HasErrors,
                 CanAfford = CanAfford(),
+                PermanentPending = PermanentPending(),
                 BuildServiceAvailable = Services.Build != null,
                 BuildRunning = _building,
                 MarkerModeActive = _markerKind != null,

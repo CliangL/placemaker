@@ -63,3 +63,67 @@ a request or a description of how the tool works around a gap.
   `ModsData/Placemaker/defaults.json`); files with a newer `formatVersion` are skipped with a log
   line; every Fill layer without a file gets a synthesized one-layer recipe; player recipes in
   `ModsData/Placemaker/Recipes/` (delete keeps a `.deleted` backup).
+
+## 5. Round 2 (playtest 1) — what changed, and requests
+
+### Price = build: automatic asset resolver (dedupe with gamebuild)
+- `Game/Preview/AutoAssets.cs` is a **local** resolver because `IAssetCatalog.ResolveAutomatic`
+  is not in this branch yet. When a plan arrives (and again when the catalog version changes, and
+  right before Build) it writes concrete prefab names into every `AssetRef.Id`:
+  nets/surfaces/areas/functional objects via `IAssetCatalog.Resolve(asset, RoleCategories.ForX(role))`
+  (exactly what BuildService.ResolvePrefabs does), trees/bushes/flowerbeds without explicit id or
+  fallbacks via `Items(category)[Variation % count]`. The build receives the resolved plan, so
+  `Pricing.Of` prices what is placed. **Lead:** once gamebuild ships `ResolveAutomatic`, replace the
+  body of `AutoAssets.Resolve` with a call to it (one resolver). Surfaces/areas still price at 0
+  (no PlaceableObjectData) — gamebuild's catalog would need a per-m² cost if the game charges one.
+
+### Contract notes / small extensions (please mirror in contract.ts)
+- `summary.permanentAcknowledged: boolean` (extension): true when `permanent` is empty or
+  `acknowledgePermanent(true)` covers the current effects. The acknowledgement is bound to the
+  fingerprint of the permanent effects (kind + rounded area); any change of those effects resets it.
+  Build/Enter is refused with reason `Placemaker.Reason.AcknowledgePermanent` until then.
+- `setMarkerKind(path, kind)`: enters placement for that step with that kind (or just switches the
+  kind while already placing on that step); `""` leaves placement. Left-click on the outline places,
+  right-click removes the nearest marker of the step **of any kind**.
+- `removeMarker(path, index)`: index into `StepView.markerList` (placement order). Undoable.
+- `StepView.markerKinds[].label`: the generator's option label when its Markers control lists the
+  kind (parking: `Placemaker.Parking.Marker.Entrance`), else `Placemaker.<Layer>.Marker.<Kind>`
+  (PascalCase; English keys added to `Lang/en-US.tool.json` for park/campground/plaza/split).
+  `icon` is a vanilla `Media/...` path. `markersRequired` = 1 when the layer is not ready with no
+  markers (parking), else 0.
+- `Control.default` is emitted for every control except `markers`.
+- `locate(x, y, z)`: moves the gameplay camera pivot (switching from orbit/cinematic camera first).
+
+### Markers (lead decision overriding FEEDBACK-1 US3)
+- Untouched marker steps that run on the whole outline (root, and `target: ""` add-ons under it)
+  get `SuggestMarkers` as real markers; re-suggested when the outline changes; filled when empty
+  after design changes. Any player add/remove/clear marks the step "edited" (in the undo snapshot)
+  and it is never auto-filled again until the area is cleared or a build finishes. Steps that
+  target regions (blocks) are left to their layer. Build is blocked only when a required step has
+  none (no road for a suggestion, or the player removed them all).
+- **parking workstream:** `PlanBuilder` still auto-suggests entrances internally when the step has
+  none; with the tool applying suggestions that branch only matters when the player removed all —
+  and then CheckReady already blocks Build. Consider dropping the internal fallback so the preview
+  shows "no entrance" honestly. Alley/footpath kinds (US3) need `MarkerKinds` + `CheckReady`
+  updates in ParkingLayer; the tool/overlay already have icons/colours for `alley` and `footpath`.
+
+### Build failure (US8)
+- `Core/Tool/BuildFeedback.cs` owns the failure message + red markers: cleared on any area/design
+  edit, stage change, build start and success. Failure lands in Review (or Area if the outline is
+  gone) with the message plus `Placemaker.Issue.BuildFailedNext`; Build stays enabled for a retry.
+  Tests: `Tests/ToolBuildFlowTests.cs`.
+- FilledPreviewSystem: layers hidden by EndFrame forgot to reset their signature, so the same
+  rings shown again later drew an empty mesh — fixed.
+
+### Icons (verified against Cities2_Data/Content/Game/UI/Media, 1.6.2f1)
+- `Game/UI/IconPaths.cs` filters every icon the catalog/design JSON emits: accepts `Media/...` and
+  `coui://GameUI/Media/...` (normalised to `Media/...`), maps known renames, drops (with one log
+  line) vanilla paths that do not exist. Other hosts pass through.
+- Wrong icons owned by others:
+  - `Core/Layers/Parking/ParkingLayer.cs:23` `Media/Game/Icons/ParkingFacility.svg` — **does not
+    exist**; use `Media/Game/Icons/Parking.svg` (parking workstream). Filter maps it meanwhile.
+    `Recipes/parking*.json` fixed here.
+  - roads branch: `coui://placemaker/roads/pattern-…` — needs a registered `placemaker` UI host
+    (`UIManager.defaultUISystem.AddHostLocation`), otherwise Gameface logs "Invalid host".
+  - All other layer icons (Forest, ParksAndRecreation, Water, Sewage, Pathways, Roads, Zones,
+    `Media/Tools/Snap Options/ExistingGeometry.svg`) exist.

@@ -84,6 +84,15 @@ namespace Placemaker.Game.Tool
             return h;
         }
 
+        private LocText MarkerLabel(string path, string kind)
+        {
+            var step = RecipePaths.Resolve(_recipe, path);
+            var gen = step != null ? Placemaker.Core.GeneratorRegistry.Get(step.Layer) : null;
+            foreach (var k in MarkerKinds.For(gen))
+                if (k.Kind == kind) return new LocText(k.LabelKey);
+            return new LocText("Placemaker.Marker." + kind);
+        }
+
         public ToolStateInput StateInput()
         {
             var facts = Facts();
@@ -109,7 +118,7 @@ namespace Placemaker.Game.Tool
                 RedoLabel = RedoLabel,
                 MarkerStepPath = _markerPath,
                 MarkerKind = _markerKind,
-                MarkerLabel = _markerKind != null ? new LocText("Placemaker.Marker." + _markerKind) : null,
+                MarkerLabel = _markerKind != null ? MarkerLabel(_markerPath, _markerKind) : null,
                 Hints = Hints(),
                 Planning = facts.Planning,
                 BuildProgress = _building ? BuildProgress : (float?)null,

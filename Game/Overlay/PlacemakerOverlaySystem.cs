@@ -278,14 +278,23 @@ namespace Placemaker.Game.Overlay
             var recipe = _tool.CurrentRecipe;
             if (recipe == null || _tool.Shape == null) return;
             float d = w * 7f;
+            // Each kind has its own colour (MarkerKinds.ColorFor: two-way yellow, entry green, exit orange…);
+            // markers of the step being edited are drawn larger with a white rim.
             foreach (var kv in RecipePaths.Walk(recipe))
+            {
+                bool stepActive = kv.Key == _tool.MarkerPath;
                 foreach (var m in kv.Value.Markers)
                 {
-                    bool active = kv.Key == _tool.MarkerPath && m.Kind == _tool.MarkerKind;
-                    buffer.DrawCircle(active ? HandleHot : Marker, Marker, w * 0.6f, 0, new float2(0, 1), m.Position, active ? d * 1.3f : d);
+                    var c = KindColor(m.Kind, 0.95f);
+                    float size = stepActive ? d * 1.3f : d;
+                    buffer.DrawCircle(stepActive ? HandleHot : c, c, w * 0.6f, 0, new float2(0, 1), m.Position, size);
+                    // Inner dot: entry/exit read at a glance even for colour-blind players (entry filled, exit hollow).
+                    if (m.Kind == "exit") buffer.DrawCircle(Color.white, new Color(0, 0, 0, 0.6f), w * 0.4f, 0, new float2(0, 1), m.Position, size * 0.45f);
+                    else if (m.Kind == "entry") buffer.DrawCircle(Color.white, Color.white, w * 0.4f, 0, new float2(0, 1), m.Position, size * 0.35f);
                 }
+            }
             if (_tool.MarkerKind != null && _tool.MarkerHoverValid)
-                buffer.DrawCircle(HandleHot, new Color(1, 1, 1, 0.35f), w * 0.6f, 0, new float2(0, 1), _tool.MarkerHover, d * 1.3f);
+                buffer.DrawCircle(HandleHot, KindColor(_tool.MarkerKind, 0.4f), w * 0.6f, 0, new float2(0, 1), _tool.MarkerHover, d * 1.3f);
         }
 
         // ───────────── plan ─────────────
@@ -368,6 +377,12 @@ namespace Placemaker.Game.Overlay
         }
 
         private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
+
+        private static Color KindColor(string kind, float a)
+        {
+            var (r, g, b) = MarkerKinds.ColorFor(kind);
+            return new Color(r, g, b, a);
+        }
 
         private static Color NetColor(NetRole r)
         {
