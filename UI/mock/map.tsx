@@ -206,13 +206,24 @@ export function MapView({ backend }: { backend: MockBackend }) {
         if (toolArea) {
             for (const st of b.allSteps())
                 for (const m of st.markers) {
-                    g.fillStyle = "#ff9b45";
+                    const kindColor: Record<string, [string, string]> = {
+                        entrance: ["#ff9b45", "⇅"], entry: ["#6fdc8c", "↓"], exit: ["#ff6b5b", "↑"], alley: ["#b48cff", "A"], footpath: ["#f5c542", "F"],
+                    };
+                    const [col, glyph] = kindColor[m.kind] ?? ["#ff9b45", ""];
+                    g.fillStyle = col;
                     g.beginPath();
-                    g.arc(m.p[0], m.p[1], 6 * px, 0, Math.PI * 2);
+                    g.arc(m.p[0], m.p[1], 8 * px, 0, Math.PI * 2);
                     g.fill();
                     g.strokeStyle = "#ffffff";
                     g.lineWidth = 2 * px;
                     g.stroke();
+                    if (glyph) {
+                        g.fillStyle = "#0b1d26";
+                        g.font = `bold ${11 * px}px sans-serif`;
+                        g.textAlign = "center";
+                        g.textBaseline = "middle";
+                        g.fillText(glyph, m.p[0], m.p[1] + 0.5 * px);
+                    }
                 }
             if (b.markerMode && mp && b.ring.length > 2) {
                 const q = closestOnRing(mp, b.ring);

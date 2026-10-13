@@ -96,19 +96,25 @@ const Entrances = ({ step, state }: { step: StepView; state: ToolState }) => {
     };
     const numbers = new Map<string, number>();
     return (
-        <Section title={t("Placemaker.UI.Entrances", "Entrances")} icon="entrance" count={have} testId={`entrances-${step.path}`}>
+        <Section title={t("Placemaker.UI.Entrances", "Entrances")} icon="entrance" count={have} testId={`entrances-${step.path}`} className={s.entrances}>
             {need > 0 && have < need ? (
                 <div className={s.required} data-testid="entrance-required">
                     <Icon name="warning" size={18} tint="warn" />
                     <div className={s.requiredText}>
                         <div className={s.requiredTitle}>
-                            {need > 1 ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need]) : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance")}
+                            {need > 1
+                                ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need])
+                                : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance")}
                         </div>
-                        <div className={s.requiredSub}>{t("Placemaker.UI.Markers.HowTo", "Choose a type below, then click the lot outline next to a road.")}</div>
+                        <div className={s.requiredSub}>
+                            {t("Placemaker.UI.Markers.HowTo", "Choose a type below, then click the lot outline next to a road.")}
+                        </div>
                     </div>
                 </div>
             ) : (
-                <div className={s.note}>{t("Placemaker.UI.Markers.Note", "Entrances next to roads are suggested for you. Add more by type, or remove any you don't want.")}</div>
+                <div className={s.note}>
+                    {t("Placemaker.UI.Markers.Note", "Entrances next to roads are suggested for you. Add more by type, or remove any you don't want.")}
+                </div>
             )}
             <div className={s.kindRow} data-testid="marker-kinds">
                 {kinds.map((k) => {
@@ -148,8 +154,20 @@ const Entrances = ({ step, state }: { step: StepView; state: ToolState }) => {
                                 </div>
                                 <div className={s.markerName}>{markerLabel(t, k) + " " + n}</div>
                                 <div className={s.flex} />
-                                <Btn icon="eye" iconSize={15} title={t("Placemaker.UI.Markers.Show", "Show on the map")} onClick={() => act.locate(m.position)} testId={`marker-show-${m.index}`} />
-                                <Btn icon="close" iconSize={15} title={t("Placemaker.UI.Markers.Remove", "Remove this entrance")} onClick={() => act.removeMarker(step.path, m.index)} testId={`marker-remove-${m.index}`} />
+                                <Btn
+                                    icon="eye"
+                                    iconSize={15}
+                                    title={t("Placemaker.UI.Markers.Show", "Show on the map")}
+                                    onClick={() => act.locate(m.position)}
+                                    testId={`marker-show-${m.index}`}
+                                />
+                                <Btn
+                                    icon="close"
+                                    iconSize={15}
+                                    title={t("Placemaker.UI.Markers.Remove", "Remove this entrance")}
+                                    onClick={() => act.removeMarker(step.path, m.index)}
+                                    testId={`marker-remove-${m.index}`}
+                                />
                             </div>
                         );
                     })}
@@ -172,24 +190,26 @@ const TypeCard = ({ r, on }: { r: RecipeInfo; on: boolean }) => {
     const desc = r.description ? t(r.description, "") : "";
     return (
         <div className={s.cardCell}>
-            <button
-                type="button"
-                data-testid={`recipe-${r.id}`}
-                aria-pressed={on ? "true" : "false"}
-                className={classNames(s.card, { [s.cardOn]: on })}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    if (!on) act.selectRecipe(r.id);
-                }}
-            >
-                <div className={s.cardIcon} style={{ backgroundColor: color }}>
-                    <Icon name={entityIcon(r.id, r.icon)} size={22} tint="dark" />
-                </div>
-                <div className={s.cardText}>
-                    <div className={s.cardName}>{name}</div>
-                    {desc ? <div className={s.cardDesc}>{desc}</div> : null}
-                </div>
-            </button>
+            <Tip title={name} description={desc || undefined}>
+                <button
+                    type="button"
+                    data-testid={`recipe-${r.id}`}
+                    aria-pressed={on ? "true" : "false"}
+                    className={classNames(s.card, { [s.cardOn]: on })}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (!on) act.selectRecipe(r.id);
+                    }}
+                >
+                    <div className={s.cardIcon} style={{ backgroundColor: color }}>
+                        <Icon name={entityIcon(r.id, r.icon)} size={22} tint="dark" />
+                    </div>
+                    <div className={s.cardText}>
+                        <div className={s.cardName}>{name}</div>
+                        {desc ? <div className={s.cardDesc}>{desc}</div> : null}
+                    </div>
+                </button>
+            </Tip>
         </div>
     );
 };

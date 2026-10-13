@@ -8,6 +8,7 @@ import { area as fmtArea, group } from "../lib/format";
 import { TFunc, useT } from "../lib/l10n";
 import { Btn, Icon, Section, Segmented } from "../components/common";
 import { Slider } from "../controls/Slider";
+import { Tip } from "../lib/tips";
 import s from "./stages.module.scss";
 
 export function modeOptions(t: TFunc) {
@@ -18,7 +19,10 @@ export function modeOptions(t: TFunc) {
             label: t("Placemaker.UI.Mode.Draw", "Draw"),
             short: t("Placemaker.UI.Mode.DrawShort", "Click the corners"),
             title: t("Placemaker.UI.Mode.Draw", "Draw"),
-            description: t("Placemaker.UI.Mode.DrawTip", "Click corners on the map; click the first corner to close. Snaps to curbs, buildings and right angles. Drag corners or edges to adjust."),
+            description: t(
+                "Placemaker.UI.Mode.DrawTip",
+                "Click corners on the map; click the first corner to close. Snaps to curbs, buildings and right angles. Drag corners or edges to adjust.",
+            ),
         },
         {
             value: "block",
@@ -98,24 +102,26 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                         const on = o.value === state.areaMode;
                         return (
                             <div key={o.value} className={s.modeCell}>
-                                <button
-                                    type="button"
-                                    data-testid={`area-mode-${o.value}`}
-                                    aria-pressed={on ? "true" : "false"}
-                                    className={classNames(s.mode, { [s.modeOn]: on })}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (!on) act.setAreaMode(o.value as AreaMode);
-                                    }}
-                                >
-                                    <div className={s.modeIcon}>
-                                        <Icon name={o.icon} size={22} tint={on ? "dark" : "light"} />
-                                    </div>
-                                    <div className={s.modeText}>
-                                        <div className={s.modeName}>{o.label}</div>
-                                        <div className={s.modeDesc}>{o.short}</div>
-                                    </div>
-                                </button>
+                                <Tip title={o.title} description={o.description}>
+                                    <button
+                                        type="button"
+                                        data-testid={`area-mode-${o.value}`}
+                                        aria-pressed={on ? "true" : "false"}
+                                        className={classNames(s.mode, { [s.modeOn]: on })}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!on) act.setAreaMode(o.value as AreaMode);
+                                        }}
+                                    >
+                                        <div className={s.modeIcon}>
+                                            <Icon name={o.icon} size={22} tint={on ? "dark" : "light"} />
+                                        </div>
+                                        <div className={s.modeText}>
+                                            <div className={s.modeName}>{o.label}</div>
+                                            <div className={s.modeDesc}>{o.short}</div>
+                                        </div>
+                                    </button>
+                                </Tip>
                             </div>
                         );
                     })}
@@ -168,7 +174,16 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
             <Section
                 title={t("Placemaker.UI.Area.Selected", "Your area")}
                 right={
-                    a.pointCount > 0 ? <Btn icon="trash" iconSize={15} variant="solid" label={t("Placemaker.UI.Area.Clear", "Clear")} onClick={act.clearArea} testId="clear-area" /> : undefined
+                    a.pointCount > 0 ? (
+                        <Btn
+                            icon="trash"
+                            iconSize={15}
+                            variant="solid"
+                            label={t("Placemaker.UI.Area.Clear", "Clear")}
+                            onClick={act.clearArea}
+                            testId="clear-area"
+                        />
+                    ) : undefined
                 }
             >
                 <div className={s.areaCard}>
@@ -194,8 +209,8 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                             {a.closed
                                 ? t("Placemaker.UI.Area.Adjust", "Drag corners to adjust. You can change the shape at any time, even later.")
                                 : HOWTO[state.areaMode]
-                                ? t(HOWTO[state.areaMode][0], HOWTO[state.areaMode][1])
-                                : ""}
+                                  ? t(HOWTO[state.areaMode][0], HOWTO[state.areaMode][1])
+                                  : ""}
                         </div>
                     </div>
                 </div>

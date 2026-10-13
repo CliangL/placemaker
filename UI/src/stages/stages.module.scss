@@ -93,7 +93,6 @@
 .modeCell {
     @include row(stretch);
     width: 50%;
-    padding: 4rem;
 }
 
 .mode {
@@ -102,6 +101,7 @@
     flex: 1 1 auto;
     min-width: 0;
     height: 58rem;
+    margin: 4rem;
     padding: 0 10rem;
     border-radius: $radius + 2rem;
     background-color: rgba(255, 255, 255, 0.06);
@@ -229,18 +229,22 @@
 // ── review ──
 .bigRow {
     @include row(stretch);
-    padding: 10rem 4rem 12rem 4rem;
+    padding: 14rem 14rem;
+    border-radius: $radius-l;
+    background-color: rgba(0, 0, 0, 0.2);
+    @include border(1rem, $c-line);
 }
 
 .big {
     @include col;
     flex: 1 1 0;
+    min-width: 0;
 }
 
 .bigSep {
     width: 1rem;
-    margin: 4rem 14rem;
-    background-color: $c-line;
+    margin: 2rem 12rem;
+    background-color: $c-line-strong;
 }
 
 .bigLabel {
@@ -252,10 +256,10 @@
 
 .bigValue {
     margin-top: 4rem;
-    font-size: var(--fontSizeXL);
+    font-size: var(--fontSizeL);
     font-weight: bold;
     color: #ffffff;
-    white-space: nowrap;
+    @include ellipsis;
 }
 
 .bad {

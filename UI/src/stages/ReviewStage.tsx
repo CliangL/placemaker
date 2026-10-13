@@ -59,11 +59,6 @@ export const ReviewStage = ({
                                 <Money value={summary.upkeep} perMonth />
                             </div>
                         </div>
-                        <div className={s.bigSep} />
-                        <div className={s.big}>
-                            <div className={s.bigLabel}>{t("Placemaker.UI.Review.Area", "Area")}</div>
-                            <div className={s.bigValue}>{fmtArea(state.area.areaM2)}</div>
-                        </div>
                     </div>
                     {!summary.canAfford ? (
                         <div className={classNames(s.callout, s.calloutBad)} data-testid="cant-afford">
@@ -71,13 +66,14 @@ export const ReviewStage = ({
                             <div className={s.calloutText}>{t("Placemaker.UI.Review.CantAfford", "You can't afford this yet. Make it smaller or simpler, or wait for more money.")}</div>
                         </div>
                     ) : null}
-                    {summary.stats.length ? (
+                    <Section title={t("Placemaker.UI.Review.What", "What you get")}>
                         <div className={classNames(s.stats, { [s.shimmer]: pending })} data-testid="review-stats">
+                            <StatChip k="Placemaker.Stat.Area" value={state.area.areaM2} unit="m2" />
                             {summary.stats.map((st) => (
                                 <StatChip key={st.key + st.unit} k={st.key} value={st.value} unit={st.unit} />
                             ))}
                         </div>
-                    ) : null}
+                    </Section>
                     {summary.issues.length ? (
                         <div className={s.issues} data-testid="issues">
                             {summary.issues.map((i, n) => {

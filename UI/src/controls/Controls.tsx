@@ -28,7 +28,9 @@ export const ControlRow = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
     const changed = def !== undefined && !valuesEqual(value, def);
     const commit = (v: SettingValue) => act.setValue(step.path, c.id, v);
     const tip = c.tooltip ? t(c.tooltip, "") : "";
-    const stacked = c.kind === "arrangement" || c.kind === "assetMulti";
+    // Wide editors get their own line under the label: lists, and choices whose labels wouldn't fit beside it.
+    const choiceText = (c.options ?? []).reduce((n, o) => n + t(o.label, humanize(o.label || o.value)).length + (o.icon ? 4 : 0), 0);
+    const stacked = c.kind === "arrangement" || c.kind === "assetMulti" || (c.kind === "choice" && (c.options ?? []).length <= 5 && choiceText > 16);
 
     const affordances = (
         <div className={s.affordances}>
@@ -142,6 +144,7 @@ const ChoiceEditor = ({ c, value, commit }: { c: ControlEx; value: string; commi
     return (
         <Segmented
             testId={`choice-${c.id}`}
+            stretch
             iconOnly={iconOnly}
             value={value}
             onChange={(v) => commit(v)}

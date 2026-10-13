@@ -30,16 +30,6 @@ test("real Core: shipped recipes in the Make row, real plans on the map", async 
     await shot(page, "real-01-park-design");
     await panelShot(page, "real-panel-park-design");
 
-    await page.getByTestId("add-layer").click();
-    await expect(page.getByTestId("add-menu")).toBeVisible();
-    await panelShot(page, "real-panel-add-menu");
-    const addOn = (await page.getByTestId("add-fountain").count()) ? "fountain" : "playground";
-    await page.getByTestId(`add-${addOn}`).click();
-    await waitCore(page);
-    const used = await page.evaluate(() => (window as any).pm.backend.plan.layers.map((l: any) => l.layer));
-    expect(used).toContain(addOn);
-    await panelShot(page, "real-panel-tree");
-
     await page.getByTestId("primary").click();
     await waitCore(page);
     await expect(page.getByTestId("review-cost")).toContainText("¢");

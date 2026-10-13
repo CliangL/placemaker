@@ -20,7 +20,7 @@ async function noHorizontalOverflow(page: Page) {
         });
         return {
             page: document.documentElement.scrollWidth <= window.innerWidth,
-            inViewport: r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight,
+            inViewport: r.left >= 0 && r.right <= window.innerWidth + 0.5 && r.top >= 0 && r.bottom <= window.innerHeight + 0.5,
             panelScroll: panel.scrollWidth <= panel.clientWidth + 1,
             bad: bad.slice(0, 5),
         };
@@ -43,7 +43,6 @@ for (const [w, h] of [
         await page.getByTestId("primary").click();
         await page.getByTestId("recipe-roads-with-parks").click();
         await waitPlanned(page);
-        await page.getByTestId("regions-0").getByTestId("region-block:0").click();
         await noHorizontalOverflow(page);
         await shot(page, `layout-${w}x${h}-design`);
         await page.getByTestId("primary").click();

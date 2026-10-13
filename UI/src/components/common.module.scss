@@ -98,8 +98,10 @@
 
 .stretch {
     flex: 1 1 auto;
+    min-width: 0;
     .seg {
         flex: 1 1 0;
+        min-width: 0;
     }
 }
 

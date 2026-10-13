@@ -100,10 +100,12 @@ function usePanelPosition() {
         const rect = wrapRef.current?.getBoundingClientRect();
         if (!rect) return;
         e.preventDefault();
-        const sx = e.clientX, sy = e.clientY;
+        const sx = e.clientX,
+            sy = e.clientY;
         let moved = false;
         const move = (ev: MouseEvent) => {
-            const dx = ev.clientX - sx, dy = ev.clientY - sy;
+            const dx = ev.clientX - sx,
+                dy = ev.clientY - sy;
             if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
             moved = true;
             setDrag(clamp(rect.left + dx, rect.top + dy));
@@ -161,7 +163,11 @@ const StageBar = ({ state }: { state: ToolState }) => {
                         type="button"
                         data-testid={`stagebar-${st.id}`}
                         data-state={current ? "current" : reachable ? "reachable" : "locked"}
-                        className={classNames(s.stageItem, { [s.stageCurrent]: current, [s.stageReachable]: reachable, [s.stageLocked]: !current && !reachable })}
+                        className={classNames(s.stageItem, {
+                            [s.stageCurrent]: current,
+                            [s.stageReachable]: reachable,
+                            [s.stageLocked]: !current && !reachable,
+                        })}
                         onClick={(e) => {
                             e.stopPropagation();
                             if (reachable) act.goToStage(st.id);
@@ -207,7 +213,7 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
 };
 
 function quickStats(summary: Summary) {
-    return summary.stats.filter((x) => x.unit === "count").slice(0, 2);
+    return summary.stats.filter((x) => x.unit === "count" && x.value > 0).slice(0, 1);
 }
 
 /** First enabled step that still lacks its required markers (entrances), or null. */
@@ -325,7 +331,9 @@ const MarkerBanner = ({ state, root }: { state: ToolState; root: StepView | null
             <Icon name="marker" size={18} tint="warn" />
             <div className={s.bannerText}>
                 <div className={s.bannerTitle}>{t("Placemaker.UI.Markers.BannerTitle", "Placing: {0}", [kindLabel])}</div>
-                <div className={s.bannerSub}>{t("Placemaker.UI.Markers.BannerHint", "Click the outline next to a road. Right-click an entrance to remove it.")}</div>
+                <div className={s.bannerSub}>
+                    {t("Placemaker.UI.Markers.BannerHint", "Click the outline next to a road. Right-click an entrance to remove it.")}
+                </div>
             </div>
             <Btn variant="accent" label={t("Placemaker.UI.Done", "Done")} onClick={act.endMarkers} testId="marker-done" />
         </div>
@@ -357,14 +365,17 @@ export const PlacemakerPanel = () => {
 
     if (!state.open) return null;
 
-    const needsAck = state.stage === "review" && summary.permanent.length > 0 && !ack && (state.primary.action === "build" || state.primary.action === "finishEdit");
+    const needsAck =
+        state.stage === "review" && summary.permanent.length > 0 && !ack && (state.primary.action === "build" || state.primary.action === "finishEdit");
     const missing = state.stage === "design" || state.stage === "review" ? missingMarkers(design.root) : null;
     const gated = state.primary.action === "toReview" || state.primary.action === "build" || state.primary.action === "finishEdit";
     let blockedReason: string | null = null;
     if (missing && gated) {
         const need = missing.markersRequired ?? 1;
         blockedReason =
-            need > 1 ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need]) : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance");
+            need > 1
+                ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need])
+                : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance");
     } else if (needsAck) {
         blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick the box to confirm the permanent changes first");
     }
@@ -400,57 +411,69 @@ export const PlacemakerPanel = () => {
     }
 
     const collapsed = state.panelCollapsed;
+    // Header tips open UPWARDS (over the game's top bar), so they never sit on the stage bar below.
     const header = (
-        <div
-            className={classNames(s.header, { [s.headerDragging]: position.dragging })}
-            data-testid="panel-header"
-            onMouseDown={position.onHeaderMouseDown}
-            onDoubleClick={(e) => {
-                if (!isInsideButton(e.target as HTMLElement, e.currentTarget)) position.reset();
-            }}
-        >
-            <Tip
-                title={t("Placemaker.UI.Move", "Move the panel")}
-                description={t("Placemaker.UI.MoveTip", "Drag the header to move the panel anywhere. Double-click it to dock it on the right again.")}
+        <TipDirectionContext.Provider value="up">
+            <div
+                className={classNames(s.header, { [s.headerDragging]: position.dragging })}
+                data-testid="panel-header"
+                onMouseDown={position.onHeaderMouseDown}
+                onDoubleClick={(e) => {
+                    if (!isInsideButton(e.target as HTMLElement, e.currentTarget)) position.reset();
+                }}
             >
-                <div className={s.grip} data-testid="panel-grip">
-                    <Icon name="grip" size={16} tint="dim" />
-                </div>
-            </Tip>
-            <Icon name="logo" size={22} tint="accent" />
-            <div className={s.title}>{state.stage === "manage" ? t("Placemaker.UI.Manage.Title", "Built with Placemaker") : t("Placemaker.Name", "Placemaker")}</div>
-            {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
-            {state.planning ? (
-                <Tip title={t("Placemaker.UI.Planning", "Updating the preview…")}>
-                    <div className={s.planningDot} data-testid="planning" />
+                <Tip
+                    title={t("Placemaker.UI.Move", "Move the panel")}
+                    description={t("Placemaker.UI.MoveTip", "Drag the header to move the panel anywhere. Double-click it to dock it on the right again.")}
+                >
+                    <div className={s.grip} data-testid="panel-grip">
+                        <Icon name="grip" size={16} tint="dim" />
+                    </div>
                 </Tip>
-            ) : null}
-            <div className={s.flex} />
-            {state.stage === "manage" ? null : <UndoRedo state={state} />}
-            {state.anarchy?.available ? (
+                <Icon name="logo" size={22} tint="accent" />
+                <div className={s.title}>
+                    {state.stage === "manage" ? t("Placemaker.UI.Manage.Title", "Built with Placemaker") : t("Placemaker.Name", "Placemaker")}
+                </div>
+                {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
+                {state.planning ? (
+                    <Tip title={t("Placemaker.UI.Planning", "Updating the preview…")}>
+                        <div className={s.planningDot} data-testid="planning" />
+                    </Tip>
+                ) : null}
+                <div className={s.flex} />
+                {state.stage === "manage" ? null : <UndoRedo state={state} />}
+                {state.anarchy?.available ? (
+                    <Btn
+                        icon="anarchy"
+                        iconSize={16}
+                        selected={state.anarchy.enabled}
+                        title={t("Placemaker.UI.Anarchy", "Anarchy")}
+                        description={t("Placemaker.UI.AnarchyTip", "Build even where the game reports a collision (Anarchy mod).")}
+                        onClick={() => act.setAnarchy(!state.anarchy?.enabled)}
+                        testId="anarchy"
+                    />
+                ) : null}
+                <div className={s.headSep} />
+                {collapsed ? null : (
+                    <Btn
+                        icon="collapse"
+                        iconSize={17}
+                        title={t("Placemaker.UI.Collapse", "Make smaller")}
+                        description={t("Placemaker.UI.CollapseTip", "Shrinks the panel to its header and main button.")}
+                        onClick={() => act.setPanelCollapsed(true)}
+                        testId="collapse"
+                    />
+                )}
                 <Btn
-                    icon="anarchy"
-                    iconSize={16}
-                    selected={state.anarchy.enabled}
-                    title={t("Placemaker.UI.Anarchy", "Anarchy")}
-                    description={t("Placemaker.UI.AnarchyTip", "Build even where the game reports a collision (Anarchy mod).")}
-                    onClick={() => act.setAnarchy(!state.anarchy?.enabled)}
-                    testId="anarchy"
-                />
-            ) : null}
-            <div className={s.headSep} />
-            {collapsed ? null : (
-                <Btn
-                    icon="collapse"
+                    icon="close"
                     iconSize={17}
-                    title={t("Placemaker.UI.Collapse", "Make smaller")}
-                    description={t("Placemaker.UI.CollapseTip", "Shrinks the panel to its header and main button.")}
-                    onClick={() => act.setPanelCollapsed(true)}
-                    testId="collapse"
+                    title={t("Placemaker.UI.Close", "Close")}
+                    description={<Keys keys={["Esc"]} />}
+                    onClick={act.close}
+                    testId="close"
                 />
-            )}
-            <Btn icon="close" iconSize={17} title={t("Placemaker.UI.Close", "Close")} description={<Keys keys={["Esc"]} />} onClick={act.close} testId="close" />
-        </div>
+            </div>
+        </TipDirectionContext.Provider>
     );
 
     return (
@@ -473,7 +496,13 @@ export const PlacemakerPanel = () => {
                                         <div className={s.compact} data-testid="panel-compact">
                                             <div className={s.compactRow}>
                                                 {state.stage === "area" ? (
-                                                    <Segmented iconOnly value={state.areaMode} onChange={(v) => act.setAreaMode(v as any)} options={modeOptions(t)} testId="area-mode-compact" />
+                                                    <Segmented
+                                                        iconOnly
+                                                        value={state.areaMode}
+                                                        onChange={(v) => act.setAreaMode(v as any)}
+                                                        options={modeOptions(t)}
+                                                        testId="area-mode-compact"
+                                                    />
                                                 ) : (
                                                     <div className={s.compactStage}>{t(STAGES.find((x) => x.id === state.stage)?.key ?? "", "")}</div>
                                                 )}
