@@ -1,0 +1,9 @@
+{
+  "light": "#eef4f7",
+  "dark": "#0b1d26",
+  "dim": "#9fb0b9",
+  "accent": "#8fd1ff",
+  "warn": "#ffb547",
+  "danger": "#ff6b5b",
+  "ok": "#6fdc8c"
+}

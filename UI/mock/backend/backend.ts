@@ -13,6 +13,22 @@ import { BLOCKS, blocksRing, Block, cellsOutline, NODES, paintCells } from "./ci
 import { FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, MockLayer, MockRecipe, RecipeTemplate } from "./fakeCatalog";
 import { composeFake, FAKE_LAYER_IDS } from "./fakePlanner";
 import { area, closestOnRing, dist, perimeter, selfIntersects, simplify, V2 } from "./geometry";
+import { GRID } from "./city";
+
+/** Midpoint of the outline edge closest to a street (≤ 30 m away), or null. */
+function suggestEntrance(ring: V2[]): V2 | null {
+    let best: { p: V2; d: number } | null = null;
+    for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length];
+        if (dist(a, b) < 12) continue;
+        const m: V2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        let d = Infinity;
+        for (let k = 0; k < GRID.nx; k++) d = Math.min(d, Math.abs(m[0] - (GRID.x0 + k * GRID.dx)));
+        for (let j = 0; j < GRID.nz; j++) d = Math.min(d, Math.abs(m[1] - (GRID.z0 + j * GRID.dz)));
+        if (d <= 30 && (!best || d < best.d)) best = { p: m, d };
+    }
+    return best ? best.p : null;
+}
 import { ComposeResult, StepModel } from "./types";
 
 const EN: Record<string, string> = { ...FAKE_STRINGS };
@@ -617,6 +633,18 @@ export class MockBackend {
             case "endMarkers":
                 this.markerMode = null;
                 break;
+            case "setMarkerKind":
+                // Which entrance type the next click places; also enters placement for that step.
+                if (this.get(a[0])) this.markerMode = { stepPath: a[0], kind: String(a[1]) };
+                break;
+            case "removeMarker": {
+                const step = this.get(a[0]);
+                const i = Number(a[1]);
+                if (!step || !(i >= 0 && i < step.markers.length)) break;
+                const kind = step.markers[i].kind;
+                this.edit({ key: "Placemaker.Undo.RemoveMarker", args: [en(`Placemaker.Marker.${kind}`, kind)] }, () => step.markers.splice(i, 1));
+                return;
+            }
             case "clearMarkers": {
                 const step = this.get(a[0]);
                 if (!step) break;
@@ -691,8 +719,9 @@ export class MockBackend {
                 this.ackPermanent = !!a[0];
                 break;
             case "locate":
-                this.toast = "Camera moved to the issue";
-                this.locateAt = json(a[0]) ?? null;
+                // contract: locate(x, y, z)
+                this.toast = "Camera moved there";
+                this.locateAt = [Number(a[0]) || 0, Number(a[1]) || 0, Number(a[2]) || 0];
                 break;
             default:
                 console.warn("[mock] unknown trigger", name, args);
@@ -765,7 +794,7 @@ export class MockBackend {
             if (!res.ready || !s.enabled) return;
             const r = this.stepReady(s, path);
             if (!r.ready) {
-                res = { ready: false, path, next: r.nextStep, kind: this.layer(s.layer)?.requires };
+                res = { ready: false, path, next: r.nextStep, kind: this.markerKindsOf(s)?.[0]?.kind };
                 return;
             }
             s.children.forEach((c, i) => visit(c, path + "/" + i));
@@ -776,10 +805,46 @@ export class MockBackend {
 
     stepReady(s: StepModel, path: string): { ready: boolean; nextStep?: LocText } {
         const l = this.layer(s.layer);
+        const need = this.markersRequiredOf(s);
+        if (need > 0 && s.markers.length < need) return { ready: false, nextStep: { key: "Placemaker.Parking.NeedsEntrance" } };
         if (l?.real) return this.readiness.get(path) ?? { ready: true };
-        if (l?.requires && !s.markers.some((m) => m.kind === l.requires)) return { ready: false, nextStep: { key: "Placemaker.Parking.NeedsEntrance" } };
         return { ready: true };
     }
+
+    /** Typed marker kinds of a step (StepView.markerKinds): declared by the fake layer, or derived from a real layer's markers control. */
+    markerKindsOf(s: StepModel): { kind: string; label: string; icon?: string }[] | undefined {
+        const l = this.layer(s.layer);
+        if (!l) return undefined;
+        if (l.markerKinds) return l.markerKinds;
+        if (l.real && l.id.toLowerCase().includes("parking")) {
+            const c = l.controls.find((x) => x.kind === "markers" && x.markerKinds && x.markerKinds.length);
+            if (c) return (c.markerKinds ?? []).map((k) => ({ kind: k, label: "" }));
+        }
+        return undefined;
+    }
+
+    markersRequiredOf(s: StepModel): number {
+        const l = this.layer(s.layer);
+        if (l?.markersRequired !== undefined) return l.markersRequired;
+        return this.markerKindsOf(s) ? 1 : 0;
+    }
+
+    /**
+     * Like C#: when a step with typed entrances has none yet, suggest real (removable) entrances on the
+     * outline edges that run next to a street. Once per outline, so removing them all sticks.
+     */
+    autoMarkers() {
+        if (!this.closed || this.ring.length < 3) return;
+        const key = JSON.stringify(this.ring);
+        for (const st of this.allSteps()) {
+            if (!st.enabled || !this.markerKindsOf(st) || st.markers.length || this.autoFor.get(st) === key) continue;
+            this.autoFor.set(st, key);
+            const best = suggestEntrance(this.ring);
+            if (best) st.markers.push({ kind: this.markerKindsOf(st)![0].kind, p: best, auto: true } as any);
+        }
+    }
+
+    private autoFor = new WeakMap<StepModel, string>();
 
     reachable(): Stage[] {
         if (this.stage === "building") return ["building"];
@@ -807,9 +872,7 @@ export class MockBackend {
             case "design": {
                 if (!this.root) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.NoRecipe" } };
                 const r = this.allReady();
-                if (!r.ready && r.kind) {
-                    return { action: "placeMarkers", label: { key: "Placemaker.Primary.PlaceMarkers", args: [en(`Placemaker.Marker.${r.kind}.Plural`, r.kind + "s")] }, enabled: true };
-                }
+                if (!r.ready && r.kind) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.NeedEntrance" } };
                 if (!r.ready) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: r.next };
                 return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: true };
             }
@@ -927,6 +990,7 @@ export class MockBackend {
     // ───────────── planning ─────────────
 
     changed(cheap = false) {
+        this.autoMarkers();
         this.stale = true;
         this.schedulePlan(cheap ? 30 : 60);
         this.publishAll();
@@ -1090,7 +1154,7 @@ export class MockBackend {
 
     catalog(): Catalog {
         return {
-            layers: this.layers.map(({ minArea, requires, real, ...l }) => l) as any,
+            layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, ...l }) => l) as any,
             recipes: this.recipes.map((r) => r.info),
         };
     }
@@ -1111,6 +1175,7 @@ export class MockBackend {
         for (const m of s.markers) counts.set(m.kind, (counts.get(m.kind) ?? 0) + 1);
         const kinds = new Set<string>();
         for (const c of this.layer(s.layer)?.controls ?? []) if (c.kind === "markers") (c.markerKinds ?? [c.id]).forEach((k) => kinds.add(k));
+        for (const k of this.markerKindsOf(s) ?? []) kinds.add(k.kind);
         const r = this.stepReady(s, path);
         const values = { ...s.values };
         for (const [k, v] of this.preview) {
@@ -1125,6 +1190,9 @@ export class MockBackend {
             values,
             locked: s.locked.slice(),
             markers: Array.from(kinds).map((k) => ({ kind: k, count: counts.get(k) ?? 0 })),
+            markerList: s.markers.map((m, index) => ({ kind: m.kind, index, position: [m.p[0], 0, m.p[1]] as [number, number, number] })),
+            markerKinds: this.markerKindsOf(s),
+            markersRequired: this.markersRequiredOf(s),
             ready: r.ready,
             nextStep: r.nextStep,
             children: s.children.map((c, i) => this.stepView(c, path + "/" + i)),

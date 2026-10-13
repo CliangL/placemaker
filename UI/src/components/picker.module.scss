@@ -2,38 +2,61 @@
 
 .card {
     @include col;
-    width: 100%;
-    max-height: 340rem;
-    margin-bottom: 8rem;
+    max-height: 100%;
+    min-height: 0;
     border-radius: $radius-l;
-    background-color: var(--panelColorNormal);
+    background-color: rgba(12, 18, 23, 0.95);
     backdrop-filter: var(--panelBlur);
-    @include border(1rem, $c-line);
+    @include border(1rem, rgba(255, 255, 255, 0.16));
+    box-shadow: 0 10rem 34rem rgba(0, 0, 0, 0.5);
     pointer-events: auto;
 }
 
 .head {
-    @include row;
-    padding: 8rem 8rem 8rem 14rem;
+    @include col;
+    flex-shrink: 0;
+    padding: 6rem 6rem 10rem 14rem;
+    background-color: rgba(0, 0, 0, 0.22);
     border-bottom-width: 1rem;
     border-bottom-style: solid;
     border-bottom-color: $c-line;
 }
 
+.headRow {
+    @include row;
+    height: 36rem;
+    margin-bottom: 4rem;
+}
+
+.closeBtn {
+    @include row;
+    @include button-reset;
+    justify-content: center;
+    width: 32rem;
+    height: 32rem;
+    margin-left: 8rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+    &:hover {
+        background-color: rgba(255, 107, 91, 0.35);
+    }
+}
+
 .title {
     @include text(var(--fontSizeM));
     font-weight: bold;
-    margin-right: 12rem;
+    color: #ffffff;
     @include ellipsis;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
 }
 
 .search {
     @include row;
-    flex: 1 1 auto;
-    height: 28rem;
-    padding: 0 8rem;
-    margin-right: 6rem;
+    height: 32rem;
+    padding: 0 10rem;
+    margin-right: 8rem;
+    @include border(1rem, $c-line-strong);
     border-radius: $radius;
     background-color: $c-shade;
     color: $c-text-dim;
@@ -76,7 +99,7 @@
     @include button-reset;
     align-items: center;
     position: relative;
-    width: 84rem;
+    width: 90rem;
     padding: 6rem 4rem;
     margin: 0 4rem 4rem 0;
     border-radius: $radius;

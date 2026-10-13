@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clickWorld, drawPolygon, FIELD, open, panelShot, waitPlanned } from "./helpers";
+import { clickWorld, drawPolygon, FIELD, open, panelShot, shot, waitPlanned } from "./helpers";
 
 async function design(page: import("@playwright/test").Page, recipe: string) {
     await drawPolygon(page, FIELD);
@@ -8,35 +8,42 @@ async function design(page: import("@playwright/test").Page, recipe: string) {
     await waitPlanned(page);
 }
 
-test("every control kind renders from the schema (essential + More options)", async ({ page }) => {
+test("every control kind renders from the schema, ALL visible and grouped (no foldouts)", async ({ page }) => {
     const errors = await open(page);
     await design(page, "parking");
     await expect(page.getByTestId("control-angle")).toHaveAttribute("data-kind", "choice");
-    await expect(page.getByTestId("control-entrances")).toHaveAttribute("data-kind", "markers");
     await expect(page.getByTestId("control-surface")).toHaveAttribute("data-kind", "asset");
     await expect(page.getByTestId("control-greenery")).toHaveAttribute("data-kind", "toggle");
-    // More tier is folded away
-    await expect(page.getByTestId("control-aisle")).toHaveCount(0);
-    await page.getByTestId("more-options").getByRole("button").first().click();
+    // typed entrances replace the generic markers control
+    await expect(page.getByTestId("control-entrances")).toHaveCount(0);
+    await expect(page.getByTestId("entrances-0")).toBeVisible();
+    // "more" tier is visible right away, under group headings, essentials first
     await expect(page.getByTestId("control-aisle")).toHaveAttribute("data-kind", "slider");
     await expect(page.getByTestId("slider-aisle-value")).toHaveText("6.0 m");
     await expect(page.getByTestId("slider-chargers-value")).toHaveText("0");
     await expect(page.getByTestId("slider-fee-value")).toHaveText("¢5");
-    await panelShot(page, "panel-parking-more");
+    await expect(page.getByTestId("group-basics")).toContainText("Basics");
+    await expect(page.getByTestId("group-layout")).toContainText("Layout");
+    await expect(page.getByTestId("group-zoning")).toContainText("Zoning");
+    const groups = await page.locator('[data-testid^="group-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+    expect(groups[0]).toBe("group-basics");
+    // nothing collapsible anywhere in the panel
+    await expect(page.getByTestId("placemaker-panel").locator("[aria-expanded]")).toHaveCount(0);
+    await expect(page.getByTestId("more-options")).toHaveCount(0);
+    await panelShot(page, "panel-parking-options");
 
     await page.getByTestId("recipe-plaza").click();
-    await page.getByTestId("more-options").getByRole("button").first().click();
     await expect(page.getByTestId("control-arrangement")).toHaveAttribute("data-kind", "arrangement");
     await page.getByTestId("recipe-park").click();
-    await page.getByTestId("more-options").getByRole("button").first().click();
     await expect(page.getByTestId("control-treeSpecies")).toHaveAttribute("data-kind", "assetMulti");
+    // untyped markers control still works as before (park entrances)
+    await expect(page.getByTestId("control-entrances")).toHaveAttribute("data-kind", "markers");
     expect(errors).toEqual([]);
 });
 
 test("visibleWhen, lock indicator, reset-to-default, randomize keeps locked values", async ({ page }) => {
     await open(page);
     await design(page, "park");
-    await page.getByTestId("more-options").getByRole("button").first().click();
     await expect(page.getByTestId("control-lakeSize")).toHaveCount(0);
     await page.getByTestId("toggle-lake").click();
     await expect(page.getByTestId("control-lakeSize")).toBeVisible();
@@ -63,26 +70,52 @@ test("visibleWhen, lock indicator, reset-to-default, randomize keeps locked valu
     await expect(page.getByTestId("lock-pathWidth")).toHaveCount(0);
 });
 
-test("asset picker: search, pick, automatic; multi-select chips; arrangement editor", async ({ page }) => {
+test("asset picker: search, thumbnails, automatic; closes with X, Esc and a click outside", async ({ page }) => {
     await open(page);
     await design(page, "parking");
+    const picker = page.getByTestId("asset-picker");
     await page.getByTestId("asset-button-surface").click();
-    await expect(page.getByTestId("asset-picker")).toBeVisible();
+    await expect(picker).toBeVisible();
+    await expect(page.getByTestId("asset-automatic")).toBeVisible();
     await expect(page.getByTestId("asset-concrete")).toBeVisible();
+    // beside the panel, not over it
+    const pb = (await page.getByTestId("placemaker-panel").boundingBox())!;
+    const fb = (await picker.boundingBox())!;
+    expect(fb.x + fb.width).toBeLessThanOrEqual(pb.x + 1);
     await page.getByTestId("asset-search").fill("conc");
     await expect(page.getByTestId("asset-asphalt")).toHaveCount(0);
     await page.getByTestId("asset-concrete").click();
-    await expect(page.getByTestId("asset-picker")).toHaveCount(0);
+    await expect(picker).toHaveCount(0);
     await expect(page.getByTestId("asset-button-surface")).toContainText("Concrete");
-    // recently used shows up next time
+
+    // X
     await page.getByTestId("asset-button-surface").click();
-    await expect(page.getByTestId("asset-picker")).toContainText("Recently used");
+    await expect(picker).toContainText("Recently used");
+    await expect(page.getByTestId("asset-picker-close").locator("img")).toHaveCount(1);
     await panelShot(page, "panel-asset-picker");
+    await page.getByTestId("asset-picker-close").click();
+    await expect(picker).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).pm.backend.open)).toBe(true);
+
+    // Esc closes the picker only, not the tool
+    await page.getByTestId("asset-button-surface").click();
+    await expect(picker).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(picker).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).pm.backend.open)).toBe(true);
+
+    // click outside (on the map)
+    await page.getByTestId("asset-button-surface").click();
+    await expect(picker).toBeVisible();
+    await page.mouse.click(300, 600);
+    await expect(picker).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).pm.backend.ring.length)).toBe(4);
+
+    await page.getByTestId("asset-button-surface").click();
     await page.getByTestId("asset-automatic").click();
     await expect(page.getByTestId("asset-button-surface")).toContainText("Automatic");
 
     await page.getByTestId("recipe-park").click();
-    await page.getByTestId("more-options").getByRole("button").first().click();
     await page.getByTestId("assetmulti-add-treeSpecies").click();
     await page.getByTestId("asset-linden").click();
     await page.getByTestId("asset-ginkgo").click();
@@ -93,7 +126,6 @@ test("asset picker: search, pick, automatic; multi-select chips; arrangement edi
     await expect(page.getByTestId("chip-linden")).toHaveCount(0);
 
     await page.getByTestId("recipe-plaza").click();
-    await page.getByTestId("more-options").getByRole("button").first().click();
     const arr = page.getByTestId("arrangement-arrangement");
     await expect(arr).toContainText("Wooden Bench");
     await page.getByTestId("arrangement-add-arrangement").click();
@@ -103,7 +135,53 @@ test("asset picker: search, pick, automatic; multi-select chips; arrangement edi
     await panelShot(page, "panel-arrangement");
 });
 
-test("disabled primary explains why; markers flow; permanent effects need acknowledgement", async ({ page }) => {
+test("entrances: suggested ones appear, typed list with remove; primary blocked at zero until one is placed", async ({ page }) => {
+    const errors = await open(page);
+    const primary = page.getByTestId("primary");
+    await design(page, "parking");
+    // an outline next to a street gets a suggested (real, removable) entrance
+    const list = page.getByTestId("marker-list");
+    await expect(list.locator('[data-testid^="marker-"][data-kind]')).toHaveCount(1);
+    await expect(page.getByTestId("marker-0")).toHaveAttribute("data-kind", "entrance");
+    await expect(page.getByTestId("marker-0")).toContainText("Two-way 1");
+    await expect(page.getByTestId("entrance-required")).toHaveCount(0);
+    await expect(primary).toHaveAttribute("aria-disabled", "false");
+    // five typed buttons, each with an icon
+    for (const k of ["entrance", "entry", "exit", "alley", "footpath"]) await expect(page.getByTestId(`marker-kind-${k}`).locator("img")).toHaveCount(1);
+    await panelShot(page, "panel-entrances");
+
+    // remove it → requirement shown, primary disabled with the reason
+    await page.getByTestId("marker-show-0").click();
+    expect(await page.evaluate(() => (window as any).pm.backend.locateAt)).not.toBeNull();
+    await page.getByTestId("marker-remove-0").click();
+    await expect(page.getByTestId("entrance-required")).toContainText("Place at least one entrance");
+    await expect(primary).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("primary-reason")).toContainText("Place at least one entrance");
+    await primary.click({ force: true });
+    expect(await page.evaluate(() => (window as any).pm.backend.stage)).toBe("design");
+    await panelShot(page, "panel-entrance-required");
+
+    // choose "Exit only", click the outline → placed with its type; Build path unblocked
+    await page.getByTestId("marker-kind-exit").click();
+    await expect(page.getByTestId("marker-banner")).toContainText("Exit only");
+    await expect(page.getByTestId("marker-kind-exit")).toHaveAttribute("aria-pressed", "true");
+    await shot(page, "14-placing-entrance");
+    await clickWorld(page, (FIELD[1][0] + FIELD[2][0]) / 2, (FIELD[1][1] + FIELD[2][1]) / 2);
+    await expect(page.getByTestId("marker-0")).toHaveAttribute("data-kind", "exit");
+    // switch type while placing
+    await page.getByTestId("marker-kind-alley").click();
+    await clickWorld(page, (FIELD[2][0] + FIELD[3][0]) / 2, (FIELD[2][1] + FIELD[3][1]) / 2);
+    await expect(page.getByTestId("marker-1")).toHaveAttribute("data-kind", "alley");
+    await page.getByTestId("marker-done").click();
+    await expect(page.getByTestId("marker-banner")).toHaveCount(0);
+    await expect(page.getByTestId("entrance-required")).toHaveCount(0);
+    await expect(primary).toHaveAttribute("aria-disabled", "false");
+    await expect(primary).toHaveAttribute("data-action", "toReview");
+    await panelShot(page, "panel-markers");
+    expect(errors).toEqual([]);
+});
+
+test("disabled primary explains why; permanent effects need acknowledgement", async ({ page }) => {
     await open(page);
     const primary = page.getByTestId("primary");
     await expect(primary).toHaveAttribute("aria-disabled", "true");
@@ -112,21 +190,8 @@ test("disabled primary explains why; markers flow; permanent effects need acknow
     await expect(page.getByTestId("tooltip")).toContainText("Draw, pick or paint");
     await panelShot(page, "panel-disabled-reason");
 
-    // parking needs an entrance: the primary turns into "Place entrances"
-    await design(page, "parking");
-    await expect(primary).toHaveAttribute("data-action", "placeMarkers");
-    await expect(page.getByTestId("next-step")).toContainText("entrance");
-    await primary.click();
-    await expect(page.getByTestId("marker-banner")).toBeVisible();
-    await panelShot(page, "panel-markers");
-    await clickWorld(page, (FIELD[0][0] + FIELD[1][0]) / 2, (FIELD[0][1] + FIELD[1][1]) / 2);
-    await expect(page.getByTestId("markers-entrance")).toContainText("1 placed");
-    await page.getByTestId("marker-done").click();
-    await expect(page.getByTestId("marker-banner")).toHaveCount(0);
-    await expect(primary).toHaveAttribute("data-action", "toReview");
-
-    // a pond is permanent: Build waits for the tick
-    await page.getByTestId("recipe-park").click();
+    // a pond is permanent: Build waits for the tick (and tells C#)
+    await design(page, "park");
     await page.getByTestId("preset-pond").click();
     await primary.click();
     await waitPlanned(page);
@@ -135,6 +200,7 @@ test("disabled primary explains why; markers flow; permanent effects need acknow
     await expect(page.getByTestId("primary-reason")).toContainText("Tick the box");
     await panelShot(page, "panel-permanent");
     await page.getByTestId("ack-permanent").click();
+    expect(await page.evaluate(() => (window as any).pm.backend.ackPermanent)).toBe(true);
     await expect(primary).toHaveAttribute("aria-disabled", "false");
 });
 

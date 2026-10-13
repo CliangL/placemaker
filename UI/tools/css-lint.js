@@ -28,6 +28,7 @@ const RULES = [
     { re: /@supports|@container/i, msg: "@supports/@container are not supported" },
     { re: /aspect-ratio\s*:/i, msg: "aspect-ratio is not supported" },
     { re: /position\s*:\s*sticky/i, msg: "position: sticky is not supported" },
+    { re: /(^|[;{\s])(-webkit-)?mask(-image|-size|-repeat|-position)?\s*:/i, msg: "no CSS masks: mask-image + currentColor icons rendered empty in game (use <img> with baked tints)" },
     { re: /\d(\.\d+)?px\b/i, msg: "use rem units (1rem ≈ 1px at 1080p, scales with resolution)" },
 ];
 

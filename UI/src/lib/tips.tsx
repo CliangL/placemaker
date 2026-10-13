@@ -2,12 +2,20 @@
 // vanilla.ts, or cs2/ui Tooltip) with the vanilla DescriptionTooltip title/description styling.
 // Adapted from Grid Road Generator (Ti4goc). Note: a plain HTML title attribute shows nothing in
 // Gameface, so every hint must go through <Tip>.
-import React, { ReactElement, ReactNode } from "react";
+import React, { createContext, ReactElement, ReactNode, useContext } from "react";
 import * as ui from "cs2/ui";
 import { VC, VT } from "./vanilla";
 import styles from "../styles/tip.module.scss";
 
 const UiTooltip: any = (ui as any)?.Tooltip;
+
+export type TipDirection = "up" | "down" | "left" | "right";
+
+/**
+ * Default direction for tips inside a container. The panel docks on the right, so its tips open to the
+ * LEFT, beside the panel: an "up" tip over a row of buttons covered the stage bar in playtest 1.
+ */
+export const TipDirectionContext = createContext<TipDirection>("up");
 
 export const TipContent = ({ title, description, footer }: { title?: ReactNode; description?: ReactNode; footer?: ReactNode }) => {
     const c = VT.descriptionTooltip ?? {};
@@ -28,17 +36,18 @@ type TipProps = {
     title?: ReactNode;
     description?: ReactNode;
     footer?: ReactNode;
-    direction?: "up" | "down" | "left" | "right";
+    direction?: TipDirection;
     /** One DOM element: the tooltip attaches a ref to it. */
     children: ReactElement;
 };
 
-export const Tip = ({ title, description, footer, direction = "up", children }: TipProps) => {
+export const Tip = ({ title, description, footer, direction, children }: TipProps) => {
+    const ctxDirection = useContext(TipDirectionContext);
     if (!title && !description && !footer) return children;
     const Impl = VC.Tooltip ?? UiTooltip;
     if (!Impl) return children;
     return (
-        <Impl tooltip={<TipContent title={title} description={description} footer={footer} />} direction={direction} delayTime={250}>
+        <Impl tooltip={<TipContent title={title} description={description} footer={footer} />} direction={direction ?? ctxDirection} delayTime={250}>
             {children}
         </Impl>
     );

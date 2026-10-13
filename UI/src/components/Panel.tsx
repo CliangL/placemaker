@@ -1,22 +1,25 @@
-// The Placemaker panel: docked bottom-centre above the vanilla toolbar, never over the work area.
-//   header  — stage bar [1 Area] → [2 Design] → [3 Review] (click any reachable stage to go back),
-//             undo/redo with labels, collapse, close
-//   body    — the current stage (each region behind its own ErrorBoundary)
+// The Placemaker panel: docked on the RIGHT, tall (below the top bar → above the bottom toolbar),
+// draggable by its header (position remembered; double-click the header to dock it again).
+//   header  — drag grip, name, undo/redo, collapse, close
+//   stages  — [1 Area] → [2 Design] → [3 Review] (click any reachable stage to go back)
+//   body    — the current stage, scrolls inside the panel (each region behind its own ErrorBoundary)
 //   footer  — what you get / why you can't continue yet + the primary button (always the next step, Enter)
 //   hints   — shortcut strip from state.hints
-// While drawing, C# collapses it to one compact row (state.panelCollapsed); the player can too.
-import React, { useEffect, useMemo, useState } from "react";
+// While drawing, C# may collapse it to a slim header + primary button (state.panelCollapsed); it then
+// shows an obvious "Show options" button.
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import classNames from "classnames";
-import { Stage, Summary, ToolState } from "../contract";
+import { Stage, StepView, Summary, ToolState } from "../contract";
 import { act, useCatalog, useDesign, useManaged, useSummary, useToolState } from "../lib/bindings";
 import { area as fmtArea, compactMoney, formatValue } from "../lib/format";
 import { useT } from "../lib/l10n";
 import { ErrorBoundary } from "../lib/errorBoundary";
 import { useRtl } from "../lib/rtl";
-import { Tip } from "../lib/tips";
+import { Tip, TipDirection, TipDirectionContext } from "../lib/tips";
 import { statIcon } from "../lib/icons";
+import { walk } from "../lib/schema";
 import { AreaReadout, AreaStage, modeOptions } from "../stages/AreaStage";
-import { DesignStage } from "../stages/DesignStage";
+import { DesignStage, markerLabel } from "../stages/DesignStage";
 import { BuildingStage, ReviewStage } from "../stages/ReviewStage";
 import { ManageStage } from "../stages/ManageStage";
 import { Btn, Icon, Keys, Segmented } from "./common";
@@ -29,6 +32,121 @@ const STAGES: { id: Stage; key: string; en: string }[] = [
     { id: "review", key: "Placemaker.UI.Stage.Review", en: "Review" },
 ];
 
+// ───────────── position (dock / drag) ─────────────
+
+const POS_KEY = "placemaker.panelPos.v2";
+/** Panel width in rem (keep in sync with .wrap in panel.module.scss). */
+export const PANEL_REM = 450;
+/** Docked insets in rem (keep in sync with .wrap): below the top bar, above the bottom toolbar. */
+const DOCK_TOP = 64;
+const DOCK_BOTTOM = 112;
+
+/** Floating position as fractions of the viewport (survives resolution / UI-scale changes). */
+type Pos = { fx: number; fy: number } | null;
+
+function loadPos(): Pos {
+    try {
+        const raw = window.localStorage?.getItem(POS_KEY);
+        if (!raw) return null;
+        const v = JSON.parse(raw);
+        return v && typeof v.fx === "number" && typeof v.fy === "number" ? { fx: v.fx, fy: v.fy } : null;
+    } catch {
+        return null;
+    }
+}
+
+function savePos(p: Pos) {
+    try {
+        if (p) window.localStorage?.setItem(POS_KEY, JSON.stringify(p));
+        else window.localStorage?.removeItem(POS_KEY);
+    } catch {
+        /* storage unavailable: the position is simply not remembered */
+    }
+}
+
+function isInsideButton(el: HTMLElement | null, stop: HTMLElement | null) {
+    for (let e = el; e && e !== stop; e = e.parentElement) if (e.tagName === "BUTTON" || e.tagName === "INPUT") return true;
+    return false;
+}
+
+function usePanelPosition() {
+    const [pos, setPos] = useState<Pos>(loadPos);
+    const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+    const [, bump] = useState(0);
+    const wrapRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const onResize = () => bump((n) => n + 1);
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+    }, []);
+
+    const remPx = () => {
+        const w = wrapRef.current?.getBoundingClientRect().width;
+        return w && w > 0 ? w / PANEL_REM : window.innerHeight / 1080;
+    };
+
+    /** Clamped pixel position: the whole width and at least the header stay on screen. */
+    const clamp = (x: number, y: number) => {
+        const r = remPx();
+        return {
+            x: Math.max(0, Math.min(window.innerWidth - PANEL_REM * r, x)),
+            y: Math.max(0, Math.min(window.innerHeight - 140 * r, y)),
+        };
+    };
+
+    const onHeaderMouseDown = (e: React.MouseEvent<HTMLElement>) => {
+        if (e.button !== 0 || isInsideButton(e.target as HTMLElement, e.currentTarget)) return;
+        const rect = wrapRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        e.preventDefault();
+        const sx = e.clientX,
+            sy = e.clientY;
+        let moved = false;
+        const move = (ev: MouseEvent) => {
+            const dx = ev.clientX - sx,
+                dy = ev.clientY - sy;
+            if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+            moved = true;
+            setDrag(clamp(rect.left + dx, rect.top + dy));
+        };
+        const up = (ev: MouseEvent) => {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("mouseup", up);
+            if (!moved) return;
+            const c = clamp(rect.left + ev.clientX - sx, rect.top + ev.clientY - sy);
+            const p = { fx: c.x / window.innerWidth, fy: c.y / window.innerHeight };
+            savePos(p);
+            setPos(p);
+            setDrag(null);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+    };
+
+    const reset = () => {
+        savePos(null);
+        setPos(null);
+        setDrag(null);
+    };
+
+    let style: React.CSSProperties | undefined;
+    let centerX = window.innerWidth; // docked right
+    if (drag || pos) {
+        const c = drag ?? clamp((pos as { fx: number }).fx * window.innerWidth, (pos as { fy: number }).fy * window.innerHeight);
+        const r = remPx();
+        // Same height as when docked, but never past the bottom of the screen.
+        const docked = window.innerHeight - (DOCK_TOP + DOCK_BOTTOM) * r;
+        const height = Math.max(140 * r, Math.min(docked, window.innerHeight - c.y - 12 * r));
+        style = { left: c.x + "px", top: c.y + "px", right: "auto", bottom: "auto", height: height + "px" };
+        centerX = c.x + (PANEL_REM * r) / 2;
+    }
+    const side: TipDirection = centerX > window.innerWidth / 2 ? "left" : "right";
+    return { wrapRef, style, floating: !!(drag || pos), dragging: !!drag, onHeaderMouseDown, reset, side };
+}
+
+// ───────────── pieces ─────────────
+
 const StageBar = ({ state }: { state: ToolState }) => {
     const { t } = useT();
     const currentIndex = STAGES.findIndex((x) => x.id === (state.stage === "building" ? "review" : state.stage));
@@ -39,32 +157,25 @@ const StageBar = ({ state }: { state: ToolState }) => {
                 const current = i === currentIndex;
                 const done = currentIndex > i;
                 const reachable = !locked && !current && state.reachable.includes(st.id);
-                const el = (
+                return (
                     <button
+                        key={st.id}
                         type="button"
                         data-testid={`stagebar-${st.id}`}
                         data-state={current ? "current" : reachable ? "reachable" : "locked"}
-                        className={classNames(s.stageItem, { [s.stageCurrent]: current, [s.stageReachable]: reachable, [s.stageLocked]: !current && !reachable })}
+                        className={classNames(s.stageItem, {
+                            [s.stageCurrent]: current,
+                            [s.stageReachable]: reachable,
+                            [s.stageLocked]: !current && !reachable,
+                        })}
                         onClick={(e) => {
                             e.stopPropagation();
                             if (reachable) act.goToStage(st.id);
                         }}
                     >
-                        <div className={classNames(s.stageNum, { [s.stageNumDone]: done })}>{done ? <Icon name="check" size={11} /> : i + 1}</div>
+                        <div className={classNames(s.stageNum, { [s.stageNumDone]: done })}>{done ? <Icon name="check" size={12} tint="dark" /> : i + 1}</div>
                         <div className={s.stageLabel}>{t(st.key, st.en)}</div>
                     </button>
-                );
-                return (
-                    <React.Fragment key={st.id}>
-                        {i > 0 ? <div className={classNames(s.stageLink, { [s.stageLinkDone]: done || current })} /> : null}
-                        {reachable && done ? (
-                            <Tip title={t("Placemaker.UI.Stage.Back", "Go back to {0}", [t(st.key, st.en)])} description={t("Placemaker.UI.Stage.BackTip", "Nothing is lost: your area and design are kept.")}>
-                                {el}
-                            </Tip>
-                        ) : (
-                            el
-                        )}
-                    </React.Fragment>
                 );
             })}
         </div>
@@ -81,20 +192,19 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
         <div className={s.undoRedo}>
             <Btn
                 icon="undo"
-                iconSize={16}
+                iconSize={17}
                 disabled={!state.canUndo}
                 testId="undo"
-                label={undo ? <span className={s.undoLabel}>{cap(undo)}</span> : undefined}
-                title={undo ? t("Placemaker.UI.UndoWhat", "Undo: {0}", [undo]) : t("Placemaker.UI.Undo", "Undo")}
+                title={undo ? t("Placemaker.UI.UndoWhat", "Undo: {0}", [cap(undo)]) : t("Placemaker.UI.Undo", "Undo")}
                 description={<Keys keys={["Ctrl", "Z"]} />}
                 onClick={act.undo}
             />
             <Btn
                 icon="redo"
-                iconSize={16}
+                iconSize={17}
                 disabled={!state.canRedo}
                 testId="redo"
-                title={redo ? t("Placemaker.UI.RedoWhat", "Redo: {0}", [redo]) : t("Placemaker.UI.Redo", "Redo")}
+                title={redo ? t("Placemaker.UI.RedoWhat", "Redo: {0}", [cap(redo)]) : t("Placemaker.UI.Redo", "Redo")}
                 description={<Keys keys={["Ctrl", "Y"]} />}
                 onClick={act.redo}
             />
@@ -103,16 +213,29 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
 };
 
 function quickStats(summary: Summary) {
-    return summary.stats.filter((x) => x.unit === "count").slice(0, 1);
+    return summary.stats.filter((x) => x.unit === "count" && x.value > 0).slice(0, 1);
 }
 
-const Footer = ({ state, summary, blockedReason }: { state: ToolState; summary: Summary; blockedReason: string | null }) => {
+/** First enabled step that still lacks its required markers (entrances), or null. */
+export function missingMarkers(root: StepView | null): StepView | null {
+    let miss: StepView | null = null;
+    walk(root, (st) => {
+        if (miss || !st.enabled) return;
+        const need = st.markersRequired ?? 0;
+        if (need <= 0) return;
+        const have = st.markerList && st.markerList.length ? st.markerList.length : st.markers.reduce((n, m) => n + m.count, 0);
+        if (have < need) miss = st;
+    });
+    return miss;
+}
+
+const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; summary: Summary; blockedReason: string | null; compact?: boolean }) => {
     const { t, tl } = useT();
     const p = state.primary;
     const enabled = p.enabled && !blockedReason;
     const reason = blockedReason ?? (p.reason ? tl(p.reason) : "");
     const pending = summary.stale || state.planning;
-    const showNumbers = state.stage === "design" && summary.ready;
+    const showNumbers = state.stage === "design" && summary.ready && !compact;
     const label = tl(p.label, t("Placemaker.UI.Primary.Next", "Next"));
     const button = (
         <button
@@ -128,47 +251,45 @@ const Footer = ({ state, summary, blockedReason }: { state: ToolState; summary: 
         >
             <div className={s.primaryLabel}>{label}</div>
             {enabled && p.action !== "cancelBuild" ? <div className={s.enterKey}>{t("Placemaker.UI.Key.Enter", "Enter")}</div> : null}
-            {enabled && p.action !== "cancelBuild" ? <Icon name="chevronRight" size={16} /> : null}
         </button>
     );
-    return (
-        <div className={s.footer}>
-            <div className={s.footInfo}>
-                {!enabled && reason ? (
-                    <div className={s.reason} data-testid="primary-reason">
-                        <Icon name="info" size={15} color="#ffb547" />
-                        <div className={s.reasonText}>{reason}</div>
-                    </div>
-                ) : showNumbers ? (
-                    <div className={classNames(s.quick, { [s.quickStale]: pending })} data-testid="quick-numbers">
-                        <div className={s.quickItem}>
-                            <Icon name="area" size={14} />
-                            <div className={s.quickText}>{fmtArea(state.area.areaM2)}</div>
-                        </div>
-                        {quickStats(summary).map((st) => (
-                            <div key={st.key} className={s.quickItem}>
-                                <Icon name={statIcon(st.key)} size={14} />
-                                <div className={s.quickText}>{formatValue(st.value, "count") + " " + t(st.key, "").toLowerCase()}</div>
-                            </div>
-                        ))}
-                        <div className={classNames(s.quickItem, { [s.quickBad]: !summary.canAfford })}>
-                            <Icon name="cost" size={14} />
-                            <div className={s.quickText}>{compactMoney(summary.cost)}</div>
-                        </div>
-                        <div className={s.quickItem}>
-                            <Icon name="upkeep" size={14} />
-                            <div className={s.quickText}>{compactMoney(summary.upkeep) + t("Placemaker.UI.PerMonth", "/mo")}</div>
-                        </div>
-                    </div>
-                ) : state.stage === "area" ? (
-                    <AreaReadout state={state} compact />
-                ) : state.stage === "review" ? (
-                    <div className={s.reassure}>
-                        <Icon name="undo" size={14} />
-                        <div className={s.reassureText}>{t("Placemaker.UI.Review.Reassure", "Not quite right? Click Design or Area above — nothing is lost.")}</div>
-                    </div>
-                ) : null}
+    let info: React.ReactNode = null;
+    if (!enabled && reason) {
+        info = (
+            <div className={s.reason} data-testid="primary-reason">
+                <Icon name="info" size={16} tint="warn" />
+                <div className={s.reasonText}>{reason}</div>
             </div>
+        );
+    } else if (showNumbers) {
+        info = (
+            <div className={classNames(s.quick, { [s.quickStale]: pending })} data-testid="quick-numbers">
+                <div className={s.quickItem}>
+                    <Icon name="area" size={15} tint="dim" />
+                    <div className={s.quickText}>{fmtArea(state.area.areaM2)}</div>
+                </div>
+                {quickStats(summary).map((st) => (
+                    <div key={st.key} className={s.quickItem}>
+                        <Icon name={statIcon(st.key)} size={15} tint="dim" />
+                        <div className={s.quickText}>{formatValue(st.value, "count") + " " + t(st.key, "").toLowerCase()}</div>
+                    </div>
+                ))}
+                <div className={classNames(s.quickItem, { [s.quickBad]: !summary.canAfford })}>
+                    <Icon name="cost" size={15} tint={summary.canAfford ? "dim" : "danger"} />
+                    <div className={s.quickText}>{compactMoney(summary.cost)}</div>
+                </div>
+                <div className={s.quickItem}>
+                    <Icon name="upkeep" size={15} tint="dim" />
+                    <div className={s.quickText}>{compactMoney(summary.upkeep) + t("Placemaker.UI.PerMonth", "/mo")}</div>
+                </div>
+            </div>
+        );
+    } else if (state.stage === "area" && !compact) {
+        info = <AreaReadout state={state} compact />;
+    }
+    return (
+        <div className={classNames(s.footer, { [s.footerCompact]: compact })}>
+            {info ? <div className={s.footInfo}>{info}</div> : null}
             {!enabled && reason ? (
                 <Tip title={label} description={reason}>
                     {button}
@@ -195,36 +316,31 @@ const Hints = ({ state }: { state: ToolState }) => {
     );
 };
 
-const MarkerBanner = ({ state }: { state: ToolState }) => {
+const MarkerBanner = ({ state, root }: { state: ToolState; root: StepView | null }) => {
     const { t, tl } = useT();
     if (!state.markerMode) return null;
+    const mm = state.markerMode;
+    let kindLabel = tl(mm.label, mm.kind);
+    walk(root, (st) => {
+        if (st.path !== mm.stepPath) return;
+        const k = st.markerKinds?.find((x) => x.kind === mm.kind);
+        if (k) kindLabel = markerLabel(t, k);
+    });
     return (
         <div className={s.banner} data-testid="marker-banner">
-            <Icon name="marker" size={16} color="#ffa94d" />
+            <Icon name="marker" size={18} tint="warn" />
             <div className={s.bannerText}>
-                {t("Placemaker.UI.Markers.Banner", "Placing {0} — click on the outline; right-click one to remove it.", [tl(state.markerMode.label, state.markerMode.kind)])}
+                <div className={s.bannerTitle}>{t("Placemaker.UI.Markers.BannerTitle", "Placing: {0}", [kindLabel])}</div>
+                <div className={s.bannerSub}>
+                    {t("Placemaker.UI.Markers.BannerHint", "Click the outline next to a road. Right-click an entrance to remove it.")}
+                </div>
             </div>
             <Btn variant="accent" label={t("Placemaker.UI.Done", "Done")} onClick={act.endMarkers} testId="marker-done" />
         </div>
     );
 };
 
-const CompactRow = ({ state, summary, blockedReason }: { state: ToolState; summary: Summary; blockedReason: string | null }) => {
-    const { t } = useT();
-    const st = STAGES.find((x) => x.id === state.stage);
-    return (
-        <div className={s.compact} data-testid="panel-compact">
-            <Icon name="logo" size={20} color="#8fd1ff" />
-            <div className={s.compactStage}>{st ? t(st.key, st.en) : ""}</div>
-            {state.stage === "area" ? <Segmented iconOnly value={state.areaMode} onChange={(v) => act.setAreaMode(v as any)} options={modeOptions(t)} testId="area-mode-compact" /> : null}
-            <div className={s.compactInfo}>
-                <Footer state={state} summary={summary} blockedReason={blockedReason} />
-            </div>
-            <Btn icon="expand" iconSize={16} title={t("Placemaker.UI.Expand", "Show options")} onClick={() => act.setPanelCollapsed(false)} testId="expand" />
-            <Btn icon="close" iconSize={16} title={t("Placemaker.UI.Close", "Close")} onClick={act.close} testId="close-compact" />
-        </div>
-    );
-};
+// ───────────── panel ─────────────
 
 export const PlacemakerPanel = () => {
     const state = useToolState();
@@ -237,18 +353,32 @@ export const PlacemakerPanel = () => {
     const [picker, setPicker] = useState<PickerRequest | null>(null);
     const [ack, setAck] = useState(false);
     const permKey = useMemo(() => JSON.stringify(summary.permanent), [summary.permanent]);
+    const position = usePanelPosition();
 
     useEffect(() => setAck(false), [permKey, state.stage === "review"]);
     useEffect(() => {
-        if (!state.open || state.stage !== "design") setPicker(null);
-    }, [state.open, state.stage]);
+        if (!state.open || state.stage !== "design" || state.panelCollapsed) setPicker(null);
+    }, [state.open, state.stage, state.panelCollapsed]);
 
-    const pickerCtx = useMemo(() => ({ open: (r: PickerRequest) => setPicker(r), close: () => setPicker(null), current: picker }), [picker]);
+    const closePicker = useCallback(() => setPicker(null), []);
+    const pickerCtx = useMemo(() => ({ open: (r: PickerRequest) => setPicker(r), close: closePicker, current: picker }), [picker, closePicker]);
 
     if (!state.open) return null;
 
-    const needsAck = state.stage === "review" && summary.permanent.length > 0 && !ack && state.primary.action === "build";
-    const blockedReason = needsAck ? t("Placemaker.UI.Review.AckFirst", "Tick the box to confirm the permanent changes first") : null;
+    const needsAck =
+        state.stage === "review" && summary.permanent.length > 0 && !ack && (state.primary.action === "build" || state.primary.action === "finishEdit");
+    const missing = state.stage === "design" || state.stage === "review" ? missingMarkers(design.root) : null;
+    const gated = state.primary.action === "toReview" || state.primary.action === "build" || state.primary.action === "finishEdit";
+    let blockedReason: string | null = null;
+    if (missing && gated) {
+        const need = missing.markersRequired ?? 1;
+        blockedReason =
+            need > 1
+                ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need])
+                : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance");
+    } else if (needsAck) {
+        blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick the box to confirm the permanent changes first");
+    }
 
     let body: React.ReactNode = null;
     switch (state.stage) {
@@ -259,10 +389,18 @@ export const PlacemakerPanel = () => {
             body = <DesignStage catalog={catalog} design={design} state={state} />;
             break;
         case "review":
-            body = <ReviewStage catalog={catalog} state={state} summary={summary} ack={ack} setAck={(v) => {
-                setAck(v);
-                act.acknowledgePermanent(v);
-            }} />;
+            body = (
+                <ReviewStage
+                    catalog={catalog}
+                    state={state}
+                    summary={summary}
+                    ack={ack}
+                    setAck={(v) => {
+                        setAck(v);
+                        act.acknowledgePermanent(v);
+                    }}
+                />
+            );
             break;
         case "building":
             body = <BuildingStage state={state} />;
@@ -272,77 +410,146 @@ export const PlacemakerPanel = () => {
             break;
     }
 
+    const collapsed = state.panelCollapsed;
+    // Header tips open UPWARDS (over the game's top bar), so they never sit on the stage bar below.
+    const header = (
+        <TipDirectionContext.Provider value="up">
+            <div
+                className={classNames(s.header, { [s.headerDragging]: position.dragging })}
+                data-testid="panel-header"
+                onMouseDown={position.onHeaderMouseDown}
+                onDoubleClick={(e) => {
+                    if (!isInsideButton(e.target as HTMLElement, e.currentTarget)) position.reset();
+                }}
+            >
+                <Tip
+                    title={t("Placemaker.UI.Move", "Move the panel")}
+                    description={t("Placemaker.UI.MoveTip", "Drag the header to move the panel anywhere. Double-click it to dock it on the right again.")}
+                >
+                    <div className={s.grip} data-testid="panel-grip">
+                        <Icon name="grip" size={16} tint="dim" />
+                    </div>
+                </Tip>
+                <Icon name="logo" size={22} tint="accent" />
+                <div className={s.title}>
+                    {state.stage === "manage" ? t("Placemaker.UI.Manage.Title", "Built with Placemaker") : t("Placemaker.Name", "Placemaker")}
+                </div>
+                {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
+                {state.planning ? (
+                    <Tip title={t("Placemaker.UI.Planning", "Updating the preview…")}>
+                        <div className={s.planningDot} data-testid="planning" />
+                    </Tip>
+                ) : null}
+                <div className={s.flex} />
+                {state.stage === "manage" ? null : <UndoRedo state={state} />}
+                {state.anarchy?.available ? (
+                    <Btn
+                        icon="anarchy"
+                        iconSize={16}
+                        selected={state.anarchy.enabled}
+                        title={t("Placemaker.UI.Anarchy", "Anarchy")}
+                        description={t("Placemaker.UI.AnarchyTip", "Build even where the game reports a collision (Anarchy mod).")}
+                        onClick={() => act.setAnarchy(!state.anarchy?.enabled)}
+                        testId="anarchy"
+                    />
+                ) : null}
+                <div className={s.headSep} />
+                {collapsed ? null : (
+                    <Btn
+                        icon="collapse"
+                        iconSize={17}
+                        title={t("Placemaker.UI.Collapse", "Make smaller")}
+                        description={t("Placemaker.UI.CollapseTip", "Shrinks the panel to its header and main button.")}
+                        onClick={() => act.setPanelCollapsed(true)}
+                        testId="collapse"
+                    />
+                )}
+                <Btn
+                    icon="close"
+                    iconSize={17}
+                    title={t("Placemaker.UI.Close", "Close")}
+                    description={<Keys keys={["Esc"]} />}
+                    onClick={act.close}
+                    testId="close"
+                />
+            </div>
+        </TipDirectionContext.Provider>
+    );
+
     return (
         <PickerContext.Provider value={pickerCtx}>
-            <div className={classNames(s.dock, { [s.rtl]: rtl })} data-testid="placemaker-dock">
-                <div className={s.column}>
-                    {picker ? (
-                        <ErrorBoundary name="picker">
-                            <AssetPickerCard req={picker} onClose={() => setPicker(null)} />
-                        </ErrorBoundary>
-                    ) : null}
-                    <MarkerBanner state={state} />
-                    <div className={classNames(s.panel, { [s.panelCompact]: state.panelCollapsed })} data-testid="placemaker-panel" data-stage={state.stage}>
-                        {state.panelCollapsed ? (
-                            <ErrorBoundary name="compact">
-                                <CompactRow state={state} summary={summary} blockedReason={blockedReason} />
-                            </ErrorBoundary>
-                        ) : (
-                            <>
-                                <div className={s.header}>
-                                    <Tip title={t("Placemaker.Name", "Placemaker")} description={t("Placemaker.UI.About", "Choose an area, choose what it becomes.")}>
-                                        <div className={s.brand}>
-                                            <Icon name="logo" size={22} color="#8fd1ff" />
+            <TipDirectionContext.Provider value={position.side}>
+                <div className={classNames(s.dock, { [s.rtl]: rtl })} data-testid="placemaker-dock">
+                    {picker ? <div className={s.backdrop} data-testid="picker-backdrop" onMouseDown={closePicker} /> : null}
+                    <div
+                        ref={position.wrapRef}
+                        className={classNames(s.wrap, { [s.wrapCollapsed]: collapsed })}
+                        style={position.style}
+                        data-testid="placemaker-wrap"
+                        data-docked={position.floating ? "false" : "true"}
+                    >
+                        <div className={classNames(s.panel, { [s.panelCompact]: collapsed })} data-testid="placemaker-panel" data-stage={state.stage}>
+                            <div className={s.panelTint}>
+                                {header}
+                                {collapsed ? (
+                                    <ErrorBoundary name="compact">
+                                        <div className={s.compact} data-testid="panel-compact">
+                                            <div className={s.compactRow}>
+                                                {state.stage === "area" ? (
+                                                    <Segmented
+                                                        iconOnly
+                                                        value={state.areaMode}
+                                                        onChange={(v) => act.setAreaMode(v as any)}
+                                                        options={modeOptions(t)}
+                                                        testId="area-mode-compact"
+                                                    />
+                                                ) : (
+                                                    <div className={s.compactStage}>{t(STAGES.find((x) => x.id === state.stage)?.key ?? "", "")}</div>
+                                                )}
+                                                <div className={s.flex} />
+                                                <Btn
+                                                    variant="solid"
+                                                    icon="expand"
+                                                    iconSize={16}
+                                                    label={t("Placemaker.UI.Expand", "Show options")}
+                                                    onClick={() => act.setPanelCollapsed(false)}
+                                                    testId="expand"
+                                                />
+                                            </div>
+                                            <Footer state={state} summary={summary} blockedReason={blockedReason} compact />
                                         </div>
-                                    </Tip>
-                                    {state.stage === "manage" ? (
-                                        <div className={s.manageTitle}>{t("Placemaker.UI.Manage.Title", "Built with Placemaker")}</div>
-                                    ) : (
-                                        <ErrorBoundary name="stagebar">
-                                            <StageBar state={state} />
+                                    </ErrorBoundary>
+                                ) : (
+                                    <>
+                                        {state.stage === "manage" ? null : (
+                                            <ErrorBoundary name="stagebar">
+                                                <StageBar state={state} />
+                                            </ErrorBoundary>
+                                        )}
+                                        <MarkerBanner state={state} root={design.root} />
+                                        <div className={s.bodyWrap} data-testid="panel-body">
+                                            <div className={s.body} key={state.stage}>
+                                                <ErrorBoundary name={"stage-" + state.stage}>{body}</ErrorBoundary>
+                                            </div>
+                                        </div>
+                                        <ErrorBoundary name="footer">
+                                            <Footer state={state} summary={summary} blockedReason={blockedReason} />
                                         </ErrorBoundary>
-                                    )}
-                                    {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
-                                    {state.planning ? (
-                                        <Tip title={t("Placemaker.UI.Planning", "Updating the preview…")}>
-                                            <div className={s.planningDot} data-testid="planning" />
-                                        </Tip>
-                                    ) : null}
-                                    <div className={s.flex} />
-                                    {state.stage === "manage" ? (
-                                        <Btn icon="plus" iconSize={15} label={t("Placemaker.UI.Manage.New", "New area")} onClick={() => act.goToStage("area")} testId="manage-new" />
-                                    ) : (
-                                        <UndoRedo state={state} />
-                                    )}
-                                    {state.anarchy?.available ? (
-                                        <Btn
-                                            icon="anarchy"
-                                            iconSize={15}
-                                            selected={state.anarchy.enabled}
-                                            title={t("Placemaker.UI.Anarchy", "Anarchy")}
-                                            description={t("Placemaker.UI.AnarchyTip", "Build even where the game reports a collision (Anarchy mod).")}
-                                            onClick={() => act.setAnarchy(!state.anarchy?.enabled)}
-                                            testId="anarchy"
-                                        />
-                                    ) : null}
-                                    <div className={s.headSep} />
-                                    <Btn icon="collapse" iconSize={16} title={t("Placemaker.UI.Collapse", "Make smaller")} onClick={() => act.setPanelCollapsed(true)} testId="collapse" />
-                                    <Btn icon="close" iconSize={16} title={t("Placemaker.UI.Close", "Close")} description={<Keys keys={["Esc"]} />} onClick={act.close} testId="close" />
-                                </div>
-                                <div className={s.bodyWrap}>
-                                    <div className={s.body} key={state.stage}>
-                                        <ErrorBoundary name={"stage-" + state.stage}>{body}</ErrorBoundary>
-                                    </div>
-                                </div>
-                                <ErrorBoundary name="footer">
-                                    <Footer state={state} summary={summary} blockedReason={blockedReason} />
+                                        <Hints state={state} />
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        {picker ? (
+                            <div className={classNames(s.flyout, position.side === "left" ? s.flyoutLeft : s.flyoutRight)} data-testid="picker-flyout">
+                                <ErrorBoundary name="picker">
+                                    <AssetPickerCard req={picker} onClose={closePicker} />
                                 </ErrorBoundary>
-                                <Hints state={state} />
-                            </>
-                        )}
+                            </div>
+                        ) : null}
                     </div>
                 </div>
-            </div>
+            </TipDirectionContext.Provider>
         </PickerContext.Provider>
     );
 };
@@ -355,7 +562,7 @@ export const PlacemakerRoot = () => (
 
 const PanelCrash = ({ error, reset }: { error: unknown; reset: () => void }) => (
     <div className={s.dock}>
-        <div className={s.crash} onClick={reset}>
+        <div className={s.crash} onClick={reset} data-pm-crash="true">
             <strong>Placemaker</strong> — the panel hit an error and was stopped so the rest of the game UI keeps working. Click to try again.
             <div className={s.crashDetail}>{error instanceof Error ? `${error.name}: ${error.message}` : String(error)}</div>
         </div>

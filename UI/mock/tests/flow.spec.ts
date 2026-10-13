@@ -19,14 +19,15 @@ test("full flow: draw → design → review → build, then manage the result", 
     await clickWorld(page, FIELD[0][0], FIELD[0][1]);
     await expect(page.getByTestId("panel-compact")).toBeHidden();
     await expect(page.getByTestId("area-readout")).toContainText("ha");
-    await expect(page.getByTestId("undo")).toContainText("Close outline");
+    await page.getByTestId("undo").hover();
+    await expect(page.getByTestId("tooltip")).toContainText("Close outline");
     await shot(page, "03-area-closed");
 
     await expect(primary).toHaveAttribute("aria-disabled", "false");
     await primary.click();
     expect(await stage(page)).toBe("design");
     await waitPlanned(page);
-    await expect(page.getByTestId("step-editor")).toBeVisible();
+    await expect(page.getByTestId("step-0")).toBeVisible();
     // single-layer recipe: no tree chrome
     await expect(page.getByTestId("layer-tree")).toHaveCount(0);
     await shot(page, "04-design-park");

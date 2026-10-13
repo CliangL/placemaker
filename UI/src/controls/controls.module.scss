@@ -6,12 +6,12 @@
 
 .row {
     @include col;
-    padding: 3rem 0;
+    padding: 2rem 0;
 }
 
 .rowHead {
     @include row;
-    min-height: 32rem;
+    min-height: 36rem;
 }
 
 .rowStacked {
@@ -20,7 +20,7 @@
 
 .label {
     @include row;
-    width: 150rem;
+    width: 138rem;
     flex-shrink: 0;
     padding-right: 10rem;
     color: var(--menuText1Normal);
@@ -201,9 +201,11 @@
 .assetButton {
     @include row;
     @include button-reset;
-    height: 30rem;
-    max-width: 260rem;
-    padding: 0 8rem 0 4rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 34rem;
+    padding: 0 8rem 0 6rem;
+    @include border(1rem, $c-line);
     border-radius: $radius;
     background-color: $c-surface;
     transition-property: background-color;
@@ -257,7 +259,7 @@
     color: $c-text-dim;
 }
 
-// ── markers ──
+// ── markers (fallback for untyped marker controls) ──
 .markers {
     @include row;
     flex-wrap: wrap;
@@ -268,26 +270,25 @@
     @include row;
 }
 
-.markerAuto {
-    margin-left: 6rem;
-    padding: 1rem 6rem;
-    border-radius: 8rem;
-    background-color: rgba(63, 182, 240, 0.12);
-    color: var(--accentColorNormal);
-    font-size: var(--fontSizeXS);
-}
-
 .group {
     @include col;
+    margin-top: 4rem;
+}
+
+.group + .group {
+    margin-top: 12rem;
 }
 
 .groupTitle {
-    margin-top: 8rem;
-    margin-bottom: 2rem;
-    font-size: var(--fontSizeXS);
-    color: $c-text-faint;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    @include row;
+    margin-bottom: 4rem;
+    padding-left: 8rem;
+    border-left-width: 2rem;
+    border-left-style: solid;
+    border-left-color: var(--accentColorNormal);
+    font-size: var(--fontSizeS);
+    font-weight: bold;
+    color: var(--menuText1Normal);
 }
 
 .none {

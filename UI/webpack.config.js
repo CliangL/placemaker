@@ -70,11 +70,26 @@ module.exports = {
           },
         ],
       },
+      // Every bundled file is namespaced under images/placemaker/ with a content hash: coui://ui-mods/
+      // is shared by ALL mods, so a plain images/check.svg could be overwritten by another mod's file.
+      {
+        test: /\.svg$/i,
+        resourceQuery: /tint=/,
+        type: "asset/resource",
+        use: [path.resolve(__dirname, "tools/svg-tint-loader.js")],
+        generator: {
+          filename: (pathData) => {
+            const m = /tint=(\w+)/.exec((pathData.module && pathData.module.resource) || "");
+            return `images/placemaker/[name]-${m ? m[1] : "light"}.[contenthash:6][ext]`;
+          },
+        },
+      },
       {
         test: /\.(png|jpe?g|gif|svg)$/i,
+        resourceQuery: { not: [/tint=/] },
         type: "asset/resource",
         generator: {
-          filename: "images/[name][ext][query]",
+          filename: "images/placemaker/[name].[contenthash:6][ext]",
         },
       },
     ],
@@ -92,6 +107,9 @@ module.exports = {
       type: "module",
     },
     publicPath: `coui://ui-mods/`,
+    // Drop stale images (e.g. the old un-namespaced images/*.svg); never touch anything else in the
+    // output folder (it can be the game Mods folder holding the DLL).
+    clean: { keep: (asset) => !/^images[\/]/.test(asset) },
   },
   optimization: {
     minimize: true,

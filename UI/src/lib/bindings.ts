@@ -121,6 +121,13 @@ function normalizeStep(s: Record<string, any>): StepView {
         values: isObj(s.values) ? s.values : {},
         locked: arr<string>(s.locked),
         markers: arr(s.markers),
+        markerList: arr<any>(s.markerList)
+            .filter(isObj)
+            .map((m, i) => ({ kind: String(m.kind ?? ""), index: typeof m.index === "number" ? m.index : i, position: (Array.isArray(m.position) ? m.position : [0, 0, 0]) as [number, number, number] })),
+        markerKinds: arr<any>(s.markerKinds)
+            .map((k) => (typeof k === "string" ? { kind: k, label: "" } : k))
+            .filter((k) => isObj(k) && typeof k.kind === "string"),
+        markersRequired: Number(s.markersRequired) || 0,
         ready: s.ready !== false,
         nextStep: s.nextStep,
         children: arr<any>(s.children).filter(isObj).map(normalizeStep),
@@ -230,12 +237,14 @@ export const act = {
     removeGroup: (id: number) => fire(Triggers.removeGroup, id),
     renameGroup: (id: number, name: string) => fire(Triggers.renameGroup, id, name),
     setAnarchy: (enabled: boolean) => fire(Triggers.setAnarchy, enabled),
-    /** PROPOSED (docs/proposals/ui.md): move the camera to an issue location. Harmless if C# lacks it. */
-    locate: (at: [number, number, number]) => fire("locate", JSON.stringify(at)),
+    /** Move the camera to a world position (issue, marker). */
+    locate: (at: [number, number, number]) => fire(Triggers.locate, Number(at[0]) || 0, Number(at[1]) || 0, Number(at[2]) || 0),
+    setMarkerKind: (path: string, kind: string) => fire(Triggers.setMarkerKind, path, kind),
+    removeMarker: (path: string, index: number) => fire(Triggers.removeMarker, path, index),
     /** Leave marker placement: in marker mode the C# primary action is "placeMarkers" (Done), which toggles it off. */
     endMarkers: () => fire(Triggers.primary),
-    /** PROPOSED: tell C# the player ticked the permanent-effects box (so Enter can't bypass it). */
-    acknowledgePermanent: (ack: boolean) => fire("acknowledgePermanent", ack),
+    /** The player ticked the permanent-effects box (C# also guards Enter with it). */
+    acknowledgePermanent: (ack: boolean) => fire(Triggers.acknowledgePermanent, ack),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */

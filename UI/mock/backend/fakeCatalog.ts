@@ -8,8 +8,9 @@ export type MockLayer = Omit<LayerType, "controls" | "presets"> & {
     controls: MockControl[];
     presets: { id: string; name: string; icon?: string; values?: Record<string, SettingValue> }[];
     minArea?: number;
-    /** Marker kinds that must have at least one marker before Build. */
-    requires?: string;
+    /** Typed marker kinds (StepView.markerKinds) and how many markers Build needs (StepView.markersRequired). */
+    markerKinds?: { kind: string; label: string; icon?: string; tooltip?: string }[];
+    markersRequired?: number;
     real?: boolean;
 };
 
@@ -61,18 +62,29 @@ export const FAKE_LAYERS: MockLayer[] = [
         controls: [
             { id: "angle", kind: "choice", tier: "essential", group: "", label: "Placemaker.Parking.StallAngle",
               options: [opt("90", "Placemaker.Parking.Angle90"), opt("60", "Placemaker.Parking.Angle60"), opt("45", "Placemaker.Parking.Angle45")], default: "90" },
-            { id: "entrances", kind: "markers", tier: "essential", group: "", label: "Placemaker.Parking.Entrances", markerKinds: ["entrance"] },
+            { id: "entrances", kind: "markers", tier: "essential", group: "", label: "Placemaker.Parking.Entrances", markerKinds: ["entrance", "entry", "exit", "alley", "footpath"] },
             { id: "surface", kind: "asset", tier: "essential", group: "", label: "Placemaker.Parking.Surface", assetCategory: "surface.asphalt", default: "" },
             { id: "greenery", kind: "toggle", tier: "essential", group: "", label: "Placemaker.Parking.Greenery", default: true },
             { id: "aisle", kind: "slider", tier: "more", group: "layout", label: "Placemaker.Parking.AisleWidth", min: 5, max: 8, step: 0.5, unit: "m", default: 6 },
             { id: "medians", kind: "toggle", tier: "more", group: "layout", label: "Placemaker.Parking.Medians", default: false },
             { id: "lanterns", kind: "toggle", tier: "more", group: "extras", label: "Placemaker.Parking.Lanterns", default: true },
+            { id: "perimeterRoad", kind: "toggle", tier: "more", group: "layout", label: "Placemaker.Parking.PerimeterRoad", default: false },
+            { id: "zoningEdges", kind: "toggle", tier: "more", group: "zoning", label: "Placemaker.Parking.ZoningEdges", tooltip: "Placemaker.Parking.ZoningEdgesTip", default: false },
+            { id: "zone", kind: "choice", tier: "more", group: "zoning", label: "Placemaker.EdgeZoning.Zone", visibleWhen: "zoningEdges=true",
+              options: [opt("resLow", "Placemaker.Zone.ResidentialLow"), opt("commercial", "Placemaker.Zone.Commercial"), opt("mixed", "Placemaker.Zone.Mixed")], default: "commercial" },
             { id: "chargers", kind: "slider", tier: "more", group: "extras", label: "Placemaker.Parking.Chargers", min: 0, max: 20, step: 1, unit: "count", default: 0 },
             { id: "fee", kind: "slider", tier: "more", group: "extras", label: "Placemaker.Parking.Fee", min: 0, max: 20, step: 1, unit: "money", default: 5 },
         ],
         presets: [],
         minArea: 600,
-        requires: "entrance",
+        markerKinds: [
+            { kind: "entrance", label: "Placemaker.Marker.TwoWay" },
+            { kind: "entry", label: "Placemaker.Marker.Entry" },
+            { kind: "exit", label: "Placemaker.Marker.Exit" },
+            { kind: "alley", label: "Placemaker.Marker.Alley" },
+            { kind: "footpath", label: "Placemaker.Marker.Footpath" },
+        ],
+        markersRequired: 1,
     },
     {
         id: "roads", name: "Placemaker.Roads.Name", icon: "roads", kind: "fill", accepts: [], emits: ["block", "edge"],
@@ -220,6 +232,11 @@ export const FAKE_STRINGS: Record<string, string> = {
     "Placemaker.Zone.Mixed": "Mixed", "Placemaker.Zone.Office": "Office", "Placemaker.Zone.Industry": "Industry",
     "Placemaker.Picnic.Name": "Picnic area", "Placemaker.Picnic.Tables": "Tables",
     "Placemaker.Recipe.RoadsParks": "Roads + parks", "Placemaker.Recipe.ParkPlaza": "Park | plaza", "Placemaker.Recipe.NeighbourhoodPark": "Family park",
+    "Placemaker.Marker.TwoWay": "Two-way", "Placemaker.Marker.Entry": "Entry only", "Placemaker.Marker.Exit": "Exit only",
+    "Placemaker.Marker.Alley": "Alley", "Placemaker.Marker.Footpath": "Footpath", "Placemaker.Reason.NeedEntrance": "Place at least one entrance",
+    "Placemaker.Parking.PerimeterRoad": "Perimeter road", "Placemaker.Parking.ZoningEdges": "Zone the edges", "Placemaker.Parking.ZoningEdgesTip": "Zones a strip along the lot so buildings can grow next to it.",
+    "Placemaker.UI.Group.zoning": "Zoning", "Placemaker.UI.Group.layout": "Layout", "Placemaker.UI.Group.extras": "Extras", "Placemaker.UI.Group.paths": "Paths",
+    "Placemaker.UI.Group.planting": "Planting", "Placemaker.UI.Group.water": "Water", "Placemaker.UI.Group.edge": "Edge",
     "Placemaker.Recipe.ParkingTip": "A surface parking lot with stalls, aisles and entrances.",
     "Placemaker.Recipe.PlazaTip": "A paved square with a centrepiece, seating and lights.",
     "Placemaker.Recipe.ParkTip": "Paths, lawns, trees and benches.",

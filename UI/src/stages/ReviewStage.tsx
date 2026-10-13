@@ -8,14 +8,14 @@ import { area as fmtArea, formatValue, Money } from "../lib/format";
 import { entityIcon, layerColor, statIcon } from "../lib/icons";
 import { humanize, useT } from "../lib/l10n";
 import { layerOf } from "../lib/schema";
-import { Btn, Check, Foldout, Icon } from "../components/common";
+import { Btn, Check, Icon, Section } from "../components/common";
 import { layerName, targetLabel } from "./DesignStage";
 import s from "./stages.module.scss";
 
-const SEVERITY: Record<Issue["severity"], { icon: string; color: string }> = {
-    error: { icon: "error", color: "#ff6b5b" },
-    warning: { icon: "warning", color: "#ffb547" },
-    info: { icon: "info", color: "#8fd1ff" },
+const SEVERITY: Record<Issue["severity"], { icon: string; tint: "danger" | "warn" | "accent" }> = {
+    error: { icon: "error", tint: "danger" as const },
+    warning: { icon: "warning", tint: "warn" as const },
+    info: { icon: "info", tint: "accent" as const },
 };
 
 export const StatChip = ({ k, value, unit }: { k: string; value: number; unit: string }) => {
@@ -59,32 +59,28 @@ export const ReviewStage = ({
                                 <Money value={summary.upkeep} perMonth />
                             </div>
                         </div>
-                        <div className={s.bigSep} />
-                        <div className={s.big}>
-                            <div className={s.bigLabel}>{t("Placemaker.UI.Review.Area", "Area")}</div>
-                            <div className={s.bigValue}>{fmtArea(state.area.areaM2)}</div>
-                        </div>
                     </div>
                     {!summary.canAfford ? (
                         <div className={classNames(s.callout, s.calloutBad)} data-testid="cant-afford">
-                            <Icon name="cost" size={16} color="#ff6b5b" />
+                            <Icon name="cost" size={16} tint="danger" />
                             <div className={s.calloutText}>{t("Placemaker.UI.Review.CantAfford", "You can't afford this yet. Make it smaller or simpler, or wait for more money.")}</div>
                         </div>
                     ) : null}
-                    {summary.stats.length ? (
+                    <Section title={t("Placemaker.UI.Review.What", "What you get")}>
                         <div className={classNames(s.stats, { [s.shimmer]: pending })} data-testid="review-stats">
+                            {summary.stats.some((st) => /(^|.)area$/i.test(st.key)) ? null : <StatChip k="Placemaker.Stat.Area" value={state.area.areaM2} unit="m2" />}
                             {summary.stats.map((st) => (
                                 <StatChip key={st.key + st.unit} k={st.key} value={st.value} unit={st.unit} />
                             ))}
                         </div>
-                    ) : null}
+                    </Section>
                     {summary.issues.length ? (
                         <div className={s.issues} data-testid="issues">
                             {summary.issues.map((i, n) => {
                                 const sev = SEVERITY[i.severity] ?? SEVERITY.info;
                                 return (
                                     <div key={n} className={classNames(s.issue, s["issue_" + i.severity])} data-testid={`issue-${i.severity}`}>
-                                        <Icon name={sev.icon} size={16} color={sev.color} />
+                                        <Icon name={sev.icon} size={16} tint={sev.tint} />
                                         <div className={s.issueText}>{tl(i.text)}</div>
                                         {i.stepPath ? (
                                             <Btn icon="edit" iconSize={13} title={t("Placemaker.UI.Review.EditLayer", "Edit this layer")} onClick={() => { act.focusStep(i.stepPath as string); act.goToStage("design"); }} />
@@ -98,7 +94,7 @@ export const ReviewStage = ({
                         </div>
                     ) : null}
                     {summary.layers.length > 1 ? (
-                        <Foldout title={t("Placemaker.UI.Review.Breakdown", "Breakdown")} count={summary.layers.length} testId="breakdown">
+                        <Section title={t("Placemaker.UI.Review.Breakdown", "Breakdown")} count={summary.layers.length} testId="breakdown">
                             {summary.layers.map((l, n) => {
                                 const layer = layerOf(catalog, l.layer);
                                 return (
@@ -118,11 +114,11 @@ export const ReviewStage = ({
                                     </div>
                                 );
                             })}
-                        </Foldout>
+                        </Section>
                     ) : null}
                     {summary.permanent.length ? (
                         <div className={classNames(s.callout, s.calloutWarn)} data-testid="permanent">
-                            <Icon name="warning" size={16} color="#ffb547" />
+                            <Icon name="warning" size={16} tint="warn" />
                             <div className={s.calloutBody}>
                                 <div className={s.calloutTitle}>{t("Placemaker.UI.Review.Permanent", "Some changes can't be undone")}</div>
                                 {summary.permanent.map((p, n) => (
@@ -141,7 +137,7 @@ export const ReviewStage = ({
                     ) : null}
                     {errors === 0 && summary.issues.length === 0 && !pending ? (
                         <div className={s.allGood} data-testid="all-good">
-                            <Icon name="check" size={14} color="#6fdc8c" />
+                            <Icon name="check" size={14} tint="ok" />
                             <div className={s.allGoodText}>{t("Placemaker.UI.Review.AllGood", "No problems found. Press Build when you're happy.")}</div>
                         </div>
                     ) : null}
@@ -157,7 +153,7 @@ export const BuildingStage = ({ state }: { state: ToolState }) => {
     return (
         <div className={s.stage} data-testid="stage-building">
             <div className={s.buildHead}>
-                <Icon name="building" size={18} color="#8fd1ff" />
+                <Icon name="building" size={18} tint="accent" />
                 <div className={s.buildTitle}>{t("Placemaker.UI.Building.Title", "Building…")}</div>
                 <div className={s.flex} />
                 <div className={s.buildPct}>{Math.round(p * 100)}%</div>

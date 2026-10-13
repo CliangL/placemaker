@@ -8,34 +8,6 @@
     flex: 1 1 auto;
 }
 
-.sectionHead {
-    @include row;
-    height: 22rem;
-}
-
-.sectionLabel {
-    margin-bottom: 6rem;
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-}
-
-.sectionHead .sectionLabel {
-    margin-bottom: 0;
-}
-
-.modified {
-    margin-left: 8rem;
-    padding: 1rem 6rem;
-    border-radius: 8rem;
-    background-color: rgba(255, 181, 71, 0.16);
-    color: #ffd59a;
-    font-size: 10rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
 .emptyNote {
     padding: 14rem 0;
     font-size: var(--fontSizeS);
@@ -96,14 +68,6 @@
     @include ellipsis;
 }
 
-.brush {
-    @include col;
-    margin-top: 10rem;
-    padding: 6rem 10rem;
-    border-radius: $radius;
-    background-color: $c-surface;
-}
-
 .brushRow {
     @include row;
     min-height: 32rem;
@@ -115,134 +79,125 @@
     flex-shrink: 0;
 }
 
-.areaFoot {
-    @include row;
-    margin-top: 12rem;
-    min-height: 30rem;
+.first {
+    margin-top: 0;
 }
 
-// ── make row ──
-.makeRow {
+// ── area mode cards (2 × 2) ──
+.modes {
     @include row(stretch);
     flex-wrap: wrap;
-    margin-top: 6rem;
-    margin-bottom: 4rem;
+    margin: -4rem;
 }
 
-.recipe {
+.modeCell {
+    @include row(stretch);
+    width: 50%;
+}
+
+.mode {
     @include row;
     @include button-reset;
-    position: relative;
-    height: 32rem;
-    padding: 0 11rem 0 4rem;
-    margin: 0 5rem 5rem 0;
-    border-radius: 16rem;
-    background-color: $c-surface;
-    @include border(1rem, transparent);
-    transition-property: background-color, transform;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 58rem;
+    margin: 4rem;
+    padding: 0 10rem;
+    border-radius: $radius + 2rem;
+    background-color: rgba(255, 255, 255, 0.06);
+    @include border(1rem, rgba(255, 255, 255, 0.1));
+    text-align: left;
+    transition-property: background-color;
     transition-duration: $t-fast;
     &:hover {
-        background-color: $c-surface-hover;
+        background-color: rgba(255, 255, 255, 0.11);
     }
 }
 
-.recipeOn {
-    background-color: rgba(255, 255, 255, 0.13);
-    @include border-color(rgba(255, 255, 255, 0.3));
+.modeOn {
+    background-color: rgba(143, 209, 255, 0.16);
+    @include border-color(var(--accentColorNormal));
+    .modeIcon {
+        background-color: var(--accentColorNormal);
+    }
+    &:hover {
+        background-color: rgba(143, 209, 255, 0.2);
+    }
 }
 
-.recipeIcon {
+.modeIcon {
     @include row;
     justify-content: center;
-    width: 24rem;
-    height: 24rem;
-    border-radius: 12rem;
-    background-color: rgba(255, 255, 255, 0.07);
-    transition-property: background-color;
-    transition-duration: $t-med;
+    width: 36rem;
+    height: 36rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
 }
 
-.recipeName {
-    margin-left: 7rem;
+.modeText {
+    @include col;
+    min-width: 0;
+    margin-left: 10rem;
+}
+
+.modeName {
     font-size: var(--fontSizeS);
-    color: var(--menuText1Normal);
+    font-weight: bold;
+    color: #ffffff;
+    @include ellipsis;
+}
+
+.modeDesc {
+    margin-top: 1rem;
+    font-size: var(--fontSizeXS);
+    color: $c-text-dim;
+    @include ellipsis;
+}
+
+.areaCard {
+    @include col;
+    padding: 12rem;
+    border-radius: $radius-l;
+    background-color: rgba(0, 0, 0, 0.18);
+    @include border(1rem, $c-line);
+}
+
+.areaStats {
+    @include row(stretch);
+    margin-bottom: 10rem;
+}
+
+.areaStat {
+    @include col;
+    flex: 1 1 0;
+}
+
+.areaStatValue {
+    font-size: var(--fontSizeL);
+    font-weight: bold;
+    color: #ffffff;
     white-space: nowrap;
 }
 
-.recipeOn .recipeName {
-    color: #ffffff;
-    font-weight: bold;
+.areaStatLabel {
+    font-size: var(--fontSizeXS);
+    color: $c-text-dim;
 }
 
-.recipeBadge {
-    @include row;
-    justify-content: center;
-    margin-left: 6rem;
-    width: 14rem;
-    height: 14rem;
-    border-radius: 7rem;
-    background-color: rgba(255, 181, 71, 0.85);
-    color: #2a1a05;
+.areaFoot {
+    @include row(flex-start);
 }
 
-// ── tree ──
-.treeHead {
-    @include row;
-    margin-top: 8rem;
-    height: 26rem;
-    .sectionLabel {
-        margin-bottom: 0;
-    }
+.areaHint {
+    flex: 1 1 auto;
+    margin-left: 8rem;
+    font-size: var(--fontSizeS);
+    line-height: 19rem;
+    color: var(--menuText1Normal);
 }
 
-.tree {
-    @include col;
-    margin-top: 2rem;
-    padding: 4rem;
-    border-radius: $radius + 2rem;
-    background-color: $c-shade;
-}
-
-.treeRow {
-    @include row;
-    height: 32rem;
-    padding-right: 4rem;
-    border-radius: $radius;
-    cursor: pointer;
-    transition-property: background-color;
-    transition-duration: $t-fast;
-    &:hover {
-        background-color: $c-surface;
-    }
-}
-
-.treeRowOn {
-    background-color: rgba(255, 255, 255, 0.1);
-    &:hover {
-        background-color: rgba(255, 255, 255, 0.12);
-    }
-}
-
-.treeRowOff {
-    opacity: 0.5;
-}
-
-.treeElbow {
-    width: 8rem;
-    height: 14rem;
-    margin-left: -12rem;
-    margin-right: 4rem;
-    margin-top: -12rem;
-    border-left-width: 1rem;
-    border-left-style: solid;
-    border-left-color: $c-line-strong;
-    border-bottom-width: 1rem;
-    border-bottom-style: solid;
-    border-bottom-color: $c-line-strong;
-    border-bottom-left-radius: 4rem;
-}
-
+// ── review breakdown ──
 .treeBar {
     width: 3rem;
     height: 18rem;
@@ -251,285 +206,7 @@
     flex-shrink: 0;
 }
 
-.treeName {
-    margin-left: 7rem;
-    font-size: var(--fontSizeS);
-    color: var(--menuText1Normal);
-    @include ellipsis;
-}
-
-.treeRowOn .treeName {
-    color: #ffffff;
-    font-weight: bold;
-}
-
-.treeTarget {
-    margin-left: 8rem;
-    padding: 1rem 7rem;
-    border-radius: 8rem;
-    background-color: $c-surface-hover;
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
-    white-space: nowrap;
-}
-
-.treeWarn {
-    @include row;
-    margin-left: 6rem;
-}
-
-.treeActions {
-    @include row;
-}
-
-.treeBtn {
-    width: 24rem;
-    height: 24rem;
-    color: $c-text-dim;
-}
-
-.treeSwitch {
-    @include row;
-    margin: 0 4rem;
-}
-
-// ── regions ──
-.regions {
-    @include col;
-    margin: 2rem 0 4rem 30rem;
-    padding: 6rem 8rem;
-    border-radius: $radius;
-    background-color: $c-surface;
-}
-
-.regionsHead {
-    @include row;
-}
-
-.regionsTitle {
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
-}
-
-.regionChips {
-    @include row;
-    flex-wrap: wrap;
-    margin-top: 4rem;
-}
-
-.regionChip {
-    @include row;
-    @include button-reset;
-    height: 24rem;
-    padding: 0 7rem 0 5rem;
-    margin: 0 4rem 4rem 0;
-    border-radius: $radius-s;
-    background-color: rgba(255, 255, 255, 0.07);
-    @include border(1rem, transparent);
-    transition-property: background-color;
-    transition-duration: $t-fast;
-    &:hover {
-        background-color: $c-surface-strong;
-    }
-}
-
-.regionChipOv {
-    @include border-color(rgba(255, 169, 77, 0.6));
-    background-color: rgba(255, 169, 77, 0.12);
-}
-
-.regionChipOpen {
-    @include border-color(var(--accentColorNormal));
-}
-
-.regionNum {
-    margin-left: 4rem;
-    font-size: var(--fontSizeXS);
-}
-
-.regionMenu {
-    @include col;
-    margin-top: 4rem;
-    padding-top: 6rem;
-    border-top-width: 1rem;
-    border-top-style: solid;
-    border-top-color: $c-line;
-}
-
-// ── add menu ──
-.addWrap {
-    @include col;
-    align-items: flex-start;
-    margin-top: 8rem;
-}
-
-.addMenu {
-    @include col;
-    align-self: stretch;
-    margin-top: 6rem;
-    padding: 8rem 10rem;
-    border-radius: $radius + 2rem;
-    background-color: $c-shade;
-    animation-name: pmFade;
-    animation-duration: 0.15s;
-}
-
-@keyframes pmFade {
-    0% {
-        opacity: 0;
-    }
-    100% {
-        opacity: 1;
-    }
-}
-
-.addMenuEmpty {
-    font-size: var(--fontSizeS);
-    color: $c-text-dim;
-}
-
-.addSection {
-    @include col;
-    margin-bottom: 6rem;
-}
-
-.addHeading {
-    margin-bottom: 4rem;
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
-}
-
-.addOptions {
-    @include row;
-    flex-wrap: wrap;
-}
-
-.addOption {
-    @include row;
-    @include button-reset;
-    height: 28rem;
-    padding: 0 10rem 0 8rem;
-    margin: 0 5rem 5rem 0;
-    border-radius: $radius;
-    background-color: $c-surface;
-    @include border(1rem, transparent);
-    transition-property: background-color;
-    transition-duration: $t-fast;
-    &:hover {
-        background-color: $c-surface-strong;
-    }
-}
-
-.addOptionOn {
-    @include border-color(var(--accentColorNormal));
-}
-
-.addOptionName {
-    margin-left: 6rem;
-    font-size: var(--fontSizeS);
-    white-space: nowrap;
-}
-
-// ── step editor ──
-.editor {
-    @include col;
-    margin-top: 8rem;
-}
-
-.editorHead {
-    @include row;
-    flex-wrap: wrap;
-    min-height: 32rem;
-    margin-bottom: 4rem;
-}
-
-.editorTitle {
-    @include row;
-    margin-right: 10rem;
-}
-
-.editorName {
-    margin-left: 6rem;
-    font-size: var(--fontSizeM);
-    font-weight: bold;
-    color: #ffffff;
-}
-
-.presets {
-    @include row;
-    flex-wrap: wrap;
-}
-
-.presetBtn {
-    height: 26rem;
-    margin-right: 4rem;
-    font-size: var(--fontSizeXS);
-}
-
-.nextStep {
-    @include row;
-    margin: 2rem 0 6rem 0;
-    padding: 6rem 10rem;
-    border-radius: $radius;
-    background-color: rgba(143, 209, 255, 0.1);
-}
-
-.nextStepText {
-    margin-left: 8rem;
-    font-size: var(--fontSizeS);
-    color: #cfeaff;
-}
-
-.targetRow {
-    @include row;
-    min-height: 32rem;
-}
-
-.targetLabel {
-    width: 150rem;
-    flex-shrink: 0;
-    font-size: var(--fontSizeS);
-}
-
-.chipsInline {
-    @include row;
-    flex-wrap: wrap;
-}
-
-.targetChip {
-    @include row;
-    @include button-reset;
-    height: 26rem;
-    padding: 0 9rem;
-    margin: 2rem 4rem 2rem 0;
-    border-radius: 13rem;
-    background-color: $c-surface;
-    color: $c-text-dim;
-    font-size: var(--fontSizeS);
-    &:hover {
-        background-color: $c-surface-hover;
-        color: var(--menuText1Normal);
-    }
-}
-
-.targetChipOn {
-    background-color: rgba(143, 209, 255, 0.18);
-    color: #ffffff;
-}
-
-.designFoot {
-    @include row;
-    margin-top: 10rem;
-    padding-top: 8rem;
-    border-top-width: 1rem;
-    border-top-style: solid;
-    border-top-color: $c-line;
-}
-
-.saveHot {
-    color: #ffd59a;
-}
-
+// ── rename ──
 .saveRow {
     @include row;
     flex: 1 1 auto;
@@ -552,18 +229,22 @@
 // ── review ──
 .bigRow {
     @include row(stretch);
-    padding: 10rem 4rem 12rem 4rem;
+    padding: 14rem 14rem;
+    border-radius: $radius-l;
+    background-color: rgba(0, 0, 0, 0.2);
+    @include border(1rem, $c-line);
 }
 
 .big {
     @include col;
     flex: 1 1 0;
+    min-width: 0;
 }
 
 .bigSep {
     width: 1rem;
-    margin: 4rem 14rem;
-    background-color: $c-line;
+    margin: 2rem 12rem;
+    background-color: $c-line-strong;
 }
 
 .bigLabel {
@@ -575,10 +256,10 @@
 
 .bigValue {
     margin-top: 4rem;
-    font-size: var(--fontSizeXL);
+    font-size: var(--fontSizeL);
     font-weight: bold;
     color: #ffffff;
-    white-space: nowrap;
+    @include ellipsis;
 }
 
 .bad {
@@ -815,12 +496,4 @@
     > div {
         margin-right: 6rem;
     }
-}
-
-.areaHint {
-    flex: 1 1 auto;
-    margin-left: 8rem;
-    margin-right: 8rem;
-    font-size: var(--fontSizeS);
-    color: $c-text-dim;
 }

@@ -25,18 +25,19 @@ export const Tooltip = ({ tooltip, children, direction = "up" }: { tooltip: Reac
         },
     });
     if (!rect) return child;
-    const below = direction === "down";
-    const style: React.CSSProperties = {
-        position: "fixed",
-        left: rect.left + rect.width / 2,
-        top: below ? rect.bottom + 8 : rect.top - 8,
-        transform: below ? "translateX(-50%)" : "translate(-50%, -100%)",
-    };
+    const style: React.CSSProperties =
+        direction === "left"
+            ? { position: "fixed", left: rect.left - 10, top: rect.top + rect.height / 2, transform: "translate(-100%, -50%)" }
+            : direction === "right"
+            ? { position: "fixed", left: rect.right + 10, top: rect.top + rect.height / 2, transform: "translateY(-50%)" }
+            : direction === "down"
+            ? { position: "fixed", left: rect.left + rect.width / 2, top: rect.bottom + 8, transform: "translateX(-50%)" }
+            : { position: "fixed", left: rect.left + rect.width / 2, top: rect.top - 8, transform: "translate(-50%, -100%)" };
     return (
         <>
             {child}
             {createPortal(
-                <div className="mock-tooltip" style={style} data-testid="tooltip">
+                <div className="mock-tooltip" style={style} data-testid="tooltip" data-direction={direction}>
                     {tooltip}
                 </div>,
                 document.body,

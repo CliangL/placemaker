@@ -1,13 +1,14 @@
 // Asset picker: searchable grid with thumbnails, "Automatic" tile, recently used, multi-select.
 // Opened by Asset / AssetMulti / Arrangement controls through PickerContext and rendered by the panel
-// as a card stacked above it, so it is never clipped by the scrolling body.
+// as a flyout beside it (never clipped by the scrolling body). Closes with its X, Esc or a click outside.
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import classNames from "classnames";
 import { AssetItem } from "../contract";
 import { act, useAssets } from "../lib/bindings";
 import { useT } from "../lib/l10n";
 import { compactMoney } from "../lib/format";
-import { Btn, Icon } from "./common";
+import { Tip } from "../lib/tips";
+import { Btn, Icon, Keys } from "./common";
 import s from "./picker.module.scss";
 
 export interface PickerRequest {
@@ -98,6 +99,18 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
     const [selected, setSelected] = useState<string[]>(req.selected);
     useEffect(() => setSelected(req.selected), [req]);
     const recentIds = useMemo(() => loadRecent()[req.category] ?? [], [req.category]);
+    // Esc closes the picker wherever the focus is (captured first, so it doesn't also close the tool).
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation?.();
+            onClose();
+        };
+        window.addEventListener("keydown", onKey, true);
+        return () => window.removeEventListener("keydown", onKey, true);
+    }, [onClose]);
 
     const q = query.trim().toLowerCase();
     const items = (list ?? []).filter((a) => !q || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q) || (a.tags ?? []).some((x) => x.toLowerCase().includes(q)));
@@ -134,7 +147,7 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                 {a.cost ? <div className={s.tileCost}>{compactMoney(a.cost)}</div> : null}
                 {on ? (
                     <div className={s.tileCheck}>
-                        <Icon name="check" size={12} />
+                        <Icon name="check" size={12} tint="dark" />
                     </div>
                 ) : null}
             </button>
@@ -144,9 +157,25 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
     return (
         <div className={s.card} data-testid="asset-picker" onMouseDown={(e) => e.stopPropagation()}>
             <div className={s.head}>
-                <div className={s.title}>{req.title}</div>
+                <div className={s.headRow}>
+                    <div className={s.title}>{req.title}</div>
+                    <Tip title={t("Placemaker.UI.Close", "Close")} description={<Keys keys={["Esc"]} />}>
+                        <button
+                            type="button"
+                            className={s.closeBtn}
+                            data-testid="asset-picker-close"
+                            data-icon-button="true"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClose();
+                            }}
+                        >
+                            <Icon name="close" size={18} />
+                        </button>
+                    </Tip>
+                </div>
                 <div className={s.search}>
-                    <Icon name="search" size={14} />
+                    <Icon name="search" size={15} tint="dim" />
                     <input
                         className={s.searchInput}
                         data-testid="asset-search"
@@ -159,7 +188,6 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                         }}
                     />
                 </div>
-                <Btn icon="close" title={t("Placemaker.UI.Close", "Close")} onClick={onClose} testId="asset-picker-close" />
             </div>
             <div className={s.body}>
                 {list === undefined ? (
@@ -189,7 +217,7 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                                     }}
                                 >
                                     <div className={s.autoIcon}>
-                                        <Icon name="auto" size={24} />
+                                        <Icon name="auto" size={26} tint="accent" />
                                     </div>
                                     <div className={s.tileName}>
                                         {req.mode === "multi" ? t("Placemaker.UI.Picker.AutoMix", "Automatic mix") : t("Placemaker.UI.Picker.Auto", "Automatic")}

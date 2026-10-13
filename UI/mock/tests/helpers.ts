@@ -11,9 +11,18 @@ export async function open(page: Page, opts: { width?: number; height?: number; 
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     page.on("console", (m) => {
-        if (m.type() === "error") errors.push(m.text());
+        // Vanilla game icons ("Media/Game/Icons/X.svg", relative like vanilla) don't exist in the browser:
+        // the Icon component falls back to our glyph, so their 404s are expected here.
+        if (m.type() === "error" && !(m.location()?.url ?? "").includes("/Media/")) errors.push(m.text());
     });
     await page.goto(opts.real ? "/" : "/?fake=1");
+    await page.evaluate(() => {
+        try {
+            localStorage.removeItem("placemaker.panelPos.v2");
+        } catch {
+            /* ignore */
+        }
+    });
     await expect(page.getByTestId("placemaker-panel")).toBeVisible();
     // make builds quick and deterministic for tests
     await page.evaluate(() => ((window as any).pm.backend.buildStepMs = 40));
@@ -60,19 +69,22 @@ export async function shot(page: Page, name: string) {
     await page.screenshot({ path: path.join(SHOTS, name + ".png") });
 }
 
+/** The panel (and a picker flyout beside it, if open) with a little map around it. */
 export async function panelShot(page: Page, name: string) {
     fs.mkdirSync(SHOTS, { recursive: true });
     await page.mouse.move(5, 300);
     await page.waitForTimeout(250);
-    const dock = page.getByTestId("placemaker-panel");
-    const box = await dock.boundingBox();
+    const box = await page.getByTestId("placemaker-panel").boundingBox();
     if (!box) throw new Error("panel not visible");
-    const pad = 24;
-    const top = Math.max(0, box.y - 420);
-    await page.screenshot({
-        path: path.join(SHOTS, name + ".png"),
-        clip: { x: Math.max(0, box.x - pad), y: top, width: box.width + pad * 2, height: box.y + box.height - top + pad },
-    });
+    const flyout = page.getByTestId("picker-flyout");
+    const fly = (await flyout.count()) ? await flyout.boundingBox() : null;
+    const vp = page.viewportSize()!;
+    const pad = 20;
+    const x0 = Math.max(0, Math.min(box.x, fly ? fly.x : box.x) - pad);
+    const x1 = Math.min(vp.width, Math.max(box.x + box.width, fly ? fly.x + fly.width : 0) + pad);
+    const y0 = Math.max(0, box.y - pad);
+    const y1 = Math.min(vp.height, box.y + box.height + pad);
+    await page.screenshot({ path: path.join(SHOTS, name + ".png"), clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
 }
 
 export function stage(page: Page) {
