@@ -1,5 +1,5 @@
 {
-  "Placemaker.Recipe.SplitParkPlaza": "Park and plaza",
+  "Placemaker.Recipe.SplitParkPlaza": "Park + plaza",
   "Placemaker.Recipe.SplitParkPlaza.Description": "Divides the area: a park on one side, a plaza on the other. Drag the divider or the slider.",
   "Placemaker.Split.Name": "Split",
   "Placemaker.Split.cuts": "Divider",

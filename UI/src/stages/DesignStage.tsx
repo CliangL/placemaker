@@ -216,7 +216,6 @@ const TypeCard = ({ r, on }: { r: RecipeInfo; on: boolean }) => {
                     </div>
                     <div className={s.cardText}>
                         <div className={s.cardName}>{name}</div>
-                        {desc ? <div className={s.cardDesc}>{desc}</div> : null}
                     </div>
                 </button>
             </Tip>
