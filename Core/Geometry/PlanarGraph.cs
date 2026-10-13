@@ -55,6 +55,8 @@ namespace Placemaker.Core.Geometry
     /// geometry (sampled curve, A→B, endpoints included). Build it from the nets near the cursor;
     /// exclude elevated/tunnel edges (crossings without a node would break planarity). Implements
     /// <see cref="INetworkGraph{TNode}"/> for Dijkstra path fill and the node boundary trace.
+    /// Queries build lazy indices: call <see cref="Prepare"/> once after the last edit before querying
+    /// from several threads; edits are never thread-safe.
     /// </summary>
     public sealed class PlanarGraph : INetworkGraph<long>
     {
@@ -134,6 +136,9 @@ namespace Placemaker.Core.Geometry
             _dirty = true;
             return true;
         }
+
+        /// <summary>Builds the angular order and components now (afterwards queries only read).</summary>
+        public void Prepare() => Build();
 
         // ───────────────────────────── INetworkGraph ─────────────────────────────
 
