@@ -99,7 +99,6 @@ namespace Placemaker.Game.Tool
                 _designVersion++;
                 _inputRevision++;
                 _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
-                _inputFromDrag = false;
                 Touch();
             }
             _autoDesignVersion = _designVersion;
