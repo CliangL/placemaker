@@ -280,6 +280,25 @@ namespace Placemaker.Core.Tool
             }
             o.Set("markerKinds", kinds);
             o.Set("markersRequired", MarkerKinds.Required(gen, s.Settings));
+            var features = Features.Of(gen);
+            if (features.Count > 0)
+            {
+                var fa = JsonValue.Arr();
+                foreach (var f in features)
+                {
+                    if (f == null || string.IsNullOrEmpty(f.Layer)) continue;
+                    IAreaGenerator fg = null;
+                    try { fg = generators?.Invoke(f.Layer); } catch (Exception) { fg = null; }
+                    int idx = Features.ChildIndex(s, f);
+                    string label = !string.IsNullOrEmpty(f.LabelKey) ? f.LabelKey : fg?.NameKey ?? f.Layer;
+                    var fo = JsonValue.Obj().Set("layer", f.Layer).Set("label", label ?? "")
+                        .Set("icon", IconPath(fg?.Icon ?? ""))
+                        .Set("enabled", idx >= 0 && s.Children[idx].Enabled);
+                    if (idx >= 0) fo.Set("path", RecipePaths.Child(path, idx));
+                    fa.Add(fo);
+                }
+                o.Set("features", fa);
+            }
             StepStatus st = null;
             if (status != null) status.TryGetValue(path, out st);
             o.Set("ready", st == null || st.Ready);

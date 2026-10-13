@@ -16,7 +16,7 @@ using Random = Unity.Mathematics.Random;
 namespace Placemaker.Core.Layers.Plaza
 {
     [AreaGenerator(20)]
-    public sealed class PlazaLayer : LayerBase
+    public sealed class PlazaLayer : LayerBase, IHasFeatures
     {
         public const string LayerId = "plaza";
         public const string AccessKind = "access";
@@ -31,6 +31,14 @@ namespace Placemaker.Core.Layers.Plaza
         public override LayerKind Kind => LayerKind.Fill;
         public override string[] Emits => new[] { RegionTags.Paved, RegionTags.Core, RegionTags.Edge };
         public override float MinArea => 60f;
+
+        /// <summary>Built-in features (FEEDBACK-2): toggles in the panel, each one a child step.</summary>
+        public IReadOnlyList<FeatureInfo> Features { get; } = new FeatureList()
+            .Add("bigtrees")
+            .Add("flowerbeds")
+            .Add("playground")
+            .Add("fountain", "", false, ("size", "large"))
+            .Build();
 
         protected override void DefineControls(ControlSet c)
         {

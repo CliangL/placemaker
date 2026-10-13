@@ -259,6 +259,7 @@ namespace Placemaker.Game.Tool
 
         private void FinishFrame()
         {
+            CheckKeepOffSetting();
             RebuildShapeIfDirty(false);
             UpdatePlanning();
             var facts = Facts();

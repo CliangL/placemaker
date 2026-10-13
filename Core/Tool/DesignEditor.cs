@@ -120,6 +120,75 @@ namespace Placemaker.Core.Tool
             return RecipePaths.Child(RecipePaths.ParentOf(path), to);
         }
 
+        // ───────────── features ─────────────
+
+        /// <summary>
+        /// Turns a built-in feature of the fill step at <paramref name="path"/> on (adds the child step:
+        /// feature layer defaults + saved defaults, FeatureInfo.Preset on top, Target from the
+        /// FeatureInfo) or off (removes that child). A disabled feature child is re-enabled instead
+        /// of duplicated. Returns false when nothing changed or the feature is unknown.
+        /// </summary>
+        public bool SetFeature(Recipe recipe, string path, string featureLayer, bool enabled, uint seed)
+        {
+            var step = RecipePaths.Resolve(recipe, path);
+            if (step == null) return false;
+            var f = Features.Find(Generator(step.Layer), featureLayer);
+            if (f == null) return false;
+            int idx = Features.ChildIndex(step, f);
+            if (!enabled)
+            {
+                if (idx < 0) return false;
+                step.Children.RemoveAt(idx);
+                return true;
+            }
+            if (idx >= 0)
+            {
+                if (step.Children[idx].Enabled) return false;
+                step.Children[idx].Enabled = true;
+                return true;
+            }
+            if (Depth(path) >= Composer.MaxDepth) return false;
+            step.Children.Add(FeatureStep(f, seed));
+            return true;
+        }
+
+        public RecipeStep FeatureStep(FeatureInfo f, uint seed)
+        {
+            var s = NewStep(f.Layer, f.Target ?? "", seed);
+            var gen = Generator(f.Layer);
+            if (f.Preset != null)
+                foreach (var kv in f.Preset.Values)
+                {
+                    var schema = FindControl(gen, kv.Key);
+                    if (gen != null && schema == null) continue;
+                    var v = schema != null ? Coerce(schema, kv.Value) : kv.Value;
+                    if (v != null) s.Settings.Values[kv.Key] = v is string[] a ? (string[])a.Clone() : v;
+                }
+            return s;
+        }
+
+        /// <summary>
+        /// Adds every DefaultOn feature (of every fill step) that has no child yet — for a recipe just
+        /// picked from the Make row. Returns true when anything was added.
+        /// </summary>
+        public bool AddDefaultFeatures(Recipe recipe, Func<uint> seed)
+        {
+            if (recipe?.Root == null) return false;
+            bool changed = false;
+            foreach (var kv in new List<KeyValuePair<string, RecipeStep>>(RecipePaths.Walk(recipe)))
+            {
+                var step = kv.Value;
+                foreach (var f in Features.Of(Generator(step.Layer)))
+                {
+                    if (f == null || !f.DefaultOn || Features.ChildIndex(step, f) >= 0) continue;
+                    if (Depth(kv.Key) >= Composer.MaxDepth) continue;
+                    step.Children.Add(FeatureStep(f, seed != null ? seed() : 0u));
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
         public bool SetEnabled(Recipe recipe, string path, bool enabled)
         {
             var step = RecipePaths.Resolve(recipe, path);

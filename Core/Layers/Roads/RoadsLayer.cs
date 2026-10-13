@@ -13,7 +13,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads
 {
     [AreaGenerator(400)]
-    public sealed class RoadsLayer : IAreaGenerator
+    public sealed class RoadsLayer : IAreaGenerator, IHasFeatures
     {
         public const string LayerId = "roads";
 
@@ -33,6 +33,11 @@ namespace Placemaker.Core.Layers.Roads
         public string[] Accepts => Array.Empty<string>();
         public string[] Emits => new[] { RegionTags.Block, RegionTags.Edge, RegionTags.Core };
         public int Version => 1;
+
+        /// <summary>Built-in features (FEEDBACK-2): zoning along the new streets.</summary>
+        public IReadOnlyList<FeatureInfo> Features { get; } = new Placemaker.Core.Layers.Common.FeatureList()
+            .Add(Placemaker.Core.Layers.AddOns.EdgeZoningAddOn.LayerId, RegionTags.Edge)
+            .Build();
 
         public IReadOnlyList<ControlSchema> Controls => _controls;
         public IReadOnlyList<PresetInfo> Presets => _presets;

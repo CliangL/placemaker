@@ -77,6 +77,7 @@ namespace Placemaker.Game.Tool
             if (string.IsNullOrEmpty(id) || id == _recipeId && _recipe != null) return;
             var r = _recipes.Instantiate(id, NewSeed());
             if (r == null) { Flash(new LocText("Placemaker.Problem.UnknownRecipe")); return; }
+            _editor.AddDefaultFeatures(r, NewSeed);
             // Markers the player placed for the same root layer stay (switching park ↔ park+playground keeps entrances).
             bool sameRoot = _recipe != null && _recipe.Root.Layer == r.Root.Layer;
             if (sameRoot && _recipe.Root.Markers.Count > 0)
@@ -125,6 +126,15 @@ namespace Placemaker.Game.Tool
 
         public void SetStepEnabled(string path, bool enabled) =>
             Edit(r => _editor.SetEnabled(r, path, enabled), enabled ? "Placemaker.Undo.EnableLayer" : "Placemaker.Undo.DisableLayer");
+
+        /// <summary>UI: turn a built-in feature (playground, zoning…) of the fill step at path on or off — adds/removes its child step.</summary>
+        public void SetFeature(string path, string featureLayer, bool enabled)
+        {
+            if (!Edit(r => _editor.SetFeature(r, path, featureLayer, enabled, NewSeed()),
+                    enabled ? "Placemaker.Undo.EnableFeature" : "Placemaker.Undo.DisableFeature") || enabled) return;
+            if (RecipePaths.Resolve(_recipe, _focus) == null) _focus = path;
+            if (_markerPath != null && RecipePaths.Resolve(_recipe, _markerPath) == null) ExitMarkerMode();
+        }
 
         public void SetStepTarget(string path, string target) =>
             Edit(r => _editor.SetTarget(r, path, target), "Placemaker.Undo.SetTarget");
