@@ -130,50 +130,44 @@
 }
 
 .recipe {
-    @include col;
+    @include row;
     @include button-reset;
-    align-items: center;
     position: relative;
-    width: 70rem;
-    padding: 6rem 2rem 5rem 2rem;
-    margin: 0 4rem 4rem 0;
-    border-radius: $radius + 2rem;
+    height: 32rem;
+    padding: 0 11rem 0 4rem;
+    margin: 0 5rem 5rem 0;
+    border-radius: 16rem;
     background-color: $c-surface;
     @include border(1rem, transparent);
     transition-property: background-color, transform;
     transition-duration: $t-fast;
     &:hover {
         background-color: $c-surface-hover;
-        transform: translateY(-1rem);
     }
 }
 
 .recipeOn {
     background-color: rgba(255, 255, 255, 0.13);
-    @include border-color(rgba(255, 255, 255, 0.28));
-    &:hover {
-        transform: translateY(0rem);
-    }
+    @include border-color(rgba(255, 255, 255, 0.3));
 }
 
 .recipeIcon {
     @include row;
     justify-content: center;
-    width: 30rem;
-    height: 30rem;
-    border-radius: 15rem;
+    width: 24rem;
+    height: 24rem;
+    border-radius: 12rem;
     background-color: rgba(255, 255, 255, 0.07);
     transition-property: background-color;
     transition-duration: $t-med;
+    flex-shrink: 0;
 }
 
 .recipeName {
-    margin-top: 4rem;
-    width: 100%;
-    font-size: 11rem;
-    text-align: center;
+    margin-left: 7rem;
+    font-size: var(--fontSizeS);
     color: var(--menuText1Normal);
-    @include ellipsis;
+    white-space: nowrap;
 }
 
 .recipeOn .recipeName {
@@ -184,12 +178,10 @@
 .recipeBadge {
     @include row;
     justify-content: center;
-    position: absolute;
-    top: 4rem;
-    right: 4rem;
-    width: 16rem;
-    height: 16rem;
-    border-radius: 8rem;
+    margin-left: 6rem;
+    width: 14rem;
+    height: 14rem;
+    border-radius: 7rem;
     background-color: rgba(255, 181, 71, 0.85);
     color: #2a1a05;
 }

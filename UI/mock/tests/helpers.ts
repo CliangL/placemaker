@@ -5,14 +5,15 @@ import path from "path";
 
 export const SHOTS = path.join(__dirname, "..", "screenshots");
 
-export async function open(page: Page, opts: { width?: number; height?: number } = {}) {
+/** Opens the mock. Default: fake catalog (stable for UX tests); { real: true } uses the Core host. */
+export async function open(page: Page, opts: { width?: number; height?: number; real?: boolean } = {}) {
     if (opts.width && opts.height) await page.setViewportSize({ width: opts.width, height: opts.height });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     page.on("console", (m) => {
         if (m.type() === "error") errors.push(m.text());
     });
-    await page.goto("/");
+    await page.goto(opts.real ? "/" : "/?fake=1");
     await expect(page.getByTestId("placemaker-panel")).toBeVisible();
     // make builds quick and deterministic for tests
     await page.evaluate(() => ((window as any).pm.backend.buildStepMs = 40));
@@ -61,6 +62,7 @@ export async function shot(page: Page, name: string) {
 
 export async function panelShot(page: Page, name: string) {
     fs.mkdirSync(SHOTS, { recursive: true });
+    await page.mouse.move(5, 300);
     await page.waitForTimeout(250);
     const dock = page.getByTestId("placemaker-panel");
     const box = await dock.boundingBox();

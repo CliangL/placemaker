@@ -62,6 +62,12 @@ export function formatValue(v: number, unit?: string, step?: number): string {
             return group(Math.round(v));
         case "ha":
             return group(v, 2) + " ha";
+        case "perHa":
+            return group(v, d) + " /ha";
+        case "per100m":
+            return group(v, d) + " /100 m";
+        case "perKm":
+            return group(v, d) + " /km";
         case "s":
             return group(v, d) + " s";
         default:

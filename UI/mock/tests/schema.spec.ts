@@ -45,6 +45,7 @@ test("visibleWhen, lock indicator, reset-to-default, randomize keeps locked valu
     await expect(page.getByTestId("reset-pathWidth")).toHaveCount(0);
     await expect(page.getByTestId("lock-pathWidth")).toHaveCount(0);
     const track = page.getByTestId("slider-pathWidth").locator("div").first();
+    await track.scrollIntoViewIfNeeded();
     const box = (await track.boundingBox())!;
     await page.mouse.click(box.x + box.width * 0.9, box.y + box.height / 2);
     await expect(page.getByTestId("slider-pathWidth-value")).toHaveText("7.5 m");

@@ -135,16 +135,26 @@ export class MockBackend {
                 Object.assign(EN, lang);
                 addStrings(lang);
             }
+            // Real layers replace fake ones with the same id (case-insensitive: "bigtrees" vs "bigTrees").
             const real: MockLayer[] = (cat?.layers ?? []).map((l: MockLayer) => ({ ...l, real: true }));
             for (const l of real) {
                 this.hostLayers.add(l.id);
-                const i = this.layers.findIndex((x) => x.id === l.id);
-                if (i >= 0) this.layers[i] = l;
-                else this.layers.push(l);
+                this.layers = this.layers.filter((x) => x.id.toLowerCase() !== l.id.toLowerCase());
             }
-            for (const r of cat?.recipes ?? []) {
-                if (!this.recipes.some((x) => x.info.id === r.id))
-                    this.recipes.push({ info: { id: r.id, name: r.name, icon: r.icon, custom: false }, root: { layer: r.root?.layer ?? r.id } });
+            this.layers = [...real, ...this.layers];
+            // Shipped recipes first; keep fake recipes only where no real layer covers their root.
+            const shipped: MockRecipe[] = (cat?.recipes ?? []).map((r: any) => ({
+                info: { id: r.id, name: r.name, icon: r.icon, custom: false, description: r.description },
+                root: r.root ?? { layer: r.id },
+            }));
+            if (shipped.length) {
+                const ids = new Set(shipped.map((r) => r.info.id));
+                const fake = this.recipes.filter((r) => !ids.has(r.info.id) && !this.hostLayers.has(r.root.layer) && !r.info.custom);
+                this.recipes = [...shipped, ...fake, ...this.recipes.filter((r) => r.info.custom)];
+                const cur = this.recipes.find((r) => r.info.id === this.recipeId) ?? this.recipes[0];
+                this.recipeId = cur.info.id;
+                this.root = this.instantiate(cur.root);
+                this.focus = "0";
             }
         } catch {
             this.hostUp = false;
@@ -161,7 +171,9 @@ export class MockBackend {
 
     defaults(layerId: string): Record<string, SettingValue> {
         const out: Record<string, SettingValue> = {};
-        for (const c of this.layer(layerId)?.controls ?? []) if (c.default !== undefined && c.default !== null && c.kind !== "markers") out[c.id] = clone(c.default);
+        const l = this.layer(layerId) as (MockLayer & { defaults?: Record<string, SettingValue> }) | undefined;
+        if (l?.defaults) return clone(l.defaults);
+        for (const c of l?.controls ?? []) if (c.default !== undefined && c.default !== null && c.kind !== "markers") out[c.id] = clone(c.default);
         return out;
     }
 
@@ -175,7 +187,7 @@ export class MockBackend {
             seed: Math.floor(Math.random() * 1e9),
             markers: [],
             children: (t.children ?? []).map((c) => this.instantiate(c)),
-            overrides: {},
+            overrides: Object.fromEntries(Object.entries(t.overrides ?? {}).map(([k, v]) => [k, this.instantiate(v)])),
         };
     }
 

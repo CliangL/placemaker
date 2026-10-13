@@ -5,7 +5,7 @@ import classNames from "classnames";
 import { Catalog, Issue, Summary, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { area as fmtArea, formatValue, Money } from "../lib/format";
-import { layerColor, statIcon } from "../lib/icons";
+import { entityIcon, layerColor, statIcon } from "../lib/icons";
 import { humanize, useT } from "../lib/l10n";
 import { layerOf } from "../lib/schema";
 import { Btn, Check, Foldout, Icon } from "../components/common";
@@ -104,7 +104,7 @@ export const ReviewStage = ({
                                 return (
                                     <div key={n} className={s.breakRow}>
                                         <div className={s.treeBar} style={{ backgroundColor: layerColor(layer.id, layer.kind) }} />
-                                        <Icon name={layer.icon || layer.id} size={15} color={layerColor(layer.id, layer.kind)} />
+                                        <Icon name={entityIcon(layer.id, layer.icon)} size={15} color={layerColor(layer.id, layer.kind)} />
                                         <div className={s.breakName}>
                                             {layerName(t, layer)}
                                             {l.regionKey && l.regionKey !== "root" ? <span className={s.breakRegion}>{" · " + targetLabel(t, l.regionKey)}</span> : null}

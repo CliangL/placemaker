@@ -6,7 +6,7 @@ import classNames from "classnames";
 import { Catalog, DesignState, LayerType, StepView, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { area as fmtArea } from "../lib/format";
-import { layerColor } from "../lib/icons";
+import { entityIcon, layerColor } from "../lib/icons";
 import { humanize, TFunc, useT } from "../lib/l10n";
 import {
     addSections, AddSection, findStep, isOverridePath, isSimple, layerOf, overridableRegions, parentOf, regionLabelArgs, targetChoices,
@@ -42,7 +42,7 @@ const RecipeRow = ({ catalog, design }: { catalog: Catalog; design: DesignState 
         <div className={s.makeRow} data-testid="recipes">
             {catalog.recipes.map((r) => {
                 const on = r.id === design.recipeId;
-                const color = layerColor(r.icon || r.id);
+                const color = layerColor(r.id);
                 const name = r.custom ? r.name : t(r.name, humanize(r.name || r.id));
                 return (
                     <Tip key={r.id} title={name} description={r.description ? t(r.description, "") : undefined}>
@@ -57,12 +57,12 @@ const RecipeRow = ({ catalog, design }: { catalog: Catalog; design: DesignState 
                             }}
                         >
                             <div className={s.recipeIcon} style={on ? { backgroundColor: color } : undefined}>
-                                <Icon name={r.icon || r.id} size={18} color={on ? "#0b1d26" : color} />
+                                <Icon name={entityIcon(r.id, r.icon)} size={15} color={on ? "#0b1d26" : color} />
                             </div>
                             <div className={s.recipeName}>{name}</div>
                             {r.custom ? (
                                 <div className={s.recipeBadge}>
-                                    <Icon name="custom" size={10} />
+                                    <Icon name="custom" size={9} />
                                 </div>
                             ) : null}
                         </button>
@@ -104,7 +104,7 @@ const AddMenu = ({ catalog, step, onDone }: { catalog: Catalog; step: StepView; 
                                     onDone();
                                 }}
                             >
-                                <Icon name={o.layer.icon || o.layer.id} size={16} color={layerColor(o.layer.id, o.layer.kind)} />
+                                <Icon name={entityIcon(o.layer.id, o.layer.icon)} size={16} color={layerColor(o.layer.id, o.layer.kind)} />
                                 <div className={s.addOptionName}>{layerName(t, o.layer)}</div>
                             </button>
                         ))}
@@ -140,7 +140,7 @@ const TreeRow = ({
         >
             {depth > 0 ? <div className={s.treeElbow} /> : null}
             <div className={s.treeBar} style={{ backgroundColor: color }} />
-            <Icon name={layer.icon || layer.id} size={16} color={color} />
+            <Icon name={entityIcon(layer.id, layer.icon)} size={16} color={color} />
             <div className={s.treeName}>{overrideKey ? regionName(t, overrideKey) + " → " + layerName(t, layer) : layerName(t, layer)}</div>
             {parent && !overrideKey ? <div className={s.treeTarget}>{targetLabel(t, step.target)}</div> : null}
             {!step.ready ? (
@@ -206,7 +206,7 @@ const RegionStrip = ({ catalog, step }: { catalog: Catalog; step: StepView }) =>
                                     setOpen(open === r.key ? null : r.key);
                                 }}
                             >
-                                <Icon name={layer.icon || layer.id} size={13} color={layerColor(layer.id, layer.kind)} />
+                                <Icon name={entityIcon(layer.id, layer.icon)} size={13} color={layerColor(layer.id, layer.kind)} />
                                 <div className={s.regionNum}>{regionLabelArgs(r.key).index ?? r.key}</div>
                             </button>
                         </Tip>
@@ -242,7 +242,7 @@ const RegionStrip = ({ catalog, step }: { catalog: Catalog; step: StepView }) =>
                                     setOpen(null);
                                 }}
                             >
-                                <Icon name={l.icon || l.id} size={16} color={layerColor(l.id, l.kind)} />
+                                <Icon name={entityIcon(l.id, l.icon)} size={16} color={layerColor(l.id, l.kind)} />
                                 <div className={s.addOptionName}>{layerName(t, l)}</div>
                             </button>
                         ))}
@@ -287,7 +287,7 @@ const StepEditor = ({ catalog, design, state, step, simple }: { catalog: Catalog
             <div className={s.editorHead}>
                 {!simple ? (
                     <div className={s.editorTitle}>
-                        <Icon name={layer.icon || layer.id} size={16} color={layerColor(layer.id, layer.kind)} />
+                        <Icon name={entityIcon(layer.id, layer.icon)} size={16} color={layerColor(layer.id, layer.kind)} />
                         <div className={s.editorName}>{overrideKey ? regionName(t, overrideKey) + " · " + layerName(t, layer) : layerName(t, layer)}</div>
                     </div>
                 ) : null}

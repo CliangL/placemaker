@@ -39,6 +39,10 @@ const ALIASES: Record<string, string> = {
     pathlength: "path",
     length: "ruler",
     centerpiece: "fountain",
+    "park-with-playground": "playground",
+    "split-park-plaza": "parkPlaza",
+    flowerbeds: "flower",
+    flowerbed: "flower",
     statue: "fountain",
 };
 
@@ -70,15 +74,23 @@ export function resolveIcon(name: string | undefined, fallback = "layers"): Reso
 
 export const icon = (name: string) => BUNDLED[name] ?? "";
 
+/**
+ * Icon for a layer or recipe: our bundled role glyph when we have one for its id (keeps the Make
+ * row and tree visually consistent and tintable), otherwise whatever icon C# declared.
+ */
+export function entityIcon(id: string, declared?: string): string {
+    return bundledIcon(id) ? id : declared || id;
+}
+
 /** Stat key → icon ("Placemaker.Stat.Trees" → tree). */
 export function statIcon(key: string): string {
     const last = (key.split(".").pop() ?? "").toLowerCase();
     const map: Record<string, string> = {
-        trees: "tree", tree: "tree", bushes: "leaf", benches: "bench", bench: "bench", lamps: "lamp",
+        trees: "tree", tree: "tree", benches: "bench", bench: "bench", lamps: "lamp",
         stalls: "car", parking: "car", spaces: "car", roadlength: "ruler", roads: "roads", pathlength: "path",
         paths: "path", area: "area", greenarea: "leaf", pavedarea: "plaza", blocks: "block", entrances: "entrance",
         playgrounds: "playground", fountains: "fountain", restrooms: "restrooms", zoning: "zone", zonecells: "zone",
-        capacity: "people", visitors: "people", tents: "campground", water: "water",
+        capacity: "people", parts: "split", bins: "more", bushes: "leaf", flowerbeds: "flower", pitches: "campground", visitors: "people", tents: "campground", water: "water",
     };
     return map[last] ?? (bundledIcon(last) ? last : "info");
 }

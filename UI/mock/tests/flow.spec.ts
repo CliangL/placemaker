@@ -12,6 +12,7 @@ test("full flow: draw → design → review → build, then manage the result", 
     await clickWorld(page, FIELD[0][0], FIELD[0][1]);
     await clickWorld(page, FIELD[1][0], FIELD[1][1]);
     await expect(page.getByTestId("panel-compact")).toBeVisible();
+    expect((await primary.boundingBox())!.width).toBeGreaterThan(100);
     await shot(page, "02-drawing-compact");
     await clickWorld(page, FIELD[2][0], FIELD[2][1]);
     await clickWorld(page, FIELD[3][0], FIELD[3][1]);

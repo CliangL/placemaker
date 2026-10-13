@@ -20,10 +20,13 @@ export const Icon = ({
     className?: string;
     fallback?: string;
 }) => {
-    const r = resolveIcon(name, fallback);
+    const [failed, setFailed] = useState<string | null>(null);
+    const r0 = resolveIcon(name, fallback);
+    // An external (game) icon that fails to load falls back to our glyph, or disappears.
+    const r = failed === r0.src ? (fallback ? resolveIcon(fallback) : { src: "", tint: true }) : r0;
     const style: React.CSSProperties = { width: size + "rem", height: size + "rem" };
-    if (!r.src) return <div className={classNames(s.icon, className)} style={style} />;
-    if (!r.tint) return <img className={classNames(s.icon, className)} style={style} src={r.src} />;
+    if (!r.src) return failed ? null : <div className={classNames(s.icon, className)} style={style} />;
+    if (!r.tint) return <img className={classNames(s.icon, className)} style={style} src={r.src} onError={() => setFailed(r0.src)} />;
     const url = `url(${r.src})`;
     return (
         <div

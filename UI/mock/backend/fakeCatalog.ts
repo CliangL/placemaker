@@ -163,6 +163,7 @@ export interface RecipeTemplate {
     target?: string;
     values?: Record<string, SettingValue>;
     children?: RecipeTemplate[];
+    overrides?: Record<string, RecipeTemplate>;
 }
 
 export const FAKE_RECIPES: MockRecipe[] = [

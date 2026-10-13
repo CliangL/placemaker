@@ -63,7 +63,19 @@ const InfoPanel = () => {
                     <span>¢{Math.round(g.upkeep).toLocaleString("en-US")}/month</span>
                 </div>
             </div>
-            {Section ? <Section groupId={g.id} name={g.customName} recipeName={g.recipeName.key === "Placemaker.UI.Literal" ? String(g.recipeName.args?.[0]) : g.recipeName.key} canEdit /> : null}
+            {Section ? (
+                <Section
+                    groupId={g.id}
+                    name={g.customName}
+                    recipeNameKey={g.recipeName.key === "Placemaker.UI.Literal" ? String(g.recipeName.args?.[0]) : g.recipeName.key}
+                    stats={g.stats}
+                    upkeep={g.upkeep}
+                    memberCount={g.plan.layers.reduce((n, l) => n + l.objects.length + l.nets.length, 0)}
+                    missingAssets={false}
+                    modified={false}
+                    removing={false}
+                />
+            ) : null}
         </div>
     );
 };
@@ -155,4 +167,5 @@ const App = () => {
 };
 
 createRoot(document.getElementById("root")!).render(<App />);
-void backend.connectHost();
+// ?fake=1 → deterministic fake catalog/planner only (the Playwright suite's default).
+if (!new URLSearchParams(location.search).has("fake")) void backend.connectHost();

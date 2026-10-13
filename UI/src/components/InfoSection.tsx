@@ -2,11 +2,13 @@
 //   "Part of <name>" — Edit / Rename / Remove.
 // Registered for the C# InfoSectionBase `Placemaker.Game.Groups.PlacemakerGroupSection` (the key is the
 // full .NET class name: InfoSectionBase writes GetType().FullName as __Type — ParkingLotTool learned
-// that the hard way). Props are whatever that section writes; see docs/proposals/ui.md for the
-// expected fields. Unknown/missing fields degrade gracefully.
+// that the hard way). Props = what Game/Groups/PlacemakerGroupSection.OnWriteProperties writes:
+// groupId, name, recipeNameKey, stats[], upkeep, memberCount, missingAssets, modified, removing.
+// Unknown/missing fields degrade gracefully.
 import React, { useState } from "react";
 import { act } from "../lib/bindings";
-import { useT } from "../lib/l10n";
+import { humanize, useT } from "../lib/l10n";
+import { formatValue, money } from "../lib/format";
 import { ErrorBoundary } from "../lib/errorBoundary";
 import { VC } from "../lib/vanilla";
 import { useGroupActions, RenameField } from "../stages/ManageStage";
@@ -22,14 +24,24 @@ type Props = {
     name?: string;
     customName?: string;
     recipeName?: string | { key: string; args?: (string | number)[] };
+    recipeNameKey?: string;
     canEdit?: boolean;
+    stats?: { key: string; value: number; unit: string }[];
+    upkeep?: number;
+    memberCount?: number;
+    missingAssets?: boolean;
+    modified?: boolean;
+    removing?: boolean;
 };
 
 const Inner = (p: Props) => {
     const { t, tl } = useT();
     const [renaming, setRenaming] = useState(false);
     const id = typeof p.groupId === "number" ? p.groupId : typeof p.id === "number" ? p.id : typeof p.group === "number" ? p.group : -1;
-    const recipe = typeof p.recipeName === "string" ? t(p.recipeName, "") : tl(p.recipeName);
+    const recipeKey = p.recipeNameKey || (typeof p.recipeName === "string" ? p.recipeName : "");
+    const recipe = recipeKey ? t(recipeKey, "") : tl(typeof p.recipeName === "object" ? p.recipeName : undefined);
+    const busy = !!p.removing;
+    const stats = Array.isArray(p.stats) ? p.stats.filter((x) => x && x.unit === "count").slice(0, 3) : [];
     const name = p.customName || p.name || recipe || t("Placemaker.Name", "Placemaker");
     const { askRemove, dialog } = useGroupActions(id, name);
     const content = (
@@ -44,7 +56,27 @@ const Inner = (p: Props) => {
                     </div>
                 )}
             </div>
-            {!renaming ? (
+            {p.customName || p.name ? <div className={s.kind}>{recipe}</div> : null}
+            {stats.length || typeof p.upkeep === "number" ? (
+                <div className={s.facts}>
+                    {stats.map((x) => formatValue(x.value, "count") + " " + t(x.key, humanize(x.key).toLowerCase())).join(" · ")}
+                    {typeof p.upkeep === "number" ? (stats.length ? " · " : "") + money(p.upkeep) + t("Placemaker.UI.PerMonth", "/mo") : ""}
+                </div>
+            ) : null}
+            {p.missingAssets ? (
+                <div className={s.note} data-testid="info-missing">
+                    <Icon name="warning" size={14} color="#ffb547" />
+                    <div className={s.noteText}>{t("Placemaker.UI.Info.Missing", "Some assets it used are missing (a mod or asset pack was removed). Edit to replace them.")}</div>
+                </div>
+            ) : null}
+            {p.modified ? (
+                <div className={s.note}>
+                    <Icon name="info" size={14} color="#8fd1ff" />
+                    <div className={s.noteText}>{t("Placemaker.UI.Info.Modified", "Changed with other tools since it was built. Editing rebuilds it from its design.")}</div>
+                </div>
+            ) : null}
+            {busy ? <div className={s.facts}>{t("Placemaker.UI.Info.Removing", "Removing…")}</div> : null}
+            {!renaming && !busy ? (
                 <div className={s.actions}>
                     <Btn variant="solid" icon="edit" iconSize={14} label={t("Placemaker.UI.Manage.Edit", "Edit")} disabled={p.canEdit === false || id < 0} onClick={() => act.editGroup(id)} testId="info-edit" />
                     <Btn variant="solid" label={t("Placemaker.UI.Manage.Rename", "Rename")} disabled={id < 0} onClick={() => setRenaming(true)} testId="info-rename" />

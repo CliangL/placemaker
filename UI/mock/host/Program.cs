@@ -57,7 +57,7 @@ namespace Placemaker.MockHost
             });
 
             app.MapGet("/api/health", () => Results.Text("ok"));
-            app.MapGet("/api/catalog", () => Json(Api.Catalog()));
+            app.MapGet("/api/catalog", () => Json(Api.Catalog(repo)));
             app.MapGet("/api/lang", () => Json(Api.Lang(repo)));
             app.MapPost("/api/compose", async (HttpRequest req) =>
             {
@@ -99,16 +99,19 @@ namespace Placemaker.MockHost
     {
         // ───────────── catalog ─────────────
 
-        public static JsonNode Catalog()
+        public static JsonNode Catalog(string repo)
         {
             var layers = new JsonArray();
-            var recipes = new JsonArray();
+            var recipes = Recipes(repo);
+            var shippedRoots = new HashSet<string>(recipes.Select(r => (string)r["root"]?["layer"] ?? ""));
+            var shippedIds = new HashSet<string>(recipes.Select(r => (string)r["id"] ?? ""));
             foreach (var g in GeneratorRegistry.All)
             {
                 try
                 {
                     layers.Add(Layer(g));
-                    if (g.Kind == LayerKind.Fill)
+                    // Single-layer recipe for fills without a shipped recipe (so every type is reachable).
+                    if (g.Kind == LayerKind.Fill && !shippedIds.Contains(g.Id) && !shippedRoots.Contains(g.Id))
                         recipes.Add(new JsonObject
                         {
                             ["id"] = g.Id, ["name"] = g.NameKey, ["icon"] = g.Icon, ["custom"] = false,
@@ -120,7 +123,63 @@ namespace Placemaker.MockHost
                     Console.WriteLine($"Layer {g?.Id} failed to describe itself: {e.Message}");
                 }
             }
-            return new JsonObject { ["layers"] = layers, ["recipes"] = recipes };
+            var all = new JsonArray();
+            foreach (var r in recipes) all.Add(r.DeepClone());
+            return new JsonObject { ["layers"] = layers, ["recipes"] = all };
+        }
+
+        /// <summary>Shipped recipes (Recipes/*.json, docs/proposals/recipe-json.md), as mock templates.</summary>
+        private static List<JsonObject> Recipes(string repo)
+        {
+            var list = new List<(int order, string file, JsonObject r)>();
+            var dir = Path.Combine(repo, "Recipes");
+            if (!Directory.Exists(dir)) return new List<JsonObject>();
+            foreach (var f in Directory.GetFiles(dir, "*.json"))
+            {
+                try
+                {
+                    if (JsonNode.Parse(File.ReadAllText(f)) is not JsonObject o) continue;
+                    if ((o["formatVersion"]?.GetValue<int>() ?? 1) > 1) continue;
+                    var rootLayer = (string)o["root"]?["layer"] ?? "";
+                    var gen = GeneratorRegistry.Get(rootLayer);
+                    int order = int.MaxValue;
+                    if (gen != null)
+                    {
+                        var attr = (AreaGeneratorAttribute)Attribute.GetCustomAttribute(gen.GetType(), typeof(AreaGeneratorAttribute));
+                        order = attr?.Order ?? order;
+                    }
+                    var r = new JsonObject
+                    {
+                        ["id"] = (string)o["id"] ?? Path.GetFileNameWithoutExtension(f),
+                        ["name"] = (string)o["nameKey"] ?? (string)o["name"] ?? "",
+                        ["icon"] = (string)o["icon"] ?? gen?.Icon ?? "",
+                        ["custom"] = false,
+                        ["root"] = Template(o["root"]),
+                    };
+                    if (o["descriptionKey"] != null) r["description"] = (string)o["descriptionKey"];
+                    list.Add((order, Path.GetFileName(f), r));
+                }
+                catch (Exception e) { Console.WriteLine($"Recipe {f}: {e.Message}"); }
+            }
+            return list.OrderBy(x => x.order).ThenBy(x => x.file, StringComparer.Ordinal).Select(x => x.r).ToList();
+        }
+
+        /// <summary>Recipe-file step → mock template { layer, target, values, children, overrides }.</summary>
+        private static JsonObject Template(JsonNode step)
+        {
+            var t = new JsonObject { ["layer"] = (string)step?["layer"] ?? "", ["target"] = (string)step?["target"] ?? "" };
+            if (step?["settings"] is JsonObject set) t["values"] = set.DeepClone();
+            if (step?["enabled"] != null) t["enabled"] = step["enabled"].DeepClone();
+            var ch = new JsonArray();
+            if (step?["children"] is JsonArray a) foreach (var c in a) ch.Add(Template(c));
+            t["children"] = ch;
+            if (step?["regionOverrides"] is JsonObject ov)
+            {
+                var o = new JsonObject();
+                foreach (var kv in ov) o[kv.Key] = Template(kv.Value);
+                t["overrides"] = o;
+            }
+            return t;
         }
 
         private static JsonObject Layer(IAreaGenerator g)

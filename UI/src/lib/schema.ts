@@ -180,7 +180,10 @@ export function overridableRegions(parent: StepView): { key: string; tags: strin
         : Object.keys(parent.overrides).map((k) => ({ key: k, tags: [k.split(":")[0]], areaM2: 0 }));
     return regionList
         .map((r) => {
-            const child = targets.find((c) => c.target === r.key || r.tags.includes(c.target)) ?? null;
+            // Children aimed at this exact region are already "different"; only tag-targeted ones
+            // (e.g. "each block") need per-region overrides.
+            if (targets.some((c) => c.target === r.key)) return { ...r, child: null };
+            const child = targets.find((c) => r.tags.includes(c.target)) ?? null;
             return { ...r, child };
         })
         .filter((r) => r.child !== null || parent.overrides[r.key] !== undefined);
