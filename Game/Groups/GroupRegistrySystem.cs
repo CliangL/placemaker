@@ -28,6 +28,7 @@ namespace Placemaker.Game.Groups
         private EntityQuery _changedMemberQuery;
         private EntityQuery _changedRecordQuery;
         private EntityQuery _deletedMemberQuery;
+        private EntityQuery _createdNetQuery;
 
         private readonly Dictionary<int, Entity> _records = new Dictionary<int, Entity>();
         private readonly Dictionary<int, GroupRecord> _decoded = new Dictionary<int, GroupRecord>();
@@ -73,6 +74,12 @@ namespace Placemaker.Game.Groups
             {
                 All = new[] { ComponentType.ReadOnly<PlacemakerGroup>() },
                 Any = new[] { ComponentType.ReadOnly<Created>(), ComponentType.ReadOnly<Deleted>() },
+            });
+            _createdNetQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Created>() },
+                Any = new[] { ComponentType.ReadOnly<global::Game.Net.Edge>(), ComponentType.ReadOnly<global::Game.Net.Node>() },
+                None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<PlacemakerMember>() },
             });
             Services.Groups = this;
         }
@@ -365,6 +372,7 @@ namespace Placemaker.Game.Groups
                 var subNets = EntityManager.GetBuffer<global::Game.Net.SubNet>(g.Carrier);
                 for (int k = subNets.Length - 1; k >= 0; k--) if (subNets[k].m_SubNet == e) subNets.RemoveAt(k);
             }
+            AdoptReplacements(deleted);
             foreach (var id in touchedGroups)
             {
                 if (!TryGetRecordEntity(id, out var rec)) continue;
@@ -389,6 +397,74 @@ namespace Placemaker.Game.Groups
                     Mod.Log.Info($"Placemaker: group {id} lost its last element; removing its record.");
                 }
             }
+        }
+
+        /// <summary>
+        /// Follows vanilla replacements of member edges: when another tool splits one of our edges
+        /// (a crossing road) or replaces it (road upgrade creating a new entity), the old edge is
+        /// deleted and new untagged edges appear along the same curve in the same frame. Adopting
+        /// them keeps the group whole, so Remove still removes everything and no untagged node is
+        /// left between two of our edges. Geometry-only match (the prefab may change on upgrades):
+        /// both ends and the midpoint must lie on the deleted curve.
+        /// </summary>
+        private int AdoptReplacements(NativeArray<Entity> deleted)
+        {
+            if (_createdNetQuery.IsEmptyIgnoreFilter) return 0;
+            var lost = new List<(Colossal.Mathematics.Bezier4x3 Curve, PlacemakerMember Tag)>();
+            for (int i = 0; i < deleted.Length; i++)
+            {
+                var e = deleted[i];
+                var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
+                if (tag.Kind != MemberKind.Edge || !EntityManager.HasComponent<global::Game.Net.Curve>(e)) continue;
+                if (!TryGetRecordEntity(tag.GroupId, out var rec) || EntityManager.HasComponent<PlacemakerRemoval>(rec)) continue;
+                lost.Add((EntityManager.GetComponentData<global::Game.Net.Curve>(e).m_Bezier, tag));
+            }
+            if (lost.Count == 0) return 0;
+            const float tolerance = 0.75f;
+            int adopted = 0;
+            using var created = _createdNetQuery.ToEntityArray(Allocator.Temp);
+            var adoptedEdges = new Dictionary<Entity, int>();
+            foreach (var c in created)
+            {
+                if (!EntityManager.HasComponent<global::Game.Net.Edge>(c) || !EntityManager.HasComponent<global::Game.Net.Curve>(c)) continue;
+                var curve = EntityManager.GetComponentData<global::Game.Net.Curve>(c).m_Bezier;
+                foreach (var l in lost)
+                {
+                    if (Colossal.Mathematics.MathUtils.Distance(l.Curve.xz, curve.a.xz, out _) > tolerance
+                        || Colossal.Mathematics.MathUtils.Distance(l.Curve.xz, curve.d.xz, out _) > tolerance
+                        || Colossal.Mathematics.MathUtils.Distance(l.Curve.xz, Colossal.Mathematics.MathUtils.Position(curve, 0.5f).xz, out _) > tolerance) continue;
+                    EntityManager.AddComponentData(c, l.Tag);
+                    adoptedEdges[c] = l.Tag.GroupId;
+                    if (l.Tag.Role == MemberRole.ParkingAisle && TryGetRecordEntity(l.Tag.GroupId, out var rec))
+                    {
+                        var g = EntityManager.GetComponentData<PlacemakerGroup>(rec);
+                        if (g.Carrier != Entity.Null && EntityManager.Exists(g.Carrier) && EntityManager.HasBuffer<global::Game.Net.SubNet>(g.Carrier))
+                            EntityManager.GetBuffer<global::Game.Net.SubNet>(g.Carrier).Add(new global::Game.Net.SubNet(c));
+                    }
+                    adopted++;
+                    break;
+                }
+            }
+            if (adopted == 0) return 0;
+            // New nodes whose every edge is ours (the split point between two adopted pieces).
+            foreach (var n in created)
+            {
+                if (!EntityManager.HasComponent<global::Game.Net.Node>(n) || EntityManager.HasComponent<PlacemakerMember>(n)
+                    || !EntityManager.HasBuffer<global::Game.Net.ConnectedEdge>(n)) continue;
+                var edges = EntityManager.GetBuffer<global::Game.Net.ConnectedEdge>(n, true);
+                int group = 0; bool all = edges.Length > 0;
+                for (int k = 0; k < edges.Length && all; k++)
+                {
+                    var edge = edges[k].m_Edge;
+                    int g = adoptedEdges.TryGetValue(edge, out var ag) ? ag
+                        : EntityManager.HasComponent<PlacemakerMember>(edge) ? EntityManager.GetComponentData<PlacemakerMember>(edge).GroupId : 0;
+                    if (g == 0 || (group != 0 && g != group)) all = false;
+                    group = g;
+                }
+                if (all) EntityManager.AddComponentData(n, new PlacemakerMember { GroupId = group, Kind = MemberKind.Node, Role = MemberRole.Generic });
+            }
+            Mod.Log.Info($"Placemaker kept {adopted} replaced/split edges in their group.");
+            return adopted;
         }
 
         private int CountLiveNonAuxiliaryExcluding(int groupId)
