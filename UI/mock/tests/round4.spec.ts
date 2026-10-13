@@ -3,7 +3,7 @@
 // commit (setValue); the Sketch | Real preview toggle; a clear "Planning…" indicator; a compact Review
 // that never overlaps; the Make row grouped once there are many types.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, SHOTS, waitPlanned } from "./helpers";
 
 async function toDesign(page: Page, recipe: string) {
     await drawPolygon(page, FIELD);
@@ -100,13 +100,13 @@ test("hover previews on the map (previewValue), leaving / closing ends it (endPr
     await page.getByTestId("asset-worn-asphalt").hover();
     await expect.poll(async () => (await calls(page, from)).filter((c) => c.name === "previewValue").length).toBe(2);
     expect((await calls(page, from)).some((c) => c.name === "endPreview")).toBe(false); // no flicker between tiles
-    await shot(page, "r4-hover-preview");
+    // (no shot() here: it parks the mouse, which would end the preview)
+    await page.screenshot({ path: SHOTS + "/r4-hover-preview.png" });
 
     // leave the grid → back to the committed value, preview ended
     from = await logLength(page);
     await page.mouse.move(5, 300);
-    await expect.poll(async () => (await calls(page, from)).map((c) => c.name)).toEqual(["previewValue", "endPreview"]);
-    expect((await calls(page, from))[0].args).toEqual(["0", "surface", '""']);
+    await expect.poll(async () => (await calls(page, from)).map((c) => c.name)).toEqual(["endPreview"]);
     expect(await page.evaluate(() => (window as any).pm.backend.preview.size)).toBe(0);
     expect(await page.evaluate(() => (window as any).pm.backend.root.values.surface ?? "")).toBe("");
 
@@ -184,9 +184,12 @@ test("planning shows a spinner + 'Planning…' and dims the stale numbers", asyn
         const b = (window as any).pm.backend;
         b.stale = true;
         b.planning = true;
+        b.planProgress = 0.42;
         b.publishAll();
     });
     await expect(page.getByTestId("busy")).toContainText("Planning");
+    await expect(page.getByTestId("busy")).toContainText("42%");
+    await expect(page.getByTestId("busy-bar")).toBeVisible();
     await expect(page.getByTestId("quick-numbers")).toHaveAttribute("data-stale", "true");
     await noTextOverflow(page, "footer while planning");
     await panelShot(page, "r4-planning");

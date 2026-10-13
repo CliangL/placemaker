@@ -186,17 +186,13 @@ const ChoiceEditor = ({ c, value, commit }: { c: ControlEx; value: string; commi
 };
 
 /**
- * Map preview while hovering picker tiles: previewValue with what the value would become; ending sends
- * the committed value back first (C# EndPreview commits the working value, so this keeps a hover from
- * sticking), then endPreview.
+ * Map preview while hovering picker tiles: previewValue with what the value would become; endPreview
+ * reverts a hover (C# treats asset previews as a look only); a click commits with setValue.
  */
 function previewHandlers(path: string, id: string, toValue: (ids: string[]) => SettingValue) {
     return {
         onPreview: (ids: string[]) => act.previewValue(path, id, toValue(ids)),
-        onPreviewEnd: (committed: string[]) => {
-            act.previewValue(path, id, toValue(committed));
-            act.endPreview();
-        },
+        onPreviewEnd: () => act.endPreview(),
     };
 }
 

@@ -296,12 +296,22 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
     const busy = (pending || ghostBusy) && (state.stage === "design" || state.stage === "review");
     const showNumbers = state.stage === "design" && summary.ready && !compact;
     // Planning can take a moment: a clear spinner + label (not just a dot), stale numbers dimmed beside it.
+    const progress = state.planning && typeof state.planningProgress === "number" ? Math.max(0, Math.min(1, state.planningProgress)) : null;
     const busyChip = busy ? (
         <div className={s.busy} data-testid="busy">
             <div className={s.spinner} />
             <div className={s.busyText}>
-                {pending ? t("Placemaker.UI.Planning", "Planning…") : t("Placemaker.UI.PreviewUpdating", "Updating preview…")}
+                {pending
+                    ? progress != null
+                        ? t("Placemaker.UI.PlanningPct", "Planning… {0}%", [Math.round(progress * 100)])
+                        : t("Placemaker.UI.Planning", "Planning…")
+                    : t("Placemaker.UI.PreviewUpdating", "Updating preview…")}
             </div>
+            {pending && progress != null ? (
+                <div className={s.busyTrack}>
+                    <div className={s.busyFill} data-testid="busy-bar" style={{ width: Math.round(progress * 100) + "%" }} />
+                </div>
+            ) : null}
         </div>
     ) : null;
     const label = tl(p.label, t("Placemaker.UI.Primary.Next", "Next"));

@@ -128,6 +128,7 @@
   "Placemaker.UI.Places.Empty": "Coming soon",
   "Placemaker.UI.Places.Title": "Places inside",
   "Placemaker.UI.Planning": "Planning…",
+  "Placemaker.UI.PlanningPct": "Planning… {0}%",
   "Placemaker.UI.Presets": "Presets",
   "Placemaker.UI.Preview.Real": "Real",
   "Placemaker.UI.Preview.RealTip": "See-through game models and textures, exactly what will be built.",

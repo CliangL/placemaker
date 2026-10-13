@@ -102,6 +102,8 @@ export class MockBackend {
     /** Real preview being rebuilt after a change (spinner on the toggle). */
     ghostPending = false;
     ghostMs = 450;
+    /** state.planningProgress while planning (the fake planner is instant; tests set it). */
+    planProgress = 0.5;
     private ghostTimer: number | null = null;
 
     // ── plan ──
@@ -1242,6 +1244,7 @@ export class MockBackend {
             anarchy: this.anarchy,
             panelCollapsed: this.collapsed(),
             previewMode: this.previewMode(),
+            planningProgress: this.planning ? this.planProgress : undefined,
             ghostPending: this.previewMode() === "ghost" && this.ghostPending,
         };
     }
