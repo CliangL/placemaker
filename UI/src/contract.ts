@@ -67,6 +67,8 @@ export interface ToolState {
   previewMode?: "sketch" | "ghost";
   /** True while the ghost is being (re)built after a change. */
   ghostPending?: boolean;
+  /** Rough planning progress 0..1 while planning (updated ~10 Hz). */
+  planningProgress?: number;
 }
 
 /** One control, mirrors Core.ControlSchema. */
