@@ -446,6 +446,8 @@ namespace Placemaker.Core
         public float3[] Ring = Array.Empty<float3>();
         public SurfaceRole Role;
         public AssetRef Asset;
+        /// <summary>Asset category for automatic resolution, or null/"" = the role's default (RoleCategories.ForSurface).</summary>
+        public string Category;
     }
 
     public enum NetRole
@@ -475,6 +477,8 @@ namespace Placemaker.Core
     {
         Tree = 0, Bush = 1, Planter = 2,
         Bench = 10, Lamp = 11, Bin = 12, Centerpiece = 13, Furniture = 14, FencePiece = 15,
+        /// <summary>Flat decal prop (leaves, cracks, markings…): never reserves space, may lie on paths.</summary>
+        Decal = 16,
         ParkingBay = 20, Charger = 21, Arrow = 22,
         Marker = 30, AnimalSpawner = 31, AccessPoint = 32, CulDeSacCap = 33, RoundaboutIsland = 34,
     }
