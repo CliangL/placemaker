@@ -328,6 +328,31 @@ namespace Placemaker.Core
     public enum LayerKind { Fill = 0, Split = 1, AddOn = 2 }
 
     /// <summary>
+    /// A built-in feature a Fill layer offers (playground in a park, trees in a plaza, zoning along
+    /// new streets). Turning a feature on adds a child RecipeStep running FeatureLayer on Target;
+    /// the UI shows features as toggles with their own (collapsed) options. This replaces free-form
+    /// mixing in the UI (decision 2026-10-13: refine each type with features, shelve split/mix).
+    /// </summary>
+    public sealed class FeatureInfo
+    {
+        /// <summary>IAreaGenerator.Id of the add-on (or fill) layer that implements the feature.</summary>
+        public string Layer = "";
+        /// <summary>Region of the parent it runs in ("" = whole parent region, or a tag like "core", "green", "edge").</summary>
+        public string Target = "";
+        public bool DefaultOn;
+        /// <summary>Label key override; empty = the feature layer's NameKey.</summary>
+        public string LabelKey = "";
+        /// <summary>Settings applied on top of the feature layer's defaults when enabled from this parent.</summary>
+        public SettingsBag Preset = new SettingsBag();
+    }
+
+    /// <summary>Optional: Fill layers that offer built-in features implement this too.</summary>
+    public interface IHasFeatures
+    {
+        IReadOnlyList<FeatureInfo> Features { get; }
+    }
+
+    /// <summary>
     /// A layer of a recipe. Historic name kept: every buildable thing — park, plaza, parking,
     /// roads, campground, playground, restrooms, edge zoning — implements this. Adding a new type
     /// = one class with [AreaGenerator] + its localisation keys; the registry, UI, presets,

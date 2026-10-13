@@ -113,7 +113,19 @@ export interface Catalog {
 export type SettingValue = number | boolean | string | string[];
 
 /** A recipe step as the UI sees it (mirrors Core.RecipeStep, paths address steps: "0", "0/1", "0/1@block:3"). */
+/** A built-in feature of a fill layer, shown as a toggle (mirrors Core.FeatureInfo). */
+export interface FeatureView {
+  layer: string;            // feature layer id
+  label: string;            // localisation key
+  icon: string;
+  enabled: boolean;
+  /** Path of the child step when enabled (its controls are shown under the toggle, collapsed by default). */
+  path?: string;
+}
+
 export interface StepView {
+  /** Built-in features this (fill) step offers. */
+  features?: FeatureView[];
   path: string;
   layer: string;
   target: string;           // "" = same region; tag; or region key
@@ -247,6 +259,7 @@ export const Triggers = {
   acknowledgePermanent: "acknowledgePermanent", // (ack: boolean) — required before Build when summary.permanent is non-empty (Enter included)
   setMarkerKind: "setMarkerKind",           // (path: string, kind: string) — which marker type the next click places (entrance types etc.)
   removeMarker: "removeMarker",             // (path: string, index: number)
+  setFeature: "setFeature",                 // (path: string, featureLayerId: string, enabled: boolean)
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────
