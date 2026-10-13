@@ -151,23 +151,26 @@ Paradox's **Park Adventures** DLC (later 2026) adds official drawable parks. Pla
 behind an "effect provider" so we can emit the DLC's park areas when they exist; our edge is one tool
 for four outcomes + parking + roads.
 
-## 9. Places inside (round 3) — user request 2026-10-13
+## 9. Places inside (round 3) — user request 2026-10-13, revised
 
-"Draw subsections too… plaza in a corner or the center of the park… a parking lot square or circle in the
-middle and connect an entrance… get crazier. But the UX is key."
+Inner places are **described, not drawn** (user: "you wouldn't be drawing on the board again, you'd be describing
+how the inner layers act, behave"). A recipe like "park with a round plaza in the centre" works on any area.
 
-UX:
-1. Design stage → **"+ Add a place inside"** → shape: rectangle / circle / freehand. Ghost follows the cursor,
-   snaps to centre, corners, edges, parent paths/axes; drag handles to move/resize/rotate afterwards.
-2. Pick its type from the same cards (Plaza, Parking, Pond, Playground, Campground…).
-3. The parent re-plans around it: paths/driveways connect to the place's entrances (parking in the middle of
-   a park gets a driveway through to the nearest road), planting keeps clearance.
-4. Each place is a chip ("Plaza · centre · 0.4 ha"): select → move/resize, change type, its own options, delete.
-   Undo covers all. One more nesting level allowed (fountain inside the plaza).
-5. One-click quick placements: "in the centre", "in a corner", "along an edge" — most players never draw.
+Each place inside is a rule:
+- **What:** any layer (Plaza, Parking, Pond, Playground, Campground…), with its own options.
+- **Shape:** circle · square · rectangle (aspect) · follows the outline (inset ring) · strip along an edge.
+- **Where:** centre · a corner (nearest the best road / chosen corner) · along an edge · next to an entrance ·
+  at the end of the main path · spread (several copies).
+- **Size:** % of the area or fixed metres, with min/max; shrinks to fit, reported if it can't fit.
+- **Connection:** how it joins the parent (paths to it, driveway through to the nearest road for parking,
+  open edge vs fenced).
 
-Engine (fits the recipe model):
-- `RecipeStep.Places`: list of user places {Key, Shape (ring), Layer step}. Composer: parent runs with the
-  places as `Reserved.Polygons` + connection targets (markers on the place outline), then each place runs as a
-  child on its own ring with tag "place:<key>". Parent layers must route paths/drives to place entrances.
-- Layout panel space: the right-side tall panel reserves a "Places inside" section under the type cards.
+UX: in Design, under the type cards, a **"Places inside"** list: "+ Add" → pick a type card → a compact row
+"[Plaza] [● circle] [centre] [25 %]" with its options below when selected. Preview updates live on the map;
+nothing is drawn by hand. Shipped recipes use it ("Park with central plaza", "Park & ride" = park with parking
+in the corner nearest the road, "Town square" = plaza with a ring of trees).
+
+Engine:  = list of PlaceRule {Key, Layer step, Shape, Anchor, Size, Connection}. A pure
+PlaceSolver turns rules into rings inside the parent region (respecting each other and the outline); the
+composer reserves them for the parent (Reserved.Polygons + connection markers on their outlines) and runs each
+place's step on its ring with tag "place:<key>". Parents route paths/drives to place entrances.
