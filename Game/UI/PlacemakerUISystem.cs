@@ -199,6 +199,7 @@ namespace Placemaker.Game.UI
                 CanAfford = afford,
                 PermanentAcknowledged = ack,
             };
+            foreach (var n in _tool.BuildNotes) input.ExtraIssues.Add(n);
             if (failure != null)
             {
                 input.ExtraIssues.Add(failure);

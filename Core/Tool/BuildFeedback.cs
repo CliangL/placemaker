@@ -14,6 +14,10 @@ namespace Placemaker.Core.Tool
     public sealed class BuildFeedback
     {
         private readonly List<float3> _errors = new List<float3>();
+        private readonly List<PlanIssue> _notes = new List<PlanIssue>();
+
+        /// <summary>What the last successful build repaired or left out (BuildStatus.Warnings), until the next change.</summary>
+        public IReadOnlyList<PlanIssue> Notes => _notes;
 
         /// <summary>Issue shown in the review card after a refused or failed build, null otherwise.</summary>
         public PlanIssue Failure { get; private set; }
@@ -28,16 +32,24 @@ namespace Placemaker.Core.Tool
 
         public void Clear()
         {
-            if (Failure == null && _errors.Count == 0) return;
+            if (Failure == null && _errors.Count == 0 && _notes.Count == 0) return;
             Failure = null;
             _errors.Clear();
+            _notes.Clear();
             Version++;
         }
 
         /// <summary>A build starts: the previous attempt's feedback is gone.</summary>
         public void Started() => Clear();
 
-        public void Succeeded() => Clear();
+        /// <summary>Build done: failure gone; keeps what the build service fixed or skipped so the player is told.</summary>
+        public void Succeeded(IEnumerable<PlanIssue> warnings = null)
+        {
+            Clear();
+            if (warnings == null) return;
+            foreach (var w in warnings) if (w != null && !string.IsNullOrEmpty(w.Key)) _notes.Add(w);
+            if (_notes.Count > 0) Version++;
+        }
 
         /// <summary>Area, design or markers changed: the failed attempt no longer describes what would be built.</summary>
         public void InputChanged() => Clear();

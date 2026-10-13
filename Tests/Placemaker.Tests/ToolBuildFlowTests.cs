@@ -90,6 +90,41 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void SuccessKeepsBuildWarningsUntilNextChange()
+        {
+            var fb = new BuildFeedback();
+            fb.Failed("k", null, Errors);
+            fb.Succeeded(new List<PlanIssue>
+            {
+                new PlanIssue { Severity = IssueSeverity.Warning, Key = "Placemaker.Build.Skipped.Object", Args = new object[] { 3 }, At = Errors[0] },
+                new PlanIssue { Severity = IssueSeverity.Info, Key = "Placemaker.Build.Cleared", Args = new object[] { 12 } },
+                null,
+            });
+            Assert.False(fb.HasFailure);
+            Assert.Empty(fb.ErrorPositions);
+            Assert.Equal(2, fb.Notes.Count);
+            fb.InputChanged();
+            Assert.Empty(fb.Notes);
+            fb.Succeeded(null);
+            Assert.Empty(fb.Notes);
+        }
+
+        [Fact]
+        public void ParkingMarkerKindsHaveVanillaIconsAndOwnColours()
+        {
+            var kinds = MarkerKinds.For(new Placemaker.Core.Layers.Parking.ParkingLayer());
+            var seenColours = new HashSet<(float, float, float)>();
+            foreach (var k in kinds)
+            {
+                Assert.StartsWith("Media/", k.Icon);
+                Assert.StartsWith("Placemaker.Parking.Marker.", k.LabelKey);
+                Assert.True(seenColours.Add(MarkerKinds.ColorFor(k.Kind)), k.Kind);
+            }
+            Assert.Contains(kinds, k => k.Kind == "busStop" && k.Icon == "Media/Game/Icons/BusStop.svg");
+            Assert.Contains(kinds, k => k.Kind == "zoningPatch" && k.Icon == "Media/Game/Icons/Zones.svg");
+        }
+
+        [Fact]
         public void RefusedStartUsesFallbackKeyAndNoPositions()
         {
             var fb = new BuildFeedback();

@@ -289,8 +289,8 @@ namespace Placemaker.Game.Overlay
                     float size = stepActive ? d * 1.3f : d;
                     buffer.DrawCircle(stepActive ? HandleHot : c, c, w * 0.6f, 0, new float2(0, 1), m.Position, size);
                     // Inner dot: entry/exit read at a glance even for colour-blind players (entry filled, exit hollow).
-                    if (m.Kind == "exit") buffer.DrawCircle(Color.white, new Color(0, 0, 0, 0.6f), w * 0.4f, 0, new float2(0, 1), m.Position, size * 0.45f);
-                    else if (m.Kind == "entry") buffer.DrawCircle(Color.white, Color.white, w * 0.4f, 0, new float2(0, 1), m.Position, size * 0.35f);
+                    if (m.Kind == "exit" || m.Kind == "alleyOut") buffer.DrawCircle(Color.white, new Color(0, 0, 0, 0.6f), w * 0.4f, 0, new float2(0, 1), m.Position, size * 0.45f);
+                    else if (m.Kind == "entry" || m.Kind == "alleyIn") buffer.DrawCircle(Color.white, Color.white, w * 0.4f, 0, new float2(0, 1), m.Position, size * 0.35f);
                 }
             }
             if (_tool.MarkerKind != null && _tool.MarkerHoverValid)
@@ -371,6 +371,10 @@ namespace Placemaker.Game.Overlay
 
         private void DrawErrors(OverlayRenderSystem.Buffer buffer, float w)
         {
+            // What the last build skipped (amber) or repaired (blue), until the player changes something.
+            foreach (var n in _tool.BuildNotes)
+                if (n?.At != null)
+                    buffer.DrawCircle(n.Severity == IssueSeverity.Warning ? Warning : new Color(0.4f, 0.7f, 1f, 0.9f), new Color(1f, 1f, 1f, 0.1f), w, 0, new float2(0, 1), n.At.Value, w * 14f);
             var errors = _tool.BuildErrorPositions;
             if (errors == null) return;
             foreach (var p in errors) buffer.DrawCircle(Error, new Color(1f, 0f, 0f, 0.2f), w, 0, new float2(0, 1), p, w * 16f);

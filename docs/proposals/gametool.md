@@ -127,3 +127,31 @@ a request or a description of how the tool works around a gap.
     (`UIManager.defaultUISystem.AddHostLocation`), otherwise Gameface logs "Invalid host".
   - All other layer icons (Forest, ParksAndRecreation, Water, Sewage, Pathways, Roads, Zones,
     `Media/Tools/Snap Options/ExistingGeometry.svg`) exist.
+
+## 6. Round 2b (after merging gamebuild/parking/roads round 2)
+
+- Build errors: every area/design edit and stage change clears our BuildFeedback **and** calls
+  `IBuildService.ClearErrors()` (only when the service still holds positions; never while building).
+- `BuildStatus.Warnings` after Done: kept as `BuildFeedback.Notes` → appended to `summary.issues`
+  (severity warning/info, `at` when given), drawn on the map (amber = left out, blue = repaired) and
+  announced in the toast (single note = its own text, several = `Placemaker.Hint.BuiltWithNotes`).
+  Cleared on the next change. No contract change.
+- Options (Building group, forwarded in `PushToServices`): Clear existing trees and props
+  (`BuildService.ClearExistingObjects`, default on), Fix or skip rejected pieces
+  (`RecoverRejectedPieces`, on), Leave out parts that collide (`AutoExcludeCollisions`, default now
+  on), Paving drawn above grass (`OverlayPavedSurfaces`, on), Charge for roads and paths
+  (`ChargeNetConstruction`, on), Select and bulldoze as one thing (`OwnerAreaPrefabSystem.FeatureEnabled`
+  + `RaycastLiftPatch.Enabled`, on), Ask before bulldozing (`BulldozeConfirmationPatch.Enabled`, on).
+  Parking companion was already exposed.
+- `Game/Preview/AutoAssets` verified: only forwards to `IAssetCatalog.ResolveAutomatic`
+  (AssetCatalogSystem → Core/Build/AutoAssets). No dead code left on the tool side.
+- Roads attach semantics: confirmed, no change needed. All ids the tool emits are `NetRefs.Encode`
+  (EntityIds.Pack delegates to it): `NearbyNet.ExternalId` = edge entity with the edge's full
+  `Curve.m_Bezier` as A..D (so T is that curve's parameter); AttachmentFinder's `RoadCrossing` /
+  `RoadAlongEdge` T values are parameters of that same curve; Block/Perimeter shapes add
+  `RoadNode` attachments (node entity, Position = node position) and `RoadAlongEdge` (edge, T 0.5).
+  BuildService.MakeCoursePos decodes with NetRefs.Decode and tells nodes from edges by component.
+- Parking marker kinds alleyIn/alleyOut (OnewayAlley.svg), busStop (BusStop.svg), zoningPatch
+  (Zones.svg): icons verified, colours per kind, labels from parking's option keys. The tool's
+  verified icon wins over a layer option icon for kinds in its table (parking's "people"/"zone"
+  glyph fallbacks are no longer used — parking can drop them).

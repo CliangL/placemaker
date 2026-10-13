@@ -121,7 +121,25 @@ namespace Placemaker.Game.Settings
         // ───────────── Building (forwarded to the build workstream's systems) ─────────────
 
         [SettingsUISection(SectionMain, GroupBuild)]
+        public bool ClearExistingTreesAndProps { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool RecoverRejectedPieces { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
         public bool AutoExcludeCollisions { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool OverlayPavedSurfaces { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool ChargeNetConstruction { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool SelectAsOneThing { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool ConfirmBulldoze { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool SurfaceClones { get; set; }
@@ -158,6 +176,13 @@ namespace Placemaker.Game.Settings
             try
             {
                 global::Placemaker.Game.Build.BuildService.AutoExcludeCollisions = AutoExcludeCollisions;
+                global::Placemaker.Game.Build.BuildService.ClearExistingObjects = ClearExistingTreesAndProps;
+                global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;
+                global::Placemaker.Game.Build.BuildService.OverlayPavedSurfaces = OverlayPavedSurfaces;
+                global::Placemaker.Game.Build.BuildService.ChargeNetConstruction = ChargeNetConstruction;
+                global::Placemaker.Game.Groups.OwnerAreaPrefabSystem.FeatureEnabled = SelectAsOneThing;
+                global::Placemaker.Game.Groups.Patches.RaycastLiftPatch.Enabled = SelectAsOneThing;
+                global::Placemaker.Game.Groups.Patches.BulldozeConfirmationPatch.Enabled = ConfirmBulldoze;
                 global::Placemaker.Game.Build.SurfaceCloneSystem.FeatureEnabled = SurfaceClones;
                 global::Placemaker.Game.Economy.ParkingEconomySystem.FeatureEnabled = ParkingEconomy;
                 global::Placemaker.Game.Economy.ParkingEconomySystem.DefaultFee = DefaultParkingFee;
@@ -188,7 +213,13 @@ namespace Placemaker.Game.Settings
             LastAreaMode = 0;
             LastRecipe = "";
             PanelCollapsed = false;
-            AutoExcludeCollisions = false;
+            AutoExcludeCollisions = true;
+            ClearExistingTreesAndProps = true;
+            RecoverRejectedPieces = true;
+            OverlayPavedSurfaces = true;
+            ChargeNetConstruction = true;
+            SelectAsOneThing = true;
+            ConfirmBulldoze = true;
             SurfaceClones = true;
             ParkingEconomy = true;
             DefaultParkingFee = 0;

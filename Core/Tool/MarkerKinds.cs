@@ -27,6 +27,10 @@ namespace Placemaker.Core.Tool
             { "entry", "Media/Glyphs/FilledArrowRight.svg" },
             { "exit", "Media/Glyphs/FilledArrowLeft.svg" },
             { "alley", "Media/Game/Icons/Alley.svg" },
+            { "alleyIn", "Media/Game/Icons/OnewayAlley.svg" },
+            { "alleyOut", "Media/Game/Icons/OnewayAlley.svg" },
+            { "busStop", "Media/Game/Icons/BusStop.svg" },
+            { "zoningPatch", "Media/Game/Icons/Zones.svg" },
             { "footpath", "Media/Game/Icons/Pathways.svg" },
             { "access", "Media/Game/Icons/MapMarker.svg" },
             { "split", "Media/Tools/Snap Options/ExistingGeometry.svg" },
@@ -42,9 +46,13 @@ namespace Placemaker.Core.Tool
                 case "entry": return (0.35f, 0.9f, 0.4f);
                 case "exit": return (1f, 0.45f, 0.25f);
                 case "alley": return (0.75f, 0.75f, 0.8f);
+                case "alleyIn": return (0.55f, 0.8f, 0.6f);
+                case "alleyOut": return (0.9f, 0.6f, 0.5f);
+                case "busStop": return (0.6f, 0.45f, 1f);
+                case "zoningPatch": return (0.3f, 0.85f, 0.75f);
                 case "footpath": return (0.95f, 0.85f, 0.55f);
                 case "access": return (0.4f, 0.75f, 1f);
-                case "split": return (0.85f, 0.55f, 1f);
+                case "split": return (1f, 0.4f, 0.8f);
                 default: return (1f, 0.85f, 0.2f);
             }
         }
@@ -85,7 +93,8 @@ namespace Placemaker.Core.Tool
                             {
                                 if (!string.IsNullOrEmpty(o.LabelKey)) info.LabelKey = o.LabelKey;
                                 if (!string.IsNullOrEmpty(o.TooltipKey)) info.TooltipKey = o.TooltipKey;
-                                if (!string.IsNullOrEmpty(o.Icon)) info.Icon = o.Icon;
+                                // The tool owns verified vanilla icons for the kinds it knows; layers may add icons for others.
+                                if (!string.IsNullOrEmpty(o.Icon) && !Icons.ContainsKey(kind)) info.Icon = o.Icon;
                             }
                     list.Add(info);
                 }

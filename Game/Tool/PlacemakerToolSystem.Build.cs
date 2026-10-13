@@ -25,6 +25,7 @@ namespace Placemaker.Game.Tool
         public PlanIssue BuildFailure => _feedback.Failure;
         public IReadOnlyList<float3> BuildErrorPositions => _feedback.ErrorPositions;
         public int FeedbackVersion => _feedback.Version;
+        public IReadOnlyList<PlanIssue> BuildNotes => _feedback.Notes;
         public int HoverGroup => _hoverGroup;
         public int ManagedGroup => _managedGroup;
 
@@ -67,6 +68,22 @@ namespace Placemaker.Game.Tool
             SetStage(ToolStage.Building);
         }
 
+        /// <summary>
+        /// Something changed: drop the failed attempt's message and red markers here AND in the build service
+        /// (its ErrorPositions). Never while a build runs — those errors are still being collected.
+        /// </summary>
+        private void ClearBuildFeedback(bool stage)
+        {
+            if (stage) _feedback.StageChanged(); else _feedback.InputChanged();
+            if (_building) return;
+            try
+            {
+                var svc = Services.Build;
+                if (svc != null && svc.Status.ErrorPositions != null && svc.Status.ErrorPositions.Count > 0) svc.ClearErrors();
+            }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: clear errors failed: " + e.Message); }
+        }
+
         private void CancelBuild()
         {
             try { Services.Build?.Cancel(); } catch (Exception e) { Mod.Log.Warn("Placemaker: cancel failed: " + e.Message); }
@@ -93,7 +110,7 @@ namespace Placemaker.Game.Tool
                 case BuildPhase.Done:
                     Acknowledge(svc);
                     _building = false;
-                    OnBuilt(st.GroupId);
+                    OnBuilt(st.GroupId, st.Warnings);
                     break;
                 case BuildPhase.Failed:
                     Acknowledge(svc);
@@ -146,9 +163,8 @@ namespace Placemaker.Game.Tool
         }
 
         /// <summary>Built: the tool stays open with a fresh selection; design and recipe stay for the next one.</summary>
-        private void OnBuilt(int groupId)
+        private void OnBuilt(int groupId, List<PlanIssue> warnings)
         {
-            _feedback.Succeeded();
             _markersEdited.Clear();
             _permanentAck = null;
             _worker.Cancel();
@@ -162,7 +178,16 @@ namespace Placemaker.Game.Tool
             DesignChanged();
             _history.Reset(Capture());
             SetStage(ToolStage.Area);
-            Flash(new LocText("Placemaker.Hint.Built"), 5f);
+            // After the stage change and the cleared selection (both clear feedback): what the build service
+            // repaired, skipped or cleared stays in the summary until the next change, and the toast says it.
+            _feedback.Succeeded(warnings);
+            var notes = _feedback.Notes;
+            if (notes.Count == 0) Flash(new LocText("Placemaker.Hint.Built"), 5f);
+            else
+            {
+                var first = notes[0];
+                Flash(new LocText(notes.Count == 1 ? first.Key : "Placemaker.Hint.BuiltWithNotes", notes.Count == 1 ? (first.Args ?? Array.Empty<object>()) : new object[] { notes.Count }), 10f);
+            }
             Mod.Log.Info("Placemaker: built group " + groupId);
         }
 
