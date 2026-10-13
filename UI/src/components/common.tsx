@@ -2,7 +2,7 @@
 // same in the game and the browser mock; vanilla sounds are played through the audio binding.
 import React, { ReactNode, useState } from "react";
 import classNames from "classnames";
-import { resolveIcon } from "../lib/icons";
+import { bundledName, resolveIcon, Tint, tintFor } from "../lib/icons";
 import { playSound } from "../lib/bindings";
 import { Tip } from "../lib/tips";
 import s from "./common.module.scss";
@@ -11,27 +11,32 @@ export const Icon = ({
     name,
     size = 18,
     color,
+    tint,
     className,
     fallback,
 }: {
     name?: string;
     size?: number;
+    /** Colour hint, mapped to the nearest baked tint (see lib/icons tintFor). */
     color?: string;
+    tint?: Tint;
     className?: string;
     fallback?: string;
 }) => {
     const [failed, setFailed] = useState<string | null>(null);
-    const r0 = resolveIcon(name, fallback);
-    // An external (game) icon that fails to load falls back to our glyph, or disappears.
-    const r = failed === r0.src ? (fallback ? resolveIcon(fallback) : { src: "", tint: true }) : r0;
+    const tn = tint ?? tintFor(color);
+    const r0 = resolveIcon(name, fallback, tn);
+    // An external (game) icon that fails to load falls back to our glyph.
+    const r = failed === r0.src ? resolveIcon(fallback ?? "layers", undefined, tn) : r0;
     const style: React.CSSProperties = { width: size + "rem", height: size + "rem" };
-    if (!r.src) return failed ? null : <div className={classNames(s.icon, className)} style={style} />;
-    if (!r.tint) return <img className={classNames(s.icon, className)} style={style} src={r.src} onError={() => setFailed(r0.src)} />;
-    const url = `url(${r.src})`;
+    if (!r.src) return <div className={classNames(s.icon, className)} style={style} />;
     return (
-        <div
-            className={classNames(s.icon, s.tinted, className)}
-            style={{ ...style, maskImage: url, WebkitMaskImage: url, backgroundColor: color } as React.CSSProperties}
+        <img
+            className={classNames(s.icon, className)}
+            style={style}
+            src={r.src}
+            data-icon={r.bundled ? bundledName(name ?? "") ?? fallback ?? "layers" : "external"}
+            onError={() => r === r0 && setFailed(r0.src)}
         />
     );
 };
@@ -63,6 +68,7 @@ export const Btn = ({
             data-testid={testId}
             aria-disabled={disabled ? "true" : "false"}
             aria-pressed={selected ? "true" : "false"}
+            data-icon-button={!label && !children ? "true" : undefined}
             className={classNames(s.btn, s[variant], { [s.selected]: selected, [s.disabled]: disabled, [s.iconOnly]: !label && !children }, className)}
             onMouseEnter={() => !disabled && playSound("hover-item")}
             onClick={(e) => {
@@ -72,7 +78,7 @@ export const Btn = ({
                 onClick();
             }}
         >
-            {icon ? <Icon name={icon} size={iconSize} color={iconColor} /> : null}
+            {icon ? <Icon name={icon} size={iconSize} color={iconColor} tint={iconColor ? undefined : variant === "accent" && !disabled ? "dark" : undefined} /> : null}
             {label ? <div className={s.btnLabel}>{label}</div> : null}
             {children}
         </button>
@@ -115,6 +121,7 @@ export const Segmented = ({
                     type="button"
                     data-testid={testId ? `${testId}-${o.value}` : undefined}
                     aria-pressed={o.value === value ? "true" : "false"}
+                    data-icon-button={iconOnly || !o.label ? "true" : undefined}
                     className={classNames(s.seg, { [s.segOn]: o.value === value, [s.segIconOnly]: iconOnly || !o.label })}
                     onMouseEnter={() => playSound("hover-item")}
                     onClick={(e) => {
@@ -125,7 +132,7 @@ export const Segmented = ({
                         }
                     }}
                 >
-                    {o.icon ? <Icon name={o.icon} size={18} color={o.value === value ? o.color : undefined} /> : null}
+                    {o.icon ? <Icon name={o.icon} size={18} tint={o.value === value ? "light" : "dim"} /> : null}
                     {!iconOnly && o.label ? <div className={s.segLabel}>{o.label}</div> : null}
                 </button>
             </Tip>
@@ -169,7 +176,7 @@ export const Check = ({
             onChange(!checked);
         }}
     >
-        <div className={s.checkBox}>{checked ? <Icon name="check" size={13} /> : null}</div>
+        <div className={s.checkBox}>{checked ? <Icon name="check" size={13} tint="dark" /> : null}</div>
         {label ? <div className={s.checkLabel}>{label}</div> : null}
     </button>
 );
@@ -191,50 +198,34 @@ export const Switch = ({ on, onChange, testId }: { on: boolean; onChange: (v: bo
     </button>
 );
 
-/** Open/closed state of foldouts that should be remembered per layer for the session. */
-const FOLDOUT_MEMORY = new Map<string, boolean>();
-
-export const Foldout = ({
+/** A titled block of the panel body: small caps heading with an optional icon, count and right-side actions. */
+export const Section = ({
     title,
+    icon,
     count,
+    right,
     children,
-    initiallyOpen = false,
     testId,
-    memoryKey,
+    className,
 }: {
     title: ReactNode;
-    count?: number;
-    children: ReactNode;
-    initiallyOpen?: boolean;
+    icon?: string;
+    count?: ReactNode;
+    right?: ReactNode;
+    children?: ReactNode;
     testId?: string;
-    /** Remember open/closed under this key (e.g. "more:park") across recipe switches. */
-    memoryKey?: string;
-}) => {
-    const [openState, setOpenState] = useState(initiallyOpen);
-    const open = memoryKey ? FOLDOUT_MEMORY.get(memoryKey) ?? initiallyOpen : openState;
-    const setOpen = (v: boolean) => {
-        if (memoryKey) FOLDOUT_MEMORY.set(memoryKey, v);
-        setOpenState(v);
-    };
-    return (
-        <div className={s.foldout} data-testid={testId}>
-            <button
-                type="button"
-                className={s.foldoutHead}
-                aria-expanded={open ? "true" : "false"}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    playSound("select-item");
-                    setOpen(!open);
-                }}
-            >
-                <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
-                <div className={s.foldoutTitle}>{title}</div>
-                {count ? <div className={s.foldoutCount}>{count}</div> : null}
-            </button>
-            {open ? <div className={s.foldoutBody}>{children}</div> : null}
+    className?: string;
+}) => (
+    <div className={classNames(s.section, className)} data-testid={testId}>
+        <div className={s.sectionHead}>
+            {icon ? <Icon name={icon} size={16} tint="dim" className={s.sectionIcon} /> : null}
+            <div className={s.sectionTitle}>{title}</div>
+            {count !== undefined && count !== null ? <div className={s.sectionCount}>{count}</div> : null}
+            <div className={s.sectionRule} />
+            {right}
         </div>
-    );
-};
+        {children}
+    </div>
+);
 
 export const Dot = ({ color }: { color: string }) => <div className={s.dot} style={{ backgroundColor: color }} />;

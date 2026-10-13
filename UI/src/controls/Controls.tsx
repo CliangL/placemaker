@@ -1,6 +1,6 @@
 // Schema-driven controls: renders any layer's Catalog.layers[].controls. A new layer needs no UI code.
 //   slider · toggle · choice (segmented, icons) · asset · assetMulti · markers · arrangement
-// Essential tier is shown; More tier sits in a "More options" foldout; visibleWhen is honoured.
+// Every control is shown (grouped, essentials first); visibleWhen is honoured.
 // Each row shows a lock when the player set the value explicitly (Randomize keeps it) and a reset
 // button only when the value differs from the default.
 import React from "react";
@@ -10,7 +10,7 @@ import { act } from "../lib/bindings";
 import { humanize, TFunc, useT } from "../lib/l10n";
 import { ControlEx, defaultFor, isVisible, valueOf, valuesEqual } from "../lib/schema";
 import { Tip } from "../lib/tips";
-import { Btn, Foldout, Icon, Segmented, Switch } from "../components/common";
+import { Btn, Icon, Segmented, Switch } from "../components/common";
 import { Thumb, useAssetList, useAssetName, usePicker } from "../components/picker";
 import { Slider } from "./Slider";
 import s from "./controls.module.scss";
@@ -68,7 +68,7 @@ export const ControlRow = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
             <div className={s.rowHead}>
                 <Tip title={label(t, c)} description={tip || undefined}>
                     <div className={s.label}>
-                        {c.icon ? <Icon name={c.icon} size={15} className={s.labelIcon} /> : null}
+                        {c.icon ? <Icon name={c.icon} size={15} tint="dim" className={s.labelIcon} /> : null}
                         <div className={s.labelText}>{label(t, c)}</div>
                     </div>
                 </Tip>
@@ -178,9 +178,10 @@ const AssetEditor = ({ c, value, commit }: { c: ControlEx; value: string; commit
                 });
             }}
         >
-            {value ? <Thumb item={item ?? { id: value, name: name(c.assetCategory, value), icon: "" }} size={22} /> : <Icon name="auto" size={16} className={s.autoGlyph} />}
+            {value ? <Thumb item={item ?? { id: value, name: name(c.assetCategory, value), icon: "" }} size={22} /> : <Icon name="auto" size={18} tint="accent" className={s.autoGlyph} />}
             <div className={s.assetName}>{value ? name(c.assetCategory, value) : t("Placemaker.UI.Picker.Auto", "Automatic")}</div>
-            <Icon name="chevronUp" size={12} />
+            <div className={s.flex} />
+            <Icon name="chevronRight" size={14} tint="dim" />
         </button>
     );
 };
@@ -203,7 +204,7 @@ const AssetMultiEditor = ({ c, value, commit }: { c: ControlEx; value: string[];
         <div className={s.chips} data-testid={`assetmulti-${c.id}`}>
             {value.length === 0 ? (
                 <div className={classNames(s.chip, s.chipAuto)}>
-                    <Icon name="auto" size={13} />
+                    <Icon name="auto" size={14} tint="accent" />
                     <div className={s.chipText}>{t("Placemaker.UI.Picker.AutoMix", "Automatic mix")}</div>
                 </div>
             ) : (
@@ -328,41 +329,38 @@ const MarkersEditor = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
                     </div>
                 );
             })}
-            {ctx.step.markers.length === 0 || ctx.step.markers.every((m) => m.count === 0) ? (
-                <div className={s.markerAuto}>{t("Placemaker.UI.Markers.Auto", "Auto")}</div>
-            ) : null}
         </div>
     );
 };
 
-/** Controls of one step: essentials, then "More options" grouped by section. */
+/**
+ * Controls of one step, ALL visible (playtest 1: no "More options" foldout). Grouped by Control.group
+ * with sub-headings; groups holding essentials come first, essentials first inside each group.
+ * Marker controls are left out when the step declares markerKinds: the Entrances section shows them.
+ */
 export const ControlList = ({ step, layer, state }: RowCtx) => {
     const { t } = useT();
     const ctx = { step, layer, state };
-    const visible = (layer.controls as ControlEx[]).filter((c) => isVisible(c.visibleWhen, withDefaults(layer, step)));
-    const essential = visible.filter((c) => c.tier !== "more");
-    const more = visible.filter((c) => c.tier === "more");
-    const groups = groupBy(more);
-    if (layer.controls.length === 0) {
-        return <div className={s.none}>{t("Placemaker.UI.NoSettings", "Nothing to set up here: it adapts to the area by itself.")}</div>;
+    const typedMarkers = !!(step.markerKinds && step.markerKinds.length);
+    const visible = (layer.controls as ControlEx[]).filter(
+        (c) => isVisible(c.visibleWhen, withDefaults(layer, step)) && !(typedMarkers && c.kind === "markers"),
+    );
+    if (visible.length === 0) {
+        return typedMarkers ? null : <div className={s.none}>{t("Placemaker.UI.NoSettings", "Nothing to set up here: it adapts to the area by itself.")}</div>;
     }
+    const groups = groupBy(visible);
     return (
         <div className={s.list} data-testid="control-list">
-            {essential.map((c) => (
-                <ControlRow key={c.id} c={c} ctx={ctx} />
-            ))}
-            {more.length ? (
-                <Foldout title={t("Placemaker.UI.MoreOptions", "More options")} count={more.length} testId="more-options" memoryKey={"more:" + layer.id}>
-                    {groups.map(([g, list]) => (
-                        <div key={g || "_"} className={s.group}>
-                            {groups.length > 1 && g ? <div className={s.groupTitle}>{t("Placemaker.UI.Group." + g, humanize(g))}</div> : null}
-                            {list.map((c) => (
-                                <ControlRow key={c.id} c={c} ctx={ctx} />
-                            ))}
-                        </div>
+            {groups.map(([g, list]) => (
+                <div key={g || "_"} className={s.group} data-testid={"group-" + (g || "basics")}>
+                    {groups.length > 1 ? (
+                        <div className={s.groupTitle}>{g ? t("Placemaker.UI.Group." + g, humanize(g)) : t("Placemaker.UI.Group.Basics", "Basics")}</div>
+                    ) : null}
+                    {list.map((c) => (
+                        <ControlRow key={c.id} c={c} ctx={ctx} />
                     ))}
-                </Foldout>
-            ) : null}
+                </div>
+            ))}
         </div>
     );
 };
@@ -381,5 +379,11 @@ function groupBy(list: ControlEx[]): [string, ControlEx[]][] {
         if (hit) hit[1].push(c);
         else out.push([g, [c]]);
     }
-    return out;
+    const ess = (l: ControlEx[]) => l.some((c) => c.tier !== "more");
+    for (const entry of out) entry[1] = [...entry[1].filter((c) => c.tier !== "more"), ...entry[1].filter((c) => c.tier === "more")];
+    // stable: groups with essentials first, the unnamed group first among equals
+    return out
+        .map((e, i) => ({ e, i }))
+        .sort((a, b) => Number(ess(b.e[1])) - Number(ess(a.e[1])) || Number(b.e[0] === "") - Number(a.e[0] === "") || a.i - b.i)
+        .map((x) => x.e);
 }

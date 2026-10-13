@@ -1,0 +1,306 @@
+@use "../styles/tokens" as *;
+
+.stage {
+    @include col;
+}
+
+.first {
+    margin-top: 0;
+}
+
+.flex {
+    flex: 1 1 auto;
+}
+
+// ── type cards: 2-column flex wrap ──
+.cards {
+    @include row(stretch);
+    flex-wrap: wrap;
+    margin: -4rem;
+}
+
+.cardCell {
+    @include row(stretch);
+    width: 50%;
+    padding: 4rem;
+}
+
+.card {
+    @include row(flex-start);
+    @include button-reset;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 62rem;
+    padding: 10rem;
+    border-radius: $radius + 2rem;
+    background-color: rgba(255, 255, 255, 0.06);
+    @include border(1rem, rgba(255, 255, 255, 0.1));
+    text-align: left;
+    transition-property: background-color, border-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.11);
+    }
+}
+
+.cardOn {
+    background-color: rgba(143, 209, 255, 0.16);
+    @include border-color(var(--accentColorNormal));
+    &:hover {
+        background-color: rgba(143, 209, 255, 0.2);
+    }
+}
+
+.cardIcon {
+    @include row;
+    justify-content: center;
+    width: 38rem;
+    height: 38rem;
+    border-radius: $radius;
+    flex-shrink: 0;
+}
+
+.cardText {
+    @include col;
+    min-width: 0;
+    margin-left: 10rem;
+}
+
+.cardName {
+    font-size: var(--fontSizeS);
+    font-weight: bold;
+    color: #ffffff;
+    @include ellipsis;
+}
+
+.cardDesc {
+    margin-top: 2rem;
+    max-height: 32rem;
+    overflow: hidden;
+    font-size: var(--fontSizeXS);
+    line-height: 16rem;
+    color: $c-text-dim;
+}
+
+.subhead {
+    margin-top: 14rem;
+    margin-bottom: 8rem;
+    font-size: var(--fontSizeXS);
+    font-weight: bold;
+    color: $c-text-dim;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.placesEmpty {
+    padding: 10rem 12rem;
+    border-radius: $radius;
+    @include border(1rem, $c-line-strong);
+    border-top-style: dashed;
+    border-right-style: dashed;
+    border-bottom-style: dashed;
+    border-left-style: dashed;
+    font-size: var(--fontSizeXS);
+    color: $c-text-dim;
+}
+
+.emptyNote {
+    padding: 16rem 0;
+    font-size: var(--fontSizeS);
+    color: $c-text-dim;
+    text-align: center;
+}
+
+// ── one step's options ──
+.step {
+    @include col;
+    margin-bottom: 14rem;
+    border-radius: $radius-l;
+    background-color: rgba(0, 0, 0, 0.18);
+    @include border(1rem, $c-line);
+}
+
+.stepOff {
+    opacity: 0.6;
+}
+
+.stepHead {
+    @include row;
+    position: relative;
+    height: 44rem;
+    padding: 0 6rem 0 14rem;
+    border-bottom-width: 1rem;
+    border-bottom-style: solid;
+    border-bottom-color: $c-line;
+}
+
+.stepBar {
+    position: absolute;
+    left: 0;
+    top: 10rem;
+    width: 4rem;
+    height: 24rem;
+    border-top-right-radius: 2rem;
+    border-bottom-right-radius: 2rem;
+}
+
+.stepName {
+    margin-left: 9rem;
+    font-size: var(--fontSizeM);
+    font-weight: bold;
+    color: #ffffff;
+    @include ellipsis;
+}
+
+.stepActions {
+    @include row;
+    flex-shrink: 0;
+}
+
+.stepSwitch {
+    @include row;
+    margin-right: 6rem;
+}
+
+.stepBody {
+    @include col;
+    padding: 8rem 12rem 10rem 12rem;
+}
+
+.presets {
+    @include row;
+    flex-wrap: wrap;
+    margin-bottom: 6rem;
+}
+
+.presetBtn {
+    margin-right: 6rem;
+    margin-bottom: 4rem;
+}
+
+.nextStep {
+    @include row;
+    margin: 2rem 0 8rem 0;
+    padding: 8rem 10rem;
+    border-radius: $radius;
+    background-color: rgba(143, 209, 255, 0.12);
+}
+
+.nextStepText {
+    margin-left: 8rem;
+    font-size: var(--fontSizeS);
+    color: #dff1ff;
+}
+
+// ── entrances ──
+.required {
+    @include row(flex-start);
+    padding: 10rem 12rem;
+    margin-bottom: 10rem;
+    border-radius: $radius;
+    background-color: rgba(255, 181, 71, 0.14);
+    @include border(1rem, rgba(255, 181, 71, 0.5));
+}
+
+.requiredText {
+    @include col;
+    margin-left: 10rem;
+}
+
+.requiredTitle {
+    font-size: var(--fontSizeS);
+    font-weight: bold;
+    color: #ffe0b0;
+}
+
+.requiredSub {
+    margin-top: 2rem;
+    font-size: var(--fontSizeXS);
+    color: #ffe9cc;
+}
+
+.note {
+    margin-bottom: 8rem;
+    font-size: var(--fontSizeXS);
+    line-height: 16rem;
+    color: $c-text-dim;
+}
+
+.kindRow {
+    @include row(stretch);
+    flex-wrap: wrap;
+    margin: -3rem;
+}
+
+.kindCell {
+    @include row(stretch);
+    width: 20%;
+    padding: 3rem;
+}
+
+.kindBtn {
+    @include col;
+    @include button-reset;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 60rem;
+    padding: 6rem 2rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.07);
+    @include border(1rem, rgba(255, 255, 255, 0.1));
+    transition-property: background-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.13);
+    }
+}
+
+.kindBtnOn {
+    background-color: #ffb547;
+    @include border-color(#ffb547);
+    color: #0b1d26;
+    &:hover {
+        background-color: #ffc56d;
+    }
+    .kindLabel {
+        color: #0b1d26;
+        font-weight: bold;
+    }
+}
+
+.kindLabel {
+    margin-top: 4rem;
+    font-size: var(--fontSizeXS);
+    color: var(--menuText1Normal);
+    text-align: center;
+}
+
+.markerList {
+    @include col;
+    margin-top: 10rem;
+}
+
+.markerItem {
+    @include row;
+    height: 34rem;
+    padding: 0 2rem 0 6rem;
+    margin-bottom: 3rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.markerBadge {
+    @include row;
+    justify-content: center;
+    width: 24rem;
+    height: 24rem;
+    border-radius: 12rem;
+    background-color: rgba(255, 181, 71, 0.16);
+}
+
+.markerName {
+    margin-left: 9rem;
+    font-size: var(--fontSizeS);
+    color: var(--menuText1Normal);
+}

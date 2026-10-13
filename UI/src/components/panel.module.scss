@@ -1,64 +1,101 @@
 @use "../styles/tokens" as *;
 
-// Full-screen layer (appended to "Game"); only the column catches the mouse, so the map stays usable.
-// --pmDockBottom keeps the panel above the vanilla bottom toolbar.
+// Full-screen layer (appended to "Game"); only the panel catches the mouse, so the map stays usable.
 .dock {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    @include col;
-    justify-content: flex-end;
-    align-items: center;
-    padding-bottom: 116rem;
     pointer-events: none;
     font-family: var(--fontFamily);
 }
 
-.column {
-    @include col;
-    align-items: stretch;
-    width: 620rem;
+// Click-outside catcher while a picker is open (closes it; the map is not clicked through by accident).
+.backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: auto;
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+// The moving element. Docked: right edge, from below the top bar (64rem) to above the bottom toolbar
+// (112rem). Width/insets mirror PANEL_REM / DOCK_TOP / DOCK_BOTTOM in Panel.tsx. When dragged, Panel.tsx
+// sets left/top/height inline.
+.wrap {
+    position: absolute;
+    top: 64rem;
+    right: 12rem;
+    bottom: 112rem;
+    width: 450rem;
     pointer-events: none;
 }
 
+.wrapCollapsed {
+    bottom: auto;
+}
+
+// Two stacked backgrounds: a near-opaque dark base under the vanilla panel colour, so the panel stays
+// readable (≥ 0.92 combined alpha) whatever transparency the player's UI settings give --panelColorNormal.
 .panel {
     @include col;
+    height: 100%;
     pointer-events: auto;
     border-radius: $radius-l;
-    background-color: var(--panelColorNormal);
+    background-color: rgba(12, 18, 23, 0.84);
     backdrop-filter: var(--panelBlur);
-    @include border(1rem, $c-line);
-    box-shadow: 0 8rem 28rem rgba(0, 0, 0, 0.35);
+    @include border(1rem, rgba(255, 255, 255, 0.13));
+    box-shadow: 0 10rem 34rem rgba(0, 0, 0, 0.45);
     color: var(--menuText1Normal);
-    transition-property: opacity, transform;
-    transition-duration: $t-med;
+    overflow: hidden;
+}
+
+.panelTint {
+    @include col;
+    flex: 1 1 auto;
+    min-height: 0;
+    background-color: var(--panelColorNormal);
 }
 
 .panelCompact {
-    border-radius: $radius-l + 4rem;
+    height: auto;
 }
 
-// ── header ──
+// ── header (drag handle) ──
 .header {
     @include row;
-    height: 46rem;
-    padding: 0 8rem 0 10rem;
+    flex-shrink: 0;
+    height: 48rem;
+    padding: 0 8rem 0 4rem;
+    background-color: rgba(0, 0, 0, 0.22);
     border-bottom-width: 1rem;
     border-bottom-style: solid;
     border-bottom-color: $c-line;
+    cursor: move;
 }
 
-.brand {
+.headerDragging {
+    background-color: rgba(143, 209, 255, 0.12);
+}
+
+.grip {
     @include row;
     justify-content: center;
-    width: 30rem;
-    height: 30rem;
-    margin-right: 8rem;
-    border-radius: $radius;
-    background-color: rgba(143, 209, 255, 0.1);
-    flex-shrink: 0;
+    width: 22rem;
+    height: 32rem;
+    margin-right: 4rem;
+    cursor: move;
+}
+
+.title {
+    margin-left: 8rem;
+    font-size: var(--fontSizeM);
+    font-weight: bold;
+    color: #ffffff;
+    @include ellipsis;
 }
 
 .flex {
@@ -67,23 +104,19 @@
 
 .headSep {
     width: 1rem;
-    height: 20rem;
-    margin: 0 4rem;
+    height: 22rem;
+    margin: 0 6rem;
     background-color: $c-line-strong;
-}
-
-.manageTitle {
-    @include text(var(--fontSizeM));
-    font-weight: bold;
 }
 
 .editingPill {
     margin-left: 8rem;
     padding: 2rem 8rem;
     border-radius: 9rem;
-    background-color: rgba(255, 169, 77, 0.18);
-    color: #ffc58a;
+    background-color: rgba(255, 169, 77, 0.22);
+    color: #ffd2a6;
     font-size: var(--fontSizeXS);
+    font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -111,18 +144,29 @@
     animation-iteration-count: infinite;
 }
 
-// ── stage bar ──
+.undoRedo {
+    @include row;
+}
+
+// ── stage bar: three equal steps under the header ──
 .stageBar {
     @include row;
     flex-shrink: 0;
+    padding: 8rem 10rem;
+    border-bottom-width: 1rem;
+    border-bottom-style: solid;
+    border-bottom-color: $c-line;
 }
 
 .stageItem {
     @include row;
     @include button-reset;
-    height: 28rem;
-    padding: 0 9rem 0 4rem;
-    border-radius: 14rem;
+    flex: 1 1 0;
+    justify-content: center;
+    height: 34rem;
+    margin: 0 2rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.04);
     transition-property: background-color, color, opacity;
     transition-duration: $t-fast;
 }
@@ -130,10 +174,10 @@
 .stageNum {
     @include row;
     justify-content: center;
-    width: 20rem;
-    height: 20rem;
-    border-radius: 10rem;
-    background-color: rgba(255, 255, 255, 0.12);
+    width: 22rem;
+    height: 22rem;
+    border-radius: 11rem;
+    background-color: rgba(255, 255, 255, 0.14);
     font-size: var(--fontSizeXS);
     font-weight: bold;
     color: var(--menuText1Normal);
@@ -141,17 +185,16 @@
 }
 
 .stageNumDone {
-    background-color: rgba(111, 220, 140, 0.25);
-    color: #b8f2c8;
+    background-color: $c-ok;
 }
 
 .stageLabel {
-    margin-left: 6rem;
+    margin-left: 8rem;
     font-size: var(--fontSizeS);
 }
 
 .stageCurrent {
-    background-color: rgba(143, 209, 255, 0.16);
+    background-color: rgba(143, 209, 255, 0.2);
     cursor: default;
     .stageNum {
         background-color: var(--accentColorNormal);
@@ -164,45 +207,21 @@
 }
 
 .stageReachable {
-    color: var(--menuText1Normal);
     &:hover {
         background-color: $c-surface-hover;
     }
 }
 
 .stageLocked {
-    opacity: 0.4;
+    opacity: 0.45;
     cursor: default;
-}
-
-.stageLink {
-    width: 14rem;
-    height: 2rem;
-    margin: 0 2rem;
-    border-radius: 1rem;
-    background-color: rgba(255, 255, 255, 0.14);
-}
-
-.stageLinkDone {
-    background-color: rgba(143, 209, 255, 0.45);
-}
-
-// ── undo/redo ──
-.undoRedo {
-    @include row;
-}
-
-.undoLabel {
-    @include ellipsis;
-    max-width: 110rem;
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
 }
 
 // ── body ──
 .bodyWrap {
     @include col;
-    max-height: 380rem;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -219,64 +238,53 @@
 
 .body {
     @include col;
-    padding: 10rem 14rem 8rem 14rem;
+    flex-shrink: 0;
+    padding: 12rem 16rem 16rem 16rem;
     animation-name: pmIn;
     animation-duration: 0.18s;
     animation-timing-function: $ease;
 }
 
-// ── footer ──
+// ── footer: info line, then the full-width primary button ──
 .footer {
-    @include row;
-    min-height: 52rem;
-    padding: 8rem 10rem 8rem 14rem;
+    @include col;
+    flex-shrink: 0;
+    padding: 10rem 14rem 12rem 14rem;
     border-top-width: 1rem;
     border-top-style: solid;
-    border-top-color: $c-line;
-    background-color: rgba(0, 0, 0, 0.12);
-    border-bottom-left-radius: $radius-l;
-    border-bottom-right-radius: $radius-l;
+    border-top-color: $c-line-strong;
+    background-color: rgba(0, 0, 0, 0.22);
+}
+
+.footerCompact {
+    border-top-width: 0;
+    padding-top: 2rem;
+    background-color: transparent;
 }
 
 .footInfo {
     @include row;
-    flex: 1 1 auto;
-    min-width: 0;
+    min-height: 22rem;
+    margin-bottom: 8rem;
     overflow: hidden;
-    margin-right: 10rem;
 }
 
 .reason {
     @include row;
     min-width: 0;
     flex: 1 1 auto;
-    overflow: hidden;
-}
-
-.reassure {
-    @include row;
-    min-width: 0;
-    color: $c-text-faint;
-}
-
-.reassureText {
-    margin-left: 6rem;
-    font-size: var(--fontSizeXS);
-    color: $c-text-dim;
-    @include ellipsis;
 }
 
 .reasonText {
-    margin-left: 6rem;
+    margin-left: 8rem;
     font-size: var(--fontSizeS);
     color: #ffd59a;
-    @include ellipsis;
 }
 
 .quick {
     @include row;
+    flex-wrap: wrap;
     min-width: 0;
-    overflow: hidden;
     transition-property: opacity;
     transition-duration: $t-med;
 }
@@ -287,12 +295,11 @@
 
 .quickItem {
     @include row;
-    margin-right: 12rem;
-    color: $c-text-dim;
+    margin-right: 14rem;
 }
 
 .quickText {
-    margin-left: 4rem;
+    margin-left: 5rem;
     font-size: var(--fontSizeS);
     color: var(--menuText1Normal);
     white-space: nowrap;
@@ -306,22 +313,17 @@
     @include row;
     @include button-reset;
     justify-content: center;
-    height: 36rem;
-    min-width: 170rem;
-    padding: 0 12rem 0 16rem;
+    position: relative;
+    height: 44rem;
+    padding: 0 16rem;
     border-radius: $radius + 2rem;
     background-color: var(--accentColorNormal);
     color: #0b1d26;
-    flex-shrink: 0;
-    box-shadow: 0 2rem 10rem rgba(63, 182, 240, 0.35);
-    transition-property: background-color, opacity, transform;
+    box-shadow: 0 2rem 12rem rgba(63, 182, 240, 0.35);
+    transition-property: background-color, opacity;
     transition-duration: $t-fast;
     &:hover {
         background-color: var(--accentColorLight);
-        transform: translateY(-1rem);
-    }
-    &:active {
-        transform: translateY(0rem);
     }
 }
 
@@ -332,37 +334,34 @@
 }
 
 .enterKey {
-    margin-left: 10rem;
-    padding: 1rem 5rem;
+    position: absolute;
+    right: 12rem;
+    top: 13rem;
+    padding: 1rem 6rem;
     border-radius: $radius-s;
-    background-color: rgba(11, 29, 38, 0.18);
-    font-size: 10rem;
+    background-color: rgba(11, 29, 38, 0.16);
+    font-size: 11rem;
     font-weight: bold;
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
 
-.primary .enterKey + div {
-    margin-left: 4rem;
-}
-
 .primaryOff {
     background-color: rgba(255, 255, 255, 0.1);
-    color: rgba(234, 242, 246, 0.55);
+    color: rgba(234, 242, 246, 0.6);
     box-shadow: 0 0 0 rgba(0, 0, 0, 0);
     cursor: default;
     &:hover {
         background-color: rgba(255, 255, 255, 0.1);
-        transform: translateY(0rem);
     }
 }
 
 .primaryCancel {
-    background-color: rgba(255, 107, 91, 0.22);
+    background-color: rgba(255, 107, 91, 0.25);
     color: #ffd2cc;
     box-shadow: 0 0 0 rgba(0, 0, 0, 0);
     &:hover {
-        background-color: rgba(255, 107, 91, 0.35);
+        background-color: rgba(255, 107, 91, 0.38);
     }
 }
 
@@ -370,90 +369,104 @@
 .hints {
     @include row;
     flex-wrap: wrap;
-    padding: 6rem 14rem 7rem 14rem;
+    flex-shrink: 0;
+    padding: 7rem 14rem 8rem 14rem;
     border-top-width: 1rem;
     border-top-style: solid;
     border-top-color: $c-line;
+    background-color: rgba(0, 0, 0, 0.22);
 }
 
 .hint {
     @include row;
     margin-right: 14rem;
-    margin-top: 1rem;
-    margin-bottom: 1rem;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
 }
 
 .hintText {
-    margin-left: 2rem;
+    margin-left: 3rem;
     font-size: var(--fontSizeXS);
     color: $c-text-dim;
     white-space: nowrap;
 }
 
-// ── marker banner ──
+// ── marker placement banner (inside the panel, under the stage bar) ──
 .banner {
     @include row;
-    pointer-events: auto;
-    margin-bottom: 8rem;
-    padding: 6rem 6rem 6rem 12rem;
-    border-radius: $radius-l;
-    background-color: var(--panelColorNormal);
-    backdrop-filter: var(--panelBlur);
-    @include border(1rem, rgba(255, 169, 77, 0.45));
+    flex-shrink: 0;
+    padding: 8rem 10rem 8rem 14rem;
+    background-color: rgba(255, 169, 77, 0.16);
+    border-bottom-width: 1rem;
+    border-bottom-style: solid;
+    border-bottom-color: rgba(255, 169, 77, 0.45);
 }
 
 .bannerText {
+    @include col;
     flex: 1 1 auto;
-    margin-left: 8rem;
-    font-size: var(--fontSizeS);
+    min-width: 0;
+    margin-left: 10rem;
+    margin-right: 8rem;
 }
 
-// ── compact ──
+.bannerTitle {
+    font-size: var(--fontSizeS);
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.bannerSub {
+    margin-top: 1rem;
+    font-size: var(--fontSizeXS);
+    color: #ffe2c2;
+}
+
+// ── collapsed ──
 .compact {
+    @include col;
+}
+
+.compactRow {
     @include row;
-    height: 52rem;
-    padding: 0 6rem 0 10rem;
-    .footer {
-        min-height: 0;
-        padding: 0;
-        border-top-width: 0;
-        background-color: transparent;
-    }
-    .primary {
-        height: 32rem;
-        min-width: 120rem;
-    }
-    .primaryLabel {
-        font-size: var(--fontSizeS);
-    }
+    padding: 8rem 14rem 6rem 14rem;
 }
 
 .compactStage {
-    margin: 0 10rem 0 8rem;
     font-size: var(--fontSizeS);
     font-weight: bold;
 }
 
-.compactInfo {
-    @include row;
-    flex: 1 1 auto;
-    min-width: 0;
+// ── picker flyout beside the panel ──
+.flyout {
+    @include col;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 420rem;
+    pointer-events: none;
+}
+
+.flyoutLeft {
+    right: 100%;
+    margin-right: 10rem;
+}
+
+.flyoutRight {
+    left: 100%;
     margin-left: 10rem;
-    margin-right: 4rem;
-    overflow: hidden;
-    .footer {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
 }
 
 // ── crash ──
 .crash {
+    position: absolute;
+    top: 64rem;
+    right: 12rem;
     pointer-events: auto;
-    max-width: 520rem;
+    max-width: 450rem;
     padding: 10rem 14rem;
     border-radius: $radius;
-    background-color: rgba(90, 20, 20, 0.92);
+    background-color: rgba(90, 20, 20, 0.95);
     @include border(1rem, #ff6b5b);
     color: #ffffff;
     font-size: var(--fontSizeS);

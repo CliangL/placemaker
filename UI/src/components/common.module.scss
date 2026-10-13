@@ -1,15 +1,8 @@
 @use "../styles/tokens" as *;
 
 .icon {
-    display: flex;
+    display: block;
     flex-shrink: 0;
-}
-
-.tinted {
-    background-color: currentColor;
-    mask-size: contain;
-    mask-repeat: no-repeat;
-    mask-position: center;
 }
 
 // ── buttons ──
@@ -235,45 +228,51 @@
     }
 }
 
-// ── foldout ──
-.foldout {
-    @include col;
-    margin-top: 6rem;
-}
-
-.foldoutHead {
-    @include row;
-    @include button-reset;
-    height: 26rem;
-    color: $c-text-dim;
-    font-size: var(--fontSizeXS);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    &:hover {
-        color: var(--menuText1Normal);
-    }
-}
-
-.foldoutTitle {
-    margin-left: 4rem;
-}
-
-.foldoutCount {
-    margin-left: 6rem;
-    padding: 0 5rem;
-    border-radius: 8rem;
-    background-color: $c-surface-hover;
-    font-size: var(--fontSizeXS);
-}
-
-.foldoutBody {
-    @include col;
-    padding-top: 2rem;
-}
-
 .dot {
     width: 8rem;
     height: 8rem;
     border-radius: 4rem;
     flex-shrink: 0;
+}
+
+// ── section ──
+.section {
+    @include col;
+    margin-top: 16rem;
+}
+
+.sectionHead {
+    @include row;
+    min-height: 26rem;
+    margin-bottom: 8rem;
+}
+
+.sectionIcon {
+    margin-right: 7rem;
+}
+
+.sectionTitle {
+    font-size: var(--fontSizeXS);
+    font-weight: bold;
+    color: #ffffff;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.sectionCount {
+    margin-left: 7rem;
+    padding: 0 6rem;
+    border-radius: 8rem;
+    background-color: $c-surface-strong;
+    font-size: var(--fontSizeXS);
+    color: var(--menuText1Normal);
+}
+
+.sectionRule {
+    flex: 1 1 auto;
+    height: 1rem;
+    margin-left: 10rem;
+    margin-right: 6rem;
+    background-color: $c-line-strong;
 }

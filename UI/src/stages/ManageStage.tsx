@@ -72,7 +72,7 @@ export const ManageStage = ({ group }: { group: ManagedGroup | null }) => {
     return (
         <div className={s.stage} data-testid="stage-manage">
             <div className={s.manageHead}>
-                <Icon name="logo" size={20} color="#8fd1ff" />
+                <Icon name="logo" size={20} tint="accent" />
                 {renaming ? (
                     <RenameField id={group.id} name={group.customName ?? ""} onDone={() => setRenaming(false)} />
                 ) : (
