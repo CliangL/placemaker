@@ -1,10 +1,15 @@
 // Browser stand-in for cs2/l10n: translate() over Lang/en-US*.json (repo files + /api/lang from the
 // mock host), and a LocalizedNumber that formats like the game (¢ money, digit grouping).
 import React, { useSyncExternalStore } from "react";
+// Every Lang/en-US*.json in the repo (core, tool, layers, ui), bundled so the mock reads like the game
+// even without the host.
+declare const require: any;
+const langCtx = require.context("../../../Lang", false, /^\.\/en-US\..*\.json$/);
+const all: Record<string, string> = {};
+langCtx.keys().forEach((k: string) => Object.assign(all, langCtx(k)));
 import uiStrings from "../../../Lang/en-US.ui.json";
-import coreStrings from "../../../Lang/en-US.core.json";
 
-let dict: Record<string, string> = { ...(coreStrings as Record<string, string>), ...(uiStrings as Record<string, string>) };
+let dict: Record<string, string> = { ...all };
 let version = 0;
 const listeners = new Set<() => void>();
 

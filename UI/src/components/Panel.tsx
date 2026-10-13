@@ -71,6 +71,8 @@ const StageBar = ({ state }: { state: ToolState }) => {
     );
 };
 
+const cap = (x: string) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x);
+
 const UndoRedo = ({ state }: { state: ToolState }) => {
     const { t, tl } = useT();
     const undo = state.undoLabel ? tl(state.undoLabel) : "";
@@ -82,7 +84,7 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
                 iconSize={16}
                 disabled={!state.canUndo}
                 testId="undo"
-                label={undo ? <span className={s.undoLabel}>{undo}</span> : undefined}
+                label={undo ? <span className={s.undoLabel}>{cap(undo)}</span> : undefined}
                 title={undo ? t("Placemaker.UI.UndoWhat", "Undo: {0}", [undo]) : t("Placemaker.UI.Undo", "Undo")}
                 description={<Keys keys={["Ctrl", "Z"]} />}
                 onClick={act.undo}
@@ -199,7 +201,9 @@ const MarkerBanner = ({ state }: { state: ToolState }) => {
     return (
         <div className={s.banner} data-testid="marker-banner">
             <Icon name="marker" size={16} color="#ffa94d" />
-            <div className={s.bannerText}>{tl(state.markerMode.label, t("Placemaker.UI.Markers.Banner", "Click on the outline to place, right-click to remove"))}</div>
+            <div className={s.bannerText}>
+                {t("Placemaker.UI.Markers.Banner", "Placing {0} — click on the outline; right-click one to remove it.", [tl(state.markerMode.label, state.markerMode.kind)])}
+            </div>
             <Btn variant="accent" label={t("Placemaker.UI.Done", "Done")} onClick={act.endMarkers} testId="marker-done" />
         </div>
     );

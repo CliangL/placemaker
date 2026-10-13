@@ -232,8 +232,8 @@ export const act = {
     setAnarchy: (enabled: boolean) => fire(Triggers.setAnarchy, enabled),
     /** PROPOSED (docs/proposals/ui.md): move the camera to an issue location. Harmless if C# lacks it. */
     locate: (at: [number, number, number]) => fire("locate", JSON.stringify(at)),
-    /** PROPOSED: leave marker placement explicitly (until then C# treats a repeated startMarkers as a toggle). */
-    endMarkers: () => fire("endMarkers"),
+    /** Leave marker placement: in marker mode the C# primary action is "placeMarkers" (Done), which toggles it off. */
+    endMarkers: () => fire(Triggers.primary),
     /** PROPOSED: tell C# the player ticked the permanent-effects box (so Enter can't bypass it). */
     acknowledgePermanent: (ack: boolean) => fire("acknowledgePermanent", ack),
 };

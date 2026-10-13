@@ -23,7 +23,7 @@ test("mix and match: add an add-on to a single-layer recipe", async ({ page }) =
     await waitPlanned(page);
     const layers = await page.evaluate(() => (window as any).pm.backend.plan.layers.map((l: any) => l.layer));
     expect(layers).toContain("playground");
-    await expect(page.getByTestId("undo")).toContainText("Add Playground");
+    await expect(page.getByTestId("undo")).toContainText("Add layer");
     await panelShot(page, "panel-tree-addon");
     expect(errors).toEqual([]);
 });
@@ -38,15 +38,15 @@ test("per-region override: one block of a road grid becomes a plaza", async ({ p
     await expect(page.getByTestId("region-menu")).toBeVisible();
     await panelShot(page, "panel-region-menu");
     await page.getByTestId("override-plaza").click();
-    await expect(page.getByTestId("tree-0@block:1")).toContainText("Plaza");
+    await expect(page.getByTestId("tree-0/0@block:1")).toContainText("Plaza");
     await waitPlanned(page);
     const plaza = await page.evaluate(() => (window as any).pm.backend.plan.layers.filter((l: any) => l.layer === "plaza").map((l: any) => l.stepPath));
     expect(plaza).toEqual(["0/0@block:1"]);
     await shot(page, "08-roads-parks-override");
     await panelShot(page, "panel-region-override");
     // remove the override again
-    await page.getByTestId("remove-0@block:1").click();
-    await expect(page.getByTestId("tree-0@block:1")).toHaveCount(0);
+    await page.getByTestId("remove-0/0@block:1").click();
+    await expect(page.getByTestId("tree-0/0@block:1")).toHaveCount(0);
 });
 
 test("tree: enable/disable, reorder, retarget, remove", async ({ page }) => {
