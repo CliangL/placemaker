@@ -62,7 +62,7 @@ namespace Placemaker.Tests
                 double v = d.Num(c.Id, double.NaN);
                 Assert.InRange(v, c.Min, c.Max);
             }
-            Assert.Contains(g.Controls, c => c.Kind == ControlKind.Markers && c.MarkerKinds.SequenceEqual(new[] { "entrance", "entry", "exit" }));
+            Assert.Contains(g.Controls, c => c.Kind == ControlKind.Markers && c.MarkerKinds.SequenceEqual(new[] { "entrance", "entry", "exit", "alley", "alleyIn", "alleyOut", "footpath", "busStop", "zoningPatch" }));
             Assert.Equal(4, g.Controls.Count(c => c.Tier == ControlTier.Essential));
             Assert.Equal("rowAngleMode=fixed", g.Controls.Single(c => c.Id == "rowAngle").VisibleWhen);
         }
@@ -182,13 +182,15 @@ namespace Placemaker.Tests
         }
 
         [Fact]
-        public void PlanUsesSuggestionsWhenNoMarkersArePlaced()
+        public void PlanNeverInventsEntrances()
         {
+            // Suggestions are applied by the tool as real markers; the plan only builds what is placed.
             var site = new SiteContext();
             site.NearbyNets.Add(Road(42, -100, -10, 260, -10));
             var r = ParkingKit.Run(Rect, null, null, site);
-            Assert.Contains(r.Plan.Issues, i => i.Key == "Placemaker.Parking.Issue.EntrancesSuggested");
-            Assert.Contains(r.Plan.Nets, n => n.Role == NetRole.DriveConnector);
+            Assert.Contains(r.Plan.Issues, i => i.Key == "Placemaker.Parking.Issue.NoEntrance");
+            Assert.DoesNotContain(r.Plan.Nets, n => n.Role == NetRole.DriveConnector);
+            Assert.True(r.Plan.Facts["capacity"] > 100, "the preview still shows the lot");
             AssertClean(r);
         }
 

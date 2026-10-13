@@ -21,6 +21,14 @@ namespace Placemaker.Core.Layers.Parking
         };
         public const string OneWayPath = "Invisible Road Path - 1xOneway";
         public const string Alley = "Alley";
+        // PLT GasseEin/GasseAus were built from the vanilla one-way alley (2026-09-18).
+        public const string AlleyOneWay = "Alley Oneway";
+        /// <summary>
+        /// Sentinel id: the game layer resolves the vanilla bus stop like PLT ParkingLotBusStops.ResolveBusStopPrefab
+        /// (built-in, bus TransportStopData with passengers, RouteConnection Road, not "Integrated", prefer a "Sign").
+        /// Unresolved it falls back to an invisible marker object (ObjectRole.Marker).
+        /// </summary>
+        public const string BusStop = "Placemaker:BusStop";
         public const string PedestrianPath = "Invisible Pedestrian Path";
 
         public const string Decal = "ParkingLotDecal01";

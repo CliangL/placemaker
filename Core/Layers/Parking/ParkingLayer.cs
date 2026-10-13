@@ -20,7 +20,7 @@ namespace Placemaker.Core.Layers.Parking
 
         public string Id => LayerId;
         public string NameKey => K + "Name";
-        public string Icon => "Media/Game/Icons/ParkingFacility.svg";
+        public string Icon => "Media/Game/Icons/Parking.svg";
         public LayerKind Kind => LayerKind.Fill;
         public string[] Accepts => Array.Empty<string>();
         public string[] Emits => new[] { RegionTags.Lot, RegionTags.Green };
@@ -64,35 +64,43 @@ namespace Placemaker.Core.Layers.Parking
             return c;
         }
 
+        /// <summary>
+        /// Marker kind → icon. The tool (Core/Tool/MarkerKinds) owns verified vanilla icons for entrance,
+        /// entry, exit, alley and footpath; the one-way alleys reuse the alley icon; bus stop and zoning
+        /// patch use bundled UI glyphs (UI/src/lib/icons.ts) until the tool adds vanilla ones.
+        /// </summary>
+        internal static string MarkerIcon(string kind)
+        {
+            switch (kind)
+            {
+                case ParkingIds.KindAlleyIn: case ParkingIds.KindAlleyOut: return Placemaker.Core.Tool.MarkerKinds.IconFor(ParkingIds.KindAlley);
+                case ParkingIds.KindBusStop: return "people";
+                case ParkingIds.KindZoningPatch: return "zone";
+                default: return Placemaker.Core.Tool.MarkerKinds.IconFor(kind);
+            }
+        }
+
+        // Groups in display order — the UI shows every control, so the most used come first.
+        internal static readonly string[] GroupOrder = { "entrances", "layout", "spaces", "planting", "lighting", "surfaces", "zoning", "fee" };
+
         private static IReadOnlyList<ControlSchema> BuildControls()
         {
             var l = new List<ControlSchema>();
-            // Essential
+
+            // ── Entrances ──
+            var ent = C(ParkingIds.Entrances, ControlKind.Markers, ControlTier.Essential, "entrances", null);
+            ent.Icon = "entrance";
+            ent.MarkerKinds = (string[])ParkingIds.MarkerKinds.Clone();
+            foreach (var k in ParkingIds.MarkerKinds)
+                ent.Options.Add(new ControlOption { Value = k, LabelKey = K + "Marker." + Placemaker.Core.Tool.MarkerKinds.Pascal(k), TooltipKey = K + "Marker." + Placemaker.Core.Tool.MarkerKinds.Pascal(k) + ".Tip", Icon = MarkerIcon(k) });
+            l.Add(ent);
+
+            // ── Layout ──
             var angle = C(ParkingIds.StallAngle, ControlKind.Choice, ControlTier.Essential, "layout", "90");
             angle.Options.Add(Opt("90", "StallAngle.90"));
             angle.Options.Add(Opt("60", "StallAngle.60"));
             angle.Options.Add(Opt("45", "StallAngle.45"));
             l.Add(angle);
-            var ent = C(ParkingIds.Entrances, ControlKind.Markers, ControlTier.Essential, "layout", null);
-            ent.MarkerKinds = new[] { ParkingIds.KindEntrance, ParkingIds.KindEntry, ParkingIds.KindExit };
-            ent.Options.Add(Opt(ParkingIds.KindEntrance, "Marker.Entrance"));
-            ent.Options.Add(Opt(ParkingIds.KindEntry, "Marker.Entry"));
-            ent.Options.Add(Opt(ParkingIds.KindExit, "Marker.Exit"));
-            l.Add(ent);
-            var asphalt = C(ParkingIds.AsphaltSurface, ControlKind.Asset, ControlTier.Essential, "surfaces", "");
-            asphalt.AssetCategory = AssetCategories.SurfaceAsphalt; asphalt.Cheap = true;
-            l.Add(asphalt);
-            var green = C(ParkingIds.Greenery, ControlKind.Choice, ControlTier.Essential, "planting", "medians");
-            green.Options.Add(Opt("none", "Greenery.None"));
-            green.Options.Add(Opt("edges", "Greenery.Edges"));
-            green.Options.Add(Opt("medians", "Greenery.Medians"));
-            l.Add(green);
-
-            // More: layout
-            l.Add(Slider(ParkingIds.AisleWidth, ControlTier.More, "layout", ParkingSettings.DefaultAisle, 4, 10, 0.5, "m"));
-            l.Add(Slider(ParkingIds.StallWidth, ControlTier.More, "layout", ParkingSettings.DefaultStallWidth, 2.5, 4, 0.1, "m"));
-            l.Add(Slider(ParkingIds.StallLength, ControlTier.More, "layout", ParkingSettings.DefaultStallLength, 4.5, 7, 0.1, "m"));
-            l.Add(Slider(ParkingIds.Setback, ControlTier.More, "layout", ParkingSettings.DefaultSetback, 0, 6, 0.5, "m"));
             var mode = C(ParkingIds.RowAngleMode, ControlKind.Choice, ControlTier.More, "layout", "edge");
             mode.Options.Add(Opt("edge", "RowAngleMode.Edge"));
             mode.Options.Add(Opt("across", "RowAngleMode.Across"));
@@ -103,30 +111,37 @@ namespace Placemaker.Core.Layers.Parking
             l.Add(rowAngle);
             l.Add(C(ParkingIds.PerimeterRoad, ControlKind.Toggle, ControlTier.More, "layout", true));
             l.Add(Slider(ParkingIds.CrossEvery, ControlTier.More, "layout", ParkingSettings.DefaultCrossEvery, 0, 30, 1, "count"));
-            var style = C(ParkingIds.EntranceStyle, ControlKind.Choice, ControlTier.More, "layout", "connect");
-            style.Options.Add(Opt("connect", "EntranceStyle.Connect"));
-            style.Options.Add(Opt("alley", "EntranceStyle.Alley"));
-            l.Add(style);
-            // More: planting
-            var ends = C(ParkingIds.RowEndPlanting, ControlKind.Toggle, ControlTier.More, "planting", true);
-           
-            l.Add(ends);
+            l.Add(Slider(ParkingIds.AisleWidth, ControlTier.More, "layout", ParkingSettings.DefaultAisle, 4, 10, 0.5, "m"));
+            l.Add(Slider(ParkingIds.Setback, ControlTier.More, "layout", ParkingSettings.DefaultSetback, 0, 6, 0.5, "m"));
+
+            // ── Spaces ──
+            l.Add(Slider(ParkingIds.StallWidth, ControlTier.More, "spaces", ParkingSettings.DefaultStallWidth, 2.5, 4, 0.1, "m"));
+            l.Add(Slider(ParkingIds.StallLength, ControlTier.More, "spaces", ParkingSettings.DefaultStallLength, 4.5, 7, 0.1, "m"));
+            l.Add(Slider(ParkingIds.AccessibleShare, ControlTier.More, "spaces", 2, 0, 10, 1, "%"));
+            l.Add(Slider(ParkingIds.EvShare, ControlTier.More, "spaces", 4, 0, 30, 1, "%"));
+            var ch = C(ParkingIds.ChargerAsset, ControlKind.Asset, ControlTier.More, "spaces", "");
+            ch.AssetCategory = AssetCategories.Charger; ch.Cheap = true;
+            l.Add(ch);
+
+            // ── Planting ──
+            var green = C(ParkingIds.Greenery, ControlKind.Choice, ControlTier.Essential, "planting", "medians");
+            green.Options.Add(Opt("none", "Greenery.None"));
+            green.Options.Add(Opt("edges", "Greenery.Edges"));
+            green.Options.Add(Opt("medians", "Greenery.Medians"));
+            l.Add(green);
             var median = Slider(ParkingIds.MedianDepth, ControlTier.More, "planting", ParkingSettings.DefaultMedian, 0.5, 8, 0.5, "m");
             median.VisibleWhen = ParkingIds.Greenery + "=medians";
             l.Add(median);
-            var gs = C(ParkingIds.GreenSurface, ControlKind.Asset, ControlTier.More, "planting", "");
-            gs.AssetCategory = AssetCategories.SurfaceGrass; gs.Cheap = true;
-            l.Add(gs);
+            l.Add(C(ParkingIds.RowEndPlanting, ControlKind.Toggle, ControlTier.More, "planting", true));
+            l.Add(Slider(ParkingIds.PlantingDensity, ControlTier.More, "planting", 50, 0, 100, 5, "%"));
             var trees = C(ParkingIds.Trees, ControlKind.AssetMulti, ControlTier.More, "planting", Array.Empty<string>());
             trees.AssetCategory = AssetCategories.Tree;
             l.Add(trees);
             var bushes = C(ParkingIds.Bushes, ControlKind.AssetMulti, ControlTier.More, "planting", Array.Empty<string>());
             bushes.AssetCategory = AssetCategories.Bush;
             l.Add(bushes);
-            var dens = Slider(ParkingIds.PlantingDensity, ControlTier.More, "planting", 50, 0, 100, 5, "%");
 
-            l.Add(dens);
-            // More: lighting
+            // ── Lighting ──
             l.Add(C(ParkingIds.Lanterns, ControlKind.Toggle, ControlTier.More, "lighting", true));
             var la = C(ParkingIds.LanternAsset, ControlKind.Asset, ControlTier.More, "lighting", "");
             la.AssetCategory = AssetCategories.Lamp; la.Cheap = true; la.VisibleWhen = ParkingIds.Lanterns + "=true";
@@ -134,13 +149,29 @@ namespace Placemaker.Core.Layers.Parking
             var ls = Slider(ParkingIds.LanternSpacing, ControlTier.More, "lighting", 30, 20, 40, 1, "m");
             ls.VisibleWhen = ParkingIds.Lanterns + "=true";
             l.Add(ls);
-            // More: special stalls & economy
-            l.Add(Slider(ParkingIds.EvShare, ControlTier.More, "stalls", 4, 0, 30, 1, "%"));
-            var ch = C(ParkingIds.ChargerAsset, ControlKind.Asset, ControlTier.More, "stalls", "");
-            ch.AssetCategory = AssetCategories.Charger; ch.Cheap = true;
-            l.Add(ch);
-            l.Add(Slider(ParkingIds.AccessibleShare, ControlTier.More, "stalls", 2, 0, 10, 1, "%"));
-            l.Add(Slider(ParkingIds.Fee, ControlTier.More, "economy", 10, 0, 50, 1, "money", cheap: true));
+
+            // ── Surfaces ──
+            var asphalt = C(ParkingIds.AsphaltSurface, ControlKind.Asset, ControlTier.Essential, "surfaces", "");
+            asphalt.AssetCategory = AssetCategories.SurfaceAsphalt; asphalt.Cheap = true;
+            l.Add(asphalt);
+            var gs = C(ParkingIds.GreenSurface, ControlKind.Asset, ControlTier.More, "surfaces", "");
+            gs.AssetCategory = AssetCategories.SurfaceGrass; gs.Cheap = true;
+            l.Add(gs);
+
+            // ── Zoning (buildings along the street) ──
+            var ez = C(ParkingIds.EdgeZoning, ControlKind.Choice, ControlTier.More, "zoning", "none");
+            ez.Options.Add(Opt("none", "EdgeZoning.None"));
+            ez.Options.Add(Opt("oneSide", "EdgeZoning.OneSide"));
+            ez.Options.Add(Opt("all", "EdgeZoning.All"));
+            l.Add(ez);
+            var zt = C(ParkingIds.ZoneType, ControlKind.Asset, ControlTier.More, "zoning", "");
+            zt.AssetCategory = AssetCategories.Zone; zt.Cheap = true;
+            l.Add(zt);
+            l.Add(Slider(ParkingIds.ZoningDepth, ControlTier.More, "zoning", 3, 1, ParkingSettings.MaxZoneDepthCells, 1, "count"));
+            l.Add(Slider(ParkingIds.ZoningPatchWidth, ControlTier.More, "zoning", 4, 1, 10, 1, "count"));
+
+            // ── Fee ──
+            l.Add(Slider(ParkingIds.Fee, ControlTier.More, "fee", 10, 0, 50, 1, "money", cheap: true));
             return l;
         }
 
@@ -183,19 +214,25 @@ namespace Placemaker.Core.Layers.Parking
 
         public Readiness CheckReady(AreaInput input)
         {
-            int two = 0, entry = 0, exit = 0;
+            // PLT FehlenderZugang: decided by DIRECTION, not by build type. A two-way entrance or alley
+            // is enough; one-way kinds need one in and one out; footpaths never count (people only).
+            int two = 0, inbound = 0, outbound = 0, vehicles = 0;
             if (input?.Markers != null)
                 foreach (var m in input.Markers)
                 {
-                    if (m.Kind == ParkingIds.KindEntrance) two++;
-                    else if (m.Kind == ParkingIds.KindEntry) entry++;
-                    else if (m.Kind == ParkingIds.KindExit) exit++;
+                    if (!EntranceKinds.TryParse(m.Kind, out var k) || !EntranceKinds.ForCars(k)) continue;
+                    vehicles++;
+                    if (!EntranceKinds.OneWay(k)) two++;
+                    else if (EntranceKinds.Outbound(k)) outbound++;
+                    else inbound++;
                 }
-            if (two > 0 || (entry > 0 && exit > 0)) return new Readiness { Ready = true };
-            string reason = entry > 0 ? K + "Reason.EntryWithoutExit"
-                : exit > 0 ? K + "Reason.ExitWithoutEntry"
+            // ReasonArgs: [minimum vehicle entrances, vehicle entrances placed] (the schema has no field for it yet)
+            var args = new object[] { ParkingIds.MinVehicleEntrances, vehicles };
+            if (two > 0 || (inbound > 0 && outbound > 0)) return new Readiness { Ready = true, ReasonArgs = args };
+            string reason = inbound > 0 ? K + "Reason.EntryWithoutExit"
+                : outbound > 0 ? K + "Reason.ExitWithoutEntry"
                 : K + "Reason.NeedsEntrance";
-            return new Readiness { Ready = false, NextStepKey = K + "Step.PlaceEntrance", ReasonKey = reason };
+            return new Readiness { Ready = false, NextStepKey = K + "Step.PlaceEntrance", ReasonKey = reason, ReasonArgs = args };
         }
 
         public List<EdgeMarker> SuggestMarkers(AreaInput input)

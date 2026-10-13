@@ -65,30 +65,49 @@ namespace Placemaker.Core.Layers.Parking
                 return plan;
             }
 
-            // ── entrances ──
-            var markers = new List<EdgeMarker>();
+            // ── markers ──
+            // Only what the player (or the tool, from SuggestMarkers) placed is built: the plan never
+            // invents entrances. Readiness blocks Build while there is no vehicle entrance.
+            var entrances = new List<EntranceRequest>();
+            var busStops = new List<double2>();
+            var patches = new List<double2>();
+            int dropped = 0;
             if (input.Markers != null)
                 foreach (var m in input.Markers)
-                    if (m.Kind == ParkingIds.KindEntrance || m.Kind == ParkingIds.KindEntry || m.Kind == ParkingIds.KindExit) markers.Add(m);
-            if (markers.Count == 0)
-            {
-                markers = EntranceSuggest.Suggest(input, s);
-                plan.Issues.Add(new PlanIssue
                 {
-                    Severity = markers.Count > 0 ? IssueSeverity.Info : IssueSeverity.Warning,
-                    Key = markers.Count > 0 ? K + "Issue.EntrancesSuggested" : K + "Issue.NoEntrance",
+                    if (!math.all(math.isfinite(m.Position))) continue;
+                    var p = new double2(m.Position.x, m.Position.z);
+                    if (m.Kind == ParkingIds.KindBusStop) { busStops.Add(p); continue; }
+                    if (m.Kind == ParkingIds.KindZoningPatch) { patches.Add(p); continue; }
+                    if (!EntranceKinds.TryParse(m.Kind, out var kind)) continue;
+                    if (entrances.Count >= ParkingIds.MaxEntrances) { dropped++; continue; }
+                    entrances.Add(new EntranceRequest { Kind = EntranceKinds.WithLegacyStyle(kind, s.Alleys), World = p });
+                }
+            if (dropped > 0)
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.TooManyEntrances", Args = new object[] { ParkingIds.MaxEntrances, dropped } });
+            bool vehicle = false;
+            foreach (var e in entrances) if (EntranceKinds.ForCars(e.Kind)) vehicle = true;
+            if (!vehicle)
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.NoEntrance" });
+
+            // ── zoning (frontage bands are cut from the lot before the layout) ──
+            var roads = Roads.From(site);
+            var openings = new List<ParkingZoning.Opening>();
+            foreach (var e in entrances)
+                openings.Add(new ParkingZoning.Opening
+                {
+                    P = e.World,
+                    Width = e.Kind == EntranceKind.Footpath ? ParkingSettings.FootpathWidth : EntranceKinds.OneWay(e.Kind) ? ParkingSettings.OneWayWidth : s.Aisle,
                 });
-            }
-            var rq = new LayoutRequest { LotWorld = world, Settings = s, LeftHandTraffic = site.LeftHandTraffic };
+            var zoning = ParkingZoning.Plan(world, roads, s, openings, patches, gen.MinArea);
+            plan.Issues.AddRange(zoning.Issues);
+            cancel.ThrowIfCancellationRequested();
+
+            var rq = new LayoutRequest { LotWorld = zoning.Lot, Settings = s, LeftHandTraffic = site.LeftHandTraffic };
             var reserved = input.Reserved;
             if (reserved != null && (reserved.Discs.Count > 0 || reserved.Corridors.Count > 0 || reserved.Polygons.Count > 0))
                 rq.Blocked = (p, r) => reserved.Blocks(new float2((float)p.x, (float)p.y), (float)r);
-            foreach (var m in markers)
-                rq.Entrances.Add(new EntranceRequest
-                {
-                    Kind = m.Kind == ParkingIds.KindEntry ? EntranceKind.Entry : m.Kind == ParkingIds.KindExit ? EntranceKind.Exit : EntranceKind.TwoWay,
-                    World = new double2(m.Position.x, m.Position.z),
-                });
+            rq.Entrances.AddRange(entrances);
 
             // ── layout ──
             cancel.ThrowIfCancellationRequested();
@@ -150,11 +169,103 @@ namespace Placemaker.Core.Layers.Parking
             }
             cancel.ThrowIfCancellationRequested();
 
-            Emit(plan, layout, s, site, H, input, cancel);
+            Emit(plan, layout, s, site, H, input, cancel, roads, zoning.MaxDepth);
+            EmitBusStops(plan, busStops, world, roads, site, H);
+            EmitZoning(plan, layout, zoning, s, H);
             Issues(plan, layout);
             inspect?.Invoke(layout);
             return plan;
         }
+
+        /// <summary>
+        /// Bus stops on the street in front of the lot (PLT Tools/ParkingLotBusStops.cs put them on its
+        /// internal zoning roads, which Placemaker does not build). The object stands on the lot-side
+        /// sidewalk; yaw = travel direction of the lane next to the kerb (PLT BusStopSnap.TravelDirection).
+        /// </summary>
+        private static void EmitBusStops(AreaPlan plan, List<double2> busStops, List<double2> world, List<RoadLine> roads, SiteContext site, Func<double2, float> H)
+        {
+            int n = 0;
+            foreach (var p in busStops)
+            {
+                n++;
+                int best = 0; double bd = double.MaxValue;
+                for (int i = 0; i < world.Count; i++)
+                {
+                    double d = PGeo.DistPointSeg(p, world[i], world[(i + 1) % world.Count]);
+                    if (d < bd) { bd = d; best = i; }
+                }
+                var inward = PGeo.Perp(PGeo.Norm(world[(best + 1) % world.Count] - world[best]));
+                if (!Roads.ForEntrance(roads, p, inward, out var hit))
+                {
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.BusStopNoRoad", Args = new object[] { n }, At = new float3((float)p.x, H(p), (float)p.y) });
+                    continue;
+                }
+                var road = roads[hit.Road];
+                var toLot = PGeo.Norm(p - hit.Point);
+                if (PGeo.Len(p - hit.Point) < 1e-6) toLot = inward;
+                var pos = hit.Point + toLot * Math.Max(0, road.Width / 2 - 1.5);
+                var dir = hit.Direction;
+                if (!road.OneWay)
+                {
+                    bool lotLeft = PGeo.Cross(dir, toLot) > 0;
+                    // right-hand traffic drives on the right: the kerb lane on the left runs backwards
+                    if (lotLeft != site.LeftHandTraffic) dir = -dir;
+                }
+                plan.Objects.Add(new PlannedObject
+                {
+                    Position = new float3((float)pos.x, H(pos), (float)pos.y), Yaw = Yaw(dir),
+                    Role = ObjectRole.Marker, Asset = new AssetRef(ParkingAssets.BusStop),
+                });
+            }
+        }
+
+        /// <summary>
+        /// Zoned quads (PlannedZoning). Last line of defence for "zoning never overlaps the lot": any
+        /// quad touching a stall, a lane, a footpath or the lot owner area is dropped.
+        /// </summary>
+        private static void EmitZoning(AreaPlan plan, Layout layout, ZoningResult zoning, ParkingSettings s, Func<double2, float> H)
+        {
+            if (zoning.Quads.Count == 0) return;
+            var f = layout.Frame;
+            var blockers = new List<double2[]>();
+            foreach (var b in layout.LiveBays)
+            {
+                var q = new double2[4];
+                for (int i = 0; i < 4; i++) q[i] = f.ToWorld(b.Quad[i]);
+                blockers.Add(q);
+            }
+            foreach (var l in layout.LiveLines)
+                blockers.Add(PGeo.Corridor(f.ToWorld(l.A), f.ToWorld(l.B), l.Width / 2));
+            // entrance pieces outside the lot (to the kerb, alleys, footpaths to the sidewalk)
+            foreach (var net in plan.Nets)
+                blockers.Add(PGeo.Corridor(new double2(net.A.x, net.A.z), new double2(net.D.x, net.D.z), net.Role == NetRole.Pathway ? 1.0 : 3.5));
+            var lotWorld = new List<double2>();
+            foreach (var p in layout.Lot) lotWorld.Add(f.ToWorld(p));
+            int cells = 0, droppedQuads = 0;
+            foreach (var zq in zoning.Quads)
+            {
+                // shrink 5 cm so a quad sharing an edge with the lot does not count as overlapping
+                var c = (zq.A + zq.B + zq.C + zq.D) * 0.25;
+                var r = zq.Ring;
+                for (int i = 0; i < 4; i++) r[i] = r[i] + PGeo.Norm(c - r[i]) * 0.05;
+                bool bad = false;
+                foreach (var bq in blockers) if (PGeo.ConvexOverlap(r, bq, 1e-4)) { bad = true; break; }
+                if (!bad) foreach (var p in r) if (PGeo.Contains(lotWorld, p)) { bad = true; break; }
+                if (bad) { droppedQuads++; continue; }
+                plan.Zoning.Add(new PlannedZoning
+                {
+                    A = P3(zq.A, H), B = P3(zq.B, H), C = P3(zq.C, H), D = P3(zq.D, H),
+                    ZoneId = s.ZoneType ?? "",
+                });
+                cells += (int)Math.Floor(PGeo.Len(zq.B - zq.A) / ParkingSettings.ZoneCell + 1e-6) * (int)Math.Floor(PGeo.Len(zq.D - zq.A) / ParkingSettings.ZoneCell + 1e-6);
+            }
+            if (droppedQuads > 0)
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = K + "Issue.ZoningTrimmed", Args = new object[] { droppedQuads } });
+            plan.Stats.Add(new PlanStat(K + "Stat.ZoneCells", cells, "count"));
+            plan.Facts["zoning.cells"] = cells;
+        }
+
+        private static float3 P3(double2 p, Func<double2, float> H) => new float3((float)p.x, H(p), (float)p.y);
 
         private static void Issues(AreaPlan plan, Layout layout)
         {
@@ -172,7 +283,8 @@ namespace Placemaker.Core.Layers.Parking
 
         private static float Yaw(double2 worldDir) => (float)Math.Atan2(worldDir.x, worldDir.y);
 
-        private static void Emit(AreaPlan plan, Layout layout, ParkingSettings s, SiteContext site, Func<double2, float> H, AreaInput input, CancellationToken cancel)
+        private static void Emit(AreaPlan plan, Layout layout, ParkingSettings s, SiteContext site, Func<double2, float> H, AreaInput input, CancellationToken cancel,
+            List<RoadLine> roads, double zoningDepth)
         {
             var f = layout.Frame;
             Func<float2, float> h2 = p => H(new double2(p.x, p.y));
@@ -224,8 +336,9 @@ namespace Placemaker.Core.Layers.Parking
             else plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.LotOwnerRejected" });
 
             // ── nets ──
-            var roads = Roads.From(site);
             var segs = new List<Seg>();
+            // an entrance on a zoned edge sits behind the band: look that much further for its street
+            double search = Roads.SearchDistance + zoningDepth;
             foreach (var l in layout.LiveLines)
             {
                 switch (l.Kind)
@@ -243,17 +356,36 @@ namespace Placemaker.Core.Layers.Parking
             for (int ei = 0; ei < layout.Entrances.Count; ei++)
             {
                 var e = layout.Entrances[ei];
-                if (!e.Connected || e.ConnectorLine < 0 || layout.Lines[e.ConnectorLine].Removed) continue;
                 var E = f.ToWorld(e.Point); var J = f.ToWorld(e.Junction);
                 var inward = f.DirToWorld(e.Inward);
-                bool exit = e.Kind == EntranceKind.Exit;
-                var asset = e.Kind == EntranceKind.TwoWay ? new AssetRef(ParkingAssets.DrivePath(e.Width)) : new AssetRef(ParkingAssets.OneWayPath, ParkingAssets.DrivePath(e.Width));
+                if (e.Kind == EntranceKind.Footpath)
+                {
+                    // PLT Fussweg: the inner piece is the layout's footpath line (emitted above); the
+                    // outer piece runs to the street and is attached to it (see parking.md).
+                    if (!e.Connected || e.FootLine < 0 || layout.Lines[e.FootLine].Removed) continue;
+                    if (Roads.ForEntrance(roads, E, inward, out var fh, search))
+                    {
+                        if (PGeo.Len(fh.Point - E) > 0.5)
+                            segs.Add(new Seg
+                            {
+                                A = E, B = fh.Point, Role = NetRole.Pathway, Asset = new AssetRef(ParkingAssets.PedestrianPath),
+                                EndAttach = roads[fh.Road].Id, EndT = (float)fh.T,
+                            });
+                    }
+                    else
+                        plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = K + "Issue.EntranceNoRoad", Args = new object[] { ei + 1 }, At = new float3((float)E.x, H(E), (float)E.y) });
+                    continue;
+                }
+                if (!e.Connected || e.ConnectorLine < 0 || layout.Lines[e.ConnectorLine].Removed) continue;
+                bool exit = EntranceKinds.Outbound(e.Kind);
+                bool oneWay = EntranceKinds.OneWay(e.Kind);
+                var asset = !oneWay ? new AssetRef(ParkingAssets.DrivePath(e.Width)) : new AssetRef(ParkingAssets.OneWayPath, ParkingAssets.DrivePath(e.Width));
                 double2 outer = E;
-                bool hasRoad = Roads.ForEntrance(roads, E, inward, out var hit);
-                if (hasRoad && s.Alleys)
+                bool hasRoad = Roads.ForEntrance(roads, E, inward, out var hit, search);
+                if (hasRoad && EntranceKinds.IsAlley(e.Kind))
                 {
                     var road = roads[hit.Road];
-                    var alley = new Seg { Role = NetRole.Alley, Asset = new AssetRef(ParkingAssets.Alley) };
+                    var alley = new Seg { Role = NetRole.Alley, Asset = oneWay ? new AssetRef(ParkingAssets.AlleyOneWay, ParkingAssets.Alley) : new AssetRef(ParkingAssets.Alley) };
                     if (exit) { alley.A = E; alley.B = hit.Point; alley.EndAttach = road.Id; alley.EndT = (float)hit.T; }
                     else { alley.A = hit.Point; alley.B = E; alley.StartAttach = road.Id; alley.StartT = (float)hit.T; }
                     if (PGeo.Len(hit.Point - E) > 0.5) segs.Add(alley);
@@ -273,7 +405,7 @@ namespace Placemaker.Core.Layers.Parking
                     ? new Seg { A = J, B = outer, Role = NetRole.DriveConnector, Asset = asset }
                     : new Seg { A = outer, B = J, Role = NetRole.DriveConnector, Asset = asset });
 
-                if (e.Kind != EntranceKind.TwoWay)
+                if (oneWay)
                 {
                     var mid = (E + J) * 0.5;
                     var dir = exit ? -inward : inward;

@@ -11,8 +11,56 @@ namespace Placemaker.Core.Layers.Parking
 
     internal enum BayRole { Normal = 0, Disabled = 1, Electric = 2 }
 
-    /// <summary>Entrance kinds (marker kinds "entrance", "entry", "exit").</summary>
-    internal enum EntranceKind { TwoWay = 0, Entry = 1, Exit = 2 }
+    /// <summary>
+    /// Entrance kinds = PLT's seven Zufahrtsarten (Geometry/ParkingGeometry.Types.cs): Zufahrt,
+    /// Einfahrt, Ausfahrt, Fussweg, Gasse, GasseEin, GasseAus. Marker kinds: see ParkingIds.Kind*.
+    /// </summary>
+    internal enum EntranceKind { TwoWay = 0, Entry = 1, Exit = 2, Footpath = 3, Alley = 4, AlleyIn = 5, AlleyOut = 6 }
+
+    /// <summary>The questions about an entrance kind, each answered in one place (PLT Zufahrtsarten).</summary>
+    internal static class EntranceKinds
+    {
+        public static bool IsAlley(EntranceKind k) => k == EntranceKind.Alley || k == EntranceKind.AlleyIn || k == EntranceKind.AlleyOut;
+        public static bool OneWay(EntranceKind k) => k == EntranceKind.Entry || k == EntranceKind.Exit || k == EntranceKind.AlleyIn || k == EntranceKind.AlleyOut;
+        /// <summary>Drives from the lot to the street (A→B order of the course is the driving direction).</summary>
+        public static bool Outbound(EntranceKind k) => k == EntranceKind.Exit || k == EntranceKind.AlleyOut;
+        public static bool ForCars(EntranceKind k) => k != EntranceKind.Footpath;
+        /// <summary>Cars can get in here (two-way or inbound).</summary>
+        public static bool In(EntranceKind k) => ForCars(k) && !Outbound(k);
+        /// <summary>Cars can get out here (two-way or outbound).</summary>
+        public static bool Out(EntranceKind k) => ForCars(k) && (!OneWay(k) || Outbound(k));
+
+        public static bool TryParse(string marker, out EntranceKind kind)
+        {
+            switch (marker)
+            {
+                case ParkingIds.KindEntrance: kind = EntranceKind.TwoWay; return true;
+                case ParkingIds.KindEntry: kind = EntranceKind.Entry; return true;
+                case ParkingIds.KindExit: kind = EntranceKind.Exit; return true;
+                case ParkingIds.KindFootpath: kind = EntranceKind.Footpath; return true;
+                case ParkingIds.KindAlley: kind = EntranceKind.Alley; return true;
+                case ParkingIds.KindAlleyIn: kind = EntranceKind.AlleyIn; return true;
+                case ParkingIds.KindAlleyOut: kind = EntranceKind.AlleyOut; return true;
+                default: kind = EntranceKind.TwoWay; return false;
+            }
+        }
+
+        /// <summary>
+        /// Legacy setting entranceStyle = "alley" (round 1): every car entrance was built as a junction.
+        /// Kept so saved designs rebuild the same way; the control is no longer shown.
+        /// </summary>
+        public static EntranceKind WithLegacyStyle(EntranceKind k, bool alleys)
+        {
+            if (!alleys) return k;
+            switch (k)
+            {
+                case EntranceKind.TwoWay: return EntranceKind.Alley;
+                case EntranceKind.Entry: return EntranceKind.AlleyIn;
+                case EntranceKind.Exit: return EntranceKind.AlleyOut;
+                default: return k;
+            }
+        }
+    }
 
     internal enum LineKind { Ring = 0, Aisle = 1, Cross = 2, Connector = 3, Footpath = 4 }
 
@@ -61,6 +109,8 @@ namespace Placemaker.Core.Layers.Parking
         /// <summary>Where the connector meets the lot's drive network.</summary>
         public double2 Junction;
         public int ConnectorLine = -1;
+        /// <summary>Footpath line of a pedestrian entrance (Kind = Footpath), else -1.</summary>
+        public int FootLine = -1;
         public double Width;
         public bool Connected;
     }

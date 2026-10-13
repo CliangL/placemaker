@@ -279,7 +279,9 @@ namespace Placemaker.Core.Layers.Parking
                 var ea = _lot[bestEdge]; var eb = _lot[(bestEdge + 1) % _lot.Count];
                 double len = PGeo.Len(eb - ea);
                 var tan = (eb - ea) / len;
-                double width = rq.Kind == EntranceKind.TwoWay ? _s.Aisle : ParkingSettings.OneWayWidth;
+                // PLT Entrance.Breite: one-way 4.0 m, footpath 2.0 m, two-way (and two-way alley) the aisle.
+                double width = rq.Kind == EntranceKind.Footpath ? ParkingSettings.FootpathWidth
+                    : EntranceKinds.OneWay(rq.Kind) ? ParkingSettings.OneWayWidth : _s.Aisle;
                 double along = bestT * len;
                 double margin = width / 2 + 0.5;
                 if (len > 2 * margin) along = Math.Max(margin, Math.Min(len - margin, along));
@@ -711,8 +713,14 @@ namespace Placemaker.Core.Layers.Parking
                 }
                 e.Junction = j;
                 e.Connected = true;
-                e.ConnectorLine = AddLine(e.Point, j, LineKind.Connector, e.Width, ei, e.Kind != EntranceKind.TwoWay);
-                if (e.Kind != EntranceKind.TwoWay)
+                if (e.Kind == EntranceKind.Footpath)
+                {
+                    // PLT Fussweg: pedestrians only, no car lane (never counts as a vehicle entrance).
+                    e.FootLine = AddLine(e.Point, j, LineKind.Footpath, e.Width, ei);
+                    continue;
+                }
+                e.ConnectorLine = AddLine(e.Point, j, LineKind.Connector, e.Width, ei, EntranceKinds.OneWay(e.Kind));
+                if (EntranceKinds.OneWay(e.Kind))
                 {
                     // PLT Netzerhalt: one-way entrances get a pedestrian path beside the lane.
                     var off = PGeo.Perp(e.Inward) * (e.Width / 2 + 1.0);
@@ -810,7 +818,7 @@ namespace Placemaker.Core.Layers.Parking
                 foreach (var e in _out.Entrances)
                     if (e.Edge == k && e.Connected)
                     {
-                        double half = e.Width / 2 + sw;
+                        double half = e.Width / 2 + (e.Kind == EntranceKind.Footpath ? 0.5 : sw);
                         blocks.Add((e.Along - half, e.Along + half));
                     }
                 blocks.Sort((p, q) => p.From.CompareTo(q.From));
@@ -1031,7 +1039,16 @@ namespace Placemaker.Core.Layers.Parking
                 if (l.Kind == LineKind.Footpath && !l.Removed)
                 {
                     var e = _out.Entrances[l.Entrance];
-                    if (!e.Connected || _out.Lines[e.ConnectorLine].Removed) l.Removed = true;
+                    if (e.Kind == EntranceKind.Footpath)
+                    {
+                        // a pedestrian entrance stays while the line it joins is still there
+                        bool joined = false;
+                        foreach (var o in _out.Lines)
+                            if (!o.Removed && o.Kind != LineKind.Footpath && PGeo.DistPointSeg(l.B, o.A, o.B) < 1e-3) { joined = true; break; }
+                        if (!joined) l.Removed = true;
+                        continue;
+                    }
+                    if (!e.Connected || e.ConnectorLine < 0 || _out.Lines[e.ConnectorLine].Removed) l.Removed = true;
                 }
         }
 
