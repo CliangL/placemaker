@@ -112,6 +112,52 @@ namespace Placemaker.Game.Assets
 
         public Dictionary<string, AssetInfo> InfoMap() => new Dictionary<string, AssetInfo>(_infoMap, StringComparer.Ordinal);
 
+        // ───────────────────────── automatic assets (US5) ─────────────────────────
+
+        private const int VarietyPoolSize = 8;
+        private readonly Dictionary<string, IReadOnlyList<string>> _pools = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        private int _poolsVersion = -1;
+
+        public int ResolveAutomatic(ComposedPlan plan)
+        {
+            if (!_ready || plan == null) return 0;
+            try { return AutoAssets.Resolve(plan, AutomaticPool, PrefabExists); }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker could not resolve automatic assets: " + e.Message);
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Ordered candidates for automatic refs of a category: the category default first; variety
+        /// categories (trees, bushes, flowerbeds) add the best-scored vanilla items (stable across
+        /// playsets and sessions). Rebuilt when the catalog version changes.
+        /// </summary>
+        public IReadOnlyList<string> AutomaticPool(string category)
+        {
+            if (_poolsVersion != _version) { _pools.Clear(); _poolsVersion = _version; }
+            if (category == null) return Array.Empty<string>();
+            if (_pools.TryGetValue(category, out var cached)) return cached;
+            var list = new List<string>();
+            var defName = NameOf(DefaultFor(category));
+            if (!string.IsNullOrEmpty(defName)) list.Add(defName);
+            if (list.Count > 0 && AutoAssets.VarietyCategories.Contains(category) && _byCategory.TryGetValue(category, out var items))
+            {
+                var ranked = new List<CatalogItem>();
+                foreach (var it in items)
+                    if (Array.IndexOf(it.Tags, "source:vanilla") >= 0 && it.Id != defName && Usable(it.Prefab)) ranked.Add(it);
+                ranked.Sort((a, b) =>
+                {
+                    int sa = AssetHeuristics.DefaultScore(category, a.Id, a.Info.NetWidth), sb = AssetHeuristics.DefaultScore(category, b.Id, b.Info.NetWidth);
+                    return sa != sb ? sb.CompareTo(sa) : string.CompareOrdinal(a.Id, b.Id);
+                });
+                for (int i = 0; i < ranked.Count && list.Count < VarietyPoolSize; i++) list.Add(ranked[i].Id);
+            }
+            _pools[category] = list;
+            return list;
+        }
+
         // ───────────────────────── extra API for build/groups ─────────────────────────
 
         /// <summary>True when any loaded prefab has this name (missing-asset detection).</summary>
@@ -345,7 +391,7 @@ namespace Placemaker.Game.Assets
                 info.NetWidth = EntityManager.GetComponentData<NetGeometryData>(e).m_DefaultWidth;
             if (EntityManager.HasComponent<PlaceableNetData>(e))
             {
-                // Nets are charged per started 8 m cell (NetUtils.GetConstructionCost); the UI's
+                // Nets are charged per rounded 8 m cell, max(1, round(len/8)) (NetUtils.GetConstructionCost); the UI's
                 // "per km" figure is cost × 125. AssetInfo wants per metre.
                 var p = EntityManager.GetComponentData<PlaceableNetData>(e);
                 info.Cost = p.m_DefaultConstructionCost / 8f;

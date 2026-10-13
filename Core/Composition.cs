@@ -358,7 +358,7 @@ namespace Placemaker.Core
             foreach (var l in plan.Layers)
             {
                 foreach (var o in l.Objects) Add(ref e, assets, o.Asset.Id, 1);
-                foreach (var n in l.Nets) Add(ref e, assets, n.Asset.Id, CurveLength(n));
+                foreach (var n in l.Nets) Add(ref e, assets, n.Asset.Id, BillableNetLength(CurveLength(n)));
                 foreach (var s in l.Surfaces) Add(ref e, assets, s.Asset.Id, PolygonArea(s.Ring));
                 foreach (var a in l.Areas) Add(ref e, assets, a.Asset.Id, PolygonArea(a.Ring));
             }
@@ -371,6 +371,13 @@ namespace Placemaker.Core
             e.Cost += info.Cost * qty;
             e.Upkeep += info.Upkeep * qty;
         }
+
+        /// <summary>
+        /// The game charges nets per (rounded) 8 m cell: NetUtils.GetConstructionCost =
+        /// max(1, round(length / 8)) × composition cost (decompiled, CS2 1.6.2). AssetInfo.Cost is per
+        /// metre (= cost per cell / 8), so the billable length is whole cells × 8.
+        /// </summary>
+        public static double BillableNetLength(double length) => Math.Max(1.0, Math.Round(length / 8.0)) * 8.0;
 
         public static double CurveLength(PlannedNet n)
         {

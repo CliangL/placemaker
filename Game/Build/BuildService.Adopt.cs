@@ -88,7 +88,7 @@ namespace Placemaker.Game.Build
                 for (int i = 0; i < temps.Length; i++)
                 {
                     if (!IsOwnCandidate(temps[i], out _)) continue;
-                    if (TryMatch(temps[i], out long key, out _)) matched.Add(key);
+                    if (TryMatch(temps[i], out long key, out _) && key != OwnerKey) matched.Add(key);
                 }
             return new CensusResult { Expected = _itemByKey.Count, Matched = matched.Count };
         }
@@ -158,7 +158,13 @@ namespace Placemaker.Game.Build
             return false;
         }
 
-        /// <summary>Maps every errored temporary back to plan items and excludes them. Returns newly excluded count.</summary>
+        /// <summary>
+        /// US8: maps every errored temporary back to plan items and excludes them (reported per kind).
+        /// Exact first (our temporary, or the temporary that owns the errored sub-element, matched by
+        /// prefab + geometry), then by proximity for errors on foreign temporaries (an existing road
+        /// copy that our piece collides with). An error on the owner lot drops only the owner lot.
+        /// Returns the number of newly excluded items.
+        /// </summary>
         private int ExcludeErroneousItems()
         {
             int newly = 0;
@@ -167,6 +173,24 @@ namespace Placemaker.Game.Build
             for (int i = 0; i < errors.Length; i++)
             {
                 var e = errors[i];
+                // Climb to the top-level temporary (sub-objects/lanes go with their owner).
+                var top = e;
+                for (int depth = 0; depth < 4 && EntityManager.HasComponent<Owner>(top); depth++)
+                {
+                    var o = EntityManager.GetComponentData<Owner>(top).m_Owner;
+                    if (o == Entity.Null || !EntityManager.Exists(o) || !EntityManager.HasComponent<Temp>(o)) break;
+                    top = o;
+                }
+                if (EntityManager.HasComponent<Temp>(top) && EntityManager.HasComponent<PrefabRef>(top) && IsOwnCandidate(top, out _)
+                    && TryMatch(top, out long exact, out var kind))
+                {
+                    if (exact == OwnerKey)
+                    {
+                        if (!_ownerSuppressed) { _ownerSuppressed = true; newly++; Mod.Log.Warn("Placemaker: the game rejected the owner lot; building without it."); }
+                        continue;
+                    }
+                    if (_itemByKey.TryGetValue(exact, out var hitItem)) { newly += Exclude(hitItem); continue; }
+                }
                 probes.Clear();
                 if (EntityManager.HasComponent<Curve>(e))
                 {
@@ -182,13 +206,20 @@ namespace Placemaker.Game.Build
                     bool hit = (_netIndex != null && _netIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _))
                         || (_objectIndex != null && _objectIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _))
                         || (_areaIndex != null && _areaIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _));
-                    if (!hit || !_itemByKey.TryGetValue(key, out var w)) continue;
-                    if (_excluded.Add(PlanWork.Key(w))) newly++;
+                    if (!hit || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) continue;
+                    newly += Exclude(w);
                 }
             }
             return newly;
         }
 
+        private int Exclude(WorkItem w)
+        {
+            if (!_excluded.Add(PlanWork.Key(w))) return 0;
+            string what = w.Kind == WorkKind.Net ? "Net" : w.Kind == WorkKind.Surface ? "Surface" : w.Kind == WorkKind.Area ? "Area" : "Object";
+            NoteSkip("Placemaker.Build.Skipped." + what, new float3(w.Anchor.x, Height(w.Anchor), w.Anchor.y));
+            return 1;
+        }
         // ───────────────────────── adoption ─────────────────────────
 
         /// <summary>
@@ -216,6 +247,7 @@ namespace Placemaker.Game.Build
                     CountNode(nodeRefs, edge.m_Start, matched);
                     CountNode(nodeRefs, edge.m_End, matched);
                 }
+                if (matched && key == OwnerKey) { AdoptOwnerTemp(e); continue; }
                 if (!matched || !_itemByKey.TryGetValue(key, out var w)) continue;
                 var role = RoleFor(w);
                 var memberKind = kind == WorkKind.Net ? MemberKind.Edge : kind == WorkKind.Area ? MemberKind.Area : MemberKind.Object;

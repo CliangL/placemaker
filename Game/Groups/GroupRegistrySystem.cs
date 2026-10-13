@@ -35,6 +35,10 @@ namespace Placemaker.Game.Groups
         private readonly Dictionary<int, List<Entity>> _members = new Dictionary<int, List<Entity>>();
         private readonly Dictionary<int, List<string>> _missing = new Dictionary<int, List<string>>();
         private readonly List<int> _allIds = new List<int>();
+        private readonly Dictionary<int, Entity> _owners = new Dictionary<int, Entity>();
+
+        /// <summary>For Harmony patches (static context, main thread only).</summary>
+        internal static GroupRegistrySystem Instance { get; private set; }
         private bool _dirty = true;
         private bool _postLoadPending;
         private int _missingCheckedCatalogVersion = -1;
@@ -82,12 +86,19 @@ namespace Placemaker.Game.Groups
                 None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<PlacemakerMember>() },
             });
             Services.Groups = this;
+            Instance = this;
+            Patches.PlacemakerHarmony.Install();
         }
 
         [Preserve]
         protected override void OnDestroy()
         {
             if (ReferenceEquals(Services.Groups, this)) Services.Groups = null;
+            if (ReferenceEquals(Instance, this))
+            {
+                Instance = null;
+                Patches.PlacemakerHarmony.Uninstall();
+            }
             base.OnDestroy();
         }
 
@@ -106,7 +117,7 @@ namespace Placemaker.Game.Groups
 
         private void ClearCaches()
         {
-            _records.Clear(); _decoded.Clear(); _members.Clear(); _missing.Clear(); _allIds.Clear();
+            _records.Clear(); _decoded.Clear(); _members.Clear(); _missing.Clear(); _allIds.Clear(); _owners.Clear();
             _dirty = true;
             _missingCheckedCatalogVersion = -1;
             Bump();
@@ -218,6 +229,52 @@ namespace Placemaker.Game.Groups
 
         // ───────────────────────── internal API (build/removal/economy) ─────────────────────────
 
+        /// <summary>The live owner lot of a group (Entity.Null for groups without one).</summary>
+        public Entity OwnerAreaOf(int groupId)
+        {
+            EnsureIndex();
+            if (!_owners.TryGetValue(groupId, out var owner)) return Entity.Null;
+            return owner != Entity.Null && EntityManager.Exists(owner) && !EntityManager.HasComponent<Deleted>(owner)
+                && !EntityManager.HasComponent<Temp>(owner) ? owner : Entity.Null;
+        }
+
+        /// <summary>
+        /// Raycast lift: the owner lot of the group <paramref name="hit"/> (or one of its owners up to
+        /// 3 levels, e.g. a street light of one of our roads) belongs to. Main thread only.
+        /// </summary>
+        internal bool TryLiftToOwner(Entity hit, out Entity owner)
+        {
+            owner = Entity.Null;
+            var e = hit;
+            for (int depth = 0; depth < 4 && e != Entity.Null && EntityManager.Exists(e); depth++)
+            {
+                if (EntityManager.HasComponent<PlacemakerMember>(e))
+                {
+                    var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
+                    if (tag.Role == MemberRole.OwnerArea) return false;   // already the owner
+                    owner = OwnerAreaOf(tag.GroupId);
+                    return owner != Entity.Null && owner != hit;
+                }
+                if (!EntityManager.HasComponent<Owner>(e)) return false;
+                e = EntityManager.GetComponentData<Owner>(e).m_Owner;
+            }
+            return false;
+        }
+
+        /// <summary>True when <paramref name="entity"/> is the owner lot of a Placemaker group.</summary>
+        internal bool IsOwnerArea(Entity entity) =>
+            entity != Entity.Null && EntityManager.Exists(entity) && EntityManager.HasComponent<PlacemakerMember>(entity)
+            && EntityManager.GetComponentData<PlacemakerMember>(entity).Role == MemberRole.OwnerArea;
+
+        /// <summary>Owners need SubArea/SubNet/SubObject buffers even when empty (RESEARCH-NOTES 8).</summary>
+        internal void EnsureOwnerBuffers(Entity owner)
+        {
+            if (owner == Entity.Null || !EntityManager.Exists(owner)) return;
+            if (!EntityManager.HasBuffer<global::Game.Areas.SubArea>(owner)) EntityManager.AddBuffer<global::Game.Areas.SubArea>(owner);
+            if (!EntityManager.HasBuffer<global::Game.Net.SubNet>(owner)) EntityManager.AddBuffer<global::Game.Net.SubNet>(owner);
+            if (!EntityManager.HasBuffer<global::Game.Objects.SubObject>(owner)) EntityManager.AddBuffer<global::Game.Objects.SubObject>(owner);
+        }
+
         public bool IsRemoving(int groupId) =>
             _records.TryGetValue(groupId, out var e) && EntityManager.Exists(e) && EntityManager.HasComponent<PlacemakerRemoval>(e);
 
@@ -323,6 +380,7 @@ namespace Placemaker.Game.Groups
             _records.Clear();
             _members.Clear();
             _allIds.Clear();
+            _owners.Clear();
             using (var records = _recordQuery.ToEntityArray(Allocator.Temp))
                 for (int i = 0; i < records.Length; i++)
                 {
@@ -334,6 +392,7 @@ namespace Placemaker.Game.Groups
                         continue;
                     }
                     _records[g.GroupId] = records[i];
+                    if (g.Owner != Entity.Null) _owners[g.GroupId] = g.Owner;
                     _allIds.Add(g.GroupId);
                 }
             _allIds.Sort();
@@ -363,6 +422,18 @@ namespace Placemaker.Game.Groups
                 var e = deleted[i];
                 var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
                 touchedGroups.Add(tag.GroupId);
+                if (tag.Role == MemberRole.OwnerArea)
+                {
+                    // The player bulldozed the ONE thing (US7): cascade to every member. Removal marks
+                    // Deleted in PreTool of the next frame (RESEARCH-NOTES 11–12), never here.
+                    if (TryGetRecordEntity(tag.GroupId, out var ownerRec) && !EntityManager.HasComponent<PlacemakerRemoval>(ownerRec)
+                        && !EntityManager.HasComponent<PlacemakerUnderConstruction>(ownerRec))
+                    {
+                        Mod.Log.Info($"Placemaker: owner area of group {tag.GroupId} was bulldozed; removing the whole group.");
+                        RemoveInternal(tag.GroupId);
+                    }
+                    continue;
+                }
                 if (tag.Kind != MemberKind.Edge) continue;
                 if (!_records.TryGetValue(tag.GroupId, out var rec) && !TryGetRecordEntity(tag.GroupId, out rec)) continue;
                 if (!EntityManager.Exists(rec)) continue;
@@ -506,6 +577,16 @@ namespace Placemaker.Game.Groups
                 var g = EntityManager.GetComponentData<PlacemakerGroup>(rec);
                 if (g.Carrier != Entity.Null && !EntityManager.Exists(g.Carrier)) { g.Carrier = Entity.Null; EntityManager.SetComponentData(rec, g); }
                 if (g.Companion != Entity.Null && !EntityManager.Exists(g.Companion)) { g.Companion = Entity.Null; EntityManager.SetComponentData(rec, g); }
+                if (g.Owner != Entity.Null)
+                {
+                    if (!EntityManager.Exists(g.Owner) || !EntityManager.HasComponent<global::Game.Areas.Area>(g.Owner))
+                    {
+                        g.Owner = Entity.Null;
+                        EntityManager.SetComponentData(rec, g);
+                        _owners.Remove(kv.Key);
+                    }
+                    else EnsureOwnerBuffers(g.Owner);
+                }
                 if (g.Carrier == Entity.Null || !_members.TryGetValue(kv.Key, out var list)) continue;
                 if (!EntityManager.HasBuffer<global::Game.Net.SubNet>(g.Carrier)) EntityManager.AddBuffer<global::Game.Net.SubNet>(g.Carrier);
                 if (!EntityManager.HasBuffer<global::Game.Objects.SubObject>(g.Carrier)) EntityManager.AddBuffer<global::Game.Objects.SubObject>(g.Carrier);

@@ -23,6 +23,12 @@ namespace Placemaker.Game.Build
     public sealed partial class BuildService
     {
         private readonly HashSet<Entity> _ownDefinitions = new HashSet<Entity>();
+        private readonly HashSet<long> _notedRings = new HashSet<long>();
+
+        /// <summary>Setting: paved surfaces (paving/asphalt/plaza/decorative) draw on top (priority −94).</summary>
+        public static bool OverlayPavedSurfaces = true;
+
+        private static bool IsPaved(SurfaceRole r) => r == SurfaceRole.Paving || r == SurfaceRole.Asphalt || r == SurfaceRole.Plaza || r == SurfaceRole.Decorative;
         /// <summary>Resolved prefab per work item key.</summary>
         private readonly Dictionary<long, Entity> _itemPrefab = new Dictionary<long, Entity>();
         /// <summary>Emitted keys (plan keys and synthetic keys for fence pieces) → work item.</summary>
@@ -210,7 +216,8 @@ namespace Placemaker.Game.Build
             var other = EntityManager.GetComponentData<PrefabRef>(target).m_Prefab;
             bool mineRoad = EntityManager.HasComponent<RoadData>(prefab), otherRoad = EntityManager.HasComponent<RoadData>(other);
             bool minePath = EntityManager.HasComponent<PathwayData>(prefab), otherPath = EntityManager.HasComponent<PathwayData>(other);
-            return (mineRoad && otherRoad) || (minePath && otherPath);
+            // Footpath entrances (parking US3/US4) may end on a road like a vanilla pedestrian path does.
+            return (mineRoad && otherRoad) || (minePath && (otherPath || otherRoad));
         }
 
         /// <summary>Inverse of <see cref="NetRefs.Encode"/>.</summary>
@@ -316,8 +323,10 @@ namespace Placemaker.Game.Build
             var s = _request.Plan.Layers[w.Layer].Surfaces[w.Index];
             // Parking surfaces must draw over roads (priority −94, Terrain|Roads decal layers): use
             // the runtime overlay clone when it is ready; otherwise the original still builds.
-            if (w.GeneratorId == "parking") prefab = _clones.OverlayFor(prefab);
-            EmitAreaDefinition(prefab, s.Ring, PlanWork.Key(w), w);
+            // US6: paved surfaces of parks/plazas also use the clone, so they stack deterministically
+            // above grass/ground (vanilla −100…−95) instead of z-fighting where they overlap.
+            if (w.GeneratorId == "parking" || (OverlayPavedSurfaces && IsPaved(s.Role))) prefab = _clones.OverlayFor(prefab);
+            EmitPreparedRings(prefab, s.Ring, w, true);
         }
 
         private void EmitArea(WorkItem w)
@@ -325,7 +334,56 @@ namespace Placemaker.Game.Build
             var prefab = PrefabOf(w);
             if (prefab == Entity.Null) return;
             var a = _request.Plan.Layers[w.Layer].Areas[w.Index];
-            EmitAreaDefinition(prefab, a.Ring, PlanWork.Key(w), w);
+            EmitPreparedRings(prefab, a.Ring, w, false);
+        }
+
+        /// <summary>
+        /// US8 root-cause fix for ErrorType.InvalidShape: every ring is checked against the game's own
+        /// shape rules for its prefab (AreaRings, d = m_SnapDistance / 2) and, for surfaces, the
+        /// triangulation model. Offending nodes are removed; a ring that cannot be repaired is split
+        /// into acceptable pieces (extra pieces get synthetic keys mapped to the same work item) or,
+        /// as the last resort, skipped and reported.
+        /// </summary>
+        private void EmitPreparedRings(Entity prefab, float3[] ring, WorkItem w, bool surface)
+        {
+            if (ring == null || ring.Length < 3) return;
+            float d = AreaRings.SurfaceMinNodeDistance;
+            if (EntityManager.HasComponent<AreaGeometryData>(prefab))
+            {
+                float snap = EntityManager.GetComponentData<AreaGeometryData>(prefab).m_SnapDistance;
+                if (math.isfinite(snap) && snap > 0f) d = AreaRings.MinNodeDistanceForSnap(snap);
+            }
+            var ring2 = Placemaker.Core.Geometry.Poly.To2D(ring);
+            List<float2[]> rings;
+            if (AreaRings.IsValid(ring2, d + AreaRings.Margin) && (!surface || Placemaker.Core.Geometry.SurfaceAcceptance.IsAccepted(ring2)))
+                rings = new List<float2[]> { ring2 };
+            else
+            {
+                if (surface) rings = AreaRings.PrepareSurface(ring2, d);
+                else
+                {
+                    var v = AreaRings.MakeValid(ring2, d);
+                    rings = v != null ? new List<float2[]> { v } : new List<float2[]>();
+                }
+                var at = new float3(w.Anchor.x, Height(w.Anchor), w.Anchor.y);
+                bool first = _notedRings.Add(PlanWork.Key(w));   // retries re-emit: count each piece once
+                if (rings.Count == 0)
+                {
+                    if (first) NoteSkip(surface ? "Placemaker.Build.Skipped.Surface" : "Placemaker.Build.Skipped.Area", at);
+                    Mod.Log.Info($"Placemaker skipped a {(surface ? "surface" : "area")} ring the game would reject ({ring.Length} nodes, d={d:0.###}).");
+                    return;
+                }
+                if (first) NoteSkip(surface ? "Placemaker.Build.Repaired.Surface" : "Placemaker.Build.Repaired.Area", at, IssueSeverity.Info);
+            }
+            long key = PlanWork.Key(w);
+            for (int i = 0; i < rings.Count; i++)
+            {
+                var r = rings[i];
+                var r3 = new float3[r.Length];
+                for (int k = 0; k < r.Length; k++) r3[k] = new float3(r[k].x, 0f, r[k].y);
+                long k2 = i == 0 ? key : _syntheticKey++;
+                EmitAreaDefinition(prefab, r3, k2, w);
+            }
         }
 
         private void EmitAreaDefinition(Entity prefab, float3[] ring, long key, WorkItem w)

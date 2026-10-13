@@ -52,6 +52,12 @@
     </Reference>
   </ItemGroup>
 
+  <!-- Harmony 2.2.2 (MIT, Library/Harmony/README.md): shipped next to the mod, licence text deployed too. -->
+  <ItemGroup>
+    <Reference Include="0Harmony"><HintPath>Library\Harmony\0Harmony.dll</HintPath><Private>true</Private></Reference>
+    <None Include="Library\Harmony\LICENSE" Link="0Harmony-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Remove="UI\**;Tests\**;docs\**;bin\**;obj\**" />
     <None Remove="UI\**;Tests\**;docs\**" />
