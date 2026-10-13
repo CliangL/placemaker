@@ -170,7 +170,7 @@ UX: in Design, under the type cards, a **"Places inside"** list: "+ Add" → pic
 nothing is drawn by hand. Shipped recipes use it ("Park with central plaza", "Park & ride" = park with parking
 in the corner nearest the road, "Town square" = plaza with a ring of trees).
 
-Engine:  = list of PlaceRule {Key, Layer step, Shape, Anchor, Size, Connection}. A pure
+Engine: `RecipeStep.Places` = list of PlaceRule {Key, Layer step, Shape, Anchor, Size, Connection}. A pure
 PlaceSolver turns rules into rings inside the parent region (respecting each other and the outline); the
 composer reserves them for the parent (Reserved.Polygons + connection markers on their outlines) and runs each
 place's step on its ring with tag "place:<key>". Parents route paths/drives to place entrances.
