@@ -126,7 +126,17 @@ export function MapView({ backend }: { backend: MockBackend }) {
 
         // plan preview
         if (toolArea && b.plan && b.closed) {
-            const alpha = b.stale ? 0.55 : 1;
+            const ghost = b.stage !== "area" && b.previewMode() === "ghost";
+            const alpha = b.stale ? 0.55 : ghost ? 0.7 : 1;
+            if (ghost) {
+                // Real preview stand-in: the chosen ground texture under translucent models.
+                g.save();
+                g.globalAlpha = b.ghostPending ? 0.35 : 0.6;
+                g.fillStyle = b.ghostSurfaceColor();
+                poly(g, b.ring);
+                g.fill();
+                g.restore();
+            }
             for (const l of b.plan.layers) drawLayer(g, l, alpha, px);
             if (b.stage !== "area") {
                 g.font = `${12 * px}px Arial`;

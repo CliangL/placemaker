@@ -37,10 +37,16 @@ namespace Placemaker.Core.Tool
         public LocText MarkerLabel;
         public List<HintInfo> Hints = new List<HintInfo>();
         public bool Planning;
+        /// <summary>Coarse 0..0.95 while planning (0 = queued); not yet in contract.ts (proposed: state.planningProgress?: number).</summary>
+        public double? PlanningProgress;
         public float? BuildProgress;
         public int EditingGroup;
         public bool AnarchyAvailable, AnarchyEnabled;
         public bool PanelCollapsed;
+        /// <summary>contract: state.previewMode — the player's choice for the current stage.</summary>
+        public PreviewMode PreviewMode;
+        /// <summary>contract: state.ghostPending.</summary>
+        public bool GhostPending;
     }
 
     public sealed class RecipeListEntry
@@ -106,10 +112,13 @@ namespace Placemaker.Core.Tool
             }
             o.Set("hints", hints);
             o.Set("planning", s.Planning);
+            if (s.Planning && s.PlanningProgress.HasValue) o.Set("planningProgress", Round(s.PlanningProgress.Value, 2));
             if (s.BuildProgress.HasValue) o.Set("buildProgress", Round(math.saturate(s.BuildProgress.Value), 3));
             if (s.EditingGroup > 0) o.Set("editingGroup", s.EditingGroup);
             if (s.AnarchyAvailable) o.Set("anarchy", JsonValue.Obj().Set("available", true).Set("enabled", s.AnarchyEnabled));
             o.Set("panelCollapsed", s.PanelCollapsed);
+            o.Set("previewMode", PreviewModes.Id(s.PreviewMode));
+            o.Set("ghostPending", s.GhostPending);
             return o;
         }
 

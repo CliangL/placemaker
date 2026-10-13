@@ -33,6 +33,9 @@ namespace Placemaker.Core.Build
             AssetCategories.Tree, AssetCategories.Bush, AssetCategories.Flowerbed,
             // Sets, not furniture: five identical swings or tents read as a copy-paste error.
             AssetCategories.Playground, AssetCategories.CampingPitch,
+            // Natural scatter: a rocky outcrop or a leaf/dirt decal scatter of one prefab looks stamped.
+            AssetCategories.Rock, AssetCategories.Decal, AssetCategories.DecalLeaves, AssetCategories.DecalDirt,
+            AssetCategories.DecalCracks, AssetCategories.DecalPuddles, AssetCategories.DecalPaving, AssetCategories.DecalGraffiti,
         };
 
         /// <summary>Categories drawn from the step's park palette when the palette has items of them.</summary>

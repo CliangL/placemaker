@@ -10,19 +10,20 @@ namespace Placemaker.Game.Tool
     public sealed partial class PlacemakerToolSystem
     {
         private Recipe _previewBase;          // committed recipe while a slider drag previews
+        private ValuePreviewKind _previewKind;   // drag (slider) or hover (asset picker) while _previewBase is set
         private int _designVersion;
         private int _modifiedVersion = -1;
         private bool _modified;
 
         public int DesignVersion => _designVersion;
         public bool ValuePreviewActive => _previewBase != null;
+        public ValuePreviewKind ValuePreviewKind => _previewBase != null ? _previewKind : ValuePreviewKind.None;
 
         private void DesignChanged(bool preview = false)
         {
             _designVersion++;
             _inputRevision++;
             _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
-            _inputFromDrag = preview;
             ClearBuildFeedback(false);
             Touch();
         }
@@ -152,15 +153,22 @@ namespace Placemaker.Game.Tool
                 // A drag that ends with setValue instead of endPreview: apply onto the committed base so the step is one undo entry.
                 _recipe = _previewBase;
                 _previewBase = null;
+                _previewKind = ValuePreviewKind.None;
             }
             Edit(r => _editor.SetValue(r, path, controlId, v, true), "Placemaker.Undo.ChangeValue", path + "|" + controlId);
         }
 
-        /// <summary>Live value while a slider is dragged: re-plans (debounced) but creates no undo step yet.</summary>
+        /// <summary>
+        /// Live value, no undo step yet: a slider drag (re-plans debounced, always shown as sketch; endPreview
+        /// commits ONE step) or a hovered asset in a picker (ghost/sketch follow it; endPreview reverts,
+        /// setValue commits).
+        /// </summary>
         public void PreviewValue(string path, string controlId, string valueJson)
         {
             var v = ParseValue(valueJson);
             if (v == null || _recipe == null) return;
+            var step = RecipePaths.Resolve(_recipe, path);
+            _previewKind = ValuePreviews.KindFor(step != null ? DesignEditor.FindControl(GeneratorRegistry.Get(step.Layer), controlId) : null);
             if (_previewBase == null) _previewBase = _recipe.Clone();
             var working = _recipe.Clone();
             if (!_editor.SetValue(working, path, controlId, v, true)) return;
@@ -175,6 +183,9 @@ namespace Placemaker.Game.Tool
             if (_previewBase == null) return;
             var baseRecipe = _previewBase;
             _previewBase = null;
+            // A hovered asset is only a look: leaving the picker (or any other edit) reverts it.
+            if (_previewKind == ValuePreviewKind.Hover) commit = false;
+            _previewKind = ValuePreviewKind.None;
             if (!commit)
             {
                 _recipe = baseRecipe;

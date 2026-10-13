@@ -41,6 +41,7 @@ namespace Placemaker.Core.Build
         WaterPlacement = 1 << 25,      // PlacementFlags Shoreline/Floating/Underwater/Waterway
         ExerciseActivity = 1 << 26,    // activity locations for push-ups, pull-ups…: outdoor gym
         Vanilla = 1 << 27,             // built-in content (prefab.isBuiltin)
+        DecalMesh = 1 << 28,           // every mesh of the object is a decal (RenderPrefab with DecalProperties -> MeshFlags.Decal)
     }
 
     public static class AssetHeuristics
@@ -113,6 +114,16 @@ namespace Placemaker.Core.Build
                 return r;
             }
 
+            // Decals: every mesh is a decal mesh (component signal, not the name).
+            if ((t & AssetTraits.DecalMesh) != 0)
+            {
+                if ((t & AssetTraits.HasMesh) == 0 || ContainsAny(lower, "random", "placeholder")) return r;
+                r.Add(AssetCategories.Decal);
+                var theme = DecalTheme(name);
+                if (theme != null) r.Add(theme);
+                return r;
+            }
+
             // Name-identified special objects used by roads (mesh-less markers are allowed here).
             if (lower.StartsWith("culdesac", StringComparison.Ordinal)) { r.Add(BuildCategories.CulDeSacCap); return r; }
             if (lower.Contains("roundabout")) { r.Add(BuildCategories.RoundaboutIsland); return r; }
@@ -132,6 +143,8 @@ namespace Placemaker.Core.Build
                     if (ContainsAny(lower, "stump", "dead", "fallen", "log")) return r;
                     r.Add(AssetCategories.Tree);
                 }
+                // "...BushCity..." are shrubs in concrete planter boxes: planters, never bushes (playtest 2).
+                else if (IsPlanterBoxName(lower)) r.Add(AssetCategories.Planter);
                 else { r.Add(AssetCategories.Bush); r.Add(AssetCategories.Planter); }
                 return r;
             }
@@ -151,7 +164,8 @@ namespace Placemaker.Core.Build
             { r.Add(AssetCategories.Playground); return r; }
             if (ContainsAny(lower, "basketball", "tennis", "football", "soccer", "volleyball", "fitness", "goal", "court", "skate", "pingpong", "table tennis", "outdoor gym"))
             { r.Add(AssetCategories.Sports); return r; }
-            if (ContainsAny(lower, "toilet", "restroom", "wc", "portapotty", "porta potty")) { r.Add(AssetCategories.Restroom); return r; }
+            if (IsRestroomName(name)) { r.Add(AssetCategories.Restroom); return r; }
+            if (IsRockName(name)) { r.Add(AssetCategories.Rock); return r; }
             if (ContainsAny(lower, "picnic", "bbq", "barbecue", "grill")) { r.Add(AssetCategories.Picnic); return r; }
             if ((t & AssetTraits.ExerciseActivity) != 0) { r.Add(AssetCategories.Sports); return r; }
             if (ContainsAny(lower, "campfire", "camp fire", "firepit", "fire pit", "bonfire"))
@@ -201,7 +215,7 @@ namespace Placemaker.Core.Build
         }
 
         /// <summary>Decoration is a grab bag: only these are safe to scatter automatically.</summary>
-        private static readonly string[] AutoDecorationNames = { "rock", "boulder", "stone", "birdbath", "bird bath", "sculpture" };
+        private static readonly string[] AutoDecorationNames = { "birdbath", "bird bath", "sculpture" };
 
         /// <summary>
         /// May an item of <paramref name="category"/> be picked when the player chose nothing? Component
@@ -229,10 +243,26 @@ namespace Placemaker.Core.Build
                 && category != AssetCategories.ParkingDecal && category != AssetCategories.Charger) return false;
             if (category == AssetCategories.ParkingDecal || category == AssetCategories.Charger || category.StartsWith("object.", StringComparison.Ordinal))
                 return true;   // functional parking/road objects: classified by sub lanes / names already
+            if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
+            {
+                // Themed pools take everything of their theme; the general pool only texture-like decals.
+                if (ContainsAny(lower, "random", "placeholder", "test", "chirper", "logo", "advert")) return false;
+                if (category != AssetCategories.Decal) return true;
+                var theme = DecalTheme(name);
+                return theme != AssetCategories.DecalMarkings && theme != AssetCategories.DecalGraffiti;
+            }
             if (ContainsAny(lower, AutoExcludedNames)) return false;
             if (ContainsAny(lower, AutoExcludedFor(category))) return false;
             switch (category)
             {
+                case AssetCategories.Bush:
+                case AssetCategories.Tree:
+                    // Vegetation pools: real plants only, never planter boxes/pots or dead plants (playtest 2).
+                    return !IsPlanterBoxName(lower) && !ContainsAny(lower, "dead", "stump", "fallen");
+                case AssetCategories.Restroom:
+                    return IsRestroomName(name);
+                case AssetCategories.Rock:
+                    return !ContainsAny(lower, "cliff");   // cliffs are huge; explicit picks only
                 case AssetCategories.Bench:
                     // A real bench: says so, or has a bench-sitting spot and is not just "a seat".
                     return lower.Contains("bench") || lower.Contains("bank") ||
@@ -255,6 +285,73 @@ namespace Placemaker.Core.Build
             var lower = paletteOrParkName.ToLowerInvariant();
             return !ContainsAny(lower, "sport", "skate", "dog", "gym", "water", "school", "university", "college",
                 "stadium", "arena", "zoo", "farm", "cemetery", "golf", "beach", "marina", "harbor", "harbour", "landmark");
+        }
+
+        /// <summary>Name split into lower-case words at camel-case, digit and punctuation boundaries.</summary>
+        public static List<string> Words(string name)
+        {
+            var words = new List<string>();
+            if (string.IsNullOrEmpty(name)) return words;
+            var cur = new System.Text.StringBuilder();
+            for (int i = 0; i < name.Length; i++)
+            {
+                char c = name[i];
+                if (!char.IsLetter(c))
+                {
+                    if (cur.Length > 0) { words.Add(cur.ToString()); cur.Clear(); }
+                    continue;
+                }
+                bool boundary = cur.Length > 0 && char.IsUpper(c) &&
+                    (char.IsLower(name[i - 1]) || (i + 1 < name.Length && char.IsLower(name[i + 1]) && char.IsUpper(name[i - 1])));
+                if (boundary) { words.Add(cur.ToString()); cur.Clear(); }
+                cur.Append(char.ToLowerInvariant(c));
+            }
+            if (cur.Length > 0) words.Add(cur.ToString());
+            return words;
+        }
+
+        /// <summary>
+        /// Real restrooms only. "wc" must be its own word: "WindowCleaningPlatform" contains "wC" across a
+        /// word boundary and was classified as a restroom (playtest 2).
+        /// </summary>
+        public static bool IsRestroomName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            var lower = name.ToLowerInvariant();
+            if (ContainsAny(lower, "window", "cleaning", "paper", "brush", "sign")) return false;
+            if (ContainsAny(lower, "toilet", "restroom", "outhouse", "latrine", "lavator", "portapotty", "porta potty", "privy",
+                "bathroom", "washroom", "comfort station")) return true;
+            foreach (var w in Words(name)) if (w == "wc" || w == "loo") return true;
+            return false;
+        }
+
+        /// <summary>Natural rocks: rocks, boulders, cliffs (not rockets, brands, tombstones, standing stones).</summary>
+        public static bool IsRockName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name.Contains(" - ")) return false;   // "Billboard01 - GrindARock": brand variants
+            if (ContainsAny(name.ToLowerInvariant(), "billboard", "poster", "sign", "screen", "pylon", "stand0", "rocket")) return false;
+            foreach (var w in Words(name))
+                if (w == "rock" || w == "rocks" || w == "boulder" || w == "boulders" || w == "cliff" || w == "cliffs" || w == "outcrop") return true;
+            return false;
+        }
+
+        /// <summary>Shrubs in a concrete box / pot (vanilla "GreenBushCity01", "FlowerBushCity02", "PlantPot01").</summary>
+        public static bool IsPlanterBoxName(string lower) =>
+            ContainsAny(lower, PlanterNames) || ContainsAny(lower, "bushcity", "bush city", "box", "planter", "pot0", "potted");
+
+        /// <summary>Theme sub-category of a decal by name (null = no theme; still in "decal").</summary>
+        public static string DecalTheme(string name)
+        {
+            var lower = (name ?? "").ToLowerInvariant();
+            if (ContainsAny(lower, "graffiti", "mural")) return AssetCategories.DecalGraffiti;
+            if (ContainsAny(lower, "leaf", "leaves", "foliage", "petal", "needles", "twig")) return AssetCategories.DecalLeaves;
+            if (ContainsAny(lower, "crack", "pothole", "patch")) return AssetCategories.DecalCracks;
+            if (ContainsAny(lower, "puddle", "wet", "water")) return AssetCategories.DecalPuddles;
+            if (ContainsAny(lower, "dirt", "mud", "dust", "stain", "oil", "soil", "sand", "grime", "rust", "leak")) return AssetCategories.DecalDirt;
+            if (ContainsAny(lower, "paving", "pavement", "tile", "brick", "cobble", "pattern", "manhole", "drain", "grate")) return AssetCategories.DecalPaving;
+            if (ContainsAny(lower, "marking", "line", "arrow", "stripe", "number", "alphabet", "text", "crosswalk", "zebra", "icon",
+                "parking", "court", "field", "letter")) return AssetCategories.DecalMarkings;
+            return null;
         }
 
         public static string SurfaceKind(string lower)

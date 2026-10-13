@@ -224,3 +224,68 @@ one prefab and one seed for the whole ring.
 - Log line "Placemaker automatic pools": bench pool starts with GardenBench*, no SportPark*/Tennis*;
   decoration pool only rocks; fence pool starts with a network fence if the playset has one.
 - Park + playground with fence: one fence type, closed corners; one bench type; swings/slides inside.
+
+## 7. Round 4 — ghost preview, catalog, thumbnails, survey, terrain paint
+
+### Ghost preview (IGhostPreview, implemented by `BuildService`, file `Game/Build/BuildService.Ghost.cs`)
+Implemented against the tool's interface `Game/Preview/GhostPreviewClient.cs` (unchanged) and
+registered with `GhostPreview.Register(this)` in `BuildService.OnCreate`. **Proposal:** move
+`IGhostPreview`/`GhostStatus`/`GhostPhase` into `Game/Abstractions.cs` next to `IBuildService`
+and add `Services.Ghost` (today: `GhostPreview.Service`).
+
+- `Show(plan, revision)`: stores the request. First ghost immediately, later revisions after
+  `GhostDebounceSeconds` (0.25 s) without another Show.
+- `Pump()` (tool, once per frame, ToolUpdate): returns **true = this frame must be Clear**. On a new
+  revision: own definitions destroyed, same emission code as the build (same prefabs, AllocateId-
+  predicted group seed → same variations), nets + clearing of trees/props in frame 1, then
+  `GhostPerFrame` (800) surfaces/areas/objects per frame under None. Above `GhostMaxDefinitions`
+  (6000) objects are sampled evenly → `GhostInfo.Partial`. Settles 4 frames → `Shown`.
+- Never applied → no money, no permanent entity. Objects carry `CreationFlags.Optional` (colliding
+  ones vanish silently, like vanilla brushes); remaining Temp icons are hidden; counts in
+  `BuildService.GhostInfo` (`Errors`, `Dropped`, `ErrorPositions`, `Emitted/Planned`, `Partial`).
+- Surfaces render with their real material (`GhostSurfaceSystem`, RESEARCH-NOTES-ADDENDUM 43);
+  setting hook `GhostSurfaceSystem.FeatureEnabled`.
+- `Hide()`: own (and, while the Placemaker tool is active, all) creation definitions are deleted
+  immediately; the next `Pump()` returns true once (Clear frame removes the temporaries).
+- Cleanup: Start of a build (its first Clear frame), game preload, and a watchdog: if no `Pump()`
+  for 3 frames while ghost temporaries exist (tool closed/switched) the service runs the ClearTool
+  phase itself, so no other tool can ever Apply a ghost.
+- `TryBuildFromGhost(request, revision)`: when the ghost of that revision is Shown, complete (not
+  partial), `request.Plan` is the very plan object shown, no ReplaceGroup, no terraform/paint →
+  the build activates its tool **without** the initial Clear, creates the record + owner lot and
+  runs census → validation → Apply on the ghost's temporaries. Rejected pieces (incl. cancelled
+  optional objects) go through the normal exclude-and-retry path. Status via `Services.Build.Status`.
+
+**Tool integration (as merged on master):** `applyMode = ghost.Pump() ? Clear : None` every frame
+in the Placemaker tool's OnUpdate, never Apply; `Show` with the resolved plan (call
+`ResolveAutomatic` first) and a revision that changes with plan/assets; `Hide` on stage change,
+before closing (keep the tool one more frame for the Clear), on Build (or `TryBuildFromGhost`).
+Limitation: an Edit ghost overlaps the old group (objects there are cancelled); a future
+`Show(plan, revision, replaceGroup)` could emit delete definitions for the old members.
+
+### Catalog
+- Restrooms: word-bounded "wc"/"loo" (WindowCleaningPlatform was a restroom), outhouse/latrine/
+  lavatory/toilet; vanilla: PortableToilet01, Outhouse01/02.
+- Planter boxes (`*BushCity*`, pots, boxes) are `planter` only; bush/tree automatic pools exclude
+  planter boxes and dead plants.
+- New `rock` (Rock01–30, Boulder01–07, cliffs; cliffs explicit-only).
+- New `decal` (component signal `MeshFlags.Decal` on every sub mesh) + themed sub-categories
+  `decal.{leaves,dirt,cracks,puddles,paving,markings,graffiti}` with automatic pools, `theme:<x>`
+  tags for the UI tabs, `auto:<category>` as before. The general `decal` pool excludes markings/graffiti.
+
+### Thumbnails
+Icon priority: UIObject (incl. Asset Icon Library, rechecked every 120 frames) → surface texture
+swatch (`SurfaceSwatches`, `coui://placemaker-thumbs/surface_<name>.png`, cached in
+`ModsData/Placemaker/thumbs`) → thumbnail camera → UI group icon. `AssetCatalogSystem.IconSourceOf(id)`.
+The log line "surfaces still have no image: …" lists what remains after swatches.
+Csproj: `UnityEngine.ImageConversionModule` reference added (EncodeToPNG).
+
+### Survey dump
+`ModsData/Placemaker/catalog-dump.json` after every scan (and ≤ every 10 s when icons change);
+`AssetCatalogSystem.WriteSurveyDump` setting hook. See `docs/ASSET-SURVEY-HOWTO.md`.
+
+### Terrain texture painting (Core contract, additive)
+`PlannedPaint { Ring, Layer (0 erase, 1..4 = Extra1..4), Strength }`, `AreaPlan.Paint`. Built in a
+`Paint` step right after terraform (one Apply frame with the terrain material brush). Layers are
+map-dependent textures — the UI should call them "Terrain layer 1–4" or let the player preview.
+Needs in-game confirmation that the material tools exist in game mode.

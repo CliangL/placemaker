@@ -23,7 +23,7 @@ namespace Placemaker.Core.Layers.AddOns
             c.AssetMulti("assets", AssetCategories.Rock, ControlTier.Essential, "rocks");
             c.Slider("rocks", 6, 2, 16, 1, "count", ControlTier.More, "rocks");
             c.Toggle("patch", true, ControlTier.More, "rocks").Tip();
-            c.Asset("patchSurface", AssetCategories.SurfaceNatural, ControlTier.More, "rocks").When("patch=true");
+            c.Slider("patchLayer", 1, 1, 4, 1, "count", ControlTier.More, "rocks").When("patch=true").Tip();
             c.Toggle("rim", true, ControlTier.More, "rocks");
             c.RandomRange("clusters", 2, 5);
         }
@@ -47,7 +47,7 @@ namespace Placemaker.Core.Layers.AddOns
             foreach (var c in spots)
             {
                 uint cs = Hashing.Mix(ctx.Seed, (uint)clusters * 977u + 3u);
-                if (ctx.B("patch")) ctx.Surface(LeisureKit.Blob(c, R * 0.85f, cs, 14, 0.2f), SurfaceRole.Decorative, AssetMix.One(ctx.S("patchSurface")), AssetCategories.SurfaceNatural);
+                if (ctx.B("patch")) TerrainPaint.Patch(ctx, LeisureKit.Blob(c, R * 0.9f, cs, 14, 0.2f), ctx.I("patchLayer"), 1f, 2f);
                 int n = ctx.I("rocks");
                 const float golden = 2.39996323f;
                 for (int i = 0; i < n * 2 && i < 40; i++)

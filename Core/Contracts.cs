@@ -528,6 +528,22 @@ namespace Placemaker.Core
         public float3 WaterAnchor;
     }
 
+    /// <summary>
+    /// (gamebuild round 4, proposal) Terrain texture painting: CS2's terrain material brush paints one of the
+    /// map's four extra terrain layers (TerrainMaterialType Extra1..Extra4 — which texture each is depends on
+    /// the map's terrain material, typically e.g. dirt/sand/rock variants) into the user splatmap, which is
+    /// saved with the city. Layer 0 erases back to the procedural grass/dirt/rock. Permanent: removing the
+    /// group does not unpaint (like terraform).
+    /// </summary>
+    public sealed class PlannedPaint
+    {
+        public float3[] Ring = Array.Empty<float3>();   // footprint
+        /// <summary>1..4 = Extra1..Extra4, 0 = erase.</summary>
+        public int Layer = 1;
+        /// <summary>Brush strength 0..1 (1 = fully painted).</summary>
+        public float Strength = 1f;
+    }
+
     public sealed class PlannedZoning
     {
         public float3 A, B, C, D;   // zoning quad
@@ -576,6 +592,8 @@ namespace Placemaker.Core
         public List<PlannedObject> Objects = new List<PlannedObject>();
         public List<PlannedArea> Areas = new List<PlannedArea>();
         public List<PlannedTerraform> Terraform = new List<PlannedTerraform>();
+        /// <summary>(gamebuild round 4) Terrain texture painting, applied right after terraform.</summary>
+        public List<PlannedPaint> Paint = new List<PlannedPaint>();
         public List<PlannedZoning> Zoning = new List<PlannedZoning>();
         public List<PlanStat> Stats = new List<PlanStat>();
         public List<PlanIssue> Issues = new List<PlanIssue>();

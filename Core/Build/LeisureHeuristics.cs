@@ -30,24 +30,7 @@ namespace Placemaker.Core.Build
         /// </summary>
         public static bool Classify(string lower, AssetTraits t, List<string> r)
         {
-            // Decals: flat props. Parking stall decals were already taken by their sub lanes.
-            bool decalName = Has(lower, "decal");
-            if (decalName || Has(lower, "graffiti", "puddle", "oilstain", "oil stain"))
-            {
-                if (Has(lower, "advert", "logo", "brand")) return true;   // never useful
-                r.Add(AssetCategories.Decal);
-                if (Has(lower, "leaf", "leaves", "foliage", "petal")) r.Add(AssetCategories.DecalLeaves);
-                else if (Has(lower, "graffiti", "tag0", "mural")) r.Add(AssetCategories.DecalGraffiti);
-                else if (Has(lower, "puddle", "wet", "water", "oil")) r.Add(AssetCategories.DecalPuddles);
-                else if (Has(lower, "crack", "damage", "patch", "pothole", "worn")) r.Add(AssetCategories.DecalCracks);
-                else if (Has(lower, "marking", "line", "arrow", "paint", "crossing", "court", "number", "letter", "hopscotch"))
-                    r.Add(AssetCategories.DecalMarkings);
-                else if (Has(lower, "paving", "pavement", "tile", "brick", "cobble", "manhole", "drain", "pattern", "stone"))
-                    r.Add(AssetCategories.DecalPaving);
-                else if (Has(lower, "dirt", "mud", "sand", "gravel", "soil", "grass", "moss", "stain")) r.Add(AssetCategories.DecalDirt);
-                return true;
-            }
-
+            // Decals and rocks are classified by AssetHeuristics (component signals / IsRockName).
             if (Has(lower, "hedge", "topiary"))
             {
                 r.Add(AssetCategories.Hedge);
@@ -101,9 +84,6 @@ namespace Placemaker.Core.Build
             if (Has(lower, "grave", "tomb", "headstone", "crypt", "mausoleum", "memorialstone", "memorial stone"))
             { r.Add(AssetCategories.Grave); return true; }
 
-            if (Has(lower, "rock", "boulder", "cliff", "outcrop") && !Has(lower, "rocket", "rocking"))
-            { r.Add(AssetCategories.Rock); r.Add(AssetCategories.Decoration); return true; }
-
             // Centrepiece kinds (same visibility rule as the general classifier: a single standalone prop with an icon).
             if ((t & AssetTraits.HasSubObjects) == 0 && (t & AssetTraits.HasIcon) != 0)
             {
@@ -131,16 +111,6 @@ namespace Placemaker.Core.Build
                 case AssetCategories.CenterpieceFountain:
                 case AssetCategories.CenterpieceStatue:
                     eligible = !Has(lower, "drinking", "dog", "logo", "advert");
-                    return true;
-                case AssetCategories.Decal:
-                case AssetCategories.DecalLeaves:
-                case AssetCategories.DecalDirt:
-                case AssetCategories.DecalCracks:
-                case AssetCategories.DecalPuddles:
-                case AssetCategories.DecalPaving:
-                case AssetCategories.DecalMarkings:
-                case AssetCategories.DecalGraffiti:
-                    eligible = !Has(lower, "advert", "logo", "parking", "placeholder");
                     return true;
                 default:
                     return false;

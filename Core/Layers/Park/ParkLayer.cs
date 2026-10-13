@@ -108,7 +108,7 @@ namespace Placemaker.Core.Layers.Park
             c.Asset("binAsset", AssetCategories.Bin, ControlTier.More, "furniture").When("bins=true");
             c.Toggle("groundSurface", true, ControlTier.More, "ground");
             c.Toggle("naturalGround", false, ControlTier.More, "ground").Tip();
-            c.Asset("naturalSurface", AssetCategories.SurfaceNatural, ControlTier.More, "ground").When("naturalGround=true");
+            c.Slider("naturalLayer", 1, 1, 4, 1, "count", ControlTier.More, "ground").When("naturalGround=true").Tip();
             c.Toggle("fence", false, ControlTier.More, "boundary");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
 
@@ -455,11 +455,9 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        /// <summary>"Natural ground": a few irregular patches of natural surface (gravel, dirt, sand) in the open lawns.</summary>
+        /// <summary>"Natural ground": a few irregular patches of painted terrain (map texture layer) in the open lawns.</summary>
         private static void NaturalGround(LayerContext ctx, ParkSite s, List<float2[]> lawns)
         {
-            var asset = AssetMix.One(ctx.S("naturalSurface"));
-            string[] mix = { AssetCategories.SurfaceNatural, AssetCategories.SurfaceDirt, AssetCategories.SurfaceSand };
             int wanted = math.clamp((int)(s.LayerRegion.Area / 4000f), 1, 8);
             int made = 0;
             for (int li = 0; li < lawns.Count && made < wanted; li++)
@@ -470,9 +468,8 @@ namespace Placemaker.Core.Layers.Park
                 float r = math.min(ins - 2f, 4f + math.sqrt(lr.Area) * 0.12f);
                 if (r < 3f) continue;
                 uint v = Hashing.Mix(ctx.Seed, 0x6A7Du + (uint)li);
-                string cat = string.IsNullOrEmpty(asset.Id) ? mix[made % mix.Length] : AssetCategories.SurfaceNatural;
-                if (!AssetAvailability.Has(cat)) cat = AssetCategories.SurfaceNatural;
-                ctx.Surface(LeisureKit.Blob(c, r * 0.85f, v, 16, 0.22f), SurfaceRole.Decorative, asset, cat);
+                // Terrain paint, interior only (the blob stays inside the lawn), blended at its edge.
+                TerrainPaint.Patch(ctx, LeisureKit.Blob(c, r * 0.85f, v, 16, 0.22f), ctx.I("naturalLayer"), 0.8f + 0.2f * Hashing.Unit(v), 3f);
                 made++;
             }
         }

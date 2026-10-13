@@ -47,7 +47,7 @@ namespace Placemaker.Game.Build
             if (!ResolveTerraformTools())
             {
                 _warnings.Add("Placemaker.Build.TerraformUnavailable");
-                Go(Step.EmitNets);
+                Go(AfterTerraform());
                 return;
             }
             foreach (var w in _work.Terraform)
@@ -58,7 +58,7 @@ namespace Placemaker.Game.Build
                 for (int i = 0; i < ring.Length; i++) ring[i] = t.Ring[i].xz;
                 foreach (var p in TerraformDabs.Dabs(ring, BrushRadius)) _dabs.Add(new Dab { P = p, Target = t.TargetHeight });
             }
-            if (_dabs.Count == 0) Go(Step.EmitNets);
+            if (_dabs.Count == 0) Go(AfterTerraform());
         }
 
         private void DoTerraform(int frame)
@@ -84,7 +84,7 @@ namespace Placemaker.Game.Build
                     _warnings.Add("Placemaker.Build.TerraformIncomplete");
                     Mod.Log.Warn($"Placemaker terraform timed out with {pending}/{_dabs.Count} spots off target.");
                 }
-                Go(Step.EmitNets);
+                Go(AfterTerraform());
                 return;
             }
             if (pending > 0) _tool.Requested = ApplyMode.Apply;
