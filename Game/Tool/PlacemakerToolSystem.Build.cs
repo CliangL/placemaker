@@ -46,7 +46,8 @@ namespace Placemaker.Game.Tool
                 ReplaceGroup = _editingGroup,
             };
             bool started;
-            try { started = svc.Start(request); }
+            // Instant Build from the ghost when it shows exactly this plan; otherwise the ghost is hidden first.
+            try { started = TryBuildFromGhost(request) || svc.Start(request); }
             catch (Exception e)
             {
                 Mod.Log.Error(e, "Placemaker: build service failed to start");

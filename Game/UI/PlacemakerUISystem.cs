@@ -92,6 +92,7 @@ namespace Placemaker.Game.UI
             Trigger<bool>("acknowledgePermanent", ack => _tool.AcknowledgePermanent(ack));
             Trigger<string, string>("setMarkerKind", (p, kind) => _tool.SetMarkerKind(p, kind));
             Trigger<string, double>("removeMarker", (p, i) => _tool.RemoveMarker(p, (int)Math.Round(i)));
+            Trigger<string>("setPreviewMode", m => _tool.SetPreviewMode(m));
         }
 
         // Every trigger is wrapped: an exception from a UI call must never escape into the binding layer.

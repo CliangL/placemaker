@@ -121,11 +121,14 @@ namespace Placemaker.Game.Tool
                 MarkerLabel = _markerKind != null ? MarkerLabel(_markerPath, _markerKind) : null,
                 Hints = Hints(),
                 Planning = facts.Planning,
+                PlanningProgress = PlanningProgress,
                 BuildProgress = _building ? BuildProgress : (float?)null,
                 EditingGroup = _editingGroup,
                 AnarchyAvailable = AnarchyAvailable,
                 AnarchyEnabled = _anarchy,
                 PanelCollapsed = _panelCollapsed,
+                PreviewMode = PreviewModeSelected,
+                GhostPending = GhostPending,
             };
             return s;
         }
