@@ -64,6 +64,7 @@ namespace Placemaker.Game.UI
             Trigger<string>("removeStep", p => _tool.RemoveStep(p));
             Trigger<string, double>("moveStep", (p, d) => _tool.MoveStep(p, (int)Math.Round(d)));
             Trigger<string, bool>("setStepEnabled", (p, e) => _tool.SetStepEnabled(p, e));
+            Trigger<string, string, bool>("setFeature", (p, layer, on) => _tool.SetFeature(p, layer, on));
             Trigger<string, string>("setStepTarget", (p, t) => _tool.SetStepTarget(p, t));
             Trigger<string, string, string>("overrideRegion", (p, region, layer) => _tool.OverrideRegion(p, region, layer));
             Trigger<string, string, string>("setValue", (p, id, json) => _tool.SetValue(p, id, json));
@@ -158,6 +159,9 @@ namespace Placemaker.Game.UI
             _catalogGenerators = generators;
             var entries = new List<RecipeListEntry>();
             foreach (var e in _tool.Recipes.Entries)
+            {
+                // Make row = single types only (FEEDBACK-2); mixes and type+feature variants stay loadable by id.
+                if (!Features.ShowInMakeRow(e.Recipe, e.Custom, GeneratorRegistry.Get)) continue;
                 entries.Add(new RecipeListEntry
                 {
                     Id = e.Recipe.Id,
@@ -166,6 +170,7 @@ namespace Placemaker.Game.UI
                     Custom = e.Custom,
                     DescriptionKey = e.DescriptionKey,
                 });
+            }
             _catalog.Update(UiModels.Catalog(GeneratorRegistry.All, entries).ToString());
         }
 

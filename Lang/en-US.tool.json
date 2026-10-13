@@ -126,6 +126,8 @@
   "Placemaker.Undo.MoveLayer": "reorder layers",
   "Placemaker.Undo.EnableLayer": "enable layer",
   "Placemaker.Undo.DisableLayer": "disable layer",
+  "Placemaker.Undo.EnableFeature": "turn feature on",
+  "Placemaker.Undo.DisableFeature": "turn feature off",
   "Placemaker.Undo.SetTarget": "change where a layer goes",
   "Placemaker.Undo.OverrideRegion": "change one region",
   "Placemaker.Undo.RemoveOverride": "reset one region",

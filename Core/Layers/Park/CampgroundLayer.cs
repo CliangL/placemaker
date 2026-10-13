@@ -13,7 +13,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Park
 {
     [AreaGenerator(40)]
-    public sealed class CampgroundLayer : LayerBase
+    public sealed class CampgroundLayer : LayerBase, IHasFeatures
     {
         public const string LayerId = "campground";
 
@@ -23,6 +23,13 @@ namespace Placemaker.Core.Layers.Park
         public override LayerKind Kind => LayerKind.Fill;
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core };
         public override float MinArea => 600f;
+
+        /// <summary>Built-in features (FEEDBACK-2): toggles in the panel, each one a child step.</summary>
+        public IReadOnlyList<FeatureInfo> Features { get; } = new FeatureList()
+            .Add("restrooms")
+            .Add("picnic", RegionTags.Green)
+            .Add("playground", RegionTags.Core)
+            .Build();
 
         protected override void DefineControls(ControlSet c)
         {
