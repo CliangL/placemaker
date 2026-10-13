@@ -19,8 +19,8 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Choice("size", "medium", ControlTier.Essential, "", Sizes);
-            c.AssetMulti("equipment", AssetCategories.Playground, ControlTier.Essential);
+            c.Choice("size", "medium", ControlTier.Essential, "playground", Sizes);
+            c.AssetMulti("equipment", AssetCategories.Playground, ControlTier.Essential, "playground");
             c.Toggle("surface", true, ControlTier.More, "ground");
             c.Asset("surfaceAsset", AssetCategories.SurfaceNatural, ControlTier.More, "ground").When("surface=true");
             c.Toggle("benches", true, ControlTier.More, "extras");

@@ -180,3 +180,10 @@ middle with a campsite", "corner square that's a parking lot"). Optionally, per 
 formula-placed place on the map and move/resize/reshape it or redraw it freehand. That override belongs to this
 build only (stored in the build receipt as `PlaceOverride {Key, Ring}`; Edit restores it), never to the recipe.
 A "Reset to formula" button drops the override.
+
+**Status (round 3, layers):** implemented as built-in features rather than free places. `PlaceSolver`
+(Core/Layers/Common) solves {shape circle/square/rectangle, anchor centre/corner/edge/entrance, size %,
+min/max, aspect, margin} → ring or failure reason. The park carves `place:plaza` (tags place:plaza, paved)
+and `place:pond` only when an enabled child targets them (`AreaInput.ChildTargets`); its paths are clipped
+to end on the plaza edge (plus one link path when none reaches it), planting avoids it, and the composer
+reserves every `place:*` region for siblings while the layer filling it sees it as free.

@@ -18,7 +18,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Split
 {
-    [AreaGenerator(60)]
+    [AreaGenerator(60, Hidden = true)]
     public sealed class SplitLayer : LayerBase
     {
         public const string LayerId = "split";
@@ -34,7 +34,7 @@ namespace Placemaker.Core.Layers.Split
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Markers("cuts", ControlTier.Essential, MarkerKind).Tip();
+            c.Markers("cuts", ControlTier.Essential, MarkerKind).Tip().In("layout");
             c.Slider("ratio", 50, 10, 90, 1, "%", ControlTier.Essential, "layout").Tip().Cheap();
             c.Slider("angle", 0, 0, 175, 5, "deg", ControlTier.Essential, "layout").Tip().Cheap();
             c.Slider("parts", 2, 2, MaxParts, 1, "count", ControlTier.More, "layout");

@@ -154,6 +154,7 @@ namespace Placemaker.Core.Tool
                 .Set("kind", g.Kind == LayerKind.Split ? "split" : g.Kind == LayerKind.AddOn ? "addOn" : "fill")
                 .Set("accepts", Strings(g.Accepts))
                 .Set("emits", Strings(g.Emits));
+            if (GeneratorRegistry.IsHidden(g)) o.Set("hidden", true);
             var controls = JsonValue.Arr();
             if (g.Controls != null) foreach (var c in g.Controls) if (c != null) controls.Add(Control(c));
             o.Set("controls", controls);
@@ -280,25 +281,7 @@ namespace Placemaker.Core.Tool
             }
             o.Set("markerKinds", kinds);
             o.Set("markersRequired", MarkerKinds.Required(gen, s.Settings));
-            var features = Features.Of(gen);
-            if (features.Count > 0)
-            {
-                var fa = JsonValue.Arr();
-                foreach (var f in features)
-                {
-                    if (f == null || string.IsNullOrEmpty(f.Layer)) continue;
-                    IAreaGenerator fg = null;
-                    try { fg = generators?.Invoke(f.Layer); } catch (Exception) { fg = null; }
-                    int idx = Features.ChildIndex(s, f);
-                    string label = !string.IsNullOrEmpty(f.LabelKey) ? f.LabelKey : fg?.NameKey ?? f.Layer;
-                    var fo = JsonValue.Obj().Set("layer", f.Layer).Set("label", label ?? "")
-                        .Set("icon", IconPath(fg?.Icon ?? ""))
-                        .Set("enabled", idx >= 0 && s.Children[idx].Enabled);
-                    if (idx >= 0) fo.Set("path", RecipePaths.Child(path, idx));
-                    fa.Add(fo);
-                }
-                o.Set("features", fa);
-            }
+            o.Set("features", FeatureViews(s, path, gen, generators));
             StepStatus st = null;
             if (status != null) status.TryGetValue(path, out st);
             o.Set("ready", st == null || st.Ready);
@@ -320,6 +303,33 @@ namespace Placemaker.Core.Tool
             o.Set("overrides", overrides);
             o.Set("regions", Regions(plan, path));
             return o;
+        }
+
+        /// <summary>Built-in features of a step (mirrors UI FeatureView): toggle state, child path and the parent options shown under it.</summary>
+        public static JsonValue FeatureViews(RecipeStep s, string path, IAreaGenerator gen, Func<string, IAreaGenerator> generators)
+        {
+            var arr = JsonValue.Arr();
+            foreach (var f in Features.Of(gen))
+            {
+                if (f == null || string.IsNullOrEmpty(f.Layer)) continue;
+                IAreaGenerator fg = null;
+                try { fg = generators?.Invoke(f.Layer); } catch (Exception) { fg = null; }
+                var fo = JsonValue.Obj()
+                    .Set("layer", f.Layer)
+                    .Set("label", !string.IsNullOrEmpty(f.LabelKey) ? f.LabelKey : fg?.NameKey ?? f.Layer)
+                    .Set("icon", IconPath(fg?.Icon ?? ""));
+                if (!string.IsNullOrEmpty(f.TooltipKey)) fo.Set("tooltip", f.TooltipKey);
+                int index = -1;
+                for (int i = 0; i < s.Children.Count; i++)
+                    if (s.Children[i] != null && s.Children[i].Layer == f.Layer && (s.Children[i].Target ?? "") == (f.Target ?? "")) { index = i; break; }
+                bool on = index >= 0 && s.Children[index].Enabled;
+                fo.Set("enabled", on);
+                if (index >= 0) fo.Set("path", RecipePaths.Child(path, index));
+                fo.Set("options", Strings(f.Options ?? Array.Empty<string>()));
+                if (f.DefaultOn) fo.Set("defaultOn", true);
+                arr.Add(fo);
+            }
+            return arr;
         }
 
         /// <summary>Regions produced by the plans of the step at <paramref name="stepPath"/> (all its region runs).</summary>

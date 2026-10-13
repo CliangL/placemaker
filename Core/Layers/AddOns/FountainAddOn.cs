@@ -21,8 +21,8 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Choice("size", "medium", ControlTier.Essential, "", Sizes);
-            c.Asset("asset", AssetCategories.Centerpiece, ControlTier.Essential);
+            c.Choice("size", "medium", ControlTier.Essential, "fountain", Sizes);
+            c.Asset("asset", AssetCategories.Centerpiece, ControlTier.Essential, "fountain");
             c.Toggle("apron", true, ControlTier.More, "ground").Tip();
             c.Asset("apronSurface", AssetCategories.SurfacePaving, ControlTier.More, "ground").When("apron=true");
             c.Slider("benches", 6, 0, 16, 1, "count", ControlTier.More, "seating");

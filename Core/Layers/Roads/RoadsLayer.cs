@@ -34,10 +34,16 @@ namespace Placemaker.Core.Layers.Roads
         public string[] Emits => new[] { RegionTags.Block, RegionTags.Edge, RegionTags.Core };
         public int Version => 1;
 
-        /// <summary>Built-in features (FEEDBACK-2): zoning along the new streets.</summary>
-        public IReadOnlyList<FeatureInfo> Features { get; } = new Placemaker.Core.Layers.Common.FeatureList()
-            .Add(Placemaker.Core.Layers.AddOns.EdgeZoningAddOn.LayerId, RegionTags.Edge)
-            .Build();
+        private static readonly FeatureInfo[] FeatureList =
+        {
+            new FeatureInfo
+            {
+                Layer = AddOns.EdgeZoningAddOn.LayerId, Target = RegionTags.Edge, LabelKey = "Placemaker.Roads.Feature.edgeZoning",
+                TooltipKey = "Placemaker.Roads.Feature.edgeZoning.Tooltip",
+            },
+        };
+
+        public IReadOnlyList<FeatureInfo> Features => FeatureList;
 
         public IReadOnlyList<ControlSchema> Controls => _controls;
         public IReadOnlyList<PresetInfo> Presets => _presets;

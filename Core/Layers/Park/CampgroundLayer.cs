@@ -24,12 +24,14 @@ namespace Placemaker.Core.Layers.Park
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core };
         public override float MinArea => 600f;
 
-        /// <summary>Built-in features (FEEDBACK-2): toggles in the panel, each one a child step.</summary>
-        public IReadOnlyList<FeatureInfo> Features { get; } = new FeatureList()
-            .Add("restrooms")
-            .Add("picnic", RegionTags.Green)
-            .Add("playground", RegionTags.Core)
-            .Build();
+        private static readonly FeatureInfo[] FeatureList =
+        {
+            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Campground.Feature.restrooms", TooltipKey = "Placemaker.Campground.Feature.restrooms.Tooltip" },
+            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.playground", Preset = ParkLayer.Bag(("size", "small")) },
+            new FeatureInfo { Layer = "picnic", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.picnic", Preset = ParkLayer.Bag(("groups", 2.0), ("shelter", true)) },
+        };
+
+        public IReadOnlyList<FeatureInfo> Features => FeatureList;
 
         protected override void DefineControls(ControlSet c)
         {
@@ -109,7 +111,8 @@ namespace Placemaker.Core.Layers.Park
 
             // Facilities: one restroom per 25 pitches near the paths, plus one near the entrance.
             int restrooms = 0;
-            if (ctx.B("facilities") && pitches.Count > 0 &&
+            // The restrooms feature replaces the built-in restroom block.
+            if (ctx.B("facilities") && !ctx.Input.HasChild("restrooms") && pitches.Count > 0 &&
                 AssetAvailability.Require(ctx.Plan, AssetCategories.Restroom, new[] { ctx.S("restroomAsset") }, Keys.Category(AssetCategories.Restroom)))
             {
                 var asset = AssetMix.One(ctx.S("restroomAsset"));

@@ -7,6 +7,8 @@
 //   Split park | plaza       = split ─┬─ park  (target "part:0")
 //                                     └─ plaza (target "part:1")
 //   Plaza with edge zoning   = plaza ─ edgeZoning (target "edge")
+//   Park with central plaza  = park ─ plaza (target "place:plaza"; the park carves the place out
+//                              because a child targets it — see AreaInput.ChildTargets)
 
 using System;
 using System.Collections.Generic;
@@ -128,12 +130,12 @@ namespace Placemaker.Core
             var result = new ComposedPlan();
             var reserved = new ReservedSpace();
             int budget = MaxSteps;
-            Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, "0", 0, result, ref budget, cancel);
+            Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, null, "0", 0, result, ref budget, cancel);
             return result;
         }
 
         private static void Run(RecipeStep step, AreaShape shape, string[] tags, string regionKey, SiteContext site,
-            ReservedSpace reserved, string path, int depth, ComposedPlan result, ref int budget, CancellationToken cancel)
+            ReservedSpace reserved, List<float2[]> ownPlaces, string path, int depth, ComposedPlan result, ref int budget, CancellationToken cancel)
         {
             cancel.ThrowIfCancellationRequested();
             if (!step.Enabled) return;
@@ -159,7 +161,11 @@ namespace Placemaker.Core
                 Markers = MarkersOn(step.Markers, shape.Ring),
                 RegionTags = tags,
                 Reserved = reserved.Clone(),
+                ChildLayers = EnabledChildren(step, true),
+                ChildTargets = EnabledChildren(step, false),
             };
+            // Layers inside a place (the one filling it and its own children) must not see it as taken.
+            if (ownPlaces != null) foreach (var mine in ownPlaces) input.Reserved.Polygons.Remove(mine);
 
             AreaPlan plan;
             try
@@ -182,6 +188,7 @@ namespace Placemaker.Core
             plan.Seed = input.Seed;
             result.Layers.Add(plan);
             Reserve(plan, reserved);
+            var places = ReservePlaces(plan, reserved);
 
             for (int ci = 0; ci < step.Children.Count; ci++)
             {
@@ -189,7 +196,7 @@ namespace Placemaker.Core
                 string childPath = path + "/" + ci;
                 if (string.IsNullOrEmpty(child.Target))
                 {
-                    Run(child, shape, tags, regionKey, site, reserved, childPath, depth + 1, result, ref budget, cancel);
+                    Run(child, shape, tags, regionKey, site, reserved, ownPlaces, childPath, depth + 1, result, ref budget, cancel);
                     continue;
                 }
                 foreach (var region in plan.Regions)
@@ -197,9 +204,47 @@ namespace Placemaker.Core
                     if (!Matches(child.Target, region)) continue;
                     var effective = step.RegionOverrides.TryGetValue(region.Key, out var ov) ? ov : child;
                     var sub = new AreaShape { Ring = region.Ring, Source = shape.Source, Attachments = AttachmentsOn(shape.Attachments, region.Ring) };
-                    Run(effective, sub, region.Tags, region.Key, site, reserved, childPath, depth + 1, result, ref budget, cancel);
+                    var inside = ownPlaces;
+                    if (places.TryGetValue(region, out var own)) inside = new List<float2[]>(ownPlaces ?? new List<float2[]>()) { own };
+                    Run(effective, sub, region.Tags, region.Key, site, reserved, inside, childPath, depth + 1, result, ref budget, cancel);
                 }
             }
+        }
+
+        /// <summary>Layer ids (or targets) of the enabled children of a step.</summary>
+        public static string[] EnabledChildren(RecipeStep step, bool layers)
+        {
+            var r = new List<string>();
+            foreach (var c in step.Children)
+                if (c != null && c.Enabled) r.Add(layers ? c.Layer ?? "" : c.Target ?? "");
+            return r.ToArray();
+        }
+
+        /// <summary>Region tag prefix of places a parent carved out for a feature ("place:plaza").</summary>
+        public const string PlacePrefix = "place:";
+
+        public static bool IsPlace(PlannedRegion region)
+        {
+            foreach (var t in region.Tags) if (t != null && t.StartsWith(PlacePrefix, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Places (regions tagged "place:*") are fully claimed: siblings and later add-ons keep out of
+        /// them; only the layer that fills a place sees it as free (see ownPlace in Run).
+        /// </summary>
+        public static Dictionary<PlannedRegion, float2[]> ReservePlaces(AreaPlan plan, ReservedSpace reserved)
+        {
+            var map = new Dictionary<PlannedRegion, float2[]>();
+            foreach (var region in plan.Regions)
+            {
+                if (region?.Ring == null || region.Ring.Length < 3 || !IsPlace(region)) continue;
+                var ring = new float2[region.Ring.Length];
+                for (int i = 0; i < ring.Length; i++) ring[i] = region.Ring[i].xz;
+                reserved.Polygons.Add(ring);
+                map[region] = ring;
+            }
+            return map;
         }
 
         public static bool Matches(string target, PlannedRegion region)
