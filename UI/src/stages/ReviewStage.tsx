@@ -68,7 +68,7 @@ export const ReviewStage = ({
                     ) : null}
                     <Section title={t("Placemaker.UI.Review.What", "What you get")}>
                         <div className={classNames(s.stats, { [s.shimmer]: pending })} data-testid="review-stats">
-                            <StatChip k="Placemaker.Stat.Area" value={state.area.areaM2} unit="m2" />
+                            {summary.stats.some((st) => /(^|.)area$/i.test(st.key)) ? null : <StatChip k="Placemaker.Stat.Area" value={state.area.areaM2} unit="m2" />}
                             {summary.stats.map((st) => (
                                 <StatChip key={st.key + st.unit} k={st.key} value={st.value} unit={st.unit} />
                             ))}

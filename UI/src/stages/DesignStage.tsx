@@ -179,8 +179,18 @@ const Entrances = ({ step, state }: { step: StepView; state: ToolState }) => {
 
 // ───────────── type cards ─────────────
 
-function isMix(catalog: Catalog, r: RecipeInfo) {
-    return r.custom || !catalog.layers.some((l) => l.id === r.id && l.kind !== "addOn");
+/**
+ * A recipe is a "mix" when its id names more than one layer ("roads-with-parks", "split-park-plaza",
+ * "park-with-playground"); a single layer or a variant of one ("parking", "parking-green") is a type.
+ */
+export function isMix(catalog: Catalog, r: RecipeInfo) {
+    if (r.custom) return true;
+    const ids = new Set(catalog.layers.map((l) => l.id.toLowerCase()));
+    const named = r.id
+        .toLowerCase()
+        .split(/[-_+|]+/)
+        .filter((tok) => ids.has(tok) || (tok.endsWith("s") && ids.has(tok.slice(0, -1))));
+    return named.length > 1;
 }
 
 const TypeCard = ({ r, on }: { r: RecipeInfo; on: boolean }) => {

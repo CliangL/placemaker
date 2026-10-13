@@ -29,8 +29,7 @@ export const ControlRow = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
     const commit = (v: SettingValue) => act.setValue(step.path, c.id, v);
     const tip = c.tooltip ? t(c.tooltip, "") : "";
     // Wide editors get their own line under the label: lists, and choices whose labels wouldn't fit beside it.
-    const choiceText = (c.options ?? []).reduce((n, o) => n + t(o.label, humanize(o.label || o.value)).length + (o.icon ? 4 : 0), 0);
-    const stacked = c.kind === "arrangement" || c.kind === "assetMulti" || (c.kind === "choice" && (c.options ?? []).length <= 5 && choiceText > 16);
+    const stacked = c.kind === "arrangement" || c.kind === "assetMulti" || (c.kind === "choice" && choiceLayout(c, t) !== "inline");
 
     const affordances = (
         <div className={s.affordances}>
@@ -115,29 +114,49 @@ function renderEditor(c: ControlEx, value: SettingValue, commit: (v: SettingValu
     }
 }
 
+/**
+ * How a choice is laid out, so labels never get cut: up to 3 short options inline beside the label;
+ * up to 3 longer ones as a full-width segmented row under it; more than 3 as wrapping chips under it.
+ */
+export function choiceLayout(c: ControlEx, t: TFunc): "inline" | "stacked" | "chips" {
+    const opts = c.options ?? [];
+    if (opts.length > 3) return "chips";
+    const text = opts.reduce((n, o) => n + t(o.label, humanize(o.label || o.value)).length + (o.icon ? 3 : 0), 0);
+    return text > 12 ? "stacked" : "inline";
+}
+
 const ChoiceEditor = ({ c, value, commit }: { c: ControlEx; value: string; commit: (v: SettingValue) => void }) => {
     const { t } = useT();
     const opts = c.options ?? [];
-    const withIcons = opts.every((o) => !!o.icon);
-    const iconOnly = withIcons && opts.length > 4;
-    if (opts.length > 5 && !withIcons) {
+    if (choiceLayout(c, t) === "chips") {
         return (
             <div className={s.chips} data-testid={`choice-${c.id}`}>
-                {opts.map((o) => (
-                    <button
-                        type="button"
-                        key={o.value}
-                        data-testid={`choice-${c.id}-${o.value}`}
-                        aria-pressed={o.value === value ? "true" : "false"}
-                        className={classNames(s.chip, { [s.chipOn]: o.value === value })}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (o.value !== value) commit(o.value);
-                        }}
-                    >
-                        {t(o.label, humanize(o.label || o.value))}
-                    </button>
-                ))}
+                {opts.map((o) => {
+                    const on = o.value === value;
+                    const chip = (
+                        <button
+                            type="button"
+                            key={o.value}
+                            data-testid={`choice-${c.id}-${o.value}`}
+                            aria-pressed={on ? "true" : "false"}
+                            className={classNames(s.chip, { [s.chipOn]: on })}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (!on) commit(o.value);
+                            }}
+                        >
+                            {o.icon ? <Icon name={o.icon} size={15} tint={on ? "light" : "dim"} /> : null}
+                            <div className={s.chipText}>{t(o.label, humanize(o.label || o.value))}</div>
+                        </button>
+                    );
+                    return o.tooltip ? (
+                        <Tip key={o.value} title={t(o.label, humanize(o.label || o.value))} description={t(o.tooltip, "")}>
+                            {chip}
+                        </Tip>
+                    ) : (
+                        chip
+                    );
+                })}
             </div>
         );
     }
@@ -145,7 +164,6 @@ const ChoiceEditor = ({ c, value, commit }: { c: ControlEx; value: string; commi
         <Segmented
             testId={`choice-${c.id}`}
             stretch
-            iconOnly={iconOnly}
             value={value}
             onChange={(v) => commit(v)}
             options={opts.map((o) => ({

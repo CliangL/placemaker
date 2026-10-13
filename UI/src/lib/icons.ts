@@ -137,7 +137,11 @@ export function tintFor(color?: string): Tint {
  * consistent), otherwise whatever icon C# declared.
  */
 export function entityIcon(id: string, declared?: string): string {
-    return bundledName(id) ? id : declared || id;
+    if (bundledName(id)) return id;
+    // variants ("parking-green") use their base type's glyph
+    const base = (id || "").split(/[-_]/)[0];
+    if (base && base !== id && bundledName(base)) return base;
+    return declared || id;
 }
 
 /** Stat key → icon ("Placemaker.Stat.Trees" → tree). */
