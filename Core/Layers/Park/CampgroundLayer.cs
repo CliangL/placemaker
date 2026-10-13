@@ -13,7 +13,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Park
 {
     [AreaGenerator(40)]
-    public sealed class CampgroundLayer : LayerBase
+    public sealed class CampgroundLayer : LayerBase, IHasFeatures
     {
         public const string LayerId = "campground";
 
@@ -23,6 +23,15 @@ namespace Placemaker.Core.Layers.Park
         public override LayerKind Kind => LayerKind.Fill;
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core };
         public override float MinArea => 600f;
+
+        private static readonly FeatureInfo[] FeatureList =
+        {
+            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Campground.Feature.restrooms", TooltipKey = "Placemaker.Campground.Feature.restrooms.Tooltip" },
+            new FeatureInfo { Layer = "playground", LabelKey = "Placemaker.Campground.Feature.playground", Preset = ParkLayer.Bag(("size", "small")) },
+            new FeatureInfo { Layer = "picnic", LabelKey = "Placemaker.Campground.Feature.picnic", Preset = ParkLayer.Bag(("groups", 2.0), ("shelter", true)) },
+        };
+
+        public IReadOnlyList<FeatureInfo> Features => FeatureList;
 
         protected override void DefineControls(ControlSet c)
         {
@@ -102,7 +111,8 @@ namespace Placemaker.Core.Layers.Park
 
             // Facilities: one restroom per 25 pitches near the paths, plus one near the entrance.
             int restrooms = 0;
-            if (ctx.B("facilities") && pitches.Count > 0 &&
+            // The restrooms feature replaces the built-in restroom block.
+            if (ctx.B("facilities") && !ctx.Input.HasChild("restrooms") && pitches.Count > 0 &&
                 AssetAvailability.Require(ctx.Plan, AssetCategories.Restroom, new[] { ctx.S("restroomAsset") }, Keys.Category(AssetCategories.Restroom)))
             {
                 var asset = AssetMix.One(ctx.S("restroomAsset"));

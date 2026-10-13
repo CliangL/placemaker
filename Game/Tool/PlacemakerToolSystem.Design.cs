@@ -107,6 +107,10 @@ namespace Placemaker.Game.Tool
                 _focus = added;
         }
 
+        /// <summary>Turns a built-in feature of the step at <paramref name="path"/> on or off (UI trigger setFeature).</summary>
+        public void SetFeature(string path, string featureLayer, bool enabled) =>
+            Edit(r => _editor.SetFeature(r, path, featureLayer, enabled, NewSeed()), enabled ? "Placemaker.Undo.EnableFeature" : "Placemaker.Undo.DisableFeature");
+
         public void RemoveStep(string path)
         {
             if (Edit(r => _editor.RemoveStep(r, path), "Placemaker.Undo.RemoveLayer"))

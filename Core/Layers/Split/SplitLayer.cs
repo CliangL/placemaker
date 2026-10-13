@@ -18,7 +18,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Split
 {
-    [AreaGenerator(60)]
+    [AreaGenerator(60, Hidden = true)]
     public sealed class SplitLayer : LayerBase
     {
         public const string LayerId = "split";

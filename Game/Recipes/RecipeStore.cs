@@ -61,7 +61,7 @@ namespace Placemaker.Game.Recipes
             var editor = _editor();
             foreach (var g in GeneratorRegistry.All)
             {
-                if (g == null || g.Kind != LayerKind.Fill || seen.Contains(g.Id)) continue;
+                if (g == null || g.Kind != LayerKind.Fill || GeneratorRegistry.IsHidden(g) || seen.Contains(g.Id)) continue;
                 try
                 {
                     var r = editor.SingleLayerRecipe(g, 0);

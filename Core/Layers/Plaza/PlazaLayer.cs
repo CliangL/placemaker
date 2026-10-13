@@ -16,7 +16,7 @@ using Random = Unity.Mathematics.Random;
 namespace Placemaker.Core.Layers.Plaza
 {
     [AreaGenerator(20)]
-    public sealed class PlazaLayer : LayerBase
+    public sealed class PlazaLayer : LayerBase, IHasFeatures
     {
         public const string LayerId = "plaza";
         public const string AccessKind = "access";
@@ -31,6 +31,24 @@ namespace Placemaker.Core.Layers.Plaza
         public override LayerKind Kind => LayerKind.Fill;
         public override string[] Emits => new[] { RegionTags.Paved, RegionTags.Core, RegionTags.Edge };
         public override float MinArea => 60f;
+
+        private static readonly FeatureInfo[] FeatureList =
+        {
+            new FeatureInfo { Layer = "plazatrees", LabelKey = "Placemaker.Plaza.Feature.trees", TooltipKey = "Placemaker.Plaza.Feature.trees.Tooltip" },
+            new FeatureInfo { Layer = "playground", LabelKey = "Placemaker.Plaza.Feature.playground", Preset = Park.ParkLayer.Bag(("size", "small"), ("fence", true)) },
+            new FeatureInfo
+            {
+                Layer = "fountain", LabelKey = "Placemaker.Plaza.Feature.fountain", TooltipKey = "Placemaker.Plaza.Feature.fountain.Tooltip",
+                Preset = Park.ParkLayer.Bag(("size", "large"), ("benches", 8.0), ("planters", true)),
+            },
+            new FeatureInfo { Layer = "kiosk", LabelKey = "Placemaker.Plaza.Feature.kiosk" },
+            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Plaza.Feature.flowerbeds", Preset = Park.ParkLayer.Bag(("density", 30.0), ("nearPaths", false)) },
+        };
+
+        public IReadOnlyList<FeatureInfo> Features => FeatureList;
+
+        /// <summary>Clear radius the plaza keeps at its centre for a fountain feature (large fountain + seating ring).</summary>
+        public const float FountainClearRadius = 12.5f;
 
         protected override void DefineControls(ControlSet c)
         {
@@ -119,7 +137,9 @@ namespace Placemaker.Core.Layers.Plaza
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
-            var gates = Entrances.Resolve(ctx.Input, region, AccessKind, WantedAccess(region));
+            // Inside a place (a park's plaza) people arrive along the parent's paths: access where they end.
+            var gates = InPlace(ctx.Input) ? PathEnds(ctx.Input, region) : new List<Gate>();
+            if (gates.Count == 0) gates = Entrances.Resolve(ctx.Input, region, AccessKind, WantedAccess(region));
             var gatePoints = new List<float2>();
             foreach (var g in gates) gatePoints.Add(g.Position);
 
@@ -135,6 +155,14 @@ namespace Placemaker.Core.Layers.Plaza
                 new[] { ctx.S("centerpiece") }, Keys.Category(AssetCategories.Centerpiece));
             if (!centerAvailable) mode = CenterMode.None;
             float centerRadius = math.max(ctx.F("centerSize"), AssetMix.FootprintRadius(ctx.Site, centerAsset, 0f));
+            // A fountain feature takes the centre: keep it clear (the add-on places the fountain itself).
+            bool fountainFeature = ctx.Input.HasChild("fountain");
+            if (fountainFeature)
+            {
+                mode = CenterMode.Single;
+                region.DeepestPoint(out float inscribed, null, 12);
+                centerRadius = math.max(centerRadius, math.min(FountainClearRadius, inscribed * 0.6f));
+            }
             var items = ParseArrangement(ctx);
             var layout = PlazaPlanner.Generate(region, occ, gatePoints, new PlazaPlanner.Options
             {
@@ -142,13 +170,14 @@ namespace Placemaker.Core.Layers.Plaza
                 ArrangementMode = ctx.S("arrangementMode") == "edges" ? ArrangementMode.AlongEdges : ArrangementMode.AroundCenter,
                 ArrangementGap = ctx.F("arrangementGap"), Groups = ctx.I("furniture"), Arrangement = items,
             });
-            if (layout.CenterpieceDropped) ctx.Issue(IssueSeverity.Info, "Placemaker.Plaza.Issue.CenterpieceDoesNotFit");
+            if (layout.CenterpieceDropped && !fountainFeature) ctx.Issue(IssueSeverity.Info, "Placemaker.Plaza.Issue.CenterpieceDoesNotFit");
             ctx.Check();
 
             // Emit.
             uint variant = Hashing.Mix(ctx.Seed, 0xCE47u);
-            foreach (var c in layout.Centerpieces)
-                ctx.Object(c.Position, 0f, ObjectRole.Centerpiece, centerAsset, variant);   // one design for all: a mirrored pair matches
+            if (!fountainFeature)
+                foreach (var c in layout.Centerpieces)
+                    ctx.Object(c.Position, 0f, ObjectRole.Centerpiece, centerAsset, variant);   // one design for all: a mirrored pair matches
             foreach (var f in layout.Furniture)
             {
                 uint v = Hashing.Mix(variant, (uint)f.ArrangementId * 31u + (uint)Array.IndexOf(ItemKinds, f.Item.Kind));
@@ -175,11 +204,40 @@ namespace Placemaker.Core.Layers.Plaza
 
             // Summary.
             ctx.Stat(Keys.StatArea, Math.Round(region.Area), Keys.UnitM2);
-            ctx.Stat(Keys.StatFountains, layout.Centerpieces.Count, Keys.UnitCount);
+            ctx.Stat(Keys.StatFountains, fountainFeature ? 0 : layout.Centerpieces.Count, Keys.UnitCount);
             ctx.Stat(Keys.StatBenches, CountRole(ctx.Plan, ObjectRole.Bench), Keys.UnitCount);
             ctx.Stat(Keys.StatLamps, CountRole(ctx.Plan, ObjectRole.Lamp), Keys.UnitCount);
             ctx.Stat(Keys.StatTrees, CountRole(ctx.Plan, ObjectRole.Tree), Keys.UnitCount);
             ctx.Plan.Facts["accessPoints"] = gates.Count;
+        }
+
+        private static bool InPlace(AreaInput input)
+        {
+            foreach (var m in input.Markers) if (m.Kind == AccessKind) return false;   // the player placed access points
+            if (input.RegionTags == null) return false;
+            foreach (var t in input.RegionTags) if (t != null && t.StartsWith(Composer.PlacePrefix, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        /// <summary>Access points where reserved paths of the parent end on this region's outline.</summary>
+        public static List<Gate> PathEnds(AreaInput input, LayerRegion region)
+        {
+            var gates = new List<Gate>();
+            if (input.Reserved == null) return gates;
+            foreach (var c in input.Reserved.Corridors)
+            {
+                if (c.Tag != nameof(NetRole.Pathway) && c.Tag != nameof(NetRole.PathwayWide)) continue;
+                foreach (var end in new[] { c.A, c.B })
+                {
+                    if (region.BoundaryDistance(end, 1.6f) > 1.5f) continue;
+                    var p = region.ClosestOnBoundary(end, out int seg, out float t);
+                    bool near = false;
+                    foreach (var g in gates) if (math.distancesq(g.Position, p) < 16f) { near = true; break; }
+                    if (!near) gates.Add(new Gate { Position = p, Segment = seg, T = t, AttachId = -1 });
+                }
+            }
+            gates.Sort((a, b) => a.Segment != b.Segment ? a.Segment.CompareTo(b.Segment) : a.T.CompareTo(b.T));
+            return gates;
         }
 
         private static int CountRole(AreaPlan plan, ObjectRole role)
