@@ -20,7 +20,7 @@ namespace Placemaker.Core.Layers.Parking
 
         public string Id => LayerId;
         public string NameKey => K + "Name";
-        public string Icon => "Media/Game/Icons/ParkingFacility.svg";
+        public string Icon => "Media/Game/Icons/Parking.svg";
         public LayerKind Kind => LayerKind.Fill;
         public string[] Accepts => Array.Empty<string>();
         public string[] Emits => new[] { RegionTags.Lot, RegionTags.Green };
@@ -64,19 +64,19 @@ namespace Placemaker.Core.Layers.Parking
             return c;
         }
 
-        /// <summary>Marker kind → icon (bundled UI glyph names, see UI/src/lib/icons.ts).</summary>
+        /// <summary>
+        /// Marker kind → icon. The tool (Core/Tool/MarkerKinds) owns verified vanilla icons for entrance,
+        /// entry, exit, alley and footpath; the one-way alleys reuse the alley icon; bus stop and zoning
+        /// patch use bundled UI glyphs (UI/src/lib/icons.ts) until the tool adds vanilla ones.
+        /// </summary>
         internal static string MarkerIcon(string kind)
         {
             switch (kind)
             {
-                case ParkingIds.KindEntrance: return "entrance";
-                case ParkingIds.KindEntry: return "arrowDown";
-                case ParkingIds.KindExit: return "arrowUp";
-                case ParkingIds.KindAlley: case ParkingIds.KindAlleyIn: case ParkingIds.KindAlleyOut: return "roads";
-                case ParkingIds.KindFootpath: return "path";
+                case ParkingIds.KindAlleyIn: case ParkingIds.KindAlleyOut: return Placemaker.Core.Tool.MarkerKinds.IconFor(ParkingIds.KindAlley);
                 case ParkingIds.KindBusStop: return "people";
                 case ParkingIds.KindZoningPatch: return "zone";
-                default: return "marker";
+                default: return Placemaker.Core.Tool.MarkerKinds.IconFor(kind);
             }
         }
 
@@ -92,7 +92,7 @@ namespace Placemaker.Core.Layers.Parking
             ent.Icon = "entrance";
             ent.MarkerKinds = (string[])ParkingIds.MarkerKinds.Clone();
             foreach (var k in ParkingIds.MarkerKinds)
-                ent.Options.Add(new ControlOption { Value = k, LabelKey = K + "Marker." + k, TooltipKey = K + "Marker." + k + ".Tip", Icon = MarkerIcon(k) });
+                ent.Options.Add(new ControlOption { Value = k, LabelKey = K + "Marker." + Placemaker.Core.Tool.MarkerKinds.Pascal(k), TooltipKey = K + "Marker." + Placemaker.Core.Tool.MarkerKinds.Pascal(k) + ".Tip", Icon = MarkerIcon(k) });
             l.Add(ent);
 
             // ── Layout ──

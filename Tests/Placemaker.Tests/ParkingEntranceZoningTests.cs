@@ -84,8 +84,8 @@ namespace Placemaker.Tests
             Assert.Equal(markers.MarkerKinds, markers.Options.Select(o => o.Value).ToArray());
             foreach (var o in markers.Options)
             {
-                Assert.Equal("Placemaker.Parking.Marker." + o.Value, o.LabelKey);
-                Assert.Equal("Placemaker.Parking.Marker." + o.Value + ".Tip", o.TooltipKey);
+                Assert.Equal("Placemaker.Parking.Marker." + Placemaker.Core.Tool.MarkerKinds.Pascal(o.Value), o.LabelKey);
+                Assert.Equal("Placemaker.Parking.Marker." + Placemaker.Core.Tool.MarkerKinds.Pascal(o.Value) + ".Tip", o.TooltipKey);
                 Assert.False(string.IsNullOrEmpty(o.Icon), o.Value);
             }
             var order = new[] { "entrances", "layout", "spaces", "planting", "lighting", "surfaces", "zoning", "fee" };
