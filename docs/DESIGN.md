@@ -150,3 +150,24 @@ ParkManager's lake default-on. Some may return later, one at a time.
 Paradox's **Park Adventures** DLC (later 2026) adds official drawable parks. Plan for it: keep effects
 behind an "effect provider" so we can emit the DLC's park areas when they exist; our edge is one tool
 for four outcomes + parking + roads.
+
+## 9. Places inside (round 3) — user request 2026-10-13
+
+"Draw subsections too… plaza in a corner or the center of the park… a parking lot square or circle in the
+middle and connect an entrance… get crazier. But the UX is key."
+
+UX:
+1. Design stage → **"+ Add a place inside"** → shape: rectangle / circle / freehand. Ghost follows the cursor,
+   snaps to centre, corners, edges, parent paths/axes; drag handles to move/resize/rotate afterwards.
+2. Pick its type from the same cards (Plaza, Parking, Pond, Playground, Campground…).
+3. The parent re-plans around it: paths/driveways connect to the place's entrances (parking in the middle of
+   a park gets a driveway through to the nearest road), planting keeps clearance.
+4. Each place is a chip ("Plaza · centre · 0.4 ha"): select → move/resize, change type, its own options, delete.
+   Undo covers all. One more nesting level allowed (fountain inside the plaza).
+5. One-click quick placements: "in the centre", "in a corner", "along an edge" — most players never draw.
+
+Engine (fits the recipe model):
+- `RecipeStep.Places`: list of user places {Key, Shape (ring), Layer step}. Composer: parent runs with the
+  places as `Reserved.Polygons` + connection targets (markers on the place outline), then each place runs as a
+  child on its own ring with tag "place:<key>". Parent layers must route paths/drives to place entrances.
+- Layout panel space: the right-side tall panel reserves a "Places inside" section under the type cards.
