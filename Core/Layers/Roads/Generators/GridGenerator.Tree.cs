@@ -8,12 +8,12 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Motif "Cul-de-sac em árvore" (famille de la Grelha, LoopMode faux) : une collectrice
-    /// (IsAvenue) le long du grand axe de la forme, reliée au périmètre à ses deux bouts ; des
-    /// branches perpendiculaires (réseau principal) des deux côtés, décalées d'une demi-distance
-    /// (carrefours en T) et qui n'atteignent jamais le périmètre ; des impasses (IsCulDeSacEnd :
-    /// réseau cul-de-sac et cercle de retournement) par paires le long de chaque branche. Une
-    /// branche se termine à sa dernière paire d'impasses. Tout le trafic passe par la collectrice.
+    /// Tree cul-de-sac pattern (grid family, LoopMode false): a collector (IsAvenue) along the
+    /// shape's long axis, joined to the perimeter at both ends; perpendicular branches (main
+    /// network) on both sides, offset by half a spacing (T junctions) and never reaching the
+    /// perimeter; cul-de-sacs (IsCulDeSacEnd: cul-de-sac network and turning circle) in pairs
+    /// along each branch. A branch ends at its last cul-de-sac pair. All traffic goes through the
+    /// collector.
     /// </summary>
     public static partial class GridGenerator
     {
@@ -27,11 +27,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
         public const float MaxTreeCulDeSacLength = 150f;
         public const float TreeCulDeSacLengthDefault = 90f;
 
-        /// <summary>Distance minimale (m) entre une rue générée et la route du périmètre, hors raccord (même valeur que le Radial).</summary>
+        /// <summary>Minimum distance (m) between a generated street and the perimeter road, junctions excepted (same value as the radial pattern).</summary>
         private const float TreeClearance = 25f;
-        /// <summary>Distance (m) entre un bout de rue et le périmètre : place du cercle de retournement.</summary>
+        /// <summary>Distance (m) between a street tip and the perimeter: room for the turning circle.</summary>
         private const float TreeTipClearance = 30f;
-        /// <summary>Écart (m) entre les bouts de deux impasses face à face (branches voisines).</summary>
+        /// <summary>Gap (m) between the tips of two facing cul-de-sacs (neighbouring branches).</summary>
         private const float TreeFacingTipGap = 40f;
         private const float TreeSampleStep = 6f;
 
@@ -44,10 +44,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float branchSpacing = TreeSetting(parameters.TreeBranchSpacing, TreeBranchSpacingDefault, MinTreeBranchSpacing, MaxTreeBranchSpacing);
             float culDeSacSpacing = TreeSetting(parameters.TreeCulDeSacSpacing, TreeCulDeSacSpacingDefault, MinTreeCulDeSacSpacing, MaxTreeCulDeSacSpacing);
             float culDeSacLength = TreeSetting(parameters.TreeCulDeSacLength, TreeCulDeSacLengthDefault, MinTreeCulDeSacLength, MaxTreeCulDeSacLength);
-            // Impasses de deux branches voisines (même côté, branchSpacing d'écart) face à face.
+            // Cul-de-sacs of two neighbouring branches (same side, branchSpacing apart) face each other.
             culDeSacLength = math.min(culDeSacLength, 0.5f * (branchSpacing - TreeFacingTipGap));
 
-            // Repère : u le long du grand axe (collectrice), v en travers.
+            // Frame: u along the long axis (collector), v across it.
             float2 axis = LongestAxis(polygon, parameters.AngleOffsetDegrees);
             float2 side = new float2(-axis.y, axis.x);
             float2 origin = polygon[0];
@@ -61,8 +61,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 vMax = math.max(vMax, lp.y);
             }
 
-            // Collectrice : la droite (v = const) qui traverse la forme sur la plus grande longueur
-            // d'un seul tenant, dans la moitié centrale ; à égalité, la plus centrée.
+            // Collector: the line (v = const) with the longest unbroken run through the shape, within
+            // the central half; on a tie, the most central one.
             float mid = 0.5f * (vMin + vMax);
             float height = vMax - vMin;
             float spineV = mid;
@@ -88,7 +88,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return segments;
             }
 
-            // Branches : un côté tous les branchSpacing, l'autre décalé d'une demi-distance (T).
+            // Branches: one side every branchSpacing, the other offset by half a spacing (T junctions).
             float margin = math.max(0.5f * branchSpacing, TreeClearance + culDeSacLength);
             var branches = new List<(float u, float dir)>();
             float usable = spine.y - spine.x - 2f * margin;
@@ -116,14 +116,14 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             foreach ((float u, float dir) in branches)
             {
-                // Longueur utile de la branche : jusqu'au périmètre (bande dégagée), moins la marge.
+                // Usable branch length: up to the perimeter (clear band), minus the margin.
                 if (!TryFreeRun(edges, new float2(u, spineV), new float2(0f, dir), out float branchRun))
                 {
                     continue;
                 }
                 float maxBranch = branchRun - TreeTipClearance;
 
-                // Paires d'impasses le long de la branche.
+                // Cul-de-sac pairs along the branch.
                 var junctions = new List<float3>();
                 var culDeSacs = new List<RoadSegmentDef>();
                 for (float t = culDeSacSpacing; t <= maxBranch + 1e-3f; t += culDeSacSpacing)
@@ -152,10 +152,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 if (junctions.Count == 0)
                 {
-                    continue; // branche sans impasse : rien à desservir
+                    continue; // branch without cul-de-sacs: nothing to serve
                 }
 
-                // Branche : de la collectrice à sa dernière paire d'impasses, coupée à chaque paire.
+                // Branch: from the collector to its last cul-de-sac pair, split at each pair.
                 if (!collectorJunctions.TryGetValue(u, out float3 start))
                 {
                     start = World(u, spineV);
@@ -170,7 +170,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 segments.AddRange(culDeSacs);
             }
 
-            // Collectrice : d'un bout à l'autre, coupée à chaque branche.
+            // Collector: end to end, split at each branch.
             var stops = new List<float3> { World(spine.x, spineV) };
             stops.AddRange(collectorJunctions.Values);
             stops.Add(World(spine.y, spineV));
@@ -182,10 +182,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Arêtes du contour rangées par tranches de TreeClearance, sur chacun des deux axes : une
-        /// requête sur une droite (u = const ou v = const) ne regarde que les arêtes de sa bande
-        /// (retour "lentíssimo" de l'ancien motif Espinha de peixe : parcourir les ~1000 arêtes pour
-        /// chaque rue coûtait des centaines de ms par génération).
+        /// Outline edges bucketed into TreeClearance-wide slices on each of the two axes, so a query
+        /// along a line (u = const or v = const) only checks the edges in its band (user feedback
+        /// "extremely slow" on the old fishbone pattern: scanning all ~1000 edges for every street cost
+        /// hundreds of ms per generation).
         /// </summary>
         private sealed class TreeEdgeIndex
         {
@@ -219,7 +219,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             public float2 A(int edge) => _local[edge];
             public float2 B(int edge) => _local[(edge + 1) % _local.Count];
 
-            /// <summary>Arêtes dont l'étendue sur l'axe `axis` (0 = u, 1 = v) touche [position − margin, position + margin].</summary>
+            /// <summary>Edges whose extent on axis `axis` (0 = u, 1 = v) touches [position - margin, position + margin].</summary>
             public List<int> Near(int axis, float position, float margin)
             {
                 var result = new List<int>();
@@ -244,23 +244,23 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Longueur (m) de rue possible depuis `from` dans la direction (axe local) `direction` :
-        /// jusqu'à la sortie de la forme ou jusqu'au premier point à moins de TreeClearance du
-        /// périmètre. Faux si `from` n'est pas dans la forme.
+        /// Street length (m) available from `from` in local-axis direction `direction`: up to where
+        /// the line leaves the shape or the first point closer than TreeClearance to the perimeter.
+        /// False if `from` is not inside the shape.
         /// </summary>
         private static bool TryFreeRun(TreeEdgeIndex edges, float2 from, float2 direction, out float run)
         {
             run = 0f;
             bool alongU = direction.x != 0f;
-            int across = alongU ? 1 : 0; // axe constant le long de la droite
+            int across = alongU ? 1 : 0; // axis held constant along the line
             int along = 1 - across;
             float position = from[across];
             float t0 = from[along];
             float sign = direction[along];
             List<int> near = edges.Near(across, position, TreeClearance);
 
-            // Sortie de la forme : croisements de la droite avec les arêtes (règle demi-ouverte,
-            // comme ClipLineToPolygon), puis parité pour savoir si `from` est dedans.
+            // Shape exit: crossings of the line with the edges (half-open rule, as in
+            // ClipLineToPolygon), then parity tells whether `from` is inside.
             var crossings = new List<float>();
             foreach (int edge in near)
             {
@@ -283,12 +283,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
             if (before % 2 == 0 || end == float.MaxValue || end == float.MinValue)
             {
-                return false; // `from` hors de la forme
+                return false; // `from` outside the shape
             }
             float available = math.abs(end - t0);
             run = available;
-            // Étendue de chaque arête le long de la droite, élargie de TreeClearance : un échantillon
-            // hors de cette étendue ne peut pas être trop près de l'arête (test bon marché d'abord).
+            // Each edge's extent along the line, widened by TreeClearance: a sample outside that
+            // extent cannot be too close to the edge (cheap test first).
             var lo = new float[near.Count];
             var hi = new float[near.Count];
             for (int i = 0; i < near.Count; i++)
@@ -326,9 +326,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Grand axe de la forme, tourné de angleOffsetDegrees : la direction le long de laquelle la
-        /// forme est la plus ÉTROITE en travers (bande de largeur minimale) — pas la direction de
-        /// plus grande étendue, qui pour un rectangle serait la diagonale.
+        /// Long axis of the shape, rotated by angleOffsetDegrees: the direction along which the shape
+        /// is NARROWEST across (minimum-width band), not the direction of greatest extent, which for a
+        /// rectangle would be the diagonal.
         /// </summary>
         private static float2 LongestAxis(List<float2> polygon, float angleOffsetDegrees)
         {

@@ -12,57 +12,56 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Représente un segment de route à créer : un point de départ et un point d'arrivée.
-    /// Les coordonnées sont en espace monde (X, Z ; Y = hauteur du terrain, gérée ailleurs).
+    /// A road segment to create: a start point and an end point. Coordinates are in world space (X, Z;
+    /// Y = terrain height, handled elsewhere).
     /// </summary>
     public struct RoadSegmentDef
     {
         public float3 Start;
         public float3 End;
-        public bool IsHorizontal; // "horizontal" = parallèle à l'axe principal de la grille
+        public bool IsHorizontal; // "horizontal" = parallel to the grid's main axis
         /// <summary>
-        /// Vrai si End est le bout libre d'une impasse (CulDeSacMode) : l'appelant ECS
-        /// y pose un objet de cercle de retournement une fois le segment créé.
+        /// True if End is the free end of a cul-de-sac (CulDeSacMode): the game layer places a
+        /// turning-circle object there once the segment is created.
         /// </summary>
         public bool IsCulDeSacEnd;
         /// <summary>
-        /// Vrai pour un tronçon de la colonne/rangée choisie comme avenue (GridParameters.
-        /// AvenueColumnIndex/AvenueRowIndex) — traversant comme une collectrice normale (jamais
-        /// de cul-de-sac sur une avenue), mais avec un troisième prefab dédié.
+        /// True for a segment of the column/row chosen as the avenue (GridParameters.AvenueColumnIndex/
+        /// AvenueRowIndex): runs through like a normal collector (never a cul-de-sac on an avenue), but
+        /// uses a dedicated third prefab.
         /// </summary>
         public bool IsAvenue;
         /// <summary>
-        /// Vrai pour un tronçon de l'intérieur pédonal d'un super-quarteirão (GridParameters.
-        /// SuperblockMode, voir GenerateLoopGrid/EmitSimpleLoopBlock) : réutilise le troisième
-        /// emplacement de prefab ("secundária", inutilisé par ailleurs en mode Loop — l'Arterial
-        /// qui l'occupait a été retiré) pour un réseau piéton dédié, plutôt que le laço/beco
-        /// carrossable habituel. Jamais vrai en même temps que IsAvenue.
+        /// True for a segment of a superblock's pedestrian interior (GridParameters.SuperblockMode, see
+        /// GenerateLoopGrid/GenerateSuperblockInterior): reuses the third prefab slot ("secondary",
+        /// otherwise unused in Loop mode since the Arterial level that held it was removed) for a
+        /// dedicated pedestrian network instead of the usual drivable loop/cul-de-sac. Never true
+        /// together with IsAvenue.
         /// </summary>
         public bool IsPedestrian;
         /// <summary>
-        /// Vrai pour un tronçon COURBE (mode Loop, voir GridGenerator.GenerateLoopGrid) : une
-        /// vraie courbe (NetUtils.FitCurve côté ECS, tangentes StartTangent/EndTangent) plutôt
-        /// qu'une ligne droite. Jamais vrai pour un tronçon de collectrice ou un rayon de
-        /// cul-de-sac (toujours droits). StartTangent/EndTangent n'ont de sens que si IsArc
-        /// est vrai.
+        /// True for a CURVED segment (Loop mode, see GridGenerator.GenerateLoopGrid): a real curve
+        /// (fitted by the game from StartTangent/EndTangent) rather than a straight line. Never true
+        /// for a collector segment or a cul-de-sac spur (always straight). StartTangent/EndTangent are
+        /// only meaningful when IsArc is true.
         /// </summary>
         public bool IsArc;
         /// <summary>
-        /// Vrai pour un tronçon d'une rue en impasse qui n'en est pas le dernier (motif Orgânico) :
-        /// même réseau cul-de-sac que le bout (IsCulDeSacEnd), sans cercle de retournement — toute
-        /// l'impasse garde ainsi un seul réseau.
+        /// True for a segment of a cul-de-sac street that is not its last one (Organic pattern): same
+        /// cul-de-sac network as the end (IsCulDeSacEnd) but without a turning circle, so the whole
+        /// cul-de-sac stays on a single network.
         /// </summary>
         public bool IsLocal;
         /// <summary>
-        /// Bout d'impasse (IsCulDeSacEnd, cercle de retournement) qui garde pourtant le réseau de sa
-        /// rue au lieu de passer sur le réseau cul-de-sac (motif Relevo : une rue de niveau qui
-        /// finit en impasse reste une rue de niveau).
+        /// Cul-de-sac end (IsCulDeSacEnd, turning circle) that nevertheless keeps its street's network
+        /// instead of switching to the cul-de-sac network (Contour pattern: a level street that ends in
+        /// a cul-de-sac is still a level street).
         /// </summary>
         public bool KeepNetwork;
         /// <summary>
-        /// Tronçon de l'anneau de la rotonde centrale du motif Radial : réseau propre, choisi dans
-        /// l'onglet Rotunda (voir GridRoadToolSystem.GetRoundaboutRoadPrefab). Toujours émis dans
-        /// le sens trigonométrique (circulation à droite) ; retourné côté ECS en circulation à gauche.
+        /// Segment of the Radial pattern's central roundabout ring: its own network, chosen in the
+        /// Roundabout tab. Always emitted counter-clockwise (right-hand traffic); the game layer
+        /// reverses it for left-hand traffic.
         /// </summary>
         public bool IsRoundabout;
         public float3 StartTangent;
@@ -84,7 +83,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             EndTangent = default;
         }
 
-        /// <summary>Facette courbe (voir IsArc) : tangentes unitaires, toutes deux orientées dans le sens de parcours.</summary>
+        /// <summary>Curved piece (see IsArc): unit tangents, both pointing in the direction of travel.</summary>
         public static RoadSegmentDef Arc(float3 start, float3 end, float3 startTangent, float3 endTangent, bool isCulDeSacEnd = false)
         {
             var def = new RoadSegmentDef(start, end, isHorizontal: false, isCulDeSacEnd: isCulDeSacEnd);
@@ -96,12 +95,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
     }
 
     /// <summary>
-    /// Rotonde à l'intersection de deux avenues (colonne ET rangée activées, voir
-    /// ComputeAvenueRoundabout) : Center/Radius servent uniquement à choisir et positionner
-    /// l'asset décoratif complet côté ECS (GridRoadToolSystem.TryResolveRoundaboutIslandPrefab)
-    /// — aucun segment de route n'est généré pour la boucle elle-même, les bras d'avenue
-    /// traversent normalement (croisement en +), comme un cul-de-sac garde son croisement
-    /// simple sous le cercle de retournement décoratif.
+    /// Roundabout at the crossing of two avenues (column AND row enabled, see ComputeAvenueRoundabout):
+    /// Center/Radius are only used by the game layer to pick and place the complete decorative
+    /// roundabout asset. No road segment is generated for the ring itself: the avenue arms cross
+    /// straight through (+ intersection), the same way a cul-de-sac keeps its plain end under the
+    /// decorative turning circle.
     /// </summary>
     public struct RoundaboutInfo
     {
@@ -112,20 +110,20 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
     public enum SpacingMode
     {
-        /// <summary>Répartit rows/columns de façon égale pour remplir toute l'emprise.</summary>
+        /// <summary>Spreads rows/columns evenly to fill the whole area.</summary>
         FitToArea,
-        /// <summary>Espacement fixe (en mètres) ; le nombre de routes est calculé automatiquement.</summary>
+        /// <summary>Fixed spacing (meters); the number of roads is computed automatically.</summary>
         FixedSpacing
     }
 
-    /// <summary>Quel(s) axe(s) de la grille peuvent devenir des impasses en mode CulDeSacMode.</summary>
+    /// <summary>Which grid axis or axes can become cul-de-sacs in CulDeSacMode.</summary>
     public enum CulDeSacAxis
     {
-        /// <summary>Seules les colonnes (axisIsU), perpendiculaires à l'axe principal — comportement historique.</summary>
+        /// <summary>Columns only (axisIsU), perpendicular to the main axis: the original behavior.</summary>
         Columns = 0,
-        /// <summary>Seules les rangées (axisIsV), parallèles à l'axe principal.</summary>
+        /// <summary>Rows only (axisIsV), parallel to the main axis.</summary>
         Rows = 1,
-        /// <summary>Les deux axes, chacun selon son propre motif/tirage indépendant.</summary>
+        /// <summary>Both axes, each with its own independent pattern.</summary>
         Both = 2
     }
 
@@ -135,127 +133,127 @@ namespace Placemaker.Core.Layers.Roads.Generators
         public int Rows;
         public int Columns;
         public float SpacingMeters;
-        /// <summary>Rotation additionnelle (degrés, -90..+90) de la grille par rapport à l'arête la plus longue du polygone.</summary>
+        /// <summary>Extra rotation (degrees, -90..+90) of the grid relative to the polygon's longest edge.</summary>
         public float AngleOffsetDegrees;
         /// <summary>
-        /// Grille alignée sur le relief (Grelha et Loop) : un des axes suit les courbes de niveau
-        /// dominantes de la zone (HeightAt requis), AngleOffsetDegrees s'ajoute par-dessus.
+        /// Grid aligned to the terrain (Grid and Loop): one axis follows the area's dominant contour
+        /// lines (requires HeightAt); AngleOffsetDegrees is added on top.
         /// </summary>
         public bool AlignToTerrain;
-        /// <summary>Liaisons piétonnes du bout des impasses vers la rue voisine (voir AddPedestrianLinks).</summary>
+        /// <summary>Pedestrian links from cul-de-sac ends to the neighboring street (see AddPedestrianLinks).</summary>
         public bool PedestrianLinks;
-        /// <summary>Motif "Misto" : Radial dans un cercle central, Orgânico autour (voir GenerateMixed).</summary>
+        /// <summary>"Mixed" pattern: Radial in a central circle, Organic around it (see GenerateMixed).</summary>
         public bool MixedMode;
-        /// <summary>Rayon (m) du cercle central du motif Misto.</summary>
+        /// <summary>Radius (m) of the Mixed pattern's central circle.</summary>
         public float MixedCoreRadius;
 
         /// <summary>
-        /// Mode quartier pavillonnaire : certaines lignes deviennent des impasses au lieu
-        /// de collectrices traversantes, selon CulDeSacAxis.
+        /// Suburban mode: some lines become cul-de-sacs instead of through collectors, according to
+        /// CulDeSacAxis.
         /// </summary>
         public bool CulDeSacMode;
-        /// <summary>Quel(s) axe(s) peuvent devenir des impasses (voir CulDeSacMode).</summary>
+        /// <summary>Which axis or axes can become cul-de-sacs (see CulDeSacMode).</summary>
         public CulDeSacAxis CulDeSacAxis;
-        /// <summary>Profondeur de l'impasse (0.5–0.9), fraction de la longueur réelle (clippée) du tronçon entre deux collectrices.</summary>
+        /// <summary>Cul-de-sac depth (0.5–0.9), as a fraction of the actual (clipped) length of the segment between two collectors.</summary>
         public float CulDeSacDepth;
-        /// <summary>Alterne l'origine des impasses entre la collectrice du haut et celle du bas d'un tronçon à l'autre.</summary>
+        /// <summary>Alternates the cul-de-sac origin between the upper and lower collector from one block to the next.</summary>
         public bool Staggered;
-        /// <summary>Fréquence des impasses (0–100 %) : motif déterministe "une sur N".</summary>
+        /// <summary>Cul-de-sac frequency (0–100 %): deterministic "one in N" pattern.</summary>
         public float CulDeSacRatio;
 
         /// <summary>
-        /// Avenue (grille classique uniquement, voir GenerateGrid/EmitLine) : la colonne
-        /// d'index AvenueColumnIndex (parmi les lignes u effectivement générées, 0-based)
-        /// utilise un troisième prefab dédié au lieu du réseau principal, et traverse tout le
-        /// périmètre comme une collectrice normale (jamais de cul-de-sac sur une avenue). Index
-        /// hors plage = silencieusement sans effet (aucune ligne ne correspond), jamais d'erreur.
+        /// Avenue (classic grid only, see GenerateGrid/EmitLine): the column at AvenueColumnIndex
+        /// (among the u lines actually generated, 0-based) uses a dedicated third prefab instead of the
+        /// main network and runs across the whole perimeter like a normal collector (never a cul-de-sac
+        /// on an avenue). An out-of-range index silently has no effect (no line matches), never an
+        /// error.
         /// </summary>
         public bool AvenueColumnEnabled;
         public int AvenueColumnIndex;
-        /// <summary>Même principe qu'AvenueColumnEnabled/AvenueColumnIndex, pour une rangée (ligne v).</summary>
+        /// <summary>Same as AvenueColumnEnabled/AvenueColumnIndex, for a row (v line).</summary>
         public bool AvenueRowEnabled;
         public int AvenueRowIndex;
 
         /// <summary>
-        /// Mode "Loop" (voir GenerateLoopGrid) : espacement (m) des collectrices ÉPARSES qui
-        /// délimitent les super-îlots — indépendant de SpacingMeters/Rows/Columns (réservés à
-        /// GenerateGrid). Généralement bien plus grand qu'un espacement de grille classique :
-        /// chaque super-îlot reçoit ensuite un laço interne (voir LoopCulDeSacRatio).
+        /// "Loop" mode (see GenerateLoopGrid): spacing (m) of the SPARSE collectors that bound the
+        /// large blocks, independent of SpacingMeters/Rows/Columns (which belong to GenerateGrid).
+        /// Usually much larger than a classic grid spacing: each block then gets an inner loop (see
+        /// LoopCulDeSacRatio).
         /// </summary>
         public float CollectorSpacingMeters;
-        /// <summary>Fréquence (0–100 %) à laquelle un laço reçoit une ramification cul-de-sac vers son centre (voir GenerateLoopGrid).</summary>
+        /// <summary>Frequency (0–100 %) at which a loop gets a cul-de-sac spur toward its center (see GenerateLoopGrid).</summary>
         public float LoopCulDeSacRatio;
         /// <summary>
-        /// Mode "super-quarteirão" (mode Loop uniquement, inspiré des superilles de Barcelone) :
-        /// la sélection est découpée en zones d'environ SuperblockZoneMeters, séparées par des
-        /// rues PIÉTONNES (RoadSegmentDef.IsPedestrian) — une ligne sur SuperblockSubdivisions est
-        /// une collectrice, délimitant des super-quarteirões de 3×3 zones. Jamais de cul-de-sac.
-        /// Voir GenerateLoopGrid.
+        /// "Superblock" mode (Loop mode only, inspired by Barcelona's superilles): the selection is cut
+        /// into zones of about SuperblockZoneMeters, separated by PEDESTRIAN streets
+        /// (RoadSegmentDef.IsPedestrian); one line in SuperblockSubdivisions is a collector, bounding
+        /// superblocks of 3×3 zones. Never any cul-de-sac. See GenerateLoopGrid.
         /// </summary>
         public bool SuperblockMode;
         /// <summary>
-        /// Taille visée (m) d'une zone constructible en mode super-quarteirão, ajustée pour que
-        /// les zones remplissent exactement la sélection (retour utilisateur : "alterar a escala
-        /// dos quadrados, mais pequenos com um mínimo tipo 100 m").
+        /// Target size (m) of a buildable zone in superblock mode, adjusted so the zones fill the
+        /// selection exactly (user feedback: "change the scale of the squares, smaller, with a minimum
+        /// of about 100 m").
         /// </summary>
         public float SuperblockZoneMeters;
         /// <summary>
-        /// Mode "Concêntrico" (mode Loop uniquement, exclusif avec SuperblockMode) : anneaux qui
-        /// reprennent la forme du périmètre, voir ConcentricGenerator.
+        /// "Concentric" pattern (Loop mode only, exclusive with SuperblockMode): rings that follow the
+        /// perimeter's shape, see ConcentricGenerator.
         /// </summary>
         public bool ConcentricMode;
-        /// <summary>Nombre d'anneaux intérieurs demandés (ConcentricMode) — moins si la forme est trop étroite.</summary>
+        /// <summary>Requested number of inner rings (ConcentricMode); fewer if the shape is too narrow.</summary>
         public int ConcentricLayers;
-        /// <summary>Nombre de rayons amorcés sur chaque anneau le plus intérieur (ConcentricMode).</summary>
+        /// <summary>Number of spokes started on each innermost ring (ConcentricMode).</summary>
         public int ConcentricConnections;
         /// <summary>
-        /// Motif "Radial" (avec ConcentricMode) : une rotonde au centre et RadialAvenues avenues
-        /// droites jusqu'au périmètre, sans anneaux (voir ConcentricGenerator.GenerateRadial).
+        /// "Radial" pattern (with ConcentricMode): a roundabout in the center and RadialAvenues
+        /// straight avenues out to the perimeter, without the concentric rings (see
+        /// ConcentricGenerator.GenerateRadial).
         /// </summary>
         public bool RadialMode;
-        /// <summary>Nombre d'avenues droites du motif Radial.</summary>
+        /// <summary>Number of straight avenues in the Radial pattern.</summary>
         public int RadialAvenues;
-        /// <summary>Rayon demandé (m) de la rotonde centrale du motif Radial (ajusté à la forme).</summary>
+        /// <summary>Requested radius (m) of the Radial pattern's central roundabout (adjusted to the shape).</summary>
         public float RadialRoundaboutRadius;
-        /// <summary>Nombre d'anneaux circulaires autour de la rotonde du motif Radial (0 = aucun).</summary>
+        /// <summary>Number of circular rings around the Radial pattern's roundabout (0 = none).</summary>
         public int RadialLayers;
         /// <summary>
-        /// Motif "Cul-de-sac em árvore" (famille de la Grelha, LoopMode faux) : collectrice le long du
-        /// grand axe, branches perpendiculaires, impasses par paires — voir GridGenerator.GenerateTree.
+        /// "Cul-de-sac tree" pattern (Grid family, LoopMode false): a collector along the long axis,
+        /// perpendicular branches, cul-de-sacs in pairs; see GridGenerator.GenerateTree.
         /// </summary>
         public bool TreeMode;
-        /// <summary>Distance (m) entre deux branches d'un même côté de la collectrice.</summary>
+        /// <summary>Distance (m) between two branches on the same side of the collector.</summary>
         public float TreeBranchSpacing;
-        /// <summary>Distance (m) entre deux paires d'impasses le long d'une branche.</summary>
+        /// <summary>Distance (m) between two pairs of cul-de-sacs along a branch.</summary>
         public float TreeCulDeSacSpacing;
-        /// <summary>Longueur (m) visée des impasses (réduite pour tenir entre deux branches et loin du périmètre).</summary>
+        /// <summary>Target cul-de-sac length (m), reduced to fit between two branches and away from the perimeter.</summary>
         public float TreeCulDeSacLength;
         /// <summary>
-        /// Motif "Orgânico" (famille de la Grelha, LoopMode faux) : lotissement à rues sinueuses et
-        /// impasses — voir GridGenerator.GenerateOrganic.
+        /// "Organic" pattern (Grid family, LoopMode false): a subdivision with winding streets and
+        /// cul-de-sacs; see GridGenerator.GenerateOrganic.
         /// </summary>
         public bool OrganicMode;
-        /// <summary>Distance visée (m) entre deux rues voisines (des lots des deux côtés).</summary>
+        /// <summary>Target distance (m) between two neighboring streets (lots on both sides).</summary>
         public float OrganicStreetSpacing;
-        /// <summary>Courbure des rues (0–100 %).</summary>
+        /// <summary>Street curviness (0–100 %).</summary>
         public float OrganicCurviness;
-        /// <summary>Part (0–100 %) des branches qui, arrivées près d'une autre rue, la rejoignent en boucle au lieu de finir en impasse.</summary>
+        /// <summary>Share (0–100 %) of branches that, on reaching another street, join it as a loop instead of ending in a cul-de-sac.</summary>
         public float OrganicLoopShare;
-        /// <summary>Variante du tirage aléatoire (même valeur : même résultat).</summary>
+        /// <summary>Random variant (the same value gives the same result).</summary>
         public int OrganicSeed;
         /// <summary>
-        /// Motif "Relevo" (famille de la Grelha, LoopMode faux) : rues le long des courbes de niveau
-        /// du terrain, reliées par des montées à pente limitée — voir GridGenerator.GenerateContour.
+        /// "Contour" pattern (Grid family, LoopMode false): streets along the terrain's contour lines,
+        /// linked by slope-limited climbs; see GridGenerator.GenerateContour.
         /// </summary>
         public bool ContourMode;
-        /// <summary>Distance (m) visée entre deux rues de niveau voisines (en plan).</summary>
+        /// <summary>Target plan distance (m) between two neighboring level streets.</summary>
         public float ContourSpacing;
-        /// <summary>Distance (m) visée entre deux montées le long d'une rue de niveau.</summary>
+        /// <summary>Target distance (m) between two climbs along a level street.</summary>
         public float ContourConnectorSpacing;
         /// <summary>
-        /// Hauteur du terrain au point (x, z) monde. Fournie par l'appelant (GridRoadToolSystem : le
-        /// vrai terrain ; tests : relief synthétique) — jamais sauvegardée dans les réglages. Sans elle,
-        /// le motif Relevo ne génère rien.
+        /// Terrain height at world point (x, z). Supplied by the caller (the game layer: real terrain;
+        /// tests: synthetic relief) and never saved in the settings. Without it, the Contour pattern
+        /// generates nothing.
         /// </summary>
         public Func<float2, float> HeightAt;
         /// <summary>Cancellation of a running generation (never saved). Checked between phases and in long loops.</summary>
@@ -282,71 +280,63 @@ namespace Placemaker.Core.Layers.Roads.Generators
     }
 
     /// <summary>
-    /// Génère une grille de routes à l'intérieur d'un périmètre QUELCONQUE (polygone
-    /// convexe, concave, tourné, irrégulier) défini par les nœuds sélectionnés dans
-    /// leur ordre de clic.
+    /// Generates a road grid inside an ARBITRARY perimeter (convex, concave, rotated or irregular
+    /// polygon) defined by the selected nodes in click order.
     ///
-    /// Algorithme :
-    ///  1. Le polygone est fermé à partir des points dans l'ordre de sélection.
-    ///  2. Un repère local (u, v) est construit, orienté sur l'arête la plus longue
-    ///     du polygone : la grille suit ainsi la "rue principale" du périmètre,
-    ///     pas les axes du monde. AngleOffsetDegrees ajoute une rotation
-    ///     supplémentaire à cette orientation (u et v tournent ensemble).
-    ///  3. Des lignes de grille u = const et v = const sont générées dans la
-    ///     bounding box locale, selon le mode d'espacement.
-    ///  4. Chaque ligne est découpée aux frontières du polygone par la règle
-    ///     pair-impair (even-odd) : les intersections avec les arêtes sont triées
-    ///     le long de la ligne et appariées deux à deux. Un polygone concave
-    ///     produit donc naturellement plusieurs sous-segments par ligne.
-    ///  5. Les croisements internes entre lignes u et lignes v sont pré-calculés,
-    ///     et chaque ligne est émise en sous-segments entre croisements consécutifs.
-    ///     Le point monde d'un croisement est calculé UNE seule fois et partagé
-    ///     (mêmes floats) par les extrémités des sous-segments des deux lignes,
-    ///     pour que le jeu fusionne ces extrémités en un seul nœud d'intersection.
-    ///  6. Les segments trop courts pour être une route sont éliminés.
+    /// Algorithm:
+    ///  1. The polygon is closed from the points in selection order.
+    ///  2. A local frame (u, v) is built, aligned with the polygon's longest edge,
+    ///     so the grid follows the perimeter's "main street" rather than the world
+    ///     axes. AngleOffsetDegrees adds an extra rotation (u and v turn together).
+    ///  3. Grid lines u = const and v = const are generated within the local
+    ///     bounding box, according to the spacing mode.
+    ///  4. Each line is clipped to the polygon with the even-odd rule: intersections
+    ///     with the edges are sorted along the line and paired up. A concave polygon
+    ///     therefore naturally yields several sub-segments per line.
+    ///  5. Interior crossings between u and v lines are precomputed, and each line
+    ///     is emitted as sub-segments between consecutive crossings. A crossing's
+    ///     world point is computed ONCE and shared (same floats) by the sub-segment
+    ///     ends of both lines, so the game merges those ends into one intersection node.
+    ///  6. Segments too short to be a road are discarded.
     ///
-    /// Cas particulier : avec exactement 2 nœuds, ils sont traités comme les coins
-    /// opposés d'un rectangle aligné sur les axes (comportement simple et prévisible).
+    /// Special case: with exactly 2 nodes, they are treated as opposite corners of an axis-aligned
+    /// rectangle (simple, predictable behavior).
     /// </summary>
     public static partial class GridGenerator
     {
-        /// <summary>Longueur minimale d'un segment généré, en mètres (en dessous, pas une route viable).</summary>
+        /// <summary>Minimum length of a generated segment, in meters (below this it is not a viable road).</summary>
         public const float MinSegmentLength = 8f;
 
         /// <summary>
-        /// Distance minimale (m) entre deux nœuds générés distincts (croisements entre
-        /// eux). En dessous, le croisement le plus tardif (ordre de balayage colonnes puis
-        /// rangées) est FUSIONNÉ avec le croisement déjà accepté le plus proche (comme le
-        /// "Super nó" de NetworkTools — voir BuildSubSegments) : les deux lignes qui s'y
-        /// croisent rejoignent ce nœud existant au lieu de créer une intersection quasi-
-        /// coïncidente séparée. Ce n'est plus une perte de nœud, seulement des lignes de
-        /// grille reconnectées à un nœud voisin déjà là. Les culs-de-sac trop proches de leur
-        /// collectrice cible restent purement omis (EmitLine, motif distinct — pas de nœud
-        /// existant à fusionner à cet endroit).
+        /// Minimum distance (m) between two distinct generated nodes (crossings). Below it, the later
+        /// crossing (scan order: columns, then rows) is MERGED into the nearest already-accepted
+        /// crossing (like NetworkTools' "super node", see BuildSubSegments): the two lines crossing
+        /// there join that existing node instead of creating a separate, nearly coincident
+        /// intersection. No node is lost; grid lines are just reconnected to a neighboring node that is
+        /// already there. Cul-de-sacs too close to their target collector are still simply dropped
+        /// (EmitLine, a different case: there is no existing node to merge into at that spot).
         /// </summary>
         public const float MinNodeDistance = 8f;
 
         private const float Epsilon = 1e-4f;
 
         /// <summary>
-        /// Tolérance (m) pour rattacher un croisement à un intervalle clippé : un croisement
-        /// à moins de cette distance d'une extrémité d'intervalle est fusionné avec elle
-        /// (jonction en T au bord du polygone) au lieu de créer un micro-segment.
+        /// Tolerance (m) for snapping a crossing to a clipped interval: a crossing within this distance
+        /// of an interval end is merged with it (T-junction at the polygon edge) instead of creating a
+        /// micro-segment.
         /// </summary>
         private const float JoinTolerance = 0.05f;
 
         /// <summary>
-        /// Index spatial en grille de baldes (côté = MinNodeDistance) pour retrouver le point
-        /// déjà accepté le plus proche d'une position, SANS balayer toute la liste — retour
-        /// utilisateur (forum du mod) : avec un petit espacement sur une grande zone, le nombre
-        /// de croisements explose, et BuildSubSegments balayait alors TOUS les points déjà
-        /// acceptés à CHAQUE nouveau croisement (dans une double boucle déjà O(lignes u × lignes
-        /// v)) — un vrai O(n²) dans une fonction déjà O(n²), donc O(n⁴) en pratique, rejoué à
-        /// CHAQUE FRAME pendant l'aperçu (voir GridRoadToolSystem.OnUpdate, "chaque frame, comme
-        /// le NetTool"). Résultat vécu : jeu qui se fige avec un espacement faible sur un grand
-        /// périmètre. Seules les baldes voisines (3×3) sont regardées : avec une taille de balde
-        /// = MinNodeDistance, aucun point à moins de MinNodeDistance ne peut se trouver plus
-        /// loin qu'une balde voisine directe.
+        /// Spatial bucket-grid index (cell size = MinNodeDistance) for finding the nearest
+        /// already-accepted point WITHOUT scanning the whole list. User feedback (mod forum): with
+        /// small spacing over a large area the number of crossings explodes, and BuildSubSegments used
+        /// to scan ALL accepted points for EVERY new crossing (inside a double loop that is already O(u
+        /// lines × v lines)): a true O(n²) inside an O(n²) function, so O(n⁴) in practice, re-run on
+        /// EVERY preview frame in the original mod. Result: the game froze with small spacing on a
+        /// large perimeter. Only the neighboring 3×3 buckets are checked: with bucket size =
+        /// MinNodeDistance, no point closer than MinNodeDistance can lie beyond a direct neighbor
+        /// bucket.
         /// </summary>
         private sealed class SpatialPointIndex
         {
@@ -371,7 +361,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 list.Add(point);
             }
 
-            /// <summary>Point accepté le plus proche à moins de maxDistance, s'il y en a un.</summary>
+            /// <summary>Nearest accepted point within maxDistance, if there is one.</summary>
             public bool TryFindNearest(float3 point, float maxDistance, out float3 nearest)
             {
                 (int cx, int cy) = CellOf(point.xz);
@@ -400,31 +390,30 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Ligne de grille clippée : sa position sur l'axe transverse et ses intervalles intérieurs.</summary>
+        /// <summary>Clipped grid line: its position on the transverse axis and its interior intervals.</summary>
         private struct GridLine
         {
             public float Position;
-            /// <summary>Intervalles [x, y] le long de la ligne, triés, intérieurs au polygone.</summary>
+            /// <summary>Sorted [x, y] intervals along the line that lie inside the polygon.</summary>
             public List<float2> Intervals;
         }
 
-        /// <summary>Surcharge pratique quand ni le diagnostic d'omission ni la rotonde ne sont nécessaires (ex. tests existants).</summary>
+        /// <summary>Convenience overload when neither the omission diagnostic nor the roundabout is needed (e.g. existing tests).</summary>
         public static List<RoadSegmentDef> GenerateGrid(IReadOnlyList<float3> selectedNodePositions, GridParameters parameters)
             => GenerateGrid(selectedNodePositions, parameters, out _, out _);
 
-        /// <summary>Surcharge pratique quand seul le diagnostic d'omission est nécessaire (ex. tests existants).</summary>
+        /// <summary>Convenience overload when only the omission diagnostic is needed (e.g. existing tests).</summary>
         public static List<RoadSegmentDef> GenerateGrid(IReadOnlyList<float3> selectedNodePositions,
             GridParameters parameters, out int omittedNodeCount)
             => GenerateGrid(selectedNodePositions, parameters, out omittedNodeCount, out _);
 
         /// <summary>
-        /// Génère la grille. omittedNodeCount compte, agrégés : les croisements FUSIONNÉS avec
-        /// un nœud généré déjà accepté trop proche (MinNodeDistance — voir BuildSubSegments,
-        /// le nœud lui-même est conservé, seulement fusionné) et les stubs de cul-de-sac
-        /// purement omis faute de nœud existant à fusionner (EmitLine) — 0 si aucun des deux.
-        /// roundabout : voir RoundaboutInfo/ComputeAvenueRoundabout (HasRoundabout=false si les
-        /// deux axes avenue ne sont pas actifs simultanément, ou si leur croisement tombe hors
-        /// du polygone).
+        /// Generates the grid. omittedNodeCount counts, combined: crossings MERGED into an
+        /// already-accepted generated node that was too close (MinNodeDistance, see BuildSubSegments;
+        /// the node itself is kept, only merged) and cul-de-sac stubs simply dropped because there was
+        /// no existing node to merge into (EmitLine); 0 if neither. roundabout: see
+        /// RoundaboutInfo/ComputeAvenueRoundabout (HasRoundabout=false unless both avenue axes are
+        /// active at once, or if their crossing falls outside the polygon).
         /// </summary>
         public static List<RoadSegmentDef> GenerateGrid(IReadOnlyList<float3> selectedNodePositions,
             GridParameters parameters, out int omittedNodeCount, out RoundaboutInfo roundabout)
@@ -436,18 +425,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
             roundabout = default;
             omittedNodeCount = 0;
             if (selectedNodePositions == null || selectedNodePositions.Count < 2)
-                throw new ArgumentException("Il faut au moins 2 nœuds sélectionnés.");
+                throw new ArgumentException("At least 2 selected nodes are required.");
 
-            // Hauteur moyenne ; sera reprojetée sur le terrain à la pose.
+            // Average height; reprojected onto the terrain at placement.
             float y = 0f;
             foreach (var p in selectedNodePositions) y += p.y;
             y /= selectedNodePositions.Count;
 
-            // Projection 2D (X, Z)
+            // 2D projection (X, Z)
             var pts = new List<float2>(selectedNodePositions.Count);
             foreach (var p in selectedNodePositions) pts.Add(new float2(p.x, p.z));
 
-            // 2 nœuds : rectangle aligné sur les axes, coins opposés.
+            // 2 nodes: axis-aligned rectangle, opposite corners.
             if (pts.Count == 2)
             {
                 float2 mn = math.min(pts[0], pts[1]);
@@ -457,7 +446,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             var polygon = RemoveConsecutiveDuplicates(pts);
             if (polygon.Count < 3 || math.abs(SignedArea(polygon)) < 1f)
-                return new List<RoadSegmentDef>(); // polygone dégénéré (points alignés/confondus)
+                return new List<RoadSegmentDef>(); // degenerate polygon (collinear/coincident points)
 
             if (parameters.MixedMode)
             {
@@ -476,11 +465,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return GenerateContour(polygon, y, parameters);
             }
 
-            // Repère local orienté sur l'arête la plus longue, plus l'angle réglable.
+            // Local frame aligned with the longest edge, plus the adjustable angle.
             (float2 origin, float2 uDir, float2 vDir) = BuildLocalFrame(polygon, parameters.AngleOffsetDegrees,
                 parameters.AlignToTerrain ? parameters.HeightAt : null);
 
-            // Polygone en coordonnées locales + bounding box locale.
+            // Polygon in local coordinates + local bounding box.
             var local = new List<float2>(polygon.Count);
             float2 lmin = new float2(float.MaxValue), lmax = new float2(float.MinValue);
             foreach (var p in polygon)
@@ -491,7 +480,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 lmax = math.max(lmax, lp);
             }
 
-            // Positions des lignes de grille dans le repère local.
+            // Grid line positions in the local frame.
             List<float> uPositions, vPositions;
             if (parameters.Mode == SpacingMode.FitToArea)
             {
@@ -504,7 +493,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 vPositions = DistributeFixed(lmin.y, lmax.y, parameters.SpacingMeters);
             }
 
-            // Clipping de chaque ligne au polygone (intervalles intérieurs).
+            // Clip each line to the polygon (interior intervals).
             var uLines = new List<GridLine>(uPositions.Count);
             foreach (var u in uPositions)
                 uLines.Add(new GridLine { Position = u, Intervals = ClipLineToPolygon(local, axisIsU: true, position: u) });
@@ -513,31 +502,29 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 vLines.Add(new GridLine { Position = v, Intervals = ClipLineToPolygon(local, axisIsU: false, position: v) });
 
             List<RoadSegmentDef> grid = BuildSubSegments(uLines, vLines, origin, uDir, vDir, y, parameters, out omittedNodeCount, out roundabout);
-            // Rues qui abordent le périmètre presque parallèles à lui (angle aigu), ou bout très court.
+            // Streets that meet the perimeter nearly parallel to it (acute angle), or very short ends.
             CleanPerimeterEnds(grid, selectedNodePositions, s => !s.IsCulDeSacEnd);
             return WithPedestrianLinks(grid, polygon, y, parameters);
         }
 
         // ------------------------------------------------------------------
-        // Pré-découpage aux croisements internes
+        // Pre-splitting at interior crossings
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Calcule les croisements entre lignes u et lignes v (en coordonnées locales, la
-        /// ligne u = x croise la ligne v = z au point (x, z), retenu seulement s'il est dans
-        /// les intervalles clippés DES DEUX lignes), puis émet chaque ligne en sous-segments
-        /// entre croisements consécutifs. Le float3 monde de chaque croisement est calculé
-        /// une seule fois et réutilisé tel quel par les deux lignes : les extrémités qui se
-        /// rejoignent sont bit-à-bit identiques, condition de la fusion en un seul nœud.
+        /// Computes the crossings between u and v lines (in local coordinates, line u = x crosses line
+        /// v = z at (x, z), kept only if it lies within the clipped intervals of BOTH lines), then
+        /// emits each line as sub-segments between consecutive crossings. Each crossing's world float3
+        /// is computed once and reused as is by both lines: the meeting ends are bit-identical, which
+        /// is required for them to merge into a single node.
         ///
-        /// Un nouveau croisement à moins de MinNodeDistance d'un croisement DÉJÀ accepté
-        /// (nécessairement sur une paire de lignes différente : deux croisements sur la
-        /// même paire seraient le même point) est FUSIONNÉ avec ce point existant le plus
-        /// proche (comme le "Super nó" de NetworkTools) plutôt que purement omis — ses deux
-        /// lignes (u et v) rejoignent le nœud déjà accepté, jamais fusionné en retour vers un
-        /// barycentre (sa position reste fixe, les splits déjà émis pour lui restent valides
-        /// tels quels). Balayage colonnes puis rangées, donc déterministe : c'est toujours le
-        /// croisement le plus tardif qui cède sa position au profit du premier accepté.
+        /// A new crossing within MinNodeDistance of an ALREADY accepted crossing (necessarily on a
+        /// different line pair: two crossings on the same pair would be the same point) is MERGED into
+        /// that nearest existing point (like NetworkTools' "super node") rather than simply dropped.
+        /// Both its lines (u and v) join the already-accepted node, which is never moved toward a
+        /// barycenter (its position stays fixed, so splits already emitted for it remain valid as they
+        /// are). The scan goes columns then rows, so it is deterministic: the later crossing always
+        /// yields to the first accepted one.
         /// </summary>
         private static List<RoadSegmentDef> BuildSubSegments(List<GridLine> uLines, List<GridLine> vLines,
             float2 origin, float2 uDir, float2 vDir, float y, GridParameters parameters, out int omittedNodeCount,
@@ -550,12 +537,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
             for (int i = 0; i < vLines.Count; i++) vSplits[i] = new List<(float, float3)>();
 
             var acceptedWorldPoints = new SpatialPointIndex(MinNodeDistance);
-            // Compte les croisements de grille FUSIONNÉS avec un nœud déjà accepté (ci-dessous)
-            // ET les vrais culs-de-sac omis plus loin (EmitLine, motif distinct — un stub
-            // presque à distance de sa collectrice est purement supprimé, pas fusionné : rien
-            // d'existant à fusionner à cet endroit précis). Un seul compteur agrégé pour les
-            // deux, comme avant ce chantier — seule la première catégorie est désormais une
-            // vraie fusion (nœud conservé, segments reconnectés) plutôt qu'une perte.
+            // Counts grid crossings MERGED into an already-accepted node (below) AND real cul-de-sacs
+            // dropped later (EmitLine, a different case: a stub ending almost on its collector is
+            // simply removed, not merged, since there is nothing existing to merge into at that exact
+            // spot). A single combined counter for both, as before merging was introduced; only the
+            // first category is now a real merge (node kept, segments reconnected) rather than a loss.
             omittedNodeCount = 0;
 
             for (int iu = 0; iu < uLines.Count; iu++)
@@ -569,14 +555,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
                     float3 world = ToWorld(origin, uDir, vDir, u, v, y);
 
-                    // Fusionne avec le point DÉJÀ accepté le plus proche (comme le "Super nó" de
-                    // NetworkTools) plutôt que d'omettre purement ce croisement — les deux lignes
-                    // (u et v) de CE croisement rejoignent alors ce point existant au lieu de créer
-                    // un nœud quasi-coïncident séparé. Le point déjà accepté garde sa position
-                    // FIXE (jamais déplacée vers un barycentre) : les entrées de split déjà
-                    // émises pour de précédents croisements le référencent telles quelles, les
-                    // recalculer rétroactivement ajouterait de la complexité sans bénéfice
-                    // visible (l'écart est par définition < MinNodeDistance).
+                    // Merge into the nearest ALREADY accepted point (like NetworkTools' "super node")
+                    // instead of dropping this crossing: both lines (u and v) of THIS crossing then
+                    // join that existing point instead of creating a separate, nearly coincident node.
+                    // The accepted point keeps a FIXED position (never moved to a barycenter): split
+                    // entries already emitted for earlier crossings reference it as is, and recomputing
+                    // them retroactively would add complexity for no visible benefit (the offset is by
+                    // definition < MinNodeDistance).
                     bool merged = acceptedWorldPoints.TryFindNearest(world, MinNodeDistance, out float3 mergeTarget);
 
                     if (merged)
@@ -584,7 +569,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         omittedNodeCount++;
                         uSplits[iu].Add((v, mergeTarget));
                         vSplits[iv].Add((u, mergeTarget));
-                        continue; // ne devient pas lui-même un nouveau point accepté distinct
+                        continue; // does not itself become a new distinct accepted point
                     }
 
                     acceptedWorldPoints.Add(world);
@@ -594,10 +579,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             var segments = new List<RoadSegmentDef>();
-            // Culs-de-sac : EmitLine décide, ligne par ligne, si le mode s'applique via
-            // AppliesToAxis(parameters.CulDeSacAxis, axisIsU) — colonnes, rangées, ou les deux.
-            // isAvenueLine : la ligne d'index i correspond-elle à l'avenue choisie sur cet axe —
-            // voir EmitLine (jamais de cul-de-sac sur une avenue, prefab dédié côté ECS).
+            // Cul-de-sacs: EmitLine decides line by line whether the mode applies via
+            // AppliesToAxis(parameters.CulDeSacAxis, axisIsU): columns, rows, or both. isAvenueLine:
+            // whether line i is the chosen avenue on this axis; see EmitLine (never a cul-de-sac on an
+            // avenue, dedicated prefab in the game layer).
             for (int i = 0; i < uLines.Count; i++)
             {
                 bool isAvenueLine = parameters.AvenueColumnEnabled && i == parameters.AvenueColumnIndex;
@@ -609,11 +594,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 EmitLine(segments, vLines[i], vSplits[i], axisIsU: false, origin, uDir, vDir, y, parameters, ref omittedNodeCount, isAvenueLine);
             }
 
-            // Rotonde à l'intersection de deux avenues (colonne ET rangée activées) — voir
-            // ComputeAvenueRoundabout : les bras d'avenue traversent normalement (croisement en
-            // +), un asset décoratif complet est posé par-dessus côté ECS. Sans effet si une
-            // seule avenue est activée (une avenue seule traverse simplement tout le périmètre,
-            // comme une collectrice normale).
+            // Roundabout at the crossing of two avenues (column AND row enabled), see
+            // ComputeAvenueRoundabout: the avenue arms cross straight through (+ intersection) and the
+            // game layer places a complete decorative asset on top. No effect if only one avenue is
+            // enabled (a single avenue just runs across the whole perimeter like a normal collector).
             if (parameters.AvenueColumnEnabled && parameters.AvenueRowEnabled)
             {
                 roundabout = ComputeAvenueRoundabout(uLines, vLines, origin, uDir, vDir, y, parameters);
@@ -622,7 +606,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return segments;
         }
 
-        /// <summary>Vrai si t appartient à l'un des intervalles (tolérance JoinTolerance aux bords).</summary>
+        /// <summary>True if t lies in one of the intervals (JoinTolerance at the ends).</summary>
         private static bool ContainsPosition(List<float2> intervals, float t)
         {
             foreach (var interval in intervals)
@@ -634,28 +618,25 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Émet les sous-segments d'une ligne : pour chaque intervalle clippé, la chaîne
-        /// [extrémité, croisements internes triés, extrémité] est parcourue par paires
-        /// consécutives. Un croisement à moins de JoinTolerance d'une extrémité de
-        /// l'intervalle remplace cette extrémité (jonction en T : le point monde partagé
-        /// du croisement est réutilisé). Les tronçons &lt; MinSegmentLength sont éliminés.
+        /// Emits a line's sub-segments: for each clipped interval, the chain [end, sorted interior
+        /// crossings, end] is walked in consecutive pairs. A crossing within JoinTolerance of an
+        /// interval end replaces that end (T-junction: the crossing's shared world point is reused).
+        /// Pieces &lt; MinSegmentLength are discarded.
         ///
-        /// Mode culs-de-sac (parameters.CulDeSacMode, sur l'axe ou les deux axes désignés par
-        /// CulDeSacAxis) : chaque tronçon entre deux points consécutifs de la chaîne ("bloc")
-        /// est, selon CulDeSacRatio (motif déterministe "une fois sur N"), soit laissé
-        /// traversant comme d'habitude, soit remplacé par une impasse partant d'une seule
-        /// extrémité du bloc (alternée haut/bas si Staggered) et s'arrêtant à CulDeSacDepth de
-        /// sa longueur. Un bloc dont
-        /// l'extrémité de départ choisie n'est PAS une vraie collectrice (pur point de
-        /// clipping au bord du polygone, jamais une entrée de `splits`) est supprimé plutôt
-        /// que de créer une impasse suspendue dans le vide.
+        /// Cul-de-sac mode (parameters.CulDeSacMode, on the axis or axes selected by CulDeSacAxis):
+        /// each piece between two consecutive chain points ("block") is, according to CulDeSacRatio
+        /// (deterministic "one in N" pattern), either left as a through street or replaced by a
+        /// cul-de-sac starting from one end of the block only (alternating top/bottom if Staggered) and
+        /// stopping at CulDeSacDepth of its length. A block whose chosen start end is NOT a real
+        /// collector (just a clipping point on the polygon edge, never an entry in `splits`) is dropped
+        /// rather than creating a cul-de-sac hanging in the void.
         /// </summary>
         private static void EmitLine(List<RoadSegmentDef> segments, GridLine line,
             List<(float t, float3 world)> splits, bool axisIsU, float2 origin, float2 uDir, float2 vDir, float y,
             GridParameters parameters, ref int omittedNodeCount, bool isAvenueLine = false)
         {
             splits.Sort((a, b) => a.t.CompareTo(b.t));
-            // Une avenue est toujours traversante, jamais un cul-de-sac (prefab dédié côté ECS).
+            // An avenue always runs through, never a cul-de-sac (dedicated prefab in the game layer).
             bool culDeSac = parameters.CulDeSacMode && AppliesToAxis(parameters.CulDeSacAxis, axisIsU) && !isAvenueLine;
             int blockIndex = 0;
 
@@ -666,15 +647,14 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float3 worldA = InterpolateAlongLine(line, axisIsU, tA, origin, uDir, vDir, y);
                 float3 worldB = InterpolateAlongLine(line, axisIsU, tB, origin, uDir, vDir, y);
 
-                // isCollector : vrai seulement si ce point de chaîne provient d'un
-                // croisement réel (splits), faux pour une pure extrémité de clipping
-                // au bord du polygone (aucune route existante à cet endroit).
+                // isCollector: true only if this chain point comes from a real crossing (splits), false
+                // for a bare clipping end on the polygon edge (no existing road there).
                 var chain = new List<(float t, float3 world, bool isCollector)> { (tA, worldA, false) };
                 bool lastIsCollector = false;
                 foreach (var split in splits)
                 {
                     if (split.t < tA - JoinTolerance || split.t > tB + JoinTolerance)
-                        continue; // croisement d'un autre intervalle de la même ligne
+                        continue; // crossing on another interval of the same line
                     if (split.t <= tA + JoinTolerance)
                         chain[0] = (tA, split.world, true);
                     else if (split.t >= tB - JoinTolerance)
@@ -689,12 +669,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
                 for (int i = 0; i + 1 < chain.Count; i++)
                 {
-                    // Distance RÉELLE entre les points monde, pas l'écart en t : un point fusionné
-                    // (voir BuildSubSegments) garde son t d'origine mais son world peut être celui
-                    // d'un nœud voisin déjà accepté — les deux ne sont plus forcément proportionnels
-                    // comme avant la fusion (world venait alors toujours directement de t).
+                    // ACTUAL distance between the world points, not the t gap: a merged point (see
+                    // BuildSubSegments) keeps its original t but its world position may be that of a
+                    // neighboring accepted node, so the two are no longer necessarily proportional as
+                    // they were before merging (world always came straight from t).
                     if (math.distance(chain[i].world.xz, chain[i + 1].world.xz) < MinSegmentLength)
-                        continue; // bloc trop court
+                        continue; // block too short
 
                     if (!culDeSac)
                     {
@@ -710,22 +690,19 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Si la colonne ET la rangée avenue sont actives simultanément, signale une rotonde à
-        /// leur croisement — même principe que le cercle de retournement d'un cul-de-sac (voir
-        /// GridRoadToolSystem.TryResolveCulDeSacCapPrefab) : les bras d'avenue traversent
-        /// normalement (croisement en +, aucun rognage), et un asset décoratif complet
-        /// ("&lt;Taille&gt;Roundabout01", déjà une rotonde entière avec anneau pavé et
-        /// marquages — pas un simple îlot central) est posé par-dessus côté ECS. Aucun segment
-        /// de route en arc n'est plus généré ici : ne renvoie que centre/rayon (pour choisir la
-        /// taille de l'asset), via RoundaboutInfo. Sans effet si le croisement tombe hors du
-        /// polygone à cet endroit (ContainsPosition) — les index eux-mêmes sont déjà garantis
-        /// valides par l'appelant (BuildSubSegments).
+        /// If the avenue column AND row are both active, reports a roundabout at their crossing; same
+        /// idea as a cul-de-sac's turning circle: the avenue arms cross straight through (+
+        /// intersection, no trimming) and the game layer places a complete decorative asset on top
+        /// ("&lt;Size&gt;Roundabout01", already a full roundabout with paved ring and markings, not
+        /// just a center island). No arc road segments are generated here any more: only center/radius
+        /// are returned (to pick the asset size), via RoundaboutInfo. No effect if the crossing falls
+        /// outside the polygon at that point (ContainsPosition) or if an avenue index is out of range.
         /// </summary>
         private static RoundaboutInfo ComputeAvenueRoundabout(List<GridLine> uLines,
             List<GridLine> vLines, float2 origin, float2 uDir, float2 vDir, float y, GridParameters parameters)
         {
-            // Index hors plage (ex. Columns/Rows réduit après avoir choisi un index avenue plus
-            // grand) : silencieusement sans effet, comme AvenueColumnIndex/AvenueRowIndex ailleurs.
+            // Out-of-range index (e.g. Columns/Rows reduced after picking a larger avenue index):
+            // silently no effect, like AvenueColumnIndex/AvenueRowIndex elsewhere.
             if (parameters.AvenueColumnIndex < 0 || parameters.AvenueColumnIndex >= uLines.Count) return default;
             if (parameters.AvenueRowIndex < 0 || parameters.AvenueRowIndex >= vLines.Count) return default;
 
@@ -742,13 +719,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Un seul bloc en mode culs-de-sac : décide (motif déterministe CulDeSacRatio)
-        /// s'il reste traversant ou devient une impasse, choisit l'extrémité de départ
-        /// (alternance Staggered), et émet l'impasse si son départ est une vraie
-        /// collectrice — sinon le bloc est simplement omis. Une impasse dont le bout
-        /// libre tombe à moins de MinNodeDistance de la collectrice visée (profondeur
-        /// proche de 1 sur un bloc court) est elle aussi omise : ce serait un nœud
-        /// quasiment confondu avec une intersection déjà existante.
+        /// A single block in cul-de-sac mode: decides (deterministic CulDeSacRatio pattern) whether it
+        /// stays a through street or becomes a cul-de-sac, picks the start end (Staggered alternation),
+        /// and emits the cul-de-sac if its start is a real collector; otherwise the block is just
+        /// dropped. A cul-de-sac whose free end falls within MinNodeDistance of the target collector
+        /// (depth close to 1 on a short block) is dropped too: it would be a node nearly coincident
+        /// with an existing intersection.
         /// </summary>
         private static void EmitCulDeSacBlock(List<RoadSegmentDef> segments, GridLine line,
             (float t, float3 world, bool isCollector) a, (float t, float3 world, bool isCollector) b,
@@ -757,44 +733,44 @@ namespace Placemaker.Core.Layers.Roads.Generators
         {
             if (!IsCulDeSacBlock(blockIndex, parameters.CulDeSacRatio))
             {
-                // Hors motif : bloc traversant normal, comme sans le mode.
+                // Outside the pattern: normal through block, as without the mode.
                 segments.Add(new RoadSegmentDef(a.world, b.world, isHorizontal: !axisIsU));
                 return;
             }
 
-            // Alternance haut/bas : les blocs pairs partent de a, les impairs de b.
+            // Top/bottom alternation: even blocks start from a, odd ones from b.
             bool startFromA = !parameters.Staggered || blockIndex % 2 == 0;
             var start = startFromA ? a : b;
             var end = startFromA ? b : a;
 
             if (!start.isCollector)
             {
-                return; // départ hors polygone/collectrice réelle : impasse supprimée
+                return; // start is not a real collector (outside the polygon): cul-de-sac dropped
             }
 
             float depth = math.clamp(parameters.CulDeSacDepth, 0.5f, 0.8f);
             float stubT = start.t + (end.t - start.t) * depth;
             float3 stubWorld = InterpolateAlongLine(line, axisIsU, stubT, origin, uDir, vDir, y);
 
-            // Distance RÉELLE à start.world, pas l'écart en t : si start est un point fusionné
-            // (voir BuildSubSegments), start.world peut être décalé de son start.t d'origine —
-            // stubWorld, lui, vient directement de stubT (jamais affecté par une fusion), donc
-            // les deux ne sont plus forcément proportionnels comme avant la fusion.
+            // ACTUAL distance to start.world, not the t gap: if start is a merged point (see
+            // BuildSubSegments), start.world may be offset from its original start.t, while stubWorld
+            // comes straight from stubT (never affected by merging), so the two are no longer
+            // necessarily proportional.
             if (math.distance(stubWorld.xz, start.world.xz) < MinSegmentLength)
             {
-                return; // impasse trop courte pour être une route viable
+                return; // cul-de-sac too short to be a viable road
             }
 
             if (math.distance(stubWorld.xz, end.world.xz) < MinNodeDistance)
             {
                 omittedNodeCount++;
-                return; // le bout de l'impasse serait quasi confondu avec la collectrice visée
+                return; // the cul-de-sac end would nearly coincide with the target collector
             }
 
             segments.Add(new RoadSegmentDef(start.world, stubWorld, isHorizontal: !axisIsU, isCulDeSacEnd: true));
         }
 
-        /// <summary>Vrai si CulDeSacAxis autorise ce mode sur une ligne de cet axisIsU.</summary>
+        /// <summary>True if CulDeSacAxis allows the mode on a line of this axisIsU.</summary>
         private static bool AppliesToAxis(CulDeSacAxis axis, bool axisIsU) => axis switch
         {
             CulDeSacAxis.Columns => axisIsU,
@@ -803,7 +779,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             _ => axisIsU
         };
 
-        /// <summary>Motif déterministe "une fois sur N" : N = round(100/ratio), jamais aléatoire.</summary>
+        /// <summary>Deterministic "one in N" pattern: N = round(100/ratio), never random.</summary>
         private static bool IsCulDeSacBlock(int blockIndex, float ratioPercent)
         {
             if (ratioPercent <= 0f) return false;
@@ -812,7 +788,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return blockIndex % n == 0;
         }
 
-        /// <summary>Point monde à la coordonnée t le long d'une ligne de grille (u=const si axisIsU, sinon v=const).</summary>
+        /// <summary>World point at coordinate t along a grid line (u=const if axisIsU, else v=const).</summary>
         private static float3 InterpolateAlongLine(GridLine line, bool axisIsU, float t,
             float2 origin, float2 uDir, float2 vDir, float y)
         {
@@ -821,7 +797,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 : ToWorld(origin, uDir, vDir, t, line.Position, y);
         }
 
-        /// <summary>Convertit un point local (u, v) en point monde (X, y, Z).</summary>
+        /// <summary>Converts a local point (u, v) to a world point (X, y, Z).</summary>
         private static float3 ToWorld(float2 origin, float2 uDir, float2 vDir, float u, float v, float y)
         {
             float2 world = origin + u * uDir + v * vDir;
@@ -829,13 +805,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Repère local
+        // Local frame
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Construit le repère (origine, axe u, axe v) : u suit l'arête la plus
-        /// longue du polygone puis subit une rotation additionnelle d'angleOffsetDegrees
-        /// (sens trigonométrique), v lui reste perpendiculaire.
+        /// Adds pedestrian links (AddPedestrianLinks) when GridParameters.PedestrianLinks is on and
+        /// there are segments to link.
         /// </summary>
         private static List<RoadSegmentDef> WithPedestrianLinks(List<RoadSegmentDef> segments, List<float2> polygon, float y, GridParameters parameters)
         {
@@ -847,9 +822,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Direction dominante des courbes de niveau dans le polygone : axe principal du tenseur des
-        /// pentes (somme de g·gᵀ, insensible au signe — sur une colline, les pentes opposées ne
-        /// s'annulent pas), tourné de 90°. Faux si la zone est presque plate (pente moyenne &lt; 1 %).
+        /// Dominant contour direction in the polygon: principal axis of the slope tensor (sum of g·gᵀ,
+        /// sign-insensitive, so opposite slopes on a hill do not cancel out), rotated by 90°. False if
+        /// the area is nearly flat (mean slope &lt; 1 %).
         /// </summary>
         internal static bool TryContourDirection(List<float2> polygon, Func<float2, float> heightAt, out float2 direction)
         {
@@ -884,10 +859,15 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
             float gradientAngle = 0.5f * math.atan2(2f * sxy, sxx - syy);
-            direction = new float2(-math.sin(gradientAngle), math.cos(gradientAngle)); // perpendiculaire à la pente
+            direction = new float2(-math.sin(gradientAngle), math.cos(gradientAngle)); // perpendicular to the slope
             return true;
         }
 
+        /// <summary>
+        /// Builds the frame (origin, u axis, v axis): u follows the polygon's longest edge (or, with
+        /// heightAt, the dominant contour direction, see TryContourDirection), then gets an extra
+        /// counter-clockwise rotation of angleOffsetDegrees; v stays perpendicular to it.
+        /// </summary>
         private static (float2 origin, float2 uDir, float2 vDir) BuildLocalFrame(List<float2> polygon, float angleOffsetDegrees,
             Func<float2, float> heightAt = null)
         {
@@ -921,24 +901,23 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 uDir = new float2(uDir.x * cosA - uDir.y * sinA, uDir.x * sinA + uDir.y * cosA);
             }
 
-            float2 vDir = new float2(-uDir.y, uDir.x); // perpendiculaire (rotation +90°)
+            float2 vDir = new float2(-uDir.y, uDir.x); // perpendicular (rotated +90°)
             return (origin2, uDir, vDir);
         }
 
         // ------------------------------------------------------------------
-        // Clipping pair-impair d'une ligne de grille dans le polygone
+        // Even-odd clipping of a grid line to the polygon
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Découpe la droite (u = position) ou (v = position) aux frontières du
-        /// polygone (en coordonnées locales). Retourne les intervalles INTÉRIEURS
-        /// au polygone : chaque float2 est [début, fin] le long de la droite
-        /// (coordonnée v si axisIsU, u sinon), triés croissants.
+        /// Clips the line (u = position) or (v = position) at the polygon boundaries (in local
+        /// coordinates). Returns the intervals INSIDE the polygon: each float2 is [start, end] along
+        /// the line (v coordinate if axisIsU, otherwise u), sorted ascending.
         /// </summary>
         private static List<float2> ClipLineToPolygon(List<float2> local, bool axisIsU, float position)
         {
-            // Intersections de la droite avec chaque arête, exprimées par la
-            // coordonnée le long de la droite (t = v si axisIsU, sinon t = u).
+            // Intersections of the line with each edge, expressed as the coordinate along the line (t =
+            // v if axisIsU, otherwise t = u).
             var crossings = new List<float>();
 
             for (int i = 0; i < local.Count; i++)
@@ -946,21 +925,21 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float2 p1 = local[i];
                 float2 p2 = local[(i + 1) % local.Count];
 
-                // Coordonnée "transverse" (celle qui doit franchir 'position')
+                // "Transverse" coordinate (the one that must cross 'position')
                 float c1 = axisIsU ? p1.x : p1.y;
                 float c2 = axisIsU ? p2.x : p2.y;
-                // Coordonnée "le long de la droite"
+                // Coordinate "along the line"
                 float t1 = axisIsU ? p1.y : p1.x;
                 float t2 = axisIsU ? p2.y : p2.x;
 
-                // Règle demi-ouverte [c1, c2) : chaque sommet n'est compté qu'une
-                // fois, ce qui garantit un nombre pair d'intersections (robustesse
-                // du ray-casting quand la droite passe pile sur un sommet).
+                // Half-open rule [c1, c2): each vertex is counted only once, which guarantees an even
+                // number of intersections (robust ray casting when the line passes exactly through a
+                // vertex).
                 bool crosses = (c1 <= position && position < c2) || (c2 <= position && position < c1);
                 if (!crosses) continue;
 
                 float denom = c2 - c1;
-                if (math.abs(denom) < Epsilon) continue; // arête parallèle à la droite
+                if (math.abs(denom) < Epsilon) continue; // edge parallel to the line
 
                 float f = (position - c1) / denom;
                 crossings.Add(t1 + f * (t2 - t1));
@@ -969,12 +948,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
             crossings.Sort();
 
             var result = new List<float2>();
-            // Appariement pair-impair : [entrée, sortie], [entrée, sortie], ...
+            // Even-odd pairing: [enter, exit], [enter, exit], ...
             for (int i = 0; i + 1 < crossings.Count; i += 2)
             {
                 float tA = crossings[i];
                 float tB = crossings[i + 1];
-                if (tB - tA < MinSegmentLength) continue; // tronçon trop court
+                if (tB - tA < MinSegmentLength) continue; // piece too short
 
                 result.Add(new float2(tA, tB));
             }
@@ -983,7 +962,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Utilitaires
+        // Utilities
         // ------------------------------------------------------------------
 
         private static List<float2> RemoveConsecutiveDuplicates(List<float2> pts)
@@ -999,7 +978,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Aire signée (shoelace). Sert à détecter les polygones dégénérés.</summary>
+        /// <summary>Signed area (shoelace). Used to detect degenerate polygons.</summary>
         private static float SignedArea(List<float2> polygon)
         {
             float area = 0f;
@@ -1023,18 +1002,16 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Positions internes espacées d'ENVIRON `spacing`, réparties ÉGALEMENT sur tout
-        /// [min, max] (délègue à DistributeEvenly avec le nombre de cellules le plus proche de
-        /// `spacing`) — PAS un pas fixe posé depuis `min` avec le reliquat entier collé sur la
-        /// dernière cellule (ancien comportement). Retour utilisateur en jeu : la dernière
-        /// cellule d'un axe (le reliquat de span % spacing) pouvait finir nettement plus LARGE
-        /// (ou plus étroite) que toutes les autres — "o de cima está mais largo que o de baixo"
-        /// — invisible tant qu'un rétrécissement uniforme des cellules en bord de périmètre
-        /// masquait la différence, mais bien réel dès qu'une cellule en bord de région (pas
-        /// forcément coupée par le périmètre) recevait purement et simplement le reliquat entier.
-        /// Répartir la même petite marge sur TOUTES les cellules d'un coup (via DistributeEvenly)
-        /// donne des cellules de largeur quasi identique partout, au prix d'un espacement réel
-        /// légèrement différent de `spacing` (jamais plus de spacing/2 d'écart).
+        /// Interior positions spaced ABOUT `spacing` apart, distributed EVENLY over all of [min, max]
+        /// (delegates to DistributeEvenly with the cell count closest to `spacing`), NOT a fixed step
+        /// from `min` with the whole remainder dumped on the last cell (old behavior). In-game user
+        /// feedback: the last cell on an axis (the span % spacing remainder) could end up noticeably
+        /// WIDER (or narrower) than all the others ("the top one is wider than the bottom one"). This
+        /// stayed hidden while a uniform shrink of cells at the perimeter edge masked the difference,
+        /// but was real as soon as a cell at the region edge (not necessarily cut by the perimeter)
+        /// simply got the whole remainder. Spreading the same small slack over ALL cells at once (via
+        /// DistributeEvenly) gives nearly identical cell widths everywhere, at the cost of an actual
+        /// spacing slightly different from `spacing` (never more than spacing/2 off).
         /// </summary>
         private static List<float> DistributeFixed(float min, float max, float spacing)
         {
@@ -1046,37 +1023,25 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Échantillonnage de courbe (périmètre courbe, ex. rond-point)
+        // Curve sampling (curved perimeter, e.g. roundabout)
         // ------------------------------------------------------------------
 
-        /// <summary>Distance cible (m) entre deux points échantillonnés le long d'une arête courbe.</summary>
+        /// <summary>Target distance (m) between two sampled points along a curved edge.</summary>
         public const float CurveSampleSpacing = 5f;
 
-        /// <summary>Garde-fou : nombre max de points insérés pour une seule arête (courbe très longue).</summary>
+        /// <summary>Safety cap: max number of points inserted for a single edge (very long curve).</summary>
         public const int MaxCurveSamplesPerEdge = 24;
 
-        /// <summary>
-        /// Échantillonne des points STRICTEMENT INTÉRIEURS (t dans ]0, 1[) le long d'une
-        /// courbe de Bézier cubique (a = départ, b/c = points de contrôle, d = arrivée),
-        /// pour approximer une arête EXISTANTE courbe (rond-point, virage...) dans le
-        /// polygone du périmètre — un polygone construit uniquement à partir des nœuds
-        /// coupe tout droit à travers la courbe (corde), ce qui peut faire déborder la
-        /// grille générée sur la route courbe elle-même. Les extrémités (a et d) ne sont
-        /// PAS incluses : ce sont déjà les positions des nœuds sélectionnés côté appelant.
-        /// Aucune dépendance à Colossal.Mathematics ici (Bezier4x3 est décomposée en 4
-        /// float3 par l'appelant) : Core reste testable sans le SDK du jeu.
-        /// </summary>
-        /// <summary>Virage (degrés) au-delà duquel un sommet du périmètre est un aller-retour parasite, s'il touche une arête courte.</summary>
+        /// <summary>Turn (degrees) beyond which a perimeter vertex is a spurious back-and-forth, if it touches a short edge.</summary>
         public const float BacktrackTurnDegrees = 150f;
-        /// <summary>Longueur (m) d'arête sous laquelle un virage de plus de BacktrackTurnDegrees est traité comme un aller-retour.</summary>
+        /// <summary>Edge length (m) below which a turn sharper than BacktrackTurnDegrees is treated as a back-and-forth.</summary>
         public const float BacktrackMaxLength = 20f;
 
         /// <summary>
-        /// Retire les allers-retours d'un contour fermé : sommets où le tracé repart presque en
-        /// arrière (virage > BacktrackTurnDegrees) sur une arête courte. Vécu sur un vrai
-        /// périmètre : au raccord de deux routes, les derniers échantillons d'une courbe
-        /// dépassaient le nœud suivant de ~3 m, puis le contour revenait en arrière (virage de
-        /// 179°). Un vrai coin de route n'est jamais aussi aigu sur si peu de longueur.
+        /// Removes back-and-forths from a closed outline: vertices where the path nearly doubles back
+        /// (turn > BacktrackTurnDegrees) on a short edge. Seen on a real perimeter: where two roads
+        /// meet, the last samples of a curve overshot the next node by ~3 m, then the outline came back
+        /// (179° turn). A real road corner is never that sharp over such a short length.
         /// </summary>
         public static void RemoveBacktracks(List<float2> loop)
         {
@@ -1103,7 +1068,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Même chose que RemoveBacktracks(List&lt;float2&gt;), sur des positions 3D (plan xz).</summary>
+        /// <summary>Same as RemoveBacktracks(List&lt;float2&gt;), on 3D positions (xz plane).</summary>
         public static void RemoveBacktracks(List<float3> loop)
         {
             var flat = new List<float2>(loop.Count);
@@ -1116,7 +1081,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 return;
             }
-            // Garde les sommets restants dans l'ordre (avec leur hauteur d'origine).
+            // Keep the remaining vertices in order (with their original height).
             var kept = new List<float3>(flat.Count);
             int j = 0;
             foreach (float3 p in loop)
@@ -1131,6 +1096,15 @@ namespace Placemaker.Core.Layers.Roads.Generators
             loop.AddRange(kept);
         }
 
+        /// <summary>
+        /// Samples STRICTLY INTERIOR points (t in ]0, 1[) along a cubic Bézier (a = start, b/c =
+        /// control points, d = end) to approximate an EXISTING curved edge (roundabout, bend...) in the
+        /// perimeter polygon. A polygon built only from the nodes cuts straight across the curve
+        /// (chord), which can make the generated grid spill onto the curved road itself. The ends (a
+        /// and d) are NOT included: they are already the selected node positions on the caller's side.
+        /// No dependency on Colossal.Mathematics here (the caller splits Bezier4x3 into 4 float3s):
+        /// Core stays testable without the game SDK.
+        /// </summary>
         public static List<float3> SampleCurve(float3 a, float3 b, float3 c, float3 d)
         {
             var result = new List<float3>();
@@ -1150,7 +1124,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return u * u * u * a + 3f * u * u * t * b + 3f * u * t * t * c + t * t * t * d;
         }
 
-        /// <summary>Longueur approchée par ligne brisée sur 16 segments — suffisant pour choisir un nombre d'échantillons.</summary>
+        /// <summary>Approximate length as a 16-segment polyline; enough to choose a sample count.</summary>
         private static float CubicBezierLength(float3 a, float3 b, float3 c, float3 d)
         {
             const int segments = 16;
@@ -1166,78 +1140,73 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Mode Loop ("super-quarteirões") : UNE seule grille de collectrices (plus de niveau
-        // Arterial séparé — voir doc de GenerateLoopGrid) délimite des quarteirões réguliers,
-        // chacun rempli d'un laço UNIFORME à coins fixes (EmitSimpleLoopBlock).
+        // Loop mode ("superblocks"): a SINGLE collector grid (no separate Arterial level any more, see
+        // GenerateLoopGrid's doc) bounds regular blocks, each filled with a UNIFORM loop with fixed
+        // corners (EmitSimpleLoopBlock).
         // ------------------------------------------------------------------
 
-        /// <summary>Rayon d'arrondi des coins du laço (voir EmitSimpleLoopBlock), avant réduction pour un petit quarteirão.</summary>
+        /// <summary>Corner rounding radius of the loop (see EmitSimpleLoopBlock), before reduction for a small block.</summary>
         private const float LoopCornerRadiusMax = 20f;
 
         /// <summary>
-        /// Largeur/profondeur minimale du laço en dessous de laquelle le cul-de-sac n'est PAS
-        /// obligatoire, même si la fréquence choisie l'aurait normalement placé ici. Retour
-        /// utilisateur en jeu : "não é obrigatório haver becos sem saída em espaços menos
-        /// largos" — dans une cellule trop étroite, la ramification collée aux coins arrondis
-        /// produisait une forme dégénérée/invalide plutôt qu'un simple laço sans branche. 3×
-        /// LoopCornerRadiusMax : assez de place pour que les coins ET la ramification restent
-        /// visuellement distincts.
+        /// Minimum loop width/depth below which the cul-de-sac is NOT mandatory, even if the chosen
+        /// frequency would normally place one here. In-game user feedback: "cul-de-sacs don't have to
+        /// exist in narrower spaces". In a cell that is too narrow, the spur squeezed against the
+        /// rounded corners produced a degenerate/invalid shape rather than a plain loop without a
+        /// branch. 3× LoopCornerRadiusMax: enough room for the corners AND the spur to stay visually
+        /// distinct.
         /// </summary>
         private const float MinCulDeSacCellWidth = LoopCornerRadiusMax * 3f;
 
         /// <summary>
-        /// Fraction de la plus petite dimension du quarteirão utilisée comme marge entre le
-        /// laço et la collectrice (voir EmitSimpleLoopBlock/LoopMarginMin/LoopMarginMax). Une
-        /// marge FIXE (essai initial, 10 m) laissait le laço quasi coller aux collectrices dès
-        /// que CollectorSpacingMeters dépassait une centaine de mètres — visuellement
-        /// indissociable d'une grille classique plus dense (bug rapporté en jeu : "tudo
-        /// colado"). Une fraction garantit une cour visible autour du laço, proportionnée à la
-        /// taille réelle du quarteirão.
+        /// Fraction of the block's smallest dimension used as margin between the loop and the collector
+        /// (see EmitSimpleLoopBlock/LoopMarginMin/LoopMarginMax). A FIXED margin (first attempt, 10 m)
+        /// left the loop almost touching the collectors once CollectorSpacingMeters exceeded about a
+        /// hundred meters, visually indistinguishable from a denser classic grid (bug reported in game:
+        /// "everything stuck together"). A fraction guarantees a visible yard around the loop,
+        /// proportional to the block's actual size.
         /// </summary>
         private const float LoopMarginFraction = 0.25f;
 
-        /// <summary>Marge minimale (m) : évite un laço qui touche presque la collectrice sur un petit quarteirão.</summary>
+        /// <summary>Minimum margin (m): avoids a loop that nearly touches the collector on a small block.</summary>
         private const float LoopMarginMin = 15f;
 
-        /// <summary>Marge maximale (m) : évite un laço ridiculement petit et centré sur un très grand quarteirão.</summary>
+        /// <summary>Maximum margin (m): avoids a ridiculously small, centered loop on a very large block.</summary>
         private const float LoopMarginMax = 45f;
 
         /// <summary>
-        /// Échelles essayées, dans l'ordre, pour faire rentrer le rectangle du laço dans un
-        /// quarteirão de bord coupé par le périmètre (voir EmitSimpleLoopBlock) — 100% d'abord
-        /// (taille normale), puis rétrécissement symétrique vers le centre du quarteirão par
-        /// paliers de 15 points, jusqu'à 40% (en dessous, le laço deviendrait un point ridicule
-        /// plutôt qu'une vraie rue) ; le premier qui rentre entièrement dans le polygone est
-        /// utilisé, ou aucun laço si même 40% déborde encore.
+        /// Scales tried, in order, to fit the loop rectangle into an edge block cut by the perimeter
+        /// (see EmitSimpleLoopBlock): 100% first (normal size), then symmetric shrinking toward the
+        /// block center in 15-point steps down to 40% (below that the loop would be a silly dot rather
+        /// than a real street). The first one that fits entirely inside the polygon is used, or no loop
+        /// at all if even 40% still spills over.
         /// </summary>
         private static readonly float[] LoopFitScales = { 1f, 0.85f, 0.7f, 0.55f, 0.4f };
 
         /// <summary>
-        /// Génère le mode "Loop" : une grille UNIQUE de collectrices (mêmes primitives que
-        /// GenerateGrid — BuildLocalFrame/DistributeFixed/ClipLineToPolygon/BuildSubSegments,
-        /// à CollectorSpacingMeters) découpe le périmètre en quarteirões réguliers ; chaque
-        /// quarteirão ENTIÈREMENT intérieur au périmètre (voir PointInPolygon, testé aux 4
-        /// coins de son laço) reçoit un laço UNIFORME à coins fixes (EmitSimpleLoopBlock),
-        /// relié à la collectrice par un seul embranchement.
+        /// Generates "Loop" mode: a SINGLE collector grid (same primitives as GenerateGrid:
+        /// BuildLocalFrame/DistributeFixed/ClipLineToPolygon/BuildSubSegments, at
+        /// CollectorSpacingMeters) cuts the perimeter into regular blocks; each block ENTIRELY inside
+        /// the perimeter (see PointInPolygon, tested at the 4 corners of its loop) gets a UNIFORM loop
+        /// with fixed corners (EmitSimpleLoopBlock), linked to the collector by a single branch.
         ///
-        /// Remplace une ancienne version à 2 niveaux (Arterial épars &gt; Coletora &gt; laço), dont
-        /// le laço suivait le contour réel du périmètre par échantillonnage adaptatif
-        /// (FindMaxLegDepth) — cause répétée de formes dégénérées en jeu (retours utilisateur
-        /// successifs : fond en biais, coins disproportionnés, brisures multiples) ET du coût
-        /// dominant en performance (échantillonnage + double appel à SplitSegmentsAtMidSpan-
-        /// AttachPoints par quarteirão arterial, voir le journal de performance en jeu montrant
-        /// jusqu'à 350 ms/régénération). Le niveau Arterial souffrait aussi d'un bug structurel
-        /// séparé : un quarteirão arterial trop étroit ne gardait aucune collectrice interne
-        /// (filtre de dégagement contre l'arterial), donc AUCUN laço — "quanto mais se baixa
-        /// [Arterial Spacing] mais os loops desaparecem". Un seul niveau, une géométrie fixe
-        /// (rectangle à coins arrondis, jamais adaptative) : plus simple, plus robuste, et
-        /// nettement moins coûteux à régénérer à chaque frame de prévisualisation.
+        /// Replaces an older 2-level version (sparse Arterial &gt; Collector &gt; loop) whose loop
+        /// followed the perimeter's actual outline through adaptive sampling (FindMaxLegDepth). That
+        /// was a repeated cause of degenerate shapes in game (successive user reports: slanted back
+        /// side, disproportionate corners, multiple kinks) AND the dominant performance cost (sampling
+        /// + two calls to SplitSegmentsAtMidSpanAttachPoints per arterial block; the in-game
+        /// performance log showed up to 350 ms per regeneration). The Arterial level also had a
+        /// separate structural bug: an arterial block that was too narrow kept no inner collector
+        /// (clearance filter against the arterial), so NO loop at all ("the lower I set [Arterial
+        /// Spacing], the more the loops disappear"). One level with fixed geometry (rounded rectangle,
+        /// never adaptive): simpler, more robust, and much cheaper to regenerate on every preview
+        /// frame.
         ///
-        /// Limitation connue : un quarteirão de bord coupé par le contour réel (périmètre non
-        /// rectangulaire) tente plusieurs tailles de rectangle rétrécies vers son centre avant
-        /// d'abandonner (voir EmitSimpleLoopBlock/LoopFitScales) — reste donc vide seulement si
-        /// même la plus petite taille testée (40% de la normale) déborde encore, ou si le centre
-        /// du quarteirão lui-même tombe hors du polygone.
+        /// Known limitation: an edge block cut by the actual outline (non-rectangular perimeter) tries
+        /// several rectangle sizes shrunk toward its center before giving up (see
+        /// EmitSimpleLoopBlock/LoopFitScales), so it stays empty only if even the smallest tested size
+        /// (40% of normal) still spills over, or if the block's center itself falls outside the
+        /// polygon.
         /// </summary>
         public static List<RoadSegmentDef> GenerateLoopGrid(IReadOnlyList<float3> selectedNodePositions, GridParameters parameters)
             => GenerateLoopGridCore(selectedNodePositions, parameters);
@@ -1256,14 +1225,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
             if (selectedNodePositions == null || selectedNodePositions.Count < 2 || parameters.CollectorSpacingMeters <= 0.5f)
                 return new List<RoadSegmentDef>();
 
-            // Réglages propres à la grille CLASSIQUE (avenue sur la colonne/rangée N, culs-de-sac
-            // par ligne) : BuildSubSegments/EmitLine, partagés avec GenerateGrid, les appliquent
-            // à TOUTE grille qu'ils construisent — y compris les collectrices et la grille fine
-            // piétonne d'ici. Restés actifs depuis le mode Grelha, ils transformaient une ligne
-            // intérieure en collectrice et en coupaient/supprimaient d'autres (retour utilisateur,
-            // log en jeu : "só estão 6 áreas construtivas em vez de 9", "tudo misturado"). Le
-            // mode Loop a ses propres réglages (LoopCulDeSacRatio, CulDeSacDepth) : neutralisés
-            // ici pour tout le reste de la génération.
+            // Settings specific to the CLASSIC grid (avenue on column/row N, per-line cul-de-sacs):
+            // BuildSubSegments/EmitLine, shared with GenerateGrid, apply them to ANY grid they build,
+            // including the collectors and the fine pedestrian grid here. Left active from Grid mode,
+            // they turned an inner line into a collector and cut/removed others (user feedback, in-game
+            // log: "only 6 building areas instead of 9", "everything mixed up"). Loop mode has its own
+            // settings (LoopCulDeSacRatio, CulDeSacDepth), so these are neutralized here for the rest
+            // of the generation.
             parameters.AvenueColumnEnabled = false;
             parameters.AvenueRowEnabled = false;
             parameters.CulDeSacMode = false;
@@ -1299,13 +1267,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 lmax = math.max(lmax, lp);
             }
 
-            // Mode super-quarteirão : la sélection est découpée en zones d'environ
-            // SuperblockZoneMeters, réparties ÉGALEMENT pour la remplir exactement ("o tamanho das
-            // células adapta-se ao perímetro e tamanho da área"). Une ligne sur
-            // SuperblockSubdivisions est une collectrice ("coletor > pedonal > pedonal > coletor"),
-            // les autres sont piétonnes (voir GenerateSuperblockInterior) ; le périmètre choisi
-            // (route existante) ferme le tout. Une petite sélection (≤ 3 zones par axe) n'a donc
-            // aucune collectrice interne : un seul super-quarteirão.
+            // Superblock mode: the selection is cut into zones of about SuperblockZoneMeters,
+            // distributed EVENLY to fill it exactly ("the cell size adapts to the perimeter and the
+            // size of the area"). One line in SuperblockSubdivisions is a collector ("collector >
+            // pedestrian > pedestrian > collector"), the others are pedestrian (see
+            // GenerateSuperblockInterior); the selected perimeter (an existing road) closes it all. A
+            // small selection (≤ 3 zones per axis) therefore has no inner collector: a single
+            // superblock.
             List<float> uPositions;
             List<float> vPositions;
             List<float> uPedestrian = null;
@@ -1330,9 +1298,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             var segments = BuildSubSegments(uLines, vLines, origin, uDir, vDir, y, parameters, out _, out _);
 
-            // Collectrices = réseau "avenue" (2ᵉ prefab, voir RoadSegmentDef.IsAvenue) — le
-            // laço (émis plus bas, jamais IsAvenue) reste sur le réseau PRINCIPAL, le rayon
-            // cul-de-sac (IsCulDeSacEnd) partage ce même réseau (voir GridRoadToolSystem).
+            // Collectors = "avenue" network (2nd prefab, see RoadSegmentDef.IsAvenue). The loop
+            // (emitted below, never IsAvenue) stays on the MAIN network; the cul-de-sac spur
+            // (IsCulDeSacEnd) shares that same network (resolved in the game layer).
             for (int i = 0; i < segments.Count; i++)
             {
                 RoadSegmentDef collector = segments[i];
@@ -1340,11 +1308,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 segments[i] = collector;
             }
 
-            // uBounds/vBounds ajoutent les extrémités du PÉRIMÈTRE aux positions de collectrices
-            // internes, pour que chaque bande — bord compris — soit traitée comme un quarteirão
-            // à part entière (sans ça, aucune collectrice interne du tout produit un quarteirão
-            // unique = le polygone entier, ce qui reste géré correctement puisque le test des 4
-            // coins du laço filtre déjà les cas où ce serait trop grand/hors polygone).
+            // uBounds/vBounds add the PERIMETER extents to the inner collector positions so that every
+            // strip, edges included, is treated as a full block (with no inner collector at all this
+            // yields a single block = the whole polygon, which is still handled correctly since the
+            // loop's 4-corner test already filters out cases where it would be too large or outside the
+            // polygon).
             var uBounds = new List<float> { lmin.x };
             uBounds.AddRange(uPositions);
             uBounds.Add(lmax.x);
@@ -1362,19 +1330,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     float vMinCell = vBounds[iv];
                     float vMaxCell = vBounds[iv + 1];
 
-                    // Super-quarteirão (retour utilisateur en jeu, inspiré des superilles de
-                    // Barcelone — capture d'écran du modèle réel) : PAS un laço unique, une VRAIE
-                    // grille fine à l'intérieur de CHAQUE quarteirão délimité par les collectrices
-                    // — voir GenerateSuperblockInterior. Quand uMinCell/uMaxCell/vMinCell/vMaxCell
-                    // touchent le bord du POLYGONE choisi (pas une collectrice interne), la grille
-                    // fine s'y accroche quand même : ce bord est presque toujours une VRAIE route
-                    // existante en jeu (le joueur clique le long d'elle) — MakeCoursePos (règle 2)
-                    // la raccorde automatiquement, exactement comme les collectrices le font déjà
-                    // (retour utilisateur : "as estradas pedonais também têm que se conectar à
-                    // estrada que serve de base, não apenas as coletoras" — laisser un anneau vide
-                    // entre le vrai périmètre et la 1re collectrice gaspille tout ce terrain).
-                    // Les extrémités qui NE touchent aucune route réelle (cas synthétique sans
-                    // route au bord) sont filtrées après coup par PruneDeadEndPedestrianSegments.
+                    // Superblock (in-game user feedback, inspired by Barcelona's superilles, with a
+                    // screenshot of the real model): NOT a single loop but a REAL fine grid inside EACH
+                    // block bounded by the collectors; see GenerateSuperblockInterior. When
+                    // uMinCell/uMaxCell/vMinCell/vMaxCell touch the edge of the selected POLYGON (not
+                    // an inner collector), the fine grid still attaches to it: that edge is almost
+                    // always a REAL existing road in game (the player clicks along it), and the game
+                    // layer (Placemaker's RoadsPlanner/RoadConnections) connects to it automatically,
+                    // exactly as it already does for the collectors (user feedback: "the pedestrian
+                    // roads also have to connect to the base road, not just the collectors"; leaving an
+                    // empty ring between the real perimeter and the 1st collector wastes all that
+                    // land). Ends that touch NO real road (synthetic case with no road at the edge) are
+                    // filtered afterwards by PruneDeadEndPedestrianSegments.
                     if (parameters.SuperblockMode)
                     {
                         GenerateSuperblockInterior(segments, local, new float2(uMinCell, vMinCell), new float2(uMaxCell, vMaxCell),
@@ -1383,24 +1350,22 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         continue;
                     }
 
-                    // Aucune collectrice interne du tout sur l'axe V (espacement plus grand que
-                    // tout le périmètre) : ni vMin ni vMax de cette unique bande ne sont une VRAIE
-                    // collectrice (vBounds ne contient alors que [lmin.y, lmax.y], les bornes du
-                    // polygone, pas des routes) — jamais de laço orphelin plutôt qu'un
-                    // embranchement raccroché dans le vide.
+                    // No inner collector at all on the V axis (spacing larger than the whole
+                    // perimeter): neither vMin nor vMax of this single strip is a REAL collector
+                    // (vBounds then only holds [lmin.y, lmax.y], the polygon bounds, not roads). Better
+                    // no loop than one whose branch hangs in the void.
                     if (vPositions.Count == 0)
                     {
                         continue;
                     }
 
-                    // Côté d'accès (vers vMin ou vMax) : la bande de bord initiale (iv==0, avant
-                    // la 1re collectrice interne) DOIT s'accrocher à vMax (la 1re collectrice
-                    // réelle) — vMin n'est ici que le bord du polygone, pas une route. Bande de
-                    // bord finale (dernière collectrice -> bord) : DOIT s'accrocher à vMin, même
-                    // raison. Bandes pleinement intérieures : alterné par rangée réelle — sans ça,
-                    // TOUS les laços de la ville s'accrocheraient au même côté absolu de chaque
-                    // collectrice (retour en jeu : "os laços deviam estar dos dois lados da
-                    // estrada principal").
+                    // Access side (toward vMin or vMax): the first edge strip (iv==0, before the 1st
+                    // inner collector) MUST attach to vMax (the 1st real collector), since vMin here is
+                    // only the polygon edge, not a road. Last edge strip (last collector -> edge): MUST
+                    // attach to vMin, same reason. Fully interior strips alternate per actual row;
+                    // otherwise ALL the city's loops would attach to the same absolute side of each
+                    // collector (in-game feedback: "the loops should be on both sides of the main
+                    // road").
                     bool isFirstStrip = iv == 0;
                     bool isLastStrip = iv == vBounds.Count - 2;
                     bool connectToMin = isFirstStrip ? false : isLastStrip ? true : (iv & 1) == 0;
@@ -1415,29 +1380,25 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // L'embranchement du laço (EmitSimpleLoopBlock) se raccorde à la collectrice EN
-            // RETRAIT du bord du quarteirão (jamais à une extrémité de la collectrice
-            // elle-même) : BuildSubSegments, appelé AVANT cette boucle, n'a aucune connaissance
-            // de ce point d'ancrage (calculé bien après, par quarteirão) — collectrice et laço
-            // se touchent visuellement mais ne partagent aucun sommet réel tant que cette
-            // post-passe n'a pas tourné (retour en jeu : "a estrada principal (laço) não fusiona
-            // na coletora").
+            // The loop's branch (EmitSimpleLoopBlock) meets the collector SET BACK from the block's
+            // edge (never at an end of the collector itself): BuildSubSegments, called BEFORE this
+            // loop, knows nothing about that attach point (computed much later, per block). Collector
+            // and loop touch visually but share no real vertex until this post-pass runs (in-game
+            // feedback: "the main road (loop) doesn't merge into the collector").
             segments = SplitSegmentsAtMidSpanAttachPoints(segments, isTarget: s => s.IsAvenue, isAttachSource: s => !s.IsAvenue);
 
-            // Collectrices qui arrivent au périmètre presque parallèles à lui, ou en bout très court
-            // près d'un carrefour : angles aigus et carrefours collés au périmètre (collisions en jeu).
+            // Collectors that reach the perimeter nearly parallel to it, or as a very short end near a
+            // junction: acute angles and junctions crammed against the perimeter (collisions in game).
             CleanPerimeterEnds(segments, selectedNodePositions, s => s.IsAvenue);
 
-            // Filet de sécurité final (retour utilisateur en jeu, répété : "Ainda tem os cul de
-            // sac... retira por completo") : au-delà du garde-fou uMinReal/uMaxReal/vMinReal/
-            // vMaxReal déjà appliqué dans GenerateSuperblockInterior (qui couvre le cas simple —
-            // périmètre rectangulaire), un périmètre IRRÉGULIER peut encore faire clipper une
-            // ligne interne en plein milieu par ClipLineToPolygon (le vrai contour, pas juste la
-            // boîte englobante lmin/lmax) à un endroit qui ne correspond à AUCUN autre tronçon —
-            // supprime ITÉRATIVEMENT tout tronçon piéton dont une extrémité n'est partagée par
-            // AUCUN autre tronçon (piéton ou collectrice), jusqu'à point fixe (une suppression
-            // peut en exposer une autre plus loin dans la même chaîne). Garantit qu'AUCUNE
-            // impasse ne peut survivre en mode super-quarteirão, quelle que soit la cause exacte.
+            // Final safety net (repeated in-game user feedback: "There are still cul-de-sacs... remove
+            // them completely"): beyond clipping inner lines to each superblock's bounds in
+            // GenerateSuperblockInterior (enough for a rectangular perimeter), an IRREGULAR perimeter
+            // can still make ClipLineToPolygon (the real outline, not just the lmin/lmax bounding box)
+            // cut an inner line mid-way at a spot that matches NO other segment. ITERATIVELY removes
+            // any pedestrian segment with an end shared by NO other segment (pedestrian or collector),
+            // until a fixed point (one removal can expose another further along the same chain).
+            // Guarantees that NO cul-de-sac can survive in superblock mode, whatever the exact cause.
             if (parameters.SuperblockMode)
             {
                 segments = PruneDeadEndPedestrianSegments(segments, polygon);
@@ -1447,19 +1408,16 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Supprime itérativement tout tronçon piéton (RoadSegmentDef.IsPedestrian) dont AU MOINS
-        /// une extrémité n'est NI partagée par un autre tronçon NI posée sur le vrai périmètre
-        /// choisi par le joueur (voir l'appel dans GenerateLoopGrid pour le pourquoi). Une
-        /// extrémité "partagée" signifie qu'un AUTRE tronçon a un Start ou un End EXACTEMENT
-        /// (bit-à-bit) à cette même position — cohérent avec le reste du mod (voir
-        /// SplitSegmentsAtMidSpanAttachPoints). Une extrémité sur le VRAI périmètre n'est PAS une
-        /// impasse : en jeu, ce périmètre est presque toujours une route existante, que
-        /// MakeCoursePos (règle 2) raccorde automatiquement — la traiter comme une impasse
-        /// gaspillait tout le terrain entre le périmètre et la 1re collectrice (retour
-        /// utilisateur : "as estradas pedonais também têm que se conectar à estrada que serve de
-        /// base"). Itératif car retirer un tronçon peut rendre orpheline l'extrémité d'un AUTRE
-        /// tronçon plus loin dans la même chaîne — tourne jusqu'à ce qu'aucune suppression ne soit
-        /// plus nécessaire.
+        /// Iteratively removes every pedestrian segment (RoadSegmentDef.IsPedestrian) with AT LEAST one
+        /// end that is NEITHER shared by another segment NOR on the real perimeter selected by the
+        /// player (see the call in GenerateLoopGrid for why). A "shared" end means ANOTHER segment has
+        /// a Start or End at EXACTLY (bit-identical) the same position, consistent with the rest of the
+        /// generator (see SplitSegmentsAtMidSpanAttachPoints). An end on the REAL perimeter is NOT a
+        /// dead end: in game that perimeter is almost always an existing road, which the game layer
+        /// (RoadsPlanner/RoadConnections) connects automatically. Treating it as a dead end wasted all
+        /// the land between the perimeter and the 1st collector (user feedback: "the pedestrian roads
+        /// also have to connect to the base road"). Iterative because removing a segment can orphan the
+        /// end of ANOTHER segment further along the same chain; runs until no more removals are needed.
         /// </summary>
         private static List<RoadSegmentDef> PruneDeadEndPedestrianSegments(List<RoadSegmentDef> segments, List<float2> polygon)
         {
@@ -1484,13 +1442,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 {
                     if (pointCounts[(p.x, p.y, p.z)] > 1)
                     {
-                        return false; // partagé par un autre tronçon : jamais une impasse
+                        return false; // shared by another segment: never a dead end
                     }
-                    // Comparaison en espace MONDE (segment.Start/End sont déjà en espace monde,
-                    // tout comme `polygon` ici — voir GenerateLoopGrid) : PAS de conversion vers
-                    // l'espace local u/v, qui comparerait des repères différents et ferait
-                    // échouer le test même pour un point réellement posé sur le périmètre (bug
-                    // corrigé : gaspillait le même anneau de terrain que le défaut d'origine).
+                    // Compare in WORLD space (segment.Start/End are already world-space, as is
+                    // `polygon` here, see GenerateLoopGrid): NO conversion to local u/v space, which
+                    // would compare different frames and fail the test even for a point really on the
+                    // perimeter (fixed bug: it wasted the same ring of land as the original defect).
                     return !IsPointOnPolygonEdge(p.xz, polygon, boundaryTolerance);
                 }
                 for (int i = result.Count - 1; i >= 0; i--)
@@ -1498,7 +1455,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     RoadSegmentDef s = result[i];
                     if (!s.IsPedestrian)
                     {
-                        continue; // ne jamais purger une collectrice : toujours traversante par nature
+                        continue; // never prune a collector: always a through road by nature
                     }
                     if (IsDangling(s.Start) || IsDangling(s.End))
                     {
@@ -1511,10 +1468,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Vrai si `point` (espace local u/v) tombe sur l'un des segments du polygone (avec
-        /// tolérance), utilisé par PruneDeadEndPedestrianSegments pour distinguer une extrémité
-        /// posée sur le vrai périmètre (jamais une impasse, MakeCoursePos la raccorde en jeu)
-        /// d'une extrémité réellement orpheline en plein milieu du terrain.
+        /// True if `point` (same coordinate space as `polygon`) lies on one of the polygon's edges,
+        /// within tolerance. Used by PruneDeadEndPedestrianSegments to tell an end on the real
+        /// perimeter (never a dead end: the game layer connects it) from one genuinely orphaned in the
+        /// middle of the land.
         /// </summary>
         private static bool IsPointOnPolygonEdge(float2 point, List<float2> polygon, float tolerance)
         {
@@ -1540,24 +1497,21 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Sens unique en "tourbillon" (super-quarteirão, GridParameters.SuperblockMode) : chaque
-        /// cellule (iu,iv) de la grille [uBounds,vBounds] tourne en rond sur ses 4 bords, dans le
-        /// sens horaire si (iu+iv) est pair, antihoraire sinon — l'alternance garantit qu'un même
-        /// tronçon, TOUJOURS partagé par exactement 2 cellules voisines (ou 1 seule en bord de
-        /// zone), reçoit un sens unique et cohérent des deux côtés (jamais deux cellules voisines
-        /// n'exigent des sens opposés sur leur frontière commune — propriété du damier de parité,
-        /// valable pour toute paire de cellules adjacentes horizontalement OU verticalement).
-        /// Réoriente chaque tronçon filtré par isTarget (échange Start/End au besoin) SANS
-        /// changer sa géométrie : le sens du trafic sur une route à sens unique est déterminé par
-        /// l'ordre Start→End du tronçon, pas par un indicateur séparé (le moteur n'a pas de flag
-        /// "sens unique" — voir CompositionFlags, seul le PREFAB choisi peut être intrinsèquement
-        /// à sens unique, ex. un "Beco"). Appelée à 2 niveaux : la grille fine intérieure d'un
-        /// super-quarteirão (GenerateSuperblockInterior, isTarget=IsPedestrian, uBounds/vBounds
-        /// LOCAUX à CE super-quarteirão — chaque super-quarteirão redémarre sa propre parité).
-        /// Chaque tronçon couvre TOUJOURS exactement un intervalle entre 2 positions consécutives
-        /// de uBounds/vBounds (BuildSubSegments scinde à chaque croisement), donc correspond à
-        /// exactement UNE cellule de chaque côté — pas de cas où un même tronçon devrait
-        /// satisfaire plusieurs cellules à la fois.
+        /// One-way "swirl" (superblock, GridParameters.SuperblockMode): each cell (iu,iv) of the
+        /// [uBounds,vBounds] grid circulates around its 4 edges, clockwise if (iu+iv) is even,
+        /// counter-clockwise otherwise. The alternation guarantees that a segment, ALWAYS shared by
+        /// exactly 2 neighboring cells (or just 1 at the zone edge), gets a single consistent direction
+        /// from both sides (two neighboring cells never demand opposite directions on their shared
+        /// edge: a checkerboard-parity property that holds for any horizontally OR vertically adjacent
+        /// pair). Reorients each segment selected by isTarget (swapping Start/End if needed) WITHOUT
+        /// changing its geometry: traffic direction on a one-way road is given by the segment's
+        /// Start→End order, not by a separate flag (the engine has no "one-way" flag, see
+        /// CompositionFlags; only the chosen PREFAB can be inherently one-way, e.g. an alley). Used for
+        /// the fine inner grid of a superblock (GenerateSuperblockInterior, isTarget=IsPedestrian,
+        /// uBounds/vBounds LOCAL to THAT superblock: each superblock restarts its own parity). Each
+        /// segment ALWAYS spans exactly one interval between 2 consecutive uBounds/vBounds positions
+        /// (BuildSubSegments splits at every crossing), so it maps to exactly ONE cell on each side: no
+        /// segment ever has to satisfy several cells at once.
         /// </summary>
         private static void ApplyOneWaySwirl(List<RoadSegmentDef> segments, List<float> uBounds, List<float> vBounds,
             float2 origin, float2 uDir, float2 vDir, Func<RoadSegmentDef, bool> isTarget)
@@ -1577,14 +1531,14 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 bool desiredForward;
                 if (seg.IsHorizontal)
                 {
-                    // Ligne à V constant (l'intervalle varie en U) : frontière basse du
-                    // quarteirão (iu,iv) situé EN DESSOUS — bord "haut" de ce quarteirão, sens
-                    // horaire = +u (voir la doc de la classe pour la convention des 4 bords).
+                    // Line at constant V (the interval varies in U): lower boundary of the block
+                    // (iu,iv) BELOW it, i.e. that block's "top" edge; clockwise = +u (see the method
+                    // doc for the 4-edge convention).
                     int iv = FindExactBoundIndex(vBounds, (a.y + b.y) * 0.5f);
                     int iu = FindIntervalIndex(uBounds, (a.x + b.x) * 0.5f);
                     if (iv <= 0 || iv >= vBounds.Count - 1 || iu < 0 || iu >= uBounds.Count - 1)
                     {
-                        continue; // pas une vraie ligne interne (bord du polygone) : jamais réorienté
+                        continue; // not a real inner line (polygon edge): never reoriented
                     }
                     bool clockwise = ((iu + iv) & 1) == 0;
                     bool wantsIncreasingU = clockwise;
@@ -1592,8 +1546,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 else
                 {
-                    // Ligne à U constant : bord "gauche" du quarteirão (iu,iv) situé À DROITE,
-                    // sens horaire = -v (bord gauche, voir la doc de la classe).
+                    // Line at constant U: "left" edge of the block (iu,iv) to its RIGHT; clockwise = -v
+                    // (left edge, see the method doc).
                     int iu = FindExactBoundIndex(uBounds, (a.x + b.x) * 0.5f);
                     int iv = FindIntervalIndex(vBounds, (a.y + b.y) * 0.5f);
                     if (iu <= 0 || iu >= uBounds.Count - 1 || iv < 0 || iv >= vBounds.Count - 1)
@@ -1613,7 +1567,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Indice EXACT (à 0.5 m près) de value dans bounds (triée croissante), ou -1 si aucune correspondance — utilisé par ApplyOneWayCollectorDirections pour repérer la ligne de collectrice elle-même.</summary>
+        /// <summary>EXACT index (within 0.5 m) of value in bounds (sorted ascending), or -1 if none. Used by ApplyOneWaySwirl to find the boundary line the segment lies on.</summary>
         private static int FindExactBoundIndex(List<float> bounds, float value)
         {
             for (int i = 0; i < bounds.Count; i++)
@@ -1626,7 +1580,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return -1;
         }
 
-        /// <summary>Indice i tel que bounds[i] &lt;= value &lt;= bounds[i+1] (avec une marge de 0.5 m), ou -1 — utilisé par ApplyOneWayCollectorDirections pour repérer l'intervalle (quarteirão) couvert par le tronçon.</summary>
+        /// <summary>Index i such that bounds[i] &lt;= value &lt;= bounds[i+1] (with a 0.5 m margin), or -1. Used by ApplyOneWaySwirl to find the interval (block) the segment covers.</summary>
         private static int FindIntervalIndex(List<float> bounds, float value)
         {
             for (int i = 0; i + 1 < bounds.Count; i++)
@@ -1640,21 +1594,20 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Nombre de subdivisions par axe à l'intérieur d'un super-quarteirão (voir
-        /// GenerateSuperblockInterior) — 3×3 = 9 "zones" édificáveis, exactement le modèle réel
-        /// des superilles de Barcelone (capture d'écran fournie par l'utilisateur : quatre
-        /// collectrices délimitent le super-quarteirão, une grille fine de rues piétonnes le
-        /// subdivise en 9 zones à construire — jamais un laço unique).
+        /// Number of subdivisions per axis inside a superblock (see GenerateSuperblockInterior): 3×3 =
+        /// 9 buildable "zones", exactly the real model of Barcelona's superilles (screenshot provided
+        /// by the user: four collectors bound the superblock, and a fine grid of pedestrian streets
+        /// subdivides it into 9 zones to build on; never a single loop).
         /// </summary>
         private const int SuperblockSubdivisions = 3;
 
-        /// <summary>Plancher (m) de GridParameters.SuperblockZoneMeters — sous ce seuil, les zones deviennent trop petites pour être construites.</summary>
+        /// <summary>Floor (m) for GridParameters.SuperblockZoneMeters; below it the zones become too small to build on.</summary>
         public const float SuperblockZoneMetersMin = 100f;
 
         /// <summary>
-        /// Découpe [min,max] en zones d'environ zoneMeters réparties également, puis sépare les
-        /// lignes internes en collectrices (une sur SuperblockSubdivisions, voir
-        /// GridParameters.SuperblockMode) et en rues piétonnes.
+        /// Cuts [min,max] into evenly distributed zones of about zoneMeters, then splits the inner
+        /// lines into collectors (one in SuperblockSubdivisions, see GridParameters.SuperblockMode) and
+        /// pedestrian streets.
         /// </summary>
         private static void SplitSuperblockLines(float min, float max, float zoneMeters, out List<float> collectors, out List<float> pedestrian)
         {
@@ -1665,7 +1618,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             List<float> lines = DistributeEvenly(min, max, zoneCount - 1);
             for (int i = 0; i < lines.Count; i++)
             {
-                // Index de ligne 1-based : 3, 6, 9... = collectrices.
+                // 1-based line index: 3, 6, 9... = collectors.
                 if ((i + 1) % SuperblockSubdivisions == 0)
                 {
                     collectors.Add(lines[i]);
@@ -1677,7 +1630,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Positions de `positions` strictement comprises dans ]min, max[.</summary>
+        /// <summary>Positions in `positions` strictly within ]min, max[.</summary>
         private static List<float> WithinRange(List<float> positions, float min, float max)
         {
             var result = new List<float>();
@@ -1692,27 +1645,24 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Remplit l'intérieur d'UN super-quarteirão [regionMin,regionMax] (délimité par les
-        /// collectrices, voir GenerateLoopGrid/GridParameters.SuperblockMode) d'une VRAIE grille
-        /// fine — SuperblockSubdivisions-1 lignes internes par axe, mêmes primitives que la
-        /// grille de collectrices elle-même (DistributeFixed-like/ClipLineToPolygon/
-        /// BuildSubSegments) — au lieu du laço unique du mode Loop classique. Chaque tronçon émis
-        /// est marqué IsPedestrian (voir RoadSegmentDef) ; jamais de cul-de-sac (retour
-        /// utilisateur : "Não há cul de sac" — la grille fine est par nature entièrement
-        /// connectée, aucune impasse). Sens unique en tourbillon appliqué localement à CETTE
-        /// grille (voir ApplyOneWaySwirl) — chaque super-quarteirão redémarre sa propre parité,
-        /// indépendamment de ses voisins.
+        /// Fills the interior of ONE superblock [regionMin,regionMax] (bounded by the collectors, see
+        /// GenerateLoopGrid/GridParameters.SuperblockMode) with a REAL fine grid
+        /// (SuperblockSubdivisions-1 inner lines per axis, same primitives as the collector grid
+        /// itself: DistributeFixed-like/ ClipLineToPolygon/BuildSubSegments) instead of classic Loop
+        /// mode's single loop. Every emitted segment is marked IsPedestrian (see RoadSegmentDef); never
+        /// a cul-de-sac (user feedback: "No cul-de-sacs"; the fine grid is fully connected by nature).
+        /// The one-way swirl is applied locally to THIS grid (see ApplyOneWaySwirl); each superblock
+        /// restarts its own parity, independently of its neighbors.
         ///
-        /// Les lignes internes sont clippées contre le VRAI [regionMin,regionMax] du
-        /// super-quarteirão, qu'un côté donné soit une collectrice interne ou le bord du
-        /// polygone choisi par le joueur : ce bord est presque toujours une VRAIE route
-        /// existante en jeu, que MakeCoursePos (règle 2) raccorde automatiquement — retenir les
-        /// lignes en retrait de ce bord (comportement précédent) gaspillait tout le terrain entre
-        /// le vrai périmètre et la 1re collectrice (retour utilisateur : "as estradas pedonais
-        /// também têm que se conectar à estrada que serve de base"). Les extrémités qui NE
-        /// touchent aucune route réelle (cas synthétique sans route au bord, ex. tests) sont
-        /// filtrées après coup par PruneDeadEndPedestrianSegments (qui exempte spécifiquement les
-        /// points sur le vrai périmètre).
+        /// Inner lines are clipped against the superblock's REAL [regionMin,regionMax], whether a given
+        /// side is an inner collector or the edge of the polygon selected by the player: that edge is
+        /// almost always a REAL existing road in game, which the game layer
+        /// (RoadsPlanner/RoadConnections) connects automatically. Holding the lines back from that edge
+        /// (previous behavior) wasted all the land between the real perimeter and the 1st collector
+        /// (user feedback: "the pedestrian roads also have to connect to the base road"). Ends that
+        /// touch NO real road (synthetic case with no road at the edge, e.g. tests) are filtered
+        /// afterwards by PruneDeadEndPedestrianSegments (which specifically exempts points on the real
+        /// perimeter).
         /// </summary>
         private static void GenerateSuperblockInterior(List<RoadSegmentDef> segments, List<float2> polygon, float2 regionMin, float2 regionMax,
             List<float> uPositions, List<float> vPositions,
@@ -1720,20 +1670,19 @@ namespace Placemaker.Core.Layers.Roads.Generators
         {
             if (uPositions.Count == 0 && vPositions.Count == 0)
             {
-                return; // super-quarteirão d'une seule zone : rien à subdiviser
+                return; // single-zone superblock: nothing to subdivide
             }
             float2 center = (regionMin + regionMax) * 0.5f;
             if (!PointInPolygon(center, polygon))
             {
-                return; // super-quarteirão entièrement hors zone développable
+                return; // superblock entirely outside the developable area
             }
 
-            // Les lignes intérieures sont clippées contre la VRAIE bordure du quarteirão
-            // (regionMin/regionMax), pas une bordure rétractée — quand cette bordure coïncide
-            // avec le vrai périmètre choisi par le joueur (le cas normal en jeu : le joueur clique
-            // le long d'une route existante), MakeCoursePos (règle 2) la raccorde automatiquement
-            // à cette route réelle, exactement comme le fait déjà le réseau collecteur. Les
-            // extrémités qui ne touchent aucune route réelle sont filtrées ensuite par
+            // Inner lines are clipped against the block's REAL border (regionMin/regionMax), not a
+            // shrunk one. When that border coincides with the real perimeter selected by the player
+            // (the normal case in game: the player clicks along an existing road), the game layer
+            // connects it to that real road automatically, exactly as it already does for the collector
+            // network. Ends that touch no real road are filtered later by
             // PruneDeadEndPedestrianSegments.
             var uLines = new List<GridLine>(uPositions.Count);
             foreach (float u in uPositions)
@@ -1766,10 +1715,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Intersecte une liste d'intervalles (déjà clippés contre le polygone entier, voir
-        /// ClipLineToPolygon) avec [rangeMin, rangeMax] — utilisé par GenerateSuperblockInterior
-        /// pour confiner une ligne interne à SON super-quarteirão, en plus du polygone entier (le
-        /// plus restrictif des deux l'emporte).
+        /// Intersects a list of intervals (already clipped against the whole polygon, see
+        /// ClipLineToPolygon) with [rangeMin, rangeMax]. Used by GenerateSuperblockInterior to confine
+        /// an inner line to ITS superblock in addition to the whole polygon (the stricter of the two
+        /// wins).
         /// </summary>
         private static List<float2> IntersectIntervalsWithRange(List<float2> intervals, float rangeMin, float rangeMax)
         {
@@ -1787,32 +1736,29 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Divise chaque tronçon "cible" (isTarget, toujours droit) là où un tronçon "source
-        /// d'ancrage" (isAttachSource) s'y raccorde STRICTEMENT AU MILIEU de son tracé, jamais à
-        /// ses propres extrémités (celles-ci sont déjà de vrais croisements, gérés par
-        /// BuildSubSegments). Utilisé par GenerateLoopGrid pour raccorder collectrice/laço
-        /// (cible=IsAvenue, source=tout le reste) : sans cette post-passe, la collectrice et
-        /// l'embranchement du laço se touchent visuellement mais ne partagent aucun sommet réel
-        /// ("X ne fusiona pas dans Y"). Un point d'ancrage est
-        /// cherché en projetant chaque extrémité Start/End d'un tronçon source sur la ligne de
-        /// CHAQUE tronçon cible (repère t ∈ ]0, 1[ strictement, et distance à la ligne quasi
-        /// nulle — ces points sont calculés pour tomber EXACTEMENT dessus, pas juste "à
-        /// proximité", donc une tolérance large signalerait une vraie coïncidence géométrique,
-        /// pas un faux positif). Plusieurs sources accrochées au même endroit produisent des
-        /// points quasi identiques, dédupliqués via MinSegmentLength.
-        /// </summary>
-        /// <summary>
-        /// Taille de balde (m) pour l'index spatial des points d'ancrage ci-dessous. Retour
-        /// utilisateur en jeu (log de performance) : le modo Loop prenait jusqu'à 350 ms par
-        /// régénération, quasi tout dans cette fonction, appelée PLUSIEURS fois (une fois par
-        /// pâté de maison + une fois globalement, voir GenerateLoopGrid) et comparant TOUS les
-        /// tronçons cibles à TOUS les points d'ancrage — O(cibles × points), même défaut
-        /// structurel que BuildSubSegments (voir SpatialPointIndex). Une taille généreuse (les
-        /// espacements collectrice/artérielle typiques font des dizaines à centaines de mètres)
-        /// garde peu de baldes à visiter par tronçon cible sans réduire les vrais candidats.
+        /// Bucket size (m) for the spatial index of attach points below. In-game user feedback
+        /// (performance log): Loop mode took up to 350 ms per regeneration, almost all of it in this
+        /// function, which was then called SEVERAL times (once per block + once globally) and compared
+        /// ALL target segments with ALL attach points: O(targets × points), the same structural flaw as
+        /// BuildSubSegments (see SpatialPointIndex). A generous size (typical collector/arterial
+        /// spacings are tens to hundreds of meters) keeps few buckets to visit per target segment
+        /// without losing real candidates.
         /// </summary>
         private const float AttachPointBucketSize = 50f;
 
+        /// <summary>
+        /// Splits each "target" segment (isTarget, always straight) where an "attach source" segment
+        /// (isAttachSource) meets it STRICTLY IN THE MIDDLE of its span, never at its own ends (those
+        /// are already real crossings, handled by BuildSubSegments). Used by GenerateLoopGrid to join
+        /// collector and loop (target=IsAvenue, source=everything else): without this post-pass, the
+        /// collector and the loop's branch touch visually but share no real vertex ("X doesn't merge
+        /// into Y"). An attach point is found by projecting each Start/End of a source segment onto
+        /// EACH target segment's line (parameter t strictly in ]0, 1[, and distance to the line nearly
+        /// zero: these points are computed to land EXACTLY on it, not just "nearby", so a loose
+        /// tolerance would signal a real geometric coincidence, not a false positive). Several sources
+        /// attached at the same spot produce nearly identical points, deduplicated via
+        /// MinSegmentLength.
+        /// </summary>
         private static List<RoadSegmentDef> SplitSegmentsAtMidSpanAttachPoints(List<RoadSegmentDef> segments,
             Func<RoadSegmentDef, bool> isTarget, Func<RoadSegmentDef, bool> isAttachSource)
         {
@@ -1830,9 +1776,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return segments;
             }
 
-            // Index spatial par baldes : au lieu de tester TOUS les points d'ancrage contre
-            // CHAQUE tronçon cible, on ne visite que les baldes recouvrant la boîte englobante
-            // du tronçon (marge = tolérance de projection ci-dessous).
+            // Spatial bucket index: instead of testing ALL attach points against EACH target segment,
+            // only visit the buckets covering the segment's bounding box (margin = projection tolerance
+            // below).
             var buckets = new Dictionary<(int, int), List<float3>>();
             foreach (float3 p in attachPoints)
             {
@@ -1884,36 +1830,32 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         float t = math.dot(p - a, ab) / lenSq;
                         if (t <= 0f || t >= 1f)
                         {
-                            continue; // à ou au-delà d'une extrémité : jamais un vrai raccord de milieu
+                            continue; // at or beyond an end: never a real mid-span join
                         }
                         float2 projected = a + t * ab;
                         if (math.distance(projected, p) > 0.5f)
                         {
-                            continue; // pas sur ce tronçon cible
+                            continue; // not on this target segment
                         }
-                        // BUG corrigé ici : recalculer le point via math.lerp(target.Start,
-                        // target.End, t) reconstruit une coordonnée INDÉPENDANTE de celle de la
-                        // source (jusqu'à 0.5 m d'écart, la tolérance ci-dessus — jamais garanti
-                        // bit-à-bit identique, même à tolérance nulle, à cause de l'arrondi flottant
-                        // sur deux chemins de calcul différents). Le pipeline ECS en aval
-                        // (GridRoadToolSystem.MakeCoursePos) ne connaît QUE des points réels
-                        // (nœud/arête déjà existants) ou des points "libres" tout neufs — deux
-                        // segments FRAÎCHEMENT générés qui devraient partager LE MÊME nœud neuf n'ont
-                        // aucun autre mécanisme pour se reconnaître comme identiques que la
-                        // coïncidence EXACTE de leur position ; le moteur natif (GenerateNodesSystem)
-                        // fusionne alors deux points quasi identiques mais pas bit-exacts en DEUX
-                        // nœuds tout proches au lieu d'un seul — précisément "Objetos sobrepostos"
-                        // sans jonction, mais entre deux tronçons qu'on a nous-mêmes générés, jamais
-                        // contre une route réelle (donc invisible à tous les diagnostics précédents,
-                        // qui ne testaient que le raccord aux routes déjà existantes). Fix : reprendre
-                        // TEL QUEL le point de la source (candidate), jamais recalculé — garantit une
-                        // coordonnée bit-à-bit identique entre les deux tronçons qui doivent se
-                        // rejoindre.
+                        // Fixed bug: recomputing the point via math.lerp(target.Start, target.End, t)
+                        // builds a coordinate INDEPENDENT of the source's (up to 0.5 m off, the
+                        // tolerance above; never guaranteed bit-identical even at zero tolerance,
+                        // because of float rounding along two different computation paths). Downstream,
+                        // the game layer only knows real points (existing node/edge) or brand-new free
+                        // points: two FRESHLY generated segments that should share THE SAME new node
+                        // have no way to recognize each other other than EXACT position equality. The
+                        // game (GenerateNodesSystem) then turns two nearly identical but not bit-exact
+                        // points into TWO nodes close together instead of one: exactly the "Overlapping
+                        // objects" error with no junction, but between two segments we generated
+                        // ourselves, never against a real road (so invisible to all earlier
+                        // diagnostics, which only tested joins to existing roads). Fix: take the source
+                        // point (candidate) AS IS, never recomputed, which guarantees a bit-identical
+                        // coordinate for the two segments that must meet.
                         float3 point = candidate;
                         if (math.distance(point, target.Start) < MinSegmentLength
                             || math.distance(point, target.End) < MinSegmentLength)
                         {
-                            continue; // trop proche d'une extrémité vraie : pièce dégénérée
+                            continue; // too close to a real end: degenerate piece
                         }
                         hits.Add((t, point));
                     }
@@ -1933,7 +1875,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 {
                     if (math.distance(point, lastAccepted) < MinSegmentLength)
                     {
-                        continue; // quasi-doublon (2 sources accrochées au même endroit)
+                        continue; // near-duplicate (2 sources attached at the same spot)
                     }
                     result.Add(new RoadSegmentDef(pieceStart, point, target.IsHorizontal, isAvenue: target.IsAvenue));
                     pieceStart = point;
@@ -1944,37 +1886,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>
-        /// Émet un laço UNIFORME à coins arrondis fixes pour UN quarteirão [uMin,uMax]x
-        /// [vMin,vMax] — remplace l'ancien EmitLoopBlock (profondeur adaptative par
-        /// échantillonnage du contour réel, voir doc de GenerateLoopGrid pour le pourquoi du
-        /// remplacement). Rectangle inséré symétriquement par une marge fixe (LoopMarginFraction/
-        /// Min/Max) sur les 4 côtés, coins arrondis à rayon fixe (LoopCornerRadiusMax, réduit si
-        /// nécessaire) — AUCUN échantillonnage, AUCUNE dépendance à la forme réelle du polygone
-        /// au-delà d'un test simple "les 4 coins du rectangle sont-ils à l'intérieur ?" (rejette
-        /// tel quel les quarteirões coupés par le bord du périmètre, plutôt que de déformer le
-        /// laço pour les épouser — géométrie toujours valide, jamais dégénérée).
-        ///
-        /// Un seul embranchement relie le laço à la collectrice, sur le côté indiqué par
-        /// connectToMin (vMin ou vMax) ; le cul-de-sac, si activé, part du côté OPPOSÉ (le "fond"
-        /// du laço, le plus loin de la collectrice) et remonte vers le centre.
-        ///
-        /// Réservée au mode Loop classique (jamais appelée quand GridParameters.SuperblockMode
-        /// est vrai — voir GenerateLoopGrid/GenerateSuperblockInterior, une grille fine remplace
-        /// ce laço unique dans ce cas).
-        /// </summary>
-        /// <summary>Côté minimal (m) d'un laço rétréci pour tenir dans la forme : plus petit, il n'est pas posé.</summary>
+        /// <summary>Minimum side (m) of a loop shrunk to fit the shape: smaller loops are not placed.</summary>
         private const float MinLoopSide = 70f;
-        /// <summary>Angle minimal (degrés) entre une rue et le périmètre là où elle le rejoint.</summary>
+        /// <summary>Minimum angle (degrees) between a street and the perimeter where it joins it.</summary>
         private const float MinPerimeterJoinAngle = 35f;
-        /// <summary>Bout de rue plus court (m) que ceci entre un carrefour et le périmètre : retiré.</summary>
+        /// <summary>Street end shorter (m) than this between a junction and the perimeter: removed.</summary>
         private const float MinPerimeterStub = 20f;
 
         /// <summary>
-        /// Nettoie les bouts de rue (filtrés par `eligible`) qui rejoignent le périmètre : retire ceux
-        /// qui l'abordent à moins de MinPerimeterJoinAngle, ou qui font moins de MinPerimeterStub
-        /// depuis un carrefour, puis les rues restées pendantes (bout libre hors périmètre), jusqu'à
-        /// point fixe. Un tronçon n'est retiré que si l'autre bout reste relié (carrefour).
+        /// Cleans up street ends (filtered by `eligible`) that join the perimeter: removes those that
+        /// meet it at less than MinPerimeterJoinAngle or are shorter than MinPerimeterStub from a
+        /// junction, then the streets left dangling (free end off the perimeter), until a fixed point.
+        /// A segment is only removed if its other end stays connected (junction).
         /// </summary>
         internal static void CleanPerimeterEnds(List<RoadSegmentDef> segments, IReadOnlyList<float3> perimeter, Func<RoadSegmentDef, bool> eligible)
         {
@@ -1983,7 +1906,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 return;
             }
-            // Distance au périmètre, mémorisée par extrémité (une grande grille partage ses nœuds).
+            // Distance to the perimeter, cached per end point (a large grid shares its nodes).
             var info = new Dictionary<float3, (bool on, float2 tangent)>();
             (bool on, float2 tangent) Info(float3 p)
             {
@@ -2026,7 +1949,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 alive[k] = true;
                 if (!eligible(segments[k])) continue;
-                // Seuls comptent les tronçons au périmètre ou pendants : le reste n'est jamais retiré d'emblée.
+                // Only segments on the perimeter or dangling count; the rest is never removed up front.
                 if (Info(segments[k].Start).on || Info(segments[k].End).on || degree[segments[k].Start] == 1 || degree[segments[k].End] == 1)
                 {
                     queue.Add(k);
@@ -2045,7 +1968,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 {
                     float3 on = startOn ? s.Start : s.End, off = startOn ? s.End : s.Start;
                     float2 tangent = startOn ? startTangent : endTangent;
-                    // Direction de la rue au point d'arrivée (tangente de l'arc s'il y en a une).
+                    // Street direction at the arrival point (the arc tangent if there is one).
                     float2 direction = math.normalizesafe(off.xz - on.xz);
                     if (s.IsArc)
                     {
@@ -2058,7 +1981,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 else if (!startOn && !endOn && !s.IsCulDeSacEnd && (degree[s.Start] == 1) != (degree[s.End] == 1))
                 {
-                    // Rue restée pendante après un retrait (bout libre hors périmètre, l'autre bout relié).
+                    // Street left dangling after a removal (free end off the perimeter, other end
+                    // connected).
                     remove = true;
                 }
                 if (!remove) continue;
@@ -2080,6 +2004,24 @@ namespace Placemaker.Core.Layers.Roads.Generators
             segments.RemoveRange(write, segments.Count - write);
         }
 
+        /// <summary>
+        /// Emits a UNIFORM loop with fixed rounded corners for ONE block [uMin,uMax]x[vMin,vMax];
+        /// replaces the old EmitLoopBlock (adaptive depth by sampling the real outline, see
+        /// GenerateLoopGrid's doc for why it was replaced). The rectangle is inset symmetrically on all
+        /// 4 sides by a margin (LoopMarginFraction, clamped to LoopMarginMin/LoopMarginMax), with
+        /// corners rounded at a fixed radius (LoopCornerRadiusMax, reduced if needed). NO sampling and
+        /// NO dependence on the polygon's actual shape beyond a simple "are the 4 rectangle corners
+        /// inside?" test: a block cut by the perimeter edge gets a smaller rectangle (LoopFitScales)
+        /// rather than a loop deformed to hug the edge, so the geometry is always valid, never
+        /// degenerate.
+        ///
+        /// A single branch connects the loop to the collector, on the side given by connectToMin (vMin
+        /// or vMax); the cul-de-sac, if enabled, starts from the OPPOSITE side (the loop's "back",
+        /// farthest from the collector) and runs toward the center.
+        ///
+        /// Classic Loop mode only (never called when GridParameters.SuperblockMode is true; see
+        /// GenerateLoopGrid/GenerateSuperblockInterior, where a fine grid replaces this single loop).
+        /// </summary>
         private static bool EmitSimpleLoopBlock(List<RoadSegmentDef> segments, float uMin, float uMax, float vMin, float vMax,
             List<float2> polygon, float2 origin, float2 uDir, float2 vDir, float y, bool withCulDeSac, float culDeSacDepth, bool connectToMin)
         {
@@ -2089,26 +2031,23 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float vMargin = math.clamp(height * LoopMarginFraction, LoopMarginMin, LoopMarginMax);
             if (width < 2f * uMargin + MinSegmentLength || height < 2f * vMargin + MinSegmentLength)
             {
-                return false; // quarteirão trop petit pour un laço lisible
+                return false; // block too small for a readable loop
             }
 
-            // Les 4 coins du rectangle doivent être à l'intérieur du VRAI polygone (pas juste le
-            // centre du quarteirão) — mais au lieu d'abandonner tout de suite dès que le
-            // rectangle À TAILLE PLEINE déborde (retour utilisateur en jeu : "que fazer com
-            // estes espaços vazios ?", quarteirões de bord entièrement vides sans laço), on
-            // essaie plusieurs tailles DÉCROISSANTES, TOUJOURS centrées sur le même point
-            // (LoopFitScales, 100% -> 40%) : le rectangle rétrécit symétriquement vers le
-            // centre du quarteirão jusqu'à ce que ses 4 coins rentrent, ou jusqu'au plancher
-            // (40% — en dessous, le laço deviendrait un point ridicule, mieux vaut laisser
-            // vide). AUCUN échantillonnage du contour ici (contrairement à l'ancien
-            // EmitLoopBlock) : toujours un simple rectangle, jamais une forme qui épouse le
-            // bord — juste sa TAILLE qui s'adapte, en quelques essais bon marché (4 tests
-            // PointInPolygon par échelle).
+            // The rectangle's 4 corners must be inside the REAL polygon (not just the block center).
+            // But instead of giving up as soon as the FULL-SIZE rectangle spills over (in-game user
+            // feedback: "what do we do with these empty spaces?", edge blocks left completely empty
+            // with no loop), several DECREASING sizes are tried, ALWAYS centered on the same point
+            // (LoopFitScales, 100% -> 40%): the rectangle shrinks symmetrically toward the block center
+            // until its 4 corners fit, or down to the floor (40%; below that the loop would be a silly
+            // dot, better to leave it empty). NO outline sampling here (unlike the old EmitLoopBlock):
+            // always a plain rectangle, never a shape hugging the edge; only its SIZE adapts, in a few
+            // cheap tries (4 PointInPolygon tests per scale).
             float centerU = (uMin + uMax) * 0.5f;
             float centerV = (vMin + vMax) * 0.5f;
             if (!PointInPolygon(new float2(centerU, centerV), polygon))
             {
-                return false; // le centre lui-même n'appartient pas à la zone développable
+                return false; // the center itself is not in the developable area
             }
 
             float fullHalfWidth = width * 0.5f - uMargin;
@@ -2135,9 +2074,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 return false;
             }
-            // Laço rétréci pour tenir dans une forme irrégulière : en dessous de MinLoopSide, ce n'est
-            // plus qu'un petit rond de tronçons de 10 m (rejoué depuis une zone libre en jeu). Un laço
-            // à pleine taille dans un petit quarteirão régulier reste permis.
+            // Loop shrunk to fit an irregular shape: below MinLoopSide it is just a small ring of 10 m
+            // segments (reproduced from an empty area in game). A full-size loop in a small regular
+            // block is still allowed.
             if (shrunk && (rightU - leftU < MinLoopSide || farV - nearV < MinLoopSide))
             {
                 return false;
@@ -2148,15 +2087,15 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float r = math.min(LoopCornerRadiusMax, math.min(rightU - leftU, farV - nearV) * 0.5f);
             if (r < 1f)
             {
-                return false; // quarteirão trop étroit pour arrondir les coins de façon visible
+                return false; // block too narrow to visibly round the corners
             }
 
-            // 4 sommets du rectangle inséré (avant arrondi des coins), sens horaire depuis le
-            // coin haut-gauche en U/V local.
+            // 4 vertices of the inset rectangle (before corner rounding), clockwise from the top-left
+            // corner in local U/V.
             float2 pTL = new float2(leftU, nearV), pTR = new float2(rightU, nearV);
             float2 pBR = new float2(rightU, farV), pBL = new float2(leftU, farV);
 
-            // Points de transition droite/arc, un par coin (entrée et sortie de chaque arc).
+            // Straight/arc transition points, one pair per corner (entry and exit of each arc).
             float2 topEnd = new float2(pTR.x - r, pTR.y), rightStart = new float2(pTR.x, pTR.y + r);
             float2 rightEnd = new float2(pBR.x, pBR.y - r), bottomStart = new float2(pBR.x - r, pBR.y);
             float2 bottomEnd = new float2(pBL.x + r, pBL.y), leftStart = new float2(pBL.x, pBL.y - r);
@@ -2183,20 +2122,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // L'embranchement (toujours présent) touche le côté connectToMin (nearV=top) ou
-            // l'opposé (farV=bottom) EN SON MILIEU (uMid) — le cul-de-sac (si activé) part
-            // TOUJOURS du côté opposé à l'embranchement (le "fond" du laço), également en son
-            // milieu. uMid coupe donc TOUJOURS le côté de l'embranchement en deux, et EN PLUS
-            // le côté du fond si un cul-de-sac y est émis — sans ça, ces branches touchent le
-            // milieu d'un côté du laço sans jamais partager de sommet réel avec lui (retour
-            // utilisateur en jeu : "colisões entre a via que acede ao loop e o loop" — jonction
-            // manquante, exactement le même bug structurel que celui déjà corrigé entre
-            // collectrice et laço, voir SplitSegmentsAtMidSpanAttachPoints). Découper
-            // INCONDITIONNELLEMENT (au lieu de vérifier d'abord que les 2 moitiés dépassent
-            // MinSegmentLength) : AddStraight rejette déjà silencieusement une moitié trop
-            // courte tout en gardant l'autre — le sommet de jonction (uMid, ce côté) reste un
-            // sommet RÉEL de la moitié survivante dans tous les cas, jamais besoin d'un
-            // fallback "jonction approximative".
+            // The branch (always present) touches the connectToMin side (nearV=top) or the opposite one
+            // (farV=bottom) AT ITS MIDDLE (uMid); the cul-de-sac (if enabled) ALWAYS starts from the
+            // side opposite the branch (the loop's "back"), also at its middle. So uMid ALWAYS splits
+            // the branch side in two, and ALSO the back side if a cul-de-sac is emitted there. Without
+            // that, these branches touch the middle of a loop side without ever sharing a real vertex
+            // with it (in-game user feedback: "collisions between the road that accesses the loop and
+            // the loop": a missing junction, exactly the same structural bug as the one already fixed
+            // between collector and loop, see SplitSegmentsAtMidSpanAttachPoints). The split is
+            // UNCONDITIONAL (instead of first checking that both halves exceed MinSegmentLength):
+            // AddStraight already silently drops a half that is too short while keeping the other, so
+            // the junction vertex (uMid, that side) is a REAL vertex of the surviving half in every
+            // case; an "approximate junction" fallback is never needed.
             float uMid = (leftU + rightU) * 0.5f;
             bool connectorOnTopSide = connectToMin;
             bool spurOnTopSide = !connectToMin;
@@ -2204,8 +2141,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             bool splitBottom = !connectorOnTopSide || (withCulDeSac && !spurOnTopSide);
             bool emitSpur = withCulDeSac;
 
-            // Périmètre complet du laço, sens horaire : 4 côtés droits (top/bottom coupés en 2
-            // au besoin, voir ci-dessus) + 4 coins arrondis.
+            // The loop's full outline, clockwise: 4 straight sides (top/bottom split in 2 when needed,
+            // see above) + 4 rounded corners.
             if (splitTop)
             {
                 AddStraight(topStart, new float2(uMid, topStart.y));
@@ -2231,19 +2168,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
             AddStraight(leftStart, leftEnd);
             AddArc(leftEnd, topStart, -wV, wU);
 
-            // Embranchement unique vers la collectrice, sur le côté connectToMin (vMin) ou
-            // l'opposé (vMax) — point milieu du côté choisi (uMid, désormais un VRAI sommet
-            // partagé, voir ci-dessus) jusqu'à la ligne de collectrice réelle (bord du
-            // quarteirão AVANT la marge, voir SplitSegmentsAtMidSpanAttachPoints pour le
-            // raccord côté collectrice).
+            // Single branch to the collector, on the connectToMin side (vMin) or the opposite one
+            // (vMax): from the middle of the chosen side (uMid, now a REAL shared vertex, see above) to
+            // the actual collector line (the block edge BEFORE the margin; see
+            // SplitSegmentsAtMidSpanAttachPoints for the join on the collector side).
             float connectorNearV = connectToMin ? nearV : farV;
             float connectorFarV = connectToMin ? vMin : vMax;
             AddStraight(new float2(uMid, connectorFarV), new float2(uMid, connectorNearV));
 
-            // Cul-de-sac : part du sommet exact où le côté "fond" a été coupé (uMid, ce côté)
-            // et remonte vers le centre — spurLength = fraction culDeSacDepth de la profondeur
-            // totale du laço, même convention que le reste du mod (CulDeSacDepthUiToReal/
-            // GridGenerator ligne classique, plafonné à 0.5-0.8).
+            // Cul-de-sac: starts at the exact vertex where the back side was split (uMid, that side)
+            // and runs toward the center. spurLength = culDeSacDepth fraction of the loop's total
+            // depth, same convention as the classic grid's cul-de-sacs (EmitCulDeSacBlock, clamped to
+            // 0.5-0.8).
             if (emitSpur)
             {
                 float farSideV = spurOnTopSide ? nearV : farV;
@@ -2262,7 +2198,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return true;
         }
 
-        /// <summary>Vrai si point (coordonnées locales) est intérieur à polygon (règle pair-impair, ray casting horizontal). Utilisé pour valider qu'un super-îlot Loop est entièrement à l'intérieur du périmètre.</summary>
+        /// <summary>True if point is inside polygon (same coordinate space; even-odd rule, horizontal ray casting). Used e.g. to check that a Loop block lies entirely inside the perimeter.</summary>
         private static bool PointInPolygon(float2 point, List<float2> polygon)
         {
             bool inside = false;

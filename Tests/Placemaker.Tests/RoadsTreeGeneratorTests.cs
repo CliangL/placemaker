@@ -70,7 +70,7 @@ namespace Placemaker.Tests
             return ((d1 > 1e-2f && d2 < -1e-2f) || (d1 < -1e-2f && d2 > 1e-2f)) && ((d3 > 1e-2f && d4 < -1e-2f) || (d3 < -1e-2f && d4 > 1e-2f));
         }
 
-        /// <summary>Vérifications communes : dans la forme, loin du périmètre sauf raccords de la collectrice, sans croisement, tout relié à la collectrice.</summary>
+        /// <summary>Common checks: inside the shape, away from the perimeter except where the collector joins it, no crossings, everything connected to the collector.</summary>
         private static void AssertWellFormed(List<RoadSegmentDef> segments, List<float3> perimeter, string label)
         {
             Assert.Contains(segments, s => s.IsAvenue);
@@ -80,12 +80,12 @@ namespace Placemaker.Tests
                 foreach (float3 q in new[] { s.Start, s.End })
                 {
                     float d = DistanceToPolygon(q.xz, perimeter);
-                    // Seule la collectrice touche le périmètre ; tout le reste en est loin.
-                    Assert.True(s.IsAvenue && d < 0.5f || d >= 24f, $"{label} : nœud à {d:F1} m du périmètre en {q.xz}");
+                    // Only the collector touches the perimeter; everything else stays away from it.
+                    Assert.True(s.IsAvenue && d < 0.5f || d >= 24f, $"{label}: node {d:F1} m from the perimeter at {q.xz}");
                 }
                 for (int i = 1; i < 10; i++)
                 {
-                    Assert.True(Inside(math.lerp(s.Start.xz, s.End.xz, i / 10f), perimeter), $"{label} : tronçon hors de la forme en {s.Start.xz}");
+                    Assert.True(Inside(math.lerp(s.Start.xz, s.End.xz, i / 10f), perimeter), $"{label}: segment outside the shape at {s.Start.xz}");
                 }
                 if (!s.IsAvenue)
                 {
@@ -93,28 +93,28 @@ namespace Placemaker.Tests
                     for (float t = 0f; t <= length; t += 4f)
                     {
                         float2 q = math.lerp(s.Start.xz, s.End.xz, t / length);
-                        Assert.True(DistanceToPolygon(q, perimeter) >= 24f, $"{label} : rue à {DistanceToPolygon(q, perimeter):F1} m du périmètre en {q}");
+                        Assert.True(DistanceToPolygon(q, perimeter) >= 24f, $"{label}: street {DistanceToPolygon(q, perimeter):F1} m from the perimeter at {q}");
                     }
                 }
             }
-            // Aucun croisement hors des nœuds partagés.
+            // No crossings other than at shared nodes.
             for (int i = 0; i < segments.Count; i++)
             {
                 for (int j = i + 1; j < segments.Count; j++)
                 {
-                    Assert.False(ProperCross(segments[i], segments[j]), $"{label} : croisement entre {segments[i].Start.xz} et {segments[j].Start.xz}");
+                    Assert.False(ProperCross(segments[i], segments[j]), $"{label}: crossing between {segments[i].Start.xz} and {segments[j].Start.xz}");
                 }
             }
-            // Bouts d'impasses : à au moins 40 m les uns des autres (cercles de retournement).
+            // Cul-de-sac ends: at least 40 m from each other (turning circles).
             var tips = segments.Where(s => s.IsCulDeSacEnd).Select(s => s.End.xz).ToList();
             for (int i = 0; i < tips.Count; i++)
             {
                 for (int j = i + 1; j < tips.Count; j++)
                 {
-                    Assert.True(math.distance(tips[i], tips[j]) >= 39f, $"{label} : bouts d'impasse à {math.distance(tips[i], tips[j]):F0} m en {tips[i]}");
+                    Assert.True(math.distance(tips[i], tips[j]) >= 39f, $"{label}: cul-de-sac ends {math.distance(tips[i], tips[j]):F0} m apart at {tips[i]}");
                 }
             }
-            // Tout est relié à la collectrice (un seul réseau, sans morceau isolé).
+            // Everything is connected to the collector (a single network, no isolated piece).
             var adjacency = new Dictionary<float3, List<float3>>();
             void Link(float3 a, float3 b)
             {
@@ -135,7 +135,7 @@ namespace Placemaker.Tests
                 if (!seen.Add(n)) continue;
                 foreach (float3 m in adjacency[n]) stack.Push(m);
             }
-            Assert.True(seen.Count == adjacency.Count, $"{label} : {adjacency.Count - seen.Count} nœud(s) non reliés à la collectrice");
+            Assert.True(seen.Count == adjacency.Count, $"{label}: {adjacency.Count - seen.Count} node(s) not connected to the collector");
         }
 
         [Fact]
@@ -145,18 +145,18 @@ namespace Placemaker.Tests
             var segments = GridGenerator.GenerateGrid(perimeter, Tree());
             AssertWellFormed(segments, perimeter, "rectangle");
             var collector = segments.Where(s => s.IsAvenue).ToList();
-            // Collectrice le long du grand côté (15°), reliée au périmètre à ses deux bouts.
+            // Collector along the long side (15°), joined to the perimeter at both ends.
             float2 dir = math.normalize(collector.Last().End.xz - collector.First().Start.xz);
             Assert.True(math.abs(math.dot(dir, new float2(math.cos(math.radians(15f)), math.sin(math.radians(15f))))) > 0.999f);
             Assert.True(OnPerimeter(collector.First().Start, perimeter) && OnPerimeter(collector.Last().End, perimeter));
-            // Branches des deux côtés, en T (jamais deux branches au même nœud de la collectrice).
+            // Branches on both sides, as T junctions (never two branches at the same collector node).
             var collectorNodes = new HashSet<float3>(collector.SelectMany(s => new[] { s.Start, s.End }));
             var branchStarts = segments.Where(s => !s.IsAvenue && !s.IsCulDeSacEnd && collectorNodes.Contains(s.Start)).ToList();
             Assert.True(branchStarts.Count >= 6, $"{branchStarts.Count} branches");
             Assert.All(branchStarts.GroupBy(s => s.Start), g => Assert.Single(g));
-            // Impasses de la longueur demandée (90 m), le long de l'axe de la collectrice.
+            // Cul-de-sacs of the requested length (90 m), along the collector's axis.
             var culDeSacs = segments.Where(s => s.IsCulDeSacEnd).ToList();
-            Assert.True(culDeSacs.Count >= 20, $"{culDeSacs.Count} impasses");
+            Assert.True(culDeSacs.Count >= 20, $"{culDeSacs.Count} cul-de-sacs");
             Assert.All(culDeSacs, s => Assert.True(math.abs(math.dot(math.normalize(s.End.xz - s.Start.xz), dir)) > 0.999f));
             Assert.Contains(culDeSacs, s => math.abs(math.distance(s.Start.xz, s.End.xz) - 90f) < 0.5f);
         }
@@ -164,10 +164,10 @@ namespace Placemaker.Tests
         [Fact]
         public void CulDeSacsBetweenBranches_KeepTheirTipsApart()
         {
-            // Branches à 160 m : impasses ramenées à (160 − 40) / 2 = 60 m pour ne pas se toucher.
+            // Branches 160 m apart: cul-de-sacs shortened to (160 - 40) / 2 = 60 m so they do not touch.
             var perimeter = Rectangle(1200f, 700f);
             var segments = GridGenerator.GenerateGrid(perimeter, Tree(branch: 160f, length: 150f));
-            AssertWellFormed(segments, perimeter, "branches serrées");
+            AssertWellFormed(segments, perimeter, "tight branches");
             Assert.All(segments.Where(s => s.IsCulDeSacEnd), s => Assert.True(math.distance(s.Start.xz, s.End.xz) <= 60.5f));
         }
 
@@ -175,7 +175,7 @@ namespace Placemaker.Tests
         public void RealPerimeter_IsWellFormed()
         {
             var perimeter = LoadRealPerimeter();
-            foreach ((GridParameters p, string label) in new[] { (Tree(), "défaut"), (Tree(branch: 160f, spacing: 60f, length: 60f), "serré"),
+            foreach ((GridParameters p, string label) in new[] { (Tree(), "default"), (Tree(branch: 160f, spacing: 60f, length: 60f), "tight"),
                          (Tree(branch: 400f, spacing: 150f, length: 150f), "large"), (Tree(angle: 40f), "40°") })
             {
                 AssertWellFormed(GridGenerator.GenerateGrid(perimeter, p), perimeter, label);
@@ -190,10 +190,10 @@ namespace Placemaker.Tests
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < 5; i++)
             {
-                GridGenerator.GenerateGrid(perimeter, Tree(spacing: 62f + i)); // réglages différents : hors cache
+                GridGenerator.GenerateGrid(perimeter, Tree(spacing: 62f + i)); // different settings on each run
             }
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 250, $"5 générations en {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < 250, $"5 generations in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         [Fact]
@@ -202,7 +202,7 @@ namespace Placemaker.Tests
             var perimeter = Rectangle(600f, 400f);
             GridParameters p = GridParameters.Default;
             int before = GridGenerator.GenerateGrid(perimeter, p).Count;
-            p.TreeBranchSpacing = 300f; // réglage du motif sans le motif : aucun effet
+            p.TreeBranchSpacing = 300f; // pattern setting without the pattern enabled: no effect
             Assert.Equal(before, GridGenerator.GenerateGrid(perimeter, p).Count);
         }
 
@@ -228,12 +228,12 @@ namespace Placemaker.Tests
                 Assert.InRange(length, 15f, GridGenerator.PedestrianLinkMaxLength);
                 Assert.Contains(link.Start, tips);
                 bool onPerimeter = link.End.x < 0.5f || link.End.x > 999.5f || link.End.z < 0.5f || link.End.z > 699.5f;
-                Assert.True(onPerimeter || nodes.Contains(link.End), $"{pattern} : liaison vers {link.End.xz}, ni nœud ni périmètre");
+                Assert.True(onPerimeter || nodes.Contains(link.End), $"{pattern}: link to {link.End.xz}, neither a node nor the perimeter");
                 foreach (float2[] street in streets)
                 {
                     for (int k = 1; k < street.Length; k++)
                     {
-                        Assert.False(Crosses(link.Start.xz, link.End.xz, street[k - 1], street[k]), $"{pattern} : liaison {link.Start.xz} → {link.End.xz} croise une rue");
+                        Assert.False(Crosses(link.Start.xz, link.End.xz, street[k - 1], street[k]), $"{pattern}: link {link.Start.xz} → {link.End.xz} crosses a street");
                     }
                 }
             }

@@ -46,7 +46,7 @@ namespace Placemaker.Tests
             int inside = segments.Count(s => math.distance((s.Start.xz + s.End.xz) * 0.5f, centre) < 200f);
             int outside = segments.Count(s => math.distance((s.Start.xz + s.End.xz) * 0.5f, centre) > 240f);
             int ringRoad = segments.Count(s => s.IsAvenue && math.abs(math.distance(s.Start.xz, centre) - 220f) < 1f && math.abs(math.distance(s.End.xz, centre) - 220f) < 1f);
-            _out.WriteLine($"seed {seed}: {segments.Count} tronçons, {inside} au centre, {outside} autour, {ringRoad} sur le cercle");
+            _out.WriteLine($"seed {seed}: {segments.Count} segments, {inside} in the centre, {outside} around it, {ringRoad} on the ring");
             Assert.True(inside > 5 && outside > 10 && ringRoad >= 6);
             string outDir = System.Environment.GetEnvironmentVariable("GRG_OUT");
             if (!string.IsNullOrEmpty(outDir) && seed == 1)
@@ -57,15 +57,15 @@ namespace Placemaker.Tests
                 System.IO.File.WriteAllLines(System.IO.Path.Combine(outDir, "mixed.txt"), lines);
             }
 
-            // Aucun croisement (courbes du jeu).
+            // No crossings (game curves).
             var curves = segments.Select(s => RoadsConcentricGeneratorTests.GameCurve(s, 12)).ToList();
             for (int a = 0; a < curves.Count; a++)
                 for (int b = a + 1; b < curves.Count; b++)
                     for (int i = 1; i < curves[a].Length; i++)
                         for (int j = 1; j < curves[b].Length; j++)
-                            Assert.False(Crosses(curves[a][i - 1], curves[a][i], curves[b][j - 1], curves[b][j]), $"croisement près de {curves[a][i]}");
+                            Assert.False(Crosses(curves[a][i - 1], curves[a][i], curves[b][j - 1], curves[b][j]), $"crossing near {curves[a][i]}");
 
-            // Tout est relié au périmètre extérieur.
+            // Everything is connected to the outer perimeter.
             var adjacency = new Dictionary<float3, List<float3>>();
             foreach (RoadSegmentDef s in segments)
             {
@@ -85,7 +85,7 @@ namespace Placemaker.Tests
                 if (!seen.Add(n)) continue;
                 stack.AddRange(adjacency[n]);
             }
-            Assert.True(seen.Count == adjacency.Count, $"{adjacency.Count - seen.Count} nœud(s) non reliés au périmètre");
+            Assert.True(seen.Count == adjacency.Count, $"{adjacency.Count - seen.Count} node(s) not connected to the perimeter");
         }
 
         [Fact]

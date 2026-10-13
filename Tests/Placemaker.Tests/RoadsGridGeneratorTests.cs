@@ -9,37 +9,37 @@ using Xunit;
 namespace Placemaker.Tests
 {
     /// <summary>
-    /// Vérifie le pré-découpage de la grille aux croisements internes :
-    ///  - chaque croisement intérieur au polygone est une extrémité partagée par
-    ///    exactement 4 sous-segments (2 par ligne) ;
-    ///  - un croisement au bord du polygone (une ou deux lignes s'y terminent) est
-    ///    partagé par 2 ou 3 sous-segments ;
-    ///  - aucun croisement ne se trouve en milieu de sous-segment ;
-    ///  - les extrémités qui se rejoignent sont EXACTEMENT identiques (mêmes floats),
-    ///    condition pour que le jeu les fusionne en un seul nœud ;
-    ///  - aucun sous-segment plus court que MinSegmentLength.
+    /// Checks the pre-splitting of the grid at internal crossings:
+    ///  - every crossing inside the polygon is an endpoint shared by
+    ///    exactly 4 sub-segments (2 per line);
+    ///  - a crossing on the polygon border (one or two lines end there) is
+    ///    shared by 2 or 3 sub-segments;
+    ///  - no crossing lies in the middle of a sub-segment;
+    ///  - endpoints that meet are EXACTLY identical (same floats),
+    ///    which is required for the game to merge them into a single node;
+    ///  - no sub-segment shorter than MinSegmentLength.
     /// </summary>
     public class RoadsGridGeneratorTests
     {
         // ------------------------------------------------------------------
-        // Cas 1 : carré axis-aligned, mode "ajuster à l'aire" 3×3
-        // → 9 croisements internes, chacun partagé par exactement 4 sous-segments.
+        // Case 1: axis-aligned square, "fit to area" mode 3×3
+        // → 9 internal crossings, each shared by exactly 4 sub-segments.
         // ------------------------------------------------------------------
 
         [Fact]
         public void RemoveBacktracks_DropsShortReversals_KeepsRealCorners()
         {
-            // Vécu sur un vrai périmètre : les échantillons d'une courbe dépassaient le nœud
-            // suivant de ~3 m, puis le contour revenait en arrière (virage de 179°).
+            // Seen on a real perimeter: a curve's samples overshot the next node
+            // by ~3 m, then the contour doubled back (179° turn).
             var loop = new List<float3>
             {
                 new float3(0f, 1f, 0f), new float3(300f, 2f, 0f), new float3(303f, 2f, 0f), new float3(300.5f, 2f, 0.2f),
                 new float3(300f, 3f, 300f), new float3(0f, 4f, 300f),
             };
             GridGenerator.RemoveBacktracks(loop);
-            Assert.Equal(5, loop.Count); // seul le point qui dépassait (303 m) part
+            Assert.Equal(5, loop.Count); // only the overshooting point (303 m) is removed
             Assert.DoesNotContain(loop, p => p.x > 301f);
-            Assert.Contains(loop, p => p.x == 300f && p.z == 300f && p.y == 3f); // coin à 90° gardé, hauteur conservée
+            Assert.Contains(loop, p => p.x == 300f && p.z == 300f && p.y == 3f); // 90° corner kept, height preserved
         }
 
         [Fact]
@@ -62,7 +62,7 @@ namespace Placemaker.Tests
 
             var segments = GridGenerator.GenerateGrid(nodes, parameters);
 
-            // 3 lignes u × 4 tronçons + 3 lignes v × 4 tronçons.
+            // 3 u-lines × 4 segments + 3 v-lines × 4 segments.
             Assert.Equal(24, segments.Count);
 
             var shared = SharedEndpoints(segments);
@@ -76,8 +76,8 @@ namespace Placemaker.Tests
         }
 
         // ------------------------------------------------------------------
-        // Cas 2 : polygone concave en L, espacement fixe
-        // → 12 croisements, tous intérieurs, chacun partagé par 4 sous-segments.
+        // Case 2: concave L-shaped polygon, fixed spacing
+        // → 12 crossings, all interior, each shared by 4 sub-segments.
         // ------------------------------------------------------------------
 
         [Fact]
@@ -102,8 +102,8 @@ namespace Placemaker.Tests
 
             var segments = GridGenerator.GenerateGrid(nodes, parameters);
 
-            // Lignes u : 60 et 120 traversent tout le L (5 tronçons), 180 et 240
-            // seulement la branche basse (3 tronçons) ; symétrique pour v.
+            // u-lines: 60 and 120 cross the whole L (5 segments), 180 and 240
+            // only the lower branch (3 segments); symmetric for v.
             Assert.Equal(32, segments.Count);
 
             var shared = SharedEndpoints(segments);
@@ -117,10 +117,10 @@ namespace Placemaker.Tests
         }
 
         // ------------------------------------------------------------------
-        // Cas 3 : croisement AU BORD du polygone. L'encoche en V du polygone a son
-        // apex exactement sur le croisement (200, 150) : la ligne u s'y termine
-        // (clippée par l'encoche) pendant que la ligne v passe de part et d'autre.
-        // → jonction en T : le point est partagé par exactement 3 sous-segments.
+        // Case 3: crossing ON THE BORDER of the polygon. The polygon's V notch has its
+        // apex exactly on the crossing (200, 150): the u-line ends there
+        // (clipped by the notch) while the v-line passes on both sides.
+        // → T junction: the point is shared by exactly 3 sub-segments.
         // ------------------------------------------------------------------
 
         [Fact]
@@ -132,7 +132,7 @@ namespace Placemaker.Tests
                 new float3(400f, 0f, 0f),
                 new float3(400f, 0f, 300f),
                 new float3(250f, 0f, 300f),
-                new float3(200f, 0f, 150f), // apex de l'encoche = croisement u=200 × v=150
+                new float3(200f, 0f, 150f), // notch apex = crossing u=200 × v=150
                 new float3(150f, 0f, 300f),
                 new float3(0f, 0f, 300f),
             };
@@ -146,8 +146,8 @@ namespace Placemaker.Tests
 
             var segments = GridGenerator.GenerateGrid(nodes, parameters);
 
-            // Ligne u=200 : 1 tronçon (arrêtée à l'apex) ; ligne v=150 : 2 tronçons
-            // (un sous chaque bras), qui se rejoignent à l'apex.
+            // Line u=200: 1 segment (stopped at the apex); line v=150: 2 segments
+            // (one under each arm), meeting at the apex.
             Assert.Equal(3, segments.Count);
 
             var shared = SharedEndpoints(segments);
@@ -160,10 +160,10 @@ namespace Placemaker.Tests
         }
 
         // ------------------------------------------------------------------
-        // Invariants communs
+        // Common invariants
         // ------------------------------------------------------------------
 
-        /// <summary>Extrémités partagées par au moins 2 sous-segments, avec leur multiplicité.</summary>
+        /// <summary>Endpoints shared by at least 2 sub-segments, with their multiplicity.</summary>
         private static Dictionary<float3, int> SharedEndpoints(List<RoadSegmentDef> segments)
         {
             var counts = new Dictionary<float3, int>();
@@ -185,26 +185,26 @@ namespace Placemaker.Tests
             }
             var endpoints = counts.Keys.ToList();
 
-            // 1) Pas de segment sous la longueur minimale.
+            // 1) No segment below the minimum length.
             foreach (var segment in segments)
             {
                 Assert.True(math.distance(segment.Start.xz, segment.End.xz) >= GridGenerator.MinSegmentLength - 1e-3f,
-                    $"Sous-segment trop court : {segment.Start} → {segment.End}");
+                    $"Sub-segment too short: {segment.Start} → {segment.End}");
             }
 
-            // 2) Deux extrémités très proches doivent être EXACTEMENT le même point
-            //    (mêmes floats) — sinon le jeu créerait deux nœuds au lieu d'un.
+            // 2) Two very close endpoints must be EXACTLY the same point
+            //    (same floats) — otherwise the game would create two nodes instead of one.
             for (int i = 0; i < endpoints.Count; i++)
             {
                 for (int j = i + 1; j < endpoints.Count; j++)
                 {
                     Assert.True(math.distance(endpoints[i], endpoints[j]) >= 0.5f,
-                        $"Extrémités distinctes quasi confondues (fusion impossible) : {endpoints[i]} vs {endpoints[j]}");
+                        $"Distinct endpoints nearly coincident (cannot merge): {endpoints[i]} vs {endpoints[j]}");
                 }
             }
 
-            // 3) Aucune extrémité partagée ne se trouve en MILIEU d'un autre segment :
-            //    tout croisement doit avoir découpé les deux lignes.
+            // 3) No shared endpoint lies in the MIDDLE of another segment:
+            //    every crossing must have split both lines.
             foreach (var pair in counts.Where(p => p.Value >= 2))
             {
                 float3 point = pair.Key;
@@ -214,7 +214,7 @@ namespace Placemaker.Tests
                         continue;
                     float distance = DistanceToSegmentXZ(point.xz, segment.Start.xz, segment.End.xz);
                     Assert.True(distance > 0.5f,
-                        $"Croisement {point} en plein milieu du segment {segment.Start} → {segment.End}");
+                        $"Crossing {point} in the middle of segment {segment.Start} → {segment.End}");
                 }
             }
         }
@@ -227,7 +227,7 @@ namespace Placemaker.Tests
         }
     }
 
-    /// <summary>Vérifie le paramètre AngleOffsetDegrees : 0° = comportement inchangé, 90° = axes échangés, clipping correct à tout angle.</summary>
+    /// <summary>Checks the AngleOffsetDegrees parameter: 0° = unchanged behaviour, 90° = axes swapped, correct clipping at any angle.</summary>
     public class GridGeneratorAngleTests
     {
         private static readonly List<float3> SquareNodes = new List<float3>
@@ -252,17 +252,17 @@ namespace Placemaker.Tests
 
             var segments = GridGenerator.GenerateGrid(SquareNodes, parameters);
 
-            // Même résultat que le test de régression sans angle (24 segments,
-            // 3 lignes u × 4 tronçons + 3 lignes v × 4 tronçons).
+            // Same result as the regression test without angle (24 segments,
+            // 3 u-lines × 4 segments + 3 v-lines × 4 segments).
             Assert.Equal(24, segments.Count);
         }
 
         [Fact]
         public void Angle90_SwapsAxisOfVariation()
         {
-            // Carré axis-aligned, origine (0,0), arête la plus longue = (0,0)->(300,0)
-            // donc uDir=(1,0) à 0°. Une seule ligne de chaque jeu (Rows=1, Columns=1)
-            // pour isoler la géométrie sans ambiguïté de tri.
+            // Axis-aligned square, origin (0,0), longest edge = (0,0)->(300,0)
+            // so uDir=(1,0) at 0°. A single line of each set (Rows=1, Columns=1)
+            // to isolate the geometry without any sorting ambiguity.
             var parameters0 = new GridParameters
             {
                 Mode = SpacingMode.FitToArea,
@@ -277,17 +277,17 @@ namespace Placemaker.Tests
             var segments0 = GridGenerator.GenerateGrid(SquareNodes, parameters0);
             var segments90 = GridGenerator.GenerateGrid(SquareNodes, parameters90);
 
-            // La ligne des colonnes croise celle des rangées en plein milieu du carré
-            // et se retrouve donc pré-découpée en 2 sous-segments (Chantier 1) : chaque
-            // morceau reste individuellement droit, First() suffit pour lire son axe.
+            // The column line crosses the row line right in the middle of the square
+            // and is therefore pre-split into 2 sub-segments (Work item 1): each
+            // piece stays individually straight, First() is enough to read its axis.
 
-            // À 0° : la ligne des colonnes est verticale en monde (X constant, Z varie).
+            // At 0°: the column line is vertical in world space (X constant, Z varies).
             var columnLine0 = segments0.First(s => !s.IsHorizontal);
             Assert.Equal(columnLine0.Start.x, columnLine0.End.x, 2);
             Assert.NotEqual(columnLine0.Start.z, columnLine0.End.z, 2);
 
-            // À 90° : la même ligne des colonnes devient horizontale en monde
-            // (Z constant, X varie) — les axes ont basculé.
+            // At 90°: the same column line becomes horizontal in world space
+            // (Z constant, X varies) — the axes have swapped.
             var columnLine90 = segments90.First(s => !s.IsHorizontal);
             Assert.Equal(columnLine90.Start.z, columnLine90.End.z, 2);
             Assert.NotEqual(columnLine90.Start.x, columnLine90.End.x, 2);
@@ -296,9 +296,9 @@ namespace Placemaker.Tests
         [Fact]
         public void ObliqueAngle_ClipsPolygonCorrectlyOnConcaveShape()
         {
-            // L concave, angle 45° : pas de valeurs attendues à la main (trop
-            // fastidieux à dériver), on vérifie les invariants structurels du
-            // clipping (segments bien formés, aucun croisement en milieu de segment).
+            // Concave L, 45° angle: no hand-computed expected values (too
+            // tedious to derive), we check the structural invariants of the
+            // clipping (well-formed segments, no crossing in the middle of a segment).
             var nodes = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -323,26 +323,26 @@ namespace Placemaker.Tests
             foreach (var segment in segments)
             {
                 Assert.True(math.distance(segment.Start.xz, segment.End.xz) >= GridGenerator.MinSegmentLength - 1e-3f,
-                    $"Sous-segment trop court à 45° : {segment.Start} → {segment.End}");
+                    $"Sub-segment too short at 45°: {segment.Start} → {segment.End}");
                 Assert.False(float.IsNaN(segment.Start.x) || float.IsNaN(segment.Start.z)
                     || float.IsNaN(segment.End.x) || float.IsNaN(segment.End.z),
-                    "Coordonnée NaN produite par le clipping à angle oblique.");
+                    "NaN coordinate produced by clipping at an oblique angle.");
             }
         }
     }
 
     /// <summary>
-    /// Vérifie le mode culs-de-sac : les collectrices (lignes parallèles à l'axe
-    /// principal, "rangées") restent toujours traversantes ; les colonnes
-    /// (perpendiculaires) deviennent des impasses selon CulDeSacRatio, avec
-    /// alternance haut/bas si Staggered et profondeur CulDeSacDepth.
+    /// Checks cul-de-sac mode: collectors (lines parallel to the main
+    /// axis, "rows") always stay through-roads; columns
+    /// (perpendicular) become cul-de-sacs according to CulDeSacRatio, with
+    /// top/bottom alternation if Staggered and depth CulDeSacDepth.
     ///
-    /// Géométrie commune : carré (0,0)-(300,0)-(300,300)-(0,300). Arête la plus
-    /// longue (0,0)-(300,0) ⇒ uDir=(1,0) Est (axe principal), vDir=(0,1) Nord.
-    /// Columns=1 place une seule colonne (u=150, monde X=150 constant) ; Rows=N
-    /// place N collectrices équiréparties (v=const, monde Z=const). Le point monde
-    /// d'une colonne à la coordonnée t vaut donc (150, t) — sert à vérifier
-    /// précisément les extrémités des impasses.
+    /// Common geometry: square (0,0)-(300,0)-(300,300)-(0,300). Longest
+    /// edge (0,0)-(300,0) ⇒ uDir=(1,0) East (main axis), vDir=(0,1) North.
+    /// Columns=1 places a single column (u=150, world X=150 constant); Rows=N
+    /// places N evenly spaced collectors (v=const, world Z=const). The world point
+    /// of a column at coordinate t is therefore (150, t) — used to check
+    /// the cul-de-sac endpoints precisely.
     /// </summary>
     public class GridGeneratorCulDeSacTests
     {
@@ -366,7 +366,7 @@ namespace Placemaker.Tests
             CulDeSacRatio = 100f,
         };
 
-        /// <summary>Segments de la colonne (u-line) uniquement : IsHorizontal=false leur est propre, les collectrices ont IsHorizontal=true.</summary>
+        /// <summary>Column (u-line) segments only: IsHorizontal=false is specific to them, collectors have IsHorizontal=true.</summary>
         private static List<RoadSegmentDef> ColumnSegments(List<RoadSegmentDef> segments) =>
             segments.Where(s => !s.IsHorizontal).ToList();
 
@@ -375,7 +375,7 @@ namespace Placemaker.Tests
         {
             var withFlag = BaseParameters(3);
             withFlag.CulDeSacMode = false;
-            withFlag.Columns = 3; // reproduit exactement le test de régression 3x3
+            withFlag.Columns = 3; // reproduces the 3x3 regression test exactly
 
             var withoutField = new GridParameters
             {
@@ -395,28 +395,28 @@ namespace Placemaker.Tests
         [Fact]
         public void Ratio100_NoColumnBlockRemainsFullLength()
         {
-            // Rows=2 : collectrices à v=100 et v=200. La colonne u=150 traverse
-            // [0,300] ⇒ chaîne [0(bord),100(collectrice),200(collectrice),300(bord)]
-            // ⇒ 3 blocs. Bloc [0,100] : départ=bord (pas de vraie collectrice) ⇒
-            // supprimé. Bloc [100,200] : alternance impaire ⇒ part de 200 vers 100,
-            // s'arrête à 200+(100-200)*0.75=125. Bloc [200,300] : alternance paire
-            // ⇒ part de 200 vers 300, s'arrête à 200+(300-200)*0.75=275.
+            // Rows=2: collectors at v=100 and v=200. Column u=150 spans
+            // [0,300] ⇒ chain [0(border),100(collector),200(collector),300(border)]
+            // ⇒ 3 blocks. Block [0,100]: start=border (not a real collector) ⇒
+            // removed. Block [100,200]: odd alternation ⇒ goes from 200 towards 100,
+            // stops at 200+(100-200)*0.75=125. Block [200,300]: even alternation
+            // ⇒ goes from 200 towards 300, stops at 200+(300-200)*0.75=275.
             var parameters = BaseParameters(2);
 
             var segments = GridGenerator.GenerateGrid(SquareNodes, parameters);
             var columns = ColumnSegments(segments);
 
-            Assert.Equal(2, columns.Count); // le bloc de bord est supprimé
+            Assert.Equal(2, columns.Count); // the border block is removed
 
             foreach (var segment in columns)
             {
                 float length = math.distance(segment.Start.xz, segment.End.xz);
-                Assert.True(length < 100f - 1f, $"Impasse pas plus courte que le bloc complet (100 m) : {length}");
+                Assert.True(length < 100f - 1f, $"Cul-de-sac not shorter than the full block (100 m): {length}");
                 Assert.Equal(75f, length, 1); // 0.75 * 100
             }
 
-            // Les deux impasses partent bien de la collectrice centrale (v=200,
-            // monde (150,200)) et s'arrêtent chacune à 75 m dans une direction opposée.
+            // Both cul-de-sacs do start from the central collector (v=200,
+            // world (150,200)) and each stops 75 m away in opposite directions.
             var endpoints = columns.SelectMany(s => new[] { s.Start, s.End }).ToList();
             Assert.Contains(endpoints, p => math.distance(p.xz, new float2(150f, 200f)) < 0.5f);
             Assert.Contains(endpoints, p => math.distance(p.xz, new float2(150f, 125f)) < 0.5f);
@@ -426,19 +426,19 @@ namespace Placemaker.Tests
         [Fact]
         public void CulDeSacBlock_MarksOnlyTheFreeEndAsCulDeSacEnd()
         {
-            // Même géométrie que Ratio100_NoColumnBlockRemainsFullLength : 2 impasses,
-            // chacune partant d'une vraie collectrice (Start, jamais marqué) et
-            // s'arrêtant à son bout libre (End, doit être marqué IsCulDeSacEnd).
+            // Same geometry as Ratio100_NoColumnBlockRemainsFullLength: 2 cul-de-sacs,
+            // each starting from a real collector (Start, never marked) and
+            // ending at its free end (End, must be marked IsCulDeSacEnd).
             var segments = GridGenerator.GenerateGrid(SquareNodes, BaseParameters(2));
             var columns = ColumnSegments(segments);
 
             Assert.Equal(2, columns.Count);
             foreach (var segment in columns)
             {
-                Assert.True(segment.IsCulDeSacEnd, "Le bout libre d'une impasse doit être marqué IsCulDeSacEnd.");
+                Assert.True(segment.IsCulDeSacEnd, "The free end of a cul-de-sac must be marked IsCulDeSacEnd.");
             }
 
-            // Les collectrices traversantes (lignes horizontales) ne sont jamais des impasses.
+            // Through collectors (horizontal lines) are never cul-de-sacs.
             var collectors = segments.Where(s => s.IsHorizontal).ToList();
             Assert.NotEmpty(collectors);
             Assert.All(collectors, s => Assert.False(s.IsCulDeSacEnd));
@@ -447,9 +447,9 @@ namespace Placemaker.Tests
         [Fact]
         public void StaggeredTrueVersusFalse_ProduceDifferentStartingCollectors()
         {
-            // Même géométrie que Ratio100_NoColumnBlockRemainsFullLength. Sans
-            // alternance, le bloc [100,200] doit partir de la collectrice basse
-            // (v=100) au lieu de la haute (v=200).
+            // Same geometry as Ratio100_NoColumnBlockRemainsFullLength. Without
+            // alternation, block [100,200] must start from the lower collector
+            // (v=100) instead of the upper one (v=200).
             var staggered = BaseParameters(2);
             var notStaggered = BaseParameters(2);
             notStaggered.Staggered = false;
@@ -460,11 +460,11 @@ namespace Placemaker.Tests
             var staggeredEndpoints = columnsStaggered.SelectMany(s => new[] { s.Start, s.End }).ToList();
             var plainEndpoints = columnsPlain.SelectMany(s => new[] { s.Start, s.End }).ToList();
 
-            // Avec Staggered=true, une impasse part de la collectrice haute (v=200)
-            // vers le bas et s'arrête à v=125.
+            // With Staggered=true, a cul-de-sac starts from the upper collector (v=200)
+            // downwards and stops at v=125.
             Assert.Contains(staggeredEndpoints, p => math.distance(p.xz, new float2(150f, 125f)) < 0.5f);
-            // Avec Staggered=false, le même bloc part de la collectrice basse (v=100)
-            // vers le haut et s'arrête à v=175 (100+(200-100)*0.75) — un résultat différent.
+            // With Staggered=false, the same block starts from the lower collector (v=100)
+            // upwards and stops at v=175 (100+(200-100)*0.75) — a different result.
             Assert.Contains(plainEndpoints, p => math.distance(p.xz, new float2(150f, 175f)) < 0.5f);
             Assert.DoesNotContain(plainEndpoints, p => math.distance(p.xz, new float2(150f, 125f)) < 0.5f);
         }
@@ -472,12 +472,12 @@ namespace Placemaker.Tests
         [Fact]
         public void Ratio50_AlternatesThroughAndCulDeSacBlocksDeterministically()
         {
-            // Rows=4 : collectrices à v=60,120,180,240 ⇒ chaîne à 6 points, 5 blocs
-            // de 60 m chacun (idx 0..4). Motif "une fois sur 2" (ratio=50, N=2) :
-            // blocs pairs (0,2,4) tentent une impasse, impairs (1,3) restent
-            // traversants. Le bloc 0 est en bord (supprimé) ; 2 et 4 réussissent
-            // (départ = vraie collectrice) ⇒ 2 impasses (45 m = 0.75*60) + 2
-            // traversées complètes (60 m) survivent, soit 4 segments de colonne.
+            // Rows=4: collectors at v=60,120,180,240 ⇒ 6-point chain, 5 blocks
+            // of 60 m each (idx 0..4). "Every other one" pattern (ratio=50, N=2):
+            // even blocks (0,2,4) try a cul-de-sac, odd ones (1,3) stay
+            // through-roads. Block 0 is on the border (removed); 2 and 4 succeed
+            // (start = real collector) ⇒ 2 cul-de-sacs (45 m = 0.75*60) + 2
+            // full through-segments (60 m) survive, i.e. 4 column segments.
             var parameters = BaseParameters(4);
             parameters.CulDeSacRatio = 50f;
 
@@ -492,15 +492,15 @@ namespace Placemaker.Tests
                 return length > 44f && length < 46f;
             });
 
-            Assert.Equal(2, fullLength); // blocs 1 et 3 : traversants (60 m)
-            Assert.Equal(2, stubLength); // blocs 2 et 4 : impasses (45 m)
+            Assert.Equal(2, fullLength); // blocks 1 and 3: through-roads (60 m)
+            Assert.Equal(2, stubLength); // blocks 2 and 4: cul-de-sacs (45 m)
         }
 
         [Fact]
         public void DepthOutOfRange_IsClampedToValidBounds()
         {
-            // CulDeSacDepth hors [0.5, 0.9] (ex. valeur non passée par l'UI/settings) :
-            // clampé plutôt que de produire une impasse dégénérée (longueur nulle ou négative).
+            // CulDeSacDepth outside [0.5, 0.9] (e.g. a value not passed through the UI/settings):
+            // clamped rather than producing a degenerate cul-de-sac (zero or negative length).
             var tooLow = BaseParameters(2);
             tooLow.CulDeSacDepth = 0f;
             var tooHigh = BaseParameters(2);
@@ -512,22 +512,22 @@ namespace Placemaker.Tests
             foreach (var segment in columnsLow.Concat(columnsHigh))
             {
                 float length = math.distance(segment.Start.xz, segment.End.xz);
-                Assert.InRange(length, 50f - 1f, 90f + 1f); // 0.5..0.9 * bloc de 100 m
+                Assert.InRange(length, 50f - 1f, 90f + 1f); // 0.5..0.9 * 100 m block
             }
         }
 
         [Fact]
         public void AxisRows_AppliesCulDeSacToRowsInsteadOfColumns()
         {
-            // Transposé de Ratio100_NoColumnBlockRemainsFullLength : Columns=2 (au lieu de
-            // Rows=2) fournit les 2 croisements internes à l'UNIQUE ligne de rangée
-            // (Rows=1), qui devient la candidate aux impasses avec CulDeSacAxis.Rows.
+            // Transpose of Ratio100_NoColumnBlockRemainsFullLength: Columns=2 (instead of
+            // Rows=2) provides the 2 internal crossings to the SINGLE row line
+            // (Rows=1), which becomes the cul-de-sac candidate with CulDeSacAxis.Rows.
             var parameters = BaseParameters(1);
             parameters.Columns = 2;
             parameters.CulDeSacAxis = CulDeSacAxis.Rows;
 
             var segments = GridGenerator.GenerateGrid(SquareNodes, parameters);
-            var columns = ColumnSegments(segments); // axisIsU (colonnes) : ne doivent JAMAIS être des impasses ici.
+            var columns = ColumnSegments(segments); // axisIsU (columns): must NEVER be cul-de-sacs here.
             var rows = segments.Except(columns).ToList();
 
             Assert.NotEmpty(columns);
@@ -538,8 +538,8 @@ namespace Placemaker.Tests
         [Fact]
         public void AxisBoth_AppliesCulDeSacToBothColumnsAndRows()
         {
-            // Rows=2 ET Columns=2 : les deux axes ont des croisements internes à
-            // proposer comme collectrices de départ pour l'autre axe.
+            // Rows=2 AND Columns=2: both axes have internal crossings to
+            // offer as starting collectors for the other axis.
             var parameters = BaseParameters(2);
             parameters.Columns = 2;
             parameters.CulDeSacAxis = CulDeSacAxis.Both;
@@ -554,14 +554,14 @@ namespace Placemaker.Tests
     }
 
     /// <summary>
-    /// Vérifie MinNodeDistance : un nœud généré (croisement, ou bout d'impasse) qui
-    /// tomberait à moins de MinNodeDistance d'un autre nœud déjà établi est purement
-    /// omis, jamais fusionné ni décalé.
+    /// Checks MinNodeDistance: a generated node (crossing, or cul-de-sac end) that
+    /// would fall less than MinNodeDistance from another already established node is simply
+    /// omitted, never merged or shifted.
     ///
-    /// La quasi-coïncidence la plus simple à provoquer de façon déterministe est une
-    /// impasse dont la profondeur (proche de la borne haute 90 %) laisse un bloc court
-    /// se terminer à moins de MinNodeDistance de la collectrice qu'elle approche sans
-    /// jamais l'atteindre : bloc de 70 m à 90 % de profondeur ⇒ écart de 7 m &lt; 8 m.
+    /// The simplest near-coincidence to trigger deterministically is a
+    /// cul-de-sac whose depth (close to the 90 % upper bound) makes a short block
+    /// end less than MinNodeDistance from the collector it approaches without
+    /// ever reaching it: 70 m block at 90 % depth ⇒ 7 m gap &lt; 8 m.
     /// </summary>
     public class GridGeneratorMinNodeDistanceTests
     {
@@ -587,16 +587,16 @@ namespace Placemaker.Tests
             var segments = GridGenerator.GenerateGrid(SquareNodes, parameters, out int omittedNodeCount);
 
             Assert.Equal(0, omittedNodeCount);
-            Assert.Equal(24, segments.Count); // identique au test de régression sans MinNodeDistance
+            Assert.Equal(24, segments.Count); // identical to the regression test without MinNodeDistance
         }
 
         [Fact]
         public void CulDeSacStubTooCloseToTargetCollector_IsOmittedNotShortened()
         {
-            // Rows=3 (collectrices tous les 70 m sur une bande [80,290] volontairement
-            // hors-grille — on force plutôt la géométrie via FixedSpacing) : plus simple,
-            // on compose directement un rectangle où l'espacement des collectrices vaut
-            // exactement 70 m pour isoler un seul bloc du bon gabarit.
+            // Rows=3 (collectors every 70 m on a band [80,290] deliberately
+            // off-grid — we force the geometry via FixedSpacing instead): simpler,
+            // we directly build a rectangle where the collector spacing is
+            // exactly 70 m to isolate a single block of the right size.
             var nodes = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -609,9 +609,9 @@ namespace Placemaker.Tests
                 Mode = SpacingMode.FixedSpacing,
                 Columns = 1,
                 Rows = 1,
-                SpacingMeters = 35f, // collectrices à v=35 et v=70
+                SpacingMeters = 35f, // collectors at v=35 and v=70
                 CulDeSacMode = true,
-                CulDeSacDepth = 0.9f, // plafonné à 0.8 (voir GridGenerator) : écart de 20 % du bloc = 7 m
+                CulDeSacDepth = 0.9f, // capped at 0.8 (see GridGenerator): gap of 20 % of the block = 7 m
                 Staggered = true,
                 CulDeSacRatio = 100f,
             };
@@ -619,18 +619,18 @@ namespace Placemaker.Tests
             var segments = GridGenerator.GenerateGrid(nodes, parameters, out int omittedNodeCount);
             var columns = segments.Where(s => !s.IsHorizontal).ToList();
 
-            // Bloc [0,35] (bord, départ non-collectrice) : supprimé comme avant.
-            // Bloc [35,70] : impair ⇒ part de la collectrice v=70 vers v=35,
-            // s'arrêterait à 70+(35-70)*0.8=42, à 7 m de la collectrice v=35
-            // (< MinNodeDistance=8) ⇒ omis pour quasi-coïncidence, PAS raccourci.
-            // Bloc [70,105] : pair ⇒ part de v=70 vers v=105 (bord, non-collecteur),
-            // s'arrête à 70+(105-70)*0.8=98, 7 m du bord — le bord n'étant pas un
-            // nœud "déjà établi", ce bloc-ci N'EST PAS concerné par MinNodeDistance.
-            Assert.True(omittedNodeCount >= 1, "Le bloc [35,70] aurait dû être omis pour quasi-coïncidence.");
+            // Block [0,35] (border, start is not a collector): removed as before.
+            // Block [35,70]: odd ⇒ goes from collector v=70 towards v=35,
+            // would stop at 70+(35-70)*0.8=42, 7 m from collector v=35
+            // (< MinNodeDistance=8) ⇒ omitted for near-coincidence, NOT shortened.
+            // Block [70,105]: even ⇒ goes from v=70 towards v=105 (border, not a collector),
+            // stops at 70+(105-70)*0.8=98, 7 m from the border — since the border is not an
+            // "already established" node, this block is NOT affected by MinNodeDistance.
+            Assert.True(omittedNodeCount >= 1, "Block [35,70] should have been omitted for near-coincidence.");
 
-            // Aucun segment de colonne ne doit s'arrêter à moins de MinNodeDistance
-            // d'une collectrice sans être en réalité fusionné avec elle (même point
-            // bit-exact) : pas de quasi-doublon flottant.
+            // No column segment may stop less than MinNodeDistance
+            // from a collector without actually being merged with it (same
+            // bit-exact point): no floating-point near-duplicate.
             var collectorPositions = new[] { new float2(150f, 70f), new float2(150f, 140f) };
             foreach (var segment in columns)
             {
@@ -638,12 +638,12 @@ namespace Placemaker.Tests
                 {
                     float distToStart = math.distance(segment.Start.xz, collector);
                     float distToEnd = math.distance(segment.End.xz, collector);
-                    // Soit confondu (segment qui rejoint réellement la collectrice),
-                    // soit largement au-delà de MinNodeDistance — jamais entre les deux.
+                    // Either coincident (segment that really joins the collector),
+                    // or well beyond MinNodeDistance — never in between.
                     Assert.True(distToStart < 0.5f || distToStart >= GridGenerator.MinNodeDistance - 0.01f,
-                        $"Extrémité de départ à {distToStart} m d'une collectrice : ni fusionnée, ni assez loin.");
+                        $"Start endpoint {distToStart} m from a collector: neither merged nor far enough.");
                     Assert.True(distToEnd < 0.5f || distToEnd >= GridGenerator.MinNodeDistance - 0.01f,
-                        $"Extrémité d'arrivée à {distToEnd} m d'une collectrice : ni fusionnée, ni assez loin.");
+                        $"End endpoint {distToEnd} m from a collector: neither merged nor far enough.");
                 }
             }
         }
@@ -651,10 +651,10 @@ namespace Placemaker.Tests
         [Fact]
         public void NearCoincidence_NeverCrashesAndRestOfGridStaysWellFormed()
         {
-            // Grille dense sur un polygone tourné à angle oblique, avec culs-de-sac :
-            // combine plusieurs sources possibles de quasi-coïncidence (croisements
-            // rapprochés, impasses profondes) sans qu'aucune n'entraîne de plantage,
-            // de doublon, ni de segment sous MinSegmentLength.
+            // Dense grid on a polygon rotated at an oblique angle, with cul-de-sacs:
+            // combines several possible sources of near-coincidence (close
+            // crossings, deep cul-de-sacs) without any of them causing a crash,
+            // a duplicate, or a segment below MinSegmentLength.
             var nodes = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -689,9 +689,9 @@ namespace Placemaker.Tests
             Assert.Null(thrown);
             Assert.NotNull(segments);
 
-            // Pas de doublon : toutes les extrémités identiques doivent être EXACTEMENT
-            // les mêmes floats (fusion valide), jamais deux points distincts séparés de
-            // moins de MinNodeDistance (ce serait la quasi-coïncidence non nettoyée).
+            // No duplicates: all identical endpoints must be EXACTLY
+            // the same floats (valid merge), never two distinct points less than
+            // MinNodeDistance apart (that would be an uncleaned near-coincidence).
             var endpoints = segments.SelectMany(s => new[] { s.Start, s.End }).Distinct().ToList();
             for (int i = 0; i < endpoints.Count; i++)
             {
@@ -699,7 +699,7 @@ namespace Placemaker.Tests
                 {
                     float distance = math.distance(endpoints[i].xz, endpoints[j].xz);
                     Assert.True(distance >= GridGenerator.MinNodeDistance - 0.5f,
-                        $"Deux nœuds distincts quasi confondus non nettoyés : {endpoints[i]} vs {endpoints[j]} ({distance} m).");
+                        $"Two distinct nodes nearly coincident, not cleaned up: {endpoints[i]} vs {endpoints[j]} ({distance} m).");
                 }
             }
 
@@ -707,30 +707,30 @@ namespace Placemaker.Tests
             {
                 float length = math.distance(segment.Start.xz, segment.End.xz);
                 Assert.True(length >= MinAcceptableLength(parameters),
-                    $"Segment sous la longueur minimale acceptable : {length} m.");
+                    $"Segment below the minimum acceptable length: {length} m.");
             }
         }
 
         [Fact]
         public void NearCoincidentCrossings_MergeIntoASharedNodeInsteadOfDroppingALine()
         {
-            // Bug corrigé (comme le "Super nó" de NetworkTools) : un croisement à moins de
-            // MinNodeDistance d'un croisement déjà accepté était auparavant purement omis — sa
-            // ligne u ET sa ligne v ne recevaient alors AUCUNE subdivision à cet endroit,
-            // contrairement à toutes les autres lignes de la grille (une des deux, voire les
-            // deux, "perdue"). Il doit maintenant être FUSIONNÉ avec ce point existant : les
-            // DEUX lignes rejoignent le nœud partagé (même position bit-exacte).
+            // Fixed bug (like NetworkTools' "Super node"): a crossing less than
+            // MinNodeDistance from an already accepted crossing used to be simply omitted — its
+            // u-line AND its v-line then got NO subdivision at that spot,
+            // unlike every other line in the grid (one of the two, or even
+            // both, "lost"). It must now be MERGED with that existing point: BOTH
+            // lines join the shared node (same bit-exact position).
             //
-            // FitToArea sur un petit périmètre avec beaucoup de colonnes/lignes : l'espacement
-            // RÉSULTANT (côté / nombre de colonnes) tombe sous MinNodeDistance (80/12 ≈ 6,7 m
-            // < 8 m), donc deux croisements adjacents sur une même ligne (même u ou même v,
-            // l'autre coordonnée décalée d'un seul pas de grille) tombent nécessairement à
-            // moins de MinNodeDistance l'un de l'autre — contrairement à FixedSpacing avec un
-            // espacement normal (>= 10 m côté UI), où deux croisements DISTINCTS ne peuvent
-            // jamais être plus proches que l'espacement lui-même (réseau parfaitement régulier).
-            // Reproduit ce qu'un joueur peut obtenir via l'UI : petit périmètre + beaucoup de
-            // colonnes/lignes (jusqu'à 12, voir gridPanel.tsx), pas besoin d'un espacement
-            // inaccessible depuis le panneau (min 10 m).
+            // FitToArea on a small perimeter with many columns/rows: the RESULTING
+            // spacing (side / number of columns) falls below MinNodeDistance (80/12 ≈ 6.7 m
+            // < 8 m), so two adjacent crossings on the same line (same u or same v,
+            // the other coordinate shifted by a single grid step) necessarily fall
+            // less than MinNodeDistance apart — unlike FixedSpacing with a
+            // normal spacing (>= 10 m in the UI), where two DISTINCT crossings can
+            // never be closer than the spacing itself (perfectly regular lattice).
+            // Reproduces what a player can get through the UI: small perimeter + many
+            // columns/rows (up to 12, see gridPanel.tsx), no need for a spacing
+            // unreachable from the panel (min 10 m).
             var nodes = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -746,13 +746,13 @@ namespace Placemaker.Tests
             };
 
             var segments = GridGenerator.GenerateGrid(nodes, parameters, out int mergedCount);
-            Assert.True(mergedCount > 0, "Ce périmètre dense/oblique devrait produire au moins une fusion de croisements.");
+            Assert.True(mergedCount > 0, "This dense/oblique perimeter should produce at least one crossing merge.");
 
-            // Regroupe les extrémités par position bit-exacte (une fusion réussie donne des
-            // floats identiques, pas juste "proches" — voir BuildSubSegments). Tout nœud
-            // partagé par 3 segments ou plus est un vrai croisement multi-branches (ou un
-            // croisement fusionné) : il doit alors avoir des segments des DEUX orientations,
-            // jamais une seule — la signature exacte du bug (une ligne "oubliée" par l'omission).
+            // Group endpoints by bit-exact position (a successful merge yields identical
+            // floats, not just "close" ones — see BuildSubSegments). Any node
+            // shared by 3 or more segments is a real multi-branch crossing (or a
+            // merged crossing): it must then have segments of BOTH orientations,
+            // never just one — the exact signature of the bug (a line "forgotten" by the omission).
             var byPosition = new Dictionary<string, (bool hasHorizontal, bool hasVertical, int count)>();
             void Record(float3 pos, bool isHorizontal)
             {
@@ -773,38 +773,38 @@ namespace Placemaker.Tests
                 if (kvp.Value.count >= 3)
                 {
                     Assert.True(kvp.Value.hasHorizontal && kvp.Value.hasVertical,
-                        $"Nœud à {kvp.Key} avec {kvp.Value.count} segments mais une seule orientation représentée — ligne perdue au lieu de fusionnée.");
+                        $"Node at {kvp.Key} with {kvp.Value.count} segments but only one orientation represented — line lost instead of merged.");
                 }
             }
         }
 
         private static float MinAcceptableLength(GridParameters parameters)
         {
-            // Une impasse peut être aussi courte que MinSegmentLength ; une traversée
-            // normale aussi. On garde une marge de sécurité modeste sur l'assertion.
+            // A cul-de-sac can be as short as MinSegmentLength; so can a normal
+            // through-segment. We keep a modest safety margin on the assertion.
             return GridGenerator.MinSegmentLength - 0.5f;
         }
     }
 
     /// <summary>
-    /// Chantier 1 (bug prioritaire) : le polygone du périmètre doit suivre la courbe
-    /// RÉELLE d'une arête existante entre deux nœuds consécutifs (rond-point, virage...),
-    /// pas la corde droite entre eux — sinon la grille générée peut déborder sur la route
-    /// courbe elle-même. GridGenerator.SampleCurve (pur, sans dépendance ECS/Colossal.Mathematics
-    /// — voir son en-tête) échantillonne cette courbe ; GridRoadToolSystem.BuildCurveAwarePerimeterPositions
-    /// (non testable ici, dépend de l'ECS) l'insère dans la liste de points avant génération.
+    /// Work item 1 (priority bug): the perimeter polygon must follow the REAL curve
+    /// of an existing edge between two consecutive nodes (roundabout, bend...),
+    /// not the straight chord between them — otherwise the generated grid can spill onto the
+    /// curved road itself. GridGenerator.SampleCurve (pure, no ECS/Colossal.Mathematics dependency
+    /// — see its header) samples that curve; the game layer (not testable here)
+    /// inserts it into the point list before generation.
     /// </summary>
     public class GridGeneratorCurveSamplingTests
     {
         // ------------------------------------------------------------------
-        // SampleCurve seul : les points échantillonnés doivent suivre la courbe,
-        // pas la corde droite entre les extrémités.
+        // SampleCurve alone: the sampled points must follow the curve,
+        // not the straight chord between the endpoints.
         // ------------------------------------------------------------------
 
         [Fact]
         public void SampleCurve_StraightBezier_ReturnsPointsOnTheChord()
         {
-            // Points de contrôle alignés : la "courbe" est en fait une droite.
+            // Aligned control points: the "curve" is actually a straight line.
             var a = new float3(0f, 0f, 0f);
             var b = new float3(33f, 0f, 0f);
             var c = new float3(66f, 0f, 0f);
@@ -815,7 +815,7 @@ namespace Placemaker.Tests
             Assert.NotEmpty(samples);
             foreach (float3 p in samples)
             {
-                // Doit rester sur la droite Y=0, Z=0, avec X strictement entre 0 et 100.
+                // Must stay on the line Y=0, Z=0, with X strictly between 0 and 100.
                 Assert.True(p.x > 0f && p.x < 100f);
                 Assert.Equal(0f, p.z, 3);
             }
@@ -824,8 +824,8 @@ namespace Placemaker.Tests
         [Fact]
         public void SampleCurve_BulgingBezier_PointsDeviateSignificantlyFromTheChord()
         {
-            // Courbe qui s'écarte fortement de la corde a→d (renflement de 75 m sur 200 m
-            // de long) : simule une arête de rond-point entre deux nœuds sélectionnés.
+            // Curve that deviates strongly from the chord a→d (75 m bulge over 200 m
+            // of length): simulates a roundabout edge between two selected nodes.
             var a = new float3(200f, 0f, 0f);
             var b = new float3(100f, 0f, 0f);
             var c = new float3(100f, 0f, 200f);
@@ -834,20 +834,20 @@ namespace Placemaker.Tests
             List<float3> samples = GridGenerator.SampleCurve(a, b, c, d);
 
             Assert.NotEmpty(samples);
-            // La corde droite a→d serait X=200 partout : au moins un point échantillonné
-            // doit s'en écarter nettement (le renflement, pas une corde).
+            // The straight chord a→d would be X=200 everywhere: at least one sampled point
+            // must deviate clearly from it (the bulge, not a chord).
             Assert.Contains(samples, p => p.x < 170f);
-            // Le point le plus proche du milieu (z≈100) doit être proche du renflement
-            // maximal théorique (x=125, cf. formule du point médian d'une cubique).
+            // The point closest to the middle (z≈100) must be close to the theoretical
+            // maximum bulge (x=125, cf. the midpoint formula of a cubic).
             float3 middle = samples.OrderBy(p => math.abs(p.z - 100f)).First();
-            Assert.True(middle.x < 150f, $"Point médian attendu proche du renflement (x<150), obtenu x={middle.x}.");
+            Assert.True(middle.x < 150f, $"Midpoint expected close to the bulge (x<150), got x={middle.x}.");
         }
 
         [Fact]
         public void SampleCurve_ShortEdge_NeverExceedsMaxSamples()
         {
-            // Courbe très longue (garde-fou MaxCurveSamplesPerEdge) : ne doit jamais
-            // produire un nombre de points disproportionné.
+            // Very long curve (MaxCurveSamplesPerEdge safeguard): must never
+            // produce a disproportionate number of points.
             var a = new float3(0f, 0f, 0f);
             var b = new float3(0f, 0f, 1000f);
             var c = new float3(2000f, 0f, 1000f);
@@ -859,19 +859,19 @@ namespace Placemaker.Tests
         }
 
         // ------------------------------------------------------------------
-        // Intégration : un polygone dont un côté est échantillonné le long d'une
-        // courbe (au lieu de la corde droite entre ses deux extrémités) doit exclure
-        // la zone entre la corde et la courbe — la grille générée ne doit pas y
-        // déborder, contrairement à ce qui se produirait avec la corde seule.
+        // Integration: a polygon with one side sampled along a
+        // curve (instead of the straight chord between its two endpoints) must exclude
+        // the area between the chord and the curve — the generated grid must not
+        // spill into it, unlike what would happen with the chord alone.
         // ------------------------------------------------------------------
 
         [Fact]
         public void CurveSampledBoundary_ExcludesBulgeArea_ComparedToStraightChord()
         {
-            // Carré 200×200, mais le côté droit (x=200, de z=0 à z=200) est en réalité
-            // une arête de rond-point qui se renfonce jusqu'à x≈125 vers z=100 (voir
-            // SampleCurve_BulgingBezier ci-dessus pour la même courbe) — comme si la
-            // route courbe mordait sur ce qui serait autrement une zone constructible.
+            // 200×200 square, but the right side (x=200, from z=0 to z=200) is actually
+            // a roundabout edge that bows inward to x≈125 around z=100 (see
+            // SampleCurve_BulgingBezier above for the same curve) — as if the
+            // curved road bit into what would otherwise be a buildable area.
             var a = new float3(200f, 0f, 0f);
             var b = new float3(100f, 0f, 0f);
             var c = new float3(100f, 0f, 200f);
@@ -904,9 +904,9 @@ namespace Placemaker.Tests
             Assert.NotEmpty(straightSegments);
             Assert.NotEmpty(curvedSegments);
 
-            // Zone du renflement (autour de z=100) : la corde droite laisse la génération
-            // atteindre x proche de 200 ; le polygone qui suit la courbe doit rester
-            // nettement en retrait de cette limite dans la même zone.
+            // Bulge area (around z=100): the straight chord lets generation
+            // reach x close to 200; the polygon following the curve must stay
+            // clearly back from that limit in the same area.
             float MaxXNearBulge(List<RoadSegmentDef> segments) => segments
                 .SelectMany(s => new[] { s.Start, s.End })
                 .Where(p => math.abs(p.z - 100f) < 20f)
@@ -918,14 +918,14 @@ namespace Placemaker.Tests
             float curvedMaxX = MaxXNearBulge(curvedSegments);
 
             Assert.True(curvedMaxX < straightMaxX - 30f,
-                $"Le polygone qui suit la courbe devrait exclure le renflement (x max attendu nettement < {straightMaxX}), obtenu {curvedMaxX}.");
+                $"The polygon following the curve should exclude the bulge (max x expected clearly < {straightMaxX}), got {curvedMaxX}.");
         }
     }
 
     // ------------------------------------------------------------------
-    // Avenue (troisième niveau : colonne/rangée choisie librement, jamais de
-    // cul-de-sac, rotonde optionnelle au croisement des deux) — carré 300×300,
-    // grille 5×5 fixe (spacing 60), axis-aligned pour des coordonnées simples.
+    // Avenue (third level: freely chosen column/row, never a
+    // cul-de-sac, optional roundabout where the two cross) — 300×300 square,
+    // fixed 5×5 grid (spacing 60), axis-aligned for simple coordinates.
     // ------------------------------------------------------------------
     public class GridGeneratorAvenueTests
     {
@@ -950,7 +950,7 @@ namespace Placemaker.Tests
         {
             var parameters = BaseParameters();
             parameters.AvenueColumnEnabled = true;
-            // DistributeFixed(0, 300, 60) → lignes u = [60, 120, 180, 240] ; index 2 = u=180.
+            // DistributeFixed(0, 300, 60) → u-lines = [60, 120, 180, 240]; index 2 = u=180.
             parameters.AvenueColumnIndex = 2;
 
             var segments = GridGenerator.GenerateGrid(SquareNodes, parameters);
@@ -959,12 +959,12 @@ namespace Placemaker.Tests
             Assert.NotEmpty(avenueSegments);
             foreach (var seg in avenueSegments)
             {
-                // Colonne = ligne u constante → segments verticaux (X constant, non horizontaux).
+                // Column = constant u-line → vertical segments (X constant, not horizontal).
                 Assert.False(seg.IsHorizontal);
                 Assert.Equal(180f, seg.Start.x, 1);
                 Assert.Equal(180f, seg.End.x, 1);
             }
-            // Aucun autre segment ne doit être marqué avenue.
+            // No other segment may be marked avenue.
             Assert.All(segments.Except(avenueSegments), s => Assert.False(s.IsAvenue));
         }
 
@@ -976,7 +976,7 @@ namespace Placemaker.Tests
             parameters.AvenueColumnIndex = 2;
             parameters.CulDeSacMode = true;
             parameters.CulDeSacAxis = CulDeSacAxis.Columns;
-            parameters.CulDeSacRatio = 100f; // toutes les colonnes seraient des culs-de-sac sans l'exception avenue
+            parameters.CulDeSacRatio = 100f; // all columns would be cul-de-sacs without the avenue exception
             parameters.Staggered = false;
 
             var segments = GridGenerator.GenerateGrid(SquareNodes, parameters);
@@ -985,8 +985,8 @@ namespace Placemaker.Tests
             Assert.NotEmpty(avenueSegments);
             Assert.DoesNotContain(avenueSegments, s => s.IsCulDeSacEnd);
 
-            // Les autres colonnes, elles, sont bien devenues des culs-de-sac (le motif marche
-            // toujours ailleurs — seule la colonne avenue y échappe).
+            // The other columns did become cul-de-sacs (the pattern still works
+            // elsewhere — only the avenue column escapes it).
             Assert.Contains(segments, s => s.IsCulDeSacEnd);
         }
 
@@ -1008,10 +1008,10 @@ namespace Placemaker.Tests
         [Fact]
         public void BothAvenuesEnabled_ReportsRoundaboutCenterAndRadius_WithoutTrimmingTheArms()
         {
-            // Comme le cercle de retournement d'un cul-de-sac : plus de rognage des bras ni de
-            // boucle en arcs générée côté géométrie — les deux avenues se croisent normalement
-            // en +, et seul centre/rayon (pour poser l'asset décoratif complet côté ECS) sont
-            // renvoyés via RoundaboutInfo.
+            // Like a cul-de-sac's turning circle: no more trimming of the arms nor an arc
+            // loop generated on the geometry side — the two avenues cross normally
+            // in a +, and only the center/radius (to place the full decorative asset in the game layer) are
+            // returned via RoundaboutInfo.
             var parameters = BaseParameters();
             parameters.AvenueColumnEnabled = true;
             parameters.AvenueColumnIndex = 2; // u = 180
@@ -1027,8 +1027,8 @@ namespace Placemaker.Tests
             Assert.Equal(center, roundabout.Center.xz);
             Assert.Equal(expectedRadius, roundabout.Radius, 2);
 
-            // Le croisement en + normal : au moins un bras d'avenue passe exactement par le
-            // centre (aucun rognage), contrairement à l'ancien comportement.
+            // The normal + crossing: at least one avenue arm passes exactly through the
+            // center (no trimming), unlike the old behaviour.
             Assert.Contains(avenueSegments, s =>
                 math.distance(s.Start.xz, center) < 0.5f || math.distance(s.End.xz, center) < 0.5f);
 
@@ -1041,7 +1041,7 @@ namespace Placemaker.Tests
             var parameters = BaseParameters();
             parameters.AvenueColumnEnabled = true;
             parameters.AvenueColumnIndex = 2;
-            // AvenueRowEnabled reste false : un seul axe, pas de croisement à traiter.
+            // AvenueRowEnabled stays false: a single axis, no crossing to handle.
 
             var segments = GridGenerator.GenerateGrid(SquareNodes, parameters, out _, out RoundaboutInfo roundabout);
             var avenueSegments = segments.Where(s => s.IsAvenue).ToList();
@@ -1067,7 +1067,7 @@ namespace Placemaker.Tests
     }
 
     // ------------------------------------------------------------------
-    // Loop (collectrices éparses + laço interne par super-îlot) — voir
+    // Loop (sparse collectors + inner loop per superblock) — see
     // GridGenerator.GenerateLoopGrid/EmitLoopBlock.
     // ------------------------------------------------------------------
     public class GridGeneratorLoopGridTests
@@ -1087,10 +1087,10 @@ namespace Placemaker.Tests
             new float3(0f, 0f, 300f),
         };
 
-        // Cellule intérieure plus grande (300×300 à l'espacement 300, contre 100×100 pour
-        // SquareNodes300/100) : nécessaire pour les tests liés au cul-de-sac, dont le segment du
-        // haut (voir EmitLoopBlock) doit dépasser 2×MinSegmentLength pour pouvoir être coupé en
-        // deux sans que les deux moitiés ne soient éliminées comme trop courtes.
+        // Larger interior cell (300×300 at spacing 300, versus 100×100 for
+        // SquareNodes300/100): needed for the cul-de-sac tests, whose top
+        // segment (see EmitLoopBlock) must exceed 2×MinSegmentLength to be split in
+        // two without both halves being discarded as too short.
         private static readonly List<float3> SquareNodes900 = new List<float3>
         {
             new float3(0f, 0f, 0f),
@@ -1123,12 +1123,12 @@ namespace Placemaker.Tests
         [Fact]
         public void SingleInteriorSuperblock_ProducesOneLoopWithFourArcsAndNoCulDeSac()
         {
-            // 300×300, collectrices tous les 100 m -> lignes internes à 100 et 200 sur chaque
-            // axe (DistributeFixed exclut les bords) -> 1 super-îlot pleinement intérieur (entre
-            // 100 et 200) ET 8 bandes de bord (entre le périmètre et la collectrice la plus
-            // proche, voir GenerateLoopGrid — v1 les ignorait totalement, retour en jeu :
-            // "demasiados perímetros vazios sem laços") -> 3×3 = 9 super-îlots au total -> 4 arcs
-            // par laço rectangulaire (EmitSimpleLoopBlock, 4 coins) -> 36 arcs.
+            // 300×300, collectors every 100 m -> internal lines at 100 and 200 on each
+            // axis (DistributeFixed excludes the borders) -> 1 fully interior superblock (between
+            // 100 and 200) AND 8 border strips (between the perimeter and the nearest collector,
+            // see GenerateLoopGrid — v1 ignored them entirely, in-game feedback:
+            // "too many empty perimeters without loops") -> 3×3 = 9 superblocks in total -> 4 arcs
+            // per rectangular loop (EmitSimpleLoopBlock, 4 corners) -> 36 arcs.
             var segments = GridGenerator.GenerateLoopGrid(SquareNodes300, LoopParams(100f, culDeSacRatio: 0f));
 
             var arcs = segments.Where(s => s.IsArc).ToList();
@@ -1141,11 +1141,11 @@ namespace Placemaker.Tests
         [Fact]
         public void SingleInteriorSuperblock_FullCulDeSacRatio_AddsOneCulDeSacSpurPerBlock()
         {
-            // Espacement 300 (pas 100) : le segment du haut du laço doit dépasser
-            // 2×MinSegmentLength pour que la coupure en deux (voir EmitLoopBlock) laisse un
-            // cul-de-sac raccordé plutôt que de le supprimer comme orphelin trop court.
-            // 900×900 à l'espacement 300 -> 3×3 = 9 super-îlots (intérieur + bandes de bord,
-            // voir GenerateLoopGrid) -> 9 rayons à 100% de fréquence.
+            // Spacing 300 (not 100): the loop's top segment must exceed
+            // 2×MinSegmentLength so that splitting it in two (see EmitLoopBlock) leaves a
+            // connected cul-de-sac rather than removing it as a too-short orphan.
+            // 900×900 at spacing 300 -> 3×3 = 9 superblocks (interior + border strips,
+            // see GenerateLoopGrid) -> 9 spurs at 100% frequency.
             var segments = GridGenerator.GenerateLoopGrid(SquareNodes900, LoopParams(300f, culDeSacRatio: 100f));
 
             var culDeSacs = segments.Where(s => s.IsCulDeSacEnd).ToList();
@@ -1155,13 +1155,13 @@ namespace Placemaker.Tests
         [Fact]
         public void CulDeSacSpur_StartPointIsAnExactSharedVertexWithTheTopSegments()
         {
-            // Bug rapporté en jeu : "os alley não estão mesmo ligados ao principal" — le rayon
-            // cul-de-sac partait d'un point milieu du segment du haut, jamais l'extrémité d'AUCUN
-            // segment émis (coordonnée coïncidente, mais pas un vrai sommet partagé côté jeu).
-            // Corrigé en coupant le segment du haut en deux AU point de jonction exact. Ce test
-            // vérifie, pour CHAQUE rayon (9, voir test précédent), que son point de départ est
-            // EXACTEMENT (mêmes floats, pas juste proche) l'extrémité d'au moins un des segments
-            // non-arc, non-cul-de-sac du laço.
+            // Bug reported in game: "the alleys really aren't connected to the main road" — the
+            // cul-de-sac spur started from a midpoint of the top segment, never the endpoint of ANY
+            // emitted segment (coincident coordinate, but not a real shared vertex in the game).
+            // Fixed by splitting the top segment in two AT the exact junction point. This test
+            // checks, for EACH spur (9, see previous test), that its start point is
+            // EXACTLY (same floats, not just close) the endpoint of at least one of the
+            // non-arc, non-cul-de-sac segments of the loop.
             var segments = GridGenerator.GenerateLoopGrid(SquareNodes900, LoopParams(300f, culDeSacRatio: 100f));
 
             var spurs = segments.Where(s => s.IsCulDeSacEnd).ToList();
@@ -1174,25 +1174,25 @@ namespace Placemaker.Tests
                     math.all(s.Start == spur.Start) || math.all(s.End == spur.Start));
 
                 Assert.True(sharesExactVertex,
-                    $"Le point de départ du rayon ({spur.Start}) devrait être EXACTEMENT l'extrémité d'un segment droit du laço, pas une simple coïncidence de coordonnée.");
+                    $"The spur's start point ({spur.Start}) should be EXACTLY the endpoint of a straight loop segment, not a mere coordinate coincidence.");
             }
         }
 
         [Fact]
         public void LoopConnectorAttachPoint_IsAnExactSharedVertexOfTheLoopEdge()
         {
-            // Retour utilisateur en jeu : "colisões entre a via que acede ao loop e o loop" —
-            // l'embranchement (EmitSimpleLoopBlock) touchait le MILIEU d'un côté du rectangle
-            // du laço (uMid) sans jamais couper ce côté à cet endroit exact : deux tronçons du
-            // même laço (embranchement + bord du rectangle) se croisaient sans partager de
-            // sommet réel — même bug structurel que celui déjà corrigé entre collectrice et
-            // laço (voir LoopLegAttachPoints_AreExactSharedVerticesWithAvenueSegments), mais À
-            // L'INTÉRIEUR même du réseau du laço. Corrigé en coupant TOUJOURS le côté de
-            // l'embranchement en deux, exactement au point de jonction. Ce test vérifie
-            // qu'aucun point d'un tronçon droit non-avenue (laço/embranchement/cul-de-sac) ne
-            // tombe au MILIEU (t strictement entre 0 et 1) d'un AUTRE tronçon droit non-avenue,
-            // sans en être une extrémité exacte — un vrai croisement structurel, pas juste une
-            // coïncidence de bord.
+            // In-game user feedback: "collisions between the road that accesses the loop and the loop" —
+            // the branch (EmitSimpleLoopBlock) touched the MIDDLE of a side of the loop's
+            // rectangle (uMid) without ever splitting that side at that exact spot: two segments of
+            // the same loop (branch + rectangle side) crossed without sharing a
+            // real vertex — the same structural bug as the one already fixed between collector and
+            // loop (see LoopLegAttachPoints_AreExactSharedVerticesWithAvenueSegments), but
+            // INSIDE the loop's own network. Fixed by ALWAYS splitting the
+            // branch's side in two, exactly at the junction point. This test checks
+            // that no point of a straight non-avenue segment (loop/branch/cul-de-sac) falls
+            // in the MIDDLE (t strictly between 0 and 1) of ANOTHER straight non-avenue segment
+            // without being an exact endpoint of it — a real structural crossing, not just a
+            // border coincidence.
             var segments = GridGenerator.GenerateLoopGrid(SquareNodes900, LoopParams(300f, culDeSacRatio: 100f));
             var straightLoopPieces = segments.Where(s => !s.IsArc && !s.IsAvenue).ToList();
             Assert.NotEmpty(straightLoopPieces);
@@ -1219,12 +1219,12 @@ namespace Placemaker.Tests
                         float t = math.dot(point.xz - a, ab) / lenSq;
                         if (t <= 0.01f || t >= 0.99f)
                         {
-                            continue; // à/au-delà d'une extrémité de CETTE cible : rien à signaler ici
+                            continue; // at/beyond an endpoint of THIS target: nothing to report here
                         }
                         float2 projected = a + t * ab;
                         bool onThisLine = math.distance(projected, point.xz) < 0.5f;
                         Assert.False(onThisLine,
-                            $"Point {point} tombe au milieu du tronçon {target.Start} -> {target.End} sans être un sommet partagé (t={t:F3}).");
+                            $"Point {point} falls in the middle of segment {target.Start} -> {target.End} without being a shared vertex (t={t:F3}).");
                     }
                 }
             }
@@ -1233,20 +1233,20 @@ namespace Placemaker.Tests
         [Fact]
         public void SuperblockMode_ZonesFillTheSelectionWithACollectorEveryThirdLine()
         {
-            // Retour utilisateur : zones de taille réglable (SuperblockZoneMeters, min 100 m),
-            // ajustées pour remplir exactement la sélection ("o tamanho das células adapta-se ao
-            // perímetro"), avec une collectrice toutes les 3 zones ("coletor > pedonal > pedonal
-            // > coletor"). Jamais de cul-de-sac ; CollectorSpacingMeters sans effet ici.
+            // User feedback: zones of adjustable size (SuperblockZoneMeters, min 100 m),
+            // fitted to fill the selection exactly ("the cell size adapts to the
+            // perimeter"), with a collector every 3 zones ("collector > pedestrian > pedestrian
+            // > collector"). Never a cul-de-sac; CollectorSpacingMeters has no effect here.
             foreach (float spacing in new[] { 200f, 400f })
             {
-                // 900 m / zones de 100 m = 9 zones par axe -> lignes 100..800, collectrices à 300/600.
+                // 900 m / 100 m zones = 9 zones per axis -> lines 100..800, collectors at 300/600.
                 var parameters = LoopParams(spacing, culDeSacRatio: 100f);
                 parameters.SuperblockMode = true;
                 parameters.SuperblockZoneMeters = 100f;
                 var segments = GridGenerator.GenerateLoopGrid(SquareNodes900, parameters);
 
                 Assert.DoesNotContain(segments, s => s.IsCulDeSacEnd);
-                Assert.All(segments, s => Assert.True(s.IsAvenue != s.IsPedestrian, $"Chaque tronçon est soit collectrice soit piéton : {s.Start} -> {s.End}"));
+                Assert.All(segments, s => Assert.True(s.IsAvenue != s.IsPedestrian, $"Each segment is either collector or pedestrian: {s.Start} -> {s.End}"));
 
                 var avenueU = segments.Where(s => s.IsAvenue && !s.IsHorizontal).Select(s => (float)math.round(s.Start.x)).Distinct().OrderBy(x => x).ToList();
                 var pedU = segments.Where(s => s.IsPedestrian && !s.IsHorizontal).Select(s => (float)math.round(s.Start.x)).Distinct().OrderBy(x => x).ToList();
@@ -1262,9 +1262,9 @@ namespace Placemaker.Tests
         [Fact]
         public void SuperblockMode_ThreeZonesOrFewer_IsASingleSuperblockAdaptedToTheArea()
         {
-            // Zone ≈ 1/3 de la sélection -> un seul super-quarteirão 3×3, sans collectrice
-            // interne : le périmètre (route existante) le ferme. La taille réelle des zones
-            // s'adapte à la zone (ici 506 m / 170 m -> 3 zones de 168,7 m).
+            // Zone ≈ 1/3 of the selection -> a single 3×3 superblock, with no internal
+            // collector: the perimeter (existing road) closes it. The actual zone size
+            // adapts to the area (here 506 m / 170 m -> 3 zones of 168.7 m).
             var square506 = new List<float3>
             {
                 new float3(0f, 0f, 0f), new float3(506f, 0f, 0f), new float3(506f, 0f, 506f), new float3(0f, 0f, 506f),
@@ -1276,7 +1276,7 @@ namespace Placemaker.Tests
 
             Assert.DoesNotContain(segments, s => s.IsAvenue);
             Assert.All(segments, s => Assert.True(s.IsPedestrian));
-            Assert.Equal(12, segments.Count); // 2 lignes par axe, chacune coupée en 3
+            Assert.Equal(12, segments.Count); // 2 lines per axis, each split into 3
             var uLines = segments.Where(s => !s.IsHorizontal).Select(s => (float)math.round(s.Start.x)).Distinct().OrderBy(x => x).ToList();
             Assert.Equal(new[] { 169f, 337f }, uLines);
         }
@@ -1284,9 +1284,9 @@ namespace Placemaker.Tests
         [Fact]
         public void SuperblockMode_InteriorGridFormsAConsistentAlternatingSwirl()
         {
-            // 900×900 -> un seul super-quarteirão, lignes internes à 300/600 sur chaque axe
-            // (SuperblockSubdivisions). Chaque cellule (iu,iv) tourne horaire si iu+iv est pair,
-            // antihoraire sinon (voir ApplyOneWaySwirl).
+            // 900×900 -> a single superblock, internal lines at 300/600 on each axis
+            // (SuperblockSubdivisions). Each cell (iu,iv) turns clockwise if iu+iv is even,
+            // counter-clockwise otherwise (see ApplyOneWaySwirl).
             var parameters = LoopParams(300f, culDeSacRatio: 0f);
             parameters.SuperblockMode = true;
             parameters.SuperblockZoneMeters = 300f;
@@ -1295,40 +1295,40 @@ namespace Placemaker.Tests
             var interior = segments.Where(s => s.IsPedestrian && !s.IsArc).ToList();
             Assert.NotEmpty(interior);
 
-            // Ligne horizontale (v=300) entre u=[0,300] : cellule (iu=0,iv=1), parité impaire =
-            // antihoraire -> u décroissant.
+            // Horizontal line (v=300) between u=[0,300]: cell (iu=0,iv=1), odd parity =
+            // counter-clockwise -> u decreasing.
             var segsA = interior.Where(s => s.IsHorizontal
                 && math.abs(s.Start.z - 300f) < 1f && math.min(s.Start.x, s.End.x) > -1f && math.max(s.Start.x, s.End.x) < 301f).ToList();
             Assert.NotEmpty(segsA);
-            Assert.All(segsA, s => Assert.True(s.Start.x > s.End.x, $"Segment A attendu u décroissant : {s.Start} -> {s.End}"));
+            Assert.All(segsA, s => Assert.True(s.Start.x > s.End.x, $"Segment A expected u decreasing: {s.Start} -> {s.End}"));
 
-            // Ligne horizontale (v=300) entre u=[300,600] : cellule (iu=1,iv=1), parité paire =
-            // horaire -> u croissant.
+            // Horizontal line (v=300) between u=[300,600]: cell (iu=1,iv=1), even parity =
+            // clockwise -> u increasing.
             var segsB = interior.Where(s => s.IsHorizontal
                 && math.abs(s.Start.z - 300f) < 1f && math.min(s.Start.x, s.End.x) > 299f && math.max(s.Start.x, s.End.x) < 601f).ToList();
             Assert.NotEmpty(segsB);
-            Assert.All(segsB, s => Assert.True(s.Start.x < s.End.x, $"Segment B attendu u croissant : {s.Start} -> {s.End}"));
+            Assert.All(segsB, s => Assert.True(s.Start.x < s.End.x, $"Segment B expected u increasing: {s.Start} -> {s.End}"));
 
-            // Ligne verticale (u=300) entre v=[0,300] : cellule (iu=1,iv=0), parité impaire =
-            // antihoraire -> v croissant.
+            // Vertical line (u=300) between v=[0,300]: cell (iu=1,iv=0), odd parity =
+            // counter-clockwise -> v increasing.
             var segsC = interior.Where(s => !s.IsHorizontal
                 && math.abs(s.Start.x - 300f) < 1f && math.min(s.Start.z, s.End.z) > -1f && math.max(s.Start.z, s.End.z) < 301f).ToList();
             Assert.NotEmpty(segsC);
-            Assert.All(segsC, s => Assert.True(s.Start.z < s.End.z, $"Segment C attendu v croissant : {s.Start} -> {s.End}"));
+            Assert.All(segsC, s => Assert.True(s.Start.z < s.End.z, $"Segment C expected v increasing: {s.Start} -> {s.End}"));
 
-            // Ligne verticale (u=300) entre v=[300,600] : cellule (iu=1,iv=1), parité paire =
-            // horaire -> v décroissant.
+            // Vertical line (u=300) between v=[300,600]: cell (iu=1,iv=1), even parity =
+            // clockwise -> v decreasing.
             var segsD = interior.Where(s => !s.IsHorizontal
                 && math.abs(s.Start.x - 300f) < 1f && math.min(s.Start.z, s.End.z) > 299f && math.max(s.Start.z, s.End.z) < 601f).ToList();
             Assert.NotEmpty(segsD);
-            Assert.All(segsD, s => Assert.True(s.Start.z > s.End.z, $"Segment D attendu v décroissant : {s.Start} -> {s.End}"));
+            Assert.All(segsD, s => Assert.True(s.Start.z > s.End.z, $"Segment D expected v decreasing: {s.Start} -> {s.End}"));
         }
 
         /// <summary>
-        /// Vrai si `point` (xz) tombe sur l'un des côtés du périmètre choisi (avec tolérance) —
-        /// miroir du helper interne GridGenerator.IsPointOnPolygonEdge, utilisé ici pour que les
-        /// tests de connectivité acceptent qu'une extrémité piétonne posée sur le VRAI périmètre
-        /// n'est pas une impasse (MakeCoursePos la raccorde en jeu, voir GenerateSuperblockInterior).
+        /// True if `point` (xz) falls on one of the sides of the chosen perimeter (with tolerance) —
+        /// mirror of the internal helper GridGenerator.IsPointOnPolygonEdge, used here so that the
+        /// connectivity tests accept that a pedestrian endpoint lying on the REAL perimeter
+        /// is not a cul-de-sac (the game layer connects it, see GenerateSuperblockInterior).
         /// </summary>
         private static bool IsOnPerimeterBoundary(float3 point, IReadOnlyList<float3> perimeter, float tolerance)
         {
@@ -1351,11 +1351,11 @@ namespace Placemaker.Tests
         [Fact]
         public void LoopAndSuperblock_IgnoreClassicGridOnlySettings()
         {
-            // Retour utilisateur en jeu (log) : "só estão 6 áreas construtivas em vez de 9" —
-            // l'avenue sur colonne/rangée N et le mode culs-de-sac du mode Grelha, restés
-            // actifs, contaminaient BuildSubSegments (partagé) : une ligne piétonne devenait
-            // collectrice et d'autres disparaissaient. Le résultat doit être identique avec ou
-            // sans ces réglages.
+            // In-game user feedback (log): "there are only 6 buildable areas instead of 9" —
+            // the avenue on column/row N and the cul-de-sac mode of Grid mode, left
+            // active, contaminated BuildSubSegments (shared): a pedestrian line became a
+            // collector and others disappeared. The result must be identical with or
+            // without these settings.
             foreach (bool superblock in new[] { true, false })
             {
                 var clean = LoopParams(300f);
@@ -1386,16 +1386,16 @@ namespace Placemaker.Tests
         [Fact]
         public void SuperblockMode_EveryInteriorEndpointIsAnExactSharedVertex_NeverADeadEnd()
         {
-            // Retour utilisateur en jeu : "Ainda tem os cul de sac" — vérifie que la grille fine
-            // intérieure (voir GenerateSuperblockInterior) est bien ENTIÈREMENT connectée : CHAQUE
-            // extrémité d'un tronçon piéton doit être soit un sommet EXACTEMENT partagé avec un
-            // autre tronçon (piéton OU collectrice), soit posée sur le VRAI périmètre choisi (que
-            // MakeCoursePos raccorde en jeu, voir GenerateSuperblockInterior — retour utilisateur :
-            // "as estradas pedonais também têm que se conectar à estrada que serve de base") —
-            // jamais un bout libre qui apparaîtrait en jeu comme une impasse. Scénario réaliste à
-            // plusieurs super-quarteirões (900×900 / 300 -> grille 3×3 de super-quarteirões,
-            // chacun subdivisé en 3×3 zones) pour ne pas se limiter au cas trivial à un seul
-            // super-quarteirão des tests précédents.
+            // In-game user feedback: "There are still cul-de-sacs" — checks that the fine inner
+            // grid (see GenerateSuperblockInterior) is FULLY connected: EVERY
+            // endpoint of a pedestrian segment must be either a vertex EXACTLY shared with
+            // another segment (pedestrian OR collector), or lie on the REAL chosen perimeter (which
+            // the game layer connects, see GenerateSuperblockInterior — user feedback:
+            // "the pedestrian roads also have to connect to the road used as the base") —
+            // never a free end that would show up in game as a cul-de-sac. Realistic scenario with
+            // several superblocks (900×900 / 300 -> 3×3 grid of superblocks,
+            // each subdivided into 3×3 zones) so as not to be limited to the trivial single
+            // superblock case of the previous tests.
             var parameters = LoopParams(300f, culDeSacRatio: 0f);
             parameters.SuperblockMode = true;
             var segments = GridGenerator.GenerateLoopGrid(SquareNodes900, parameters);
@@ -1409,11 +1409,11 @@ namespace Placemaker.Tests
                 foreach (float3 endpoint in new[] { segment.Start, segment.End })
                 {
                     bool sharedWithAnother = all.Any(other =>
-                        !(math.all(other.Start == segment.Start) && math.all(other.End == segment.End)) // pas le même tronçon
+                        !(math.all(other.Start == segment.Start) && math.all(other.End == segment.End)) // not the same segment
                         && (math.all(other.Start == endpoint) || math.all(other.End == endpoint)));
                     bool onPerimeter = IsOnPerimeterBoundary(endpoint, SquareNodes900, 0.5f);
                     Assert.True(sharedWithAnother || onPerimeter,
-                        $"Extrémité {endpoint} du tronçon piéton {segment.Start} -> {segment.End} n'est ni partagée ni sur le périmètre — impasse.");
+                        $"Endpoint {endpoint} of pedestrian segment {segment.Start} -> {segment.End} is neither shared nor on the perimeter — cul-de-sac.");
                 }
             }
         }
@@ -1421,14 +1421,14 @@ namespace Placemaker.Tests
         [Fact]
         public void SuperblockMode_IrregularPerimeter_NeverLeavesADeadEndPedestrianSegment()
         {
-            // Retour utilisateur en jeu, répété : "Ainda tem os cul de sac... retira por
-            // completo" — un périmètre IRRÉGULIER peut faire clipper une ligne interne en plein
-            // milieu par le vrai contour (ClipLineToPolygon), pas seulement à ses 4 coins —
-            // exactement le genre de cas que PruneDeadEndPedestrianSegments doit rattraper. Même
-            // octogone bruité que IrregularRealPerimeter_... (non-régression Loop), réutilisé ici
-            // pour Superblock : si la purge fonctionne, AUCUN tronçon piéton restant ne doit avoir
-            // une extrémité qui ne soit ni partagée ni sur le vrai périmètre, quel que soit
-            // l'espacement de collectrice essayé.
+            // In-game user feedback, repeated: "There are still cul-de-sacs... remove them
+            // completely" — an IRREGULAR perimeter can make the real contour clip an internal line right
+            // in the middle (ClipLineToPolygon), not only at its 4 corners —
+            // exactly the kind of case PruneDeadEndPedestrianSegments must catch. Same
+            // noisy octagon as IrregularRealPerimeter_... (Loop non-regression), reused here
+            // for Superblock: if the pruning works, NO remaining pedestrian segment may have
+            // an endpoint that is neither shared nor on the real perimeter, whatever
+            // collector spacing is tried.
             var rnd = new System.Random(7);
             var perimeter = new List<float3>();
             const int nodeCount = 10;
@@ -1457,7 +1457,7 @@ namespace Placemaker.Tests
                             && (math.all(other.Start == endpoint) || math.all(other.End == endpoint)));
                         bool onPerimeter = IsOnPerimeterBoundary(endpoint, perimeter, 0.5f);
                         Assert.True(sharedWithAnother || onPerimeter,
-                            $"Extrémité {endpoint} du tronçon piéton {segment.Start} -> {segment.End} (spacing={spacing}) n'est ni partagée ni sur le périmètre — impasse.");
+                            $"Endpoint {endpoint} of pedestrian segment {segment.Start} -> {segment.End} (spacing={spacing}) is neither shared nor on the perimeter — cul-de-sac.");
                     }
                 }
             }
@@ -1466,9 +1466,9 @@ namespace Placemaker.Tests
         [Fact]
         public void CollectorSegments_AreMarkedAvenue_LoopAndSpurAreNot()
         {
-            // 3 réseaux distincts (voir RoadSegmentDef.IsAvenue/IsCulDeSacEnd) : collectrices
-            // éparses -> réseau avenue, laço -> réseau principal, rayon cul-de-sac -> réseau
-            // secondaire. Voir GenerateLoopGrid. 9 super-îlots (intérieur + bandes de bord).
+            // 3 distinct networks (see RoadSegmentDef.IsAvenue/IsCulDeSacEnd): sparse
+            // collectors -> avenue network, loop -> main network, cul-de-sac spur -> secondary
+            // network. See GenerateLoopGrid. 9 superblocks (interior + border strips).
             var segments = GridGenerator.GenerateLoopGrid(SquareNodes900, LoopParams(300f, culDeSacRatio: 100f));
 
             var spur = segments.Where(s => s.IsCulDeSacEnd).ToList();
@@ -1478,20 +1478,20 @@ namespace Placemaker.Tests
             Assert.NotEmpty(collectors);
             Assert.NotEmpty(loopPieces);
             Assert.Equal(9, spur.Count);
-            Assert.All(spur, s => Assert.False(s.IsAvenue, $"Rayon cul-de-sac attendu IsAvenue=false (réseau secondaire) : {s.Start} -> {s.End}"));
-            // Le laço (loopPieces) doit contenir 4 arcs par super-îlot (9 x 4 = 36).
+            Assert.All(spur, s => Assert.False(s.IsAvenue, $"Cul-de-sac spur expected IsAvenue=false (secondary network): {s.Start} -> {s.End}"));
+            // The loop (loopPieces) must contain 4 arcs per superblock (9 x 4 = 36).
             Assert.Equal(36, loopPieces.Count(s => s.IsArc));
         }
 
         [Fact]
         public void ArcTangents_AreNeverBackwardsAlongTheChord()
         {
-            // Même garde-fou que pour l'ancien mode Adaptativo (voir historique du mod) :
-            // une tangente d'arc qui pointe à l'opposé du sens de parcours produit une
-            // courbe aberrante côté jeu ("Forma inválida"). Ici les tangentes sont FIXES
-            // par construction ((0,1)/(1,0) en repère local, jamais dérivées d'un nuage de
-            // points), donc ce test est une garantie de non-régression plutôt qu'une
-            // découverte, mais reste peu coûteux à vérifier.
+            // Same safeguard as for the old Adaptive mode (see the mod's history):
+            // an arc tangent pointing opposite to the direction of travel produces an
+            // aberrant curve in the game ("Invalid shape"). Here the tangents are FIXED
+            // by construction ((0,1)/(1,0) in the local frame, never derived from a point
+            // cloud), so this test is a non-regression guarantee rather than a
+            // discovery, but it remains cheap to check.
             var segments = GridGenerator.GenerateLoopGrid(SquareNodes300, LoopParams(100f));
             var arcs = segments.Where(s => s.IsArc).ToList();
             Assert.NotEmpty(arcs);
@@ -1501,19 +1501,19 @@ namespace Placemaker.Tests
                 float2 chord = math.normalize(arc.End.xz - arc.Start.xz);
                 float startDot = math.dot(math.normalize(arc.StartTangent.xz), chord);
                 float endDot = math.dot(math.normalize(arc.EndTangent.xz), chord);
-                Assert.True(startDot > 0.3f, $"Tangente de départ quasi retournée : {arc.Start} -> {arc.End}, dot={startDot:F2}");
-                Assert.True(endDot > 0.3f, $"Tangente d'arrivée quasi retournée : {arc.Start} -> {arc.End}, dot={endDot:F2}");
+                Assert.True(startDot > 0.3f, $"Start tangent nearly reversed: {arc.Start} -> {arc.End}, dot={startDot:F2}");
+                Assert.True(endDot > 0.3f, $"End tangent nearly reversed: {arc.Start} -> {arc.End}, dot={endDot:F2}");
             }
         }
 
         [Fact]
         public void MirroredRow_ArcsAndCulDeSacSpurAreValid()
         {
-            // 1800x1800 (5 lignes internes par axe à l'espacement 300 -> iu ET iv vont de 0 à 3)
-            // : garantit qu'au moins un bloc a iv impair (mirrorV=true, voir GenerateLoopGrid —
-            // alternance introduite pour "laços des deux côtés de la collectrice"). Un rectangle
-            // dont l'axe court n'a qu'une seule ligne interne aurait iv TOUJOURS 0 et ne
-            // testerait jamais mirrorV=true.
+            // 1800x1800 (5 internal lines per axis at spacing 300 -> iu AND iv range from 0 to 3)
+            // : guarantees that at least one block has an odd iv (mirrorV=true, see GenerateLoopGrid —
+            // alternation introduced for "loops on both sides of the collector"). A rectangle
+            // whose short axis has only one internal line would ALWAYS have iv 0 and would
+            // never test mirrorV=true.
             var square1800 = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1526,37 +1526,37 @@ namespace Placemaker.Tests
             var arcs = segments.Where(s => s.IsArc).ToList();
             var spurs = segments.Where(s => s.IsCulDeSacEnd).ToList();
 
-            Assert.Equal(144, arcs.Count); // 36 blocs (6x6, intérieur + bandes de bord) x 4 arcs
-            Assert.Equal(36, spurs.Count); // 1 par bloc
+            Assert.Equal(144, arcs.Count); // 36 blocks (6x6, interior + border strips) x 4 arcs
+            Assert.Equal(36, spurs.Count); // 1 per block
 
             foreach (RoadSegmentDef arc in arcs)
             {
                 float2 chord = math.normalize(arc.End.xz - arc.Start.xz);
                 float startDot = math.dot(math.normalize(arc.StartTangent.xz), chord);
                 float endDot = math.dot(math.normalize(arc.EndTangent.xz), chord);
-                Assert.True(startDot > 0.3f, $"Tangente de départ quasi retournée : {arc.Start} -> {arc.End}, dot={startDot:F2}");
-                Assert.True(endDot > 0.3f, $"Tangente d'arrivée quasi retournée : {arc.Start} -> {arc.End}, dot={endDot:F2}");
+                Assert.True(startDot > 0.3f, $"Start tangent nearly reversed: {arc.Start} -> {arc.End}, dot={startDot:F2}");
+                Assert.True(endDot > 0.3f, $"End tangent nearly reversed: {arc.Start} -> {arc.End}, dot={endDot:F2}");
             }
 
             var loopStraightPieces = segments.Where(s => !s.IsArc && !s.IsCulDeSacEnd && !s.IsAvenue).ToList();
             foreach (RoadSegmentDef spur in spurs)
             {
                 bool sharesExactVertex = loopStraightPieces.Any(s => math.all(s.Start == spur.Start) || math.all(s.End == spur.Start));
-                Assert.True(sharesExactVertex, $"Rayon cul-de-sac ({spur.Start}) pas connecté à un sommet exact du laço.");
+                Assert.True(sharesExactVertex, $"Cul-de-sac spur ({spur.Start}) not connected to an exact loop vertex.");
             }
         }
 
         [Fact]
         public void LoopLegAttachPoints_AreExactSharedVerticesWithAvenueSegments()
         {
-            // Bug rapporté en jeu : "a estrada principal (laço) não fusiona na coletora" — les
-            // jambes du laço (EmitLoopBlock) s'accrochent à la collectrice en retrait de
-            // `margin` de ses bords, donc AU MILIEU de son tracé, jamais à ses extrémités —
-            // sans division de la collectrice à ce point exact (voir
-            // SplitAvenuesAtLoopAttachPoints), les deux se touchent sans jamais partager de
-            // sommet réel. Ce test vérifie que TOUT point d'un tronçon non-avenue qui tombe sur
-            // la LIGNE d'un tronçon avenue (à l'intérieur de son tracé) est EXACTEMENT l'une des
-            // deux extrémités de ce tronçon avenue — jamais un point de milieu.
+            // Bug reported in game: "the main road (loop) does not merge into the collector" — the
+            // loop legs (EmitLoopBlock) attach to the collector inset by
+            // `margin` from its ends, so IN THE MIDDLE of its path, never at its endpoints —
+            // without splitting the collector at that exact point (see
+            // SplitAvenuesAtLoopAttachPoints), the two touch without ever sharing a
+            // real vertex. This test checks that ANY point of a non-avenue segment that falls on
+            // the LINE of an avenue segment (inside its path) is EXACTLY one of the
+            // two endpoints of that avenue segment — never a midpoint.
             var square1800 = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1587,25 +1587,25 @@ namespace Placemaker.Tests
                         float t = math.dot(point.xz - a, ab) / lenSq;
                         if (t <= 0.01f || t >= 0.99f)
                         {
-                            continue; // à/au-delà d'une extrémité de CETTE avenue : rien à signaler ici
+                            continue; // at/beyond an endpoint of THIS avenue: nothing to report here
                         }
                         float2 projected = a + t * ab;
                         bool onThisAvenueLine = math.distance(projected, point.xz) < 0.5f;
                         Assert.False(onThisAvenueLine,
-                            $"Point {point} tombe au milieu de l'avenue {avenue.Start} -> {avenue.End} sans être un sommet partagé (t={t:F3}).");
+                            $"Point {point} falls in the middle of avenue {avenue.Start} -> {avenue.End} without being a shared vertex (t={t:F3}).");
                     }
                 }
             }
         }
 
-        /// <summary>Vrai si a/b (droits) sont colinéaires ET si b.Start ou b.End tombe strictement à l'intérieur de a (chevauchement de tracé, pas un simple croisement).</summary>
+        /// <summary>True if a/b (straight) are collinear AND b.Start or b.End falls strictly inside a (overlapping paths, not a simple crossing).</summary>
         private static bool SegmentsOverlapCollinearly(RoadSegmentDef a, RoadSegmentDef b)
         {
             float2 aDir = math.normalize(a.End.xz - a.Start.xz);
             float2 bDir = math.normalize(b.End.xz - b.Start.xz);
             if (math.abs(aDir.x * bDir.y - aDir.y * bDir.x) > 0.01f)
             {
-                return false; // pas colinéaires
+                return false; // not collinear
             }
             float2 aA = a.Start.xz;
             float2 aAB = a.End.xz - aA;
@@ -1626,7 +1626,7 @@ namespace Placemaker.Tests
             return false;
         }
 
-        /// <summary>Vrai si a/b (droits, niveaux DIFFÉRENTS) se croisent à un point qui n'est l'extrémité d'AUCUN des deux — jonction manquante.</summary>
+        /// <summary>True if a/b (straight, DIFFERENT levels) cross at a point that is the endpoint of NEITHER of them — missing junction.</summary>
         private static bool SegmentsCrossWithoutSharedJunction(RoadSegmentDef a, RoadSegmentDef b)
         {
             float2 a1 = a.Start.xz, a2 = a.End.xz, b1 = b.Start.xz, b2 = b.End.xz;
@@ -1644,10 +1644,10 @@ namespace Placemaker.Tests
         [Fact]
         public void MultipleSuperblocks_EachInteriorCellGetsExactlyOneLoop()
         {
-            // 500×500, collectrices tous les 100 m -> lignes internes à 100/200/300/400 sur
-            // chaque axe -> 3×3 = 9 super-îlots pleinement intérieurs + bandes de bord (voir
-            // GenerateLoopGrid) -> 5×5 = 25 super-îlots au total -> 4 arcs par laço rectangulaire
-            // (EmitSimpleLoopBlock, 4 coins) -> 100 arcs.
+            // 500×500, collectors every 100 m -> internal lines at 100/200/300/400 on
+            // each axis -> 3×3 = 9 fully interior superblocks + border strips (see
+            // GenerateLoopGrid) -> 5×5 = 25 superblocks in total -> 4 arcs per rectangular loop
+            // (EmitSimpleLoopBlock, 4 corners) -> 100 arcs.
             var square500 = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1663,18 +1663,18 @@ namespace Placemaker.Tests
         [Fact]
         public void NarrowCell_CulDeSacIsSkippedRatherThanForcedIntoAnInvalidShape()
         {
-            // Bande 100×900 : BuildLocalFrame aligne u sur l'arête la PLUS LONGUE (les côtés de
-            // 900), donc sans rotation, u=900 (largeur du laço, pas de problème) et v=100
-            // (profondeur, vPositions vide -> rien émis du tout, ne teste pas ce qu'on veut).
-            // AngleOffsetDegrees=90° tourne u de 90°, ce qui échange effectivement les deux axes :
-            // u=100 (largeur) et v=900 (profondeur, assez pour plusieurs bandes). DistributeFixed
-            // (0,100,300) donne cellCount=round(100/300)=0<=1 -> aucune collectrice interne sur u
-            // -> uBounds=[0,100] (une seule bande couvrant toute la largeur) -> largeur utile après
-            // marge (leftU=25, rightU=75) = 50m, sous MinCulDeSacCellWidth (60m). Le cul-de-sac
-            // doit être ignoré ici plutôt que forcé dans un espace trop étroit (retour utilisateur
-            // en jeu : "não é obrigatório haver becos sem saída em espaços menos largos" — la
-            // ramification collée aux deux arcs presque jointifs produisait une forme
-            // dégénérée/invalide).
+            // 100×900 strip: BuildLocalFrame aligns u with the LONGEST edge (the 900 m
+            // sides), so without rotation, u=900 (loop width, no problem) and v=100
+            // (depth, vPositions empty -> nothing emitted at all, doesn't test what we want).
+            // AngleOffsetDegrees=90° rotates u by 90°, which effectively swaps the two axes:
+            // u=100 (width) and v=900 (depth, enough for several strips). DistributeFixed
+            // (0,100,300) gives cellCount=round(100/300)=0<=1 -> no internal collector on u
+            // -> uBounds=[0,100] (a single strip covering the whole width) -> usable width after
+            // margin (leftU=25, rightU=75) = 50m, below MinCulDeSacCellWidth (60m). The cul-de-sac
+            // must be skipped here rather than forced into too narrow a space (in-game user
+            // feedback: "cul-de-sacs aren't mandatory in narrower spaces" — the
+            // branch squeezed against the two nearly touching arcs produced a
+            // degenerate/invalid shape).
             var narrowStrip = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1686,17 +1686,17 @@ namespace Placemaker.Tests
             parameters.AngleOffsetDegrees = 90f;
             var segments = GridGenerator.GenerateLoopGrid(narrowStrip, parameters);
             Assert.Empty(segments.Where(s => s.IsCulDeSacEnd));
-            // Le laço lui-même doit quand même exister, juste sans ramification.
+            // The loop itself must still exist, just without a branch.
             Assert.NotEmpty(segments.Where(s => s.IsArc));
         }
 
         [Fact]
         public void IrregularRealPerimeter_NeverThrowsAndKeepsAllSegmentsInsidePerimeter()
         {
-            // Périmètre réel irrégulier capturé en jeu (voir l'incident "Forma inválida" du
-            // mode Adaptativo) : le test le plus utile n'est pas une forme synthétique
-            // parfaite, mais une géométrie réelle bruitée. Ici un octogone irrégulier
-            // (rayons variables) sert de test de non-régression pour Loop.
+            // Real irregular perimeter captured in game (see the "Invalid shape" incident of
+            // the Adaptive mode): the most useful test is not a perfect synthetic
+            // shape, but a real noisy geometry. Here an irregular octagon
+            // (variable radii) serves as a non-regression test for Loop.
             var rnd = new System.Random(7);
             var perimeter = new List<float3>();
             const int nodeCount = 10;
@@ -1710,15 +1710,15 @@ namespace Placemaker.Tests
             foreach (float spacing in new[] { 60f, 90f, 120f, 180f })
             {
                 var segments = GridGenerator.GenerateLoopGrid(perimeter, LoopParams(spacing, culDeSacRatio: 50f));
-                // Ne doit jamais lever d'exception (déjà garanti par l'exécution du test),
-                // et chaque segment doit rester géométriquement raisonnable (longueur non
-                // nulle, pas de NaN).
+                // Must never throw (already guaranteed by the test running),
+                // and each segment must stay geometrically reasonable (non-zero
+                // length, no NaN).
                 foreach (RoadSegmentDef s in segments)
                 {
                     Assert.False(float.IsNaN(s.Start.x) || float.IsNaN(s.Start.z) || float.IsNaN(s.End.x) || float.IsNaN(s.End.z),
-                        $"Segment NaN (spacing={spacing}) : {s.Start} -> {s.End}");
+                        $"NaN segment (spacing={spacing}): {s.Start} -> {s.End}");
                     Assert.True(math.distance(s.Start.xz, s.End.xz) >= GridGenerator.MinSegmentLength - 0.01f,
-                        $"Segment plus court que MinSegmentLength (spacing={spacing}) : {s.Start} -> {s.End}");
+                        $"Segment shorter than MinSegmentLength (spacing={spacing}): {s.Start} -> {s.End}");
                 }
             }
         }
@@ -1726,13 +1726,13 @@ namespace Placemaker.Tests
         [Fact]
         public void ChamferedCorner_StillGetsADepthAdaptedLoop_AnchoredToTheCollector()
         {
-            // Carré 900×900 avec un coin coupé en biais (chanfrein) : le super-îlot le plus
-            // proche du coin coupé échoue le test "4 coins intérieurs" strict. Plutôt que de
-            // laisser ce coin de terrain entièrement vide (bug rapporté en jeu), un laço à
-            // PROFONDEUR ADAPTÉE mais LARGEUR PLEINE doit y apparaître (voir
-            // TryFitDepthPreservingWidth — plus de rétrécissement uniforme largeur+profondeur,
-            // qui produisait des laços visiblement miniatures), toujours ancré à la collectrice
-            // (vMin fixe, jamais rétréci).
+            // 900×900 square with one corner cut diagonally (chamfer): the superblock closest
+            // to the cut corner fails the strict "4 interior corners" test. Rather than
+            // leaving that corner of land completely empty (bug reported in game), a loop with
+            // ADAPTED DEPTH but FULL WIDTH must appear there (see
+            // TryFitDepthPreservingWidth — no more uniform width+depth shrinking,
+            // which produced visibly miniature loops), still anchored to the collector
+            // (vMin fixed, never shrunk).
             var chamfered = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1746,44 +1746,44 @@ namespace Placemaker.Tests
 
             Assert.NotEmpty(segments);
             var arcs = segments.Where(s => s.IsArc).ToList();
-            Assert.True(arcs.Count >= 2, $"Attendu au moins 1 laço (2 arcs), obtenu {arcs.Count} arc(s).");
+            Assert.True(arcs.Count >= 2, $"Expected at least 1 loop (2 arcs), got {arcs.Count} arc(s).");
 
-            // Contrôle géométrique DIRECT plutôt qu'une comparaison de décompte d'arcs avec le
-            // carré plein : depuis l'ajout des bandes de bord (voir GenerateLoopGrid), le coin
-            // chanfreiné peut désormais recevoir un laço à profondeur adaptée là où, avant cet
-            // ajout, il n'y avait même pas de super-îlot candidat à cet endroit — le nombre total
-            // d'arcs peut donc rester identique au carré plein (l'adaptation ne change jamais le
-            // nombre d'arcs émis, seulement la profondeur du laço), ce qui ne prouve plus rien
-            // par comparaison de décompte. Le vrai contrat à vérifier : aucun segment ne dépasse
-            // la ligne du chanfrein (x+z <= 1650, la diagonale coupée entre (900,750) et
-            // (750,900)) — petite tolérance pour l'arrondi en virgule flottante (JoinTolerance de
-            // GridGenerator est privé, pas accessible ici).
+            // DIRECT geometric check rather than comparing arc counts with the
+            // full square: since border strips were added (see GenerateLoopGrid), the
+            // chamfered corner can now receive an adapted-depth loop where, before that
+            // addition, there wasn't even a candidate superblock at that spot — the total number
+            // of arcs can therefore stay identical to the full square (the adaptation never changes the
+            // number of arcs emitted, only the loop's depth), so a count comparison no longer proves
+            // anything. The real contract to check: no segment crosses
+            // the chamfer line (x+z <= 1650, the cut diagonal between (900,750) and
+            // (750,900)) — small tolerance for floating-point rounding (GridGenerator's
+            // JoinTolerance is private, not accessible here).
             const float tolerance = 1f;
             foreach (RoadSegmentDef s in segments)
             {
                 Assert.True(s.Start.x + s.Start.z <= 1650f + tolerance,
-                    $"Segment déborde du chanfrein (Start) : {s.Start}");
+                    $"Segment spills past the chamfer (Start): {s.Start}");
                 Assert.True(s.End.x + s.End.z <= 1650f + tolerance,
-                    $"Segment déborde du chanfrein (End) : {s.End}");
+                    $"Segment spills past the chamfer (End): {s.End}");
             }
 
             foreach (RoadSegmentDef s in segments)
             {
                 Assert.False(float.IsNaN(s.Start.x) || float.IsNaN(s.Start.z) || float.IsNaN(s.End.x) || float.IsNaN(s.End.z),
-                    $"Segment NaN : {s.Start} -> {s.End}");
+                    $"NaN segment: {s.Start} -> {s.End}");
             }
         }
 
         [Fact]
         public void ChamferedCorner_LoopLegsAdaptIndependently_GivingADiagonalBackSegment()
         {
-            // Même chanfrein que le test précédent, mais vérifie la vraie nouveauté (retour
-            // utilisateur en jeu avec capture d'écran : "a forma mais parecida com a área da
-            // célula", une jambe raccourcie par une coupe en diagonale, PAS les deux jambes
-            // rétrécies à la même profondeur) : la cellule d'angle (600-900 en u ET v, coupée par
-            // x+z<=1650) doit donner une jambe côté u=900 clairement plus courte que côté u=600
-            // (plus proche du coin coupé), avec un segment du fond qui suit cette diagonale au
-            // lieu de rester horizontal comme ailleurs dans la grille.
+            // Same chamfer as the previous test, but checks the real novelty (in-game user
+            // feedback with a screenshot: "the shape closer to the cell's area",
+            // one leg shortened by a diagonal cut, NOT both legs
+            // shrunk to the same depth): the corner cell (600-900 in u AND v, cut by
+            // x+z<=1650) must give a leg on the u=900 side clearly shorter than on the u=600 side
+            // (closer to the cut corner), with a back segment that follows that diagonal instead
+            // of staying horizontal as elsewhere in the grid.
             var chamfered = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1795,47 +1795,47 @@ namespace Placemaker.Tests
 
             var segments = GridGenerator.GenerateLoopGrid(chamfered, LoopParams(300f, culDeSacRatio: 0f));
 
-            // Segments "fond" candidats : droits, pas une collectrice/laço marqué autrement —
-            // angle=0 donc u=x, v=z, la comparaison directe sur .z est valide sans transformer de
-            // repère local.
+            // Candidate "back" segments: straight, not a collector/loop marked otherwise —
+            // angle=0 so u=x, v=z; the direct comparison on .z is valid without transforming to
+            // the local frame.
             var backSegments = segments.Where(s => !s.IsArc && !s.IsAvenue && !s.IsCulDeSacEnd).ToList();
             Assert.NotEmpty(backSegments);
 
             float maxZDelta = backSegments.Max(s => math.abs(s.Start.z - s.End.z));
             Assert.True(maxZDelta > 5f,
-                $"Aucun segment du fond n'est diagonal (plus grand écart en z trouvé : {maxZDelta:F2}m) — la jambe côté chanfrein devrait être plus courte que l'autre, donnant un fond incliné plutôt qu'horizontal partout.");
+                $"No back segment is diagonal (largest z gap found: {maxZDelta:F2}m) — the leg on the chamfer side should be shorter than the other, giving a sloped back rather than horizontal everywhere.");
 
-            // Toujours à l'intérieur du chanfrein, même vérification que le test précédent —
-            // s'assure que l'adaptation par jambe n'a pas réintroduit de débordement.
+            // Still inside the chamfer, same check as the previous test —
+            // ensures the per-leg adaptation did not reintroduce any spill-over.
             const float tolerance = 1f;
             foreach (RoadSegmentDef s in segments)
             {
-                Assert.True(s.Start.x + s.Start.z <= 1650f + tolerance, $"Segment déborde du chanfrein (Start) : {s.Start}");
-                Assert.True(s.End.x + s.End.z <= 1650f + tolerance, $"Segment déborde du chanfrein (End) : {s.End}");
+                Assert.True(s.Start.x + s.Start.z <= 1650f + tolerance, $"Segment spills past the chamfer (Start): {s.Start}");
+                Assert.True(s.End.x + s.End.z <= 1650f + tolerance, $"Segment spills past the chamfer (End): {s.End}");
             }
         }
 
     }
 
     /// <summary>
-    /// Régression de performance — retour utilisateur (forum du mod) : "the mod lags hard the
+    /// Performance regression — user feedback (mod forum): "the mod lags hard the
     /// more rows and columns there are... BuildSubSegments runs at O(n^4) complexity and gets
-    /// executed every single frame" avec le défaut Spacing=10m. Vérifié fondé : BuildSubSegments
-    /// balayait TOUS les points déjà acceptés à chaque nouveau croisement (O(n²) dans une
-    /// double boucle déjà O(n²)), et GridRoadToolSystem.OnUpdate régénère bien l'aperçu à CHAQUE
-    /// frame tant que ≥2 nœuds sont sélectionnés — un petit espacement sur un grand périmètre se
-    /// traduisait en gel du jeu. Remplacé par SpatialPointIndex (grille de baldes, voisinage
-    /// 3×3) — ce test verrouille un budget temps généreux mais strict pour empêcher toute
-    /// régression future vers un comportement O(n⁴).
+    /// executed every single frame" with the default Spacing=10m. Confirmed valid: BuildSubSegments
+    /// scanned ALL already accepted points for each new crossing (O(n²) inside a
+    /// double loop already O(n²)), and the game layer does regenerate the preview EVERY
+    /// frame while ≥2 nodes are selected — a small spacing on a large perimeter
+    /// translated into a game freeze. Replaced by SpatialPointIndex (bucket grid, 3×3
+    /// neighbourhood) — this test locks in a generous but strict time budget to prevent any
+    /// future regression towards O(n⁴) behaviour.
     /// </summary>
     public class GridGeneratorPerformanceTests
     {
         [Fact]
         public void LargeAreaWithSmallSpacing_GeneratesWellUnderOneSecond()
         {
-            // ~450x450m avec Spacing=10m (le défaut historique visé par le retour utilisateur)
-            // -> ~45x45 lignes, ~2000 croisements : négligeable avec un index spatial,
-            // plusieurs dizaines de millions d'opérations avec l'ancien balayage linéaire.
+            // ~450x450m with Spacing=10m (the historical default targeted by the user feedback)
+            // -> ~45x45 lines, ~2000 crossings: negligible with a spatial index,
+            // several tens of millions of operations with the old linear scan.
             var perimeter = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1853,17 +1853,17 @@ namespace Placemaker.Tests
 
             Assert.NotEmpty(segments);
             Assert.True(stopwatch.ElapsedMilliseconds < 1000,
-                $"GenerateGrid a pris {stopwatch.ElapsedMilliseconds}ms pour un espacement de 10m sur 450x450m — " +
-                "régression vers une complexité quadratique/pire dans la fusion des croisements probable.");
+                $"GenerateGrid took {stopwatch.ElapsedMilliseconds}ms for a 10m spacing on 450x450m — " +
+                "likely regression to quadratic/worse complexity in crossing merging.");
         }
 
         [Fact]
         public void VeryLargeAreaWithSmallSpacing_StillGeneratesQuickly()
         {
-            // Cas extrême : ~200x200 lignes, ~40 000 croisements — scénario exact décrit sur le
-            // forum du mod ("the mod lags hard the more rows and columns there are"). L'ancien
-            // balayage linéaire (O(n²) DANS une boucle déjà O(n²)) aurait fait des dizaines de
-            // millions d'opérations ici ; SpatialPointIndex garde ça quasi linéaire.
+            // Extreme case: ~200x200 lines, ~40,000 crossings — the exact scenario described on the
+            // mod forum ("the mod lags hard the more rows and columns there are"). The old
+            // linear scan (O(n²) INSIDE an already O(n²) loop) would have done tens of
+            // millions of operations here; SpatialPointIndex keeps it near-linear.
             var perimeter = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1881,21 +1881,21 @@ namespace Placemaker.Tests
 
             Assert.NotEmpty(segments);
             Assert.True(stopwatch.ElapsedMilliseconds < 5000,
-                $"GenerateGrid a pris {stopwatch.ElapsedMilliseconds}ms pour un espacement de 10m sur 2000x2000m " +
-                $"({segments.Count} segments) — ce scénario est celui exact rapporté comme gelant le jeu.");
+                $"GenerateGrid took {stopwatch.ElapsedMilliseconds}ms for a 10m spacing on 2000x2000m " +
+                $"({segments.Count} segments) — this is exactly the scenario reported as freezing the game.");
         }
 
         [Fact]
         public void LoopMode_LargeAreaWithManyBlocks_GeneratesQuickly()
         {
-            // Retour utilisateur (log de performance en jeu, ~31 nœuds sélectionnés, modo Loop) :
-            // 325-351ms par régénération complète, contre <1ms pour le modo Grid équivalent.
-            // Cause : SplitSegmentsAtMidSpanAttachPoints (O(cibles × points d'ancrage)) sans
-            // index spatial, alors même appelée plusieurs fois par régénération avec l'ancienne
-            // hiérarchie à 2 niveaux (Arterial > Coletora, depuis supprimée — voir GridGenerator.
-            // GenerateLoopGrid). ~2000x2000m / CollectorSpacingMeters=200 (le minimum autorisé
-            // par le panneau) -> ~100 quarteirões, un seul appel global à
-            // SplitSegmentsAtMidSpanAttachPoints sur TOUS leurs points d'ancrage.
+            // User feedback (in-game performance log, ~31 nodes selected, Loop mode):
+            // 325-351ms per full regeneration, versus <1ms for the equivalent Grid mode.
+            // Cause: SplitSegmentsAtMidSpanAttachPoints (O(targets × attach points)) without
+            // a spatial index, and on top of that called several times per regeneration with the old
+            // 2-level hierarchy (Arterial > Collector, since removed — see GridGenerator.
+            // GenerateLoopGrid). ~2000x2000m / CollectorSpacingMeters=200 (the minimum allowed
+            // by the panel) -> ~100 blocks, a single global call to
+            // SplitSegmentsAtMidSpanAttachPoints on ALL their attach points.
             var perimeter = new List<float3>
             {
                 new float3(0f, 0f, 0f),
@@ -1916,8 +1916,8 @@ namespace Placemaker.Tests
 
             Assert.NotEmpty(segments);
             Assert.True(stopwatch.ElapsedMilliseconds < 2000,
-                $"GenerateLoopGrid a pris {stopwatch.ElapsedMilliseconds}ms pour ~49 pâtés de maison sur 2000x2000m " +
-                $"({segments.Count} segments) — régression probable dans SplitSegmentsAtMidSpanAttachPoints.");
+                $"GenerateLoopGrid took {stopwatch.ElapsedMilliseconds}ms for ~49 blocks on 2000x2000m " +
+                $"({segments.Count} segments) — likely regression in SplitSegmentsAtMidSpanAttachPoints.");
         }
 
     public class GridAlignToTerrainTests
@@ -1925,7 +1925,7 @@ namespace Placemaker.Tests
         [Fact]
         public void AlignedGrid_HasStreetsAlongTheContours()
         {
-            // Pente de 10 % vers le nord-est (45°) : les courbes de niveau vont nord-ouest ↔ sud-est.
+            // 10 % slope towards the north-east (45°): contour lines run north-west ↔ south-east.
             var square = new List<float3> { new float3(0, 0, 0), new float3(800, 0, 0), new float3(800, 0, 800), new float3(0, 0, 800) };
             GridParameters p = GridParameters.Default;
             p.HeightAt = q => 0.1f * (q.x + q.y) / math.SQRT2;
@@ -1935,7 +1935,7 @@ namespace Placemaker.Tests
             float2 contour = math.normalize(new float2(1f, -1f));
             int along = segments.Count(s => math.abs(math.dot(math.normalizesafe(s.End.xz - s.Start.xz), contour)) > 0.99f);
             int across = segments.Count(s => math.abs(math.dot(math.normalizesafe(s.End.xz - s.Start.xz), contour)) < 0.01f);
-            Assert.True(along > 0 && along + across == segments.Count, $"{along} le long, {across} en travers sur {segments.Count}");
+            Assert.True(along > 0 && along + across == segments.Count, $"{along} along, {across} across out of {segments.Count}");
         }
 
         [Fact]

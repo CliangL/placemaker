@@ -65,30 +65,30 @@ namespace Placemaker.Tests
 
         private static void AssertWellFormed(List<RoadSegmentDef> segments, List<float3> perimeter, string label)
         {
-            Assert.True(segments.Count >= 10, $"{label} : {segments.Count} tronçons seulement");
+            Assert.True(segments.Count >= 10, $"{label}: only {segments.Count} segments");
             var curves = segments.Select(s => RoadsConcentricGeneratorTests.GameCurve(s, 24)).ToList();
-            var nodes = new Dictionary<float3, List<float2>>(); // tangente sortante de chaque tronçon, par nœud
+            var nodes = new Dictionary<float3, List<float2>>(); // outgoing tangent of each segment, per node
             for (int k = 0; k < segments.Count; k++)
             {
                 RoadSegmentDef s = segments[k];
                 float2[] c = curves[k];
                 float length = 0f;
                 for (int i = 1; i < c.Length; i++) length += math.distance(c[i - 1], c[i]);
-                Assert.True(length >= 34f, $"{label} : tronçon de {length:F0} m en {s.Start.xz}");
+                Assert.True(length >= 34f, $"{label}: {length:F0} m segment at {s.Start.xz}");
                 bool startOn = DistanceToPolygon(s.Start.xz, perimeter) < 0.5f, endOn = DistanceToPolygon(s.End.xz, perimeter) < 0.5f;
                 foreach (float3 q in new[] { s.Start, s.End })
                 {
                     float d = DistanceToPolygon(q.xz, perimeter);
-                    Assert.True(d < 0.5f || d >= 24f, $"{label} : nœud à {d:F1} m du périmètre en {q.xz}");
+                    Assert.True(d < 0.5f || d >= 24f, $"{label}: node {d:F1} m from the perimeter at {q.xz}");
                 }
                 float along = 0f;
                 for (int i = 0; i < c.Length; i++)
                 {
                     if (i > 0) along += math.distance(c[i - 1], c[i]);
-                    Assert.True(Inside(c[i], perimeter) || DistanceToPolygon(c[i], perimeter) < 0.5f, $"{label} : tronçon hors de la forme en {c[i]}");
-                    // Hors de la zone d'approche d'un bout sur le périmètre (25 / sin 50° + marge).
+                    Assert.True(Inside(c[i], perimeter) || DistanceToPolygon(c[i], perimeter) < 0.5f, $"{label}: segment outside the shape at {c[i]}");
+                    // Outside the approach zone of an end on the perimeter (25 / sin 50° + margin).
                     if ((startOn && along < 42f) || (endOn && length - along < 42f)) continue;
-                    Assert.True(DistanceToPolygon(c[i], perimeter) >= 23f, $"{label} : rue à {DistanceToPolygon(c[i], perimeter):F1} m du périmètre en {c[i]}");
+                    Assert.True(DistanceToPolygon(c[i], perimeter) >= 23f, $"{label}: street {DistanceToPolygon(c[i], perimeter):F1} m from the perimeter at {c[i]}");
                 }
                 void AddTangent(float3 n, float2 t)
                 {
@@ -98,17 +98,17 @@ namespace Placemaker.Tests
                 AddTangent(s.Start, c[1] - c[0]);
                 AddTangent(s.End, c[c.Length - 2] - c[c.Length - 1]);
             }
-            // Angles aux carrefours (tangentes réelles des courbes).
+            // Junction angles (actual curve tangents).
             foreach (var pair in nodes)
             {
                 for (int i = 0; i < pair.Value.Count; i++)
                     for (int j = i + 1; j < pair.Value.Count; j++)
                     {
                         float angle = math.degrees(math.acos(math.clamp(math.dot(pair.Value[i], pair.Value[j]), -1f, 1f)));
-                        Assert.True(angle >= 38f, $"{label} : angle de {angle:F0}° au nœud {pair.Key.xz}");
+                        Assert.True(angle >= 38f, $"{label}: {angle:F0}° angle at node {pair.Key.xz}");
                     }
             }
-            // Pas de croisement (courbes réelles, hors extrémités partagées).
+            // No crossings (actual curves, shared endpoints excluded).
             var boxes = curves.Select(c => (min: c.Aggregate(new float2(float.MaxValue), math.min), max: c.Aggregate(new float2(float.MinValue), math.max))).ToList();
             for (int a = 0; a < curves.Count; a++)
                 for (int b = a + 1; b < curves.Count; b++)
@@ -117,31 +117,31 @@ namespace Placemaker.Tests
                     for (int i = 1; i < curves[a].Length; i++)
                         for (int j = 1; j < curves[b].Length; j++)
                             Assert.False(Cross(curves[a][i - 1], curves[a][i], curves[b][j - 1], curves[b][j]),
-                                $"{label} : croisement près de {curves[a][i]}");
+                                $"{label}: crossing near {curves[a][i]}");
                 }
-            // Bouts libres : seulement des entrées (sur le périmètre) ou des bouts d'impasse, eux-mêmes
-            // loin du périmètre et des autres rues (place du cercle de retournement).
+            // Free ends: only entries (on the perimeter) or cul-de-sac ends, which must themselves be
+            // far from the perimeter and from other streets (room for the turning circle).
             var tips = new HashSet<float3>(segments.Where(s => s.IsCulDeSacEnd).Select(s => s.End));
             Assert.NotEmpty(tips);
             foreach (var pair in nodes.Where(n => n.Value.Count == 1))
             {
                 bool entry = DistanceToPolygon(pair.Key.xz, perimeter) < 0.5f;
-                Assert.True(entry || tips.Contains(pair.Key), $"{label} : bout libre qui n'est pas une impasse en {pair.Key.xz}");
+                Assert.True(entry || tips.Contains(pair.Key), $"{label}: free end that is not a cul-de-sac at {pair.Key.xz}");
             }
             foreach (float3 tip in tips)
             {
                 Assert.Single(nodes[tip]);
-                Assert.True(DistanceToPolygon(tip.xz, perimeter) >= 29f, $"{label} : impasse à {DistanceToPolygon(tip.xz, perimeter):F0} m du périmètre en {tip.xz}");
+                Assert.True(DistanceToPolygon(tip.xz, perimeter) >= 29f, $"{label}: cul-de-sac {DistanceToPolygon(tip.xz, perimeter):F0} m from the perimeter at {tip.xz}");
                 for (int k = 0; k < segments.Count; k++)
                 {
                     if (segments[k].Start.Equals(tip) || segments[k].End.Equals(tip)) continue;
                     float d = curves[k].Min(q => math.distance(q, tip.xz));
-                    Assert.True(d >= 38f, $"{label} : bout d'impasse à {d:F0} m d'une autre rue en {tip.xz}");
+                    Assert.True(d >= 38f, $"{label}: cul-de-sac end {d:F0} m from another street at {tip.xz}");
                 }
             }
-            // Deux réseaux : la rue principale (avenue) et toutes les autres rues (cul-de-sac, IsLocal).
-            Assert.All(segments, s => Assert.True(s.IsAvenue != s.IsLocal, $"{label} : tronçon ni avenue ni cul-de-sac en {s.Start.xz}"));
-            // Tout relié aux entrées.
+            // Two networks: the main street (avenue) and all other streets (cul-de-sac, IsLocal).
+            Assert.All(segments, s => Assert.True(s.IsAvenue != s.IsLocal, $"{label}: segment neither avenue nor cul-de-sac at {s.Start.xz}"));
+            // Everything connected to the entries.
             var adjacency = new Dictionary<float3, List<float3>>();
             foreach (RoadSegmentDef s in segments)
             {
@@ -151,7 +151,7 @@ namespace Placemaker.Tests
                 b.Add(s.Start);
             }
             var entries = adjacency.Keys.Where(n => DistanceToPolygon(n.xz, perimeter) < 0.5f).ToList();
-            Assert.True(entries.Count >= 2, $"{label} : {entries.Count} entrée(s)");
+            Assert.True(entries.Count >= 2, $"{label}: {entries.Count} entry(ies)");
             var seen = new HashSet<float3>();
             var stack = new Stack<float3>(entries);
             while (stack.Count > 0)
@@ -160,7 +160,7 @@ namespace Placemaker.Tests
                 if (!seen.Add(n)) continue;
                 foreach (float3 m in adjacency[n]) stack.Push(m);
             }
-            Assert.True(seen.Count == adjacency.Count, $"{label} : {adjacency.Count - seen.Count} nœud(s) non reliés aux entrées");
+            Assert.True(seen.Count == adjacency.Count, $"{label}: {adjacency.Count - seen.Count} node(s) not connected to the entries");
         }
 
         [Fact]
@@ -169,7 +169,7 @@ namespace Placemaker.Tests
             var perimeter = Rectangle(900f, 700f);
             foreach (int seed in new[] { 1, 2, 3 })
             {
-                AssertWellFormed(GridGenerator.GenerateGrid(perimeter, Organic(seed: seed)), perimeter, $"rectangle graine {seed}");
+                AssertWellFormed(GridGenerator.GenerateGrid(perimeter, Organic(seed: seed)), perimeter, $"rectangle seed {seed}");
             }
         }
 
@@ -177,8 +177,8 @@ namespace Placemaker.Tests
         public void RealPerimeter_IsWellFormed()
         {
             var perimeter = LoadRealPerimeter();
-            foreach ((GridParameters p, string label) in new[] { (Organic(), "défaut"), (Organic(block: 60f, curviness: 100f, seed: 7, loops: 60f), "serré, très courbe"),
-                         (Organic(block: 140f, curviness: 0f, seed: 42, loops: 0f), "large, droit"), (Organic(curviness: 100f, seed: 99), "courbe 99") })
+            foreach ((GridParameters p, string label) in new[] { (Organic(), "default"), (Organic(block: 60f, curviness: 100f, seed: 7, loops: 60f), "tight, very curvy"),
+                         (Organic(block: 140f, curviness: 0f, seed: 42, loops: 0f), "wide, straight"), (Organic(curviness: 100f, seed: 99), "curvy 99") })
             {
                 AssertWellFormed(GridGenerator.GenerateGrid(perimeter, p), perimeter, label);
             }
@@ -187,14 +187,14 @@ namespace Placemaker.Tests
         [Fact]
         public void RealPerimeter_ManySeeds_AreWellFormed()
         {
-            // Motif aléatoire : les garanties doivent tenir pour toutes les variantes, pas seulement une.
+            // Random pattern: the guarantees must hold for every variant, not just one.
             var perimeter = LoadRealPerimeter();
             foreach (float spacing in new[] { 60f, 80f, 110f })
             {
                 for (int seed = 10; seed < 22; seed++)
                 {
                     AssertWellFormed(GridGenerator.GenerateGrid(perimeter, Organic(block: spacing, curviness: 80f, seed: seed, loops: 40f)), perimeter,
-                        $"{spacing} m graine {seed}");
+                        $"{spacing} m seed {seed}");
                 }
             }
         }
@@ -221,10 +221,10 @@ namespace Placemaker.Tests
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < 5; i++)
             {
-                GridGenerator.GenerateGrid(perimeter, Organic(seed: 51 + i)); // graines différentes : hors cache
+                GridGenerator.GenerateGrid(perimeter, Organic(seed: 51 + i)); // a different seed on each run
             }
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 1500, $"5 générations en {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < 1500, $"5 generations in {stopwatch.ElapsedMilliseconds} ms");
         }
     }
 }

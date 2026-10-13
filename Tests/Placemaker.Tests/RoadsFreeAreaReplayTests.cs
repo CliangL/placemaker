@@ -33,8 +33,8 @@ namespace Placemaker.Tests
         }
 
         /// <summary>
-        /// Zone libre dessinée en jeu (contour et relief relevés dans le log) : aucun motif ne doit y
-        /// laisser de tronçon intérieur de moins de 16 m ni de carrefour à moins de 35°.
+        /// Drawn area captured in game (outline and terrain taken from the log): no pattern may leave
+        /// an interior segment shorter than 16 m or a junction sharper than 35° in it.
         /// </summary>
         [Fact]
         public void RealFreeArea_HasNoShortSegmentsOrSharpJunctions()
@@ -59,7 +59,7 @@ namespace Placemaker.Tests
                     var c = RoadsConcentricGeneratorTests.GameCurve(s, 16);
                     float len = 0; for (int i = 1; i < c.Length; i++) len += math.distance(c[i - 1], c[i]);
                     if (len < 16 && !road.Contains(s)) interiorShort++;
-                    if (len < 16) { shortCount++; _out.WriteLine($"{pattern} court {len:F1} {s.Start.xz} {(road.Contains(s) ? "P" : "I")}"); }
+                    if (len < 16) { shortCount++; _out.WriteLine($"{pattern} short {len:F1} {s.Start.xz} {(road.Contains(s) ? "P" : "I")}"); }
                     float grade = 0; for (int i = 1; i < c.Length; i++) grade = math.max(grade, math.abs(height(c[i]) - height(c[i - 1])) / math.distance(c[i - 1], c[i]));
                     if (grade > 0.2f) steep++;
                     void Add(float3 n, float2 t) { if (!tangents.TryGetValue(n, out var l)) tangents[n] = l = new List<float2>(); l.Add(math.normalizesafe(t)); }
@@ -69,11 +69,11 @@ namespace Placemaker.Tests
                     for (int i = 0; i < kv.Value.Count; i++) for (int j = i + 1; j < kv.Value.Count; j++)
                     {
                         float a = math.degrees(math.acos(math.clamp(math.dot(kv.Value[i], kv.Value[j]), -1, 1)));
-                        if (a < 35) { sharp++; _out.WriteLine($"{pattern} angle {a:F0} en {kv.Key.xz}"); }
+                        if (a < 35) { sharp++; _out.WriteLine($"{pattern} angle {a:F0} at {kv.Key.xz}"); }
                     }
-                _out.WriteLine($"== {pattern}: {interior.Count} int, {road.Count} perim, courts={shortCount}, raides(>20%)={steep}, aigus={sharp}");
+                _out.WriteLine($"== {pattern}: {interior.Count} int, {road.Count} perim, short={shortCount}, steep(>20%)={steep}, sharp={sharp}");
                 Assert.Equal(0, sharp);
-                Assert.True(interiorShort == 0, $"{pattern} : {interiorShort} tronçon(s) intérieur(s) de moins de 16 m");
+                Assert.True(interiorShort == 0, $"{pattern}: {interiorShort} interior segment(s) shorter than 16 m");
             }
         }
     }

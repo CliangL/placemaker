@@ -11,22 +11,21 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Mode "Concêntrico" (retour utilisateur : "um modo que copia a forma exterior dentro, em que
-    /// possamos escolher o número de camadas") : N anneaux de routes qui reprennent la forme du
-    /// périmètre choisi, reliés entre eux et au périmètre par des rayons courts.
+    /// Concentric mode (user feedback: "a mode that copies the outer shape inwards, where we can
+    /// choose the number of layers"): N rings of roads that follow the shape of the selected
+    /// perimeter, linked to each other and to the perimeter by short spokes.
     ///
-    /// Pourquoi pas un offset arête par arête (ancien mode Adaptativo, retiré) : décaler chaque
-    /// arête puis recoller les coins (jonction miter) s'auto-intersecte dès qu'un coin est
-    /// concave, qu'une partie étroite se referme ou que la forme se sépare en deux — chaque cas
-    /// demandait son propre garde-fou, et il en restait toujours un. Ici chaque anneau est la
-    /// courbe de niveau "distance au périmètre = k × espacement" d'un champ de distance calculé
-    /// sur une grille (marching squares) : c'est par construction le vrai offset intérieur, qui
-    /// ne peut ni se croiser lui-même ni sortir du périmètre, garde des coins nets sur les coins
-    /// convexes, s'arrondit dans les coins concaves, et se sépare/disparaît naturellement quand
-    /// la forme devient trop étroite.
+    /// Why not an edge-by-edge offset (the old Adaptive mode, removed): offsetting each edge and
+    /// re-joining the corners (miter join) self-intersects as soon as a corner is concave, a narrow
+    /// part closes up or the shape splits in two — each case needed its own guard, and there was
+    /// always one left. Here each ring is the level curve "distance to perimeter = k × spacing" of
+    /// a distance field computed on a grid (marching squares): by construction it is the true
+    /// inward offset, which can neither cross itself nor leave the perimeter, keeps sharp corners
+    /// at convex corners, rounds off in concave corners, and splits/disappears naturally when the
+    /// shape becomes too narrow.
     ///
-    /// L'espacement n'est pas un réglage : il est calculé pour que les N anneaux remplissent la
-    /// forme jusqu'à son centre (profondeur maximale / (N + 1)), en respectant MinLayerSpacing.
+    /// Spacing is not a setting: it is computed so that the N rings fill the shape up to its centre
+    /// (maximum depth / (N + 1)), while respecting MinLayerSpacing.
     /// </summary>
     public static class ConcentricGenerator
     {
@@ -36,13 +35,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
         public const int MaxConnections = 12;
 
         /// <summary>
-        /// Écart minimal (m) entre deux anneaux voisins, mesuré à l'endroit le plus serré (les
-        /// anneaux se resserrent dans les parties étroites de la forme) — une bande plus étroite
-        /// ne serait plus constructible. Détermine le nombre maximal d'anneaux (voir MaxLayers).
+        /// Minimum gap (m) between two neighbouring rings, measured at the tightest point (rings
+        /// squeeze together in narrow parts of the shape) — a narrower strip would no longer be
+        /// buildable. Determines the maximum number of rings (see MaxLayers).
         /// </summary>
         public const float MinLayerSpacing = 40f;
 
-        /// <summary>Tailles de cellule (m) du champ de distance : fine sur une petite zone, plafonnée sur une grande pour rester rapide.</summary>
+        /// <summary>Distance-field cell sizes (m): fine on a small area, capped on a large one to stay fast.</summary>
         private const float MinCellSize = 1.5f;
         private const float MaxCellSize = 8f;
         private const int TargetCellsPerAxis = 220;
@@ -69,8 +68,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return segments;
             }
 
-            // Jamais plus d'anneaux que la forme n'en permet (voir MaxLayersFor) — le panneau
-            // bloque déjà le slider à cette limite, ceci couvre une valeur sauvegardée plus haute.
+            // Never more rings than the shape allows (see MaxLayersFor) — the panel already caps
+            // the slider at this limit; this covers a higher saved value.
             int layerCount = math.min(layers, MaxLayersFor(field, polygon, cancel));
             if (layerCount < 1)
             {
@@ -107,11 +106,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Nombre maximal d'anneaux pour ce périmètre (retour utilisateur : "é preciso haver um
-        /// limite de anéis dependendo do tamanho do perímetro, e no painel simplesmente
-        /// bloqueia além do limite") : le plus grand N pour lequel, même à l'endroit le plus
-        /// serré, deux anneaux voisins restent à au moins MinLayerSpacing l'un de l'autre. 0 si
-        /// la forme est trop petite pour un seul anneau. Mis en cache avec le champ de distance.
+        /// Maximum number of rings for this perimeter (user feedback: "there has to be a ring limit
+        /// depending on the perimeter size, and the panel simply blocks beyond the limit"): the
+        /// largest N for which, even at the tightest point, two neighbouring rings stay at least
+        /// MinLayerSpacing apart. 0 if the shape is too small for a single ring. Memoised in
+        /// DistanceField.MaxLayersCache, i.e. per field built for this call (there is no static
+        /// cache).
         /// </summary>
         public static int MaxLayers(IReadOnlyList<float3> selectedNodePositions)
         {
@@ -130,7 +130,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 return field.MaxLayersCache;
             }
-            // Borne haute : l'espacement MOYEN doit déjà atteindre MinLayerSpacing.
+            // Upper bound: the AVERAGE spacing must already reach MinLayerSpacing.
             int upper = math.min(MaxLayersLimit, (int)math.floor(field.RingDepth / MinLayerSpacing) - 1);
             int result = 0;
             for (int layerCount = upper; layerCount >= 1; layerCount--)
@@ -147,7 +147,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Champ de distance du périmètre (en cache tant que le périmètre ne change pas) et polygone nettoyé.</summary>
+        /// <summary>Distance field of the perimeter (built per call, not cached) and the cleaned polygon.</summary>
         private static bool TryGetField(IReadOnlyList<float3> nodes, out DistanceField field, out List<float2> polygon, out float y)
         {
             field = null;
@@ -177,11 +177,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Anneaux = courbes de niveau d'un champ lisse qui vaut 0 sur le périmètre et 1 sur
-        /// l'"épine" de la forme (voir DistanceField.RingField) : chaque anneau fait le tour de
-        /// toute la forme sans se couper ni finir en pointe, plus serré dans les parties
-        /// étroites, plus large dans les parties larges. Espacement MOYEN = profondeur / (N+1).
-        /// levels[0] = le périmètre lui-même. null si on n'obtient pas les N anneaux demandés.
+        /// Rings = level curves of a smooth field that is 0 on the perimeter and 1 on the "spine"
+        /// of the shape (see DistanceField.RingField): each ring goes round the whole shape without
+        /// cutting itself or ending in a point, tighter in narrow parts and wider in wide parts.
+        /// AVERAGE spacing = depth / (N+1). levels[0] = the perimeter itself. null if the N
+        /// requested rings cannot be obtained.
         /// </summary>
         private static List<List<List<float2>>> BuildLevels(DistanceField field, List<float2> polygon, int layerCount,
             HashSet<(float, float)> corners, out float spacing)
@@ -197,7 +197,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     List<float2> loop = SmoothAndResample(raw, field, corners, spacing);
                     if (loop.Count < 3 || math.abs(SignedArea(loop)) < MinLayerSpacing * MinLayerSpacing)
                     {
-                        continue; // lambeau trop petit pour porter une zone constructible
+                        continue; // scrap too small to hold a buildable zone
                     }
                     loops.Add(loop);
                 }
@@ -210,7 +210,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return levels;
         }
 
-        /// <summary>Plus petit écart entre un anneau et le niveau juste à l'extérieur (le périmètre pour le premier).</summary>
+        /// <summary>Smallest gap between a ring and the level just outside it (the perimeter for the first ring).</summary>
         private static float MinGapBetweenLevels(List<List<List<float2>>> levels)
         {
             float min = float.MaxValue;
@@ -230,23 +230,23 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return min;
         }
 
-        /// <summary>Virage minimal (degrés) pour qu'un point soit un coin — et seulement là où le périmètre a lui-même un coin net (voir DistanceField.SharpWeightAt).</summary>
+        /// <summary>Minimum turn (degrees) for a point to be a corner — and only where the perimeter itself has a sharp corner (see DistanceField.SharpWeightAt).</summary>
         private const float CornerTurnDegrees = 30f;
 
-        /// <summary>Marge (degrés) entre le virage d'un coin d'anneau et celui du coin de périmètre dont il hérite.</summary>
+        /// <summary>Slack (degrees) between the turn of a ring corner and the turn of the perimeter corner it inherits from.</summary>
         private const float CornerTurnSlackDegrees = 20f;
 
-        /// <summary>Distance visée (m) entre deux sommets d'un anneau courbe après rééchantillonnage.</summary>
+        /// <summary>Target distance (m) between two vertices of a curved ring after resampling.</summary>
         private const float RingSampleStep = 25f;
 
         /// <summary>
-        /// Transforme la courbe de niveau brute (un point par cellule de grille, en escalier) en
-        /// anneau fluide : repère les VRAIS coins (fort virage ET dans le sillage d'un coin net du
-        /// périmètre), lisse tout le reste, puis rééchantillonne à pas régulier entre deux coins.
-        /// Remplace l'ancien Douglas-Peucker, qui laissait des sommets espacés irrégulièrement :
-        /// sur une courbe serrée, l'angle entre deux cordes dépassait le seuil de coin et
-        /// l'anneau restait cassé à cet endroit ("falta fluidez das curvas"). Les coins retenus
-        /// sont ajoutés à `corners` (positions exactes des sommets retournés).
+        /// Turns the raw level curve (one point per grid cell, stair-stepped) into a smooth ring:
+        /// finds the REAL corners (strong turn AND in the wake of a sharp perimeter corner),
+        /// smooths everything else, then resamples at a regular step between corners. Replaces the
+        /// old Douglas-Peucker, which left irregularly spaced vertices: on a tight curve the angle
+        /// between two chords exceeded the corner threshold and the ring stayed broken there (user
+        /// feedback: "the curves lack fluidity"). Retained corners are added to `corners` (exact
+        /// positions of the returned vertices).
         /// </summary>
         private static List<float2> SmoothAndResample(List<float2> raw, DistanceField field, HashSet<(float, float)> corners, float spacing)
         {
@@ -256,8 +256,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return new List<float2>(raw);
             }
 
-            // Virage mesuré sur une fenêtre de quelques mètres (les points bruts sont trop
-            // serrés et en escalier pour un angle point à point).
+            // Turn measured over a window of a few metres (the raw points are too close together
+            // and stair-stepped for a point-to-point angle).
             int window = math.max(2, (int)math.round(6f / field.CellSize));
             window = math.min(window, n / 4);
             var turn = new float[n];
@@ -271,12 +271,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
             int cornerCount = 0;
             for (int i = 0; i < n; i++)
             {
-                // Un coin hérité tourne autant que le coin du périmètre dont il vient (un carré
-                // donne des anneaux carrés). Retour utilisateur (bicos persistants, perimètre réel
-                // rejoué en test) : la zone d'influence d'un coin OBTUS du périmètre (deux rues qui
-                // se croisent à 150°) couvre une large bande jusqu'au fond de la forme, et des
-                // pointes d'anneau à 110-128° qui s'y trouvaient étaient gardées comme "coins",
-                // donc jamais arrondies (LimitCurvature laisse les coins fixes).
+                // An inherited corner turns as much as the perimeter corner it comes from (a square
+                // gives square rings). User feedback (persistent spikes, real perimeter replayed in
+                // a test): the influence zone of an OBTUSE perimeter corner (two streets crossing
+                // at 150°) covers a wide band down to the deepest part of the shape, and ring
+                // spikes of 110-128° lying in it were kept as "corners", so never rounded
+                // (LimitCurvature leaves corners fixed).
                 if (turn[i] < CornerTurnDegrees || field.SharpWeightAt(raw[i]) < 0.5f
                     || turn[i] > field.SharpTurnAt(raw[i]) + CornerTurnSlackDegrees)
                 {
@@ -298,7 +298,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // Lissage laplacien (coins fixés) : efface l'escalier du marching squares.
+            // Laplacian smoothing (corners pinned): removes the marching-squares staircase.
             var points = new List<float2>(raw);
             var next = new float2[n];
             for (int pass = 0; pass < 8; pass++)
@@ -315,7 +315,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // Rééchantillonnage à pas régulier, par tronçons entre deux coins (ou tout l'anneau).
+            // Resample at a regular step, segment by segment between two corners (or the whole
+            // ring).
             int startIndex = 0;
             if (cornerCount > 0)
             {
@@ -329,7 +330,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             int visited = 0;
             while (visited < n)
             {
-                // Tronçon [runStart .. prochain coin (ou retour au départ)].
+                // Segment [runStart .. next corner (or back to the start)].
                 var run = new List<float2> { points[runStart] };
                 int idx = runStart;
                 do
@@ -378,7 +379,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             LimitCurvature(result, corners, spacing * MinRingRadiusFactor);
 
-            // Retire les sommets quasi alignés (côtés droits) : moins de nœuds inutiles.
+            // Drop near-collinear vertices (straight sides): fewer useless nodes.
             for (int pass = 0; pass < 2; pass++)
             {
                 for (int i = result.Count - 1; i >= 0 && result.Count > 4; i--)
@@ -401,19 +402,19 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Rayon de courbure minimal d'un anneau (hors vrais coins), en fraction de l'espacement moyen entre anneaux.</summary>
+        /// <summary>Minimum curvature radius of a ring (outside real corners), as a fraction of the average spacing between rings.</summary>
         private const float MinRingRadiusFactor = 0.5f;
 
         /// <summary>
-        /// Arrondit les pointes qui restent sur un anneau (retour utilisateur : "ainda existem
-        /// alguns bicos em outras formas complexas") : quand le périmètre tourne en large courbe
-        /// (ex. une rue en U) dans une forme plus large que le rayon de cette courbe, un anneau
-        /// plus profond que ce rayon se referme en pointe — le flou de ComputeRingField n'arrondit
-        /// que sur ~¼ de la profondeur, et la fraction de demi-largeur n'aide que là où la forme
-        /// elle-même s'amincit. Lissage laplacien local, répété tant qu'un sommet tourne plus
-        /// serré que `minRadius` (cercle passant par ses deux voisins) : la pointe recule vers
-        /// l'intérieur de sa courbe (loin du périmètre) jusqu'à devenir un arc de ce rayon. Les
-        /// vrais coins (hérités d'un coin net du périmètre) restent fixes : un carré reste carré.
+        /// Rounds off the spikes that remain on a ring (user feedback: "there are still some spikes
+        /// in other complex shapes"): when the perimeter turns in a wide curve (e.g. a U-shaped
+        /// street) inside a shape wider than that curve's radius, a ring deeper than that radius
+        /// closes into a spike — the former blur of the field in ComputeRingField only rounded over
+        /// ~¼ of the depth, and the half-width fraction only helps where the shape itself narrows.
+        /// Local Laplacian smoothing, repeated while a vertex turns tighter than `minRadius`
+        /// (circle through its two neighbours): the spike recedes towards the inside of its curve
+        /// (away from the perimeter) until it becomes an arc of that radius. Real corners
+        /// (inherited from a sharp perimeter corner) stay fixed: a square stays square.
         /// </summary>
         internal static void LimitCurvature(List<float2> loop, HashSet<(float, float)> corners, float minRadius)
         {
@@ -451,8 +452,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     float cos = math.dot(dIn, dOut);
                     float sin = math.abs(dIn.x * dOut.y - dIn.y * dOut.x);
                     float chord = math.distance(a, b);
-                    // Courbure du cercle par a, p, b : 2 sin(virage) / |ab| ; au-delà de 90° de
-                    // virage (cos < 0) c'est de toute façon une pointe.
+                    // Curvature of the circle through a, p, b: 2 sin(turn) / |ab|; beyond a 90°
+                    // turn (cos < 0) it is a spike anyway.
                     bool tooSharp = cos < 0f || (chord > 1e-4f && 2f * sin / chord > maxCurvature);
                     if (tooSharp)
                     {
@@ -480,10 +481,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Anneau en vraies courbes (RoadSegmentDef.IsArc, NetUtils.FitCurve côté ECS) : tangente
-        /// en chaque sommet = moyenne des deux tronçons adjacents (Catmull-Rom), sauf aux vrais
-        /// coins (hérités d'un coin net du périmètre) où chaque côté garde sa propre direction.
-        /// Sans ça, un anneau courbe se voit en facettes droites cassées à chaque sommet.
+        /// Ring made of true curves (RoadSegmentDef.IsArc; the game fits the curve from the
+        /// tangents with NetUtils.FitCurve): tangent at each vertex = average of the two adjacent
+        /// segments (Catmull-Rom), except at real corners (inherited from a sharp perimeter corner)
+        /// where each side keeps its own direction. Without this, a curved ring shows as straight
+        /// facets broken at every vertex.
         /// </summary>
         private static void EmitSmoothLoop(List<RoadSegmentDef> segments, List<float2> loop, HashSet<(float, float)> corners, float y)
         {
@@ -494,9 +496,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 float2 dIn = math.normalizesafe(loop[i] - loop[(i - 1 + n) % n]);
                 float2 dOut = math.normalizesafe(loop[(i + 1) % n] - loop[i]);
-                // Seuls les vrais coins (hérités d'un coin net du périmètre, voir
-                // SmoothAndResample) gardent une cassure ; tout le reste est lissé, quel que soit
-                // l'angle entre deux tronçons (retour utilisateur : "falta fluidez das curvas").
+                // Only real corners (inherited from a sharp perimeter corner, see
+                // SmoothAndResample) keep a break; everything else is smoothed, whatever the angle
+                // between two segments (user feedback: "the curves lack fluidity").
                 if (corners.Contains((loop[i].x, loop[i].y)))
                 {
                     incoming[i] = dIn;
@@ -509,11 +511,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     outgoing[i] = t;
                 }
             }
-            // Sommets gardés (retour utilisateur : "quando o mod gera as curvas, cria demasiados
-            // nós" — un nœud tous les ~25 m, pas de rééchantillonnage) : les vrais coins, les
-            // raccords des rayons (déjà émis, voir EmitRadialChains) et, entre deux, seulement
-            // assez de sommets pour que chaque tronçon reste un arc de cercle fidèle (voir
-            // CanSpanAsArc) — NetUtils.FitCurve côté ECS refait la courbe à partir des tangentes.
+            // Kept vertices (user feedback: "when the mod generates the curves, it creates too many
+            // nodes" — one node every ~25 m, no resampling): real corners, spoke joints (already
+            // emitted, see EmitRadialChains) and, in between, only enough vertices for each segment
+            // to stay a faithful circular arc (see CanSpanAsArc) — the game rebuilds the curve from
+            // the tangents (NetUtils.FitCurve).
             var joints = new HashSet<(float, float)>();
             foreach (RoadSegmentDef s in segments)
             {
@@ -542,7 +544,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 int end = (current + 1) % n;
                 int steps = 1;
-                // Étend le tronçon tant que le sommet suivant n'est pas imposé et que l'arc tient.
+                // Extend the segment while the next vertex is not forced and the arc still fits.
                 while (!keep[end] && steps + 1 <= n - walked
                     && CanSpanAsArc(loop, current, (end + 1) % n, outgoing[current], incoming[(end + 1) % n]))
                 {
@@ -558,10 +560,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 kept.Add(current);
             }
 
-            // Pas de tronçon plus court que MinJunctionSegmentLength collé à un carrefour (raccord
-            // de rayon ou coin) : le jeu le refuse ("Objetos sobrepostos", vécu sur le périmètre
-            // réel). Un sommet ordinaire trop près d'un carrefour est retiré ; l'arc va alors
-            // directement du carrefour au sommet suivant.
+            // No segment shorter than MinJunctionSegmentLength attached to a junction (spoke joint
+            // or corner): the game rejects it (its "Overlapping objects" error, seen on the real
+            // perimeter). An ordinary vertex too close to a junction is removed; the arc then goes
+            // straight from the junction to the next vertex.
             bool removedStub = true;
             while (removedStub && kept.Count > 3)
             {
@@ -601,7 +603,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float2 tb = incoming[j];
                 var start = new float3(a.x, y, a.y);
                 var end = new float3(b.x, y, b.y);
-                // Tronçon quasi droit : ligne droite ordinaire.
+                // Near-straight segment: ordinary straight line.
                 if (math.dot(ta, chord) > 0.9995f && math.dot(tb, chord) > 0.9995f)
                 {
                     segments.Add(new RoadSegmentDef(start, end, isHorizontal: false));
@@ -614,23 +616,23 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Longueur minimale (m) d'un tronçon d'anneau qui touche un carrefour. D'abord la largeur
-        /// d'une route (16 m) ; vécu en jeu (log [Diag colisão]) : des tronçons de 16-20 m collés à
-        /// un carrefour faisaient partie de chaque refus — le carrefour du jeu occupe davantage.
+        /// Minimum length (m) of a ring segment touching a junction. Initially the width of a road
+        /// (16 m); seen in game (collision diagnostics log): 16-20 m segments attached to a
+        /// junction were part of every rejection — the game's junction takes up more room.
         /// </summary>
         private const float MinJunctionSegmentLength = 35f;
 
-        /// <summary>Écart maximal (m) entre l'anneau lissé et l'arc qui remplace plusieurs de ses sommets.</summary>
+        /// <summary>Maximum deviation (m) between the smoothed ring and the arc that replaces several of its vertices.</summary>
         private const float ArcFitTolerance = 2f;
-        /// <summary>Corde maximale (m) d'un tronçon courbe d'anneau.</summary>
+        /// <summary>Maximum chord (m) of a curved ring segment.</summary>
         private const float MaxArcChord = 300f;
-        /// <summary>Virage maximal (degrés) d'un seul tronçon courbe : au-delà, FitCurve s'écarte du cercle.</summary>
+        /// <summary>Maximum turn (degrees) of a single curved segment: beyond it, FitCurve departs from the circle.</summary>
         private const float MaxArcTurnDegrees = 90f;
 
         /// <summary>
-        /// Vrai si les sommets de loop[from] à loop[to] (sens de parcours) tiennent sur UN arc de
-        /// cercle partant de loop[from] avec la tangente `startTangent` et arrivant sur loop[to]
-        /// avec (à 6° près) la tangente `endTangent` : alors un seul tronçon courbe suffit.
+        /// True if the vertices from loop[from] to loop[to] (in loop order) fit on ONE circular arc
+        /// leaving loop[from] with tangent `startTangent` and arriving at loop[to] with tangent
+        /// `endTangent` (within 6°): then a single curved segment is enough.
         /// </summary>
         private static bool CanSpanAsArc(List<float2> loop, int from, int to, float2 startTangent, float2 endTangent)
         {
@@ -644,7 +646,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
             float2 chord = ab / chordLength;
-            // Tangente d'arrivée d'un arc de cercle : symétrique de celle de départ par rapport à la corde.
+            // End tangent of a circular arc: the start tangent mirrored about the chord.
             float2 arcEnd = 2f * math.dot(startTangent, chord) * chord - startTangent;
             if (math.dot(startTangent, chord) <= 0f
                 || math.dot(arcEnd, endTangent) < math.cos(math.radians(6f))
@@ -672,7 +674,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Motif Radial : rotonde au centre + avenues droites
+        // Radial pattern: roundabout at the centre + straight avenues
         // ------------------------------------------------------------------
 
         public const int MinRadialAvenues = 3;
@@ -680,35 +682,35 @@ namespace Placemaker.Core.Layers.Roads.Generators
         public const float MinRoundaboutRadius = 25f;
         public const float MaxRoundaboutRadius = 150f;
 
-        /// <summary>Écart minimal (m) entre deux raccords d'avenues sur la rotonde : au-dessous, deux carrefours collés (voir MinJunctionSegmentLength).</summary>
+        /// <summary>Minimum gap (m) between two avenue joints on the roundabout: below it, two junctions are glued together (see MinJunctionSegmentLength).</summary>
         private const float MinAvenueJointSpacing = MinJunctionSegmentLength + 5f;
 
-        /// <summary>Longueur minimale (m) d'une avenue entre la rotonde et le périmètre.</summary>
+        /// <summary>Minimum length (m) of an avenue between the roundabout and the perimeter.</summary>
         private const float MinAvenueLength = 40f;
 
-        /// <summary>Longueur maximale (m) d'un tronçon d'avenue : une avenue longue est posée en plusieurs tronçons alignés.</summary>
+        /// <summary>Maximum length (m) of an avenue segment: a long avenue is laid as several aligned segments.</summary>
         private const float MaxAvenuePieceLength = 200f;
 
-        /// <summary>Pas (degrés) de la rotation de l'ensemble des avenues cherchant des arrivées à angle ouvert sur le périmètre.</summary>
+        /// <summary>Step (degrees) of the rotation of the whole avenue set when searching for open-angle arrivals on the perimeter.</summary>
         private const float AvenuePivotStepDegrees = 2f;
 
         /// <summary>
-        /// Motif Radial (retour utilisateur : "deixemos apenas as avenidas e não as camadas, e no
-        /// centro geras uma rotunda, não um asset mas um círculo") : une rotonde — un vrai cercle
-        /// de route — centrée sur le point le plus profond de la forme (centre du plus grand
-        /// cercle inscrit, toujours à l'intérieur même d'une forme irrégulière), et `avenues`
-        /// avenues droites (IsAvenue, réseau "Coletor") réparties à angles égaux, de la rotonde
-        /// jusqu'au périmètre. La première vise le point du périmètre le plus éloigné (grand axe).
-        /// Le rayon est agrandi si les avenues seraient trop serrées sur la rotonde, et réduit si
-        /// la forme est trop petite (moins d'avenues alors). Les avenues restent à écart égal sur
-        /// la rotonde : l'ensemble pivote pour que le plus grand nombre arrive sur le périmètre à
-        /// angle ouvert ; une avenue qui reste à angle fermé est omise (les autres gardent leur
-        /// place).
+        /// Radial pattern (user feedback: "let's keep just the avenues and not the layers, and in
+        /// the centre generate a roundabout, not an asset but a circle"): a roundabout — a real
+        /// circle of road — centred on the deepest point of the shape (centre of the largest
+        /// inscribed circle, always inside, even for an irregular shape), and `avenues` straight
+        /// avenues (IsAvenue, collector network) spread at equal angles, from the roundabout to the
+        /// perimeter. The first one aims at the farthest perimeter point (major axis). The radius
+        /// is enlarged if the avenues would be too crowded on the roundabout, and reduced if the
+        /// shape is too small (with fewer avenues then). The avenues stay evenly spaced on the
+        /// roundabout: the whole set pivots so that as many as possible reach the perimeter at an
+        /// open angle; an avenue that still arrives at a closed angle is omitted (the others keep
+        /// their place).
         /// </summary>
         /// <summary>
-        /// Rayon effectif de la rotonde et nombre effectif d'avenues : assez grand pour espacer les
-        /// raccords (MinAvenueJointSpacing), assez petit pour laisser des avenues (MinAvenueLength).
-        /// Faux si la forme est trop petite pour une rotonde et des avenues.
+        /// Effective roundabout radius and effective number of avenues: large enough to space out
+        /// the joints (MinAvenueJointSpacing), small enough to leave room for avenues
+        /// (MinAvenueLength). False if the shape is too small for a roundabout and avenues.
         /// </summary>
         private static bool RadialLayout(DistanceField field, ref int avenues, ref float radius)
         {
@@ -724,7 +726,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return radius >= 0.6f * MinRoundaboutRadius && avenues >= 2;
         }
 
-        /// <summary>Distance (m) du centre au point du périmètre le plus éloigné : les anneaux du Radial vont jusque-là.</summary>
+        /// <summary>Distance (m) from the centre to the farthest perimeter point: the Radial rings extend that far.</summary>
         private static float FarthestReach(List<float2> polygon, float2 centre)
         {
             float best = 0f;
@@ -736,8 +738,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Nombre maximal d'anneaux autour de la rotonde : écart d'au moins MinLayerSpacing entre
-        /// anneaux, répartis jusqu'au point du périmètre le plus éloigné (voir GenerateRadial).
+        /// Maximum number of rings around the roundabout: at least MinLayerSpacing between rings,
+        /// spread out to the farthest perimeter point (see GenerateRadial).
         /// </summary>
         private static int RadialMaxLayersFor(DistanceField field, List<float2> polygon, float radius)
         {
@@ -745,7 +747,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return math.clamp((int)math.floor((reach - radius) / MinLayerSpacing) - 1, 0, MaxLayersLimit);
         }
 
-        /// <summary>Nombre maximal d'anneaux du motif Radial pour ce périmètre et ces réglages — borne haute du slider Camadas.</summary>
+        /// <summary>Maximum number of rings of the Radial pattern for this perimeter and these settings — upper bound of the Layers slider.</summary>
         public static int RadialMaxLayers(IReadOnlyList<float3> selectedNodePositions, int avenues, float roundaboutRadius)
         {
             if (selectedNodePositions == null || selectedNodePositions.Count < 2
@@ -773,20 +775,20 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float radius = roundaboutRadius;
             if (!RadialLayout(field, ref avenues, ref radius))
             {
-                return segments; // forme trop petite pour une rotonde et des avenues
+                return segments; // shape too small for a roundabout and avenues
             }
             float2 centre = field.DeepestPoint;
 
-            // Anneaux : cercles concentriques à la rotonde (retour utilisateur : "de acordo com a
-            // rotunda e não a estrada exterior"), répartis à écart égal jusqu'au point du périmètre
-            // le plus éloigné ("têm de preencher o perímetro todo nem que fique só meio círculo") :
-            // là où le cercle sort de la forme, seules ses parties intérieures sont posées, en arcs
-            // qui rejoignent la route du périmètre.
+            // Rings: circles concentric with the roundabout (user feedback: "following the
+            // roundabout and not the outer road"), evenly spaced out to the farthest perimeter
+            // point ("they have to fill the whole perimeter, even if it is only half a circle"):
+            // where the circle leaves the shape, only its inside parts are laid, as arcs that join
+            // the perimeter road.
             float reach = FarthestReach(polygon, centre);
             layers = math.clamp(layers, 0, RadialMaxLayersFor(field, polygon, radius));
             float ringSpacing = layers > 0 ? (reach - radius) / (layers + 1) : 0f;
 
-            // --- Avenues : écart égal sur la rotonde, l'ensemble pivote (voir plus bas).
+            // --- Avenues: equal spacing on the roundabout, the whole set pivots (see below).
             float2 farthest = polygon[0];
             foreach (float2 q in polygon)
             {
@@ -798,11 +800,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float baseAngle = math.atan2(farthest.y - centre.y, farthest.x - centre.x);
             float gap = 2f * math.PI / avenues;
 
-            // Toutes les avenues gardent le même écart angulaire sur la rotonde (retour utilisateur :
-            // "as linhas têm que estar à mesma distância uma da outra quando chegam à rotunda") :
-            // c'est l'ENSEMBLE qui pivote, jamais une avenue seule. Parmi les rotations (pas de
-            // AvenuePivotStepDegrees, sur un écart entier), celle qui laisse le plus d'avenues
-            // arriver sur le périmètre à angle ouvert ; à égalité, la plus proche du grand axe.
+            // All avenues keep the same angular gap on the roundabout (user feedback: "the lines
+            // have to be the same distance from each other when they reach the roundabout"): the
+            // WHOLE set pivots, never a single avenue. Among the rotations (steps of
+            // AvenuePivotStepDegrees, over one full gap), pick the one that lets the most avenues
+            // reach the perimeter at an open angle; on a tie, the one closest to the major axis.
             List<(float angle, float length)> AvenuesAt(float rotation)
             {
                 var result = new List<(float angle, float length)>();
@@ -843,19 +845,21 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float2 At(float r, float angle) => centre + r * new float2(math.cos(angle), math.sin(angle));
             var avenueEnds = accepted.Select(av => At(av.length, av.angle)).ToList();
 
-            // --- Anneaux : parties du cercle à l'intérieur de la forme, jamais rasantes.
-            // Retour utilisateur (log [Diag colisão], rotonde 150 m, 10 anneaux) : un anneau passait à
-            // 12-14 m de la route du périmètre sans la couper, et le jeu y collait un nœud (tronçon de
-            // 8 m sur la route existante, chevauchement). Une route générée reste à PerimeterClearance
-            // du périmètre, sauf là où elle le coupe franchement (arrivée à angle ouvert).
-            // keepFrom / keepTo : zone d'approche (m) d'un bout raccordé au périmètre, où l'arc ne doit pas
-            // être coupé (un nœud intermédiaire y serait trop près du périmètre).
+            // --- Rings: the parts of the circle inside the shape, never grazing the perimeter.
+            // User feedback (collision diagnostics log, 150 m roundabout, 10 rings): a ring passed
+            // 12-14 m from the perimeter road without crossing it, and the game snapped a node onto
+            // it (8 m segment on the existing road, overlap). A generated road stays
+            // PerimeterClearance away from the perimeter, except where it crosses it cleanly
+            // (open-angle arrival). keepFrom / keepTo: approach zone (m) of an end connected to the
+            // perimeter, where the arc must not be split (an intermediate node there would be too
+            // close to the perimeter).
             var ringArcs = new List<(float r, float from, float to, bool full, float keepFrom, float keepTo)>();
             var ringRadii = new List<float>();
-            // Prolongements d'anneau (voir PerimeterTail) : au-delà de la dernière avenue croisée
-            // (`cross`) jusqu'au bout dégagé de la suite (`runEnd`), `dir` = +1 vers les angles croissants.
+            // Ring extensions (see PerimeterTail): beyond the last crossed avenue (`cross`) up to
+            // the clear end of the run (`runEnd`), `dir` = +1 towards increasing angles.
             var tailCandidates = new List<(float r, float cross, float runEnd, float dir)>();
-            // Zone d'approche d'une avenue (droite) vers le périmètre, qu'elle rejoint à angle ouvert.
+            // Approach zone of a (straight) avenue towards the perimeter, which it meets at an open
+            // angle.
             float approach = PerimeterClearance / math.sin(math.radians(MinSpokeRingAngleDegrees));
             for (int k = 1; k <= layers; k++)
             {
@@ -863,8 +867,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 ringRadii.Add(r);
                 foreach ((float from, float to, bool full) in InsideArcs(polygon, centre, r))
                 {
-                    // Échantillons le long de l'arc : "rasant" si trop près du périmètre, sauf dans la
-                    // zone d'approche d'un bout qui coupe le périmètre à angle ouvert.
+                    // Samples along the arc: "grazing" if too close to the perimeter, except in the
+                    // approach zone of an end that crosses the perimeter at an open angle.
                     float startMinRun = 0f, endMinRun = 0f;
                     float startApproach = full ? 0f : PerimeterApproach(polygon, centre, r, from, avenueEnds, out startMinRun);
                     float endApproach = full ? 0f : PerimeterApproach(polygon, centre, r, to, avenueEnds, out endMinRun);
@@ -886,7 +890,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         ringArcs.Add((r, from, to, true, 0f, 0f));
                         continue;
                     }
-                    // Cercle entier mais rasant par endroits : on le parcourt à partir d'un point rasant.
+                    // Full circle but grazing in places: walk it starting from a grazing point.
                     float baseFrom = from;
                     if (full)
                     {
@@ -900,8 +904,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         clear = rotated;
                     }
                     float span = to - from;
-                    // Suites d'échantillons dégagés : chacune donne un arc, dont les bouts sont sur le
-                    // périmètre (bout d'origine, dégagé) ou ramenés à l'avenue la plus proche.
+                    // Runs of clear samples: each gives an arc, whose ends are on the perimeter
+                    // (original end, clear) or pulled back to the nearest avenue.
                     for (int i = 0; i <= count; i++)
                     {
                         if (!clear[i])
@@ -919,9 +923,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         bool keepsEnd = !full && j == count && endOnPerimeter;
                         var crossing = accepted.Where(av => av.length > r + 1f && AngleWithin(av.angle, runFrom, runTo))
                             .Select(av => runFrom + Wrap(av.angle - runFrom)).OrderBy(x => x).ToList();
-                        // Les avenues croisées dans la zone d'approche d'un bout sur le périmètre sont trop
-                        // près de celui-ci (échantillons exemptés) : l'arc ne va pas jusqu'au périmètre
-                        // (ce nœud d'avenue serait sur l'arc) et n'est pas non plus ramené à elles.
+                        // Avenues crossed in the approach zone of an end on the perimeter are too
+                        // close to it (exempted samples): the arc does not go to the perimeter
+                        // (that avenue node would be on the arc) and is not pulled back to them
+                        // either.
                         if (!full && i == 0 && startOnPerimeter
                             && crossing.RemoveAll(x => (x - runFrom) * r < startApproach) > 0)
                         {
@@ -934,8 +939,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         }
                         float start = keepsStart ? runFrom : (crossing.Count > 0 ? crossing[0] : float.NaN);
                         float end = keepsEnd ? runTo : (crossing.Count > 0 ? crossing[crossing.Count - 1] : float.NaN);
-                        // Bout d'arc jusqu'à l'avenue voisine assez long pour la géométrie des deux nœuds
-                        // (recul croissant quand l'angle avec le périmètre se ferme), sinon ramené à l'avenue.
+                        // Arc end up to the neighbouring avenue: long enough for the geometry of
+                        // both nodes (the cutback grows as the angle with the perimeter closes),
+                        // otherwise pulled back to the avenue.
                         if (keepsStart && crossing.Count > 0 && (crossing[0] - start) * r < startMinRun)
                         {
                             start = crossing[0];
@@ -946,8 +952,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                             end = crossing[crossing.Count - 1];
                             keepsEnd = false;
                         }
-                        // Arc d'un bord du périmètre à l'autre sans avenue : les reculs des deux nœuds
-                        // doivent y tenir.
+                        // Arc from one side of the perimeter to the other with no avenue: the
+                        // cutbacks of both nodes must fit on it.
                         float minLength = MinJunctionSegmentLength;
                         if (keepsStart && keepsEnd && crossing.Count == 0)
                         {
@@ -974,9 +980,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
             bool OnRing(float r, float angle) => ringArcs.Exists(arc => math.abs(arc.r - r) < 1e-3f
                 && (arc.full || AngleWithin(angle, arc.from - 1e-4f, arc.to + 1e-4f)));
 
-            // --- Avenues : rotonde, puis chaque anneau croisé, puis le périmètre — tant qu'elles
-            // restent dégagées du périmètre (une avenue qui le rase avant de l'atteindre s'arrête au
-            // dernier anneau d'avant).
+            // --- Avenues: roundabout, then each crossed ring, then the perimeter — as long as they
+            // stay clear of the perimeter (an avenue that grazes it before reaching it stops at the
+            // last ring before that point).
             foreach ((float angle, float length) in accepted)
             {
                 float clearUntil = length;
@@ -996,7 +1002,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         stops.Add(r);
                     }
                 }
-                // Jusqu'au périmètre si l'avenue reste dégagée et que le dernier tronçon est assez long.
+                // Up to the perimeter if the avenue stays clear and the last segment is long
+                // enough.
                 if (clearUntil >= length && length - stops[stops.Count - 1] >= MinAvenueLength)
                 {
                     stops.Add(length);
@@ -1016,13 +1023,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // --- Rotonde et anneaux : arcs exacts entre raccords successifs. Les bouts d'arc sont
-            // recalés sur les points EXACTS des avenues (joints) : recalculés à partir d'un angle
-            // ramené dans [0, 2π), ils différaient d'un arrondi et le nœud n'était plus partagé.
+            // --- Roundabout and rings: exact arcs between successive joints. Arc ends are snapped
+            // to the EXACT avenue points (joints): recomputed from an angle wrapped into [0, 2π),
+            // they differed by a rounding error and the node was no longer shared.
             var joints = segments.SelectMany(sg => new[] { sg.Start.xz, sg.End.xz }).ToList();
             var roundaboutStops = accepted.Select(av => av.angle).ToList();
             EmitCircle(segments, centre, radius, roundaboutStops, y, joints, roundabout: true);
-            // Raccords réels d'avenue sur chaque anneau (une avenue arrêtée plus tôt ne le croise pas).
+            // Actual avenue joints on each ring (an avenue stopped earlier does not cross it).
             var avenueJointSet = new HashSet<(float, float)>(joints.Select(j => (j.x, j.y)));
             foreach (var arc in ringArcs)
             {
@@ -1038,8 +1045,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     var angles = new List<float> { arc.from, arc.to };
                     angles.AddRange(stops.Select(x => arc.from + Wrap(x - arc.from)).Where(x => x > arc.from + 1e-4f && x < arc.to - 1e-4f));
                     angles.Sort();
-                    // Coupe à 60° imposée à la sortie de la zone d'approche : sans ça, le découpage
-                    // régulier de EmitCircleArc pouvait poser un nœud à 13 m du périmètre (angle fermé).
+                    // Forced split at the exit of the approach zone (pieces of at most 60°):
+                    // without it, the regular split in EmitCircleArc could put a node 13 m from the
+                    // perimeter (closed angle).
                     float maxPiece = math.PI / 3f - 1e-3f;
                     if (arc.keepFrom > 0f && angles[1] - angles[0] > maxPiece)
                     {
@@ -1057,11 +1065,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // --- Prolongements d'anneau jusqu'au périmètre. Retour utilisateur ("continuam a haver
-            // camadas que não vão até ao fim") : là où l'anneau court presque parallèle au périmètre,
-            // aucun croisement à angle ouvert n'existe et l'anneau s'arrêtait à la dernière avenue.
-            // Il continue maintenant tant qu'il reste dégagé, puis tourne vers le périmètre par une
-            // courbe qui le rejoint à angle ouvert (voir PerimeterTail).
+            // --- Ring extensions to the perimeter. User feedback ("there are still layers that do
+            // not go all the way to the end"): where the ring runs almost parallel to the
+            // perimeter, no open-angle crossing exists and the ring stopped at the last avenue. It
+            // now continues as long as it stays clear, then turns towards the perimeter with a
+            // curve that meets it at an open angle (see PerimeterTail).
             var perimeterJoints = new List<float2>(avenueEnds);
             foreach (var arc in ringArcs)
             {
@@ -1074,7 +1082,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 if (!joints.Exists(jt => math.distancesq(jt, At(tail.r, tail.cross)) < 0.01f))
                 {
-                    continue; // l'avenue n'atteint pas cet anneau : pas de raccord où s'accrocher
+                    continue; // the avenue does not reach this ring: no joint to attach to
                 }
                 if (PerimeterTail(polygon, centre, tail.r, tail.cross, tail.runEnd, tail.dir, accepted, ringSpans,
                         segments, perimeterJoints, avenueEnds, acceptedTailSamples, out float tailEnd, out float2 q, out float2 qTangent))
@@ -1096,7 +1104,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return segments;
         }
 
-        /// <summary>Vrai si p est à l'intérieur du contour fermé `loop` (règle pair-impair).</summary>
+        /// <summary>True if p is inside the closed outline `loop` (even-odd rule).</summary>
         private static bool PointInLoop(float2 p, List<float2> loop)
         {
             bool inside = false;
@@ -1112,17 +1120,17 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return inside;
         }
 
-        /// <summary>Distance minimale (m) entre une route générée et la route du périmètre, hors croisement franc.</summary>
+        /// <summary>Minimum distance (m) between a generated road and the perimeter road, except at a clean crossing.</summary>
         private const float PerimeterClearance = 25f;
 
-        /// <summary>Pas (m) des échantillons de contrôle de ce dégagement.</summary>
+        /// <summary>Step (m) of the samples used to check this clearance.</summary>
         private const float ClearanceSampleStep = 6f;
 
         /// <summary>
-        /// Vrai si p est à au moins PerimeterClearance du périmètre. Lecture de la grille de distance
-        /// (instantanée) ; distance exacte au contour seulement quand la grille donne une valeur
-        /// proche du seuil (sa précision est d'environ une maille) — sans ça, le contrôle de
-        /// dégagement du Radial coûtait plus d'une demi-seconde par génération.
+        /// True if p is at least PerimeterClearance from the perimeter. Reads the distance grid
+        /// (instant); computes the exact distance to the outline only when the grid gives a value
+        /// close to the threshold (its accuracy is about one cell) — without this, the Radial
+        /// clearance check cost more than half a second per generation.
         /// </summary>
         private static bool IsClearOfPerimeter(DistanceField field, List<float2> polygon, float2 p)
         {
@@ -1139,7 +1147,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return DistanceToLoop(polygon, p) >= PerimeterClearance;
         }
 
-        /// <summary>Distance (m) du point p au contour fermé `loop`.</summary>
+        /// <summary>Distance (m) from point p to the closed outline `loop`.</summary>
         private static float DistanceToLoop(List<float2> loop, float2 p)
         {
             float best = float.MaxValue;
@@ -1151,37 +1159,38 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Angle minimal (degrés), au point de croisement, entre un arc d'anneau du Radial et la route
-        /// du périmètre qu'il rejoint. Le jeu n'a pas d'angle minimal en soi (Game.Net.ValidationHelpers) :
-        /// deux tronçons qui partagent un nœud ne sont jamais testés l'un contre l'autre (pas
-        /// d'OverlapExisting), et les routes n'ont pas de longueur minimale (m_EdgeLengthRange.min = 0).
-        /// Ce qui casse à angle fermé, c'est la géométrie du nœud : son recul le long de chaque route
-        /// (NodeCutback) croît en 1/tan(θ/2), et si un tronçon est plus court que ce recul sa
-        /// géométrie s'inverse (InvalidShape). La vraie contrainte est donc la longueur disponible
-        /// (voir PerimeterApproach) ; ce plancher écarte seulement les raccords quasi tangents
-        /// (recul > 90 m, liaisons de voies dégénérées).
+        /// Minimum angle (degrees), at the crossing point, between a Radial ring arc and the
+        /// perimeter road it joins. The game has no minimum angle as such
+        /// (Game.Net.ValidationHelpers): two segments sharing a node are never tested against each
+        /// other (no OverlapExisting), and roads have no minimum length (m_EdgeLengthRange.min =
+        /// 0). What breaks at a closed angle is the node geometry: its cutback along each road
+        /// (NodeCutback) grows as 1/tan(θ/2), and if a segment is shorter than that cutback its
+        /// geometry inverts (InvalidShape). The real constraint is therefore the available length
+        /// (see PerimeterApproach); this floor only rules out near-tangent joints (cutback > 90 m,
+        /// degenerate lane connections).
         /// </summary>
         private const float MinArcPerimeterAngleDegrees = 15f;
 
         /// <summary>
-        /// Recul (m) de la géométrie d'un nœud le long d'une route qui en croise une autre à l'angle
-        /// dont le sinus/cosinus sont donnés : le bord de la route croise le bord de l'autre à
-        /// (w₁ + w₂·cos θ) / sin θ du nœud ; avec w₁ + w₂ = PerimeterClearance (largeurs cumulées
-        /// supposées, marge comprise), w₁ = w₂ donne (PerimeterClearance / 2) / tan(θ/2).
+        /// Cutback (m) of a node's geometry along a road that crosses another at the angle whose
+        /// sine/cosine are given: the edge of one road crosses the edge of the other at (w₁ +
+        /// w₂·cos θ) / sin θ from the node; with w₁ + w₂ = PerimeterClearance (assumed combined
+        /// widths, margin included), w₁ = w₂ gives (PerimeterClearance / 2) / tan(θ/2).
         /// </summary>
         private static float NodeCutback(float sin, float cos) => 0.5f * PerimeterClearance * (1f + cos) / math.max(sin, 1e-3f);
 
         /// <summary>
-        /// Bout d'arc du cercle (centre, r) à l'angle `angle`, sur le périmètre : longueur (m) de sa zone
-        /// d'approche — où il est normal d'être près du périmètre — s'il peut s'y raccorder, 0 sinon.
-        /// L'angle est mesuré AU point de croisement, entre la tangente du cercle et l'arête du
-        /// contour (retour utilisateur : "continua a haver sítios onde não existe continuidade" —
-        /// mesuré avant sur 50 m comme pour une route droite, il refusait des arcs qui croisent
-        /// correctement un périmètre courbe). Le reste de l'arc est contrôlé par PerimeterClearance.
-        /// `minRun` : longueur (m) minimale du bout d'arc entre le périmètre et la première avenue —
-        /// recul du nœud du périmètre + tronçon admissible + recul (≈ angle droit) du nœud de l'avenue,
-        /// et au moins la zone d'approche (sinon ce nœud d'avenue serait trop près du périmètre, où le
-        /// jeu le recollerait à la route existante).
+        /// Arc end of the circle (centre, r) at angle `angle`, on the perimeter: length (m) of its
+        /// approach zone — where being close to the perimeter is expected — if it can connect
+        /// there, 0 otherwise. The angle is measured AT the crossing point, between the circle's
+        /// tangent and the outline edge (user feedback: "there are still places where there is no
+        /// continuity" — previously measured over 50 m as for a straight road, it rejected arcs
+        /// that cross a curved perimeter correctly). The rest of the arc is checked against
+        /// PerimeterClearance. `minRun`: minimum length (m) of the arc end between the perimeter
+        /// and the first avenue — perimeter node cutback + allowed segment + cutback (≈ right
+        /// angle) of the avenue node, and at least the approach zone (otherwise that avenue node
+        /// would be too close to the perimeter, where the game would snap it onto the existing
+        /// road).
         /// </summary>
         private static float PerimeterApproach(List<float2> polygon, float2 centre, float r, float angle, List<float2> avenueEnds, out float minRun)
         {
@@ -1219,20 +1228,20 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return approach;
         }
 
-        /// <summary>Distance minimale (m) au périmètre du point où un prolongement d'anneau tourne vers lui.</summary>
+        /// <summary>Minimum distance (m) to the perimeter of the point where a ring extension turns towards it.</summary>
         private const float TailTurnClearance = 32f;
 
-        /// <summary>Écart minimal (m) entre une courbe de prolongement et les autres routes générées.</summary>
+        /// <summary>Minimum gap (m) between an extension curve and the other generated roads.</summary>
         private const float TailRoadSpacing = 20f;
 
         /// <summary>
-        /// Prolongement d'un anneau (centre, r) depuis l'avenue à l'angle `cross` dans le sens `dir`,
-        /// au plus jusqu'à `runEnd` : l'anneau continue jusqu'au dernier point à TailTurnClearance du
-        /// périmètre (`tailEnd`), puis une courbe circulaire (tangente à l'anneau) tourne vers le
-        /// périmètre et le rejoint en `q` (tangente d'arrivée `qTangent`). Refusé si le tronçon ou la
-        /// courbe sont trop courts pour la géométrie des nœuds (voir NodeCutback), si l'arrivée est
-        /// sous 40°, trop près d'un autre raccord au périmètre, ou si la courbe passe près d'une autre
-        /// route (avenues, autres anneaux, prolongements déjà acceptés).
+        /// Extension of a ring (centre, r) from the avenue at angle `cross` in direction `dir`, at
+        /// most up to `runEnd`: the ring continues to the last point that is TailTurnClearance from
+        /// the perimeter (`tailEnd`), then a circular curve (tangent to the ring) turns towards the
+        /// perimeter and meets it at `q` (arrival tangent `qTangent`). Rejected if the segment or
+        /// the curve is too short for the node geometry (see NodeCutback), if the arrival is under
+        /// 40°, too close to another perimeter joint, or if the curve passes close to another road
+        /// (avenues, other rings, extensions already accepted).
         /// </summary>
         private static bool PerimeterTail(List<float2> polygon, float2 centre, float r, float cross, float runEnd, float dir,
             List<(float angle, float length)> avenues, List<(float r, float from, float to, bool full)> rings,
@@ -1254,7 +1263,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
             float lo = math.min(cross, tailEnd), hi = math.max(cross, tailEnd);
-            // Aucune avenue ne doit traverser le prolongement (elle n'y aurait pas de nœud).
+            // No avenue may cross the extension (it would have no node there).
             if (avenues.Exists(av => av.length > r - 1f && AngleWithin(av.angle, lo + 1e-4f, hi - 1e-4f)))
             {
                 return false;
@@ -1267,9 +1276,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 edge = -edge;
             }
-            // Courbe circulaire tangente à l'anneau jusqu'au périmètre. L'avance le long du périmètre
-            // fixe le virage : √3·h donne un virage de 60° (rayon 2h) sur un bord droit ; sur un bord
-            // courbe ou près d'un autre raccord, d'autres avances sont essayées.
+            // Circular curve tangent to the ring up to the perimeter. The advance along the
+            // perimeter sets the turn: √3·h gives a 60° turn (radius 2h) on a straight edge; on a
+            // curved edge or near another joint, other advances are tried.
             var tailSamples = new List<float2>();
             int arcCount = math.max(2, (int)math.ceil(tailLength / 4f));
             for (int i = 0; i <= arcCount; i++)
@@ -1293,13 +1302,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return false;
         }
 
-        /// <summary>Avances (× distance au périmètre) essayées pour la courbe d'un prolongement d'anneau.</summary>
+        /// <summary>Advances (× distance to the perimeter) tried for the curve of a ring extension.</summary>
         private static readonly float[] TailAdvanceFactors = { 1.732f, 1.3f, 2.3f, 1f, 3f, 0.7f };
 
         /// <summary>
-        /// Courbe d'un prolongement d'anneau (voir PerimeterTail) de p (tangente tf) vers le point du
-        /// périmètre le plus proche de `target` : arc de cercle, arrivée à au moins 40°, assez long pour
-        /// le recul du nœud, loin des autres raccords au périmètre et des autres routes.
+        /// Curve of a ring extension (see PerimeterTail) from p (tangent tf) to the perimeter point
+        /// closest to `target`: circular arc, arrival at 40° or more, long enough for the node
+        /// cutback, away from the other perimeter joints and the other roads.
         /// </summary>
         private static bool TryTailCurve(List<float2> polygon, float2 centre, float r, float2 p, float2 tf, float2 target,
             List<(float r, float from, float to, bool full)> rings, List<RoadSegmentDef> segments, List<float2> perimeterJoints,
@@ -1308,9 +1317,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
             qTangent = default;
             curve = null;
             q = ClosestOnLoop(polygon, target, out float2 qEdge);
-            // Arrivée trop près d'un autre raccord au périmètre : si c'est l'arrivée d'une avenue, la
-            // courbe la rejoint au même nœud (retour utilisateur : les coins restés vides étaient au
-            // pied d'une avenue, là où l'anneau rejoint le périmètre) ; sinon, refusée.
+            // Arrival too close to another perimeter joint: if it is an avenue's arrival, the curve
+            // joins it at the same node (user feedback: the corners left empty were at the foot of
+            // an avenue, where the ring meets the perimeter); otherwise rejected.
             float2 end = q;
             var near = perimeterJoints.Where(j => math.distance(j, end) < MinAvenueJointSpacing).Distinct().ToList();
             bool snapped = false;
@@ -1334,7 +1343,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float along = math.dot(chord, tf);
             if (along < math.cos(math.radians(50f)))
             {
-                return false; // virage de plus de 100° : pas une courbe raisonnable
+                return false; // turn of more than 100°: not a reasonable curve
             }
             qTangent = 2f * along * chord - tf;
             float sin = math.abs(qTangent.x * qEdge.y - qTangent.y * qEdge.x);
@@ -1343,8 +1352,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 return false;
             }
-            // Au nœud d'une avenue : angle ouvert avec elle aussi, et les échantillons proches du nœud
-            // sont exemptés de l'écart aux avenues (ils la rejoignent).
+            // At an avenue node: open angle with the avenue too, and the samples near the node are
+            // exempt from the avenue spacing (they join it).
             float avenueExemption = 0f;
             if (snapped)
             {
@@ -1355,7 +1364,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 avenueExemption = TailRoadSpacing / math.max(math.sqrt(math.saturate(1f - cosAvenue * cosAvenue)), 0.3f) + 5f;
             }
-            // Échantillons de la courbe (Bézier quadratique, sommet à l'intersection des tangentes).
+            // Curve samples (quadratic Bézier, control point at the intersection of the tangents).
             float2 control = p + tf * (0.5f * chordLength / along);
             var points = new List<float2>();
             int curveCount = math.max(4, (int)math.ceil(chordLength / 4f));
@@ -1396,7 +1405,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return true;
         }
 
-        /// <summary>Point du contour fermé le plus proche de p, et direction (unitaire) de son arête.</summary>
+        /// <summary>Point of the closed outline closest to p, and the (unit) direction of its edge.</summary>
         private static float2 ClosestOnLoop(List<float2> loop, float2 p, out float2 edgeDirection)
         {
             float best = float.MaxValue;
@@ -1422,7 +1431,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Angle ramené dans [0, 2π).</summary>
+        /// <summary>Angle wrapped into [0, 2π).</summary>
         private static float Wrap(float angle)
         {
             float twoPi = 2f * math.PI;
@@ -1430,16 +1439,16 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return angle < 0f ? angle + twoPi : angle;
         }
 
-        /// <summary>Vrai si `angle` est dans l'intervalle [from, to] parcouru dans le sens trigonométrique (to - from ≤ 2π).</summary>
+        /// <summary>True if `angle` is within the interval [from, to] travelled counter-clockwise (to - from ≤ 2π).</summary>
         private static bool AngleWithin(float angle, float from, float to)
         {
             return Wrap(angle - from) <= to - from;
         }
 
         /// <summary>
-        /// Parties du cercle (centre, r) à l'intérieur du polygone : intervalles d'angle [from, to]
-        /// (to > from, sens trigonométrique) entre deux croisements avec le contour ; full = cercle
-        /// entier à l'intérieur (from = 0, to = 2π).
+        /// Parts of the circle (centre, r) inside the polygon: angle intervals [from, to] (to >
+        /// from, counter-clockwise) between two crossings with the outline; full = whole circle
+        /// inside (from = 0, to = 2π).
         /// </summary>
         private static List<(float from, float to, bool full)> InsideArcs(List<float2> polygon, float2 centre, float r)
         {
@@ -1494,7 +1503,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Cercle complet (centre, r) coupé aux angles `stops` (voir EmitCircleArc pour la longueur des tronçons).</summary>
+        /// <summary>Full circle (centre, r) split at the angles `stops` (see EmitCircleArc for the segment length).</summary>
         private static void EmitCircle(List<RoadSegmentDef> segments, float2 centre, float r, List<float> stops, float y, List<float2> joints, bool roundabout = false)
         {
             var angles = stops.Select(Wrap).Distinct().OrderBy(x => x).ToList();
@@ -1510,7 +1519,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Arc exact du cercle (centre, r) de `from` à `to` (sens trigonométrique), en tronçons courbes d'au plus 60° aux tangentes exactes.</summary>
+        /// <summary>Exact arc of the circle (centre, r) from `from` to `to` (counter-clockwise), as curved segments of at most 60° with exact tangents.</summary>
         private static void EmitCircleArc(List<RoadSegmentDef> segments, float2 centre, float r, float from, float to, float y, List<float2> joints, bool roundabout = false)
         {
             float2 Snap(float2 q)
@@ -1524,8 +1533,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 return q;
             }
-            // Au plus 60° par tronçon (NetUtils.FitCurve suit bien le cercle jusque-là), avec une
-            // marge d'arrondi : un arc de 45° pile ne doit pas être coupé en deux tronçons de 22,5°.
+            // At most 60° per segment (NetUtils.FitCurve follows the circle well up to that), with
+            // a rounding margin: an arc of exactly 45° must not be split into two 22.5° segments.
             int pieces = math.max(1, (int)math.ceil((to - from) / (math.PI / 3f) - 1e-3f));
             for (int i = 0; i < pieces; i++)
             {
@@ -1541,7 +1550,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Centre et rayon effectifs de la dernière rotonde générée (diagnostic pour les tests).</summary>
+        /// <summary>Distance `bestT` along the ray (origin, direction) to the first perimeter edge it hits; false if it hits none.</summary>
         private static bool FirstPerimeterHit(List<float2> polygon, float2 origin, float2 direction, out float bestT)
         {
             bestT = float.MaxValue;
@@ -1566,22 +1575,21 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Rayons
+        // Spokes
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Rayons en chaînes continues du périmètre vers le centre (retour utilisateur : "as
-        /// conexões aparecem muito próximas umas das outras em vez de aparecerem em vários
-        /// cantos do perímetro" — les chaînes partaient de l'anneau le plus INTÉRIEUR, petit et
-        /// étiré sur une forme allongée, et se retrouvaient toutes groupées au milieu). On place
-        /// `connections` points répartis également sur le premier anneau (celui qui suit le
-        /// périmètre), on relie chacun au périmètre (point le plus proche = perpendiculaire), puis
-        /// on le projette sur l'anneau suivant vers l'intérieur, et ainsi de suite. Deux chaînes
-        /// qui convergent (vers la pointe d'un anneau intérieur) aboutissent au même nœud. Les
-        /// points d'arrivée sont INSÉRÉS comme sommets des anneaux, pour que rayon et anneau
-        /// partagent exactement le même nœud ; ceux qui arrivent sur le périmètre (levels[0]) s'y
-        /// raccordent côté ECS (MakeCoursePos, règle 2). Un anneau qu'aucune chaîne n'atteint
-        /// (branche de forme séparée) reçoit ses propres points, reliés vers l'extérieur.
+        /// Spokes as continuous chains from the perimeter towards the centre (user feedback: "the
+        /// connections appear very close to each other instead of appearing in various corners of
+        /// the perimeter" — the chains used to start from the INNERMOST ring, small and stretched
+        /// on an elongated shape, and all ended up grouped in the middle). `connections` points are
+        /// spread evenly on the first ring (the one following the perimeter); each is linked to the
+        /// perimeter (nearest point = perpendicular), then projected onto the next ring inwards,
+        /// and so on. Two chains that converge (towards the tip of an inner ring) end at the same
+        /// node. Arrival points are INSERTED as ring vertices so that spoke and ring share exactly
+        /// the same node; those arriving on the perimeter (levels[0]) are connected to it by the
+        /// game layer. A ring that no chain reaches (a separate branch of the shape) gets its own
+        /// points, linked outwards.
         /// </summary>
         private static void EmitRadialChains(List<RoadSegmentDef> segments, List<List<List<float2>>> levels,
             int connections, float spacing, float y, CancellationToken cancel)
@@ -1601,8 +1609,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             int connections, float spacing, float y, CancellationToken cancel)
         {
             float mergeDistance = spacing * 0.8f;
-            // L'écart réel entre anneaux varie autour de `spacing` (plus large dans les parties
-            // larges de la forme, plus serré dans les étroites).
+            // The actual gap between rings varies around `spacing` (wider in wide parts of the
+            // shape, tighter in narrow ones).
             float maxSpokeLength = spacing * 4f;
 
             var chainPoints = new List<List<List<float2>>>();
@@ -1617,8 +1625,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 chainPoints.Add(perLoop);
             }
 
-            // Vrai si le segment droit a -> b croise un anneau de `level` ou un rayon déjà posé, hors
-            // de ses propres extrémités.
+            // True if the straight segment a -> b crosses a ring of `level` or an already placed
+            // spoke, away from its own ends.
             bool CrossesSomething(float2 a, float2 b, List<List<float2>> level)
             {
                 foreach (List<float2> loop in level)
@@ -1641,16 +1649,16 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
 
-            // Cherche sur `target` le raccord d'un rayon partant de p : le point le plus proche, puis
-            // de proche en proche le long de l'anneau (jusqu'à 1,5 × l'espacement), le premier dont
-            // le rayon est assez court, arrive à angle ouvert aux deux bouts et ne croise rien.
-            // `avoid` (facultatif) : nœuds déjà posés sur `target`, dont le raccord doit rester
-            // écarté d'au moins la moitié de l'espacement, et jamais à moins de
-            // MinJunctionSegmentLength (sinon un tronçon trop court entre deux carrefours).
-            // `targetLevel` >= 0 (rayon vers le centre) : parmi les raccords valables, préfère le plus
-            // proche d'où la suite de la chaîne, simulée sur les anneaux tels qu'ils sont à cet
-            // instant, atteint encore l'anneau le plus intérieur (retours utilisateur : "a ligação
-            // não vai até ao centro", puis "a estrada não é contínua"). Sinon, le premier valable.
+            // Finds on `target` the joint for a spoke starting at p: the nearest point, then step
+            // by step along the ring (up to 1.5 × the spacing), the first one whose spoke is short
+            // enough, arrives at an open angle at both ends and crosses nothing. `avoid`
+            // (optional): nodes already placed on `target`; the joint must stay at least half the
+            // spacing away from them, and never closer than MinJunctionSegmentLength (otherwise a
+            // too-short segment between two junctions). `targetLevel` >= 0 (spoke towards the
+            // centre): among the valid joints, prefers the nearest one from which the rest of the
+            // chain, simulated on the rings as they are at that moment, still reaches the innermost
+            // ring (user feedback: "the connection does not go to the centre", then "the road is
+            // not continuous"). Otherwise, the first valid one.
             bool FindSpokeTarget(float2 p, List<float2> source, List<float2> target, float2 nearest, List<float2> avoid, int targetLevel, out float2 result)
             {
                 if (targetLevel >= 0 && targetLevel + 1 < levels.Count
@@ -1664,12 +1672,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
             bool FindSpokeTargetCore(float2 p, List<float2> source, List<float2> target, float2 nearest, List<float2> avoid, int targetLevel, out float2 result)
             {
                 result = nearest;
-                // Avec anticipation : si aucun raccord ne mène jusqu'au centre, garder celui qui
-                // mène le plus loin plutôt que le premier venu (qui menait parfois à une impasse).
+                // With look-ahead: if no joint leads all the way to the centre, keep the one that
+                // leads furthest rather than the first one found (which sometimes led to a dead
+                // end).
                 bool hasPartial = false;
                 int bestDepth = -1;
-                // Coût borné (la génération se refait à chaque réglage du panneau) : au plus
-                // MaxSimulatedCandidates simulations par choix, une seule par sommet d'arrivée.
+                // Bounded cost (generation reruns on every panel setting change): at most
+                // MaxSimulatedCandidates simulations per choice, only one per arrival vertex.
                 int simulations = 0;
                 var simulated = new HashSet<(float, float)>();
                 bool hasFirstValid = false;
@@ -1739,16 +1748,17 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
 
-            // Vrai si un rayon partant de p (sur `loop`, niveau k) trouve un raccord valable sur le
-            // niveau `to` (voir FindSpokeTarget), sans rien insérer.
+            // True if a spoke starting at p (on `loop`, level k) finds a valid joint on level `to`
+            // (see FindSpokeTarget), without inserting anything.
             bool CanReach(float2 p, List<float2> loop, int to)
             {
                 return NearestOnLevel(levels[to], p, out int targetLoop, out float2 nearest)
                     && FindSpokeTargetCore(p, loop, levels[to][targetLoop], nearest, null, -1, out float2 _);
             }
 
-            // Nombre d'anneaux qu'une chaîne partant de p (sur `loop`, niveau k) traverserait vers le
-            // centre, en suivant la même règle que la construction (voir Project), sans rien insérer.
+            // Number of rings a chain starting at p (on `loop`, level k) would cross towards the
+            // centre, following the same rule as the construction (see Project), without inserting
+            // anything.
             int SimulatedChainDepth(float2 p, List<float2> loop, int k)
             {
                 float2 current = p;
@@ -1761,8 +1771,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     {
                         break;
                     }
-                    // Mêmes règles que Project pour une chaîne déjà posée à proximité : la rejoindre
-                    // (elle va déjà jusqu'au centre) si l'angle est ouvert, sinon s'en écarter.
+                    // Same rules as Project for a chain already placed nearby: join it (it already
+                    // reaches the centre) if the angle is open, otherwise move away from it.
                     List<float2> targetPoints = chainPoints[level][targetLoop];
                     float2 joined = next;
                     bool nearChain = targetPoints.Exists(existing =>
@@ -1788,12 +1798,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return depth;
             }
 
-            // Point de départ d'une chaîne : le point réparti `seed`, ou le plus proche le long de
-            // l'anneau (jusqu'à `maxShift`) d'où la chaîne peut rejoindre l'extérieur ET, d'un seul
-            // tenant, l'anneau le plus intérieur. Retours utilisateur : "a ligação não vai até ao
-            // centro" (chaîne partie de l'axe d'un lobe, bloquée par les dobras des anneaux), puis
-            // "a estrada não é contínua" quand un rayon bloqué repartait d'un autre point de
-            // l'anneau — d'où le choix du départ en amont, sur toute la chaîne simulée.
+            // Start point of a chain: the spread point `seed`, or the nearest one along the ring
+            // (up to `maxShift`) from which the chain can reach the outside AND, in one piece, the
+            // innermost ring. User feedback: "the connection does not go to the centre" (chain
+            // starting on the axis of a lobe, blocked by the folds of the rings), then "the road is
+            // not continuous" when a blocked spoke restarted from another point of the ring — hence
+            // choosing the start upstream, over the whole simulated chain.
             float2 ViableSeed(List<float2> loop, float2 seed, int k, float maxShift)
             {
                 float along = ArcPosition(loop, seed);
@@ -1827,8 +1837,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return best;
             }
 
-            // Vrai si un rayon p -> node ferait un angle ouvert avec l'anneau en node et avec chaque
-            // rayon déjà raccordé en node (voir MinSpokeRingAngleDegrees).
+            // True if a spoke p -> node would make an open angle with the ring at node and with
+            // every spoke already joined at node (see MinSpokeRingAngleDegrees).
             bool JoinsNodeAtOpenAngle(float2 node, float2 p, List<float2> ring)
             {
                 float2 incoming = p - node;
@@ -1866,22 +1876,22 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 segments.Add(new RoadSegmentDef(new float3(a.x, y, a.y), new float3(b.x, y, b.y), isHorizontal: false));
             }
 
-            // Projette p (sur un anneau du niveau `from`) vers le niveau `to` (to = from ± 1) ;
-            // retourne le nœud d'arrivée (fusionné ou inséré), ou null si trop loin.
-            // `sourceLoop` : l'anneau (niveau `to` ± 1) sur lequel se trouve p — le rayon doit aussi en
-            // partir à angle ouvert (voir MeetsRingAtOpenAngle).
+            // Projects p (on a ring of level `from`) to level `to` (to = from ± 1); returns the
+            // arrival node (merged or inserted), or null if too far. `sourceLoop`: the ring (level
+            // `to` ± 1) that p lies on — the spoke must also leave it at an open angle (see
+            // MeetsRingAtOpenAngle).
             float2? Project(float2 p, List<float2> sourceLoop, int to, bool inward)
             {
                 if (!NearestOnLevel(levels[to], p, out int targetLoop, out float2 nearest))
                 {
                     return null;
                 }
-                // Point le plus proche d'abord ; s'il tombe dans la dobra d'un anneau (angle fermé,
-                // voir MeetsRingAtOpenAngle), le rayon glisse le long de l'anneau cible jusqu'au
-                // premier point où il arrive à angle ouvert des deux côtés sans rien croiser.
-                // Retour utilisateur : s'arrêter là laissait des rayons qui n'allaient pas jusqu'au
-                // centre ("a ligação não vai até ao centro") — le rayon est seulement un peu en
-                // biais dans ces zones.
+                // Nearest point first; if it falls in the fold of a ring (closed angle, see
+                // MeetsRingAtOpenAngle), the spoke slides along the target ring to the first point
+                // where it arrives at an open angle on both sides without crossing anything. User
+                // feedback: stopping there left spokes that did not reach the centre ("the
+                // connection does not go to the centre") — the spoke is merely a little skewed in
+                // those areas.
                 int lookaheadLevel = inward ? to : -1;
                 if (!FindSpokeTarget(p, sourceLoop, levels[to][targetLoop], nearest, null, lookaheadLevel, out float2 q))
                 {
@@ -1889,19 +1899,19 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 if (to == 0)
                 {
-                    return q; // périmètre = route existante, raccordée côté ECS
+                    return q; // perimeter = existing road, connected by the game layer
                 }
                 List<float2> targetPoints = chainPoints[to][targetLoop];
                 foreach (float2 existing in targetPoints)
                 {
                     if (math.distance(existing, q) < mergeDistance)
                     {
-                        // Deux chaînes qui convergent se rejoignent au même nœud — seulement si le
-                        // nouveau rayon y arrive à angle ouvert, avec l'anneau ET avec les rayons
-                        // déjà raccordés là (vécu sur le périmètre réel : deux rayons à 23° au même
-                        // nœud). Sinon, plutôt que de s'arrêter (retour utilisateur : "a ligação não
-                        // vai até ao centro"), la chaîne cherche son propre raccord, à l'écart des
-                        // nœuds déjà posés sur cet anneau, et continue vers le centre.
+                        // Two converging chains meet at the same node — only if the new spoke
+                        // arrives there at an open angle, with the ring AND with the spokes already
+                        // joined there (seen on the real perimeter: two spokes at 23° at the same
+                        // node). Otherwise, rather than stopping (user feedback: "the connection
+                        // does not go to the centre"), the chain looks for its own joint, away from
+                        // the nodes already placed on this ring, and continues towards the centre.
                         if (JoinsNodeAtOpenAngle(existing, p, levels[to][targetLoop]))
                         {
                             return existing;
@@ -1918,13 +1928,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return q;
             }
 
-            // Nœuds de chaîne déjà prolongés vers le centre.
+            // Chain nodes already extended towards the centre.
             var extended = new HashSet<(float, float)>();
 
-            // Prolonge la chaîne qui passe par p (sur `loop`, niveau k) jusqu'au centre, une chaîne
-            // entière à la fois : chaque raccord est choisi en connaissant les chaînes déjà posées
-            // (voir FindSpokeTarget et sa simulation de la suite). Construites anneau par anneau,
-            // une chaîne posée ensuite invalidait le chemin prévu d'une autre, qui s'arrêtait.
+            // Extends the chain through p (on `loop`, level k) to the centre, one whole chain at a
+            // time: each joint is chosen knowing the chains already placed (see FindSpokeTarget and
+            // its simulation of the rest). When built ring by ring, a chain placed later
+            // invalidated another chain's planned path, which then stopped.
             void ExtendChain(float2 p, List<float2> loop, int k)
             {
                 if (!extended.Add((p.x, p.y)))
@@ -1943,7 +1953,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     AddSpoke(current, inner.Value);
                     if (!extended.Add((inner.Value.x, inner.Value.y)))
                     {
-                        break; // a rejoint une chaîne déjà prolongée jusqu'au centre
+                        break; // joined a chain already extended to the centre
                     }
                     NearestOnLevel(levels[level], inner.Value, out int nextLoop, out float2 _);
                     current = inner.Value;
@@ -1960,10 +1970,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     List<float2> points = chainPoints[k][li];
                     if (points.Count == 0)
                     {
-                        // Anneau qu'aucune chaîne n'atteint (le premier, ou une branche isolée) : ses
-                        // propres points de départ, reliés vers l'extérieur (au périmètre pour le
-                        // premier anneau). Chacun est choisi APRÈS que les chaînes précédentes ont été
-                        // posées jusqu'au centre (voir ViableSeed), puis sa chaîne est posée à son tour.
+                        // Ring that no chain reaches (the first one, or an isolated branch): its
+                        // own start points, linked outwards (to the perimeter for the first ring).
+                        // Each is chosen AFTER the previous chains have been laid down to the
+                        // centre (see ViableSeed), then its own chain is laid in turn.
                         float length = LoopLength(loop);
                         int count = math.clamp((int)math.floor(length / (1.5f * spacing)), 1, connections);
                         float maxSeedShift = 0.5f * length / count;
@@ -1987,7 +1997,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         }
                     }
 
-                    // Chaînes arrivées de l'extérieur sur cet anneau et pas encore prolongées.
+                    // Chains that arrived on this ring from outside and are not yet extended.
                     if (k + 1 < levels.Count)
                     {
                         foreach (float2 p in points.ToArray())
@@ -1999,16 +2009,16 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Pas (m) de la recherche d'un raccord de rayon le long de l'anneau cible (voir FindSpokeTarget).</summary>
+        /// <summary>Step (m) of the search for a spoke joint along the target ring (see FindSpokeTarget).</summary>
         private const float SpokeSearchStep = 8f;
 
-        /// <summary>Nombre maximal de raccords candidats dont la suite de chaîne est simulée par choix (voir FindSpokeTarget) : borne le temps de génération.</summary>
+        /// <summary>Maximum number of candidate joints whose chain continuation is simulated per choice (see FindSpokeTarget): bounds generation time.</summary>
         private const int MaxSimulatedCandidates = 200;
 
-        /// <summary>Portée de cette recherche, de part et d'autre du point le plus proche, en nombre d'espacements entre anneaux.</summary>
+        /// <summary>Reach of this search, on each side of the nearest point, in number of ring spacings.</summary>
         private const float SpokeSearchSpacings = 3f;
 
-        /// <summary>Abscisse curviligne (m) du point de `loop` le plus proche de `q`.</summary>
+        /// <summary>Arc-length position (m) of the point of `loop` closest to `q`.</summary>
         private static float ArcPosition(List<float2> loop, float2 q)
         {
             float bestDistance = float.MaxValue;
@@ -2030,7 +2040,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return along;
         }
 
-        /// <summary>Position que prendra le raccord en `point` une fois inséré (même règle qu'InsertOnLoop : sommet existant à moins de JointSnapDistance).</summary>
+        /// <summary>Position the joint at `point` will take once inserted (same rule as InsertOnLoop: existing vertex within JointSnapDistance).</summary>
         private static float2 SnappedJoint(List<float2> loop, float2 point)
         {
             int bestEdge = 0;
@@ -2058,7 +2068,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return bestPoint;
         }
 
-        /// <summary>Vrai si [a1, a2] et [b1, b2] se croisent franchement, à plus de 1 m de leurs extrémités.</summary>
+        /// <summary>True if [a1, a2] and [b1, b2] cross cleanly, more than 1 m from their ends.</summary>
         private static bool SegmentsCrossAwayFromEnds(float2 a1, float2 a2, float2 b1, float2 b2)
         {
             float2 r = a2 - a1;
@@ -2076,18 +2086,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return t > marginA && t < 1f - marginA && u > marginB && u < 1f - marginB;
         }
 
-        /// <summary>Angle minimal (degrés) entre un rayon et chacune des deux branches de l'anneau qu'il rejoint.</summary>
+        /// <summary>Minimum angle (degrees) between a spoke and each of the two branches of the ring it joins.</summary>
         private const float MinSpokeRingAngleDegrees = 50f;
 
-        /// <summary>Distances (m) le long de l'anneau, de part et d'autre du raccord, auxquelles cet angle est mesuré.</summary>
+        /// <summary>Distances (m) along the ring, on either side of the joint, at which this angle is measured.</summary>
         private static readonly float[] SpokeAngleProbeReaches = { 10f, 20f, 35f, 50f };
 
         /// <summary>
-        /// Vrai si un rayon arrivant sur `loop` au point `q`, en direction de `towardOther`, y fait un
-        /// angle ouvert avec les DEUX branches de l'anneau. Retour utilisateur (capture en jeu,
-        /// "Objetos sobrepostos") : sur un lobe, les deux rayons suivaient l'axe du lobe et passaient
-        /// par la pointe de chaque anneau, qui y fait une dobra ; le rayon entrait dans la dobra à
-        /// ~44° de chaque branche et les bords des routes se chevauchaient près du carrefour.
+        /// True if a spoke arriving on `loop` at point `q`, in direction `towardOther`, makes an
+        /// open angle there with BOTH branches of the ring. User feedback (in-game screenshot,
+        /// "Overlapping objects" error): on a lobe, both spokes followed the lobe axis and passed
+        /// through the tip of each ring, which folds there; the spoke entered the fold at ~44° to
+        /// each branch and the road edges overlapped near the junction.
         /// </summary>
         private static bool MeetsRingAtOpenAngle(List<float2> loop, float2 q, float2 towardOther)
         {
@@ -2096,7 +2106,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 return true;
             }
-            // Position de q le long de l'anneau (abscisse curviligne).
+            // Position of q along the ring (arc length).
             float bestDistance = float.MaxValue;
             float along = 0f;
             float walked = 0f;
@@ -2114,9 +2124,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 walked += math.distance(a, b);
             }
             float cosLimit = math.cos(math.radians(MinSpokeRingAngleDegrees));
-            // Plusieurs distances le long de chaque branche : un anneau peut partir à angle ouvert
-            // puis se recourber vers le rayon (vécu en jeu, log [Diag colisão] : 54° au nœud mais
-            // 35° à 40 m, routes côte à côte et refus du jeu).
+            // Several distances along each branch: a ring may leave at an open angle and then curl
+            // back towards the spoke (seen in game, collision diagnostics log: 54° at the node but
+            // 35° at 40 m, roads side by side and rejected by the game).
             foreach (float reach in SpokeAngleProbeReaches)
             {
                 foreach (float sign in new[] { -1f, 1f })
@@ -2132,9 +2142,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// `count` points répartis également le long de l'anneau, en choisissant le décalage de
-        /// départ qui les éloigne le plus des coins marqués — un rayon parti d'un coin partirait
-        /// en diagonale vers l'un des deux côtés extérieurs.
+        /// `count` points spread evenly along the ring, choosing the start offset that keeps them
+        /// farthest from the marked corners — a spoke starting from a corner would head diagonally
+        /// towards one of the two outer sides.
         /// </summary>
         private static List<float2> SeedPoints(List<float2> loop, int count, float spacing)
         {
@@ -2189,12 +2199,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Longueurs cumulées par anneau (cumulative[i] = abscisse du sommet i, dernier élément =
-        /// longueur totale), recalculées dès que l'anneau gagne un sommet (voir InsertOnLoop, seule
-        /// modification pendant la pose des rayons). PointAtArc est appelé des centaines de milliers
-        /// de fois par la simulation des chaînes (voir FindSpokeTarget) : le parcours complet de
-        /// l'anneau à chaque appel rendait la génération lente (~2 s avec 12 rayons).
-        /// Par thread : les tests peuvent générer en parallèle.
+        /// Cumulative lengths per ring (cumulative[i] = arc length at vertex i, last element =
+        /// total length), recomputed as soon as the ring gains a vertex (see InsertOnLoop, the only
+        /// modification while spokes are laid). PointAtArc is called hundreds of thousands of times
+        /// by the chain simulation (see FindSpokeTarget): walking the whole ring on each call made
+        /// generation slow (~2 s with 12 spokes). Per thread, because tests may generate in
+        /// parallel; reset at the start and end of each EmitRadialChains call, so nothing survives
+        /// between calls.
         /// </summary>
         [ThreadStatic]
         private static Dictionary<List<float2>, float[]> s_CumulativeLengths;
@@ -2227,7 +2238,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return loop[0];
             }
             s = ((s % length) + length) % length;
-            // Dernier sommet i tel que cumulative[i] <= s (recherche dichotomique).
+            // Last vertex i with cumulative[i] <= s (binary search).
             int lo = 0;
             int hi = loop.Count - 1;
             while (lo < hi)
@@ -2249,19 +2260,19 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Distance (m) sous laquelle un rayon se raccorde à un sommet existant de l'anneau au lieu
-        /// d'en insérer un nouveau à côté. Retour utilisateur (capture en jeu, "Objetos
-        /// sobrepostos" sur le périmètre réel) : avec 3 m, des raccords tombaient à 3-15 m d'un
-        /// sommet voisin et laissaient des tronçons minuscules collés au carrefour, que le jeu
-        /// refuse. Les sommets d'un anneau sont espacés d'environ RingSampleStep (25 m) : un
-        /// rayon se décale au plus d'une douzaine de mètres, invisible à l'échelle d'un anneau.
+        /// Distance (m) under which a spoke connects to an existing ring vertex instead of
+        /// inserting a new one next to it. User feedback (in-game screenshot, "Overlapping objects"
+        /// error on the real perimeter): with 3 m, joints landed 3-15 m from a neighbouring vertex
+        /// and left tiny segments attached to the junction, which the game rejects. Ring vertices
+        /// are about RingSampleStep (25 m) apart: a spoke shifts by at most a dozen metres,
+        /// invisible at the scale of a ring.
         /// </summary>
         private const float JointSnapDistance = 15f;
 
         /// <summary>
-        /// Insère `point` (supposé sur l'anneau) comme sommet, sur l'arête la plus proche.
-        /// À moins de `snapDistance` d'un sommet existant, réutilise ce sommet. Retourne la
-        /// position EXACTE du sommet, à réutiliser telle quelle comme extrémité du rayon.
+        /// Inserts `point` (assumed to be on the ring) as a vertex, on the nearest edge. Within
+        /// `snapDistance` of an existing vertex, reuses that vertex. Returns the EXACT vertex
+        /// position, to be reused as-is as the spoke end.
         /// </summary>
         private static float2 InsertOnLoop(List<float2> loop, float2 point, float snapDistance)
         {
@@ -2281,9 +2292,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
             float2 a = loop[bestEdge];
             float2 b = loop[(bestEdge + 1) % loop.Count];
-            // Le plus proche des deux bouts (et non le premier sous le seuil) : un point qui EST le
-            // sommet b était sinon « ramené » sur a, voisin à moins de snapDistance — le rayon
-            // partait alors d'un autre sommet que celui choisi (et simulé) par FindSpokeTarget.
+            // The nearer of the two ends (not the first one under the threshold): otherwise a point
+            // that IS vertex b was "snapped" to a, a neighbour within snapDistance — the spoke then
+            // started from a different vertex than the one chosen (and simulated) by
+            // FindSpokeTarget.
             float toA = math.distance(a, bestPoint);
             float toB = math.distance(b, bestPoint);
             if (math.min(toA, toB) < snapDistance)
@@ -2318,7 +2330,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Géométrie
+        // Geometry
         // ------------------------------------------------------------------
 
         private static float2 ClosestOnSegment(float2 a, float2 b, float2 p)
@@ -2370,17 +2382,17 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 result.RemoveAt(result.Count - 1);
             }
 
-            // Allers-retours du contour : voir GridGenerator.RemoveBacktracks. Déjà retirés par
-            // GridRoadToolSystem.BuildCurveAwarePerimeterPositions ; refait ici pour tout appelant
-            // direct (tests, autre source de périmètre). Vécu : un virage de 179° sur 5 m passait
-            // pour un coin net ultra-aigu dont la zone d'influence (ComputeSharpCornerWeights)
-            // couvrait toute la forme — toutes les pointes d'anneau y étaient gardées comme
-            // "coins", jamais arrondies.
+            // Back-and-forth spikes in the outline: see GridGenerator.RemoveBacktracks. The game
+            // layer already removes them when it builds the curve-aware perimeter
+            // (BuildCurveAwarePerimeterPositions); redone here for any direct caller (tests,
+            // another perimeter source). Seen in practice: a 179° turn over 5 m passed for an
+            // ultra-acute sharp corner whose influence zone (ComputeSharpCornerWeights) covered the
+            // whole shape — every ring spike in it was kept as a "corner", never rounded.
             GridGenerator.RemoveBacktracks(result);
             return result;
         }
 
-        /// <summary>Douglas-Peucker sur une polyligne fermée (coupée en deux au point le plus éloigné du premier).</summary>
+        /// <summary>Douglas-Peucker on a closed polyline (split in two at the point farthest from the first).</summary>
         internal static List<float2> SimplifyClosed(List<float2> loop, float tolerance)
         {
             if (loop.Count < 4)
@@ -2414,7 +2426,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Douglas-Peucker entre les indices first et last (last peut valoir loop.Count = retour au sommet 0).</summary>
+        /// <summary>Douglas-Peucker between indices first and last (last may equal loop.Count = back to vertex 0).</summary>
         private static void SimplifyRange(List<float2> loop, int first, int last, float tolerance, bool[] keep)
         {
             if (last - first < 2)
@@ -2444,25 +2456,25 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         // ------------------------------------------------------------------
-        // Champ de distance + marching squares
+        // Distance field + marching squares
         // ------------------------------------------------------------------
 
         private sealed class DistanceField
         {
             public float CellSize;
             public float MaxDepth;
-            /// <summary>Point de grille le plus éloigné du périmètre (centre du plus grand cercle inscrit).</summary>
+            /// <summary>Grid point farthest from the perimeter (centre of the largest inscribed circle).</summary>
             public float2 DeepestPoint;
-            /// <summary>Voir ComputeConnectedDepth.</summary>
+            /// <summary>See ComputeConnectedDepth.</summary>
             public float ConnectedDepth;
-            /// <summary>Voir ConcentricGenerator.MaxLayersFor ; -1 = pas encore calculé.</summary>
+            /// <summary>See ConcentricGenerator.MaxLayersFor; -1 = not computed yet. Lives on this per-call field, not in a static cache.</summary>
             public int MaxLayersCache = -1;
             private float2 _origin;
             private int _nx;
             private int _nz;
-            private float[] _values; // distance signée au périmètre : > 0 à l'intérieur
-            private float[] _sharpWeight; // voir ComputeSharpCornerWeights ; null = aucun coin net
-            private float[] _sharpTurn; // virage (degrés) du coin de périmètre qui domine _sharpWeight
+            private float[] _values; // signed distance to the perimeter: > 0 inside
+            private float[] _sharpWeight; // see ComputeSharpCornerWeights; null = no sharp corner
+            private float[] _sharpTurn; // turn (degrees) of the perimeter corner that dominates _sharpWeight
 
             public static DistanceField Build(List<float2> polygon)
             {
@@ -2477,7 +2489,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float cell = math.clamp(span / TargetCellsPerAxis, MinCellSize, MaxCellSize);
 
                 var field = new DistanceField { CellSize = cell };
-                // Une rangée de marge tout autour (valeurs négatives) : tout contour est fermé.
+                // One row of margin all around (negative values): every contour is closed.
                 field._origin = mn - cell;
                 field._nx = (int)math.ceil((mx.x - mn.x) / cell) + 3;
                 field._nz = (int)math.ceil((mx.y - mn.y) / cell) + 3;
@@ -2495,11 +2507,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     edgeInvLenSq[i] = lenSq > 1e-8f ? 1f / lenSq : 0f;
                 }
 
-                // Index spatial des arêtes par baldes : pour un point donné on visite les baldes
-                // en anneaux de plus en plus larges et on s'arrête dès que la meilleure distance
-                // trouvée est plus petite que la distance minimale possible à l'anneau suivant —
-                // au lieu de tester chaque arête pour chaque point (1,1 s sur un rond-point
-                // densifié à 525 points, contre quelques dizaines de ms ainsi).
+                // Spatial index of the edges in buckets: for a given point, buckets are visited in
+                // wider and wider rings and the search stops as soon as the best distance found is
+                // smaller than the minimum possible distance to the next ring — instead of testing
+                // every edge for every point (1.1 s on a roundabout densified to 525 points, versus
+                // a few tens of ms this way).
                 float bucketSize = math.max(cell * 8f, span / 32f);
                 int bx = (int)math.ceil((field._nx * cell) / bucketSize) + 1;
                 int bz = (int)math.ceil((field._nz * cell) / bucketSize) + 1;
@@ -2532,8 +2544,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float maxDepth = 0f;
                 for (int j = 0; j < field._nz; j++)
                 {
-                    // Intérieur/extérieur par balayage de la rangée (pair-impair, même règle que
-                    // GridGenerator.PointInPolygon) : abscisses où la rangée coupe le polygone.
+                    // Inside/outside by scanning the row (even-odd, same rule as
+                    // GridGenerator.PointInPolygon): x-coordinates where the row crosses the
+                    // polygon.
                     float rowY = field._origin.y + j * cell;
                     crossings.Clear();
                     for (int e = 0; e < n; e++)
@@ -2601,7 +2614,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                                     }
                                 }
                             }
-                            // Tout balde de l'anneau suivant est à au moins ring × bucketSize.
+                            // Every bucket in the next ring is at least ring × bucketSize away.
                             float reach = ring * bucketSize;
                             if (best <= reach * reach)
                             {
@@ -2630,12 +2643,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Plus grande profondeur jusqu'à laquelle la région {distance ≥ profondeur} reste d'un
-            /// seul tenant — au-delà, une "taille" étroite de la forme sépare deux lobes et les
-            /// anneaux se couperaient en deux. Arbre de fusion : on ajoute les points de grille du
-            /// plus profond au moins profond (union-find), et on retient la profondeur de la
-            /// DERNIÈRE fusion entre deux parties toutes deux assez grandes pour porter un anneau
-            /// (les petites bosses du champ, qui fusionnent aussitôt, sont ignorées).
+            /// Greatest depth up to which the region {distance ≥ depth} stays in one piece — beyond
+            /// it, a narrow "waist" of the shape separates two lobes and the rings would split in
+            /// two. Merge tree: grid points are added from deepest to shallowest (union-find), and
+            /// the depth of the LAST merge between two parts both large enough to hold a ring is
+            /// kept (small bumps of the field, which merge right away, are ignored).
             /// </summary>
             private float ComputeConnectedDepth()
             {
@@ -2653,7 +2665,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 var size = new int[_values.Length];
                 for (int idx = 0; idx < parent.Length; idx++)
                 {
-                    parent[idx] = -1; // pas encore ajouté
+                    parent[idx] = -1; // not added yet
                 }
                 int Find(int x)
                 {
@@ -2707,7 +2719,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return connectedDepth;
             }
 
-            /// <summary>Distance signée (m) au périmètre au point p, interpolée sur la grille (> 0 à l'intérieur).</summary>
+            /// <summary>Signed distance (m) to the perimeter at point p, interpolated on the grid (> 0 inside).</summary>
             public float DepthAt(float2 p)
             {
                 float2 g = (p - _origin) / CellSize;
@@ -2722,7 +2734,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return math.lerp(math.lerp(v00, v10, fx), math.lerp(v01, v11, fx), fz);
             }
 
-            /// <summary>Poids de coin net (voir ComputeSharpCornerWeights) au point de grille le plus proche.</summary>
+            /// <summary>Sharp-corner weight (see ComputeSharpCornerWeights) at the nearest grid point.</summary>
             public float SharpWeightAt(float2 p)
             {
                 if (_sharpWeight == null)
@@ -2734,7 +2746,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return _sharpWeight[j * _nx + i];
             }
 
-            /// <summary>Virage (degrés) du coin net du périmètre dont dépend ce point (voir SharpWeightAt) ; 0 sans coin.</summary>
+            /// <summary>Turn (degrees) of the sharp perimeter corner this point depends on (see SharpWeightAt); 0 when there is no corner.</summary>
             public float SharpTurnAt(float2 p)
             {
                 if (_sharpTurn == null)
@@ -2747,11 +2759,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Poids 0..1 par point de grille : 1 dans le "sillage" d'un coin NET convexe du
-            /// périmètre (sa bissectrice vers l'intérieur), 0 ailleurs. Voir ComputeRingField :
-            /// là où le poids vaut 1, l'anneau garde le coin net hérité du périmètre (un carré
-            /// reste un carré) ; ailleurs, les pointes qui n'apparaissent qu'en profondeur (bout
-            /// d'une forme arrondie) sont arrondies.
+            /// Weight 0..1 per grid point: 1 in the "wake" of a SHARP convex perimeter corner (its
+            /// inward bisector), 0 elsewhere. See ComputeRingField: where the weight is 1, the ring
+            /// keeps the sharp corner inherited from the perimeter (a square stays a square);
+            /// elsewhere, spikes that only appear at depth (end of a rounded shape) are rounded.
             /// </summary>
             private void ComputeSharpCornerWeights(List<float2> polygon)
             {
@@ -2769,9 +2780,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     float cross = dIn.x * dOut.y - dIn.y * dOut.x;
                     if (math.dot(dIn, dOut) >= cornerCos || cross * windingSign <= 0f)
                     {
-                        continue; // pas un coin net, ou coin concave (arrondi naturellement)
+                        continue; // not a sharp corner, or a concave corner (rounded naturally)
                     }
-                    // Angle intérieur = π - angle de virage ; demi-angle pour la bissectrice.
+                    // Interior angle = π - turn angle; half-angle for the bisector.
                     float turn = math.acos(math.clamp(math.dot(dIn, dOut), -1f, 1f));
                     float halfInterior = 0.5f * (math.PI - turn);
                     corners.Add((curr, math.max(math.sin(halfInterior), 0.05f), math.degrees(turn)));
@@ -2798,7 +2809,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         float turnOfBest = 0f;
                         foreach ((float2 c, float sinHalf, float cornerTurn) in corners)
                         {
-                            // Sur la bissectrice d'un coin, distance au coin = profondeur / sin(demi-angle).
+                            // On a corner's bisector, distance to the corner = depth /
+                            // sin(half-angle).
                             float q = math.distance(p, c) * sinHalf / depth;
                             float w = 1f - math.smoothstep(1.1f, 1.5f, q);
                             if (w > weight || (w == weight && w > 0f && cornerTurn > turnOfBest))
@@ -2813,22 +2825,22 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            /// <summary>Profondeur moyenne (m) de l'épine : l'anneau le plus profond possible (voir LevelForDepth).</summary>
+            /// <summary>Average depth (m) of the spine: the deepest possible ring (see LevelForDepth).</summary>
             public float RingDepth;
 
             /// <summary>
-            /// Champ dont les courbes de niveau sont les anneaux : 0 sur le périmètre, 1 sur
-            /// l'épine (voir ComputeRingField), mélangé près des coins nets du périmètre avec la
-            /// distance exacte (voir ComputeSharpCornerWeights) pour qu'un carré garde des coins nets.
+            /// Field whose level curves are the rings: 0 on the perimeter, 1 on the spine (see
+            /// ComputeRingField), blended near sharp perimeter corners with the exact distance (see
+            /// ComputeSharpCornerWeights) so that a square keeps sharp corners.
             /// </summary>
             public float[] RingField;
 
-            // Table niveau -> profondeur moyenne des points de ce niveau (croissante), pour
-            // choisir les niveaux qui donnent un espacement moyen régulier.
+            // Table level -> average depth of the points at that level (increasing), used to choose
+            // the levels that give a regular average spacing.
             private float[] _levelDepth;
             private const int LevelBins = 256;
 
-            /// <summary>Niveau du champ lisse dont la profondeur moyenne vaut `depth` (m).</summary>
+            /// <summary>Level of the smooth field whose average depth is `depth` (m).</summary>
             public float LevelForDepth(float depth)
             {
                 for (int b = 1; b < LevelBins; b++)
@@ -2845,19 +2857,17 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Champ des anneaux G = F / H : F = distance exacte au périmètre, H =
-            /// demi-largeur locale de la forme = profondeur du point de l'"épine" qu'on atteint en
-            /// suivant la plus forte montée du champ de distance. L'épine est la crête du champ,
-            /// gardée seulement là où elle est au moins aussi profonde que la taille la plus
-            /// étroite (0,97 × ConnectedDepth) : d'un seul tenant à travers toute la forme, sans
-            /// les branches de crête qui partent vers les coins et les bouts de lobes. Chaque
-            /// courbe de niveau est donc à une FRACTION fixe de la demi-largeur locale — elle fait
-            /// le tour de toute la forme sans se couper ni s'arrêter en pointe là où la forme
-            /// s'amincit (elle s'y resserre), et reste parallèle aux côtés droits (tous les points
-            /// d'un côté droit montent au même endroit de l'épine, H y est constant). Les plis du
-            /// champ de distance donnent des anneaux en pointe ("bicos") : ils sont arrondis après
-            /// coup, anneau par anneau (LimitCurvature), pas par un flou du champ qui arrondissait
-            /// toute la forme.
+            /// Ring field G = F / H: F = exact distance to the perimeter, H = local half-width of
+            /// the shape = depth of the "spine" point reached by following the steepest ascent of
+            /// the distance field. The spine is the ridge of the field, kept only where it is at
+            /// least as deep as the narrowest waist (0.97 × ConnectedDepth): one piece across the
+            /// whole shape, without the ridge branches that head off to the corners and lobe tips.
+            /// Each level curve is therefore at a fixed FRACTION of the local half-width — it goes
+            /// round the whole shape without cutting itself or stopping in a point where the shape
+            /// narrows (it tightens there), and stays parallel to straight sides (all points of a
+            /// straight side ascend to the same place on the spine, so H is constant there). Folds
+            /// in the distance field produce spiky rings: they are rounded afterwards, ring by ring
+            /// (LimitCurvature), not by a blur of the field, which rounded the whole shape.
             /// </summary>
             private void ComputeRingField()
             {
@@ -2886,20 +2896,20 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 {
                     spine[maxIdx] = true;
                 }
-                // Demi-largeur lissée (flou limité à l'intérieur de la forme) : brute, elle saute
-                // d'une valeur à l'autre là où deux parties de largeurs différentes se rejoignent
-                // (ex. un passage étroit qui débouche sur un lobe), et les anneaux se tassaient
-                // contre cette ligne de saut (écart de quelques mètres seulement).
+                // Smoothed half-width (blur restricted to the inside of the shape): raw, it jumps
+                // from one value to another where two parts of different widths meet (e.g. a narrow
+                // passage opening onto a lobe), and the rings bunched up against that jump line
+                // (only a few metres apart).
                 float[] halfWidth = MaskedBlur(HalfWidthByAscent(spine), math.max(2f, 0.5f * ConnectedDepth / CellSize));
 
-                // Distance EXACTE, sans flou (retour utilisateur : "está a criar formas cada vez
-                // mais circulares em vez de guardar a forma original"). Un flou gaussien du champ
-                // de distance (σ = ¼ de la profondeur, ~150 m sur une grande forme) arrondissait
-                // les pointes, mais aussi toute la forme : les anneaux intérieurs tendaient vers
-                // des cercles. Il ne s'était jamais vu en jeu que par accident — un faux coin
-                // (aller-retour du périmètre, voir CleanPolygon) forçait le poids de coin à 1
-                // partout, donc la distance exacte. Les pointes sont désormais arrondies
-                // localement, anneau par anneau (LimitCurvature), sans toucher au reste.
+                // EXACT distance, no blur (user feedback: "it is creating more and more circular
+                // shapes instead of keeping the original shape"). A Gaussian blur of the distance
+                // field (σ = ¼ of the depth, ~150 m on a large shape) rounded the spikes, but also
+                // the whole shape: inner rings tended towards circles. It had only ever been seen
+                // in game by accident — a false corner (a back-and-forth in the perimeter, see
+                // CleanPolygon) forced the corner weight to 1 everywhere, hence the exact distance.
+                // Spikes are now rounded locally, ring by ring (LimitCurvature), without touching
+                // the rest.
                 var ring = new float[count];
                 for (int idx = 0; idx < count; idx++)
                 {
@@ -2912,7 +2922,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 RingField = ring;
 
-                // Profondeur moyenne par niveau (table croissante), et profondeur de l'épine.
+                // Average depth per level (increasing table), and spine depth.
                 var sum = new double[LevelBins];
                 var hits = new int[LevelBins];
                 for (int idx = 0; idx < count; idx++)
@@ -2937,9 +2947,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Flou gaussien restreint à l'intérieur de la forme (valeur > 0) : moyenne pondérée
-            /// des seuls points intérieurs, pour que l'extérieur (0) ne tire pas les valeurs vers
-            /// le bas près du bord.
+            /// Gaussian blur restricted to the inside of the shape (value > 0): weighted average of
+            /// the inside points only, so that the outside (0) does not pull values down near the
+            /// edge.
             /// </summary>
             private float[] MaskedBlur(float[] source, float sigmaCells)
             {
@@ -2964,13 +2974,14 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return result;
             }
 
-            /// <summary>Flou gaussien séparable (écart-type en cellules), bords étendus par la valeur du bord.</summary>
+            /// <summary>Separable Gaussian blur (standard deviation in cells), edges extended with the edge value.</summary>
             private float[] GaussianBlur(float[] source, float sigmaCells)
             {
                 int radius = math.max(1, (int)math.ceil(3f * sigmaCells));
-                // Grand rayon (grande forme, ex. zone peinte au Pincel : noyau de ~300 cases, des
-                // dizaines de millions d'opérations, jusqu'à 0,5 s en jeu à chaque nouvelle forme) :
-                // trois flous en boîte successifs, coût indépendant du rayon, quasi identiques.
+                // Large radius (large shape, e.g. an area painted with the Brush: kernel of ~300
+                // cells, tens of millions of operations, up to 0.5 s in game for each new shape):
+                // three successive box blurs instead, cost independent of the radius, nearly
+                // identical result.
                 if (radius > BoxBlurFromRadius)
                 {
                     return BoxGaussian(source, sigmaCells);
@@ -3019,13 +3030,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return result;
             }
 
-            /// <summary>Rayon (cases) du noyau gaussien au-delà duquel GaussianBlur passe aux flous en boîte.</summary>
+            /// <summary>Gaussian kernel radius (cells) above which GaussianBlur switches to box blurs.</summary>
             private const int BoxBlurFromRadius = 12;
 
             /// <summary>
-            /// Approximation d'un flou gaussien par trois flous en boîte (sommes glissantes), bords
-            /// étendus par la valeur du bord comme GaussianBlur. Largeurs des boîtes choisies pour
-            /// que la variance totale soit celle de la gaussienne.
+            /// Approximates a Gaussian blur with three box blurs (running sums), edges extended
+            /// with the edge value like GaussianBlur. Box widths are chosen so that the total
+            /// variance matches the Gaussian's.
             /// </summary>
             private float[] BoxGaussian(float[] source, float sigma)
             {
@@ -3046,7 +3057,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return a;
             }
 
-            /// <summary>Moyenne glissante de rayon r le long des rangées (horizontal) ou des colonnes.</summary>
+            /// <summary>Running average of radius r along rows (horizontal) or columns.</summary>
             private void BoxPass(float[] from, float[] to, int r, bool horizontal)
             {
                 int lines = horizontal ? _nz : _nx, length = horizontal ? _nx : _nz;
@@ -3067,10 +3078,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Demi-largeur locale (m) de chaque point : profondeur du point d'épine atteint en
-            /// suivant la plus forte montée du champ de distance (calculé en une passe, du plus
-            /// profond au moins profond). Un point qui monte jusqu'à un maximum local hors de
-            /// l'épine (petite bosse) prend la profondeur de ce maximum.
+            /// Local half-width (m) of each point: depth of the spine point reached by following
+            /// the steepest ascent of the distance field (computed in one pass, from deepest to
+            /// shallowest). A point that ascends to a local maximum off the spine (a small bump)
+            /// takes that maximum's depth.
             /// </summary>
             private float[] HalfWidthByAscent(bool[] spine)
             {
@@ -3107,7 +3118,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                                 continue;
                             }
                             int n = nj * _nx + ni;
-                            // Pente (et non valeur brute) : un voisin en diagonale est plus loin.
+                            // Slope (not raw value): a diagonal neighbour is farther away.
                             float slope = (_values[n] - _values[idx]) / ((di != 0 && dj != 0) ? 1.4142f : 1f);
                             if (_values[n] > _values[idx] && (bestIdx < 0 || slope > best))
                             {
@@ -3121,7 +3132,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return result;
             }
 
-            /// <summary>Point de crête : maximum local du champ de distance dans au moins une direction.</summary>
+            /// <summary>Ridge point: local maximum of the distance field in at least one direction.</summary>
             private bool IsRidge(int i, int j)
             {
                 float v = _values[j * _nx + i];
@@ -3148,13 +3159,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             private float2 Position(int i, int j) => _origin + new float2(i, j) * CellSize;
 
-            /// <summary>Courbes de niveau fermées "valeur = level" (marching squares, ambiguïtés résolues par la valeur au centre).</summary>
+            /// <summary>Closed level curves "value = level" (marching squares, ambiguities resolved by the centre value).</summary>
             public List<List<float2>> ExtractContours(float[] values, float level)
             {
                 float Value(int i, int j) => values[j * _nx + i];
 
-                // Clé d'un point de contour = l'arête de grille qu'il coupe : (i, j, 0) arête
-                // horizontale (i,j)-(i+1,j), (i, j, 1) arête verticale (i,j)-(i,j+1).
+                // Key of a contour point = the grid edge it crosses: (i, j, 0) horizontal edge
+                // (i,j)-(i+1,j), (i, j, 1) vertical edge (i,j)-(i,j+1).
                 var neighbors = new Dictionary<(int, int, int), List<(int, int, int)>>();
                 var points = new Dictionary<(int, int, int), float2>();
 

@@ -9,22 +9,22 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Motif "Misto" (retour : "Radial no centro e Orgânico à volta") : un cercle central porte le
-    /// motif Radial (rotonde, avenues, anneaux) ; l'Orgânico remplit le reste de la zone, avec le
-    /// cercle comme second bord ; une route circulaire suit le cercle et relie les deux, avec un
-    /// nœud à chaque rue qui la rejoint (voir FreeAreaPerimeter.PerimeterRoad).
+    /// Mixed pattern (user feedback: "Radial in the centre and Organic around it"): a central circle
+    /// holds the Radial pattern (roundabout, avenues, rings); Organic fills the rest of the area, with
+    /// the circle as a second boundary; a ring road follows the circle and joins the two, with a
+    /// node at every street that meets it (see FreeAreaPerimeter.PerimeterRoad).
     /// </summary>
     public static partial class GridGenerator
     {
         public const float MinMixedCoreRadius = 100f;
         public const float MaxMixedCoreRadius = 450f;
         public const float MixedCoreRadiusDefault = 220f;
-        /// <summary>Pas (m) entre deux points du cercle central.</summary>
+        /// <summary>Spacing (m) between two points of the central circle.</summary>
         private const float MixedCircleStep = 12f;
 
         private static List<RoadSegmentDef> GenerateMixed(List<float2> polygon, float y, GridParameters parameters)
         {
-            // Centre : barycentre (s'il est dans la forme), rayon borné par la distance au bord.
+            // Centre: centroid (if it lies inside the shape); radius capped by the distance to the edge.
             float2 centre = Centroid(polygon);
             if (!PointInPolygon(centre, polygon))
             {
@@ -38,7 +38,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             float radius = math.min(parameters.MixedCoreRadius > 0f ? parameters.MixedCoreRadius : MixedCoreRadiusDefault, 0.6f * clearance);
             if (radius < MinMixedCoreRadius)
             {
-                return GenerateOrganic(polygon, y, parameters); // forme trop étroite pour un centre
+                return GenerateOrganic(polygon, y, parameters); // shape too narrow for a core
             }
 
             int count = math.max(24, (int)math.ceil(2f * math.PI * radius / MixedCircleStep));
@@ -50,12 +50,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
             var circle3 = circle.Select(p => new float3(p.x, y, p.y)).ToList();
 
-            // Cœur : le Radial, avec le cercle pour périmètre.
+            // Core: the Radial pattern, with the circle as its outline.
             List<RoadSegmentDef> core = ConcentricGenerator.GenerateRadial(circle3, parameters.RadialAvenues, parameters.RadialRoundaboutRadius, parameters.RadialLayers,
                 cancel: parameters.Cancel);
-            // Le Radial simplifie son contour : ses bouts d'avenue tombent à quelques décimètres du
-            // cercle. Ramenés exactement dessus (même point pour tous les tronçons qui s'y rejoignent),
-            // pour que la route circulaire s'y raccorde.
+            // Radial simplifies its outline, so its avenue ends land a few decimetres off the circle.
+            // Snap them exactly onto it (same point for every segment meeting there) so the ring road
+            // can connect to them.
             var snapped = new Dictionary<float3, float3>();
             float3 Snap(float3 p)
             {
@@ -84,21 +84,21 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 core[k] = s;
             }
 
-            // Couronne : l'Orgânico dans la forme percée du cercle (polygone "trou de serrure" : bord
-            // extérieur, fente de largeur nulle, cercle parcouru en entier, retour par la fente).
+            // Outer ring: Organic inside the shape with the circle cut out ("keyhole" polygon: outer
+            // edge, zero-width slit, a full lap of the circle, then back out through the slit).
             (List<float2> keyhole, float2 bridgeA, float2 bridgeB) = Keyhole(polygon, circle);
             List<RoadSegmentDef> ring = GenerateOrganic(keyhole, y, parameters);
-            // La fente n'est pas une vraie route : rien ne doit s'y raccorder.
+            // The slit is not a real road: nothing may connect to it.
             ring.RemoveAll(s => OnBridge(s.Start.xz, bridgeA, bridgeB, circle, polygon) || OnBridge(s.End.xz, bridgeA, bridgeB, circle, polygon));
 
             var result = new List<RoadSegmentDef>(core.Count + ring.Count);
             result.AddRange(core);
             result.AddRange(ring);
-            // Les rues de l'Orgânico s'arrêtent avant tout bord, cercle compris : chaque avenue du
-            // centre se prolonge vers l'extérieur jusqu'au nœud de la couronne le plus proche devant
-            // elle — les avenues traversent ainsi le quartier au lieu de buter sur le cercle.
+            // Organic streets stop short of every boundary, the circle included: each core avenue is
+            // extended outward to the nearest outer-ring node ahead of it, so avenues cross the
+            // district instead of dead-ending at the circle.
             result.AddRange(ExtendSpokes(core, ring, centre, keyhole));
-            // Route circulaire : nœud à chaque rue du cœur ou de la couronne qui touche le cercle.
+            // Ring road: a node at every core or outer-ring street that touches the circle.
             foreach (RoadSegmentDef road in FreeAreaPerimeter.PerimeterRoad(circle3, result))
             {
                 RoadSegmentDef avenue = road;
@@ -108,14 +108,14 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Longueur maximale (m) d'une avenue prolongée du cercle vers la couronne.</summary>
+        /// <summary>Maximum length (m) of an avenue extended from the circle into the outer ring.</summary>
         private const float MixedSpokeMaxLength = 260f;
         private const float MixedSpokeMaxTurn = 30f;
 
         private static List<RoadSegmentDef> ExtendSpokes(List<RoadSegmentDef> core, List<RoadSegmentDef> ring, float2 centre, List<float2> keyhole)
         {
             var extensions = new List<RoadSegmentDef>();
-            // Bouts libres du centre (sur le cercle) et nœuds de la couronne avec leurs directions.
+            // Free core ends (on the circle) and outer-ring nodes with their outgoing directions.
             var coreDegree = new Dictionary<float3, int>();
             foreach (RoadSegmentDef s in core)
             {
@@ -169,7 +169,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 if (!found) continue;
                 var spoke = new RoadSegmentDef(end.Key, best, isHorizontal: false, isAvenue: true);
                 extensions.Add(spoke);
-                // La nouvelle avenue compte pour les suivantes (pas de croisement entre deux prolongements).
+                // The new avenue counts as an obstacle for later ones (no two extensions may cross).
                 float2[] line = { from, best.xz };
                 polylines.Add((line, math.min(from, best.xz), math.max(from, best.xz)));
             }
@@ -191,8 +191,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Polygone extérieur percé du cercle : relié par une fente entre le sommet extérieur et le point du
-        /// cercle les plus proches. Avec la règle pair-impair (PointInPolygon), le disque est dehors.
+        /// Outer polygon with the circle cut out, joined by a slit between the closest pair of outer
+        /// vertex and circle point. Under the even-odd rule (PointInPolygon) the disc is outside.
         /// </summary>
         private static (List<float2> keyhole, float2 bridgeA, float2 bridgeB) Keyhole(List<float2> outer, List<float2> circle)
         {
@@ -218,7 +218,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return (result, outer[bestOuter], circle[bestCircle]);
         }
 
-        /// <summary>Point sur la fente (hors de ses deux bouts, qui sont de vrais bords).</summary>
+        /// <summary>True if the point lies on the slit (excluding its two ends, which are real boundaries).</summary>
         private static bool OnBridge(float2 p, float2 a, float2 b, List<float2> circle, List<float2> outer)
         {
             float2 closest = ClosestOnSegment(a, b, p);

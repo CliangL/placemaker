@@ -8,28 +8,29 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Liaisons piétonnes entre impasses (retour : "ruas pedonais e ciclovias como terceira rede") :
-    /// comme dans les vrais lotissements, le bout de chaque impasse est relié par un court chemin au
-    /// nœud de rue le plus proche devant lui — les piétons et cyclistes ne font plus le tour du quartier.
+    /// Pedestrian links between cul-de-sacs (user feedback: "pedestrian streets and cycle paths as a
+    /// third network"): as in real subdivisions, the tip of each cul-de-sac is joined by a short path
+    /// to the nearest street node ahead of it, so pedestrians and cyclists no longer have to walk
+    /// around the whole block.
     /// </summary>
     public static partial class GridGenerator
     {
-        /// <summary>Longueur maximale (m) d'une liaison piétonne.</summary>
+        /// <summary>Maximum length (m) of a pedestrian link.</summary>
         public const float PedestrianLinkMaxLength = 90f;
         private const float PedestrianLinkMinLength = 15f;
-        /// <summary>Écart maximal (degrés) entre la direction de l'impasse et la liaison.</summary>
+        /// <summary>Maximum deviation (degrees) between the cul-de-sac direction and the link.</summary>
         private const float PedestrianLinkMaxTurn = 70f;
-        /// <summary>Angle minimal (degrés) entre la liaison et les rues au nœud d'arrivée.</summary>
+        /// <summary>Minimum angle (degrees) between the link and the streets at the target node.</summary>
         private const float PedestrianLinkMinJunctionAngle = 30f;
 
         /// <summary>
-        /// Ajoute à `segments` une liaison (RoadSegmentDef.IsPedestrian) depuis chaque bout d'impasse
-        /// (IsCulDeSacEnd, bout = End) vers un nœud existant d'une autre rue, ou vers le périmètre,
-        /// sans croiser de rue ni sortir de la forme. Au plus une liaison par nœud d'arrivée.
+        /// Adds to `segments` a link (RoadSegmentDef.IsPedestrian) from each cul-de-sac tip
+        /// (IsCulDeSacEnd, tip = End) to an existing node of another street, or to the perimeter,
+        /// without crossing any street or leaving the shape. At most one link per target node.
         /// </summary>
         internal static void AddPedestrianLinks(List<RoadSegmentDef> segments, List<float2> polygon, float y)
         {
-            // Nœuds et tangentes sortantes (pour l'angle au nœud d'arrivée).
+            // Nodes and their outgoing tangents (for the angle check at the target node).
             var nodes = new Dictionary<float3, List<float2>>();
             void AddDirection(float3 node, float2 direction)
             {
@@ -65,8 +66,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float bestDistance = PedestrianLinkMaxLength;
                 float3 best = default;
                 bool found = false;
-                // Cibles à portée, de la plus proche à la plus lointaine : nœuds des autres rues, puis
-                // point du périmètre droit devant. La première qui convient est la meilleure.
+                // Targets in range, nearest first: nodes of other streets, plus the perimeter point
+                // straight ahead. The first one that qualifies is the best.
                 var targets = new List<(float3 point, bool onPerimeter, float distance)>();
                 foreach (float3 node in nodes.Keys)
                 {
@@ -107,7 +108,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             segments.AddRange(links);
         }
 
-        /// <summary>Points de la courbe d'un tronçon (cubique approchant la courbe du jeu).</summary>
+        /// <summary>Sample points along a segment's curve (a cubic approximating the game's curve).</summary>
         private static float2[] Sample(RoadSegmentDef s, int count = 8)
         {
             var points = new float2[count + 1];
@@ -127,7 +128,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return points;
         }
 
-        /// <summary>Premier point du périmètre touché en avançant de `from` dans `direction` (sinon le plus proche).</summary>
+        /// <summary>First perimeter point hit when moving from `from` along `direction` (otherwise `from` itself).</summary>
         private static float2 ClosestPerimeterPoint(List<float2> polygon, float2 from, float2 direction)
         {
             float best = float.MaxValue;
@@ -144,7 +145,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return hit;
         }
 
-        /// <summary>Chemin droit a→b : dans la forme, sans croiser aucune rue (hors ses deux bouts).</summary>
+        /// <summary>Straight path a→b stays inside the shape and crosses no street (ignoring its two ends).</summary>
         private static bool PathClear(float2 a, float2 b, List<(float2[] points, float2 min, float2 max)> polylines, List<float2> polygon)
         {
             float2 middle = (a + b) * 0.5f;

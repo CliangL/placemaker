@@ -17,14 +17,14 @@ namespace Placemaker.Tests
             new float3(0f, 0f, 0f), new float3(size, 0f, 0f), new float3(size, 0f, size), new float3(0f, 0f, size),
         };
 
-        /// <summary>L de 600×600 amputé du quart supérieur droit : un coin concave.</summary>
+        /// <summary>600×600 L with the top-right quarter removed: one concave corner.</summary>
         private static List<float3> LShape() => new List<float3>
         {
             new float3(0f, 0f, 0f), new float3(600f, 0f, 0f), new float3(600f, 0f, 300f),
             new float3(300f, 0f, 300f), new float3(300f, 0f, 600f), new float3(0f, 0f, 600f),
         };
 
-        /// <summary>Deux carrés de 400 m reliés par un couloir de 60 m : les anneaux se séparent en deux.</summary>
+        /// <summary>Two 400 m squares joined by a 60 m corridor: the rings split in two.</summary>
         private static List<float3> Dumbbell() => new List<float3>
         {
             new float3(0f, 0f, 0f), new float3(400f, 0f, 0f), new float3(400f, 0f, 170f), new float3(600f, 0f, 170f),
@@ -111,9 +111,9 @@ namespace Placemaker.Tests
         private static float Orient(float2 a, float2 b, float2 c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 
         /// <summary>
-        /// Invariants communs à toute forme : rien hors du périmètre, aucun croisement de routes
-        /// sans nœud partagé, et chaque extrémité est soit un nœud partagé, soit posée sur le
-        /// périmètre (où MakeCoursePos la raccorde à la route existante) — jamais une impasse.
+        /// Invariants shared by every shape: nothing outside the perimeter, no roads crossing
+        /// without a shared node, and every endpoint is either a shared node or lies on the
+        /// perimeter (where the game connects it to the existing road) — never a dead end.
         /// </summary>
         private static void AssertWellFormed(List<RoadSegmentDef> segments, List<float3> perimeter)
         {
@@ -122,7 +122,7 @@ namespace Placemaker.Tests
             {
                 float2 mid = (s.Start.xz + s.End.xz) * 0.5f;
                 Assert.True(PointInPolygon(mid, perimeter) || DistanceToPolygon(mid, perimeter) < 0.5f,
-                    $"Tronçon hors du périmètre : {s.Start} -> {s.End}");
+                    $"Segment outside the perimeter: {s.Start} -> {s.End}");
             }
 
             for (int i = 0; i < segments.Count; i++)
@@ -130,7 +130,7 @@ namespace Placemaker.Tests
                 for (int j = i + 1; j < segments.Count; j++)
                 {
                     Assert.False(Cross(segments[i].Start.xz, segments[i].End.xz, segments[j].Start.xz, segments[j].End.xz),
-                        $"Croisement sans nœud : {segments[i].Start}->{segments[i].End} × {segments[j].Start}->{segments[j].End}");
+                        $"Crossing without a node: {segments[i].Start}->{segments[i].End} × {segments[j].Start}->{segments[j].End}");
                 }
             }
 
@@ -146,10 +146,10 @@ namespace Placemaker.Tests
             foreach (var kv in counts)
             {
                 float2 p = new float2(kv.Key.Item1, kv.Key.Item2);
-                Assert.True(kv.Value > 1 || DistanceToPolygon(p, perimeter) < 0.5f, $"Impasse en {p}");
+                Assert.True(kv.Value > 1 || DistanceToPolygon(p, perimeter) < 0.5f, $"Dead end at {p}");
             }
 
-            // Tout le réseau doit être relié au périmètre (route existante) : aucun anneau isolé.
+            // The whole network must be connected to the perimeter (existing road): no isolated ring.
             var parent = new Dictionary<(float, float), (float, float)>();
             var root = (float.NaN, float.NaN);
             (float, float) Find((float, float) x)
@@ -171,20 +171,20 @@ namespace Placemaker.Tests
             }
             foreach (var node in parent.Keys.ToList())
             {
-                Assert.True(Find(node).Equals(Find(root)), $"Nœud {node} non relié au périmètre");
+                Assert.True(Find(node).Equals(Find(root)), $"Node {node} not connected to the perimeter");
             }
         }
 
         [Fact]
         public void Square_TwoLayers_TwoNestedSquaresEvenlySpacedToTheCentre()
         {
-            // 600 m : profondeur max 300 m -> 2 anneaux à 100 m et 200 m du bord.
+            // 600 m: max depth 300 m -> 2 rings at 100 m and 200 m from the edge.
             var perimeter = Square(600f);
             var segments = ConcentricGenerator.Generate(perimeter, layers: 2, connections: 4, diagnostics: _diag);
             AssertWellFormed(segments, perimeter);
 
-            // Chaque sommet d'anneau est à ±12 % de 100 m ou de 200 m du bord (anneaux parallèles
-            // aux côtés, à une fraction constante de la demi-largeur).
+            // Every ring vertex is within ±12 % of 100 m or 200 m from the edge (rings parallel
+            // to the sides, at a constant fraction of the half-width).
             var ringDepths = segments
                 .SelectMany(s => new[] { s.Start.xz, s.End.xz })
                 .Select(p => DistanceToPolygon(p, perimeter))
@@ -192,30 +192,30 @@ namespace Placemaker.Tests
                 .ToList();
             Assert.Contains(ringDepths, d => d < 150f);
             Assert.Contains(ringDepths, d => d > 150f);
-            Assert.All(ringDepths, d => Assert.True(math.abs(d - 100f) < 12f || math.abs(d - 200f) < 24f, $"Sommet à {d:F0} m du bord"));
+            Assert.All(ringDepths, d => Assert.True(math.abs(d - 100f) < 12f || math.abs(d - 200f) < 24f, $"Vertex {d:F0} m from the edge"));
         }
 
         [Fact]
         public void LayerCount_IsCappedWhenTheShapeIsTooNarrow()
         {
-            // 300 m : profondeur 150 m -> au plus 2 anneaux à MinLayerSpacing (40 m).
+            // 300 m: depth 150 m -> at most 2 rings at MinLayerSpacing (40 m).
             var perimeter = Square(300f);
             var many = ConcentricGenerator.Generate(perimeter, layers: 10, connections: 4, diagnostics: _diag);
             AssertWellFormed(many, perimeter);
             float minDepth = many.SelectMany(s => new[] { s.Start.xz, s.End.xz })
                 .Select(p => DistanceToPolygon(p, perimeter)).Where(d => d > 1f).Min();
-            Assert.True(minDepth >= ConcentricGenerator.MinLayerSpacing - 2f, $"Anneaux trop serrés : {minDepth} m");
+            Assert.True(minDepth >= ConcentricGenerator.MinLayerSpacing - 2f, $"Rings too tight: {minDepth} m");
         }
 
         [Fact]
         public void MaxLayers_DependsOnTheShape_AndGenerateNeverExceedsIt()
         {
-            // Retour utilisateur : "é preciso haver um limite de anéis dependendo do tamanho do
-            // perímetro, e no painel simplesmente bloqueia além do limite".
+            // User feedback: "there needs to be a ring limit depending on the size of the
+            // perimeter, and the panel should simply block going past the limit".
             int small = ConcentricGenerator.MaxLayers(Square(300f));
             int large = ConcentricGenerator.MaxLayers(Square(1200f));
             Assert.InRange(small, 1, 3);
-            Assert.True(large > small, $"Un carré 4× plus grand devrait permettre plus d'anneaux ({large} vs {small})");
+            Assert.True(large > small, $"A square 4× larger should allow more rings ({large} vs {small})");
             Assert.Equal(0, ConcentricGenerator.MaxLayers(Square(80f)));
 
             foreach (var perimeter in new[] { Square(300f), Square(1200f), LShape(), Ellipse(600f, 220f, 400) })
@@ -239,11 +239,11 @@ namespace Placemaker.Tests
         [Fact]
         public void WaistedShape_EveryRingGoesAllAround_TighterInTheNarrowPassage()
         {
-            // Deux carrés de 400 m reliés par un passage de 300 m de large (demi-largeur 150 m).
-            // Retours utilisateur : les anneaux ne doivent ni se couper ("vê porque divide"), ni
-            // s'arrêter en pointe là où ils devraient continuer ("os bicos voltaram... onde é
-            // suposto o anel continuar"), ni être plafonnés par le passage ("não vai além de 4
-            // camadas") : chaque anneau fait le tour des deux carrés, plus serré dans le passage.
+            // Two 400 m squares joined by a 300 m wide passage (half-width 150 m).
+            // User feedback: rings must not split ("see why it divides"), nor stop in a point
+            // where they should carry on ("the tips are back... where the ring is supposed to
+            // continue"), nor be capped by the passage ("it doesn't go beyond 4 layers"): every
+            // ring goes around both squares, tighter in the passage.
             var perimeter = new List<float3>
             {
                 new float3(0f, 0f, 0f), new float3(400f, 0f, 0f), new float3(400f, 0f, 50f), new float3(600f, 0f, 50f),
@@ -254,9 +254,9 @@ namespace Placemaker.Tests
             AssertWellFormed(segments, perimeter);
 
             int[] loopsPerRing = _diag.RingLoopCounts;
-            // L'ancienne limite (anneaux à 40 m minimum, bornés par le passage) n'en laissait que 2.
-            Assert.True(loopsPerRing.Length >= 2, $"Seulement {loopsPerRing.Length} anneaux");
-            Assert.All(loopsPerRing, count => Assert.True(count == 1, $"Anneau coupé en {count} morceaux"));
+            // The old limit (rings at least 40 m apart, bounded by the passage) left only 2.
+            Assert.True(loopsPerRing.Length >= 2, $"Only {loopsPerRing.Length} rings");
+            Assert.All(loopsPerRing, count => Assert.True(count == 1, $"Ring split into {count} pieces"));
             Assert.Contains(segments, s => s.Start.x < 400f && s.End.x < 400f);
             Assert.Contains(segments, s => s.Start.x > 600f && s.End.x > 600f);
         }
@@ -264,13 +264,13 @@ namespace Placemaker.Tests
         [Fact]
         public void DenseCurvedPerimeter_IsFastAndWellFormed()
         {
-            // Rond-point/avenue courbe densifiée : 525 points comme le vrai périmètre du log.
+            // Densified roundabout/curved avenue: 525 points, like the real perimeter from the log.
             var perimeter = Circle(500f, 525);
             var stopwatch = Stopwatch.StartNew();
             var segments = ConcentricGenerator.Generate(perimeter, layers: 4, connections: 6, diagnostics: _diag);
             stopwatch.Stop();
             AssertWellFormed(segments, perimeter);
-            Assert.True(stopwatch.ElapsedMilliseconds < 600, $"Génération trop lente : {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < 600, $"Generation too slow: {stopwatch.ElapsedMilliseconds} ms");
         }
 
         private static List<float3> Ellipse(float a, float b, int points)
@@ -285,16 +285,15 @@ namespace Placemaker.Tests
         }
 
         /// <summary>
-        /// Écart de profondeur (m) toléré entre les deux bouts d'un tronçon d'anneau : les anneaux
-        /// ondulent de quelques mètres, et un tronçon courbe couvre désormais une longue portion
-        /// (voir CanSpanAsArc) ; un rayon, lui, relie deux anneaux distants d'au moins 40 m.
+        /// Depth difference (m) tolerated between the two ends of a ring segment: rings wobble
+        /// by a few metres, and a curved segment now covers a long stretch (see CanSpanAsArc);
+        /// a spoke, on the other hand, joins two rings at least 40 m apart.
         /// </summary>
         private const float RingDepthTolerance = 10f;
 
         /// <summary>
-        /// Plus grand virage (degrés) entre deux tronçons d'ANNEAU consécutifs (les rayons, qui
-        /// relient deux profondeurs différentes, sont ignorés), en tenant compte des tangentes
-        /// des tronçons courbes.
+        /// Largest turn (degrees) between two consecutive RING segments (spokes, which join two
+        /// different depths, are ignored), taking the tangents of curved segments into account.
         /// </summary>
         private static float MaxRingTurnDegrees(List<RoadSegmentDef> segments, List<float3> perimeter)
         {
@@ -319,31 +318,30 @@ namespace Placemaker.Tests
         [Fact]
         public void RoundedShape_InnerRingsKeepTheirCurvature_NoPointedTips()
         {
-            // Retour utilisateur (capture) : sur une forme courbe, les anneaux profonds finissaient
-            // "com bico" (l'offset exact devient pointu dès que la profondeur dépasse le rayon de
-            // courbure du bout : ici 200²/500 = 80 m, anneaux à 50/100/150 m).
+            // User feedback (screenshot): on a curved shape, the deep rings ended "with a tip"
+            // (the exact offset turns pointed once the depth exceeds the radius of curvature at
+            // the end: here 200²/500 = 80 m, rings at 50/100/150 m).
             var perimeter = Ellipse(500f, 200f, 400);
             var segments = ConcentricGenerator.Generate(perimeter, layers: 3, connections: 4, diagnostics: _diag);
             AssertWellFormed(segments, perimeter);
             float maxTurn = MaxRingTurnDegrees(segments, perimeter);
-            Assert.True(maxTurn < 5f, $"Anneau cassé ou pointu : virage de {maxTurn:F0}°");
+            Assert.True(maxTurn < 5f, $"Ring kinked or pointed: {maxTurn:F0}° turn");
         }
 
         /// <summary>
-        /// Lobe rond (rayon 300 m) prolongé à gauche par un bras étroit (150 m de large, bout
-        /// arrondi) : aucune arête vive, mais une "taille" — les anneaux profonds du lobe se
-        /// referment près du bras.
+        /// Round lobe (radius 300 m) extended to the left by a narrow arm (150 m wide, rounded
+        /// end): no sharp edge, but a "waist" — the lobe's deep rings close up near the arm.
         /// </summary>
         private static List<float3> LobeWithArm()
         {
             var result = new List<float3>();
             float junctionAngle = math.asin(75f / 300f);
-            // Cercle, de l'attache haute du bras à son attache basse (en passant par la droite).
+            // Circle, from the arm's upper attachment to its lower attachment (going round the right).
             for (float a = math.PI - junctionAngle; a > -math.PI + junctionAngle; a -= 0.03f)
             {
                 result.Add(new float3(300f * math.cos(a), 0f, 300f * math.sin(a)));
             }
-            // Bras : bord bas vers la gauche, bout en demi-cercle, bord haut vers la droite.
+            // Arm: lower edge towards the left, semicircular end, upper edge towards the right.
             for (float x = -290f; x > -700f; x -= 20f) result.Add(new float3(x, 0f, -75f));
             for (float a = -math.PI / 2f; a > -3f * math.PI / 2f; a -= 0.1f)
             {
@@ -356,16 +354,16 @@ namespace Placemaker.Tests
         [Fact]
         public void LobeWithNarrowArm_DeepRingsInTheLobeHaveNoPointedTips()
         {
-            // Retour utilisateur (capture) : "os bicos voltaram" — les anneaux qui ne tiennent
-            // plus que dans le lobe finissaient en pointe vers le bras.
+            // User feedback (screenshot): "the tips are back" — rings that only fit inside the
+            // lobe ended in a point towards the arm.
             var perimeter = LobeWithArm();
             var segments = ConcentricGenerator.Generate(perimeter, layers: 6, connections: 4, diagnostics: _diag);
             AssertWellFormed(segments, perimeter);
             float maxTurn = MaxRingTurnDegrees(segments, perimeter);
-            Assert.True(maxTurn < 5f, $"Anneau pointu : virage de {maxTurn:F0}°");
+            Assert.True(maxTurn < 5f, $"Pointed ring: {maxTurn:F0}° turn");
         }
 
-        /// <summary>Plus petit rayon (m) du cercle passant par trois sommets consécutifs d'un anneau fermé.</summary>
+        /// <summary>Smallest radius (m) of the circle through three consecutive vertices of a closed ring.</summary>
         private static float MinThreePointRadius(List<float2> loop)
         {
             float min = float.MaxValue;
@@ -383,10 +381,10 @@ namespace Placemaker.Tests
         [Fact]
         public void LimitCurvature_RoundsAPointedTip_KeepsTrueCornersAndStaysInside()
         {
-            // Retour utilisateur (capture, anneau qui finit en pointe face à une rue en U) :
-            // "ainda existem alguns bicos em outras formas complexas". Filet de sécurité quelle
-            // que soit la cause : une goutte à pointe de 40° (sommets tous les 25 m), et un vrai
-            // coin (hérité du périmètre) sur l'arrondi opposé, qui doit rester en place.
+            // User feedback (screenshot, ring ending in a point facing a U-shaped street):
+            // "there are still some tips in other complex shapes". Safety net whatever the cause:
+            // a teardrop with a 40° tip (vertices every 25 m), and a true corner (inherited from
+            // the perimeter) on the opposite rounded end, which must stay in place.
             var loop = new List<float2>();
             var tip = new float2(0f, 0f);
             float half = math.radians(20f);
@@ -401,46 +399,46 @@ namespace Placemaker.Tests
             float2 corner = loop[20];
             var original = new List<float2>(loop);
 
-            Assert.True(MinThreePointRadius(loop) < 10f, "La goutte de départ devrait avoir une pointe.");
+            Assert.True(MinThreePointRadius(loop) < 10f, "The initial teardrop should have a tip.");
             ConcentricGenerator.LimitCurvature(loop, corners, 60f);
 
             Assert.Equal(corner, loop[20]);
-            // La pointe a reculé vers l'intérieur de sa courbe, sans jamais dépasser la forme d'origine.
-            Assert.True(loop.Min(p => p.x) > 20f, $"Pointe non arrondie : x min = {loop.Min(p => p.x):F0}");
+            // The tip has moved back towards the inside of its curve, never going past the original shape.
+            Assert.True(loop.Min(p => p.x) > 20f, $"Tip not rounded: min x = {loop.Min(p => p.x):F0}");
             var outline = original.Select(p => new float3(p.x, 0f, p.y)).ToList();
-            Assert.All(loop, p => Assert.True(PointInPolygon(p, outline) || DistanceToPolygon(p, outline) < 0.5f, $"Sommet sorti : {p}"));
-            // Aucun virage plus serré que le rayon minimal, hors du vrai coin et de ses voisins.
+            Assert.All(loop, p => Assert.True(PointInPolygon(p, outline) || DistanceToPolygon(p, outline) < 0.5f, $"Vertex outside: {p}"));
+            // No turn tighter than the minimum radius, except at the true corner and its neighbours.
             var withoutCorner = loop.Where((p, i) => math.abs(i - 20) > 1).ToList();
-            Assert.True(MinThreePointRadius(withoutCorner) > 40f, $"Encore une pointe : rayon {MinThreePointRadius(withoutCorner):F0} m");
+            Assert.True(MinThreePointRadius(withoutCorner) > 40f, $"Still a tip: radius {MinThreePointRadius(withoutCorner):F0} m");
         }
 
         [Fact]
         public void CurvedRings_UseFewLongArcs_NotANodeEvery25Metres()
         {
-            // Retour utilisateur (capture) : "quando o mod gera as curvas, cria demasiados nós".
-            // Cercle de 500 m, 3 anneaux (rayons ~375/250/125 m) : un nœud tous les 25 m en
-            // faisait ~190 ; en arcs de 90° maximum coupés aux raccords des rayons, moins de 40 (28 mesurés).
+            // User feedback (screenshot): "when the mod generates the curves, it creates too many nodes".
+            // 500 m circle, 3 rings (radii ~375/250/125 m): a node every 25 m gave ~190; with arcs
+            // of at most 90° split at the spoke connections, fewer than 40 (28 measured).
             var perimeter = Circle(500f, 400);
             var segments = ConcentricGenerator.Generate(perimeter, layers: 3, connections: 4, diagnostics: _diag);
             AssertWellFormed(segments, perimeter);
             var rings = segments.Where(s => math.abs(DistanceToPolygon(s.Start.xz, perimeter) - DistanceToPolygon(s.End.xz, perimeter)) < RingDepthTolerance).ToList();
-            Assert.True(rings.Count <= 40, $"{rings.Count} tronçons d'anneau");
-            // Chaque tronçon reste fidèle au cercle : son milieu (FitCurve ≈ arc) est au bon rayon.
+            Assert.True(rings.Count <= 40, $"{rings.Count} ring segments");
+            // Every segment stays true to the circle: its midpoint (game curve ≈ arc) is at the right radius.
             foreach (RoadSegmentDef s in rings)
             {
                 float r0 = math.length(s.Start.xz), r1 = math.length(s.End.xz);
-                Assert.True(math.abs(r0 - r1) < RingDepthTolerance, $"Tronçon qui change de rayon : {r0:F0} -> {r1:F0}");
+                Assert.True(math.abs(r0 - r1) < RingDepthTolerance, $"Segment changes radius: {r0:F0} -> {r1:F0}");
             }
         }
 
         [Fact]
         public void RealPerimeterWithBacktrack_RingsHaveNoPointedTips()
         {
-            // Retour utilisateur (bicos persistants, "só aparecem quando passa uma estrada de
-            // ligação") : périmètre réel de 990 points, exporté du jeu via le log [Diag concêntrico].
-            // Au raccord de deux routes échantillonnées, le contour recule de ~5 m puis repart
-            // (virage de 179°). Ce faux coin ultra-aigu "protégeait" toutes les pointes d'anneau de
-            // la forme comme coins hérités — 17 cassures de 57° à 128°, jamais arrondies.
+            // User feedback (persistent tips, "they only appear when a connecting road passes
+            // through"): real 990-point perimeter, exported from the game via the [Diag concêntrico]
+            // log. Where two sampled roads join, the outline backs up by ~5 m and then carries on
+            // (179° turn). This ultra-sharp false corner "protected" every ring tip in the shape as
+            // an inherited corner — 17 kinks of 57° to 128°, never rounded.
             string path = System.IO.Path.Combine(RoadsTestUtil.FixtureDir(), "real-perimeter-backtrack.txt");
             var perimeter = System.IO.File.ReadAllLines(path)
                 .Where(l => l.Trim().Length > 0)
@@ -452,24 +450,24 @@ namespace Placemaker.Tests
             {
                 var segments = ConcentricGenerator.Generate(perimeter, layers, connections, diagnostics: _diag);
                 float maxTurn = MaxRingTurnDegrees(segments, perimeter);
-                Assert.True(maxTurn < 20f, $"{layers} anneaux, {connections} rayons : anneau cassé à {maxTurn:F0}°");
+                Assert.True(maxTurn < 20f, $"{layers} rings, {connections} spokes: ring kinked at {maxTurn:F0}°");
             }
 
-            // Retour utilisateur suivant : "está a criar formas cada vez mais circulares em vez de
-            // guardar a forma original" (flou du champ de distance). Chaque anneau doit rester à
-            // distance quasi constante du contour. Mesuré sur ce périmètre, 10 anneaux : distance
-            // exacte -> écart max/min ≤ 1,13 par anneau ; avec le flou -> jusqu'à 3,4 (48 à 163 m
-            // pour le premier anneau, qui coupait le lobe au lieu d'y entrer).
-            ConcentricGenerator.Generate(perimeter, 10, 3, diagnostics: _diag); // autre réglage : pas de cache
+            // Next user feedback: "it is creating ever more circular shapes instead of keeping
+            // the original shape" (blurred distance field). Every ring must stay at a nearly
+            // constant distance from the outline. Measured on this perimeter, 10 rings: exact
+            // distance -> max/min ratio ≤ 1.13 per ring; with the blur -> up to 3.4 (48 to 163 m
+            // for the first ring, which cut across the lobe instead of entering it).
+            ConcentricGenerator.Generate(perimeter, 10, 3, diagnostics: _diag); // different settings; _diag now holds this run's rings
             foreach (List<List<float2>> ring in _diag.Rings)
             {
                 var ringDepths = ring.SelectMany(loop => loop).Select(p => DistanceToPolygon(p, perimeter)).ToList();
                 Assert.True(ringDepths.Max() < 1.25f * ringDepths.Min(),
-                    $"Anneau déformé : de {ringDepths.Min():F0} à {ringDepths.Max():F0} m du périmètre");
+                    $"Distorted ring: {ringDepths.Min():F0} to {ringDepths.Max():F0} m from the perimeter");
             }
         }
 
-        /// <summary>Copie de Game.Net.NetUtils.FitCurve (jeu) : la courbe réellement posée pour un tronçon IsArc.</summary>
+        /// <summary>Copy of the game's curve fitting: the curve the game actually places for an IsArc segment.</summary>
         internal static float2[] GameCurve(RoadSegmentDef s, int samples = 24)
         {
             float2 a = s.Start.xz, dpos = s.End.xz;
@@ -482,7 +480,7 @@ namespace Placemaker.Tests
             {
                 float2 st = math.normalizesafe(s.StartTangent.xz), et = math.normalizesafe(s.EndTangent.xz);
                 float num = math.distance(a, dpos);
-                // Intersection de a + x*st et dpos - y*et.
+                // Intersection of a + x*st and dpos - y*et.
                 float2 r = st, q = -et; float den = r.x * q.y - r.y * q.x;
                 float2 tt;
                 if (math.abs(den) < 1e-6f) tt = new float2(num * 0.75f);
@@ -517,23 +515,23 @@ namespace Placemaker.Tests
         [Fact]
         public void RealPerimeter_JunctionsHaveOpenAnglesAndNoStubs()
         {
-            // Retour utilisateur (capture en jeu, "Objetos sobrepostos" sur le lobe) : les rayons
-            // suivaient l'axe du lobe et entraient dans la dobra de chaque anneau à ~44° (bords des
-            // routes qui se chevauchent au carrefour), et des raccords tombaient à 3-15 m d'un
-            // sommet voisin (tronçon minuscule collé au carrefour). Angles mesurés sur la courbe que
-            // le jeu pose réellement (copie de NetUtils.FitCurve, voir GameCurve).
+            // User feedback (in-game screenshot, "Overlapping objects" on the lobe): spokes
+            // followed the lobe's axis and entered each ring's fold at ~44° (road edges overlapping
+            // at the junction), and some connections landed 3-15 m from a neighbouring vertex (tiny
+            // segment stuck to the junction). Angles measured on the curve the game actually places
+            // (copy of the game's curve fitting, see GameCurve).
             string path = System.IO.Path.Combine(RoadsTestUtil.FixtureDir(), "real-perimeter-backtrack.txt");
             var perimeter = System.IO.File.ReadAllLines(path).Where(l => l.Trim().Length > 0).Select(l => l.Trim().Split(' '))
                 .Select(q => new float3(float.Parse(q[0], System.Globalization.CultureInfo.InvariantCulture), 0f,
                     float.Parse(q[1], System.Globalization.CultureInfo.InvariantCulture))).ToList();
             const float minJunctionAngle = 40f;
-            // Largeur d'une route à deux voies : plus court, le carrefour mange tout le tronçon.
+            // Width of a two-lane road: any shorter and the junction swallows the whole segment.
             const float minStubLength = 16f;
             foreach ((int layers, int connections) in new[] { (10, 2), (6, 4), (3, 2) })
             {
                 var segs = ConcentricGenerator.Generate(perimeter, layers, connections, diagnostics: _diag);
                 AssertWellFormed(segs, perimeter);
-                // Direction de départ de chaque tronçon depuis chacune de ses extrémités.
+                // Leaving direction of each segment from each of its endpoints.
                 var leaving = new Dictionary<(float, float), List<float2>>();
                 foreach (RoadSegmentDef s in segs)
                 {
@@ -554,7 +552,7 @@ namespace Placemaker.Tests
                         {
                             float angle = math.degrees(math.acos(math.clamp(math.dot(dirs[i], dirs[j]), -1f, 1f)));
                             Assert.True(angle >= minJunctionAngle,
-                                $"{layers} anneaux, {connections} rayons : deux routes à {angle:F0}° au nœud ({node.Key.Item1:F0}, {node.Key.Item2:F0})");
+                                $"{layers} rings, {connections} spokes: two roads at {angle:F0}° at node ({node.Key.Item1:F0}, {node.Key.Item2:F0})");
                         }
                     }
                 }
@@ -563,18 +561,17 @@ namespace Placemaker.Tests
                     bool atJunction = leaving[(s.Start.x, s.Start.z)].Count >= 3 || leaving[(s.End.x, s.End.z)].Count >= 3;
                     float length = math.distance(s.Start.xz, s.End.xz);
                     Assert.True(!atJunction || length >= minStubLength || DistanceToPolygon(s.Start.xz, perimeter) < 0.5f || DistanceToPolygon(s.End.xz, perimeter) < 0.5f,
-                        $"{layers} anneaux, {connections} rayons : tronçon de {length:F1} m collé à un carrefour ({s.Start.xz} -> {s.End.xz})");
+                        $"{layers} rings, {connections} spokes: {length:F1} m segment stuck to a junction ({s.Start.xz} -> {s.End.xz})");
                 }
             }
         }
 
         /// <summary>
-        /// Pour chaque carrefour (nœud à 3 routes ou plus) : plus petit angle entre deux routes qui
-        /// en partent, mesuré de la position du nœud vers le point situé à `reach` mètres le long
-        /// de chaque route (en suivant les tronçons au-delà des nœuds à 2 routes), pour chaque
-        /// `reach` de la liste. Retourne (angle min, nœud, plus court tronçon qui touche un carrefour,
-        /// plus courte route entre un carrefour et le carrefour ou le bout suivant — un tronçon coupé
-        /// par un simple nœud de forme n'est pas plus court pour le jeu).
+        /// For every junction (node with 3 or more roads): smallest angle between two roads leaving
+        /// it, measured from the node position to the point `reach` metres along each road
+        /// (following segments past 2-road nodes), for each `reach` in the list. Returns (min angle,
+        /// node, shortest segment touching a junction, shortest road between a junction and the
+        /// next junction or end — a segment split by a mere shape node is not shorter for the game).
         /// </summary>
         internal static (float minAngle, float2 at, float shortestStub, float shortestRoad) JunctionDivergence(List<RoadSegmentDef> segs, float[] reaches)
         {
@@ -588,7 +585,7 @@ namespace Placemaker.Tests
                     byNode[q].Add(i);
                 }
             }
-            // Polyligne d'une route qui part de `node` par le tronçon `first`, prolongée à travers les nœuds à 2 routes.
+            // Polyline of a road leaving `node` through segment `first`, extended through 2-road nodes.
             List<float2> Walk((float, float) node, int first, float length)
             {
                 var pts = new List<float2>();
@@ -632,8 +629,8 @@ namespace Placemaker.Tests
             {
                 float2 n = new float2(kv.Key.Item1, kv.Key.Item2);
                 var roads = kv.Value.Select(i => Walk(kv.Key, i, reaches.Max() + 5f)).ToList();
-                // Longueur de route jusqu'au carrefour (ou bout) suivant, à travers les nœuds à 2 routes :
-                // un tronçon coupé en deux par un simple nœud de forme n'est pas plus court pour le jeu.
+                // Road length up to the next junction (or end), through 2-road nodes:
+                // a segment split in two by a mere shape node is not shorter for the game.
                 foreach (int i in kv.Value)
                 {
                     shortest = math.min(shortest, math.distance(segs[i].Start.xz, segs[i].End.xz));
@@ -659,10 +656,10 @@ namespace Placemaker.Tests
         [Fact]
         public void RealPerimeter_RoadsDivergeFromEachJunction()
         {
-            // Retour utilisateur (log [Diag colisão], 10 anneaux, 6 rayons, refus du jeu en trois
-            // carrefours) : un rayon quittait l'anneau à 54°, mais l'anneau se recourbait vers lui
-            // (33° à 40 m), et un tronçon d'anneau de 16 m restait collé au carrefour. Mesuré sur les
-            // courbes que le jeu pose (voir GameCurve), jusqu'à 50 m de chaque carrefour.
+            // User feedback ([Diag colisão] log, 10 rings, 6 spokes, game rejected three
+            // junctions): a spoke left the ring at 54°, but the ring curved back towards it
+            // (33° at 40 m), and a 16 m ring segment stayed stuck to the junction. Measured on the
+            // curves the game places (see GameCurve), up to 50 m from each junction.
             string path = System.IO.Path.Combine(RoadsTestUtil.FixtureDir(), "real-perimeter-backtrack.txt");
             var perimeter = System.IO.File.ReadAllLines(path).Where(l => l.Trim().Length > 0).Select(l => l.Trim().Split(' '))
                 .Select(q => new float3(float.Parse(q[0], System.Globalization.CultureInfo.InvariantCulture), 0f,
@@ -671,21 +668,21 @@ namespace Placemaker.Tests
             {
                 var r = JunctionDivergence(ConcentricGenerator.Generate(perimeter, layers, connections, diagnostics: _diag), new[] { 10f, 20f, 35f, 50f });
                 Assert.True(r.minAngle >= 40f,
-                    $"{layers} anneaux, {connections} rayons : deux routes à {r.minAngle:F0}° près du carrefour ({r.at.x:F0}, {r.at.y:F0})");
+                    $"{layers} rings, {connections} spokes: two roads at {r.minAngle:F0}° near the junction ({r.at.x:F0}, {r.at.y:F0})");
                 Assert.True(r.shortestStub >= 30f,
-                    $"{layers} anneaux, {connections} rayons : tronçon de {r.shortestStub:F1} m collé à un carrefour");
+                    $"{layers} rings, {connections} spokes: {r.shortestStub:F1} m segment stuck to a junction");
             }
         }
 
         [Fact]
         public void RealPerimeter_ConnectionsAreContinuous()
         {
-            // Retour utilisateur (capture en jeu) : "a estrada não é contínua" — un rayon bloqué
-            // repartait d'un autre point de l'anneau et la ligação devenait un escalier de tronçons
-            // décalés. Une chaîne ne repart jamais d'un autre point que celui où elle est arrivée :
-            // sur un anneau intermédiaire, un nœud de rayon unique est au plus une FIN de chaîne
-            // (rayon venu de l'extérieur), jamais un départ sans arrivée. Et jusqu'à 8 rayons,
-            // aucune chaîne ne s'arrête avant le centre.
+            // User feedback (in-game screenshot): "the road is not continuous" — a blocked spoke
+            // restarted from another point of the ring and the connection became a staircase of
+            // offset segments. A chain never restarts from a point other than where it arrived:
+            // on an intermediate ring, a node with a single spoke is at most the END of a chain
+            // (spoke coming from outside), never a start without an arrival. And up to 8 spokes,
+            // no chain stops before the centre.
             string path = System.IO.Path.Combine(RoadsTestUtil.FixtureDir(), "real-perimeter-backtrack.txt");
             var perimeter = System.IO.File.ReadAllLines(path).Where(l => l.Trim().Length > 0).Select(l => l.Trim().Split(' '))
                 .Select(q => new float3(float.Parse(q[0], System.Globalization.CultureInfo.InvariantCulture), 0f,
@@ -724,11 +721,11 @@ namespace Placemaker.Tests
                     RoadSegmentDef only = node.Value[0];
                     float3 other = only.Start.x == node.Key.Item1 && only.Start.z == node.Key.Item2 ? only.End : only.Start;
                     Assert.True(Level(other) < level,
-                        $"{layers} anneaux, {connections} rayons : ligação qui repart d'ailleurs à l'anneau {level} en ({node.Key.Item1:F0}, {node.Key.Item2:F0})");
-                    // Jusqu'à 8 rayons, tous vont jusqu'au centre ; au-delà, un rayon peut s'arrêter
-                    // un peu avant faute de place dans une partie étroite (vu : 12 rayons, anneau 9/10).
+                        $"{layers} rings, {connections} spokes: connection restarts elsewhere at ring {level} at ({node.Key.Item1:F0}, {node.Key.Item2:F0})");
+                    // Up to 8 spokes, all reach the centre; beyond that, a spoke may stop a little short
+                    // for lack of room in a narrow part (seen: 12 spokes, ring 9/10).
                     Assert.True(connections > 8,
-                        $"{layers} anneaux, {connections} rayons : ligação arrêtée à l'anneau {level} en ({node.Key.Item1:F0}, {node.Key.Item2:F0})");
+                        $"{layers} rings, {connections} spokes: connection stopped at ring {level} at ({node.Key.Item1:F0}, {node.Key.Item2:F0})");
                 }
             }
         }
@@ -736,9 +733,9 @@ namespace Placemaker.Tests
         [Fact]
         public void RealPerimeter_ConnectionsReachTheInnermostRing()
         {
-            // Retour utilisateur (capture en jeu, 10 anneaux) : "a ligação não vai até ao centro".
-            // Le rayon du lobe s'arrêtait à la première dobra d'anneau (angle fermé) ; il doit
-            // maintenant la contourner et atteindre l'anneau le plus intérieur, pour chaque rayon.
+            // User feedback (in-game screenshot, 10 rings): "the connection doesn't go to the centre".
+            // The lobe's spoke stopped at the first ring fold (closed angle); it must now go around
+            // it and reach the innermost ring, for every spoke.
             string path = System.IO.Path.Combine(RoadsTestUtil.FixtureDir(), "real-perimeter-backtrack.txt");
             var perimeter = System.IO.File.ReadAllLines(path).Where(l => l.Trim().Length > 0).Select(l => l.Trim().Split(' '))
                 .Select(q => new float3(float.Parse(q[0], System.Globalization.CultureInfo.InvariantCulture), 0f,
@@ -750,11 +747,11 @@ namespace Placemaker.Tests
                     .SelectMany(loop => loop).Select(q => (q.x, q.y)));
                 int spokesIntoCentre = segments.Count(s => !s.IsArc
                     && (innermost.Contains((s.Start.x, s.Start.z)) ^ innermost.Contains((s.End.x, s.End.z))));
-                // Deux rayons peuvent se rejoindre en chemin (à angle ouvert) et finir en une seule
-                // route : au moins un rayon entre dans le centre, et aucun ne s'arrête en chemin
-                // (voir RealPerimeter_ConnectionsAreContinuous).
+                // Two spokes may merge on the way (at an open angle) and end as a single road:
+                // at least one spoke enters the centre, and none stops on the way
+                // (see RealPerimeter_ConnectionsAreContinuous).
                 Assert.True(spokesIntoCentre >= 1,
-                    $"{layers} anneaux, {connections} rayons : aucun rayon n'atteint l'anneau le plus intérieur");
+                    $"{layers} rings, {connections} spokes: no spoke reaches the innermost ring");
             }
         }
 
@@ -769,20 +766,20 @@ namespace Placemaker.Tests
         [Fact]
         public void Radial_Circle_RoundaboutAndStraightAvenuesToThePerimeter()
         {
-            // Motif Radial (retour utilisateur : "apenas as avenidas e não as camadas, e no centro
-            // uma rotunda, não um asset mas um círculo").
+            // Radial pattern (user feedback: "only the avenues and not the layers, and in the centre
+            // a roundabout, not an asset but a circle").
             var perimeter = Circle(600f, 400);
             var segments = ConcentricGenerator.GenerateRadial(perimeter, avenues: 6, roundaboutRadius: 60f, diagnostics: _radial);
             AssertWellFormed(segments, perimeter);
             float2 centre = _radial.Centre;
             float radius = _radial.Radius;
-            Assert.True(math.length(centre) < 10f, $"Rotonde décentrée : {centre}");
-            Assert.True(math.abs(radius - 60f) < 0.5f, $"Rayon {radius:F1} au lieu de 60");
-            // Cercle de route : tronçons non-avenue, tous à ~60 m du centre.
+            Assert.True(math.length(centre) < 10f, $"Roundabout off-centre: {centre}");
+            Assert.True(math.abs(radius - 60f) < 0.5f, $"Radius {radius:F1} instead of 60");
+            // Road circle: non-avenue segments, all ~60 m from the centre.
             var ring = segments.Where(s => !s.IsAvenue).ToList();
             Assert.NotEmpty(ring);
             Assert.All(ring, s => Assert.True(math.abs(math.distance(s.Start.xz, centre) - radius) < 1f));
-            // 6 avenues, chacune de la rotonde au périmètre, alignée sur le centre.
+            // 6 avenues, each from the roundabout to the perimeter, aligned with the centre.
             var avenues = segments.Where(s => s.IsAvenue).ToList();
             Assert.Equal(6, avenues.Count(s => DistanceToPolygon(s.End.xz, perimeter) < 0.5f));
             Assert.Equal(6, avenues.Count(s => math.abs(math.distance(s.Start.xz, centre) - radius) < 1f));
@@ -790,15 +787,15 @@ namespace Placemaker.Tests
             {
                 float2 u = s.Start.xz - centre, v = s.End.xz - centre;
                 float offCentre = math.abs(u.x * v.y - u.y * v.x) / math.max(math.distance(u, v), 1e-3f);
-                Assert.True(offCentre < 1f, $"Avenue pas droite depuis le centre ({offCentre:F1} m)");
+                Assert.True(offCentre < 1f, $"Avenue not straight from the centre ({offCentre:F1} m)");
             }
         }
 
         [Fact]
         public void Radial_TooManyAvenuesForTheRadius_RoundaboutGrowsToKeepJunctionsApart()
         {
-            // 16 avenues sur une rotonde de 25 m : raccords à 10 m les uns des autres. Le rayon est
-            // agrandi pour garder au moins MinAvenueJointSpacing entre raccords voisins.
+            // 16 avenues on a 25 m roundabout: connections 10 m apart. The radius is enlarged
+            // to keep at least MinAvenueJointSpacing between neighbouring connections.
             var perimeter = Circle(700f, 400);
             var segments = ConcentricGenerator.GenerateRadial(perimeter, avenues: 16, roundaboutRadius: 25f, diagnostics: _radial);
             AssertWellFormed(segments, perimeter);
@@ -806,7 +803,7 @@ namespace Placemaker.Tests
                 .Select(s => s.Start.xz).ToList();
             Assert.Equal(16, joints.Count);
             float closest = joints.SelectMany((p, i) => joints.Skip(i + 1).Select(q => math.distance(p, q))).Min();
-            Assert.True(closest >= 38f, $"Raccords à {closest:F1} m sur la rotonde");
+            Assert.True(closest >= 38f, $"Connections {closest:F1} m apart on the roundabout");
         }
 
         [Fact]
@@ -817,17 +814,17 @@ namespace Placemaker.Tests
             if (segments.Count > 0)
             {
                 AssertWellFormed(segments, perimeter);
-                Assert.True(_radial.Radius <= 110f - 40f + 1f, $"Rotonde de {_radial.Radius:F0} m dans un carré de 220 m");
+                Assert.True(_radial.Radius <= 110f - 40f + 1f, $"{_radial.Radius:F0} m roundabout in a 220 m square");
             }
         }
 
         [Fact]
         public void Radial_AvenuesAreEquallySpacedAroundTheRoundabout()
         {
-            // Retour utilisateur : "as linhas têm que estar à mesma distância uma da outra quando
-            // chegam à rotunda" — chaque avenue pivotait seule pour trouver un bon angle sur le
-            // périmètre. Les angles des raccords doivent tous être des multiples de 2π/n (à partir
-            // de l'un d'eux), y compris sur la forme irrégulière.
+            // User feedback: "the lines have to be the same distance from each other when they
+            // reach the roundabout" — each avenue rotated on its own to find a good angle on the
+            // perimeter. The connection angles must all be multiples of 2π/n (relative to one of
+            // them), including on the irregular shape.
             foreach ((List<float3> perimeter, int n) in new[] { (LoadRealPerimeter(), 8), (LoadRealPerimeter(), 5), (LoadRealPerimeter(), 12), (Circle(600f, 400), 7) })
             {
                 var segments = ConcentricGenerator.GenerateRadial(perimeter, n, 50f, diagnostics: _radial);
@@ -841,7 +838,7 @@ namespace Placemaker.Tests
                 {
                     float steps = (angle - angles[0]) / gap;
                     float offBy = math.abs(steps - math.round(steps)) * gap * radius;
-                    Assert.True(offBy < 1.5f, $"{n} avenues : raccord décalé de {offBy:F1} m sur la rotonde");
+                    Assert.True(offBy < 1.5f, $"{n} avenues: connection offset by {offBy:F1} m on the roundabout");
                 }
             }
         }
@@ -849,9 +846,9 @@ namespace Placemaker.Tests
         [Fact]
         public void Radial_Layers_AreCirclesAroundTheRoundabout()
         {
-            // Retour utilisateur : "volta a adicionar as camadas, mas de acordo com a rotunda e não a
-            // estrada exterior" — anneaux circulaires concentriques à la rotonde, à écart égal,
-            // entiers dans la forme, traversés à angle droit par chaque avenue.
+            // User feedback: "add the layers back, but following the roundabout and not the
+            // outer road" — circular rings concentric with the roundabout, evenly spaced, wholly
+            // inside the shape, crossed at right angles by every avenue.
             var perimeter = Circle(600f, 400);
             var segments = ConcentricGenerator.GenerateRadial(perimeter, avenues: 8, roundaboutRadius: 50f, layers: 3, diagnostics: _radial);
             AssertWellFormed(segments, perimeter);
@@ -859,13 +856,13 @@ namespace Placemaker.Tests
             float[] rings = _radial.RingRadii;
             Assert.Equal(3, rings.Length);
             float spacing = rings[0] - _radial.Radius;
-            Assert.True(spacing >= ConcentricGenerator.MinLayerSpacing, $"Anneaux à {spacing:F0} m");
+            Assert.True(spacing >= ConcentricGenerator.MinLayerSpacing, $"Rings {spacing:F0} m apart");
             for (int k = 1; k < rings.Length; k++)
             {
-                Assert.True(math.abs(rings[k] - rings[k - 1] - spacing) < 0.5f, "Anneaux pas à écart égal");
+                Assert.True(math.abs(rings[k] - rings[k - 1] - spacing) < 0.5f, "Rings not evenly spaced");
             }
-            Assert.True(rings[rings.Length - 1] <= 600f - 40f + 5f, $"Dernier anneau à {rings[rings.Length - 1]:F0} m du centre");
-            // Chaque anneau : un cercle (tronçons non-avenue à son rayon), croisé par les 8 avenues.
+            Assert.True(rings[rings.Length - 1] <= 600f - 40f + 5f, $"Last ring {rings[rings.Length - 1]:F0} m from the centre");
+            // Each ring: a circle (non-avenue segments at its radius), crossed by the 8 avenues.
             foreach (float r in rings)
             {
                 Assert.Contains(segments, s => !s.IsAvenue && math.abs(math.distance(s.Start.xz, centre) - r) < 1f);
@@ -877,47 +874,46 @@ namespace Placemaker.Tests
         [Fact]
         public void Radial_Layers_FillTheWholeShape_OuterRingsAsArcsToThePerimeter()
         {
-            // Retour utilisateur : "as camadas têm de preencher o perímetro todo nem que fique só
-            // meio círculo". Sur la forme réelle (allongée), les anneaux vont jusqu'au point le plus
-            // éloigné : les plus grands sortent de la forme et ne gardent que des arcs qui
-            // rejoignent la route du périmètre.
+            // User feedback: "the layers have to fill the whole perimeter even if only half a
+            // circle remains". On the real (elongated) shape, the rings reach the farthest point:
+            // the largest ones leave the shape and keep only arcs that join the perimeter road.
             var perimeter = LoadRealPerimeter();
             int max = ConcentricGenerator.RadialMaxLayers(perimeter, 8, 50f);
-            Assert.True(max >= 5, $"Seulement {max} anneaux possibles sur le périmètre réel");
+            Assert.True(max >= 5, $"Only {max} rings possible on the real perimeter");
             var segments = ConcentricGenerator.GenerateRadial(perimeter, 8, 50f, layers: 99, diagnostics: _radial);
             Assert.Equal(max, _radial.RingRadii.Length);
             AssertWellFormed(segments, perimeter);
             float2 centre = _radial.Centre;
             float outer = _radial.RingRadii.Last();
-            // Un arc d'anneau (non-avenue) qui touche le périmètre, sur un anneau plus grand que le
-            // plus grand cercle inscrit.
+            // A (non-avenue) ring arc that touches the perimeter, on a ring larger than the
+            // largest inscribed circle.
             Assert.Contains(segments, s => !s.IsAvenue
                 && (DistanceToPolygon(s.Start.xz, perimeter) < 0.5f || DistanceToPolygon(s.End.xz, perimeter) < 0.5f));
             float inscribed = perimeter.Select(q => math.distance(q.xz, centre)).Min();
-            Assert.True(outer > inscribed + 100f, $"Dernier anneau à {outer:F0} m, cercle inscrit {inscribed:F0} m");
+            Assert.True(outer > inscribed + 100f, $"Last ring at {outer:F0} m, inscribed circle {inscribed:F0} m");
         }
 
         [Fact]
         public void Radial_RealPerimeter_RoadsKeepClearOfThePerimeterRoad()
         {
-            // Retour utilisateur (log [Diag colisão] : 12 avenues, rotonde 150 m, 10 anneaux) : un
-            // anneau passait à 12-14 m de la route du périmètre et une avenue s'y arrêtait ; le jeu
-            // collait ce nœud à la route existante (tronçon de 8 m) et les routes se chevauchaient.
+            // User feedback ([Diag colisão] log: 12 avenues, 150 m roundabout, 10 rings): a ring
+            // passed 12-14 m from the perimeter road and an avenue stopped on it; the game snapped
+            // that node to the existing road (8 m segment) and the roads overlapped.
             var perimeter = LoadRealPerimeter();
             foreach ((int avenues, float radius, int layers) in new[] { (12, 150f, 10), (8, 50f, 10), (6, 100f, 6), (16, 30f, 10) })
             {
                 var segments = ConcentricGenerator.GenerateRadial(perimeter, avenues, radius, layers, diagnostics: _radial);
                 AssertWellFormed(segments, perimeter);
-                // Aucun nœud généré dans la bande où le jeu le recollerait au périmètre.
+                // No generated node in the band where the game would snap it to the perimeter.
                 foreach (float3 q in segments.SelectMany(s => new[] { s.Start, s.End }))
                 {
                     float d = DistanceToPolygon(q.xz, perimeter);
-                    Assert.True(d < 0.5f || d >= 24f, $"{avenues}/{radius}/{layers} : nœud à {d:F1} m du périmètre en {q.xz}");
+                    Assert.True(d < 0.5f || d >= 24f, $"{avenues}/{radius}/{layers}: node {d:F1} m from the perimeter at {q.xz}");
                 }
-                // Aucune route rasante : hors de la zone d'approche de son arrivée sur le périmètre
-                // (25 m / sin θ, θ l'angle de croisement), une route générée reste à au moins 24 m de
-                // celui-ci (courbes réelles, voir GameCurve). Règles du jeu (ValidationHelpers) : pas
-                // d'angle minimal, mais le tronçon doit contenir le recul du nœud, sinon InvalidShape.
+                // No grazing road: outside the approach zone of its arrival on the perimeter
+                // (25 m / sin θ, θ being the crossing angle), a generated road stays at least 24 m
+                // from it (real curves, see GameCurve). Game rules: no minimum angle, but the
+                // segment must contain the node cutback, otherwise the game reports an invalid shape.
                 foreach (RoadSegmentDef s in segments)
                 {
                     float2[] curve = GameCurve(s, 48);
@@ -929,17 +925,17 @@ namespace Placemaker.Tests
                         float2 dir = math.normalize(next - e);
                         float sin = math.abs(dir.x * edge.y - dir.y * edge.x);
                         float cos = math.abs(math.dot(dir, edge));
-                        Assert.True(sin >= math.sin(math.radians(14.5f)), $"{avenues}/{radius}/{layers} : raccord au périmètre à {math.degrees(math.asin(sin)):F0}° en {e}");
+                        Assert.True(sin >= math.sin(math.radians(14.5f)), $"{avenues}/{radius}/{layers}: perimeter connection at {math.degrees(math.asin(sin)):F0}° at {e}");
                         float cutback = 12.5f * (1f + cos) / sin;
                         float length = CurveLength(curve);
-                        Assert.True(length >= cutback, $"{avenues}/{radius}/{layers} : tronçon de {length:F0} m plus court que le recul du nœud ({cutback:F0} m) en {e}");
+                        Assert.True(length >= cutback, $"{avenues}/{radius}/{layers}: {length:F0} m segment shorter than the node cutback ({cutback:F0} m) at {e}");
                         ends.Add((e, 25f / sin + 8f));
                     }
                     foreach (float2 q in curve)
                     {
                         if (ends.Exists(e => math.distance(e.at, q) < e.reach)) continue;
                         float d = DistanceToPolygon(q, perimeter);
-                        Assert.True(d >= 24f, $"{avenues}/{radius}/{layers} : route à {d:F1} m du périmètre en ({q.x:F0}, {q.y:F0})");
+                        Assert.True(d >= 24f, $"{avenues}/{radius}/{layers}: road {d:F1} m from the perimeter at ({q.x:F0}, {q.y:F0})");
                     }
                 }
             }
@@ -948,10 +944,10 @@ namespace Placemaker.Tests
         [Fact]
         public void Radial_RealPerimeter_LayersReachThePerimeterAtShallowAngles()
         {
-            // Retour utilisateur : des anneaux presque parallèles au périmètre s'arrêtaient à l'avenue
-            // voisine (raccord refusé sous 40°), laissant des coins vides. Le jeu n'impose pas d'angle
-            // minimal (seul le recul du nœud doit tenir dans le tronçon, voir
-            // Radial_RealPerimeter_RoadsKeepClearOfThePerimeterRoad) : ces raccords sont gardés.
+            // User feedback: rings nearly parallel to the perimeter stopped at the neighbouring
+            // avenue (connection rejected below 40°), leaving empty corners. The game imposes no
+            // minimum angle (only the node cutback must fit in the segment, see
+            // Radial_RealPerimeter_RoadsKeepClearOfThePerimeterRoad): these connections are kept.
             var perimeter = LoadRealPerimeter();
             int shallow = 0;
             foreach ((int avenues, float radius, int layers) in new[] { (12, 150f, 10), (8, 50f, 10), (6, 100f, 6) })
@@ -968,16 +964,16 @@ namespace Placemaker.Tests
                     }
                 }
             }
-            Assert.True(shallow >= 3, $"Seulement {shallow} raccords d'anneau au périmètre sous 40°");
+            Assert.True(shallow >= 3, $"Only {shallow} ring connections to the perimeter below 40°");
         }
 
         [Fact]
         public void Radial_RealPerimeter_LayersLeaveNoEmptyWedges()
         {
-            // Retour utilisateur ("continuam a haver camadas que não vão até ao fim") : là où l'anneau
-            // court presque parallèle au périmètre, il s'arrêtait à la dernière avenue et laissait un
-            // coin vide entre l'avenue et le périmètre. Il continue maintenant, puis tourne vers le
-            // périmètre. Mesure : surface intérieure (hors rotonde) à plus de 70 m de toute route.
+            // User feedback ("there are still layers that don't go all the way"): where the ring
+            // runs nearly parallel to the perimeter, it stopped at the last avenue and left an empty
+            // corner between the avenue and the perimeter. It now carries on, then turns towards the
+            // perimeter. Metric: interior area (excluding the roundabout) more than 70 m from any road.
             var perimeter = LoadRealPerimeter();
             var segments = ConcentricGenerator.GenerateRadial(perimeter, 12, 150f, 10, diagnostics: _radial);
             float2 centre = _radial.Centre;
@@ -1008,14 +1004,14 @@ namespace Placemaker.Tests
                     if (!near) empty++;
                 }
             }
-            // Avant : ~84 000 m² vides (4 coins) ; après : ~30 000 m² (1 coin, arrivée trop fermée sur l'avenue).
-            Assert.True(empty * cell * cell < 50000f, $"{empty * cell * cell:F0} m² à plus de 70 m de toute route");
+            // Before: ~84,000 m² empty (4 corners); after: ~30,000 m² (1 corner, arrival too closed against the avenue).
+            Assert.True(empty * cell * cell < 50000f, $"{empty * cell * cell:F0} m² more than 70 m from any road");
         }
 
         [Fact]
         public void Radial_RealPerimeter_GeneratesQuickly()
         {
-            // Régénéré à chaque réglage du panneau : doit rester rapide même au maximum.
+            // Regenerated on every panel setting change: must stay fast even at the maximum.
             var perimeter = LoadRealPerimeter();
             ConcentricGenerator.GenerateRadial(perimeter, 8, 50f, 2, diagnostics: _radial);
             // Placemaker: generators no longer keep static result/distance-field caches (thread safety);
@@ -1025,7 +1021,7 @@ namespace Placemaker.Tests
             ConcentricGenerator.GenerateRadial(perimeter, 16, 150f, 10, diagnostics: _radial);
             ConcentricGenerator.GenerateRadial(perimeter, 12, 50f, 10, diagnostics: _radial);
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 1800, $"Deux générations Radial en {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < 1800, $"Two Radial generations in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         [Fact]
@@ -1037,18 +1033,18 @@ namespace Placemaker.Tests
                 var segments = ConcentricGenerator.GenerateRadial(perimeter, avenues, radius, layers, diagnostics: _radial);
                 AssertWellFormed(segments, perimeter);
                 Assert.True(segments.Count(s => s.IsAvenue && DistanceToPolygon(s.End.xz, perimeter) < 0.5f) >= 2,
-                    $"Radial {avenues}/{radius}/{layers} : moins de 2 avenues jusqu'au périmètre");
+                    $"Radial {avenues}/{radius}/{layers}: fewer than 2 avenues reach the perimeter");
                 var r = JunctionDivergence(segments, new[] { 10f, 20f, 35f, 50f });
-                Assert.True(r.minAngle >= 40f, $"Radial {avenues}/{radius}/{layers} : deux routes à {r.minAngle:F0}° près du carrefour ({r.at.x:F0}, {r.at.y:F0})");
-                Assert.True(r.shortestRoad >= 30f, $"Radial {avenues}/{radius}/{layers} : route de {r.shortestRoad:F1} m entre deux carrefours");
+                Assert.True(r.minAngle >= 40f, $"Radial {avenues}/{radius}/{layers}: two roads at {r.minAngle:F0}° near the junction ({r.at.x:F0}, {r.at.y:F0})");
+                Assert.True(r.shortestRoad >= 30f, $"Radial {avenues}/{radius}/{layers}: {r.shortestRoad:F1} m road between two junctions");
             }
         }
 
         [Fact]
         public void Connections_AreSpreadAroundThePerimeter_NotBunchedInTheMiddle()
         {
-            // Retour utilisateur (capture) : sur une forme allongée, les rayons partaient du petit
-            // anneau intérieur et arrivaient tous groupés au milieu du périmètre.
+            // User feedback (screenshot): on an elongated shape, the spokes started from the small
+            // inner ring and all arrived bunched in the middle of the perimeter.
             var perimeter = Ellipse(600f, 220f, 400);
             var segments = ConcentricGenerator.Generate(perimeter, layers: 3, connections: 8, diagnostics: _diag);
             AssertWellFormed(segments, perimeter);
@@ -1056,7 +1052,7 @@ namespace Placemaker.Tests
                 .SelectMany(s => new[] { s.Start, s.End })
                 .Where(p => DistanceToPolygon(p.xz, perimeter) < 0.5f)
                 .ToList();
-            Assert.True(onPerimeter.Count >= 6, $"Seulement {onPerimeter.Count} rayons atteignent le périmètre");
+            Assert.True(onPerimeter.Count >= 6, $"Only {onPerimeter.Count} spokes reach the perimeter");
             Assert.Contains(onPerimeter, p => p.x > 360f);
             Assert.Contains(onPerimeter, p => p.x < -360f);
         }
@@ -1064,17 +1060,17 @@ namespace Placemaker.Tests
         [Fact]
         public void SharpCorneredShape_InnerRingsKeepSharpCorners()
         {
-            // Un carré doit rester un carré (coins nets hérités du périmètre), pas devenir arrondi.
+            // A square must stay a square (sharp corners inherited from the perimeter), not become rounded.
             var perimeter = Square(600f);
             var segments = ConcentricGenerator.Generate(perimeter, layers: 2, connections: 4, diagnostics: _diag);
-            Assert.True(MaxRingTurnDegrees(segments, perimeter) > 70f, "Les coins du carré ont été arrondis.");
+            Assert.True(MaxRingTurnDegrees(segments, perimeter) > 70f, "The square's corners were rounded.");
         }
 
         [Fact]
         public void ChangingLayersOnTheSamePerimeter_StaysInteractive()
         {
-            // Retour utilisateur : "lentidão quando se tenta mudar parâmetros" — le champ de
-            // distance (partie coûteuse) ne dépend que du périmètre.
+            // User feedback: "slowness when trying to change parameters" — the distance field
+            // (the expensive part) depends only on the perimeter.
             var perimeter = Circle(520f, 500);
             ConcentricGenerator.Generate(perimeter, layers: 2, connections: 4, diagnostics: _diag);
             // Placemaker: generators no longer keep static result/distance-field caches (thread safety);
@@ -1086,7 +1082,7 @@ namespace Placemaker.Tests
                 ConcentricGenerator.Generate(perimeter, layers, connections: 5, diagnostics: _diag);
             }
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 2800, $"4 changements de réglage en {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < 2800, $"4 setting changes in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         [Fact]
@@ -1110,12 +1106,12 @@ namespace Placemaker.Tests
             {
                 Assert.True(s.IsArc);
                 Assert.False(s.IsAvenue);
-                // Sens trigonométrique : la tangente de départ tourne à gauche autour du centre.
+                // Counter-clockwise: the start tangent turns left around the centre.
                 float2 radial = s.Start.xz - centre, t = s.StartTangent.xz;
                 Assert.True(radial.x * t.y - radial.y * t.x > 0f);
                 Assert.InRange(math.distance(s.Start.xz, centre), 30f, 50f);
             }
-            // Les anneaux extérieurs ne sont pas la rotonde.
+            // The outer rings are not the roundabout.
             Assert.Contains(segments, s => s.IsArc && !s.IsRoundabout);
         }
     }

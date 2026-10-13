@@ -9,15 +9,15 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Motif "Orgânico" (famille de la Grelha, LoopMode faux) : lotissement suburbain à rues
-    /// sinueuses (retour utilisateur, image d'exemple : "algo assim, que também tenha cul de sacs").
-    /// Une rue principale (IsAvenue) serpente entre deux entrées sur le périmètre ; des branches
-    /// poussent ensuite partout où il reste de la place, en courbes aléatoires douces (graine
-    /// OrganicSeed), et finissent en impasse (réseau cul-de-sac + cercle de retournement) ou, parfois
-    /// (OrganicLoopShare), rejoignent la rue qu'elles rencontrent pour former une boucle. Les rues
-    /// restent à environ OrganicStreetSpacing les unes des autres : des lots des deux côtés.
-    /// Garanties (voir les tests) : pas de croisement, pas d'angle fermé, pas de tronçon trop
-    /// court, rien trop près du périmètre hors entrées, tout relié aux entrées.
+    /// Organic pattern (grid family, LoopMode false): a suburban subdivision with winding streets
+    /// (user feedback with an example image: "something like this, that also has cul-de-sacs").
+    /// A main street (IsAvenue) meanders between two entrances on the perimeter; branches then
+    /// grow wherever there is room, in gentle random curves (seed OrganicSeed), and end in a
+    /// cul-de-sac (cul-de-sac network + turning circle) or sometimes (OrganicLoopShare) join the
+    /// street they run into to form a loop. Streets stay about OrganicStreetSpacing apart, leaving
+    /// lots on both sides. Guarantees (see the tests): no crossings, no sharp angles, no overly
+    /// short segments, nothing too close to the perimeter except at entrances, everything
+    /// connected to the entrances.
     /// </summary>
     public static partial class GridGenerator
     {
@@ -29,32 +29,32 @@ namespace Placemaker.Core.Layers.Roads.Generators
         public const int MinOrganicSeed = 1;
         public const int MaxOrganicSeed = 100;
 
-        /// <summary>Distance minimale (m) au périmètre d'une rue générée, hors entrées.</summary>
+        /// <summary>Minimum distance (m) from a generated street to the perimeter, entrances excepted.</summary>
         private const float OrganicClearance = 25f;
-        /// <summary>Une branche s'arrête (impasse) avant d'arriver à cette distance du périmètre : place du cercle de retournement.</summary>
+        /// <summary>A branch stops (cul-de-sac) before getting this close to the perimeter: room for the turning circle.</summary>
         private const float OrganicTipClearance = 35f;
-        /// <summary>Pas (m) de la marche qui trace les rues.</summary>
+        /// <summary>Step (m) of the walk that traces the streets.</summary>
         private const float OrganicStep = 8f;
-        /// <summary>Distance minimale (m), le long d'une rue, entre deux carrefours ou entre un carrefour et un bout.</summary>
+        /// <summary>Minimum distance (m) along a street between two junctions, or between a junction and an end.</summary>
         private const float OrganicMinJunctionGap = 45f;
         /// <summary>
-        /// Distance minimale (m) entre le bout d'une impasse et toute autre rue, mesurée sur les
-        /// polylignes : marge incluse pour l'écart des vraies courbes du jeu (jusqu'à ~8 m).
+        /// Minimum distance (m) between a cul-de-sac tip and any other street, measured on the
+        /// polylines; includes margin for the game's actual curves deviating (up to ~8 m).
         /// </summary>
         private const float OrganicTipGap = 48f;
-        /// <summary>Longueur minimale (m) d'une impasse.</summary>
+        /// <summary>Minimum length (m) of a cul-de-sac.</summary>
         private const float OrganicMinCulDeSac = 45f;
-        /// <summary>Virage maximal (degrés) par pas à 100 % de courbure.</summary>
+        /// <summary>Maximum turn (degrees) per step at 100% curviness.</summary>
         private const float OrganicMaxTurnDegrees = 9f;
-        /// <summary>Angle minimal (degrés) d'une boucle qui rejoint une autre rue.</summary>
+        /// <summary>Minimum angle (degrees) at which a loop joins another street.</summary>
         private const float OrganicMinLoopAngle = 60f;
-        /// <summary>Angle minimal (degrés) entre la rue principale et le périmètre à ses entrées.</summary>
+        /// <summary>Minimum angle (degrees) between the main street and the perimeter at its entrances.</summary>
         private const float OrganicMinEntryAngle = 55f;
 
         private static List<RoadSegmentDef> GenerateOrganic(List<float2> polygon, float y, GridParameters parameters)
             => new OrganicBuilder(polygon, y, parameters).Build();
 
-        /// <summary>Arêtes du périmètre rangées dans une grille (requêtes de distance rapides).</summary>
+        /// <summary>Perimeter edges bucketed in a grid (fast distance queries).</summary>
         private sealed class PerimeterGrid
         {
             private const float Cell = 25f;
@@ -86,7 +86,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             private static int2 CellOf(float2 p) => new int2((int)math.floor(p.x / Cell), (int)math.floor(p.y / Cell));
             private static long Key(int x, int z) => ((long)x << 32) ^ (uint)z;
 
-            /// <summary>Distance (m) de p au périmètre, plafonnée à `max`.</summary>
+            /// <summary>Distance (m) from p to the perimeter, capped at `max`.</summary>
             public float Distance(float2 p, float max)
             {
                 int2 c = CellOf(p);
@@ -109,7 +109,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return math.sqrt(best);
             }
 
-            /// <summary>Direction (unitaire) de l'arête du périmètre la plus proche de p.</summary>
+            /// <summary>Unit direction of the perimeter edge nearest to p.</summary>
             public float2 EdgeDirection(float2 p)
             {
                 float best = float.MaxValue;
@@ -139,7 +139,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Une rue tracée : polyligne (un point tous les OrganicStep m) et carrefours (indices de points).</summary>
+        /// <summary>A traced street: polyline (one point every OrganicStep m) and junctions (point indices).</summary>
         private sealed class OrganicStreet
         {
             public readonly List<float2> Points = new List<float2>();
@@ -149,7 +149,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             private float[] _cumulative;
 
-            /// <summary>Longueur cumulée (m) au point i (recalculée seulement si la polyligne a changé).</summary>
+            /// <summary>Cumulative length (m) at point i (recomputed only when the polyline has changed).</summary>
             public float Along(int i)
             {
                 if (_cumulative == null || _cumulative.Length != Points.Count)
@@ -169,7 +169,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return math.normalizesafe(Points[b] - Points[a]);
             }
 
-            /// <summary>Vrai si le point i est à au moins `gap` m (le long de la rue) de tout carrefour et des deux bouts.</summary>
+            /// <summary>True if point i is at least `gap` m (along the street) from every junction and from both ends.</summary>
             public bool FreeAt(int i, float gap)
             {
                 float here = Along(i);
@@ -188,7 +188,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
         }
 
-        /// <summary>Index spatial des points de toutes les rues (proximité entre rues).</summary>
+        /// <summary>Spatial index of all street points (street-to-street proximity).</summary>
         private sealed class StreetIndex
         {
             private const float Cell = 20f;
@@ -211,7 +211,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 list.Add((street, point));
             }
 
-            /// <summary>Point de rue le plus proche de p à moins de `radius`, hors ceux que `skip` écarte.</summary>
+            /// <summary>Nearest street point to p within `radius`, excluding those rejected by `skip`.</summary>
             public bool Nearest(float2 p, float radius, Func<int, int, bool> skip, out int street, out int point, out float distance)
             {
                 street = -1;
@@ -307,17 +307,17 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return Emit();
             }
 
-            // ---------------- Rue principale
+            // ---------------- Main street
 
             /// <summary>
-            /// Rue principale : entre deux entrées sur le périmètre, aux deux bouts du grand axe, elle
-            /// part perpendiculaire au périmètre et serpente vers l'autre entrée en restant à
-            /// distance du périmètre. Plusieurs essais (entrées légèrement déplacées) si l'un échoue.
+            /// Main street: between two perimeter entrances at either end of the long axis, it starts
+            /// perpendicular to the perimeter and meanders toward the other entrance while keeping
+            /// clear of the perimeter. Several attempts (entrances shifted slightly) if one fails.
             /// </summary>
             private bool TryMainStreet()
             {
                 float2 axis = LongestAxis(_polygon, 0f);
-                // Points du périmètre tous les ~10 m.
+                // Perimeter points every ~10 m.
                 var samples = new List<float2>();
                 for (int i = 0; i < _polygon.Count; i++)
                 {
@@ -328,7 +328,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 samples.Sort((p, q) => math.dot(p, axis).CompareTo(math.dot(q, axis)));
                 for (int attempt = 0; attempt < 12; attempt++)
                 {
-                    // Entrées : parmi les 12 % de points les plus en bout de chaque côté du grand axe.
+                    // Entrances: among the 12% of points furthest out at each end of the long axis.
                     int band = math.max(1, samples.Count * 12 / 100);
                     float2 a = samples[_random.Next(band)];
                     float2 b = samples[samples.Count - 1 - _random.Next(band)];
@@ -341,7 +341,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
 
-            /// <summary>Normale intérieure du périmètre au point p (sur le périmètre), ou zéro si indéterminée.</summary>
+            /// <summary>Inward perimeter normal at point p (on the perimeter), or zero if undetermined.</summary>
             private float2 InwardNormal(float2 p)
             {
                 float2 edge = _perimeter.EdgeDirection(p);
@@ -371,7 +371,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     float toB = math.distance(p, b);
                     if (toB < 2.5f * _spacing && step > 3)
                     {
-                        // Arrivée : droit sur l'entrée b, à angle ouvert avec le périmètre.
+                        // Arrival: straight to entrance b, at a wide angle to the perimeter.
                         float2 last = math.normalize(b - p);
                         float2 edge = _perimeter.EdgeDirection(b);
                         float sin = math.abs(edge.x * last.y - edge.y * last.x);
@@ -393,9 +393,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                             }
                         }
                     }
-                    // Grandes courbes douces, nettement attirées vers b, repoussées par le périmètre :
-                    // la rue principale reste bien plus droite que les rues de desserte (retour
-                    // utilisateur : "a avenida está demasiado orgânica, deveria ser mais reta").
+                    // Wide gentle curves, strongly pulled toward b and pushed off the perimeter: the main
+                    // street stays much straighter than the access streets (user feedback: "the avenue
+                    // is too organic, it should be straighter").
                     turn = 0.92f * turn + 0.12f * _maxTurn * RandomSigned();
                     float2 goal = math.normalize(b - p);
                     float pull = math.saturate(0.35f + 0.5f * (1f - toB / total));
@@ -413,7 +413,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
 
-            /// <summary>Tourne `heading` vers le côté le plus dégagé quand le périmètre est proche devant.</summary>
+            /// <summary>Turns `heading` toward the clearer side when the perimeter is close ahead.</summary>
             private float2 AvoidPerimeter(float2 p, float2 heading)
             {
                 float ahead = _perimeter.Distance(p + heading * 30f, 70f);
@@ -430,8 +430,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             // ---------------- Branches
 
             /// <summary>
-            /// Fait pousser des branches tant qu'il reste de la place : depuis chaque point libre d'une
-            /// rue, de chaque côté, si la zone voisine (à une distance de rue) est vide.
+            /// Grows branches while there is room left: from every free point of a street, on each
+            /// side, if the neighbouring zone (one street spacing away) is empty.
             /// </summary>
             private void GrowBranches()
             {
@@ -457,7 +457,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     {
                         return;
                     }
-                    // Ordre aléatoire (graine) ; chaque candidat est revalidé : l'état change à chaque branche.
+                    // Random (seeded) order; each candidate is revalidated because the state changes with every branch.
                     for (int i = candidates.Count - 1; i > 0; i--)
                     {
                         int j = _random.Next(i + 1);
@@ -478,7 +478,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            /// <summary>Bout d'une impasse (jamais ignoré : son cercle de retournement a besoin de place).</summary>
+            /// <summary>Cul-de-sac tip (never skipped: its turning circle needs room).</summary>
             private bool IsTip(int street, int point) => _streets[street].DeadEnd && point == _streets[street].Points.Count - 1;
 
             private float2 Normal(int street, int point, float side)
@@ -511,14 +511,14 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float turn = 0f;
                 float length = 0f;
                 float maxLength = _spacing * (2f + 6f * Random01());
-                // Au moins la distance d'un bout d'impasse : une rue qui s'approche s'arrête avant.
+                // At least the cul-de-sac tip distance: an approaching street stops short of it.
                 float near = math.max(0.75f * _spacing, OrganicTipGap);
                 int loopStreet = -1, loopPoint = -1;
 
-                // Points à ignorer dans la recherche de voisins : la rue mère près de l'origine, et tout
-                // point autour du carrefour de départ — le départ d'une branche voisine, posé sur la rue
-                // mère à ~45 m, arrêtait sinon la nouvelle branche dès son premier pas (vu avec des
-                // rues à 100 m : seulement des bouts d'impasse d'un côté).
+                // Points to ignore in the neighbour search: the parent street near the origin, and any
+                // point around the starting junction. Otherwise a neighbouring branch's start, on the
+                // parent street ~45 m away, stopped the new branch at its first step (seen with 100 m
+                // street spacing: only cul-de-sac stubs on one side).
                 float2 originPoint = p;
                 bool Skip(int s, int i) => !IsTip(s, i)
                     && ((s == parent && math.abs(parentStreet.Along(i) - originAlong) < OrganicMinJunctionGap + near)
@@ -527,7 +527,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 while (true)
                 {
                     turn = 0.8f * turn + 0.5f * _maxTurn * RandomSigned();
-                    // Premiers pas : départ perpendiculaire (angle ouvert avec la rue mère).
+                    // First steps: start perpendicular (wide angle to the parent street).
                     if (length > 2f * OrganicStep)
                     {
                         heading = Rotate(heading, math.clamp(turn, -_maxTurn, _maxTurn));
@@ -538,11 +538,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     {
                         break;
                     }
-                    // Autre rue devant (ou la branche elle-même, plus loin en arrière) : impasse ou boucle.
+                    // Another street ahead (or the branch itself, further back): cul-de-sac or loop.
                     int own = branch.Points.Count;
                     bool found = _index.Nearest(next, near, Skip, out int hitStreet, out int hitPoint, out _);
-                    // La branche elle-même : seulement les points déjà loin en arrière le long de la rue
-                    // (une rue droite a toujours ses points récents à moins de `near`).
+                    // The branch itself: only points already far back along the street (a straight
+                    // street always has its recent points within `near`).
                     bool selfHit = false;
                     int recent = (int)math.ceil(1.6f * near / OrganicStep);
                     for (int k = 0; k < own - recent && !selfHit; k++)
@@ -580,8 +580,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
                 else
                 {
-                    // Bout d'impasse : à distance de TOUTES les autres rues (cercle de retournement),
-                    // y compris celles écartées pendant la pousse (autour du carrefour de départ).
+                    // Cul-de-sac tip: clear of ALL other streets (turning circle), including those
+                    // skipped while growing (around the starting junction).
                     while (branch.Points.Count > 1
                         && _index.Nearest(branch.Points[branch.Points.Count - 1], OrganicTipGap, null, out _, out _, out _))
                     {
@@ -600,8 +600,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Boucle possible de p vers le point `point` de la rue `street` : carrefour libre sur
-            /// cette rue, arrivée à angle ouvert, et rien d'autre sur le chemin.
+            /// Whether a loop from p to point `point` of street `street` is possible: a free junction
+            /// spot on that street, arrival at a wide angle, and nothing else in the way.
             /// </summary>
             private bool CanLoop(float2 p, int street, int point)
             {
@@ -618,7 +618,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 {
                     return false;
                 }
-                // Le raccord ne doit passer près d'aucune autre rue que la cible (près du point visé).
+                // The connector must not pass near any street other than the target (near the aimed point).
                 float length = math.distance(p, q);
                 for (float t = OrganicStep; t < length - OrganicStep; t += OrganicStep)
                 {
@@ -633,22 +633,21 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     }
                     if (_index.Nearest(m, OrganicTipGap, (s, i) => !IsTip(s, i), out _, out _, out _))
                     {
-                        return false; // passerait près d'un bout d'impasse
+                        return false; // would pass near a cul-de-sac tip
                     }
                 }
                 return true;
             }
 
-            // ---------------- Tronçons
+            // ---------------- Segments
 
             /// <summary>
-            /// Chaque rue est coupée à ses carrefours, puis en tronçons courbes de 45 à 90 m (tangentes
-            /// de la polyligne). Deux réseaux seulement (retour utilisateur : "apenas quero a avenida e
-            /// as que vão até ao beco" — un 3ᵉ réseau pour les rues de desserte, essayé pour les
-            /// boucles puis pour les collectrices, faisait désordre en jeu) :
-            ///  - rue principale : réseau avenue ;
-            ///  - toutes les autres rues : réseau cul-de-sac (IsLocal), cercle de retournement au bout
-            ///    des impasses.
+            /// Each street is split at its junctions, then into 45-90 m curved segments (polyline
+            /// tangents). Only two networks (user feedback: "I only want the avenue and the ones that
+            /// go to the cul-de-sac"; a third network for access streets, tried for loops and then for
+            /// collectors, looked messy in game):
+            ///  - main street: avenue network;
+            ///  - all other streets: cul-de-sac network (IsLocal), turning circle at cul-de-sac ends.
             /// </summary>
             private List<RoadSegmentDef> Emit()
             {
@@ -662,7 +661,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         int from = cutList[c], to = cutList[c + 1];
                         float pieceLength = street.Along(to) - street.Along(from);
                         int chunks = math.max(1, (int)math.floor(pieceLength / 45f));
-                        // Points de coupe intermédiaires, au plus près d'une longueur égale.
+                        // Intermediate cut points, as close to equal lengths as possible.
                         var stops = new List<int> { from };
                         for (int k = 1; k < chunks; k++)
                         {

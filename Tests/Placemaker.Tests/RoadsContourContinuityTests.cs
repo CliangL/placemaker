@@ -16,8 +16,8 @@ namespace Placemaker.Tests
         public RoadsContourContinuityTests(ITestOutputHelper o) { _out = o; }
 
         /// <summary>
-        /// Relevo sur le relief réel relevé en jeu (retour utilisateur : "as estradas perdem continuidade") :
-        /// au plus 3,2 bouts libres par km de route (5 à 6 avant la correction, bouts sur le périmètre compris).
+        /// Contour pattern on the real terrain captured in game (user feedback: "the roads lose continuity"):
+        /// at most 3.2 free ends per km of road (5 to 6 before the fix, counting ends on the perimeter).
         /// </summary>
         [Fact]
         public void RealTerrain_StreetsKeepTheirContinuity()
@@ -41,8 +41,8 @@ namespace Placemaker.Tests
                 }
                 int dead = degree.Values.Count(d => d == 1);
                 int junctions = degree.Values.Count(d => d >= 3);
-                _out.WriteLine($"espaçamento {spacing}: {segs.Count} troços, {length / 1000f:F1} km, {dead} pontas soltas, {junctions} cruzamentos, pontas por km {dead / (length / 1000f):F1}");
-                Assert.True(dead / (length / 1000f) <= 3.2f, $"espaçamento {spacing} : {dead / (length / 1000f):F1} pontas soltas por km");
+                _out.WriteLine($"spacing {spacing}: {segs.Count} segments, {length / 1000f:F1} km, {dead} free ends, {junctions} junctions, ends per km {dead / (length / 1000f):F1}");
+                Assert.True(dead / (length / 1000f) <= 3.2f, $"spacing {spacing}: {dead / (length / 1000f):F1} free ends per km");
             }
         }
     }

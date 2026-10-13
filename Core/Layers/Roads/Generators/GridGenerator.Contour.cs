@@ -9,13 +9,13 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Motif "Relevo" (famille de la Grelha, LoopMode faux) : rues le long des courbes de niveau du
-    /// terrain (quasi sans pente), espacées d'environ ContourSpacing en plan, reliées par des montées
-    /// droites (IsAvenue) à pente limitée (ContourMaxGrade). Les bouts de rue rejoignent le périmètre
-    /// s'ils l'atteignent à angle ouvert, sinon finissent en impasse (cercle de retournement, même
-    /// réseau que la rue : KeepNetwork). Terrain plat : rien (pas de courbes de niveau à suivre).
-    /// Garanties (voir les tests) : pas de croisement, angles ouverts, rien trop près du périmètre
-    /// hors raccords, tout relié au périmètre, montées sous la pente maximale.
+    /// Contour pattern (grid family, LoopMode false): streets follow the terrain's contour lines
+    /// (almost no grade), roughly ContourSpacing apart in plan, joined by straight uphill links
+    /// (IsAvenue) with a capped grade (ContourMaxGrade). Street ends join the perimeter when they reach
+    /// it at an open angle; otherwise they stop as a plain dead end (no turning circle, per user
+    /// feedback; see EmitCurve). Flat terrain: nothing (no contour lines to follow).
+    /// Guarantees (see the tests): no crossings, open angles, nothing too close to the perimeter
+    /// except at connections, everything connected to the perimeter, uphill links under the max grade.
     /// </summary>
     public static partial class GridGenerator
     {
@@ -31,30 +31,30 @@ namespace Placemaker.Core.Layers.Roads.Generators
         private const float ContourTipGap = 48f;
         private const float ContourStep = 8f;
         private const float ContourMinPiece = 80f;
-        /// <summary>Portée (x l'espacement) d'une liaison entre un bout d'impasse et la rue devant lui (voir JoinDeadEnds).</summary>
+        /// <summary>Reach (x spacing) of a link between a cul-de-sac tip and the street ahead of it (see JoinDeadEnds).</summary>
         private const float ContourJoinReach = 1.6f;
-        /// <summary>Distance minimale (x l'espacement) à une autre rue le long d'un passage proche (voir AcceptContour).</summary>
+        /// <summary>Minimum distance (x spacing) to another street along a close pass (see AcceptContour).</summary>
         private const float ContourLooseGap = 0.4f;
-        /// <summary>Longueur maximale (x l'espacement) d'un passage proche gardé sans couper la rue.</summary>
+        /// <summary>Maximum length (x spacing) of a close pass that is kept without cutting the street.</summary>
         private const float ContourMaxBridge = 1.5f;
         private const float ContourJunctionGap = 45f;
-        /// <summary>Nombre maximal de vagues de rues parallèles pour combler les trous (voir FillGaps).</summary>
+        /// <summary>Maximum number of waves of parallel streets used to fill gaps (see FillGaps).</summary>
         private const int ContourFillPasses = 8;
-        /// <summary>Longueur minimale (m) d'une liaison entre une rue de niveau et le périmètre.</summary>
+        /// <summary>Minimum length (m) of a link between a level street and the perimeter.</summary>
         private const float ContourMinLink = 40f;
-        /// <summary>Pente maximale (fraction) d'une montée entre deux rues de niveau.</summary>
+        /// <summary>Maximum grade (fraction) of an uphill link between two level streets.</summary>
         private const float ContourMaxGrade = 0.15f;
         private const float ContourMinJunctionAngle = 45f;
-        /// <summary>Angle (degrés) de départ et d'arrivée d'une montée courbe sur les rues de niveau.</summary>
+        /// <summary>Departure and arrival angle (degrees) of a curved uphill link on the level streets.</summary>
         private const float ContourCurveAngle = 55f;
-        /// <summary>Angle minimal (degrés) entre la corde d'une montée courbe et les rues qu'elle relie.</summary>
+        /// <summary>Minimum angle (degrees) between a curved uphill link's chord and the streets it joins.</summary>
         private const float ContourMinCurveChordAngle = 22f;
         private const float ContourMinPerimeterAngle = 50f;
-        /// <summary>En dessous de ce dénivelé (m) ou de cette pente médiane, le terrain est plat : rien à suivre.</summary>
+        /// <summary>Below this relief (m) or this median slope the terrain is flat: nothing to follow.</summary>
         private const float ContourMinRelief = 4f;
         private const float ContourMinSlope = 0.015f;
 
-        /// <summary>Vrai si le motif Relevo n'a rien à suivre sur ce terrain (plat, ou pas de terrain fourni).</summary>
+        /// <summary>True if the Contour pattern has nothing to follow on this terrain (flat, or no terrain supplied).</summary>
         public static bool IsTerrainFlat(IReadOnlyList<float3> selectedNodePositions, Func<float2, float> heightAt)
         {
             if (heightAt == null || selectedNodePositions == null || selectedNodePositions.Count < 3)
@@ -73,7 +73,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return hi - lo < ContourMinRelief;
         }
 
-        /// <summary>Hauteurs sur une grille 7×7 de la boîte englobante : change si le terrain change.</summary>
+        /// <summary>Heights on a 7×7 grid over the bounding box: changes whenever the terrain changes.</summary>
         private static float[] TerrainSignature(List<float2> polygon, Func<float2, float> heightAt)
         {
             float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
@@ -102,7 +102,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return new ContourBuilder(polygon, y, parameters).Build();
         }
 
-        /// <summary>Intersection des segments a→b et c→d : t le long de a→b (strictement intérieur).</summary>
+        /// <summary>Intersection of segments a→b and c→d: t along a→b (strictly interior).</summary>
         private static bool SegmentIntersection(float2 a, float2 b, float2 c, float2 d, out float t)
         {
             t = 0f;
@@ -122,11 +122,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
         {
             public readonly List<float2> Points = new List<float2>();
             public readonly SortedSet<int> Junctions = new SortedSet<int>();
-            /// <summary>Hauteur (m) de la rue de niveau : les montées vont vers une rue plus haute.</summary>
+            /// <summary>Height (m) of the level street: uphill links go towards a higher street.</summary>
             public float Level;
             public bool Closed;
             public bool Connector;
-            /// <summary>Montée courbe (pente forte, voir AddConnectors) : directions de départ et d'arrivée.</summary>
+            /// <summary>Curved uphill link (steep slope, see AddConnectors): departure and arrival directions.</summary>
             public bool Curved;
             public float2 StartDirection, EndDirection;
             public bool StartOnPerimeter, EndOnPerimeter;
@@ -159,7 +159,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return math.normalizesafe(Points[b] - Points[a]);
             }
 
-            /// <summary>Point i à au moins `gap` m (le long de la rue) des bouts et de tout carrefour.</summary>
+            /// <summary>Point i is at least `gap` m (along the street) from the ends and from every junction.</summary>
             public bool FreeAt(int i, float gap)
             {
                 float here = Along(i), total = Length;
@@ -189,7 +189,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             private readonly Dictionary<long, List<(int street, int point)>> _index = new Dictionary<long, List<(int, int)>>();
             private const float IndexCell = 20f;
 
-            // Grille de hauteurs
+            // Height grid
             private float2 _origin;
             private float _cell;
             private int _nx, _nz;
@@ -210,7 +210,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 _perimeter = new PerimeterGrid(polygon);
             }
 
-            // ---------------- Index des points de rue
+            // ---------------- Street point index
 
             private static long Key(int x, int z) => ((long)x << 32) ^ (uint)z;
             private static int2 CellOf(float2 p) => new int2((int)math.floor(p.x / IndexCell), (int)math.floor(p.y / IndexCell));
@@ -246,7 +246,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         if (!_index.TryGetValue(Key(x, z), out var list)) continue;
                         foreach ((int s, int i) in list)
                         {
-                            // Index reconstruit après les coupes (RebuildIndex) : un point retiré entre-temps est ignoré.
+                            // Index is rebuilt after cuts (RebuildIndex): a point removed in the meantime is ignored.
                             if (_streets[s].Removed || i >= _streets[s].Points.Count || (skip != null && skip(s, i))) continue;
                             if (math.distancesq(_streets[s].Points[i], p) < radius * radius) return true;
                         }
@@ -263,9 +263,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 {
                     return new List<RoadSegmentDef>();
                 }
-                // Niveaux deux fois plus serrés que l'espacement visé sur la pente médiane : là où la pente
-                // est plus douce, les courbes s'écartent et une sur deux y trouve encore sa place
-                // (AcceptContour garde 0,7 × l'espacement entre rues) — au lieu de bandes vides.
+                // Levels twice as tight as the target spacing on the median slope: where the slope is gentler
+                // the contours spread apart and every other one still fits (AcceptContour keeps
+                // 0.7 × spacing between streets), instead of leaving empty bands.
                 float step = 0.5f * levelStep;
                 for (float level = minHeight + 0.5f * step; level < maxHeight; level += step)
                 {
@@ -293,7 +293,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return Emit();
             }
 
-            /// <summary>Grille de hauteurs lissée dans la boîte englobante, cases intérieures, pas entre niveaux.</summary>
+            /// <summary>Smoothed height grid over the bounding box, interior cells, step between levels.</summary>
             private bool SampleTerrain(out float levelStep, out float minHeight, out float maxHeight)
             {
                 levelStep = minHeight = maxHeight = 0f;
@@ -316,7 +316,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         _h[j * _nx + i] = _height(Node(i, j));
                     }
                 }
-                // Lissage (deux passes 3×3) : courbes de niveau sans dents dues au relief fin.
+                // Smoothing (two 3×3 passes): contour lines without jaggies from fine terrain detail.
                 for (int pass = 0; pass < 2; pass++)
                 {
                     var smoothed = new float[_h.Length];
@@ -341,7 +341,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     }
                     _h = smoothed;
                 }
-                // Nœuds intérieurs (balayage ligne par ligne).
+                // Interior nodes (row-by-row scan).
                 _inside = new bool[_h.Length];
                 for (int j = 0; j < _nz; j++)
                 {
@@ -389,17 +389,17 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 {
                     return false;
                 }
-                // Niveaux espacés pour que deux rues voisines soient à ~_spacing en plan sur une pente médiane.
+                // Levels spaced so two neighbouring streets are ~_spacing apart in plan on a median slope.
                 levelStep = _spacing * medianSlope;
                 return true;
             }
 
             private float2 Node(int i, int j) => _origin + new float2(i, j) * _cell;
 
-            /// <summary>Courbes de niveau `level` (carrés marchants), en polylignes ; closed[k] vrai pour une boucle.</summary>
+            /// <summary>Contour lines at `level` (marching squares) as polylines; closed[k] is true for a loop.</summary>
             private List<List<float2>> ContourLines(float level, out List<bool> closed)
             {
-                // Point de croisement par arête de la grille : clé (i, j, horizontale ?).
+                // One crossing point per grid edge: key (i, j, horizontal?).
                 var position = new Dictionary<long, float2>();
                 var links = new Dictionary<long, List<long>>();
                 long EdgeKey(int i, int j, bool horizontal) => ((long)(j * _nx + i) << 1) | (horizontal ? 1L : 0L);
@@ -447,7 +447,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         }
                         else if (edges.Count == 4)
                         {
-                            // Col : lever l'ambiguïté avec la valeur au centre.
+                            // Saddle: disambiguate with the value at the cell centre.
                             bool centreHigh = 0.25f * (v0 + v1 + v2 + v3) > level;
                             bool corner0High = v0 > level;
                             if (centreHigh == corner0High)
@@ -463,7 +463,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         }
                     }
                 }
-                // Chaînage en polylignes : d'abord depuis les bouts (degré 1), puis les boucles.
+                // Chain into polylines: first from the ends (degree 1), then the loops.
                 var lines = new List<List<float2>>();
                 var loops = new List<bool>();
                 var used = new HashSet<long>();
@@ -506,7 +506,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return lines;
             }
 
-            /// <summary>Rééchantillonne une polyligne tous les ContourStep m puis la lisse (moyenne glissante, bouts fixes).</summary>
+            /// <summary>Resamples a polyline every ContourStep m, then smooths it (moving average, ends fixed).</summary>
             private static List<float2> Resample(List<float2> line, bool loop)
             {
                 var source = new List<float2>(line);
@@ -550,18 +550,17 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Garde les portions d'une courbe de niveau dans la forme, à distance du périmètre et des
-            /// rues de niveau déjà acceptées (sinon, là où la pente est forte, les courbes se serrent).
+            /// Keeps the parts of a contour line that lie inside the shape, away from the perimeter and from
+            /// already accepted level streets (otherwise contours bunch up where the slope is steep).
             /// </summary>
             private void AcceptContour(List<float2> line, bool loop, float level)
             {
                 List<float2> points = Resample(line, loop);
                 if (points.Count < 3) return;
-                // Deux seuils (retour utilisateur, capture : "as estradas perdem continuidade") : une rue ne
-                // commence et ne finit que loin des autres (0,7 x l'espacement), mais le long d'une rue
-                // déjà commencée un passage plus proche (jusqu'à 0,4 x) est gardé s'il est court
-                // (ContourMaxBridge x l'espacement) — la courbe n'est plus coupée en tronçons isolés à
-                // chaque endroit où elle frôle sa voisine.
+                // Two thresholds (user feedback, with screenshot: "the roads lose continuity"): a street only
+                // starts and ends far from the others (0.7 x spacing), but along a street already started a
+                // closer pass (down to 0.4 x) is kept if it is short (ContourMaxBridge x spacing), so the
+                // contour is no longer chopped into isolated segments wherever it brushes its neighbour.
                 bool Inside(float2 p) => PointInPolygon(p, _polygon) && _perimeter.Distance(p, ContourClearance) >= ContourClearance;
                 var strict = new bool[points.Count];
                 var loose = new bool[points.Count];
@@ -584,7 +583,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     }
                     return;
                 }
-                // Boucle ouverte : commencer à un point refusé pour ne pas couper une portion en deux.
+                // Closed loop: start at a rejected point so a kept portion is not split in two.
                 int start = 0;
                 if (loop)
                 {
@@ -596,7 +595,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 var runStrict = new List<bool>();
                 void Flush()
                 {
-                    // Bouts pas assez loin des autres rues retirés ; passages proches trop longs : coupure.
+                    // Ends too close to other streets are trimmed; close passes that are too long: cut.
                     int a = 0, b = run.Count - 1;
                     while (a <= b && !runStrict[a]) a++;
                     while (b >= a && !runStrict[b]) b--;
@@ -610,7 +609,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         }
                         else if (++soft > maxBridge)
                         {
-                            // Passage trop long : fin de la pièce avant lui, reprise au prochain point strict.
+                            // Pass too long: end the piece before it, resume at the next point that meets the strict gap.
                             piece.RemoveRange(piece.Count - (soft - 1), soft - 1);
                             Keep(piece);
                             piece = new List<float2>();
@@ -650,9 +649,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Trous restants (plateau presque plat, replat entre deux pentes : aucune courbe de niveau à
-            /// suivre) : des rues parallèles aux rues voisines, à l'espacement voulu, gagnent de proche
-            /// en proche (AcceptContour ne les garde que loin des rues existantes et du périmètre).
+            /// Remaining gaps (near-flat plateau, a shelf between two slopes: no contour line to follow):
+            /// parallel streets to the neighbouring ones, at the desired spacing, spread outward step by
+            /// step (AcceptContour keeps them only away from existing streets and the perimeter).
             /// </summary>
             private void FillGaps()
             {
@@ -684,8 +683,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Bouts de rue : prolongés tout droit jusqu'au périmètre s'ils l'atteignent vite et à angle
-            /// ouvert ; sinon impasse, raccourcie jusqu'à laisser la place du cercle de retournement.
+            /// Street ends: extended straight to the perimeter if they reach it quickly and at an open angle;
+            /// otherwise a cul-de-sac, shortened until it clears the space a turning circle would need.
             /// </summary>
             private void ResolveEnds()
             {
@@ -700,7 +699,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                             if (atEnd) street.EndOnPerimeter = true; else street.StartOnPerimeter = true;
                             continue;
                         }
-                        // Impasse : le bout doit être loin du périmètre et des autres rues.
+                        // Cul-de-sac: the tip must be far from the perimeter and from other streets.
                         while (street.Points.Count > 2)
                         {
                             float2 tip = atEnd ? street.Points[street.Points.Count - 1] : street.Points[0];
@@ -724,7 +723,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 ContourStreet street = _streets[s];
                 int n = street.Points.Count;
                 if (n < 2) return false;
-                // Rue raccourcie à deux points par son autre bout (log en jeu : index hors limites).
+                // Street may have been shortened to two points from its other end (seen in game log: index out of range).
                 int back = math.min(2, n - 1);
                 float2 tip = atEnd ? street.Points[n - 1] : street.Points[0];
                 float2 dir = atEnd ? math.normalizesafe(street.Points[n - 1] - street.Points[n - 1 - back])
@@ -766,8 +765,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Montées : le long de chaque rue de niveau, tous les _connectorSpacing m, une rue droite
-            /// vers la rue du niveau supérieur, sous la pente maximale et à angles ouverts des deux côtés.
+            /// Uphill links: along each level street, every _connectorSpacing m, a straight street to the
+            /// next higher level street, under the max grade and with open angles at both ends.
             /// </summary>
             private void AddConnectors()
             {
@@ -794,8 +793,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         for (int b = 0; b < count; b++)
                         {
                             ContourStreet upper = _streets[b];
-                            // Rue de niveau supérieure la plus proche (le niveau juste au-dessus a pu être écarté
-                            // là où la pente serre les courbes) ; passer par-dessus une autre rue est exclu par ConnectorClear.
+                            // Nearest higher level street (the level just above may have been dropped where the slope
+                            // bunches the contours); passing over another street is ruled out by ConnectorClear.
                             if (upper.Removed || upper.Connector || upper.Level <= lower.Level) continue;
                             for (int j = 0; j < upper.Points.Count; j++)
                             {
@@ -807,9 +806,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                                 float2 tq = upper.Tangent(j);
                                 float sinP = math.abs(dir.x * tangentP.y - dir.y * tangentP.x), sinQ = math.abs(dir.x * tq.y - dir.y * tq.x);
                                 bool curved = sinP < minSin || sinQ < minSin;
-                                // Pente forte (retour : aucune montée au-delà de ~15 % de pente) : la corde
-                                // doit partir en biais pour rester ≤ 15 %, trop à plat pour un carrefour —
-                                // montée en S qui quitte et rejoint les rues à ContourCurveAngle.
+                                // Steep slope (user feedback: no uphill link above ~15% grade): the chord would have
+                                // to run at a slant to stay ≤ 15%, too shallow for a junction, so use an S-shaped
+                                // link that leaves and joins the streets at ContourCurveAngle.
                                 if (curved && (sinP < minCurveSin || sinQ < minCurveSin)) continue;
                                 float score = curved ? d * 1.25f : d;
                                 if (score >= bestDistance) continue;
@@ -854,10 +853,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Liaisons vers le périmètre : depuis chaque rue de niveau, tous les _connectorSpacing m, une
-            /// rue droite jusqu'au périmètre quand rien ne les sépare (rue la plus extérieure à cet
-            /// endroit), sous la pente maximale — en biais si la pente l'exige. Sans elles, une colline
-            /// entièrement dans la zone ne donne que des boucles fermées, jamais reliées au périmètre.
+            /// Links to the perimeter: from each level street, every _connectorSpacing m, a straight
+            /// street to the perimeter when nothing lies in between (outermost street at that spot),
+            /// under the max grade (at a slant if the slope requires it). Without them, a hill lying
+            /// entirely inside the area yields only closed loops, never connected to the perimeter.
             /// </summary>
             private void AddPerimeterLinks()
             {
@@ -925,7 +924,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            /// <summary>Liaison droite p→hit (hit sur le périmètre) : dans la forme, sans frôler une autre rue.</summary>
+            /// <summary>Straight link p→hit (hit on the perimeter): inside the shape, without brushing another street.</summary>
             private bool PerimeterLinkClear(float2 p, float2 hit, int streetP)
             {
                 float length = math.distance(p, hit);
@@ -934,7 +933,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     float2 m = math.lerp(p, hit, t / length);
                     if (!PointInPolygon(m, _polygon)) return false;
                     float fromP = t, fromHit = length - t;
-                    // Le long du périmètre seulement près de l'arrivée (la liaison y arrive à angle ouvert).
+                    // Runs along the perimeter only near the arrival point (where the link meets it at an open angle).
                     if (fromHit > ContourClearance + ContourStep && _perimeter.Distance(m, ContourClearance) < ContourClearance) return false;
                     if (Near(m, math.min(ContourClearance, fromP), (s, i) => s == streetP && math.distance(_streets[s].Points[i], p) < fromP + 1f))
                     {
@@ -945,8 +944,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Bouts d'impasse : gardent leur distance (ContourTipGap) à toute rue, liaisons comprises.
-            /// Liaison droite a→b, ou polyligne `path` pour une montée courbe.
+            /// Cul-de-sac tips keep their distance (ContourTipGap) from every street, links included.
+            /// Straight link a→b, or polyline `path` for a curved uphill link.
             /// </summary>
             private bool ClearOfTips(float2 a, float2 b, List<float2> path = null)
             {
@@ -979,8 +978,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Direction de départ (ou d'arrivée) d'une montée courbe : à ContourCurveAngle de la rue
-            /// (tangente), du côté de la corde et dans son sens.
+            /// Departure (or arrival) direction of a curved uphill link: at ContourCurveAngle to the street
+            /// (tangent), on the chord's side and in its direction.
             /// </summary>
             private static float2 CurveDirection(float2 tangent, float2 chord)
             {
@@ -991,7 +990,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return math.normalize(along * math.cos(angle) + normal * math.sin(angle));
             }
 
-            /// <summary>Point t de la montée courbe (cubique, bras au tiers de la corde — proche de la courbe du jeu).</summary>
+            /// <summary>Point t of the curved uphill link (cubic, arms at a third of the chord, close to the game's curve).</summary>
             private static float2 CurvePoint(float2 a, float2 startDir, float2 endDir, float2 b, float t)
             {
                 float arm = math.distance(a, b) / 3f;
@@ -1000,7 +999,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return u * u * u * a + 3f * u * u * t * c1 + 3f * u * t * t * c2 + t * t * t * b;
             }
 
-            /// <summary>Montée courbe dégagée : même règle que ConnectorClear, le long de la courbe.</summary>
+            /// <summary>Curved uphill link is clear: same rule as ConnectorClear, along the curve.</summary>
             private bool CurveClear(float2 p, float2 startDir, float2 endDir, float2 q, int streetP, int streetQ)
             {
                 int steps = (int)math.ceil(math.distance(p, q) / ContourStep);
@@ -1032,7 +1031,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return ClearOfTips(p, q, points);
             }
 
-            /// <summary>Montée droite p→q : dans la forme, loin du périmètre et des autres rues (hors ses deux bouts).</summary>
+            /// <summary>Straight uphill link p→q: inside the shape, away from the perimeter and other streets (excluding its two ends).</summary>
             private bool ConnectorClear(float2 p, float2 q, int streetP, int streetQ)
             {
                 float length = math.distance(p, q);
@@ -1051,7 +1050,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return ClearOfTips(p, q);
             }
 
-            /// <summary>Rues reliées au périmètre (directement ou par des montées/liaisons).</summary>
+            /// <summary>Streets connected to the perimeter (directly or through uphill links/links).</summary>
             private HashSet<int> Reached()
             {
                 var reached = new HashSet<int>();
@@ -1074,18 +1073,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Îlots : rues de niveau qu'aucune montée (toujours vers le haut) ni liaison au périmètre
-            /// n'a reliées — elles seraient retirées (KeepConnected), laissant de grands trous (rejoué
-            /// sur un vrai terrain : 52 rues sur 112). Chaque îlot reçoit la liaison la plus courte vers
-            /// une rue déjà reliée, vers le haut OU le bas, mêmes règles (pente ≤ 15 %, angles ouverts,
-            /// dégagement) ; on recommence tant que ça relie quelque chose.
+            /// Islands: level streets that no uphill link (always upward) nor perimeter link has
+            /// connected; they would be removed (KeepConnected), leaving large gaps (replayed on real
+            /// terrain: 52 streets out of 112). Each island gets the shortest link to an already
+            /// connected street, upward OR downward, same rules (grade ≤ 15%, open angles, clearance);
+            /// repeat while it still connects something.
             /// </summary>
             private void ConnectIslands()
             {
-                // Candidats (îlot → rue reliée) tenus à jour d'un tour à l'autre au lieu d'être tous
-                // recalculés (retour : Relevo à 60 m sur une grande zone peinte, plusieurs secondes ici) :
-                // au départ tous les couples proches, puis seulement ceux vers les rues nouvellement
-                // reliées. Chaque tour prend le plus court encore valide et libre, comme avant.
+                // Candidates (island → connected street) are kept up to date between rounds instead of all
+                // being recomputed (user feedback: Contour at 60 m on a large painted area took several seconds
+                // here): initially every nearby pair, then only those towards newly connected streets. Each
+                // round takes the shortest one still valid and free, as before.
                 var candidates = new List<(float d, int a, int i, int b, int j)>();
                 HashSet<int> reached = Reached();
                 AddIslandCandidates(candidates, reached, reached);
@@ -1094,8 +1093,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     candidates.Sort((x, y) => x.d.CompareTo(y.d));
                     int bestA = -1, bestB = -1, bestI = -1, bestJ = -1;
                     float bestDistance = 0f;
-                    // Un candidat refusé le reste : les tours suivants ne font qu'ajouter des liaisons
-                    // (plus d'obstacles, plus de carrefours), jamais en retirer — il est écarté.
+                    // A rejected candidate stays rejected: later rounds only add links (more obstacles, more
+                    // junctions), never remove any, so it is dropped.
                     int k0 = 0;
                     for (; k0 < candidates.Count; k0++)
                     {
@@ -1137,14 +1136,14 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // Index grossier (cases de la portée d'une liaison) des points de rue, pour ConnectIslands.
+            // Coarse index (cells the size of a link's reach) of street points, for ConnectIslands.
             private Dictionary<long, List<(int street, int point)>> _coarse;
             private float _coarseCell;
 
             /// <summary>
-            /// Couples (point d'îlot, point d'une rue de `targets`) proches : on part des points des rues
-            /// cibles (peu nombreuses après le premier tour) et on cherche les points d'îlot dans les 3 x 3
-            /// cases voisines de l'index grossier.
+            /// Nearby (island point, point on a `targets` street) pairs: start from the target streets'
+            /// points (few after the first round) and look for island points in the 3 x 3 neighbouring
+            /// cells of the coarse index.
             /// </summary>
             private void AddIslandCandidates(List<(float d, int a, int i, int b, int j)> candidates, HashSet<int> reached, HashSet<int> targets)
             {
@@ -1190,7 +1189,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            /// <summary>Liaison possible (hors test de passage) du point i de l'îlot a au point j de la rue b.</summary>
+            /// <summary>Possible link (clearance test excluded) from point i of island a to point j of street b.</summary>
             private bool IslandCandidate(int a, int i, int b, int j, out float d)
             {
                 d = 0f;
@@ -1206,12 +1205,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float2 tangentP = island.Tangent(i);
                 if (math.abs(dir.x * tangentP.y - dir.y * tangentP.x) < minSin) return false;
                 int last = other.Points.Count - 1;
-                // Bout d'impasse : la liaison le prolonge (l'impasse disparaît) ; ailleurs, carrefour en T.
+                // Cul-de-sac tip: the link extends it (the cul-de-sac disappears); elsewhere, a T-junction.
                 bool tip = (j == 0 && other.StartDead) || (j == last && other.EndDead);
                 float2 tq = other.Tangent(j);
                 if (tip)
                 {
-                    // La rue continue dans la liaison : pas de repli en épingle (> 40° d'ouverture).
+                    // The street continues into the link: no hairpin fold-back (> 40° opening).
                     float2 outward = j == 0 ? -tq : tq;
                     return math.dot(outward, -dir) >= -0.77f;
                 }
@@ -1219,10 +1218,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             }
 
             /// <summary>
-            /// Bouts d'impasse reliés à la rue la plus proche devant eux (retour utilisateur, capture :
-            /// "as estradas perdem continuidade") : au bout d'une autre impasse (la rue continue) ou au
-            /// milieu d'une rue (carrefour en T), à moins de ContourJoinReach x l'espacement, dans la
-            /// direction de la rue (±50°), pente ≤ 15 %, angles ouverts et passage dégagé.
+            /// Cul-de-sac tips joined to the nearest street ahead of them (user feedback, with screenshot:
+            /// "the roads lose continuity"): to another cul-de-sac tip (the street continues) or to the
+            /// middle of a street (T-junction), within ContourJoinReach x spacing, in the street's
+            /// direction (±50°), grade ≤ 15%, open angles and a clear path.
             /// </summary>
             private void JoinDeadEnds()
             {
@@ -1266,7 +1265,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                                 bool tip = !other.Closed && ((j == 0 && other.StartDead) || (j == last && other.EndDead));
                                 if (tip)
                                 {
-                                    // Les deux bouts se font face : la rue continue.
+                                    // The two tips face each other: the street continues.
                                     float2 otherOut = j == 0 ? math.normalizesafe(q - other.Points[math.min(2, last)])
                                         : math.normalizesafe(q - other.Points[math.max(0, last - 2)]);
                                     if (math.dot(otherOut, -dir) < aheadCos) continue;
@@ -1277,7 +1276,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                                     if (math.abs(dir.x * tq.y - dir.y * tq.x) < minSin) continue;
                                     if (!other.FreeAt(j, ContourJunctionGap)) continue;
                                 }
-                                // Continuité d'abord : un bout d'impasse en face compte pour plus proche.
+                                // Continuity first: a facing cul-de-sac tip counts as closer.
                                 float score = tip ? 0.7f * d : d;
                                 if (score >= bestScore) continue;
                                 if (!ConnectorClear(p, q, s, b)) continue;
@@ -1312,10 +1311,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            /// <summary>Ne garde que ce qui est relié au périmètre (sinon inaccessible). Faux si rien ne l'est.</summary>
+            /// <summary>Keeps only what is connected to the perimeter (otherwise unreachable). False if nothing is.</summary>
             private bool KeepConnected()
             {
-                // Liste en guise de pile : Stack<T> est ambigu dans le projet du mod (System et mscorlib).
+                // List used as a stack: Stack<T> was ambiguous in the original mod project (System vs mscorlib).
                 var reached = new HashSet<int>();
                 var stack = new List<int>();
                 for (int s = 0; s < _streets.Count; s++)
@@ -1339,7 +1338,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return reached.Count > 0;
             }
 
-            // ---------------- Tronçons
+            // ---------------- Segments
 
             private List<RoadSegmentDef> Emit()
             {
@@ -1385,7 +1384,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return result;
             }
 
-            /// <summary>Portion de rue de niveau entre deux carrefours, en tronçons courbes de 45 à 90 m ; bouts d'impasse en fin de tronçon.</summary>
+            /// <summary>Part of a level street between two junctions, as curved segments of 45 to 90 m; cul-de-sac tips at the end of a segment.</summary>
             private void EmitCurve(List<RoadSegmentDef> result, ContourStreet street, List<int> indices, bool deadStart, bool deadEnd)
             {
                 var along = new float[indices.Count];
@@ -1412,13 +1411,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     bool first = c == 0, last = c + 2 == stops.Count;
                     if (first && deadStart)
                     {
-                        // Le cercle de retournement se pose au bout (End) : tronçon retourné.
+                        // The dead end goes at the segment's End (where the turning circle used to sit): reverse the segment.
                         (a, b) = (b, a);
                         (t0, t1) = (-t1, -t0);
                     }
-                    // Pas de cercle de retournement (retour utilisateur : "os becos aqui não são
-                    // necessários, apenas vias que seguem as linhas topográficas") : un bout de rue
-                    // de niveau qui n'atteint pas le périmètre s'arrête simplement.
+                    // No turning circle (user feedback: "the cul-de-sacs aren't needed here, just roads that
+                    // follow the contour lines"): a level street end that does not reach the perimeter
+                    // simply stops.
                     result.Add(RoadSegmentDef.Arc(new float3(a.x, _y, a.y), new float3(b.x, _y, b.y),
                         new float3(t0.x, 0f, t0.y), new float3(t1.x, 0f, t1.y)));
                 }
@@ -1428,7 +1427,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 if (street.Curved)
                 {
-                    // Montée en S : un seul tronçon courbe (la corde reste sous 3 × l'espacement).
+                    // S-shaped uphill link: a single curved segment (the chord stays under 3 × spacing).
                     float2 s0 = street.Points[0], s1 = street.Points[street.Points.Count - 1];
                     var arc = RoadSegmentDef.Arc(new float3(s0.x, _y, s0.y), new float3(s1.x, _y, s1.y),
                         new float3(street.StartDirection.x, 0f, street.StartDirection.y), new float3(street.EndDirection.x, 0f, street.EndDirection.y));

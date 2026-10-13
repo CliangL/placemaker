@@ -49,11 +49,11 @@ namespace Placemaker.Tests
             Assert.True(ring.Count > Clicked.Count * 3);
             for (int i = 0; i < ring.Count; i++)
             {
-                // Chaque point reste sur ou dans le polygone cliqué, et près de son contour.
+                // Every point stays on or inside the clicked polygon, and close to its outline.
                 Assert.True(DistanceToRing(ring[i].xz, Clicked) < FreeAreaPerimeter.CornerRadius);
                 float2 a = ring[i].xz, b = ring[(i + 1) % ring.Count].xz, c = ring[(i + 2) % ring.Count].xz;
                 float turn = math.degrees(math.acos(math.clamp(math.dot(math.normalize(b - a), math.normalize(c - b)), -1f, 1f)));
-                Assert.True(turn < 25f, $"virage de {turn:F0}° en {b}");
+                Assert.True(turn < 25f, $"{turn:F0}° turn at {b}");
             }
         }
 
@@ -75,7 +75,7 @@ namespace Placemaker.Tests
             Assert.NotEmpty(interior);
             List<RoadSegmentDef> road = FreeAreaPerimeter.PerimeterRoad(ring, interior);
 
-            // Chaîne fermée : chaque nœud de la route de périmètre a exactement deux tronçons.
+            // Closed chain: every node of the perimeter road has exactly two segments.
             var degree = new Dictionary<float3, int>();
             foreach (RoadSegmentDef s in road)
             {
@@ -84,20 +84,20 @@ namespace Placemaker.Tests
             }
             Assert.All(degree, pair => Assert.Equal(2, pair.Value));
 
-            // Toute extrémité de rue posée sur le contour est un nœud de la route (même float3).
+            // Every street end lying on the outline is a node of the road (same float3).
             foreach (RoadSegmentDef s in interior)
             {
                 foreach (float3 end in new[] { s.Start, s.End })
                 {
                     if (DistanceToRing(end.xz, ring) < 0.5f)
                     {
-                        Assert.True(degree.ContainsKey(end), $"{pattern} : rue en {end.xz} non raccordée à la route de périmètre");
+                        Assert.True(degree.ContainsKey(end), $"{pattern}: street at {end.xz} not joined to the perimeter road");
                     }
                 }
             }
 
-            // La courbe réellement posée par le jeu colle au contour (à quelques mètres près là où un
-            // tronçon enchaîne un bout droit et un coin : les rues intérieures restent à 22 m au moins).
+            // The curve the game actually builds hugs the outline (within a few metres where a segment
+            // chains a straight piece and a corner: interior streets stay at least 22 m away).
             float total = 0f;
             foreach (RoadSegmentDef s in road)
             {
@@ -105,10 +105,10 @@ namespace Placemaker.Tests
                 float length = 0f;
                 for (int i = 1; i < curve.Length; i++) length += math.distance(curve[i - 1], curve[i]);
                 total += length;
-                Assert.True(length <= FreeAreaPerimeter.MaxPieceLength * 1.15f, $"{pattern} : tronçon de {length:F0} m de {s.Start.xz} à {s.End.xz} arc={s.IsArc}");
+                Assert.True(length <= FreeAreaPerimeter.MaxPieceLength * 1.15f, $"{pattern}: {length:F0} m segment from {s.Start.xz} to {s.End.xz} arc={s.IsArc}");
                 foreach (float2 q in curve)
                 {
-                    Assert.True(DistanceToRing(q, ring) < 1.5f, $"{pattern} : courbe à {DistanceToRing(q, ring):F1} m du contour en {q}");
+                    Assert.True(DistanceToRing(q, ring) < 1.5f, $"{pattern}: curve {DistanceToRing(q, ring):F1} m from the outline at {q}");
                 }
             }
             float ringLength = 0f;

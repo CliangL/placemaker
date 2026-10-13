@@ -9,35 +9,35 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads.Generators
 {
     /// <summary>
-    /// Mode "Área livre" : le joueur clique des points sur le terrain au lieu de choisir des nœuds
-    /// de routes existantes. Le polygone cliqué est arrondi aux coins (Smooth) pour servir de
-    /// périmètre aux générateurs, puis une route de périmètre est posée le long de ce contour
-    /// (PerimeterRoad), coupée à chaque point où une rue générée le rejoint.
+    /// Drawn (free) area mode: the player clicks points on the terrain instead of picking nodes of
+    /// existing roads. The clicked polygon gets rounded corners (Smooth) and serves as the
+    /// generators' perimeter; a perimeter road is then laid along that outline (PerimeterRoad),
+    /// split at every point where a generated street meets it.
     /// </summary>
     public static class FreeAreaPerimeter
     {
-        /// <summary>Rayon (m) des coins arrondis du contour.</summary>
+        /// <summary>Radius (m) of the outline's rounded corners.</summary>
         public const float CornerRadius = 40f;
-        /// <summary>Pas (m) des points le long d'un coin arrondi.</summary>
+        /// <summary>Spacing (m) of the points along a rounded corner.</summary>
         public const float ArcStep = 8f;
-        /// <summary>Distance (m) au premier point sous laquelle un clic referme la zone.</summary>
+        /// <summary>Distance (m) to the first point below which a click closes the area.</summary>
         public const float CloseDistance = 20f;
-        /// <summary>Distance minimale (m) entre deux points cliqués consécutifs.</summary>
+        /// <summary>Minimum distance (m) between two consecutive clicked points.</summary>
         public const float MinPointDistance = 10f;
-        /// <summary>Longueur maximale (m) d'un tronçon de la route de périmètre.</summary>
+        /// <summary>Maximum length (m) of one perimeter-road segment.</summary>
         public const float MaxPieceLength = 90f;
-        /// <summary>Virage maximal (degrés) le long d'un tronçon de la route de périmètre.</summary>
+        /// <summary>Maximum turn (degrees) along one perimeter-road segment.</summary>
         public const float MaxPieceTurnDegrees = 40f;
-        /// <summary>Distance (m) sous laquelle une extrémité de rue générée est sur le contour.</summary>
+        /// <summary>Distance (m) below which a generated street end counts as on the outline.</summary>
         private const float OnRingDistance = 0.5f;
-        /// <summary>Côté du contour (m) au-delà duquel il est droit (les coins arrondis ont des pas de ArcStep).</summary>
+        /// <summary>Outline edge length (m) above which the edge is straight (rounded corners use ArcStep spacing).</summary>
         private const float StraightEdgeLength = 20f;
-        /// <summary>Distance minimale (m) entre un nœud de transition droit/coin et un autre nœud.</summary>
+        /// <summary>Minimum distance (m) between a straight/corner transition node and any other node.</summary>
         private const float MinTransitionGap = 15f;
-        /// <summary>Longueur minimale (m) d'un tronçon issu d'une découpe (hors raccords imposés par les rues).</summary>
+        /// <summary>Minimum length (m) of a segment produced by splitting (junctions forced by streets excepted).</summary>
         private const float MinPieceLength = 40f;
 
-        /// <summary>Vrai si le polygone a au moins 3 points, une aire suffisante et aucun côté qui en croise un autre.</summary>
+        /// <summary>True if the polygon has at least 3 points, enough area and no edge crossing another.</summary>
         public static bool IsSimple(IReadOnlyList<float3> polygon)
         {
             int n = polygon.Count;
@@ -60,7 +60,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float2 a1 = polygon[i].xz, a2 = polygon[(i + 1) % n].xz;
                 for (int j = i + 1; j < n; j++)
                 {
-                    // Côtés voisins : partagent un sommet, jamais un vrai croisement.
+                    // Adjacent edges share a vertex, never a real crossing.
                     if (j == i + 1 || (i == 0 && j == n - 1))
                     {
                         continue;
@@ -82,9 +82,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Remplissage de l'aperçu d'un polygone (règle pair-impair) : bandes horizontales (xz) espacées
-        /// de step m, d'au plus maxLength m. Dessinées en lignes projetées de largeur step, elles
-        /// couvrent l'intérieur (même principe que BrushMask.FillRuns).
+        /// Preview fill of a polygon (even-odd rule): horizontal (xz) strips spaced `step` m apart,
+        /// each at most `maxLength` m long. Drawn as projected lines of width `step`, they cover the
+        /// interior (same approach as BrushMask.FillRuns).
         /// </summary>
         public static List<(float2 a, float2 b)> FillRuns(IReadOnlyList<float3> polygon, float step = 4f, float maxLength = 64f)
         {
@@ -128,9 +128,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Contour arrondi : chaque coin est remplacé par un arc de cercle tangent aux deux côtés
-        /// (rayon CornerRadius, réduit si les côtés sont trop courts pour le loger), échantillonné
-        /// tous les ArcStep mètres. Les côtés droits restent un seul segment.
+        /// Rounded outline: each corner is replaced by a circular arc tangent to both edges (radius
+        /// CornerRadius, reduced when the edges are too short to fit it), sampled every ArcStep
+        /// metres. Straight edges stay a single segment.
         /// </summary>
         public static List<float3> Smooth(IReadOnlyList<float3> corners, float radius = CornerRadius, float step = ArcStep)
         {
@@ -149,7 +149,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float angle = math.acos(math.clamp(math.dot(u, v), -1f, 1f));
                 if (angle > math.radians(175f))
                 {
-                    result.Add(cur); // presque droit : rien à arrondir
+                    result.Add(cur); // nearly straight: nothing to round
                     continue;
                 }
                 float half = angle * 0.5f;
@@ -175,7 +175,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     result.Add(new float3(centre.x + r * math.cos(a), cur.y, centre.y + r * math.sin(a)));
                 }
             }
-            // Points confondus (fin d'un arc = début du suivant quand un côté est entièrement arrondi).
+            // Coincident points (end of one arc = start of the next when an edge is fully rounded).
             for (int i = result.Count - 1; i > 0 && result.Count > 3; i--)
             {
                 if (math.distance(result[i].xz, result[i - 1].xz) < 0.5f)
@@ -191,10 +191,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
         }
 
         /// <summary>
-        /// Route de périmètre le long du contour fermé `ring` : un nœud à chaque extrémité de rue
-        /// générée posée sur le contour (même float3 exact, pour que le jeu les relie), et des
-        /// tronçons courbes entre deux nœuds — recoupés pour rester sous MaxPieceLength et
-        /// MaxPieceTurnDegrees, afin que la courbe du jeu (NetUtils.FitCurve) colle au contour.
+        /// Perimeter road along the closed outline `ring`: a node at every generated street end lying
+        /// on the outline (the exact same float3, so the game connects them), and curved segments
+        /// between nodes, split further to stay under MaxPieceLength and MaxPieceTurnDegrees so the
+        /// game's curve fit (NetUtils.FitCurve) hugs the outline.
         /// </summary>
         public static List<RoadSegmentDef> PerimeterRoad(IReadOnlyList<float3> ring, IReadOnlyList<RoadSegmentDef> interior,
             IReadOnlyList<float3> extraNodes = null, float maxLength = MaxPieceLength, float maxTurnDegrees = MaxPieceTurnDegrees)
@@ -206,7 +206,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return result;
             }
 
-            // Points de raccord : extrémités des rues générées posées sur le contour.
+            // Junction points: generated street ends lying on the outline.
             var splitsByEdge = new List<(float t, float3 p)>[n];
             var seen = new HashSet<float3>();
             void AddSplit(float3 p)
@@ -242,7 +242,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 AddSplit(s.Start);
                 AddSplit(s.End);
             }
-            // Nœuds imposés (ex. routes existantes qui traversent le contour).
+            // Forced nodes (e.g. existing roads crossing the outline).
             if (extraNodes != null)
             {
                 foreach (float3 p in extraNodes)
@@ -251,7 +251,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 }
             }
 
-            // Séquence fermée : sommets du contour + raccords, dans l'ordre.
+            // Closed sequence: outline vertices + junctions, in order.
             var seq = new List<(float3 p, bool node)>();
             for (int i = 0; i < n; i++)
             {
@@ -267,7 +267,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     seq.Add((p, true));
                 }
             }
-            // Un sommet du contour collé à un raccord ferait un tronçon minuscule : on l'enlève.
+            // An outline vertex right next to a junction would make a tiny segment: drop it.
             for (int i = seq.Count - 1; i >= 0 && seq.Count > 3; i--)
             {
                 if (seq[i].node)
@@ -280,8 +280,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     seq.RemoveAt(i);
                 }
             }
-            // Passage côté droit ↔ coin arrondi : un nœud, pour que chaque tronçon soit droit ou un
-            // arc régulier — la courbe du jeu suit mal un tronçon moitié droit, moitié courbe.
+            // Straight edge <-> rounded corner transition gets a node, so every segment is either straight
+            // or a regular arc: the game's curve tracks a half-straight, half-curved segment poorly.
             int total = seq.Count;
             bool NodeWithin(int i, float distance)
             {
@@ -310,7 +310,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             int firstNode = seq.FindIndex(e => e.node);
             if (firstNode < 0)
             {
-                seq[0] = (seq[0].p, true); // aucune rue ne touche le contour : une boucle seule
+                seq[0] = (seq[0].p, true); // no street touches the outline: a lone loop
                 firstNode = 0;
             }
             var rotated = new List<(float3 p, bool node)>(seq.Count + 1);
@@ -319,7 +319,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 rotated.Add(seq[(firstNode + i) % seq.Count]);
             }
 
-            // Découpe de chaque portion entre deux nœuds : coût = longueur/maxLength + virage/maxTurn.
+            // Split each portion between two nodes: cost = length/maxLength + turn/maxTurn.
             float maxTurn = math.radians(maxTurnDegrees);
             var nodes = new List<(float3 p, bool node)>();
             int start = 0;
@@ -332,12 +332,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 AppendPortion(rotated, start, i, maxLength, maxTurn, nodes);
                 start = i;
             }
-            // `nodes` est fermé : le dernier point est le premier (même nœud).
+            // `nodes` is closed: the last point is the first (same node).
             int count = nodes.Count - 1;
             float3 TangentAt(int k)
             {
                 float2 prev = nodes[(k + count - 1) % count].p.xz, cur = nodes[k % count].p.xz, next = nodes[(k + 1) % count].p.xz;
-                // Au passage côté droit ↔ coin arrondi : la direction du côté droit (tangente exacte de l'arc).
+                // At a straight edge <-> rounded corner transition: use the straight edge's direction (the arc's exact tangent).
                 bool straightBefore = math.distance(prev, cur) >= StraightEdgeLength, straightAfter = math.distance(cur, next) >= StraightEdgeLength;
                 if (straightBefore != straightAfter)
                 {
@@ -374,7 +374,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             return result;
         }
 
-        /// <summary>Ajoute à `output` la portion seq[from..to] (le point `from` seulement si output est vide), avec des nœuds de coupe intermédiaires.</summary>
+        /// <summary>Appends portion seq[from..to] to `output` (point `from` only if output is empty), with intermediate split nodes.</summary>
         private static void AppendPortion(List<(float3 p, bool node)> seq, int from, int to, float maxLength, float maxTurn,
             List<(float3 p, bool node)> output)
         {
@@ -382,7 +382,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
             {
                 output.Add((seq[from].p, true));
             }
-            // Coût cumulé à chaque point : longueur parcourue et virage aux sommets intermédiaires.
+            // Cumulative cost at each point: distance travelled plus turn at intermediate vertices.
             int m = to - from;
             var cost = new float[m + 1];
             for (int i = 1; i <= m; i++)
@@ -396,11 +396,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     cost[i] += turn / maxTurn;
                 }
             }
-            // Pas de tronçon plus court que MinPieceLength : un petit coin arrondi reste d'un seul tenant.
+            // No segment shorter than MinPieceLength: a small rounded corner stays in one piece.
             float portionLength = 0f;
             for (int i = 1; i <= m; i++) portionLength += math.distance(seq[from + i - 1].p.xz, seq[from + i].p.xz);
-            // ... sauf si le virage l'exige : au-delà de MaxPieceTurnDegrees d'un seul tenant, la courbe du
-            // jeu (NetUtils.FitCurve) s'écarte de plusieurs mètres de l'arc.
+            // ...unless the turn requires it: beyond MaxPieceTurnDegrees in one piece, the game's curve
+            // (NetUtils.FitCurve) drifts several metres off the arc.
             float totalTurn = 0f;
             for (int i = 1; i < m; i++)
             {
@@ -415,7 +415,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float lengthStart = cost[i - 1];
                 float lengthEnd = cost[i - 1] + math.distance(seq[from + i - 1].p.xz, seq[from + i].p.xz) / maxLength;
                 bool cutHere = false;
-                // Coupes tombant sur le segment (i-1, i) : point interpolé ; sur le virage au sommet i : le sommet.
+                // Cuts falling on segment (i-1, i): interpolated point; on the turn at vertex i: the vertex itself.
                 while (next < pieces && next * cost[m] / pieces < lengthEnd)
                 {
                     float target = next * cost[m] / pieces;
@@ -423,7 +423,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     float3 p = math.lerp(seq[from + i - 1].p, seq[from + i].p, t);
                     if (math.distance(p.xz, seq[from + i].p.xz) <= 1f)
                     {
-                        cutHere = i < m; // coupe collée au sommet : le sommet lui-même devient le nœud
+                        cutHere = i < m; // cut right at the vertex: the vertex itself becomes the node
                     }
                     else if (math.distance(p.xz, output[output.Count - 1].p.xz) > 1f)
                     {
@@ -431,7 +431,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     }
                     else
                     {
-                        // Coupe collée au point précédent : c'est lui qui devient le nœud.
+                        // Cut right at the previous point: that point becomes the node.
                         output[output.Count - 1] = (output[output.Count - 1].p, true);
                     }
                     next++;

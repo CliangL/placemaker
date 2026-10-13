@@ -66,7 +66,7 @@ namespace Placemaker.Tests
 
         private static void AssertWellFormed(List<RoadSegmentDef> segments, List<float3> perimeter, Func<float2, float> height, string label)
         {
-            Assert.True(segments.Count(s => !s.IsAvenue) >= 6, $"{label} : {segments.Count(s => !s.IsAvenue)} tronçons de niveau seulement");
+            Assert.True(segments.Count(s => !s.IsAvenue) >= 6, $"{label}: only {segments.Count(s => !s.IsAvenue)} level segments");
             Assert.Contains(segments, s => s.IsAvenue);
             var curves = segments.Select(s => RoadsConcentricGeneratorTests.GameCurve(s, 24)).ToList();
             var nodes = new Dictionary<float3, List<float2>>();
@@ -76,21 +76,21 @@ namespace Placemaker.Tests
                 float2[] c = curves[k];
                 float length = 0f;
                 for (int i = 1; i < c.Length; i++) length += math.distance(c[i - 1], c[i]);
-                Assert.True(length >= 34f, $"{label} : tronçon de {length:F0} m en {s.Start.xz}");
+                Assert.True(length >= 34f, $"{label}: {length:F0} m segment at {s.Start.xz}");
                 bool startOn = DistanceToPolygon(s.Start.xz, perimeter) < 0.5f, endOn = DistanceToPolygon(s.End.xz, perimeter) < 0.5f;
                 float along = 0f;
                 for (int i = 0; i < c.Length; i++)
                 {
                     if (i > 0) along += math.distance(c[i - 1], c[i]);
-                    Assert.True(Inside(c[i], perimeter) || DistanceToPolygon(c[i], perimeter) < 0.5f, $"{label} : hors de la forme en {c[i]}");
+                    Assert.True(Inside(c[i], perimeter) || DistanceToPolygon(c[i], perimeter) < 0.5f, $"{label}: outside the shape at {c[i]}");
                     if ((startOn && along < 45f) || (endOn && length - along < 45f)) continue;
-                    Assert.True(DistanceToPolygon(c[i], perimeter) >= 22f, $"{label} : à {DistanceToPolygon(c[i], perimeter):F1} m du périmètre en {c[i]}");
+                    Assert.True(DistanceToPolygon(c[i], perimeter) >= 22f, $"{label}: {DistanceToPolygon(c[i], perimeter):F1} m from the perimeter at {c[i]}");
                 }
                 if (s.IsAvenue)
                 {
-                    // Montée : pente sous le maximum (15 %).
+                    // Uphill link: grade below the maximum (15%).
                     float grade = math.abs(height(s.End.xz) - height(s.Start.xz)) / math.distance(s.Start.xz, s.End.xz);
-                    Assert.True(grade <= 0.16f, $"{label} : montée à {grade:P0} en {s.Start.xz}");
+                    Assert.True(grade <= 0.16f, $"{label}: uphill link at {grade:P0} at {s.Start.xz}");
                 }
                 void AddTangent(float3 n, float2 t)
                 {
@@ -105,7 +105,7 @@ namespace Placemaker.Tests
                     for (int j = i + 1; j < pair.Value.Count; j++)
                     {
                         float angle = math.degrees(math.acos(math.clamp(math.dot(pair.Value[i], pair.Value[j]), -1f, 1f)));
-                        Assert.True(angle >= 38f, $"{label} : angle de {angle:F0}° en {pair.Key.xz}");
+                        Assert.True(angle >= 38f, $"{label}: {angle:F0}° angle at {pair.Key.xz}");
                     }
             var boxes = curves.Select(c => (min: c.Aggregate(new float2(float.MaxValue), math.min), max: c.Aggregate(new float2(float.MinValue), math.max))).ToList();
             for (int a = 0; a < curves.Count; a++)
@@ -114,23 +114,23 @@ namespace Placemaker.Tests
                     if (math.any(boxes[a].max < boxes[b].min) || math.any(boxes[b].max < boxes[a].min)) continue;
                     for (int i = 1; i < curves[a].Length; i++)
                         for (int j = 1; j < curves[b].Length; j++)
-                            Assert.False(Cross(curves[a][i - 1], curves[a][i], curves[b][j - 1], curves[b][j]), $"{label} : croisement près de {curves[a][i]}");
+                            Assert.False(Cross(curves[a][i - 1], curves[a][i], curves[b][j - 1], curves[b][j]), $"{label}: crossing near {curves[a][i]}");
                 }
-            // Pas d'impasse avec cercle de retournement : seulement des rues de niveau et des montées.
+            // No cul-de-sac with a turning circle: only level streets and uphill links.
             Assert.DoesNotContain(segments, s => s.IsCulDeSacEnd);
-            // Bouts libres hors périmètre : loin du périmètre et des autres rues.
+            // Free ends off the perimeter: far from the perimeter and from other streets.
             var tips = nodes.Where(n => n.Value.Count == 1 && DistanceToPolygon(n.Key.xz, perimeter) >= 0.5f).Select(n => n.Key).ToList();
             foreach (float3 tip in tips)
             {
-                Assert.True(DistanceToPolygon(tip.xz, perimeter) >= 29f, $"{label} : impasse à {DistanceToPolygon(tip.xz, perimeter):F0} m du périmètre");
+                Assert.True(DistanceToPolygon(tip.xz, perimeter) >= 29f, $"{label}: cul-de-sac {DistanceToPolygon(tip.xz, perimeter):F0} m from the perimeter");
                 for (int k = 0; k < segments.Count; k++)
                 {
                     if (segments[k].Start.Equals(tip) || segments[k].End.Equals(tip)) continue;
                     float d = curves[k].Min(q => math.distance(q, tip.xz));
-                    Assert.True(d >= 38f, $"{label} : bout d'impasse à {d:F0} m d'une autre rue en {tip.xz}");
+                    Assert.True(d >= 38f, $"{label}: cul-de-sac end {d:F0} m from another street at {tip.xz}");
                 }
             }
-            // Tout relié au périmètre.
+            // Everything connected to the perimeter.
             var adjacency = new Dictionary<float3, List<float3>>();
             foreach (RoadSegmentDef s in segments)
             {
@@ -149,7 +149,7 @@ namespace Placemaker.Tests
                 if (!seen.Add(n)) continue;
                 foreach (float3 m in adjacency[n]) stack.Push(m);
             }
-            Assert.True(seen.Count == adjacency.Count, $"{label} : {adjacency.Count - seen.Count} nœud(s) non reliés au périmètre");
+            Assert.True(seen.Count == adjacency.Count, $"{label}: {adjacency.Count - seen.Count} node(s) not connected to the perimeter");
         }
 
         [Fact]
@@ -158,12 +158,12 @@ namespace Placemaker.Tests
             var perimeter = Rectangle(1400f, 1000f);
             var height = Hill(new float2(700f, 500f), 80f, 350f);
             var segments = GridGenerator.GenerateGrid(perimeter, Contour(height));
-            AssertWellFormed(segments, perimeter, height, "colline");
-            // Rues de niveau : hauteur presque constante le long de chaque tronçon.
+            AssertWellFormed(segments, perimeter, height, "hill");
+            // Level streets: height almost constant along each segment.
             foreach (RoadSegmentDef s in segments.Where(s => !s.IsAvenue))
             {
                 var heights = RoadsConcentricGeneratorTests.GameCurve(s, 12).Select(q => height(q)).ToList();
-                Assert.True(heights.Max() - heights.Min() <= 4f, $"rue de niveau qui monte de {heights.Max() - heights.Min():F1} m en {s.Start.xz}");
+                Assert.True(heights.Max() - heights.Min() <= 4f, $"level street climbing {heights.Max() - heights.Min():F1} m at {s.Start.xz}");
             }
         }
 
@@ -174,7 +174,7 @@ namespace Placemaker.Tests
             Func<float2, float> height = p => 0.12f * p.x + 8f * math.sin(p.y / 120f);
             foreach (float spacing in new[] { 70f, 90f, 130f })
             {
-                AssertWellFormed(GridGenerator.GenerateGrid(perimeter, Contour(height, spacing)), perimeter, height, $"pente {spacing} m");
+                AssertWellFormed(GridGenerator.GenerateGrid(perimeter, Contour(height, spacing)), perimeter, height, $"slope {spacing} m");
             }
         }
 
@@ -186,32 +186,32 @@ namespace Placemaker.Tests
             var height = Hill(centre, 90f, 450f);
             foreach (float spacing in new[] { 70f, 90f, 120f })
             {
-                AssertWellFormed(GridGenerator.GenerateGrid(perimeter, Contour(height, spacing)), perimeter, height, $"réel {spacing} m");
+                AssertWellFormed(GridGenerator.GenerateGrid(perimeter, Contour(height, spacing)), perimeter, height, $"real {spacing} m");
             }
         }
 
         [Fact]
         public void SteepSlope_GetsCurvedUphillLinks()
         {
-            // 25 % : une montée droite ≤ 15 % partirait à moins de 45° des rues — montées en S.
+            // 25%: a straight uphill link at <= 15% would leave the streets at under 45°, hence S-shaped uphill links.
             var perimeter = Rectangle(1200f, 900f);
             Func<float2, float> height = p => 0.25f * p.x;
             var segments = GridGenerator.GenerateGrid(perimeter, Contour(height));
-            AssertWellFormed(segments, perimeter, height, "pente 25 %");
+            AssertWellFormed(segments, perimeter, height, "slope 25%");
             Assert.Contains(segments, s => s.IsAvenue && s.IsArc);
         }
 
         [Fact]
         public void RealTerrain_LeavesNoLargeGaps()
         {
-            // Zone libre dessinée en jeu (contour et relief relevés dans le log) : plateau presque plat et
-            // pentes variables — avant, 24 % de la zone était à plus de 90 m de toute rue.
+            // Drawn area captured in game (outline and terrain taken from the log): an almost flat plateau and
+            // varying slopes. Previously 24% of the area was more than 90 m from any street.
             var perimeter = File.ReadAllLines(Path.Combine(RoadsTestUtil.FixtureDir(), "free-area-ring.txt"))
                 .Where(l => l.Trim().Length > 0).Select(l => l.Trim().Split(' '))
                 .Select(q => new float3(float.Parse(q[0], CultureInfo.InvariantCulture), 0f, float.Parse(q[1], CultureInfo.InvariantCulture))).ToList();
             var height = RoadsFreeAreaReplayTests.LoadHeights("free-area-heights.txt");
             var segments = GridGenerator.GenerateGrid(perimeter, Contour(height));
-            AssertWellFormed(segments, perimeter, height, "terrain réel");
+            AssertWellFormed(segments, perimeter, height, "real terrain");
             var points = segments.SelectMany(s => RoadsConcentricGeneratorTests.GameCurve(s, 12)).ToList();
             float2 min = perimeter.Aggregate(new float2(float.MaxValue), (a, q) => math.min(a, q.xz));
             float2 max = perimeter.Aggregate(new float2(float.MinValue), (a, q) => math.max(a, q.xz));
@@ -227,7 +227,7 @@ namespace Placemaker.Tests
                     if (d > 90f) far++;
                 }
             }
-            Assert.True(far <= inside * 0.02f, $"{100f * far / inside:F0} % de la zone à plus de 90 m d'une rue");
+            Assert.True(far <= inside * 0.02f, $"{100f * far / inside:F0}% of the area more than 90 m from a street");
         }
 
         [Fact]
@@ -252,7 +252,7 @@ namespace Placemaker.Tests
             {
                 GridGenerator.GenerateGrid(perimeter, Contour(Hill(centre, 90f, 450f), 80f + i));
             }
-            Assert.True(stopwatch.ElapsedMilliseconds < 2400, $"3 générations en {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < 2400, $"3 generations in {stopwatch.ElapsedMilliseconds} ms");
         }
     }
 }

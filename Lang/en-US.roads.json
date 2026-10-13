@@ -198,9 +198,12 @@
   "Placemaker.Roads.Issue.InvalidArea": "The area outline is not valid.",
   "Placemaker.Roads.Reason.NoArea": "Select an area first.",
 
-  "Placemaker.Roads.Recipe.roads": "Roads",
-  "Placemaker.Roads.Recipe.roads-with-parks": "Roads + parks",
-  "Placemaker.Roads.Recipe.roads-with-zoning": "Roads + zoning",
+  "Placemaker.Recipe.Roads": "Roads",
+  "Placemaker.Recipe.Roads.Description": "A street pattern for the area, connected to the roads around it.",
+  "Placemaker.Recipe.RoadsWithParks": "Roads + parks",
+  "Placemaker.Recipe.RoadsWithParks.Description": "Streets, with a park filling every block between them.",
+  "Placemaker.Recipe.RoadsWithZoning": "Roads + zoning",
+  "Placemaker.Recipe.RoadsWithZoning.Description": "Streets, with zoning painted along every new street.",
 
   "Placemaker.EdgeZoning.Name": "Edge zoning",
   "Placemaker.EdgeZoning.Control.zone": "Zone",
