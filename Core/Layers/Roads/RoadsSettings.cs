@@ -154,7 +154,7 @@ namespace Placemaker.Core.Layers.Roads
             c.Add(Slider(RoadsIds.MixedCoreRadius, ControlTier.Essential, "layout",
                 GridGenerator.MinMixedCoreRadius, GridGenerator.MaxMixedCoreRadius, 10, "m", GridGenerator.MixedCoreRadiusDefault, "pattern=mixed"));
             c.Add(Slider(RoadsIds.MixedAvenues, ControlTier.Essential, "layout", 3, 16, 1, "count", 8, "pattern=mixed", label: "avenues"));
-            c.Add(Slider(RoadsIds.LoopCollectorSpacing, ControlTier.Essential, "layout", 200, 400, 10, "m", 250, "pattern=loop"));
+            c.Add(Slider(RoadsIds.LoopCollectorSpacing, ControlTier.Essential, "layout", 200, 400, 10, "m", 200, "pattern=loop"));
             c.Add(Slider(RoadsIds.LoopAngle, ControlTier.Essential, "layout", -90, 90, 1, "deg", 0, "pattern=loop", label: "angle"));
             c.Add(Slider(RoadsIds.SuperblockZone, ControlTier.Essential, "layout",
                 GridGenerator.SuperblockZoneMetersMin, 400, 10, "m", 150, "pattern=superblock"));

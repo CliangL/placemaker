@@ -156,6 +156,7 @@ namespace Placemaker.Core.Layers.Roads
             {
                 var (a, b, seg) = pieces[i];
                 float2 mid = 0.5f * (a + b);
+                float2 dir = math.normalizesafe(b - a);
                 bool all = true;
                 float w = 0f;
                 foreach (float2 p in new[] { a, mid, b })
@@ -167,7 +168,10 @@ namespace Placemaker.Core.Layers.Roads
                         float d = Seg.Dist(p, roadIndex.A[id], roadIndex.B[id]);
                         float hw = roadSegs[roadIndex.Owner[id]].W;
                         if (d < best) { best = d; bestW = hw; }
-                        w = math.max(w, hw - d);
+                        // A road alongside the outline eats into the land up to its curb; a road crossing it
+                        // bounds the face itself and must not widen the outline.
+                        float2 rd = math.normalizesafe(roadIndex.B[id] - roadIndex.A[id]);
+                        if (math.abs(math.dot(dir, rd)) > 0.7f) w = math.max(w, hw - d);
                     }
                     float tol = math.max(2f, 0.6f * bestW);
                     if (best > tol) all = false;
@@ -470,68 +474,166 @@ namespace Placemaker.Core.Layers.Roads
 
         // ───────────────────────── inset ─────────────────────────
 
-        /// <summary>
-        /// Shrinks a face (CCW, edge i = pts[i]→pts[i+1] with half-width widths[i]). Convex corners are
-        /// mitred (exact), reflex corners and dead-end tips are rounded (caps[i] = turning circle radius
-        /// at pts[i], 0 = plain road end). Self-intersections of the raw offset are split apart and only
-        /// positively oriented loops are kept.
-        /// </summary>
-        public static List<List<float2>> Inset(List<float2> pts, List<float> widths, List<float> caps)
+        private enum JoinKind { Mitre, Round, Cap, Step }
+
+        private struct OffsetLine
         {
+            public float2 P, D;
+            public float W;
+            public int Src;
+        }
+
+        private struct Join
+        {
+            public float EndA, StartB;
+            public JoinKind Kind;
+            public float2 Center;
+            public float Radius;
+        }
+
+        /// <summary>
+        /// Shrinks a face (CCW, edge i = pts[i]→pts[i+1] with half-width widths[i]). Each edge becomes an
+        /// offset line; convex corners are mitred (exact), reflex corners and dead-end tips are rounded
+        /// (caps[i] = turning-circle radius at pts[i], 0 = plain road end). Offset edges that come out
+        /// reversed (source edge shorter than the inset can bear) are collapsed and their neighbours
+        /// re-joined, like an edge event of a straight skeleton; remaining self-intersections are split
+        /// apart and only positively oriented loops are kept.
+        /// </summary>
+        public static List<List<float2>> Inset(List<float2> facePts, List<float> faceWidths, List<float> faceCaps)
+        {
+            ExpandCaps(facePts, faceWidths, faceCaps, out var pts, out var widths);
             int n = pts.Count;
-            var raw = new List<float2>(n * 2);
-            for (int j = 0; j < n; j++)
+            var result = new List<List<float2>>();
+            if (n < 3) return result;
+
+            var lines = new OffsetLine[n];
+            for (int i = 0; i < n; i++)
             {
-                int e0 = (j - 1 + n) % n, e1 = j;
-                float2 v = pts[j];
-                float2 d0 = math.normalizesafe(pts[j] - pts[e0]), d1 = math.normalizesafe(pts[(j + 1) % n] - pts[j]);
-                float2 n0 = new float2(-d0.y, d0.x), n1 = new float2(-d1.y, d1.x);
-                float w0 = widths[e0], w1 = widths[e1];
-                float cross = d0.x * d1.y - d0.y * d1.x, dot = math.dot(d0, d1);
-                if (dot < -0.999f)
+                float2 d = math.normalizesafe(pts[(i + 1) % n] - pts[i]);
+                lines[i] = new OffsetLine { P = pts[i] + new float2(-d.y, d.x) * widths[i], D = d, W = widths[i], Src = i };
+            }
+            var prev = new int[n];
+            var next = new int[n];
+            for (int i = 0; i < n; i++) { prev[i] = (i - 1 + n) % n; next[i] = (i + 1) % n; }
+            var alive = new bool[n];
+            for (int i = 0; i < n; i++) alive[i] = true;
+            int aliveCount = n;
+
+            Join JoinOf(int a, int b)
+            {
+                var la = lines[a];
+                var lb = lines[b];
+                float dot = math.dot(la.D, lb.D), cross = Poly.Cross(la.D, lb.D);
+                bool shared = (la.Src + 1) % n == lb.Src;
+                float2 v = pts[lb.Src];
+                var j = new Join { Kind = JoinKind.Mitre };
+                if (shared && dot < -0.999f)
                 {
-                    // Dead end: around the tip, at least the road's own half-width, more for a turning circle.
-                    float r = math.max(caps[j], math.max(w0, w1));
-                    if (r <= 1e-4f) { raw.Add(v); continue; }
-                    float2 s = v + n0 * w0 - d0 * math.sqrt(math.max(0f, r * r - w0 * w0));
-                    float2 e = v + n1 * w1 + d1 * math.sqrt(math.max(0f, r * r - w1 * w1));
-                    raw.Add(s);
-                    Arc(raw, v, s, e, r);
-                    raw.Add(e);
+                    float r = math.max(la.W, lb.W);
+                    j.Kind = r > 1e-4f ? JoinKind.Cap : JoinKind.Step;
+                    j.Center = v; j.Radius = r;
+                    j.EndA = math.dot(v - la.P, la.D) - math.sqrt(math.max(0f, r * r - la.W * la.W));
+                    j.StartB = math.dot(v - lb.P, lb.D) + math.sqrt(math.max(0f, r * r - lb.W * lb.W));
+                    return j;
                 }
-                else if (math.abs(cross) < 1e-4f)
+                if (math.abs(cross) < 1e-4f || (!shared && math.abs(cross) < 0.05f))
                 {
-                    raw.Add(v + n0 * w0);
-                    if (math.abs(w0 - w1) > 1e-3f) raw.Add(v + n1 * w1);
+                    j.Kind = JoinKind.Step;
+                    j.EndA = math.dot(v - la.P, la.D);
+                    j.StartB = math.dot(v - lb.P, lb.D);
+                    return j;
                 }
-                else if (cross > 0f)
+                if (shared && cross < 0f && dot <= 0.866f && (la.W > 1e-4f || lb.W > 1e-4f))
                 {
-                    // Convex: the offset lines meet on the bisector.
-                    float2 p0 = v + n0 * w0, p1 = v + n1 * w1;
-                    float t = Poly.Cross(p1 - p0, d1) / cross;
-                    raw.Add(p0 + d0 * t);
+                    j.Kind = JoinKind.Round;
+                    j.Center = v; j.Radius = math.max(la.W, lb.W);
+                    j.EndA = math.dot(v - la.P, la.D);
+                    j.StartB = math.dot(v - lb.P, lb.D);
+                    return j;
                 }
-                else
+                // Mitre: intersection of the two offset lines (exact for convex corners, conservative for reflex).
+                float t = Poly.Cross(lb.P - la.P, lb.D) / cross;
+                float2 x = la.P + la.D * t;
+                j.EndA = t;
+                j.StartB = math.dot(x - lb.P, lb.D);
+                return j;
+            }
+
+            // Edge collapse: an offset edge whose end comes before its start has vanished.
+            int guard = 4 * n + 16;
+            bool changed = true;
+            while (changed && aliveCount >= 3 && guard-- > 0)
+            {
+                changed = false;
+                for (int i = 0; i < n && aliveCount >= 3; i++)
                 {
-                    float2 p0 = v + n0 * w0, p1 = v + n1 * w1;
-                    if (dot > 0.866f || (w0 <= 1e-4f && w1 <= 1e-4f))
-                    {
-                        // Shallow reflex turn: the mitre is conservative and nearly identical.
-                        float t = Poly.Cross(p1 - p0, d1) / cross;
-                        raw.Add(p0 + d0 * t);
-                    }
-                    else
-                    {
-                        raw.Add(p0);
-                        Arc(raw, v, p0, p1, math.max(w0, w1));
-                        raw.Add(p1);
-                    }
+                    if (!alive[i]) continue;
+                    float s = JoinOf(prev[i], i).StartB;
+                    float e = JoinOf(i, next[i]).EndA;
+                    if (e >= s - 1e-3f) continue;
+                    alive[i] = false;
+                    aliveCount--;
+                    next[prev[i]] = next[i];
+                    prev[next[i]] = prev[i];
+                    changed = true;
                 }
             }
-            var result = new List<List<float2>>();
+            if (aliveCount < 3) return result;
+
+            int first = 0;
+            while (!alive[first]) first++;
+            var raw = new List<float2>(aliveCount * 2);
+            int cur = first;
+            do
+            {
+                int nx = next[cur];
+                var j = JoinOf(cur, nx);
+                var la = lines[cur];
+                var lb = lines[nx];
+                float2 endA = la.P + la.D * j.EndA, startB = lb.P + lb.D * j.StartB;
+                raw.Add(endA);
+                if (j.Kind == JoinKind.Round || j.Kind == JoinKind.Cap) Arc(raw, j.Center, endA, startB, j.Radius);
+                if (j.Kind != JoinKind.Mitre) raw.Add(startB);
+                cur = nx;
+            } while (cur != first);
+
             foreach (var loop in SplitSelfIntersections(Dedup(raw)))
                 if (loop.Count >= 3 && Poly.SignedArea(loop) > MinBlockArea) result.Add(loop);
             return result;
+        }
+
+        /// <summary>
+        /// Turning circles larger than the road: the dead-end tip is replaced by a small half-circle
+        /// of radius (cap − width) so the regular inset by the road width yields the full circle.
+        /// </summary>
+        private static void ExpandCaps(List<float2> pts, List<float> widths, List<float> caps, out List<float2> outPts, out List<float> outWidths)
+        {
+            int n = pts.Count;
+            outPts = new List<float2>(n + 16);
+            outWidths = new List<float>(n + 16);
+            for (int j = 0; j < n; j++)
+            {
+                float2 v = pts[j];
+                float w0 = widths[(j - 1 + n) % n], w1 = widths[j];
+                float2 d0 = math.normalizesafe(v - pts[(j - 1 + n) % n]), d1 = math.normalizesafe(pts[(j + 1) % n] - v);
+                float rho = caps[j] - math.max(w0, w1);
+                if (math.dot(d0, d1) < -0.999f && rho > 0.5f)
+                {
+                    // Clockwise half circle from the left of the incoming direction, around the tip.
+                    float2 n0 = new float2(-d0.y, d0.x);
+                    float a0 = math.atan2(n0.y, n0.x);
+                    const int steps = 8;
+                    for (int k = 0; k <= steps; k++)
+                    {
+                        float a = a0 - math.PI * k / steps;
+                        outPts.Add(v + rho * new float2(math.cos(a), math.sin(a)));
+                        outWidths.Add(k < steps ? math.max(w0, w1) : w1);
+                    }
+                    continue;
+                }
+                outPts.Add(v);
+                outWidths.Add(w1);
+            }
         }
 
         /// <summary>Clockwise arc around c from s to e (exclusive), radius r, ≤ 15° steps.</summary>
@@ -556,7 +658,35 @@ namespace Placemaker.Core.Layers.Roads
                 if (!(math.all(math.isfinite(p)))) continue;
                 else if (r.Count == 0 || math.distancesq(r[r.Count - 1], p) > 1e-6f) r.Add(p);
             while (r.Count > 1 && math.distancesq(r[0], r[r.Count - 1]) <= 1e-6f) r.RemoveAt(r.Count - 1);
+            RemoveSpikes(r);
             return r;
+        }
+
+        /// <summary>
+        /// Removes zero-width back-and-forth spikes (A→B→A along one line). They appear when an edge is
+        /// shorter than the inset and are invisible to crossing tests because the pieces are collinear.
+        /// </summary>
+        private static void RemoveSpikes(List<float2> r)
+        {
+            bool changed = true;
+            int guard = r.Count * 4 + 8;
+            while (changed && r.Count >= 3 && guard-- > 0)
+            {
+                changed = false;
+                for (int i = 0; i < r.Count && r.Count >= 3; i++)
+                {
+                    float2 a = r[(i - 1 + r.Count) % r.Count], b = r[i], c = r[(i + 1) % r.Count];
+                    float2 u = b - a, v = c - b;
+                    float lu = math.length(u), lv = math.length(v);
+                    if (lu < 1e-4f || lv < 1e-4f) { r.RemoveAt(i); changed = true; i--; continue; }
+                    if (math.dot(u, v) < 0f && math.abs(Poly.Cross(u, v)) <= 1e-3f * lu * lv)
+                    {
+                        r.RemoveAt(i);
+                        changed = true;
+                        i--;
+                    }
+                }
+            }
         }
 
         /// <summary>Splits a closed polyline at its self-intersections into simple loops.</summary>
@@ -634,7 +764,10 @@ namespace Placemaker.Core.Layers.Roads
                 {
                     float w = widths[i];
                     if (w <= 0.05f) continue;
-                    float d = Seg.Dist(p, face[i], face[(i + 1) % n]);
+                    // Only the corridor beside a segment counts: around a junction point the road ends
+                    // in the crossing road, not in a disc (a T junction has no bulge on its far side).
+                    float d = math.sqrt(Seg.DistSq(p, face[i], face[(i + 1) % n], out float t));
+                    if (t <= 1e-4f || t >= 1f - 1e-4f) continue;
                     if (d < w - 0.25f) return false;
                 }
             float2 c = Poly.Centroid(loop);
@@ -717,9 +850,10 @@ namespace Placemaker.Core.Layers.Roads
         }
 
         /// <summary>
-        /// Frontage strips of a block: maximal runs of block edges that face a generated road, split at
-        /// corners sharper than 50°; each run becomes a strip reaching `depth` into the block (less when
-        /// the block is too thin). Closed runs (round blocks) are cut into ≤ 120 m pieces.
+        /// Frontage strips of a block: the block edges that face a generated road, cut into pieces of at
+        /// most 80 m / 45° of turning (and at corners sharper than 50°). Each piece becomes a strip
+        /// reaching `depth` into the block, never more than half the block's local thickness, so strips
+        /// from opposite sides do not overlap; neighbouring pieces meet on the corner bisector.
         /// </summary>
         public static List<float2[]> Frontage(float2[] block, SegmentIndex roads, List<float> roadHalfWidths, float depth)
         {
@@ -732,94 +866,108 @@ namespace Placemaker.Core.Layers.Roads
             int count = 0;
             for (int i = 0; i < n; i++)
             {
-                float2 a = block[i], b = block[(i + 1) % n];
-                float2 mid = 0.5f * (a + b);
+                float2 mid = 0.5f * (block[i] + block[(i + 1) % n]);
                 int id = roads.Nearest(mid, 48f, out float d, out _, scratch, seen);
                 if (id < 0) continue;
-                float hw = roadHalfWidths[roads.Owner[id]];
-                if (d <= hw + 1.5f) { front[i] = true; count++; }
+                if (d <= roadHalfWidths[roads.Owner[id]] + 1.5f) { front[i] = true; count++; }
             }
             if (count == 0) return result;
 
-            var runs = new List<List<int>>();
-            bool Corner(int i)
+            float Turn(int v)
             {
-                float2 d0 = math.normalizesafe(block[i] - block[(i - 1 + n) % n]), d1 = math.normalizesafe(block[(i + 1) % n] - block[i]);
-                return math.dot(d0, d1) < math.cos(math.radians(50f));
+                float2 d0 = math.normalizesafe(block[v] - block[(v - 1 + n) % n]), d1 = math.normalizesafe(block[(v + 1) % n] - block[v]);
+                return math.degrees(math.acos(math.clamp(math.dot(d0, d1), -1f, 1f)));
             }
+            // Start at a run start, or (closed run) at the sharpest corner.
             int first = -1;
-            for (int i = 0; i < n; i++)
-                if (front[i] && (!front[(i - 1 + n) % n] || Corner(i))) { first = i; break; }
+            for (int i = 0; i < n && first < 0; i++) if (front[i] && !front[(i - 1 + n) % n]) first = i;
             if (first < 0)
             {
-                // Every edge fronts a road and there is no corner: a round block. Cut by length.
-                float total = 0f;
-                for (int i = 0; i < n; i++) total += math.distance(block[i], block[(i + 1) % n]);
-                int pieces = math.max(3, (int)math.ceil(total / 120f));
-                float target = total / pieces, acc = 0f;
-                var run = new List<int>();
-                for (int i = 0; i < n; i++)
-                {
-                    run.Add(i);
-                    acc += math.distance(block[i], block[(i + 1) % n]);
-                    if (acc >= target && runs.Count < pieces - 1) { runs.Add(run); run = new List<int>(); acc = 0f; }
-                }
-                if (run.Count > 0) runs.Add(run);
-            }
-            else
-            {
-                List<int> run = null;
-                for (int k = 0; k < n; k++)
-                {
-                    int i = (first + k) % n;
-                    if (!front[i]) { if (run != null) { runs.Add(run); run = null; } continue; }
-                    if (run != null && Corner(i)) { runs.Add(run); run = null; }
-                    if (run == null) run = new List<int>();
-                    run.Add(i);
-                }
-                if (run != null) runs.Add(run);
+                first = 0;
+                for (int i = 1; i < n; i++) if (Turn(i) > Turn(first)) first = i;
             }
 
-            foreach (var run in runs)
+            var pieces = new List<List<int>>();
+            List<int> piece = null;
+            float length = 0f, turn = 0f;
+            for (int k = 0; k < n; k++)
             {
-                var p = new List<float2>(run.Count + 1);
-                foreach (int i in run) p.Add(block[i]);
-                p.Add(block[(run[run.Count - 1] + 1) % n]);
+                int i = (first + k) % n;
+                if (!front[i]) { if (piece != null) { pieces.Add(piece); piece = null; } continue; }
+                float t = Turn(i);
+                if (piece != null && (t > 50f || length >= 80f || turn + t > 45f)) { pieces.Add(piece); piece = null; }
+                if (piece == null) { piece = new List<int>(); length = 0f; turn = 0f; }
+                else turn += t;
+                piece.Add(i);
+                length += math.distance(block[i], block[(i + 1) % n]);
+            }
+            if (piece != null) pieces.Add(piece);
+
+            foreach (var pc in pieces)
+            {
+                var p = new List<float2>(pc.Count + 1);
+                var dirs = new List<float2>(pc.Count + 1);
+                foreach (int i in pc) p.Add(block[i]);
+                int last = (pc[pc.Count - 1] + 1) % n;
+                p.Add(block[last]);
                 float runLength = 0f;
                 for (int i = 0; i + 1 < p.Count; i++) runLength += math.distance(p[i], p[i + 1]);
                 if (runLength < 8f) continue;
-                for (float d = depth; d >= 6f; d *= 0.7f)
+                // Inward offset direction at each point: bisector inside the piece and towards a neighbouring
+                // frontage piece (shared corner), the piece's own normal at a free end.
+                for (int k = 0; k < p.Count; k++)
                 {
-                    var strip = Strip(p, d);
-                    if (strip == null) continue;
+                    int v = k < pc.Count ? pc[k] : last;
+                    int ePrev = (v - 1 + n) % n, eNext = v;
+                    bool usePrev = k > 0 || front[ePrev];
+                    bool useNext = k < pc.Count || front[eNext];
+                    float2 nPrev = Left(block[(ePrev + 1) % n] - block[ePrev]), nNext = Left(block[(eNext + 1) % n] - block[eNext]);
+                    float2 bis = usePrev && useNext ? math.normalizesafe(nPrev + nNext, nNext) : usePrev ? nPrev : nNext;
+                    float cos = math.max(0.5f, math.dot(bis, useNext ? nNext : nPrev));
+                    dirs.Add(bis / cos);
+                }
+                float limit = depth;
+                for (int k = 0; k < p.Count; k++)
+                {
+                    float2 nrm = math.normalizesafe(dirs[k]);
+                    float2 start = k == 0 || k == p.Count - 1 ? math.lerp(p[k], p[k == 0 ? 1 : k - 1], 0.02f) : p[k];
+                    float thick = RayToBoundary(block, start + nrm * 0.05f, nrm);
+                    limit = math.min(limit, 0.5f * thick / math.max(1f, math.length(dirs[k])));
+                }
+                for (float d = limit; d >= 6f; d *= 0.8f)
+                {
+                    var ring = new float2[2 * p.Count];
+                    for (int k = 0; k < p.Count; k++)
+                    {
+                        ring[k] = p[k];
+                        ring[2 * p.Count - 1 - k] = p[k] + dirs[k] * d;
+                    }
+                    var clean = Poly.Clean(ring, SurfaceAcceptance.MinEdge);
+                    if (clean.Length < 3 || !Poly.IsSimple(clean) || Poly.SignedArea(clean) < 20f) continue;
                     bool inside = true;
-                    for (int i = p.Count; i < strip.Length && inside; i++)
-                        if (!Poly.Contains(block, strip[i]) && Poly.DistanceToBoundary(block, strip[i]) > 0.05f) inside = false;
+                    for (int k = 0; k < p.Count && inside; k++)
+                    {
+                        float2 q = p[k] + dirs[k] * d;
+                        if (!Poly.Contains(block, q) && Poly.DistanceToBoundary(block, q) > 0.05f) inside = false;
+                    }
                     if (!inside) continue;
-                    var clean = Poly.Clean(strip, SurfaceAcceptance.MinEdge);
-                    if (clean.Length >= 3 && Poly.IsSimple(clean) && Poly.Area(clean) > 20f) { result.Add(clean); break; }
+                    result.Add(clean);
+                    break;
                 }
             }
             return result;
         }
 
-        private static float2[] Strip(List<float2> p, float d)
+        /// <summary>Distance from p along dir to the first crossing of the ring (∞ when none).</summary>
+        private static float RayToBoundary(float2[] ring, float2 p, float2 dir)
         {
-            int k = p.Count;
-            var q = new float2[k];
-            for (int i = 0; i < k; i++)
-            {
-                float2 nPrev = i > 0 ? Left(p[i] - p[i - 1]) : Left(p[1] - p[0]);
-                float2 nNext = i + 1 < k ? Left(p[i + 1] - p[i]) : nPrev;
-                float2 bis = math.normalizesafe(nPrev + nNext, nPrev);
-                float cos = math.max(0.5f, math.dot(bis, nNext));
-                q[i] = p[i] + bis * (d / cos);
-            }
-            var ring = new float2[2 * k];
-            for (int i = 0; i < k; i++) ring[i] = p[i];
-            for (int i = 0; i < k; i++) ring[k + i] = q[k - 1 - i];
-            if (!Poly.IsSimple(ring) || Poly.SignedArea(ring) <= 0f) return null;
-            return ring;
+            float best = float.MaxValue;
+            int n = ring.Length;
+            float2 far = p + dir * 100000f;
+            for (int i = 0; i < n; i++)
+                if (Seg.Intersect(p, far, ring[i], ring[(i + 1) % n], out float t, out _) && t > 1e-7f)
+                    best = math.min(best, t * 100000f);
+            return best;
         }
 
         private static float2 Left(float2 d)
