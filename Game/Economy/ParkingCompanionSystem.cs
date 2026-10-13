@@ -324,7 +324,7 @@ namespace Placemaker.Game.Economy
                     var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
                     if (tag.Role != MemberRole.Companion) continue;
                     int capacity = _economy.CapacityOf(tag.GroupId);
-                    bool on = ParkingCompanionSystem.CompanionEnabled && ParkingEconomySystem.Enabled;
+                    bool on = ParkingCompanionSystem.CompanionEnabled && ParkingEconomySystem.FeatureEnabled;
                     float upkeep = on ? (48f * capacity + 438f) * math.max(0f, UpkeepFactor) : 0f;
                     // Only set what the archetype provides; never add CityServiceUpkeep/Resources later (PLT).
                     if (EntityManager.HasComponent<ServiceUsage>(e))

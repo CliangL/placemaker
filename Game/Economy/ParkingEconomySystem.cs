@@ -33,7 +33,7 @@ namespace Placemaker.Game.Economy
         public const float ComfortFactor = 0.5f;
 
         /// <summary>Setting: fee/comfort/capacity on Placemaker parking lots.</summary>
-        public static bool Enabled = true;
+        public static bool FeatureEnabled = true;
         /// <summary>Setting: default fee for new lots when the plan does not set one (money per park).</summary>
         public static int DefaultFee = 0;
 
@@ -80,7 +80,7 @@ namespace Placemaker.Game.Economy
         /// <summary>Called by BuildService after a successful build.</summary>
         public void OnGroupBuilt(int groupId)
         {
-            if (!Enabled || !AppliesTo(groupId)) return;
+            if (!FeatureEnabled || !AppliesTo(groupId)) return;
             var rec = _registry.GetRecord(groupId);
             if (!rec.Facts.ContainsKey(FeeFact) && _registry.TryGetRecordEntity(groupId, out var entity))
             {
@@ -122,7 +122,7 @@ namespace Placemaker.Game.Economy
         [Preserve]
         protected override void OnUpdate()
         {
-            if (!Enabled) return;
+            if (!FeatureEnabled) return;
             try
             {
                 EnsureFees();
@@ -138,7 +138,7 @@ namespace Placemaker.Game.Economy
             catch (Exception e)
             {
                 Mod.Log.Error(e, "Placemaker parking economy failed; disabled for this session (lots keep working without fees)");
-                Enabled = false;
+                FeatureEnabled = false;
             }
         }
 

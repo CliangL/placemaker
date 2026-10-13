@@ -49,7 +49,7 @@ namespace Placemaker.Game.Build
         private int _rememberedRetries;
 
         /// <summary>Switch for the feature (setting). Off = parking surfaces use the originals.</summary>
-        public static bool Enabled = true;
+        public static bool FeatureEnabled = true;
 
         public static string CloneName(string original) => NamePrefix + original + ")";
 
@@ -73,7 +73,7 @@ namespace Placemaker.Game.Build
         /// <summary>The ready overlay clone for a surface prefab, or the original (and a request) when not ready.</summary>
         public Entity OverlayFor(Entity original)
         {
-            if (!Enabled || original == Entity.Null) return original;
+            if (!FeatureEnabled || original == Entity.Null) return original;
             try
             {
                 if (_cloneOf.TryGetValue(original, out var clone) && IsReady(clone)) return clone;
@@ -108,7 +108,7 @@ namespace Placemaker.Game.Build
         [Preserve]
         protected override void OnUpdate()
         {
-            if (!Enabled) return;
+            if (!FeatureEnabled) return;
             try
             {
                 if (!_builtinsDone && !_surfaceQuery.IsEmptyIgnoreFilter) RequestBuiltins();
@@ -119,7 +119,7 @@ namespace Placemaker.Game.Build
             catch (Exception e)
             {
                 Mod.Log.Error(e, "Placemaker surface overlay clones failed; parking surfaces use the originals");
-                Enabled = false;
+                FeatureEnabled = false;
             }
         }
 

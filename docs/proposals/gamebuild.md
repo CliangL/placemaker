@@ -61,7 +61,7 @@ After Apply: rollback through the normal group removal.
    the entity by geometry (≤ 4 m), so stale ids from an old receipt degrade to a free endpoint.
    On Edit/repair the tool should recapture attachments for the receipt's area.
 6. Settings to expose (owned by tool workstream): `BuildService.AutoExcludeCollisions`,
-   `SurfaceCloneSystem.Enabled`, `ParkingEconomySystem.Enabled`, `ParkingEconomySystem.DefaultFee`,
+   `SurfaceCloneSystem.FeatureEnabled`, `ParkingEconomySystem.FeatureEnabled`, `ParkingEconomySystem.DefaultFee`,
    `ParkingCompanionSystem.CompanionEnabled` (experimental, default off),
    `ParkingCompanionUpkeepSystem.UpkeepFactor`.
 7. Mod.cs: call `Placemaker.Game.Build.BuildRegistration.Register(updateSystem)` in `OnLoad`.
