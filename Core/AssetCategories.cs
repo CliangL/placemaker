@@ -83,6 +83,7 @@ namespace Placemaker.Core
         public const string CenterpieceStatue = "centerpiece.statue"; // statues, monuments, clocks, obelisks
         public const string WaterJets = "water.jets";                 // splash pad jets, sprinklers
         public const string Grave = "cemetery.grave";                 // gravestones, tombs
+        public const string Rock = "rock";                            // rocks, boulders (outcrops; also decoration)
 
         // Sports (all also "sports")
         public const string SportsGoal = "sports.goal";               // football / handball goals

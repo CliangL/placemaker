@@ -101,6 +101,9 @@ namespace Placemaker.Core.Build
             if (Has(lower, "grave", "tomb", "headstone", "crypt", "mausoleum", "memorialstone", "memorial stone"))
             { r.Add(AssetCategories.Grave); return true; }
 
+            if (Has(lower, "rock", "boulder", "cliff", "outcrop") && !Has(lower, "rocket", "rocking"))
+            { r.Add(AssetCategories.Rock); r.Add(AssetCategories.Decoration); return true; }
+
             // Centrepiece kinds (same visibility rule as the general classifier: a single standalone prop with an icon).
             if ((t & AssetTraits.HasSubObjects) == 0 && (t & AssetTraits.HasIcon) != 0)
             {

@@ -17,11 +17,14 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("count", 1, 1, 4, 1, "count", ControlTier.Essential, "restrooms");
+            c.Slider("count", 1, 1, 6, 1, "count", ControlTier.Essential, "restrooms").Tip();
+            c.Toggle("byArea", true, ControlTier.Essential, "restrooms").Tip();
+            c.Slider("haEach", 3, 0.5, 10, 0.5, "ha", ControlTier.More, "restrooms").When("byArea=true").Tip();
             c.Asset("asset", AssetCategories.Restroom, ControlTier.Essential, "restrooms");
             c.Toggle("kiosk", false, ControlTier.More, "extras").Tip();
             c.Asset("kioskAsset", AssetCategories.Kiosk, ControlTier.More, "extras").When("kiosk=true");
             c.RandomRange("count", 1, 2);
+            c.Fixed("byArea");
             c.Chance("kiosk", 0.4f);
         }
 
@@ -35,10 +38,30 @@ namespace Placemaker.Core.Layers.AddOns
             bool kiosk = ctx.B("kiosk") && AssetAvailability.Require(ctx.Plan, AssetCategories.Kiosk, new[] { ctx.S("kioskAsset") }, Keys.Category(AssetCategories.Kiosk));
             var kioskAsset = AssetMix.One(ctx.S("kioskAsset"));
             float kioskRadius = AssetMix.FootprintRadius(ctx.Site, kioskAsset, 2.5f);
-            int wanted = ctx.I("count");
+            // One per N hectares (at least one), capped by the count — or exactly the count.
+            int wanted = ctx.B("byArea")
+                ? math.clamp((int)math.ceil(ctx.LayerRegion.Area / (math.max(0.5f, ctx.F("haEach")) * 10000f) - 0.25f), 1, ctx.I("count"))
+                : ctx.I("count");
             float minDistance = math.max(30f, math.sqrt(ctx.LayerRegion.Area) / (wanted + 1));
-            var pref = occ.Paths.Count > 0 ? Spots.Preference.NearPaths : Spots.Preference.NearBoundary;
-            var spots = Spread(occ, radius + (kiosk ? kioskRadius * 2f + 0.5f : 0f), wanted, pref, ctx.Seed, minDistance);
+            // Beside a path, the first near an entrance (people look for one on arrival), the others
+            // spread over the network. Without paths: near the outline (street frontage).
+            float footprint = radius + (kiosk ? kioskRadius * 2f + 0.5f : 0f);
+            var anchors = PathAnchors.Beside(occ, footprint, 6f, 1.2f);
+            var spots = new List<float2>();
+            var picked = PathAnchors.Pick(anchors, 1, minDistance, true);
+            if (picked.Count > 0 && wanted > 1)
+            {
+                var rest = PathAnchors.Pick(anchors, wanted, minDistance, false);
+                picked = rest.Count > 0 && rest[0].Position.Equals(picked[0].Position) ? rest : picked;
+            }
+            foreach (var a in picked) spots.Add(a.Position);
+            if (spots.Count < wanted)
+                foreach (var s in Spread(occ, footprint, wanted - spots.Count, occ.Paths.Count > 0 ? Spots.Preference.NearPaths : Spots.Preference.NearBoundary, ctx.Seed, minDistance))
+                {
+                    bool far = true;
+                    foreach (var q in spots) if (math.distance(q, s) < minDistance) far = false;
+                    if (far) spots.Add(s);
+                }
             int placed = 0;
             foreach (var spot in spots)
             {
