@@ -1,0 +1,515 @@
+// Placemaker UI mock host.
+//
+// Serves the browser harness (UI/mock) and exposes the REAL engine-free Core over HTTP so the
+// mock panel shows genuine plans while UX is iterated in a browser instead of the game:
+//   GET  /api/catalog    every layer in GeneratorRegistry.All with its control schema, presets
+//                        (incl. values) and defaults; plus single-layer recipes
+//   POST /api/compose    { recipe: Step, ring: [[x,z]…], markers?: … } → plan geometry + summary
+//   POST /api/randomize  { layer, values, locked, seed } → values (IAreaGenerator.Randomize)
+//   POST /api/ready      { layer, values, ring } → Readiness
+//   GET  /api/lang       merged Lang/en-US*.json from the repository
+// Works with any number of registered layers, including zero (the mock then falls back to its
+// own fake catalog).
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Threading;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging;
+using Placemaker.Core;
+using Unity.Mathematics;
+
+namespace Placemaker.MockHost
+{
+    public static class Program
+    {
+        public static void Main(string[] args)
+        {
+            int port = 5123;
+            string root = null;
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] == "--port") port = int.Parse(args[i + 1]);
+                if (args[i] == "--root") root = args[i + 1];
+            }
+            root ??= FindMockRoot();
+            string repo = Path.GetFullPath(Path.Combine(root, "..", ".."));
+
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = Array.Empty<string>() });
+            builder.Logging.SetMinimumLevel(LogLevel.Warning);
+            var app = builder.Build();
+            app.Urls.Add($"http://127.0.0.1:{port}");
+
+            var files = new PhysicalFileProvider(root);
+            app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = files,
+                ServeUnknownFileTypes = true,
+                OnPrepareResponse = c => c.Context.Response.Headers["Cache-Control"] = "no-store",
+            });
+
+            app.MapGet("/api/health", () => Results.Text("ok"));
+            app.MapGet("/api/catalog", () => Json(Api.Catalog(repo)));
+            app.MapGet("/api/lang", () => Json(Api.Lang(repo)));
+            app.MapPost("/api/compose", async (HttpRequest req) =>
+            {
+                var body = await JsonNode.ParseAsync(req.Body);
+                return Json(Api.Compose(body));
+            });
+            app.MapPost("/api/randomize", async (HttpRequest req) =>
+            {
+                var body = await JsonNode.ParseAsync(req.Body);
+                return Json(Api.Randomize(body));
+            });
+            app.MapPost("/api/ready", async (HttpRequest req) =>
+            {
+                var body = await JsonNode.ParseAsync(req.Body);
+                return Json(Api.Ready(body));
+            });
+
+            Console.WriteLine($"Placemaker mock host: http://127.0.0.1:{port}/  (layers: {GeneratorRegistry.All.Count}, root: {root})");
+            app.Run();
+        }
+
+        private static IResult Json(JsonNode node) => Results.Content(node?.ToJsonString() ?? "null", "application/json");
+
+        private static string FindMockRoot()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName, "UI", "mock");
+                if (File.Exists(Path.Combine(candidate, "index.html"))) return candidate;
+                if (File.Exists(Path.Combine(dir.FullName, "index.html")) && dir.Name == "mock") return dir.FullName;
+                dir = dir.Parent;
+            }
+            throw new DirectoryNotFoundException("UI/mock not found; pass --root <path to UI/mock>.");
+        }
+    }
+
+    internal static class Api
+    {
+        // ───────────── catalog ─────────────
+
+        public static JsonNode Catalog(string repo)
+        {
+            var layers = new JsonArray();
+            var recipes = Recipes(repo);
+            var shippedRoots = new HashSet<string>(recipes.Select(r => (string)r["root"]?["layer"] ?? ""));
+            var shippedIds = new HashSet<string>(recipes.Select(r => (string)r["id"] ?? ""));
+            foreach (var g in GeneratorRegistry.All)
+            {
+                try
+                {
+                    layers.Add(Layer(g));
+                    // Single-layer recipe for fills without a shipped recipe (so every type is reachable).
+                    if (g.Kind == LayerKind.Fill && !shippedIds.Contains(g.Id) && !shippedRoots.Contains(g.Id))
+                        recipes.Add(new JsonObject
+                        {
+                            ["id"] = g.Id, ["name"] = g.NameKey, ["icon"] = g.Icon, ["custom"] = false,
+                            ["root"] = new JsonObject { ["layer"] = g.Id },
+                        });
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Layer {g?.Id} failed to describe itself: {e.Message}");
+                }
+            }
+            var all = new JsonArray();
+            foreach (var r in recipes) all.Add(r.DeepClone());
+            return new JsonObject { ["layers"] = layers, ["recipes"] = all };
+        }
+
+        /// <summary>Shipped recipes (Recipes/*.json, docs/proposals/recipe-json.md), as mock templates.</summary>
+        private static List<JsonObject> Recipes(string repo)
+        {
+            var list = new List<(int order, string file, JsonObject r)>();
+            var dir = Path.Combine(repo, "Recipes");
+            if (!Directory.Exists(dir)) return new List<JsonObject>();
+            foreach (var f in Directory.GetFiles(dir, "*.json"))
+            {
+                try
+                {
+                    if (JsonNode.Parse(File.ReadAllText(f)) is not JsonObject o) continue;
+                    if ((o["formatVersion"]?.GetValue<int>() ?? 1) > 1) continue;
+                    var rootLayer = (string)o["root"]?["layer"] ?? "";
+                    var gen = GeneratorRegistry.Get(rootLayer);
+                    int order = int.MaxValue;
+                    if (gen != null)
+                    {
+                        var attr = (AreaGeneratorAttribute)Attribute.GetCustomAttribute(gen.GetType(), typeof(AreaGeneratorAttribute));
+                        order = attr?.Order ?? order;
+                    }
+                    var r = new JsonObject
+                    {
+                        ["id"] = (string)o["id"] ?? Path.GetFileNameWithoutExtension(f),
+                        ["name"] = (string)o["nameKey"] ?? (string)o["name"] ?? "",
+                        ["icon"] = (string)o["icon"] ?? gen?.Icon ?? "",
+                        ["custom"] = false,
+                        ["root"] = Template(o["root"]),
+                    };
+                    if (o["descriptionKey"] != null) r["description"] = (string)o["descriptionKey"];
+                    list.Add((order, Path.GetFileName(f), r));
+                }
+                catch (Exception e) { Console.WriteLine($"Recipe {f}: {e.Message}"); }
+            }
+            return list.OrderBy(x => x.order).ThenBy(x => x.file, StringComparer.Ordinal).Select(x => x.r).ToList();
+        }
+
+        /// <summary>Recipe-file step → mock template { layer, target, values, children, overrides }.</summary>
+        private static JsonObject Template(JsonNode step)
+        {
+            var t = new JsonObject { ["layer"] = (string)step?["layer"] ?? "", ["target"] = (string)step?["target"] ?? "" };
+            if (step?["settings"] is JsonObject set) t["values"] = set.DeepClone();
+            if (step?["enabled"] != null) t["enabled"] = step["enabled"].DeepClone();
+            var ch = new JsonArray();
+            if (step?["children"] is JsonArray a) foreach (var c in a) ch.Add(Template(c));
+            t["children"] = ch;
+            if (step?["regionOverrides"] is JsonObject ov)
+            {
+                var o = new JsonObject();
+                foreach (var kv in ov) o[kv.Key] = Template(kv.Value);
+                t["overrides"] = o;
+            }
+            return t;
+        }
+
+        private static JsonObject Layer(IAreaGenerator g)
+        {
+            var controls = new JsonArray();
+            foreach (var c in g.Controls ?? Array.Empty<ControlSchema>())
+            {
+                var o = new JsonObject
+                {
+                    ["id"] = c.Id,
+                    ["kind"] = Camel(c.Kind.ToString()),
+                    ["tier"] = c.Tier == ControlTier.Essential ? "essential" : "more",
+                    ["group"] = c.Group ?? "",
+                    ["label"] = c.LabelKey ?? "",
+                    ["min"] = c.Min, ["max"] = c.Max, ["step"] = c.Step,
+                    ["unit"] = c.Unit ?? "",
+                    ["cheap"] = c.Cheap,
+                    ["default"] = Value(c.Default),
+                };
+                if (!string.IsNullOrEmpty(c.TooltipKey)) o["tooltip"] = c.TooltipKey;
+                if (!string.IsNullOrEmpty(c.Icon)) o["icon"] = c.Icon;
+                if (!string.IsNullOrEmpty(c.AssetCategory)) o["assetCategory"] = c.AssetCategory;
+                if (!string.IsNullOrEmpty(c.VisibleWhen)) o["visibleWhen"] = c.VisibleWhen;
+                if (c.MarkerKinds != null && c.MarkerKinds.Length > 0) o["markerKinds"] = Arr(c.MarkerKinds);
+                if (c.Options != null && c.Options.Count > 0)
+                {
+                    var opts = new JsonArray();
+                    foreach (var op in c.Options)
+                    {
+                        var oo = new JsonObject { ["value"] = op.Value, ["label"] = op.LabelKey };
+                        if (!string.IsNullOrEmpty(op.Icon)) oo["icon"] = op.Icon;
+                        if (!string.IsNullOrEmpty(op.TooltipKey)) oo["tooltip"] = op.TooltipKey;
+                        opts.Add(oo);
+                    }
+                    o["options"] = opts;
+                }
+                controls.Add(o);
+            }
+            var presets = new JsonArray();
+            foreach (var p in g.Presets ?? Array.Empty<PresetInfo>())
+                presets.Add(new JsonObject { ["id"] = p.Id, ["name"] = p.LabelKey, ["icon"] = p.Icon ?? "", ["values"] = Bag(p.Values) });
+            return new JsonObject
+            {
+                ["id"] = g.Id,
+                ["name"] = g.NameKey,
+                ["icon"] = g.Icon ?? "",
+                ["kind"] = Camel(g.Kind.ToString()),
+                ["accepts"] = Arr(g.Accepts ?? Array.Empty<string>()),
+                ["emits"] = Arr(g.Emits ?? Array.Empty<string>()),
+                ["controls"] = controls,
+                ["presets"] = presets,
+                ["defaults"] = Bag(g.Defaults()),
+                ["minArea"] = g.MinArea,
+                ["maxArea"] = g.MaxArea,
+            };
+        }
+
+        // ───────────── compose ─────────────
+
+        public static JsonNode Compose(JsonNode body)
+        {
+            var sw = Stopwatch.StartNew();
+            var recipe = new Recipe { Id = "mock", Root = Step(body?["recipe"]) };
+            var shape = new AreaShape { Ring = Ring(body?["ring"]), Source = AreaSource.Drawn };
+            var site = new SiteContext();
+            ComposedPlan plan;
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+            {
+                try { plan = Composer.Compose(recipe, shape, site, cts.Token); }
+                catch (OperationCanceledException)
+                {
+                    plan = new ComposedPlan();
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Error, Key = "Placemaker.UI.Mock.Timeout" });
+                }
+            }
+
+            var layers = new JsonArray();
+            double cost = 0, upkeep = 0;
+            var perLayer = new JsonArray();
+            foreach (var l in plan.Layers)
+            {
+                var (c, u) = FakePrice(l);
+                cost += c; upkeep += u;
+                layers.Add(new JsonObject
+                {
+                    ["layer"] = l.GeneratorId,
+                    ["stepPath"] = l.StepPath,
+                    ["regions"] = new JsonArray(l.Regions.Select(r => (JsonNode)new JsonObject
+                    {
+                        ["key"] = r.Key, ["tags"] = Arr(r.Tags), ["ring"] = Ring2(r.Ring), ["areaM2"] = Pricing.PolygonArea(r.Ring),
+                    }).ToArray()),
+                    ["surfaces"] = new JsonArray(l.Surfaces.Select(s => (JsonNode)new JsonObject
+                    {
+                        ["role"] = s.Role.ToString(), ["ring"] = Ring2(s.Ring),
+                    }).ToArray()),
+                    ["areas"] = new JsonArray(l.Areas.Select(s => (JsonNode)new JsonObject
+                    {
+                        ["role"] = s.Role.ToString(), ["ring"] = Ring2(s.Ring),
+                    }).ToArray()),
+                    ["nets"] = new JsonArray(l.Nets.Select(n => (JsonNode)new JsonObject
+                    {
+                        ["role"] = n.Role.ToString(),
+                        ["pts"] = new JsonArray(P(n.A), P(n.B), P(n.C), P(n.D)),
+                        ["width"] = Composer.DefaultHalfWidth(n.Role) * 2,
+                    }).ToArray()),
+                    ["objects"] = new JsonArray(l.Objects.Select(o => (JsonNode)new JsonObject
+                    {
+                        ["role"] = o.Role.ToString(), ["p"] = P(o.Position), ["yaw"] = o.Yaw,
+                        ["r"] = Composer.DefaultRadius(o.Role),
+                    }).ToArray()),
+                    ["zoning"] = new JsonArray(l.Zoning.Select(z => (JsonNode)new JsonObject
+                    {
+                        ["zone"] = z.ZoneId, ["quad"] = new JsonArray(P(z.A), P(z.B), P(z.C), P(z.D)),
+                    }).ToArray()),
+                    ["terraform"] = new JsonArray(l.Terraform.Select(t => (JsonNode)new JsonObject
+                    {
+                        ["kind"] = t.Kind.ToString(), ["permanent"] = t.Permanent, ["ring"] = Ring2(t.Ring),
+                    }).ToArray()),
+                    ["issues"] = Issues(l.Issues, l.StepPath),
+                });
+                var at = l.StepPath.IndexOf('@');
+                perLayer.Add(new JsonObject
+                {
+                    ["stepPath"] = at >= 0 ? l.StepPath.Substring(0, at) : l.StepPath,
+                    ["layer"] = l.GeneratorId,
+                    ["regionKey"] = at >= 0 ? l.StepPath.Substring(at + 1) : "",
+                    ["stats"] = Stats(l.Stats),
+                    ["cost"] = Math.Round(c), ["upkeep"] = Math.Round(u),
+                });
+            }
+
+            var permanent = new JsonArray();
+            foreach (var l in plan.Layers)
+                foreach (var t in l.Terraform)
+                    if (t.Permanent) permanent.Add(new JsonObject { ["key"] = "Placemaker.UI.Permanent.Terraform" });
+
+            return new JsonObject
+            {
+                ["layers"] = layers,
+                ["issues"] = Issues(plan.Issues, ""),
+                ["stats"] = Stats(plan.MergedStats()),
+                ["perLayer"] = perLayer,
+                ["cost"] = Math.Round(cost),
+                ["upkeep"] = Math.Round(upkeep),
+                ["permanent"] = permanent,
+                ["ms"] = sw.Elapsed.TotalMilliseconds,
+            };
+        }
+
+        /// <summary>Stand-in prices (the game catalog supplies real AssetInfo costs).</summary>
+        private static (double cost, double upkeep) FakePrice(AreaPlan l)
+        {
+            double c = 0;
+            foreach (var o in l.Objects)
+                c += o.Role switch
+                {
+                    ObjectRole.Tree => 150, ObjectRole.Bush => 40, ObjectRole.Centerpiece => 4500,
+                    ObjectRole.Bench => 90, ObjectRole.Lamp => 120, ObjectRole.Furniture => 600, ObjectRole.Planter => 70,
+                    _ => 60,
+                };
+            foreach (var n in l.Nets)
+            {
+                double len = Pricing.CurveLength(n);
+                c += len * (n.Role switch
+                {
+                    NetRole.Avenue => 220, NetRole.Street or NetRole.PerimeterRoad or NetRole.Roundabout or NetRole.CulDeSac => 120,
+                    NetRole.Pathway => 18, NetRole.PathwayWide => 30, NetRole.Fence => 12, _ => 60,
+                });
+            }
+            foreach (var s in l.Surfaces) c += Pricing.PolygonArea(s.Ring) * (s.Role == SurfaceRole.Grass ? 0.5 : 3);
+            return (c, c * 0.012);
+        }
+
+        // ───────────── randomize / ready ─────────────
+
+        public static JsonNode Randomize(JsonNode body)
+        {
+            var g = GeneratorRegistry.Get((string)body?["layer"] ?? "");
+            if (g == null) return null;
+            var current = Settings(body["values"]);
+            var locked = new HashSet<string>((body["locked"] as JsonArray)?.Select(x => (string)x) ?? Array.Empty<string>());
+            uint seed = (uint)(body["seed"]?.GetValue<double>() ?? 1);
+            try { return Bag(g.Randomize(current, seed, locked)); }
+            catch (Exception e) { return new JsonObject { ["error"] = e.Message }; }
+        }
+
+        public static JsonNode Ready(JsonNode body)
+        {
+            var g = GeneratorRegistry.Get((string)body?["layer"] ?? "");
+            if (g == null) return new JsonObject { ["ready"] = true };
+            try
+            {
+                var r = g.CheckReady(new AreaInput
+                {
+                    Shape = new AreaShape { Ring = Ring(body["ring"]) },
+                    Settings = Settings(body["values"]),
+                    Markers = Markers(body["markers"]),
+                });
+                return new JsonObject
+                {
+                    ["ready"] = r.Ready, ["nextStep"] = r.NextStepKey ?? "", ["reason"] = r.ReasonKey ?? "",
+                    ["args"] = new JsonArray((r.ReasonArgs ?? Array.Empty<object>()).Select(a => (JsonNode)JsonValue.Create(a?.ToString())).ToArray()),
+                };
+            }
+            catch (Exception e) { return new JsonObject { ["ready"] = true, ["error"] = e.Message }; }
+        }
+
+        // ───────────── lang ─────────────
+
+        public static JsonNode Lang(string repo)
+        {
+            var merged = new JsonObject();
+            var dir = Path.Combine(repo, "Lang");
+            if (!Directory.Exists(dir)) return merged;
+            foreach (var f in Directory.GetFiles(dir, "en-US*.json").OrderBy(x => x, StringComparer.Ordinal))
+            {
+                try
+                {
+                    if (JsonNode.Parse(File.ReadAllText(f)) is JsonObject o)
+                        foreach (var kv in o) merged[kv.Key] = kv.Value?.DeepClone();
+                }
+                catch (Exception e) { Console.WriteLine($"Lang file {f}: {e.Message}"); }
+            }
+            return merged;
+        }
+
+        // ───────────── JSON ⇄ Core ─────────────
+
+        private static RecipeStep Step(JsonNode n)
+        {
+            var s = new RecipeStep();
+            if (n == null) return s;
+            s.Layer = (string)n["layer"] ?? "";
+            s.Target = (string)n["target"] ?? "";
+            s.Enabled = n["enabled"]?.GetValue<bool>() ?? true;
+            s.Seed = (uint)(n["seed"]?.GetValue<double>() ?? 1);
+            s.Settings = Settings(n["values"]);
+            if (n["locked"] is JsonArray locked) foreach (var l in locked) s.Locked.Add((string)l);
+            s.Markers = Markers(n["markers"]);
+            if (n["children"] is JsonArray ch) foreach (var c in ch) s.Children.Add(Step(c));
+            if (n["overrides"] is JsonObject ov) foreach (var kv in ov) s.RegionOverrides[kv.Key] = Step(kv.Value);
+            return s;
+        }
+
+        private static List<EdgeMarker> Markers(JsonNode n)
+        {
+            var r = new List<EdgeMarker>();
+            if (n is JsonArray a)
+                foreach (var m in a)
+                {
+                    var p = m?["p"] as JsonArray;
+                    if (p == null || p.Count < 2) continue;
+                    r.Add(new EdgeMarker { Kind = (string)m["kind"] ?? "", Position = new float3((float)p[0].GetValue<double>(), 0, (float)p[1].GetValue<double>()) });
+                }
+            return r;
+        }
+
+        private static SettingsBag Settings(JsonNode n)
+        {
+            var bag = new SettingsBag();
+            if (n is not JsonObject o) return bag;
+            foreach (var kv in o)
+            {
+                switch (kv.Value?.GetValueKind())
+                {
+                    case JsonValueKind.Number: bag.Values[kv.Key] = kv.Value.GetValue<double>(); break;
+                    case JsonValueKind.True: bag.Values[kv.Key] = true; break;
+                    case JsonValueKind.False: bag.Values[kv.Key] = false; break;
+                    case JsonValueKind.String: bag.Values[kv.Key] = kv.Value.GetValue<string>(); break;
+                    case JsonValueKind.Array: bag.Values[kv.Key] = ((JsonArray)kv.Value).Select(x => x?.ToString() ?? "").ToArray(); break;
+                }
+            }
+            return bag;
+        }
+
+        private static float3[] Ring(JsonNode n)
+        {
+            if (n is not JsonArray a) return Array.Empty<float3>();
+            var pts = new List<float3>();
+            foreach (var p in a)
+                if (p is JsonArray xy && xy.Count >= 2)
+                    pts.Add(new float3((float)xy[0].GetValue<double>(), 0, (float)xy[1].GetValue<double>()));
+            // Core expects counter-clockwise in XZ (positive shoelace on x,z).
+            double s = 0;
+            for (int i = 0, j = pts.Count - 1; i < pts.Count; j = i++) s += (double)pts[j].x * pts[i].z - (double)pts[i].x * pts[j].z;
+            if (s < 0) pts.Reverse();
+            return pts.ToArray();
+        }
+
+        private static JsonNode Value(object v) => v switch
+        {
+            null => null,
+            bool b => JsonValue.Create(b),
+            string s => JsonValue.Create(s),
+            string[] a => Arr(a),
+            IConvertible c => JsonValue.Create(c.ToDouble(System.Globalization.CultureInfo.InvariantCulture)),
+            _ => JsonValue.Create(v.ToString()),
+        };
+
+        private static JsonObject Bag(SettingsBag b)
+        {
+            var o = new JsonObject();
+            if (b == null) return o;
+            foreach (var kv in b.Values) o[kv.Key] = Value(kv.Value);
+            return o;
+        }
+
+        private static JsonArray Stats(IEnumerable<PlanStat> stats) =>
+            new JsonArray(stats.Select(s => (JsonNode)new JsonObject { ["key"] = s.Key, ["value"] = s.Value, ["unit"] = s.Unit ?? "" }).ToArray());
+
+        private static JsonArray Issues(IEnumerable<PlanIssue> issues, string stepPath) =>
+            new JsonArray(issues.Select(i =>
+            {
+                var o = new JsonObject
+                {
+                    ["severity"] = i.Severity switch { IssueSeverity.Error => "error", IssueSeverity.Warning => "warning", _ => "info" },
+                    ["text"] = new JsonObject
+                    {
+                        ["key"] = i.Key,
+                        ["args"] = new JsonArray((i.Args ?? Array.Empty<object>()).Select(a => (JsonNode)JsonValue.Create(a?.ToString() ?? "")).ToArray()),
+                    },
+                };
+                if (!string.IsNullOrEmpty(stepPath)) { int at = stepPath.IndexOf('@'); o["stepPath"] = at >= 0 ? stepPath.Substring(0, at) : stepPath; }
+                if (i.At.HasValue) o["at"] = new JsonArray(i.At.Value.x, i.At.Value.y, i.At.Value.z);
+                return (JsonNode)o;
+            }).ToArray());
+
+        private static JsonArray Arr(IEnumerable<string> s) => new JsonArray(s.Select(x => (JsonNode)JsonValue.Create(x)).ToArray());
+        private static JsonArray P(float3 p) => new JsonArray(Math.Round(p.x, 2), Math.Round(p.z, 2));
+        private static JsonArray Ring2(float3[] ring) => new JsonArray((ring ?? Array.Empty<float3>()).Select(p => (JsonNode)P(p)).ToArray());
+        private static string Camel(string s) => string.IsNullOrEmpty(s) ? s : char.ToLowerInvariant(s[0]) + s.Substring(1);
+    }
+}
