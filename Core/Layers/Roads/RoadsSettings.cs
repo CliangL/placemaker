@@ -1,0 +1,416 @@
+// Placemaker roads layer — control schema and mapping to the generator parameters.
+// The ~45 GridParameters of Grid Road Generator (Ti4goc) are exposed as one clean schema:
+// a handful of essentials per pattern (VisibleWhen "pattern=…"), every option grouped under a plain heading.
+// Control ids are save format: never rename, only add.
+
+using System;
+using System.Collections.Generic;
+using Placemaker.Core.Layers.Roads.Generators;
+using Unity.Mathematics;
+
+namespace Placemaker.Core.Layers.Roads
+{
+    public enum RoadPattern { Grid, Tree, Organic, Contour, Mixed, Loop, Superblock, Concentric, Radial }
+
+    /// <summary>Control ids of the roads layer (save format).</summary>
+    public static class RoadsIds
+    {
+        public const string Pattern = "pattern";
+        public const string StreetAsset = "streetAsset";
+
+        // Grid
+        public const string GridSpacing = "gridSpacing";
+        public const string GridAngle = "gridAngle";
+        public const string GridAlignTerrain = "gridAlignTerrain";
+        public const string GridMode = "gridMode";              // "spacing" | "count"
+        public const string GridColumns = "gridColumns";
+        public const string GridRows = "gridRows";
+        public const string CulDeSacs = "culDeSacs";
+        public const string CulDeSacAxis = "culDeSacAxis";      // "columns" | "rows" | "both"
+        public const string CulDeSacRatio = "culDeSacRatio";
+        public const string CulDeSacDepth = "culDeSacDepth";
+        public const string CulDeSacStaggered = "culDeSacStaggered";
+        public const string AvenueColumn = "avenueColumn";
+        public const string AvenueColumnIndex = "avenueColumnIndex";
+        public const string AvenueRow = "avenueRow";
+        public const string AvenueRowIndex = "avenueRowIndex";
+        public const string RoundaboutIsland = "roundaboutIsland";
+
+        // Tree
+        public const string TreeBranchSpacing = "treeBranchSpacing";
+        public const string TreeCulDeSacLength = "treeCulDeSacLength";
+        public const string TreeCulDeSacSpacing = "treeCulDeSacSpacing";
+        public const string TreeAngle = "treeAngle";
+
+        // Organic
+        public const string OrganicSpacing = "organicSpacing";
+        public const string OrganicCurviness = "organicCurviness";
+        public const string OrganicLoops = "organicLoops";
+        public const string OrganicVariation = "organicVariation";
+
+        // Contour
+        public const string ContourSpacing = "contourSpacing";
+        public const string ContourLinkSpacing = "contourLinkSpacing";
+
+        // Mixed
+        public const string MixedCoreRadius = "mixedCoreRadius";
+        public const string MixedAvenues = "mixedAvenues";
+        public const string MixedSpacing = "mixedSpacing";
+        public const string MixedCurviness = "mixedCurviness";
+
+        // Loop
+        public const string LoopCollectorSpacing = "loopCollectorSpacing";
+        public const string LoopCulDeSacRatio = "loopCulDeSacRatio";
+        public const string LoopCulDeSacDepth = "loopCulDeSacDepth";
+        public const string LoopAngle = "loopAngle";
+        public const string LoopAlignTerrain = "loopAlignTerrain";
+
+        // Superblock
+        public const string SuperblockZone = "superblockZone";
+        public const string SuperblockAngle = "superblockAngle";
+        public const string SuperblockAlignTerrain = "superblockAlignTerrain";
+
+        // Concentric
+        public const string ConcentricRings = "concentricRings";
+        public const string ConcentricConnections = "concentricConnections";
+
+        // Radial
+        public const string RadialAvenues = "radialAvenues";
+        public const string RadialRoundaboutRadius = "radialRoundaboutRadius";
+        public const string RadialRings = "radialRings";
+
+        // Network-wide
+        public const string PerimeterRoad = "perimeterRoad";        // "auto" | "on" | "off"
+        public const string PerimeterCornerRadius = "perimeterCornerRadius";
+        public const string FollowTerrain = "followTerrain";
+        public const string AvoidObstacles = "avoidObstacles";
+        public const string ConnectExisting = "connectExisting";
+        public const string CapStyle = "capStyle";                  // "none" | "asphalt" | "grass" | "trees"
+        public const string CapSize = "capSize";                    // "auto" | "small" | "medium" | "large" | "xl"
+        public const string LocalAsset = "localAsset";
+        public const string AvenueAsset = "avenueAsset";
+        public const string RoundaboutAsset = "roundaboutAsset";
+        public const string PathAsset = "pathAsset";
+        public const string EdgeDepth = "edgeDepth";
+
+        // Upgrades
+        public const string StreetTrees = "streetTrees";
+        public const string StreetGrass = "streetGrass";
+        public const string StreetWideSidewalks = "streetWideSidewalks";
+        public const string StreetBikeLanes = "streetBikeLanes";
+        public const string AvenueMedianTrees = "avenueMedianTrees";
+        public const string AvenueMedianGrass = "avenueMedianGrass";
+        public const string AvenueTrees = "avenueTrees";
+        public const string AvenueGrass = "avenueGrass";
+        public const string AvenueBikeLanes = "avenueBikeLanes";
+    }
+
+    /// <summary>Schema construction and settings → generator parameters.</summary>
+    public static class RoadsSchema
+    {
+        public const string KeyPrefix = "Placemaker.Roads.";
+
+        public static readonly string[] PatternValues =
+            { "grid", "tree", "organic", "contour", "mixed", "loop", "superblock", "concentric", "radial" };
+
+        public static RoadPattern ParsePattern(string s)
+        {
+            int i = Array.IndexOf(PatternValues, s ?? "");
+            return i < 0 ? RoadPattern.Grid : (RoadPattern)i;
+        }
+
+        public static string PatternValue(RoadPattern p) => PatternValues[(int)p];
+
+        public static string Label(string id) => KeyPrefix + "Control." + id;
+        public static string Tooltip(string id) => KeyPrefix + "Control." + id + ".Tooltip";
+        public static string OptionLabel(string id, string value) => KeyPrefix + "Option." + id + "." + value;
+        /// <summary>The panel reads group headings from "Placemaker.UI.Group.{id}" (shared across layers).</summary>
+        public static string GroupLabel(string group) => "Placemaker.UI.Group." + group;
+
+        public static List<ControlSchema> Build()
+        {
+            var c = new List<ControlSchema>();
+
+            // ── Essentials ────────────────────────────────────────────────
+            var pattern = Choice(RoadsIds.Pattern, ControlTier.Essential, "layout", "grid", PatternValues);
+            // Pattern options are text choices: no "placemaker" coui host exists and vanilla has no
+            // pattern icons. Bundled icons are requested in docs/proposals/roads.md.
+            c.Add(pattern);
+            c.Add(Asset(RoadsIds.StreetAsset, ControlTier.Essential, "roadTypes", AssetCategories.Road));
+
+            c.Add(Slider(RoadsIds.GridSpacing, ControlTier.Essential, "layout", 60, 300, 10, "m", 100, "pattern=grid"));
+            c.Add(Slider(RoadsIds.GridAngle, ControlTier.Essential, "layout", -90, 90, 1, "deg", 0, "pattern=grid", label: "angle"));
+            c.Add(Slider(RoadsIds.TreeBranchSpacing, ControlTier.Essential, "layout",
+                GridGenerator.MinTreeBranchSpacing, GridGenerator.MaxTreeBranchSpacing, 10, "m", GridGenerator.TreeBranchSpacingDefault, "pattern=tree"));
+            c.Add(Slider(RoadsIds.TreeCulDeSacLength, ControlTier.Essential, "layout",
+                GridGenerator.MinTreeCulDeSacLength, GridGenerator.MaxTreeCulDeSacLength, 5, "m", GridGenerator.TreeCulDeSacLengthDefault, "pattern=tree"));
+            c.Add(Slider(RoadsIds.TreeAngle, ControlTier.Essential, "layout", -90, 90, 1, "deg", 0, "pattern=tree", label: "angle"));
+            c.Add(Slider(RoadsIds.OrganicSpacing, ControlTier.Essential, "layout",
+                GridGenerator.MinOrganicStreetSpacing, GridGenerator.MaxOrganicStreetSpacing, 5, "m", GridGenerator.OrganicStreetSpacingDefault, "pattern=organic", label: "streetSpacing"));
+            c.Add(Slider(RoadsIds.OrganicCurviness, ControlTier.Essential, "layout", 0, 100, 5, "%", GridGenerator.OrganicCurvinessDefault, "pattern=organic", label: "curviness"));
+            c.Add(Slider(RoadsIds.ContourSpacing, ControlTier.Essential, "layout",
+                GridGenerator.MinContourSpacing, GridGenerator.MaxContourSpacing, 5, "m", GridGenerator.ContourSpacingDefault, "pattern=contour", label: "streetSpacing"));
+            c.Add(Slider(RoadsIds.ContourLinkSpacing, ControlTier.Essential, "layout",
+                GridGenerator.MinContourConnectorSpacing, GridGenerator.MaxContourConnectorSpacing, 10, "m", GridGenerator.ContourConnectorSpacingDefault, "pattern=contour"));
+            c.Add(Slider(RoadsIds.MixedCoreRadius, ControlTier.Essential, "layout",
+                GridGenerator.MinMixedCoreRadius, GridGenerator.MaxMixedCoreRadius, 10, "m", GridGenerator.MixedCoreRadiusDefault, "pattern=mixed"));
+            c.Add(Slider(RoadsIds.MixedAvenues, ControlTier.Essential, "layout", 3, 16, 1, "count", 8, "pattern=mixed", label: "avenues"));
+            c.Add(Slider(RoadsIds.LoopCollectorSpacing, ControlTier.Essential, "layout", 200, 400, 10, "m", 200, "pattern=loop"));
+            c.Add(Slider(RoadsIds.LoopAngle, ControlTier.Essential, "layout", -90, 90, 1, "deg", 0, "pattern=loop", label: "angle"));
+            c.Add(Slider(RoadsIds.SuperblockZone, ControlTier.Essential, "layout",
+                GridGenerator.SuperblockZoneMetersMin, 400, 10, "m", 150, "pattern=superblock"));
+            c.Add(Slider(RoadsIds.SuperblockAngle, ControlTier.Essential, "layout", -90, 90, 1, "deg", 0, "pattern=superblock", label: "angle"));
+            c.Add(Slider(RoadsIds.ConcentricRings, ControlTier.Essential, "layout",
+                ConcentricGenerator.MinLayers, ConcentricGenerator.MaxLayersLimit, 1, "count", 3, "pattern=concentric", label: "rings"));
+            c.Add(Slider(RoadsIds.ConcentricConnections, ControlTier.Essential, "layout",
+                ConcentricGenerator.MinConnections, ConcentricGenerator.MaxConnections, 1, "count", 4, "pattern=concentric"));
+            c.Add(Slider(RoadsIds.RadialAvenues, ControlTier.Essential, "layout", 3, 16, 1, "count", 8, "pattern=radial", label: "avenues"));
+            c.Add(Slider(RoadsIds.RadialRoundaboutRadius, ControlTier.Essential, "layout", 20, 150, 5, "m", 50, "pattern=radial", label: "roundaboutRadius"));
+            c.Add(Slider(RoadsIds.RadialRings, ControlTier.Essential, "layout", 0, ConcentricGenerator.MaxLayersLimit, 1, "count", 2, "pattern=radial", label: "rings"));
+
+            // ── More: per pattern ─────────────────────────────────────────
+            c.Add(Toggle(RoadsIds.GridAlignTerrain, ControlTier.More, "layout", false, "pattern=grid", label: "alignTerrain"));
+            c.Add(Choice(RoadsIds.GridMode, ControlTier.More, "layout", "spacing", new[] { "spacing", "count" }, "pattern=grid"));
+            c.Add(Slider(RoadsIds.GridColumns, ControlTier.More, "layout", 1, 12, 1, "count", 3, "gridMode=count"));
+            c.Add(Slider(RoadsIds.GridRows, ControlTier.More, "layout", 1, 12, 1, "count", 3, "gridMode=count"));
+            c.Add(Toggle(RoadsIds.CulDeSacs, ControlTier.More, "culDeSacs", false, "pattern=grid"));
+            c.Add(Choice(RoadsIds.CulDeSacAxis, ControlTier.More, "culDeSacs", "columns", new[] { "columns", "rows", "both" }, "culDeSacs=true"));
+            c.Add(Slider(RoadsIds.CulDeSacRatio, ControlTier.More, "culDeSacs", 0, 100, 5, "%", 100, "culDeSacs=true", label: "culDeSacFrequency"));
+            c.Add(Slider(RoadsIds.CulDeSacDepth, ControlTier.More, "culDeSacs", 50, 80, 5, "%", 60, "culDeSacs=true", label: "culDeSacDepth"));
+            c.Add(Toggle(RoadsIds.CulDeSacStaggered, ControlTier.More, "culDeSacs", true, "culDeSacs=true"));
+            c.Add(Toggle(RoadsIds.AvenueColumn, ControlTier.More, "avenues", false, "pattern=grid"));
+            c.Add(Slider(RoadsIds.AvenueColumnIndex, ControlTier.More, "avenues", 0, 23, 1, "count", 1, "avenueColumn=true", label: "avenueIndex"));
+            c.Add(Toggle(RoadsIds.AvenueRow, ControlTier.More, "avenues", false, "pattern=grid"));
+            c.Add(Slider(RoadsIds.AvenueRowIndex, ControlTier.More, "avenues", 0, 23, 1, "count", 1, "avenueRow=true", label: "avenueIndex"));
+            c.Add(Toggle(RoadsIds.RoundaboutIsland, ControlTier.More, "avenues", true, "pattern=grid"));
+            c.Add(Slider(RoadsIds.TreeCulDeSacSpacing, ControlTier.More, "layout",
+                GridGenerator.MinTreeCulDeSacSpacing, GridGenerator.MaxTreeCulDeSacSpacing, 5, "m", GridGenerator.TreeCulDeSacSpacingDefault, "pattern=tree"));
+            c.Add(Slider(RoadsIds.OrganicLoops, ControlTier.More, "layout", 0, 100, 5, "%", GridGenerator.OrganicLoopShareDefault, "pattern=organic", label: "loops"));
+            c.Add(Slider(RoadsIds.OrganicVariation, ControlTier.More, "layout",
+                GridGenerator.MinOrganicSeed, GridGenerator.MaxOrganicSeed, 1, "count", GridGenerator.MinOrganicSeed, "pattern=organic", label: "variation"));
+            c.Add(Slider(RoadsIds.MixedSpacing, ControlTier.More, "layout",
+                GridGenerator.MinOrganicStreetSpacing, GridGenerator.MaxOrganicStreetSpacing, 5, "m", GridGenerator.OrganicStreetSpacingDefault, "pattern=mixed", label: "streetSpacing"));
+            c.Add(Slider(RoadsIds.MixedCurviness, ControlTier.More, "layout", 0, 100, 5, "%", GridGenerator.OrganicCurvinessDefault, "pattern=mixed", label: "curviness"));
+            c.Add(Slider(RoadsIds.LoopCulDeSacRatio, ControlTier.More, "culDeSacs", 0, 100, 5, "%", 50, "pattern=loop", label: "culDeSacFrequency"));
+            c.Add(Slider(RoadsIds.LoopCulDeSacDepth, ControlTier.More, "culDeSacs", 50, 80, 5, "%", 60, "pattern=loop", label: "culDeSacDepth"));
+            c.Add(Toggle(RoadsIds.LoopAlignTerrain, ControlTier.More, "layout", false, "pattern=loop", label: "alignTerrain"));
+            c.Add(Toggle(RoadsIds.SuperblockAlignTerrain, ControlTier.More, "layout", false, "pattern=superblock", label: "alignTerrain"));
+
+            // ── More: network-wide ────────────────────────────────────────
+            c.Add(Choice(RoadsIds.PerimeterRoad, ControlTier.More, "connections", "auto", new[] { "auto", "on", "off" }));
+            c.Add(Slider(RoadsIds.PerimeterCornerRadius, ControlTier.More, "connections", 0, 80, 5, "m", FreeAreaPerimeter.CornerRadius));
+            c.Add(Toggle(RoadsIds.ConnectExisting, ControlTier.More, "connections", true));
+            c.Add(Toggle(RoadsIds.AvoidObstacles, ControlTier.More, "connections", true));
+            c.Add(Toggle(RoadsIds.FollowTerrain, ControlTier.More, "connections", true));
+            c.Add(Asset(RoadsIds.LocalAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
+            c.Add(Asset(RoadsIds.AvenueAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
+            c.Add(Asset(RoadsIds.RoundaboutAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
+            c.Add(Asset(RoadsIds.PathAsset, ControlTier.More, "roadTypes", AssetCategories.Pathway, "pattern=superblock"));
+            c.Add(Choice(RoadsIds.CapStyle, ControlTier.More, "culDeSacs", "asphalt", new[] { "none", "asphalt", "grass", "trees" }));
+            c.Add(Choice(RoadsIds.CapSize, ControlTier.More, "culDeSacs", "auto", new[] { "auto", "small", "medium", "large", "xl" }));
+            c.Add(Slider(RoadsIds.EdgeDepth, ControlTier.More, "frontage", 16, 64, 8, "m", 48, ""));
+
+            // ── More: upgrades ────────────────────────────────────────────
+            c.Add(Toggle(RoadsIds.StreetTrees, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.StreetGrass, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.StreetWideSidewalks, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.StreetBikeLanes, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueMedianTrees, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueMedianGrass, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueTrees, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueGrass, ControlTier.More, "streetUpgrades", false));
+            c.Add(Toggle(RoadsIds.AvenueBikeLanes, ControlTier.More, "streetUpgrades", false));
+
+            foreach (var ctl in c)
+            {
+                // Pattern geometry needs a full re-plan; asset/upgrade/cap choices keep the layout.
+                ctl.Cheap = ctl.Kind == ControlKind.Asset || ctl.Group == "streetUpgrades"
+                    || ctl.Id == RoadsIds.CapStyle || ctl.Id == RoadsIds.CapSize;
+            }
+            return c;
+        }
+
+        private static ControlSchema Base(string id, ControlKind kind, ControlTier tier, string group, string visibleWhen, string label)
+        {
+            string labelId = string.IsNullOrEmpty(label) ? id : label;
+            return new ControlSchema
+            {
+                Id = id, Kind = kind, Tier = tier, Group = group,
+                LabelKey = Label(labelId), TooltipKey = Tooltip(labelId),
+                VisibleWhen = visibleWhen ?? "",
+            };
+        }
+
+        private static ControlSchema Slider(string id, ControlTier tier, string group, double min, double max, double step,
+            string unit, double def, string visibleWhen = "", string label = null)
+        {
+            var s = Base(id, ControlKind.Slider, tier, group, visibleWhen, label);
+            s.Min = min; s.Max = max; s.Step = step; s.Unit = unit; s.Default = def;
+            return s;
+        }
+
+        private static ControlSchema Toggle(string id, ControlTier tier, string group, bool def, string visibleWhen = "", string label = null)
+        {
+            var s = Base(id, ControlKind.Toggle, tier, group, visibleWhen, label);
+            s.Default = def;
+            return s;
+        }
+
+        private static ControlSchema Choice(string id, ControlTier tier, string group, string def, string[] values, string visibleWhen = "")
+        {
+            var s = Base(id, ControlKind.Choice, tier, group, visibleWhen, null);
+            s.Default = def;
+            foreach (var v in values)
+                s.Options.Add(new ControlOption { Value = v, LabelKey = OptionLabel(id, v), TooltipKey = OptionLabel(id, v) + ".Tooltip" });
+            return s;
+        }
+
+        private static ControlSchema Asset(string id, ControlTier tier, string group, string category, string visibleWhen = "")
+        {
+            var s = Base(id, ControlKind.Asset, tier, group, visibleWhen, null);
+            s.Default = "";
+            s.AssetCategory = category;
+            return s;
+        }
+
+        public static SettingsBag Defaults(IReadOnlyList<ControlSchema> controls)
+        {
+            var b = new SettingsBag();
+            foreach (var ctl in controls) b.Values[ctl.Id] = ctl.Default;
+            return b;
+        }
+
+        /// <summary>Clamp helper for sliders read from a bag (saved values may predate a range change).</summary>
+        public static float Num(SettingsBag s, IReadOnlyList<ControlSchema> controls, string id)
+        {
+            foreach (var ctl in controls)
+            {
+                if (ctl.Id != id) continue;
+                double def = ctl.Default is IConvertible cv ? cv.ToDouble(System.Globalization.CultureInfo.InvariantCulture) : ctl.Min;
+                double v = s.Num(id, def);
+                if (double.IsNaN(v) || double.IsInfinity(v)) v = def;
+                return (float)Math.Max(ctl.Min, Math.Min(ctl.Max, v));
+            }
+            return (float)s.Num(id, 0);
+        }
+
+        /// <summary>Settings → generator parameters for the chosen pattern.</summary>
+        public static GridParameters ToGridParameters(SettingsBag s, IReadOnlyList<ControlSchema> controls, out RoadPattern pattern)
+        {
+            pattern = ParsePattern(s.S(RoadsIds.Pattern, "grid"));
+            float N(string id) => Num(s, controls, id);
+            int I(string id) => (int)Math.Round(Num(s, controls, id));
+
+            var p = GridParameters.Default;
+            p.PedestrianLinks = false;   // GRG retired them: CS2 deletes free pathway stubs seconds after placement.
+            switch (pattern)
+            {
+                case RoadPattern.Grid:
+                    p.Mode = s.S(RoadsIds.GridMode, "spacing") == "count" ? SpacingMode.FitToArea : SpacingMode.FixedSpacing;
+                    p.SpacingMeters = N(RoadsIds.GridSpacing);
+                    p.Columns = I(RoadsIds.GridColumns);
+                    p.Rows = I(RoadsIds.GridRows);
+                    p.AngleOffsetDegrees = N(RoadsIds.GridAngle);
+                    p.AlignToTerrain = s.B(RoadsIds.GridAlignTerrain, false);
+                    p.CulDeSacMode = s.B(RoadsIds.CulDeSacs, false);
+                    string axis = s.S(RoadsIds.CulDeSacAxis, "columns");
+                    p.CulDeSacAxis = axis == "rows" ? Generators.CulDeSacAxis.Rows : axis == "both" ? Generators.CulDeSacAxis.Both : Generators.CulDeSacAxis.Columns;
+                    p.CulDeSacRatio = N(RoadsIds.CulDeSacRatio);
+                    p.CulDeSacDepth = N(RoadsIds.CulDeSacDepth) / 100f;
+                    p.Staggered = s.B(RoadsIds.CulDeSacStaggered, true);
+                    p.AvenueColumnEnabled = s.B(RoadsIds.AvenueColumn, false);
+                    p.AvenueColumnIndex = I(RoadsIds.AvenueColumnIndex);
+                    p.AvenueRowEnabled = s.B(RoadsIds.AvenueRow, false);
+                    p.AvenueRowIndex = I(RoadsIds.AvenueRowIndex);
+                    break;
+                case RoadPattern.Tree:
+                    p.TreeMode = true;
+                    p.TreeBranchSpacing = N(RoadsIds.TreeBranchSpacing);
+                    p.TreeCulDeSacLength = N(RoadsIds.TreeCulDeSacLength);
+                    p.TreeCulDeSacSpacing = N(RoadsIds.TreeCulDeSacSpacing);
+                    p.AngleOffsetDegrees = N(RoadsIds.TreeAngle);
+                    break;
+                case RoadPattern.Organic:
+                    p.OrganicMode = true;
+                    p.OrganicStreetSpacing = N(RoadsIds.OrganicSpacing);
+                    p.OrganicCurviness = N(RoadsIds.OrganicCurviness);
+                    p.OrganicLoopShare = N(RoadsIds.OrganicLoops);
+                    p.OrganicSeed = I(RoadsIds.OrganicVariation);
+                    break;
+                case RoadPattern.Contour:
+                    p.ContourMode = true;
+                    p.ContourSpacing = N(RoadsIds.ContourSpacing);
+                    p.ContourConnectorSpacing = N(RoadsIds.ContourLinkSpacing);
+                    break;
+                case RoadPattern.Mixed:
+                    p.MixedMode = true;
+                    p.MixedCoreRadius = N(RoadsIds.MixedCoreRadius);
+                    p.RadialAvenues = I(RoadsIds.MixedAvenues);
+                    p.RadialRoundaboutRadius = 40f;
+                    p.RadialLayers = 2;
+                    p.OrganicStreetSpacing = N(RoadsIds.MixedSpacing);
+                    p.OrganicCurviness = N(RoadsIds.MixedCurviness);
+                    p.OrganicLoopShare = GridGenerator.OrganicLoopShareDefault;
+                    p.OrganicSeed = GridGenerator.MinOrganicSeed;
+                    break;
+                case RoadPattern.Loop:
+                    p.CollectorSpacingMeters = N(RoadsIds.LoopCollectorSpacing);
+                    p.LoopCulDeSacRatio = N(RoadsIds.LoopCulDeSacRatio);
+                    p.CulDeSacDepth = N(RoadsIds.LoopCulDeSacDepth) / 100f;
+                    p.AngleOffsetDegrees = N(RoadsIds.LoopAngle);
+                    p.AlignToTerrain = s.B(RoadsIds.LoopAlignTerrain, false);
+                    break;
+                case RoadPattern.Superblock:
+                    p.SuperblockMode = true;
+                    p.SuperblockZoneMeters = N(RoadsIds.SuperblockZone);
+                    p.AngleOffsetDegrees = N(RoadsIds.SuperblockAngle);
+                    p.AlignToTerrain = s.B(RoadsIds.SuperblockAlignTerrain, false);
+                    break;
+                case RoadPattern.Concentric:
+                    p.ConcentricMode = true;
+                    p.ConcentricLayers = I(RoadsIds.ConcentricRings);
+                    p.ConcentricConnections = I(RoadsIds.ConcentricConnections);
+                    break;
+                case RoadPattern.Radial:
+                    p.ConcentricMode = true;
+                    p.RadialMode = true;
+                    p.RadialAvenues = I(RoadsIds.RadialAvenues);
+                    p.RadialRoundaboutRadius = N(RoadsIds.RadialRoundaboutRadius);
+                    p.RadialLayers = I(RoadsIds.RadialRings);
+                    break;
+            }
+            return p;
+        }
+
+        /// <summary>The "loop family" runs through GenerateLoopGrid, everything else through GenerateGrid.</summary>
+        public static bool IsLoopFamily(RoadPattern p) =>
+            p == RoadPattern.Loop || p == RoadPattern.Superblock || p == RoadPattern.Concentric || p == RoadPattern.Radial;
+
+        /// <summary>Composition upgrade flags (game flag names, "Side.Flag" per side) for a role.</summary>
+        public static string[] Upgrades(SettingsBag s, NetRole role)
+        {
+            var r = new List<string>();
+            void Both(string flag) { r.Add("Left." + flag); r.Add("Right." + flag); }
+            if (role == NetRole.Avenue)
+            {
+                if (s.B(RoadsIds.AvenueMedianGrass, false)) r.Add("General.PrimaryMiddleBeautification");
+                if (s.B(RoadsIds.AvenueMedianTrees, false)) r.Add("General.SecondaryMiddleBeautification");
+                if (s.B(RoadsIds.AvenueTrees, false)) Both("SecondaryBeautification");
+                if (s.B(RoadsIds.AvenueGrass, false)) Both("PrimaryBeautification");
+                if (s.B(RoadsIds.AvenueBikeLanes, false)) Both("SecondaryLane");
+            }
+            else if (role == NetRole.Street || role == NetRole.CulDeSac || role == NetRole.PerimeterRoad || role == NetRole.Roundabout)
+            {
+                if (s.B(RoadsIds.StreetTrees, false)) Both("SecondaryBeautification");
+                bool wide = s.B(RoadsIds.StreetWideSidewalks, false);
+                // Grass verge and wide sidewalk share the same strip: the wide sidewalk wins (GRG rule).
+                if (s.B(RoadsIds.StreetGrass, false) && !wide) Both("PrimaryBeautification");
+                if (wide) Both("WideSidewalk");
+                if (s.B(RoadsIds.StreetBikeLanes, false)) Both("SecondaryLane");
+            }
+            return r.ToArray();
+        }
+
+        public static float SafeAngle(float deg) => math.isfinite(deg) ? deg : 0f;
+    }
+}

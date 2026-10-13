@@ -17,6 +17,7 @@ using Xunit;
 
 namespace Placemaker.Tests
 {
+    [Collection(TimingCollection.Name)]
     public class ParkingTests
     {
         private static readonly float3[] Rect = ParkingKit.Rect(160, 110);
