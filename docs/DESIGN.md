@@ -15,6 +15,16 @@ Consequence: the new mod is **GPL-3.0**, credits all three, keeps the MIT notice
 
 ---
 
+## 0. Decisions (2026-10-13, from the user)
+
+- Ship the real thing, not a prototype: everything all three mods can do, in one new UI, rewritten robustly.
+- **Stages you can always roll back**: Area → Design → Review (price, upkeep, stats, issues) → Build. Undo everywhere.
+- **Composable, extensible to the extreme**: an area runs a *recipe* of layers — Fill (park, plaza, parking,
+  roads, campground…), Split (park | plaza), Add-ons (bigger fountain, playground, restrooms, big trees,
+  edge zoning…). Roads + parks, split plaza/park, park with zoning edges — all just recipes.
+  Adding a new type = one class. Player-made recipes later = saved recipe files. See ARCHITECTURE.md.
+- Working name **Placemaker** (rename later is fine). Panel docked above vanilla tool options.
+
 ## 1. UX principles
 
 1. **Area first, then purpose — but never forced order.** The selected area survives switching type;
