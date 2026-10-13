@@ -24,7 +24,6 @@ namespace Placemaker.Game.Tool
             _designVersion++;
             _inputRevision++;
             _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
-            _inputFromDrag = preview;
             ClearBuildFeedback(false);
             Touch();
         }

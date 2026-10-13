@@ -270,6 +270,7 @@ namespace Placemaker.Game.Tool
             CheckKeepOffSetting();
             RebuildShapeIfDirty(false);
             UpdatePlanning();
+            TickPlanningProgress();
             var facts = Facts();
             var normalized = StageMachine.Normalize(_stage, facts);
             if (normalized != _stage) SetStage(normalized);

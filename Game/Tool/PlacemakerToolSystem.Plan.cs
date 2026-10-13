@@ -20,7 +20,6 @@ namespace Placemaker.Game.Tool
         private int _shapeVersion;
         private int _inputRevision, _requestedRevision = -1, _planRevision = -1;
         private float _lastInputChange;
-        private bool _inputFromDrag;
         private ComposedPlan _plan;
         private double _planMs;
         private SiteContext _siteCache;
@@ -55,7 +54,6 @@ namespace Placemaker.Game.Tool
             else { _shapeDirty = true; _shapeThrottled = throttled; }
             _inputRevision++;
             _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
-            _inputFromDrag = throttled;
             ClearBuildFeedback(false);
             Touch();
         }
@@ -187,17 +185,42 @@ namespace Placemaker.Game.Tool
             }
             if (_shapeDirty || _planRevision == _inputRevision || _requestedRevision == _inputRevision) return;
 
-            bool live = _gesture != Gesture.None || _previewBase != null || _inputFromDrag;
+            // Committed edits plan at once; only a running drag (or a hover) is debounced (Core/Tool/PlanSchedule).
             var detail = _settings?.PreviewDetail ?? PreviewDetail.Normal;
-            // Simple detail: re-plan only when the drag ends (a hovered asset still re-plans: that is the point of hovering).
-            if (live && detail == PreviewDetail.Simple && (_gesture != Gesture.None || ValuePreviewKind == ValuePreviewKind.Drag)) return;
-            float debounce = !live ? 0f : detail == PreviewDetail.Detailed ? 0.06f : 0.15f;
-            if (UnityEngine.Time.realtimeSinceStartup - _lastInputChange < debounce) return;
+            float debounce = PlanSchedule.Debounce(_gesture != Gesture.None, ValuePreviewKind, detail == PreviewDetail.Simple, detail == PreviewDetail.Detailed);
+            if (debounce < 0f) return;   // Simple detail: re-plan when the drag ends
+            if (debounce > 0f && UnityEngine.Time.realtimeSinceStartup - _lastInputChange < debounce) return;
 
             var site = SiteFor(_shape);
             _requestedRevision = _inputRevision;
+            _planStartedAt = UnityEngine.Time.realtimeSinceStartup;
             _worker.Request(_inputRevision, _recipe.Clone(), _shape, site);
             Touch();
+        }
+
+        private float _planStartedAt = -1f;
+        private float _planningTouchAt;
+
+        /// <summary>While planning, refresh the state ~10x a second so the spinner's coarse progress moves.</summary>
+        private void TickPlanningProgress()
+        {
+            if (!Planning) return;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (now - _planningTouchAt < 0.1f) return;
+            _planningTouchAt = now;
+            Touch();
+        }
+
+        /// <summary>Coarse 0..0.95 while Planning (0 = queued, the request has not started), else null.</summary>
+        public double? PlanningProgress
+        {
+            get
+            {
+                if (!Planning) return null;
+                bool running = _requestedRevision == _inputRevision && _worker.Busy;
+                double ms = running ? (UnityEngine.Time.realtimeSinceStartup - _planStartedAt) * 1000.0 : -1;
+                return PlanSchedule.Progress(ms, _planMs);
+            }
         }
 
         private SiteContext SiteFor(AreaShape shape)
