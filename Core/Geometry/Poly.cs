@@ -116,7 +116,7 @@ namespace Placemaker.Core.Geometry
             return CrossD(b - a, c - b) < 0;
         }
 
-        /// <summary>True when the ring is convex in either orientation (collinear vertices allowed).</summary>
+        /// <summary>True when the ring is convex in either orientation (straight vertices allowed, turns below 1e-6 rad ignored).</summary>
         public static bool IsConvex(IReadOnlyList<float2> ring)
         {
             int n = ring.Count;
@@ -126,7 +126,7 @@ namespace Placemaker.Core.Geometry
             {
                 double2 a = ring[(i - 1 + n) % n], b = ring[i], c = ring[(i + 1) % n];
                 double cr = CrossD(b - a, c - b);
-                if (cr == 0) continue;
+                if (math.abs(cr) <= 1e-6 * math.length(b - a) * math.length(c - b)) continue; // straight up to float noise
                 int s = cr > 0 ? 1 : -1;
                 if (sign == 0) sign = s;
                 else if (s != sign) return false;

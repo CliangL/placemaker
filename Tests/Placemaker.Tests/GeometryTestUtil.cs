@@ -135,6 +135,23 @@ namespace Placemaker.Tests
                 .ToArray();
         }
 
+        /// <summary>
+        /// Best-of-N wall time (ms) after warm-up: the test host JITs in tiers and other processes share
+        /// the CPU, the minimum is the stable measure of the algorithm's cost.
+        /// </summary>
+        public static double BestMs(System.Action action, int warmup = 3, int runs = 5)
+        {
+            for (int i = 0; i < warmup; i++) action();
+            double best = double.MaxValue;
+            for (int i = 0; i < runs; i++)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                action();
+                best = System.Math.Min(best, sw.Elapsed.TotalMilliseconds);
+            }
+            return best;
+        }
+
         /// <summary>Deterministic pseudo-random generator (tests must not depend on System.Random's algorithm).</summary>
         public sealed class Rng
         {

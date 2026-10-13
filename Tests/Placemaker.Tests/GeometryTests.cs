@@ -89,9 +89,8 @@ namespace Placemaker.Tests
         {
             var blob = G.Blob(500, 4000);
             Assert.True(Poly.IsSimple(blob));
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < 10; i++) Assert.True(Poly.IsSimple(blob));
-            Assert.True(sw.ElapsedMilliseconds < 400, $"{sw.ElapsedMilliseconds} ms for 10× 4000 vertices");
+            double ms = G.BestMs(() => Poly.IsSimple(blob));
+            Assert.True(ms < 20, $"{ms:F1} ms for 4000 vertices");
             // One crossing hidden in a big ring is still found.
             var bad = (float2[])blob.Clone();
             var t = bad[1000]; bad[1000] = bad[1001]; bad[1001] = t;
@@ -187,10 +186,9 @@ namespace Placemaker.Tests
         public void Clean_500Vertices_Under50ms()
         {
             var blob = G.Blob(200, 500);
-            Poly.Clean(blob);
-            var sw = Stopwatch.StartNew();
+            double ms = G.BestMs(() => Poly.Clean(blob));
+            Assert.True(ms < 50, $"{ms:F1} ms");
             var c = Poly.Clean(blob);
-            Assert.True(sw.ElapsedMilliseconds < 50, $"{sw.ElapsedMilliseconds} ms");
             G.AssertSimpleCcw(c);
         }
 

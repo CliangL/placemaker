@@ -313,13 +313,14 @@ namespace Placemaker.Core.Geometry
             foreach (var p in c) { float s = math.dot(p, nrm); lo = math.min(lo, s); hi = math.max(hi, s); }
             if (ratio <= 0 || ratio >= 1 || hi - lo < 1e-3f) { result.Add(c); return result; }
             double total = math.abs(SignedAreaD(c));
-            // Left area grows as the line moves towards +normal; bisection on the offset.
+            // Bisection on the line's offset along its left normal.
             float a = lo, b = hi;
             for (int it = 0; it < 40; it++)
             {
                 float m = 0.5f * (a + b);
                 double left = LeftArea(c, dir, nrm * m);
-                if (left / total < ratio) a = m; else b = m;
+                // Moving the line along its left normal shrinks the left side.
+                if (left / total > ratio) a = m; else b = m;
             }
             float off = 0.5f * (a + b);
             return SplitByLine(c, nrm * off, dir);
@@ -502,7 +503,9 @@ namespace Placemaker.Core.Geometry
                 y = AvoidVertices(r, y, (hmax.y - hmin.y) * 0.01f);
                 if (!HoleSpanAt(hole, y, out float xl, out float xr)) continue;
                 float2 pl = new float2(xl, y), pr = new float2(xr, y);
-                float2 hitL = RayHit(r, pl, new float2(-1, 0)), hitR = RayHit(r, pr, new float2(1, 0));
+                // Seam = the horizontal chord between the nearest OUTER boundary crossings on both sides:
+                // it separates the region even when it passes through other holes on the way.
+                float2 hitL = RayHit(r.Outer, pl, new float2(-1, 0)), hitR = RayHit(r.Outer, pr, new float2(1, 0));
                 List<Region> parts;
                 if (corridor > 0)
                 {
@@ -511,17 +514,11 @@ namespace Placemaker.Core.Geometry
                     var strip = StripAround(a, b, corridor);
                     parts = Boolean(new[] { r }, new[] { new Region(strip) }, BoolOp.Difference);
                 }
-                else
-                {
-                    var arr = Arrangement.For(new IReadOnlyList<float2>[] { r.Outer, new[] { hitL, hitR } });
-                    foreach (var ring in r.Normalized().Rings()) arr.AddRing(ring, 0);
-                    arr.AddPolyline(new[] { hitL, pl });
-                    arr.AddPolyline(new[] { pr, hitR });
-                    parts = arr.Extract((wa, wb) => wa != 0, splitByCuts: true);
-                }
+                else parts = Split(r, new[] { hitL, hitR }, extend: 0.01f);
                 if (HolesTotal(parts) < holesBefore) return parts;
-                // Fallback: a full line through the hole always reaches the outer boundary on both sides.
-                parts = Split(r, new[] { new float2(hitL.x - 1, y), new float2(hitR.x + 1, y) });
+                // Fallback: a line across the whole region at this height.
+                Bounds(r.Outer, out var omin, out var omax);
+                parts = Split(r, new[] { new float2(omin.x - 1, y), new float2(omax.x + 1, y) });
                 if (HolesTotal(parts) < holesBefore) return parts;
             }
             return null;
@@ -563,22 +560,19 @@ namespace Placemaker.Core.Geometry
             return xl < xr;
         }
 
-        private static float2 RayHit(Region r, float2 from, float2 dir)
+        private static float2 RayHit(float2[] ring, float2 from, float2 dir)
         {
             double best = double.MaxValue;
             double2 o = from, dd = dir;
-            foreach (var ring in r.Rings())
+            int n = ring.Length;
+            for (int i = 0; i < n; i++)
             {
-                int n = ring.Length;
-                for (int i = 0; i < n; i++)
-                {
-                    double2 a = ring[i], s = (double2)ring[(i + 1) % n] - a;
-                    double den = CrossD(dd, s);
-                    if (den == 0) continue;
-                    double t = CrossD(a - o, s) / den, u = CrossD(a - o, dd) / den;
-                    if (u < 0 || u > 1 || t <= 1e-4) continue;
-                    if (t < best) best = t;
-                }
+                double2 a = ring[i], s = (double2)ring[(i + 1) % n] - a;
+                double den = CrossD(dd, s);
+                if (den == 0) continue;
+                double t = CrossD(a - o, s) / den, u = CrossD(a - o, dd) / den;
+                if (u < 0 || u > 1 || t <= 1e-4) continue;
+                if (t < best) best = t;
             }
             if (best == double.MaxValue) return from;
             return (float2)(o + dd * best);

@@ -370,13 +370,49 @@ namespace Placemaker.Core.Geometry
                 _cycles.Add(cur.ToArray());
             }
 
+            // Windings: measured once per connected component (at its outer boundary, whose left side
+            // is the face containing the component), then propagated across edges:
+            // winding(right of h) = winding(left of h) − delta(h). O(E) instead of O(F·E).
             int nc = _cycles.Count;
             _windA = new int[nc];
             _windB = new int[nc];
+            var parent = new int[_pts.Count];
+            for (int i = 0; i < parent.Length; i++) parent[i] = i;
+            int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+            foreach (var e in _edges) { int a = Find(e.U), b = Find(e.V); if (a != b) parent[a] = b; }
+            var area = new double[nc];
+            var outerOf = new Dictionary<int, int>();
             for (int c = 0; c < nc; c++)
             {
-                double2 sample = SampleLeft(_cycles[c]);
-                Winding(sample, out _windA[c], out _windB[c]);
+                double a = 0;
+                foreach (int h in _cycles[c]) a += Cross(_pts[Org(h)], _pts[Dst(h)]);
+                area[c] = a;
+                int comp = Find(Org(_cycles[c][0]));
+                if (!outerOf.TryGetValue(comp, out int cur0) || a < area[cur0]) outerOf[comp] = c;
+            }
+            var done = new bool[nc];
+            var queue = new Queue<int>();
+            foreach (var kv in outerOf)
+            {
+                int c0 = kv.Value;
+                Winding(SampleLeft(_cycles[c0]), out _windA[c0], out _windB[c0]);
+                done[c0] = true;
+                queue.Enqueue(c0);
+                while (queue.Count > 0)
+                {
+                    int c = queue.Dequeue();
+                    foreach (int h in _cycles[c])
+                    {
+                        int c2 = _cycleOf[h ^ 1];
+                        if (done[c2]) continue;
+                        var e = _edges[h >> 1];
+                        int sgn = (h & 1) == 0 ? 1 : -1;
+                        _windA[c2] = _windA[c] - sgn * e.DA;
+                        _windB[c2] = _windB[c] - sgn * e.DB;
+                        done[c2] = true;
+                        queue.Enqueue(c2);
+                    }
+                }
             }
         }
 
@@ -529,22 +565,36 @@ namespace Placemaker.Core.Geometry
             area = 0;
             var pts = new List<double2>(loop.Count);
             foreach (int v in loop) pts.Add(_pts[v]);
-            // Drop straight-through vertices introduced by splitting (keeps rings minimal).
-            bool changed = true;
-            while (changed && pts.Count > 3)
+            // Drop straight-through vertices introduced by splitting (keeps rings minimal). Linked list
+            // with a work stack: O(n) instead of repeated passes.
+            int n = pts.Count;
+            var prev = new int[n];
+            var next = new int[n];
+            var alive = new bool[n];
+            var stack = new Stack<int>(n);
+            for (int i = 0; i < n; i++) { prev[i] = (i - 1 + n) % n; next[i] = (i + 1) % n; alive[i] = true; stack.Push(i); }
+            int count = n;
+            while (stack.Count > 0 && count > 3)
             {
-                changed = false;
-                for (int i = 0; i < pts.Count && pts.Count > 3; i++)
-                {
-                    double2 a = pts[(i - 1 + pts.Count) % pts.Count], b = pts[i], c = pts[(i + 1) % pts.Count];
-                    double2 ac = c - a;
-                    double lac = math.length(ac);
-                    if (lac <= 0) continue;
-                    if (math.abs(Cross(b - a, ac)) / lac <= _eps * 0.25 && math.dot(b - a, c - b) > 0)
-                    {
-                        pts.RemoveAt(i); i--; changed = true;
-                    }
-                }
+                int i = stack.Pop();
+                if (!alive[i]) continue;
+                double2 a = pts[prev[i]], b = pts[i], c = pts[next[i]];
+                double2 ac = c - a;
+                double lac = math.length(ac);
+                if (lac <= 0) continue;
+                if (math.abs(Cross(b - a, ac)) / lac > _eps * 0.25 || math.dot(b - a, c - b) <= 0) continue;
+                alive[i] = false; count--;
+                next[prev[i]] = next[i]; prev[next[i]] = prev[i];
+                stack.Push(prev[i]); stack.Push(next[i]);
+            }
+            if (count < n)
+            {
+                var kept = new List<double2>(count);
+                int s0 = 0;
+                while (!alive[s0]) s0++;
+                int k = s0;
+                do { kept.Add(pts[k]); k = next[k]; } while (k != s0);
+                pts = kept;
             }
             var ring = new List<float2>(pts.Count);
             foreach (var p in pts)

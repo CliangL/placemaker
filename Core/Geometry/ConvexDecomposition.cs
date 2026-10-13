@@ -39,13 +39,16 @@ namespace Placemaker.Core.Geometry
             stack.Push(start);
             int guard = 4 * c.Length + 16;
             var parts = new List<List<int>>();
+            var straight = new HashSet<int>(); // vertices whose "reflex" turn is rounding noise
             while (stack.Count > 0)
             {
                 var poly = stack.Pop();
                 if (guard-- <= 0) { parts.Add(poly); continue; }
-                int r = FirstReflex(verts, poly);
+                int r = FirstReflex(verts, poly, straight);
                 if (r < 0) { parts.Add(poly); continue; }
-                if (!SplitAt(verts, poly, r, out var a, out var b)) { parts.Add(poly); continue; }
+                int res = SplitAt(verts, poly, r, out var a, out var b);
+                if (res == Straight) { straight.Add(poly[r]); stack.Push(poly); continue; }
+                if (res == Failed) { parts.Add(poly); continue; }
                 stack.Push(b);
                 stack.Push(a);
             }
@@ -59,18 +62,22 @@ namespace Placemaker.Core.Geometry
             return result;
         }
 
-        private static int FirstReflex(List<double2> v, List<int> poly)
+        private const int Failed = 0, Done = 1, Straight = 2;
+
+        private static int FirstReflex(List<double2> v, List<int> poly, HashSet<int> straight)
         {
             int n = poly.Count;
             for (int i = 0; i < n; i++)
             {
+                if (straight.Contains(poly[i])) continue;
                 double2 a = v[poly[(i - 1 + n) % n]], b = v[poly[i]], c = v[poly[(i + 1) % n]];
-                if (Poly.CrossD(b - a, c - b) < 0) return i;
+                // Relative tolerance: seam points are rounded, a straight-through seam end must not count as reflex.
+                if (Poly.CrossD(b - a, c - b) < -1e-10 * math.length(b - a) * math.length(c - b)) return i;
             }
             return -1;
         }
 
-        private static bool SplitAt(List<double2> v, List<int> poly, int r, out List<int> first, out List<int> second)
+        private static int SplitAt(List<double2> v, List<int> poly, int r, out List<int> first, out List<int> second)
         {
             first = second = null;
             int n = poly.Count;
@@ -94,12 +101,13 @@ namespace Placemaker.Core.Geometry
                 if (s <= 0 || t < 0 || t > 1 || s >= bestS) continue;
                 bestS = s; bestT = t; bestEdge = e;
             }
-            if (bestEdge < 0) return false;
+            if (bestEdge < 0) return Failed;
 
             if (bestT == 0 || bestT == 1)
             {
                 int target = bestT == 0 ? bestEdge : (bestEdge + 1) % n;
-                if (target == (r + 1) % n || target == (r - 1 + n) % n) return false;
+                // The extension runs straight into a neighbour: the corner is straight up to rounding.
+                if (target == (r + 1) % n || target == (r - 1 + n) % n) return Straight;
                 first = Walk(poly, r, target);
                 second = Walk(poly, target, r);
             }
@@ -114,7 +122,7 @@ namespace Placemaker.Core.Geometry
                 second = new List<int> { hit };
                 second.AddRange(Walk(poly, (bestEdge + 1) % n, r));
             }
-            return first.Count >= 3 && second.Count >= 3;
+            return first.Count >= 3 && second.Count >= 3 ? Done : Failed;
         }
 
         /// <summary>Vertices from index i to index j (inclusive) going forward around the ring.</summary>
