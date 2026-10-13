@@ -1,0 +1,9 @@
+@use "../styles/tokens" as *;
+
+.wrap {
+    @include row;
+}
+
+.button {
+    flex-shrink: 0;
+}

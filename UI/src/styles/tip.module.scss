@@ -1,0 +1,31 @@
+@use "tokens" as *;
+
+// Fallback look for tooltip content when the vanilla DescriptionTooltip theme is unavailable.
+.tip {
+    @include col;
+    max-width: 300rem;
+}
+
+.header {
+    @include row;
+    margin-bottom: 4rem;
+}
+
+.title {
+    font-size: var(--fontSizeS);
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.description {
+    font-size: var(--fontSizeXS);
+    color: var(--menuText1Normal);
+    line-height: 1.35;
+}
+
+.footer {
+    @include row;
+    margin-top: 6rem;
+    font-size: var(--fontSizeXS);
+    color: $c-text-dim;
+}

@@ -1,0 +1,279 @@
+@use "../styles/tokens" as *;
+
+.icon {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.tinted {
+    background-color: currentColor;
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+}
+
+// ── buttons ──
+.btn {
+    @include row;
+    @include button-reset;
+    justify-content: center;
+    height: 30rem;
+    padding: 0 10rem;
+    border-radius: $radius;
+    font-size: var(--fontSizeS);
+    transition-property: background-color, opacity, color, transform;
+    transition-duration: $t-fast;
+    flex-shrink: 0;
+}
+
+.iconOnly {
+    width: 30rem;
+    padding: 0;
+}
+
+.btnLabel {
+    margin-left: 6rem;
+    @include ellipsis;
+}
+
+.iconOnly .btnLabel {
+    margin-left: 0;
+}
+
+.ghost {
+    background-color: transparent;
+    &:hover {
+        background-color: $c-surface-hover;
+    }
+}
+
+.solid {
+    background-color: $c-surface;
+    &:hover {
+        background-color: $c-surface-hover;
+    }
+}
+
+.accent {
+    background-color: var(--accentColorNormal);
+    color: #0b1d26;
+    font-weight: bold;
+    &:hover {
+        background-color: var(--accentColorLight);
+    }
+}
+
+.danger {
+    background-color: rgba(255, 107, 91, 0.18);
+    color: #ffd2cc;
+    &:hover {
+        background-color: rgba(255, 107, 91, 0.32);
+    }
+}
+
+.selected {
+    background-color: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+}
+
+.disabled {
+    opacity: 0.38;
+    cursor: default;
+    &:hover {
+        background-color: transparent;
+    }
+}
+
+.solid.disabled:hover {
+    background-color: $c-surface;
+}
+
+.accent.disabled {
+    background-color: $c-surface-strong;
+    color: var(--menuText1Normal);
+    opacity: 0.55;
+}
+
+// ── segmented ──
+.segmented {
+    @include row;
+    padding: 2rem;
+    border-radius: $radius + 1rem;
+    background-color: $c-shade;
+    flex-shrink: 0;
+}
+
+.stretch {
+    flex: 1 1 auto;
+    .seg {
+        flex: 1 1 0;
+    }
+}
+
+.seg {
+    @include row;
+    @include button-reset;
+    justify-content: center;
+    height: 28rem;
+    padding: 0 10rem;
+    margin-left: 1rem;
+    margin-right: 1rem;
+    border-radius: $radius;
+    color: $c-text-dim;
+    font-size: var(--fontSizeS);
+    transition-property: background-color, color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+        color: var(--menuText1Normal);
+    }
+}
+
+.segIconOnly {
+    width: 34rem;
+    padding: 0;
+}
+
+.segOn {
+    background-color: rgba(255, 255, 255, 0.17);
+    color: #ffffff;
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+}
+
+.segLabel {
+    margin-left: 6rem;
+    @include ellipsis;
+}
+
+.segIconOnly .segLabel {
+    margin-left: 0;
+}
+
+// ── key caps ──
+.keys {
+    @include row;
+}
+
+.key {
+    @include row;
+    justify-content: center;
+    min-width: 18rem;
+    height: 18rem;
+    padding: 0 5rem;
+    margin-right: 3rem;
+    border-radius: $radius-s;
+    background-color: rgba(255, 255, 255, 0.12);
+    @include border(1rem, rgba(255, 255, 255, 0.14));
+    border-bottom-width: 2rem;
+    font-size: var(--fontSizeXS);
+    color: var(--menuText1Normal);
+}
+
+// ── checkbox / switch ──
+.check {
+    @include row;
+    @include button-reset;
+    padding: 2rem 0;
+    text-align: left;
+}
+
+.checkBox {
+    @include row;
+    justify-content: center;
+    width: 18rem;
+    height: 18rem;
+    border-radius: $radius-s;
+    @include border(2rem, $c-line-strong);
+    background-color: $c-shade;
+    flex-shrink: 0;
+    transition-property: background-color;
+    transition-duration: $t-fast;
+}
+
+.checkOn .checkBox {
+    background-color: var(--accentColorNormal);
+    @include border-color(var(--accentColorNormal));
+    color: #0b1d26;
+}
+
+.checkLabel {
+    margin-left: 8rem;
+    font-size: var(--fontSizeS);
+    color: var(--menuText1Normal);
+}
+
+.switch {
+    @include row;
+    @include button-reset;
+    width: 34rem;
+    height: 20rem;
+    padding: 2rem;
+    border-radius: 10rem;
+    background-color: rgba(255, 255, 255, 0.16);
+    flex-shrink: 0;
+    transition-property: background-color;
+    transition-duration: $t-med;
+}
+
+.knob {
+    width: 16rem;
+    height: 16rem;
+    border-radius: 8rem;
+    background-color: #ffffff;
+    transform: translateX(0rem);
+    transition-property: transform;
+    transition-duration: $t-med;
+    transition-timing-function: $ease;
+}
+
+.switchOn {
+    background-color: var(--accentColorNormal);
+    .knob {
+        transform: translateX(14rem);
+    }
+}
+
+// ── foldout ──
+.foldout {
+    @include col;
+    margin-top: 6rem;
+}
+
+.foldoutHead {
+    @include row;
+    @include button-reset;
+    height: 26rem;
+    color: $c-text-dim;
+    font-size: var(--fontSizeXS);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    &:hover {
+        color: var(--menuText1Normal);
+    }
+}
+
+.foldoutTitle {
+    margin-left: 4rem;
+}
+
+.foldoutCount {
+    margin-left: 6rem;
+    padding: 0 5rem;
+    border-radius: 8rem;
+    background-color: $c-surface-hover;
+    font-size: var(--fontSizeXS);
+}
+
+.foldoutBody {
+    @include col;
+    padding-top: 2rem;
+}
+
+.dot {
+    width: 8rem;
+    height: 8rem;
+    border-radius: 4rem;
+    flex-shrink: 0;
+}
