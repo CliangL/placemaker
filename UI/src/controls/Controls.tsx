@@ -14,7 +14,7 @@ import { humanize, TFunc, useT } from "../lib/l10n";
 import { ControlEx, defaultFor, isVisible, valueOf, valuesEqual } from "../lib/schema";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Segmented, Switch } from "../components/common";
-import { Thumb, useAssetList, useAssetName, usePicker } from "../components/picker";
+import { AutoMosaic, autoPool, Thumb, useAssetList, useAssetName, usePicker } from "../components/picker";
 import { Slider } from "./Slider";
 import s from "./controls.module.scss";
 
@@ -69,7 +69,7 @@ export const ControlRow = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
     );
 
     return (
-        <div className={classNames(s.row, { [s.rowStacked]: stacked })} data-testid={`control-${c.id}`} data-kind={c.kind}>
+        <div className={classNames(s.row, { [s.rowStacked]: stacked, [s.rowAsset]: c.kind === "asset" })} data-testid={`control-${c.id}`} data-kind={c.kind}>
             <div className={s.rowHead}>
                 <Tip title={label(t, c)} description={tip || undefined}>
                     <div className={classNames(s.label, { [s.labelWide]: stacked || c.kind === "toggle" })}>
@@ -109,9 +109,9 @@ function renderEditor(c: ControlEx, value: SettingValue, commit: (v: SettingValu
         case "choice":
             return <ChoiceEditor c={c} value={String(value)} commit={commit} />;
         case "asset":
-            return <AssetEditor c={c} value={typeof value === "string" ? value : ""} commit={commit} />;
+            return <AssetEditor c={c} value={typeof value === "string" ? value : ""} commit={commit} path={ctx.step.path} />;
         case "assetMulti":
-            return <AssetMultiEditor c={c} value={Array.isArray(value) ? value : []} commit={commit} />;
+            return <AssetMultiEditor c={c} value={Array.isArray(value) ? value : []} commit={commit} path={ctx.step.path} />;
         case "arrangement":
             return <ArrangementEditor c={c} value={Array.isArray(value) ? value : []} commit={commit} />;
         case "markers":
@@ -185,7 +185,22 @@ const ChoiceEditor = ({ c, value, commit }: { c: ControlEx; value: string; commi
     );
 };
 
-const AssetEditor = ({ c, value, commit }: { c: ControlEx; value: string; commit: (v: SettingValue) => void }) => {
+/**
+ * Map preview while hovering picker tiles: previewValue with what the value would become; ending sends
+ * the committed value back first (C# EndPreview commits the working value, so this keeps a hover from
+ * sticking), then endPreview.
+ */
+function previewHandlers(path: string, id: string, toValue: (ids: string[]) => SettingValue) {
+    return {
+        onPreview: (ids: string[]) => act.previewValue(path, id, toValue(ids)),
+        onPreviewEnd: (committed: string[]) => {
+            act.previewValue(path, id, toValue(committed));
+            act.endPreview();
+        },
+    };
+}
+
+const AssetEditor = ({ c, value, commit, path }: { c: ControlEx; value: string; commit: (v: SettingValue) => void; path: string }) => {
     const { t } = useT();
     const picker = usePicker();
     const list = useAssetList(c.assetCategory);
@@ -205,21 +220,27 @@ const AssetEditor = ({ c, value, commit }: { c: ControlEx; value: string; commit
                     selected: value ? [value] : [],
                     allowAutomatic: true,
                     onPick: (ids) => commit(ids[0] ?? ""),
+                    ...previewHandlers(path, c.id, (ids) => ids[0] ?? ""),
                 });
             }}
         >
-            {value ? <Thumb item={item ?? { id: value, name: name(c.assetCategory, value), icon: "" }} size={18} /> : <Icon name="auto" size={13} tint="accent" className={s.autoGlyph} />}
+            {value ? (
+                <Thumb item={item ?? { id: value, name: name(c.assetCategory, value), icon: "" }} size={28} testId={`asset-thumb-${c.id}`} />
+            ) : (
+                <AutoMosaic items={autoPool(list, c.assetCategory, 3)} size={28} testId={`asset-thumb-${c.id}`} />
+            )}
             <div className={s.assetName}>{value ? name(c.assetCategory, value) : t("Placemaker.UI.Picker.Auto", "Automatic")}</div>
             <Icon name="chevronRight" size={11} tint="dim" />
         </button>
     );
 };
 
-const AssetMultiEditor = ({ c, value, commit }: { c: ControlEx; value: string[]; commit: (v: SettingValue) => void }) => {
+const AssetMultiEditor = ({ c, value, commit, path }: { c: ControlEx; value: string[]; commit: (v: SettingValue) => void; path: string }) => {
     const { t } = useT();
     const picker = usePicker();
     const name = useAssetName();
-    useAssetList(c.assetCategory);
+    const list = useAssetList(c.assetCategory);
+    const itemOf = (id: string) => list?.find((a) => a.id === id) ?? { id, name: name(c.assetCategory, id), icon: "" };
     const openPicker = () =>
         picker.open({
             category: c.assetCategory ?? "",
@@ -228,17 +249,27 @@ const AssetMultiEditor = ({ c, value, commit }: { c: ControlEx; value: string[];
             selected: value,
             allowAutomatic: true,
             onPick: (ids) => commit(ids),
+            ...previewHandlers(path, c.id, (ids) => ids),
         });
     return (
         <div className={s.chips} data-testid={`assetmulti-${c.id}`}>
             {value.length === 0 ? (
-                <div className={classNames(s.chip, s.chipAuto)}>
-                    <Icon name="auto" size={12} tint="accent" />
+                <button
+                    type="button"
+                    className={classNames(s.chip, s.chipAuto, s.chipThumb)}
+                    data-testid={`assetmulti-auto-${c.id}`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        openPicker();
+                    }}
+                >
+                    <AutoMosaic items={autoPool(list, c.assetCategory, 3)} size={20} testId={`asset-thumb-${c.id}`} />
                     <div className={s.chipText}>{t("Placemaker.UI.Picker.Auto", "Automatic")}</div>
-                </div>
+                </button>
             ) : (
                 value.map((id) => (
-                    <div key={id} className={classNames(s.chip, s.chipOn)} data-testid={`chip-${id}`}>
+                    <div key={id} className={classNames(s.chip, s.chipOn, s.chipThumb)} data-testid={`chip-${id}`}>
+                        <Thumb item={itemOf(id)} size={20} testId={`chip-thumb-${id}`} />
                         <div className={s.chipText}>{name(c.assetCategory, id)}</div>
                         <button
                             type="button"
@@ -263,7 +294,7 @@ const ArrangementEditor = ({ c, value, commit }: { c: ControlEx; value: string[]
     const { t } = useT();
     const picker = usePicker();
     const name = useAssetName();
-    useAssetList(c.assetCategory);
+    const arrList = useAssetList(c.assetCategory);
     const move = (i: number, d: number) => {
         const j = i + d;
         if (j < 0 || j >= value.length) return;
@@ -276,6 +307,7 @@ const ArrangementEditor = ({ c, value, commit }: { c: ControlEx; value: string[]
             {value.map((id, i) => (
                 <div key={i + id} className={s.arrItem}>
                     <div className={s.arrIndex}>{i + 1}</div>
+                    <Thumb item={arrList?.find((a) => a.id === id) ?? { id, name: name(c.assetCategory, id), icon: "" }} size={16} />
                     <div className={s.chipText}>{name(c.assetCategory, id)}</div>
                     <button type="button" className={s.chipX} disabled={i === 0} onClick={(e) => { e.stopPropagation(); move(i, -1); }}>
                         <Icon name="chevronLeft" size={10} />

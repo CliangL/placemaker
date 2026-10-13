@@ -212,6 +212,63 @@ const UndoRedo = ({ state }: { state: ToolState }) => {
     );
 };
 
+/** The preview mode in effect: C#'s choice, else Real on Review and Sketch before it. */
+export function effectivePreviewMode(state: ToolState): "sketch" | "ghost" {
+    if (state.previewMode === "sketch" || state.previewMode === "ghost") return state.previewMode;
+    return state.stage === "review" || state.stage === "building" ? "ghost" : "sketch";
+}
+
+/** Sketch | Real: fast overlay or the real translucent models + textures (spinner while the ghost rebuilds). */
+const PreviewToggle = ({ state }: { state: ToolState }) => {
+    const { t } = useT();
+    const mode = effectivePreviewMode(state);
+    const pending = mode === "ghost" && !!state.ghostPending;
+    const opts: { value: "sketch" | "ghost"; icon: string; label: string; title: string; tip: string }[] = [
+        {
+            value: "sketch",
+            icon: "sketch",
+            label: t("Placemaker.UI.Preview.Sketch", "Sketch"),
+            title: t("Placemaker.UI.Preview.SketchTitle", "Sketch preview"),
+            tip: t("Placemaker.UI.Preview.SketchTip", "Fast outlines and dots. Best while drawing and trying things."),
+        },
+        {
+            value: "ghost",
+            icon: "cube",
+            label: t("Placemaker.UI.Preview.Real", "Real"),
+            title: t("Placemaker.UI.Preview.RealTitle", "Real preview"),
+            tip: t("Placemaker.UI.Preview.RealTip", "See-through game models and textures, exactly what will be built."),
+        },
+    ];
+    return (
+        <div className={s.previewToggle} data-testid="preview-mode" data-mode={mode} data-pending={pending ? "true" : "false"}>
+            {opts.map((o) => {
+                const on = o.value === mode;
+                return (
+                    <Tip key={o.value} title={o.title} description={o.tip}>
+                        <button
+                            type="button"
+                            data-testid={`preview-mode-${o.value}`}
+                            aria-pressed={on ? "true" : "false"}
+                            className={classNames(s.pvBtn, { [s.pvOn]: on })}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (!on) act.setPreviewMode(o.value);
+                            }}
+                        >
+                            {o.value === "ghost" && pending ? (
+                                <div className={s.spinner} data-testid="ghost-pending" />
+                            ) : (
+                                <Icon name={o.icon} size={13} tint={on ? "light" : "dim"} />
+                            )}
+                            <div className={s.pvLabel}>{o.label}</div>
+                        </button>
+                    </Tip>
+                );
+            })}
+        </div>
+    );
+};
+
 function quickStats(summary: Summary) {
     return summary.stats.filter((x) => x.unit === "count" && x.value > 0).slice(0, 1);
 }
@@ -365,6 +422,8 @@ export const PlacemakerPanel = () => {
     const rtl = useRtl();
     const { t } = useT();
     const [picker, setPicker] = useState<PickerRequest | null>(null);
+    // Each open is a fresh card (its hover preview ends when it is replaced).
+    const pickerSerial = useRef(0);
     const [ack, setAck] = useState(false);
     const permKey = useMemo(() => JSON.stringify(summary.permanent), [summary.permanent]);
     const position = usePanelPosition();
@@ -375,7 +434,10 @@ export const PlacemakerPanel = () => {
     }, [state.open, state.stage, state.panelCollapsed]);
 
     const closePicker = useCallback(() => setPicker(null), []);
-    const pickerCtx = useMemo(() => ({ open: (r: PickerRequest) => setPicker(r), close: closePicker, current: picker }), [picker, closePicker]);
+    const pickerCtx = useMemo(() => ({ open: (r: PickerRequest) => {
+                pickerSerial.current++;
+                setPicker(r);
+            }, close: closePicker, current: picker }), [picker, closePicker]);
 
     if (!state.open) return null;
 
@@ -425,6 +487,7 @@ export const PlacemakerPanel = () => {
     }
 
     const collapsed = state.panelCollapsed;
+    const showPreviewToggle = state.stage === "design" || state.stage === "review";
     // Header tips open UPWARDS (over the game's top bar), so they never sit on the stage bar below.
     const header = (
         <TipDirectionContext.Provider value="up">
@@ -444,10 +507,19 @@ export const PlacemakerPanel = () => {
                         <Icon name="grip" size={12} tint="dim" />
                     </div>
                 </Tip>
-                <Icon name="logo" size={16} tint="accent" />
-                <div className={s.title}>
-                    {state.stage === "manage" ? t("Placemaker.UI.Manage.Title", "Built with Placemaker") : t("Placemaker.Name", "Placemaker")}
-                </div>
+                <Tip title={t("Placemaker.Name", "Placemaker")}>
+                    <div className={s.logo}>
+                        <Icon name="logo" size={16} tint="accent" />
+                    </div>
+                </Tip>
+                {/* Design / Review show the preview toggle in the title's place (the logo names the tool). */}
+                {showPreviewToggle ? (
+                    <PreviewToggle state={state} />
+                ) : (
+                    <div className={s.title}>
+                        {state.stage === "manage" ? t("Placemaker.UI.Manage.Title", "Built with Placemaker") : t("Placemaker.Name", "Placemaker")}
+                    </div>
+                )}
                 {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
                 {state.planning ? (
                     <Tip title={t("Placemaker.UI.Planning", "Updating…")}>
@@ -556,7 +628,7 @@ export const PlacemakerPanel = () => {
                         {picker ? (
                             <div className={classNames(s.flyout, position.side === "left" ? s.flyoutLeft : s.flyoutRight)} data-testid="picker-flyout">
                                 <ErrorBoundary name="picker">
-                                    <AssetPickerCard req={picker} onClose={closePicker} />
+                                    <AssetPickerCard key={pickerSerial.current} req={picker} onClose={closePicker} />
                                 </ErrorBoundary>
                             </div>
                         ) : null}

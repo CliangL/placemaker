@@ -98,6 +98,75 @@
     @include ellipsis;
 }
 
+.logo {
+    @include row;
+    flex-shrink: 0;
+}
+
+// ── preview mode: Sketch | Real (header, Design / Review) ──
+.previewToggle {
+    @include row;
+    flex-shrink: 0;
+    height: 24rem;
+    margin-left: 8rem;
+    padding: 2rem;
+    border-radius: $radius;
+    background-color: rgba(0, 0, 0, 0.3);
+    @include border(1rem, $c-line);
+}
+
+.pvBtn {
+    @include row;
+    @include button-reset;
+    height: 18rem;
+    padding: 0 7rem 0 5rem;
+    border-radius: $radius-s;
+    color: $c-text-dim;
+    transition-property: background-color, color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+        color: #ffffff;
+    }
+}
+
+.pvOn {
+    background-color: rgba(63, 182, 240, 0.4);
+    color: #ffffff;
+    &:hover {
+        background-color: rgba(63, 182, 240, 0.4);
+    }
+}
+
+.pvLabel {
+    margin-left: 4rem;
+    font-size: $fs-s;
+    white-space: nowrap;
+}
+
+// Ghost rebuilding: a small ring spinning where the cube icon was.
+.spinner {
+    width: 12rem;
+    height: 12rem;
+    margin: 0 0.5rem;
+    border-radius: 6rem;
+    @include border(2rem, rgba(255, 255, 255, 0.25));
+    border-top-color: var(--accentColorNormal);
+    animation-name: pmSpin;
+    animation-duration: 0.8s;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+
+@keyframes pmSpin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
 .flex {
     flex: 1 1 auto;
 }

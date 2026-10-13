@@ -260,13 +260,67 @@ const TypeCard = ({ r, on }: { r: RecipeInfo; on: boolean }) => {
     );
 };
 
-const TypeCards = ({ catalog, design }: { catalog: Catalog; design: DesignState }) => (
-    <div className={s.cards} data-testid="recipes">
-        {makeRecipes(catalog).map((r) => (
-            <TypeCard key={r.id} r={r} on={r.id === design.recipeId} />
-        ))}
-    </div>
-);
+// Make-row groups: a type lands in a group by its id (no catalog field needed), unknown ids in "Other".
+export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
+    { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
+    { id: "squares", key: "Placemaker.UI.MakeGroup.Squares", en: "Squares" },
+    { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
+    { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
+    { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
+];
+
+/** Group of a type id (checked in this order: "parking" before "park", "market square" before parks). */
+export function makeGroupOf(id: string): string {
+    const x = id.toLowerCase();
+    if (/parking|car-?park|garage|lot/.test(x)) return "parking";
+    if (/road|street|avenue|grid/.test(x)) return "roads";
+    if (/plaza|square|market|piazza|amphi|festival|fair/.test(x)) return "squares";
+    if (/park|garden|camp|reserve|nature|forest|picnic|arboret|cemetery|green|playground|sport|golf|beach|lido|promenade|allotment|meadow|zoo|dog|botanic|skate/.test(x)) return "parks";
+    return "other";
+}
+
+/** Up to this many types show as one flat grid; more are grouped (collapsible, remembered). */
+const FLAT_MAX = 6;
+
+const TypeCards = ({ catalog, design }: { catalog: Catalog; design: DesignState }) => {
+    const { t } = useT();
+    const list = makeRecipes(catalog);
+    if (list.length <= FLAT_MAX)
+        return (
+            <div className={s.cards} data-testid="recipes">
+                {list.map((r) => (
+                    <TypeCard key={r.id} r={r} on={r.id === design.recipeId} />
+                ))}
+            </div>
+        );
+    const groups = MAKE_GROUPS.map((g) => ({ ...g, items: list.filter((r) => makeGroupOf(r.id) === g.id) })).filter((g) => g.items.length);
+    return (
+        <div className={s.makeGroups} data-testid="recipes" data-grouped="true">
+            {groups.map((g) => {
+                const sel = g.items.find((r) => r.id === design.recipeId);
+                const selName = sel ? (sel.custom ? sel.name : t(sel.name, humanize(sel.name || sel.id))) : "";
+                return (
+                    <Collapsible
+                        key={g.id}
+                        id={"make:" + g.id}
+                        testId={"make-group-" + g.id}
+                        title={t(g.key, g.en)}
+                        summary={selName || String(g.items.length)}
+                        defaultOpen
+                        nested
+                        className={s.makeGroup}
+                    >
+                        <div className={s.cards}>
+                            {g.items.map((r) => (
+                                <TypeCard key={r.id} r={r} on={r.id === design.recipeId} />
+                            ))}
+                        </div>
+                    </Collapsible>
+                );
+            })}
+        </div>
+    );
+};
 
 // ───────────── places inside (round 3 slot) ─────────────
 

@@ -18,6 +18,15 @@
     flex-wrap: wrap;
 }
 
+.makeGroups {
+    @include col;
+}
+
+// Grouped Make row: slim headers ("Parks · 7"), the usual three-per-row cards inside.
+.makeGroup {
+    margin-bottom: 1rem;
+}
+
 .cardCell {
     @include row(stretch);
     width: 33.333%;
