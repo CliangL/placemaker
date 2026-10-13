@@ -193,6 +193,7 @@ namespace Placemaker.Core.Build
                 case AssetCategories.Centerpiece: return new[] { "drinking", "dog", "logo" };
                 case AssetCategories.Playground: return new[] { "dog" };
                 case AssetCategories.Bin: return new[] { "container", "dumpster", "industrial" };
+                case AssetCategories.Shelter: return new[] { "bus", "tram", "taxi", "bicycle", "bike", "smoking", "stop" };
                 default: return Array.Empty<string>();
             }
         }

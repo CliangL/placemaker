@@ -169,3 +169,58 @@ longer resolve fall back to category defaults inside the catalog.
 - Footpaths (`NetRole.Pathway`) may now attach to a road end (`StartAttach/EndAttach` = road id)
   like a vanilla pedestrian path; invisible aisles still join via LocalConnect (no attach).
 - `PlannedZoning` is applied without Overwrite (unchanged). Bus stops: dropped by parking (§92).
+
+## 7. Round 3 (playtest 2) — FEEDBACK-2 #1 "inconsistent automatic assets"
+
+### What produced the screenshot (root cause)
+Build log: 3 layers = park + **playground add-on with `fence=true`** (preset "tots" / 30 % random
+chance) + one more add-on. The playground draws a 10-sided fence ring (`Fences.Ring`), benches
+on the rim just *outside* the ring, and its equipment as `ObjectRole.Furniture`.
+1. **Signs inside the ring:** `RoleCategories.ForObject(Furniture)` = `decoration`, so automatic
+   playground equipment (and picnic tables, shelters, restrooms, kiosks, tents, campfires) all
+   resolved to the *decoration* default — an arbitrary vanilla "park"-named prop with an icon
+   (boards/signs/scoreboards were classified as decoration). Fix: `PlannedObject.Category` (set via
+   `LayerContext.Object(..., category)`) on every Furniture placement; new `camping.pitch` /
+   `camping.fire` so tents and fires are not the same asset.
+2. **Stadium seats as benches:** the bench default scored "bench" +50 and "park" +30, so vanilla
+   `SportParkBench01/02` (the yellow/white spectator seat rows) beat `GardenBench01`. Fix: curated
+   automatic pools (below) + garden +40 / sport −100.
+3. **Every fence segment different:** the fence default was a vanilla residential fence (network
+   or `…PieceLow` prop). Its look comes from placeholder lane objects / mesh & colour variations
+   picked by `CreationDefinition.m_RandomSeed`, which the build drew fresh per course/piece. Fix:
+   `AutoAssets.UniformSeed(category, group)` for fence courses, fence pieces and every object of a
+   uniform category (benches, lamps, bins…).
+
+### Rules now (`Core/Build/AutoAssets`, the single resolver for preview, pricing and build)
+- One asset per **(step, category)** for everything except `VarietyCategories` = tree, bush,
+  flowerbed + the "sets" playground equipment and tents (5 identical swings look like a bug).
+- **Steps:** a layer joins its parent layer's step (add-ons share the park's); a top-level layer or
+  a split child starts one. Each step picks **one vanilla park palette** from `AreaPlan.Seed`
+  (new, set by the composer) and draws `PaletteCategories` (vegetation and furniture) from it when
+  it has the category; otherwise the category pool. Fences/nets/surfaces never use palettes.
+- Usable palettes: general parks only (`IsGeneralParkPalette`: no sport/skate/dog/gym/water/school…)
+  with ≥ 2 of tree/bush/bench/lamp/bin.
+
+### Curation (`AssetHeuristics.AutoEligible`, catalog tags `auto`, `auto:<category>`)
+Component data first: `BrandObjectData` (advertising), PlacementFlags Wall/Hanging, RoadSide/
+RoadNode/RoadEdge/NetObject (street furniture; lamps/bollards excepted), Shoreline/Floating/…,
+exercise activity locations → sports. Then names with exclusion lists (signs, boards, stadium/
+spectator/bleacher/stands, construction/cones/barriers, crates/pallets/piles, vehicles, ATMs,
+mailboxes, random/placeholder/template…) and per category (bench: sport/tennis/pier/bus stop, and a
+"seat" or "chair" is not a bench; fence: industrial/barrier/jump/security…; decoration: only rocks/
+boulders/stones/birdbaths/sculptures). Explicit user picks still list the whole category.
+Pools: eligible only, vanilla first (modded join only when no vanilla exists; modded network fences
+still outrank prop pieces), then score. The catalog logs every category's eligible/total count and
+first picks plus the usable palettes at each scan.
+
+### Fences
+Network fence preferred (tier before any prop piece); a ring is several courses whose shared
+corners are now **bit-identical** (`Fences.Runs` uses the vertex itself for run ends) — CS2 only
+merges course nodes at equal positions (`GenerateNodesSystem.NodeKey`), so before this corners
+could stay open. Prop fallback: `Fences.PieceCount` = ceil, so pieces reach both corners (no gaps),
+one prefab and one seed for the whole ring.
+
+### Verify in game
+- Log line "Placemaker automatic pools": bench pool starts with GardenBench*, no SportPark*/Tennis*;
+  decoration pool only rocks; fence pool starts with a network fence if the playset has one.
+- Park + playground with fence: one fence type, closed corners; one bench type; swings/slides inside.
