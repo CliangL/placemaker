@@ -119,7 +119,7 @@ namespace Placemaker.Core.Layers.Park
                 {
                     if (!Spots.Find(occ, r, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, (uint)i + 50u), out var spot, null, 0f, 1f)) break;
                     var toward = occ.Corridors.Nearest(spot, 300f, out var q) >= 0 ? q : region.Centroid;
-                    ctx.Object(spot, math.atan2(toward.x - spot.x, toward.y - spot.y), ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)i));
+                    ctx.Object(spot, math.atan2(toward.x - spot.x, toward.y - spot.y), ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)i), -1, AssetCategories.Restroom);
                     occ.Take(spot, r, 2);
                     restrooms++;
                 }
@@ -137,9 +137,9 @@ namespace Placemaker.Core.Layers.Park
                 if (ctx.B("pads")) ctx.Surface(LayerRegion.Rect(c, t, size * 0.5f, size * 0.5f), SurfaceRole.Decorative, AssetMix.One(ctx.S("padSurface")));
                 uint v = Hashing.Mix(ctx.Seed, (uint)i + 7u);
                 var tent = c - toPath * size * 0.15f;
-                ctx.Object(tent, math.atan2(toPath.x, toPath.y), ObjectRole.Furniture, AssetMix.Pick(pitchIds, v), v);
-                if (fires) ctx.Object(c + toPath * size * 0.28f + t * size * 0.28f, 0f, ObjectRole.Furniture, campfire, Hashing.Mix(v, 1u));
-                if (tables) ctx.Object(c + toPath * size * 0.25f - t * size * 0.25f, math.atan2(t.x, t.y), ObjectRole.Furniture, table, Hashing.Mix(v, 2u));
+                ctx.Object(tent, math.atan2(toPath.x, toPath.y), ObjectRole.Furniture, AssetMix.Pick(pitchIds, v), v, -1, AssetCategories.CampingPitch);
+                if (fires) ctx.Object(c + toPath * size * 0.28f + t * size * 0.28f, 0f, ObjectRole.Furniture, campfire, Hashing.Mix(v, 1u), -1, AssetCategories.CampingFire);
+                if (tables) ctx.Object(c + toPath * size * 0.25f - t * size * 0.25f, math.atan2(t.x, t.y), ObjectRole.Furniture, table, Hashing.Mix(v, 2u), -1, AssetCategories.Picnic);
             }
             ctx.Check();
 

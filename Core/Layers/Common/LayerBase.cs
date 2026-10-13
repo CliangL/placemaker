@@ -164,9 +164,10 @@ namespace Placemaker.Core.Layers.Common
 
         public void Stat(string key, double value, string unit) => Plan.Stats.Add(new PlanStat(key, value, unit));
 
-        public PlannedObject Object(float2 p, float yaw, ObjectRole role, AssetRef asset, uint variation, int age = -1)
+        /// <param name="category">Asset category (AssetCategories) when the role does not imply it — required for ObjectRole.Furniture.</param>
+        public PlannedObject Object(float2 p, float yaw, ObjectRole role, AssetRef asset, uint variation, int age = -1, string category = null)
         {
-            var o = new PlannedObject { Position = P3(p), Yaw = yaw, Role = role, Asset = asset, Variation = variation, Age = age };
+            var o = new PlannedObject { Position = P3(p), Yaw = yaw, Role = role, Asset = asset, Variation = variation, Age = age, Category = category };
             Plan.Objects.Add(o);
             return o;
         }

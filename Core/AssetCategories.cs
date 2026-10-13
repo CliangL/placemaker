@@ -32,6 +32,8 @@ namespace Placemaker.Core
         public const string Shelter = "shelter";           // pavilions, gazebos, picnic shelters
         public const string Picnic = "picnic";             // picnic tables, BBQ
         public const string Camping = "camping";           // tents, campfires, caravans
+        public const string CampingPitch = "camping.pitch"; // automatic pitch contents: tents, caravans (subset of camping)
+        public const string CampingFire = "camping.fire";   // automatic campfires / fire pits (subset of camping)
         public const string Decoration = "decoration";     // misc props
         public const string Fence = "fence";               // net fences or fence props
         public const string Bollard = "bollard";

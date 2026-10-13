@@ -179,6 +179,7 @@ namespace Placemaker.Core
 
             plan.GeneratorId = gen.Id;
             plan.StepPath = path + "@" + regionKey;
+            plan.Seed = input.Seed;
             result.Layers.Add(plan);
             Reserve(plan, reserved);
 

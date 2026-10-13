@@ -135,7 +135,10 @@ namespace Placemaker.Game.Build
                     start.m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(curve));
                     end.m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(curve));
                     var def = NewDefinition();
-                    EntityManager.AddComponentData(def, new CreationDefinition { m_Prefab = prefab, m_RandomSeed = random.NextInt() });
+                    // Fences: one random seed for the whole build, so lane objects / colour variations of the
+                    // fence net are the same on every segment (FEEDBACK-2 #1: "every segment a different fence").
+                    int seed = net.Role == NetRole.Fence ? AutoAssets.UniformSeed(w.Category, (uint)_groupId) : random.NextInt();
+                    EntityManager.AddComponentData(def, new CreationDefinition { m_Prefab = prefab, m_RandomSeed = seed });
                     EntityManager.AddComponent<Updated>(def);
                     EntityManager.AddComponentData(def, new NetCourse
                     {
@@ -255,7 +258,9 @@ namespace Placemaker.Game.Build
             float piece = math.max(0.5f, math.max(size.x, size.z));
             var c = new Cubic(net.A, net.B, net.C, net.D);
             float len = c.LengthXZ();
-            int count = math.max(1, (int)math.floor(len / piece));
+            // No gaps: the pieces reach both course ends (= the corners of the ring), overlapping a little.
+            int count = Placemaker.Core.Layers.Common.Fences.PieceCount(len, piece);
+            int seed = AutoAssets.UniformSeed(w.Category, (uint)_groupId);   // one look for every piece
             for (int i = 0; i < count; i++)
             {
                 float t = (i + 0.5f) / count;
@@ -265,7 +270,7 @@ namespace Placemaker.Game.Build
                 float yaw = math.atan2(tan.x, tan.z) - math.PI * 0.5f;
                 long key = _syntheticKey++;
                 _itemByKey[key] = w;
-                EmitObjectDefinition(prefab, p, yaw, 1f, -1, (uint)i, key, true);
+                EmitObjectDefinition(prefab, p, yaw, 1f, -1, (uint)i, key, true, seed);
             }
             NoteUsed(prefab);
         }
@@ -279,13 +284,16 @@ namespace Placemaker.Game.Build
             var o = _request.Plan.Layers[w.Layer].Objects[w.Index];
             long key = PlanWork.Key(w);
             _itemByKey[key] = w;
-            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true);
+            // Uniform categories (benches, lamps, bins…): one random seed per build, so colour/mesh
+            // variations do not turn a row of one bench into a mix (FEEDBACK-2 #1).
+            int? seed = AutoAssets.IsUniform(w.Category) ? AutoAssets.UniformSeed(w.Category, (uint)_groupId) : (int?)null;
+            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed);
             NoteUsed(prefab);
         }
 
         private static readonly float[] AgeStages = { 0f, 0.17500001f, 0.425f, 0.77500004f };   // ToolUtils.GetRandomAge
 
-        private void EmitObjectDefinition(Entity prefab, float3 position, float yaw, float scale, int age, uint variation, long key, bool snapToGround)
+        private void EmitObjectDefinition(Entity prefab, float3 position, float yaw, float scale, int age, uint variation, long key, bool snapToGround, int? randomSeed = null)
         {
             _objectIndex = _objectIndex ?? new PlanIndex();
             var p = position;
@@ -295,7 +303,7 @@ namespace Placemaker.Game.Build
             EntityManager.AddComponentData(def, new CreationDefinition
             {
                 m_Prefab = prefab,
-                m_RandomSeed = (int)Seeds.Mix(variation, (uint)key),
+                m_RandomSeed = randomSeed ?? (int)Seeds.Mix(variation, (uint)key),
             });
             EntityManager.AddComponent<Updated>(def);
             EntityManager.AddComponentData(def, new ObjectDefinition

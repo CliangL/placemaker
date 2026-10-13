@@ -474,6 +474,12 @@ namespace Placemaker.Core
         public uint Variation;
         /// <summary>Optional: which planned net this object belongs to (index into AreaPlan.Nets), -1 none.</summary>
         public int AttachedNet = -1;
+        /// <summary>
+        /// Asset category (AssetCategories), or null/"" = the role's default (RoleCategories.ForObject).
+        /// Generic roles such as Furniture MUST set it (playground equipment, picnic tables, restrooms…);
+        /// otherwise automatic resolution falls back to "decoration" (FEEDBACK-2 #1: sandwich boards).
+        /// </summary>
+        public string Category;
     }
 
     public enum AreaRole { PedestrianArea = 0, Hangaround = 1, Lot = 2 }
@@ -540,6 +546,8 @@ namespace Placemaker.Core
         public string GeneratorId = "";
         /// <summary>Path of the recipe step that produced this (set by the composer), e.g. "0/2".</summary>
         public string StepPath = "";
+        /// <summary>Seed the step was planned with (set by the composer). Automatic assets pick one palette per step from it.</summary>
+        public uint Seed;
         public List<PlannedRegion> Regions = new List<PlannedRegion>();
         public List<PlannedSurface> Surfaces = new List<PlannedSurface>();
         public List<PlannedNet> Nets = new List<PlannedNet>();
