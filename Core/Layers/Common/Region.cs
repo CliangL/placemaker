@@ -287,12 +287,19 @@ namespace Placemaker.Core.Layers.Common
         /// holes, so a closed ring band is never emitted). Strips that would self-intersect at tight
         /// corners are subdivided, and dropped only at single-edge level.
         /// </summary>
-        public List<float2[]> BoundaryStrips(float depth, int pieces)
+        public List<float2[]> BoundaryStrips(float depth, int pieces, System.Threading.CancellationToken cancel = default)
         {
             var result = new List<float2[]>();
             int n = Ring.Length;
             if (n < 3 || depth <= 0.2f) return result;
             var inset = InsetVertices(depth, 2.5f);
+            // The mitred inset is only trustworthy when it is itself simple and every vertex really lies
+            // about `depth` inside. Jagged painted outlines fail this; they get the raster belt instead
+            // (testing strips piece by piece on them cost O(n²) per piece and produced hundreds of slivers).
+            bool geometric = Poly.SignedArea(inset) > 0f && Poly.IsSimple(inset);
+            for (int i = 0; i < n && geometric; i++)
+                geometric = Contains(inset[i]) && BoundaryDistance(inset[i], depth) >= depth * 0.9f;
+            if (!geometric) return RasterStrips(depth, cancel);
             pieces = math.clamp(pieces, 2, n);
             // Break points at vertices closest to equal perimeter fractions.
             var breaks = new List<int>();
@@ -315,7 +322,14 @@ namespace Placemaker.Core.Layers.Common
                 if (to <= from) to += n;
                 AddStrip(result, inset, from, to);
             }
-            return result;
+            return result.Count <= pieces * 2 ? result : RasterStrips(depth, cancel);
+        }
+
+        /// <summary>Belt as raster pieces (hole-free, so a closed band comes back as one C shape).</summary>
+        private List<float2[]> RasterStrips(float depth, System.Threading.CancellationToken cancel)
+        {
+            float cell = math.clamp(depth / 5f, 0.5f, 2f);
+            return FreeSpace.Pieces(this, p => BoundaryDistance(p, depth + 0.01f) >= depth, cell, depth * depth, cancel);
         }
 
         private void AddStrip(List<float2[]> into, float2[] inset, int from, int to)

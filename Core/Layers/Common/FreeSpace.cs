@@ -97,7 +97,8 @@ namespace Placemaker.Core.Layers.Common
             return exact;
         }
 
-        private static float2[] DouglasPeuckerClosed(float2[] ring, float tol)
+        /// <summary>Douglas–Peucker on a closed ring (keeps original vertices; may self-intersect — caller checks).</summary>
+        public static float2[] DouglasPeuckerClosed(float2[] ring, float tol)
         {
             int n = ring.Length;
             if (n < 5) return ring;

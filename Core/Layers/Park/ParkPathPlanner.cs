@@ -33,7 +33,7 @@ namespace Placemaker.Core.Layers.Park
         public const int CandidateCount = 6;
 
         private sealed class Node { public float2 Position; public double Clearance; public bool GateApproach; }
-        private sealed class Triangle { public int A, B, C; public double Clearance; }
+        private sealed class Triangle { public int A, B, C; public double Clearance; public float2 Centroid; public bool Inside; }
 
         private sealed class Path
         {
@@ -96,7 +96,7 @@ namespace Placemaker.Core.Layers.Park
         private static ParkPathGraph Generate(Region region, IReadOnlyList<float2> gates, float2 hub, uint seed,
             int loops, bool stretch, List<Triangle> triangles, CancellationToken cancel)
         {
-            var polygon = region.Ring;   // CCW, cleaned
+
             var output = new List<float2>();
             int terminals = gates.Count;
             var nodes = new List<Node>();
@@ -106,9 +106,9 @@ namespace Placemaker.Core.Layers.Park
             for (int ti = 0; ti < triangles.Count; ti++)
             {
                 var t = triangles[ti];
-                var p = (polygon[t.A] + polygon[t.B] + polygon[t.C]) / 3f;
+                if (!t.Inside) { triangleNode[ti] = -1; continue; }
                 triangleNode[ti] = nodes.Count;
-                nodes.Add(new Node { Position = p, Clearance = t.Clearance });
+                nodes.Add(new Node { Position = t.Centroid, Clearance = t.Clearance });
             }
             double spacing = SamplingSpacing(region);
             AddInteriorSamples(nodes, region, spacing, terminals, seed);
@@ -122,9 +122,9 @@ namespace Placemaker.Core.Layers.Park
             for (int ti = 0; ti < triangles.Count; ti++)
             {
                 var t = triangles[ti];
-                ConnectTriangleEdge(owners, t.A, t.B, triangleNode[ti], graph, nodes, seed);
-                ConnectTriangleEdge(owners, t.B, t.C, triangleNode[ti], graph, nodes, seed);
-                ConnectTriangleEdge(owners, t.C, t.A, triangleNode[ti], graph, nodes, seed);
+                ConnectTriangleEdge(owners, t.A, t.B, triangleNode[ti], graph, nodes, region, seed);
+                ConnectTriangleEdge(owners, t.B, t.C, triangleNode[ti], graph, nodes, region, seed);
+                ConnectTriangleEdge(owners, t.C, t.A, triangleNode[ti], graph, nodes, region, seed);
             }
             ConnectInteriorRoadmap(graph, nodes, region, terminals, spacing, seed);
             ConnectTerminals(graph, nodes, region, terminals, approaches, seed);
@@ -190,10 +190,27 @@ namespace Placemaker.Core.Layers.Park
             return result;
         }
 
+        /// <summary>
+        /// Triangle-dual nodes come from a simplified outline: on a painted 400-vertex outline the raw
+        /// triangulation adds one roadmap node per sliver along the edge, which tripled planning time
+        /// without adding useful routes. Nodes are kept only when inside the real region.
+        /// </summary>
         private static List<Triangle> Triangulate(Region region, int start)
         {
-            var tris = Triangulate(region.Ring, start);
-            foreach (var t in tris) t.Clearance = region.BoundaryDistance((region.Ring[t.A] + region.Ring[t.B] + region.Ring[t.C]) / 3f);
+            var ring = region.Ring;
+            float tol = math.clamp(math.sqrt(region.Area) / 150f, 0.5f, 3f);
+            for (int attempt = 0; attempt < 6 && ring.Length > 120; attempt++, tol *= 1.6f)
+            {
+                var s = Geometry.Poly.Clean(FreeSpace.DouglasPeuckerClosed(region.Ring, tol), 0.05f);
+                if (s.Length >= 3 && Geometry.Poly.IsSimple(s)) ring = s;
+            }
+            var tris = Triangulate(ring, start % ring.Length);
+            foreach (var t in tris)
+            {
+                t.Centroid = (ring[t.A] + ring[t.B] + ring[t.C]) / 3f;
+                t.Inside = region.Contains(t.Centroid);
+                t.Clearance = t.Inside ? region.BoundaryDistance(t.Centroid) : 0;
+            }
             return tris;
         }
 
@@ -254,11 +271,14 @@ namespace Placemaker.Core.Layers.Park
         }
 
         private static void ConnectTriangleEdge(Dictionary<long, int> owners, int a, int b, int node, Graph graph,
-            List<Node> nodes, uint seed)
+            List<Node> nodes, Region region, uint seed)
         {
+            if (node < 0) return;
             long key = Key(a, b);
-            if (owners.TryGetValue(key, out var neighbour)) Connect(graph, nodes, node, neighbour, false, seed);
-            else owners[key] = node;
+            if (!owners.TryGetValue(key, out var neighbour)) { owners[key] = node; return; }
+            // The simplified outline may cut a concave corner: verify the dual edge against the real one.
+            if (SegmentInside(nodes[node].Position, nodes[neighbour].Position, region, false))
+                Connect(graph, nodes, node, neighbour, false, seed);
         }
 
         private static void ConnectInteriorRoadmap(Graph graph, List<Node> nodes, Region region, int terminals,
