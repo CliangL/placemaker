@@ -45,7 +45,8 @@ namespace Placemaker.Core.Build
             {
                 if (l == null) continue;
                 foreach (var n in l.Nets)
-                    if (n != null && Needs(n.Asset, exists)) resolved += Set(ref n.Asset, Pick(RoleCategories.ForNet(n.Role), 0, false), exists);
+                    if (n != null && Needs(n.Asset, exists))
+                        resolved += Set(ref n.Asset, n.Role == NetRole.Alley && exists != null && exists(AlleyPrefab) ? AlleyPrefab : Pick(RoleCategories.ForNet(n.Role), 0, false), exists);
                 foreach (var s in l.Surfaces)
                     if (s != null && Needs(s.Asset, exists)) resolved += Set(ref s.Asset, Pick(RoleCategories.ForSurface(s.Role), 0, false), exists);
                 foreach (var a in l.Areas)
@@ -59,6 +60,9 @@ namespace Placemaker.Core.Build
             }
             return resolved;
         }
+
+        /// <summary>Vanilla two-way alley (PLT: never "Alley Oneway", it has 2.5 m parking strips).</summary>
+        public const string AlleyPrefab = "Alley";
 
         public static bool IsAuto(AssetRef a) => string.IsNullOrEmpty(a.Id);
 

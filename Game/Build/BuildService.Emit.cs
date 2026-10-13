@@ -216,7 +216,8 @@ namespace Placemaker.Game.Build
             var other = EntityManager.GetComponentData<PrefabRef>(target).m_Prefab;
             bool mineRoad = EntityManager.HasComponent<RoadData>(prefab), otherRoad = EntityManager.HasComponent<RoadData>(other);
             bool minePath = EntityManager.HasComponent<PathwayData>(prefab), otherPath = EntityManager.HasComponent<PathwayData>(other);
-            return (mineRoad && otherRoad) || (minePath && otherPath);
+            // Footpath entrances (parking US3/US4) may end on a road like a vanilla pedestrian path does.
+            return (mineRoad && otherRoad) || (minePath && (otherPath || otherRoad));
         }
 
         /// <summary>Inverse of <see cref="NetRefs.Encode"/>.</summary>
