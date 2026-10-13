@@ -375,6 +375,9 @@ namespace Placemaker.Game.Assets
                     foreach (var c in categories)
                         if (AssetHeuristics.AutoEligible(c, prefab.name, traits)) { t.Add("auto:" + c); anyAuto = true; }
                     if (anyAuto) t.Add("auto");
+                    // Decal picker tabs (UI): "theme:leaves", "theme:dirt", … from the themed sub-category.
+                    foreach (var c in categories)
+                        if (c.StartsWith(AssetCategories.Decal + ".", StringComparison.Ordinal)) t.Add("theme:" + c.Substring(AssetCategories.Decal.Length + 1));
                     tags[prefab.name] = t;
                     byName[prefab.name] = item;
                     info[prefab.name] = item.Info;

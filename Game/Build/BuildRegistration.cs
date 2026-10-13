@@ -32,6 +32,9 @@ namespace Placemaker.Game.Build
             // after. The service decides first, then the build tool hands the mode to the game.
             updateSystem.UpdateAt<BuildToolSystem>(SystemUpdatePhase.ToolUpdate);
             updateSystem.UpdateBefore<BuildService, BuildToolSystem>(SystemUpdatePhase.ToolUpdate);
+            // Ghost preview: temporary surfaces are created in Modification1 and triangulated before ModificationEnd;
+            // tagging them there (still Updated) lets AreaBatchSystem (PreCulling) render their material.
+            updateSystem.UpdateAt<GhostSurfaceSystem>(SystemUpdatePhase.ModificationEnd);
 
             // ── Groups ─────────────────────────────────────────────────────────────────
             // Removal marks Deleted in PreTool: SubElementDeleteSystem (PostTool) cascades and
