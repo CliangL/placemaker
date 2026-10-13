@@ -15,10 +15,12 @@ namespace Placemaker
             // Each workstream registers its own systems; a failure in one area is logged and the
             // rest still loads, so a broken feature never takes the whole mod (or the game) down.
             Try("build", () => Game.Build.BuildRegistration.Register(updateSystem));
+            Try("tool", () => Game.Tool.ToolRegistration.Register(updateSystem, this));
         }
 
         public void OnDispose()
         {
+            try { Game.Tool.ToolRegistration.Unregister(); } catch (Exception e) { Log.Error(e, "Placemaker: tool unregister failed"); }
             Game.Services.Reset();
         }
 
