@@ -23,6 +23,12 @@ namespace Placemaker.Game.Build
     public sealed partial class BuildService
     {
         private readonly HashSet<Entity> _ownDefinitions = new HashSet<Entity>();
+        private readonly HashSet<long> _notedRings = new HashSet<long>();
+
+        /// <summary>Setting: paved surfaces (paving/asphalt/plaza/decorative) draw on top (priority −94).</summary>
+        public static bool OverlayPavedSurfaces = true;
+
+        private static bool IsPaved(SurfaceRole r) => r == SurfaceRole.Paving || r == SurfaceRole.Asphalt || r == SurfaceRole.Plaza || r == SurfaceRole.Decorative;
         /// <summary>Resolved prefab per work item key.</summary>
         private readonly Dictionary<long, Entity> _itemPrefab = new Dictionary<long, Entity>();
         /// <summary>Emitted keys (plan keys and synthetic keys for fence pieces) → work item.</summary>
@@ -316,7 +322,9 @@ namespace Placemaker.Game.Build
             var s = _request.Plan.Layers[w.Layer].Surfaces[w.Index];
             // Parking surfaces must draw over roads (priority −94, Terrain|Roads decal layers): use
             // the runtime overlay clone when it is ready; otherwise the original still builds.
-            if (w.GeneratorId == "parking") prefab = _clones.OverlayFor(prefab);
+            // US6: paved surfaces of parks/plazas also use the clone, so they stack deterministically
+            // above grass/ground (vanilla −100…−95) instead of z-fighting where they overlap.
+            if (w.GeneratorId == "parking" || (OverlayPavedSurfaces && IsPaved(s.Role))) prefab = _clones.OverlayFor(prefab);
             EmitPreparedRings(prefab, s.Ring, w, true);
         }
 
@@ -357,13 +365,14 @@ namespace Placemaker.Game.Build
                     rings = v != null ? new List<float2[]> { v } : new List<float2[]>();
                 }
                 var at = new float3(w.Anchor.x, Height(w.Anchor), w.Anchor.y);
+                bool first = _notedRings.Add(PlanWork.Key(w));   // retries re-emit: count each piece once
                 if (rings.Count == 0)
                 {
-                    NoteSkip(surface ? "Placemaker.Build.Skipped.Surface" : "Placemaker.Build.Skipped.Area", at);
+                    if (first) NoteSkip(surface ? "Placemaker.Build.Skipped.Surface" : "Placemaker.Build.Skipped.Area", at);
                     Mod.Log.Info($"Placemaker skipped a {(surface ? "surface" : "area")} ring the game would reject ({ring.Length} nodes, d={d:0.###}).");
                     return;
                 }
-                NoteSkip(surface ? "Placemaker.Build.Repaired.Surface" : "Placemaker.Build.Repaired.Area", at, IssueSeverity.Info);
+                if (first) NoteSkip(surface ? "Placemaker.Build.Repaired.Surface" : "Placemaker.Build.Repaired.Area", at, IssueSeverity.Info);
             }
             long key = PlanWork.Key(w);
             for (int i = 0; i < rings.Count; i++)

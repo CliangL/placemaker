@@ -16,6 +16,7 @@
 //    Upkeep needs nothing: the city budget already counts every permanent edge.
 
 using System;
+using Game;
 using Game.City;
 using Game.Common;
 using Game.Net;

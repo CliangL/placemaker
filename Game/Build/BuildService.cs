@@ -667,6 +667,7 @@ namespace Placemaker.Game.Build
             ResetOwner();
             _ownerSuppressed = false;
             _skipped.Clear();
+            _notedRings.Clear();
             if (_toolActivated) RestoreTool();
         }
 

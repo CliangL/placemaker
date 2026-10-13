@@ -45,14 +45,14 @@ namespace Placemaker.Core.Build
             {
                 if (l == null) continue;
                 foreach (var n in l.Nets)
-                    if (n != null && IsAuto(n.Asset)) resolved += Set(ref n.Asset, Pick(RoleCategories.ForNet(n.Role), 0, false), exists);
+                    if (n != null && Needs(n.Asset, exists)) resolved += Set(ref n.Asset, Pick(RoleCategories.ForNet(n.Role), 0, false), exists);
                 foreach (var s in l.Surfaces)
-                    if (s != null && IsAuto(s.Asset)) resolved += Set(ref s.Asset, Pick(RoleCategories.ForSurface(s.Role), 0, false), exists);
+                    if (s != null && Needs(s.Asset, exists)) resolved += Set(ref s.Asset, Pick(RoleCategories.ForSurface(s.Role), 0, false), exists);
                 foreach (var a in l.Areas)
-                    if (a != null && IsAuto(a.Asset)) resolved += Set(ref a.Asset, Pick(RoleCategories.ForArea(a.Role), 0, false), exists);
+                    if (a != null && Needs(a.Asset, exists)) resolved += Set(ref a.Asset, Pick(RoleCategories.ForArea(a.Role), 0, false), exists);
                 foreach (var o in l.Objects)
                 {
-                    if (o == null || !IsAuto(o.Asset)) continue;
+                    if (o == null || !Needs(o.Asset, exists)) continue;
                     var cat = RoleCategories.ForObject(o.Role);
                     resolved += Set(ref o.Asset, Pick(cat, o.Variation, VarietyCategories.Contains(cat)), exists);
                 }
@@ -61,6 +61,9 @@ namespace Placemaker.Core.Build
         }
 
         public static bool IsAuto(AssetRef a) => string.IsNullOrEmpty(a.Id);
+
+        /// <summary>Automatic, or an explicit id this playset does not have (then: fallbacks → default).</summary>
+        private static bool Needs(AssetRef a, Func<string, bool> exists) => IsAuto(a) || (exists != null && !exists(a.Id));
 
         private static int Set(ref AssetRef asset, string id, Func<string, bool> exists)
         {
