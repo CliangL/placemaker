@@ -92,6 +92,9 @@ namespace Placemaker.Core.Layers.Types.Beach
             return j * Sculpt.Nx + i;
         }
 
+        /// <summary>(s30) Shore arc length of the sculpt node k (cached).</summary>
+        public float AlongOf(int k) => _along[k];
+
         /// <summary>Distance from the real waterline (bilinear on the cached grid; exact outside it).</summary>
         public float DwAt(float2 p)
         {
@@ -391,6 +394,12 @@ namespace Placemaker.Core.Layers.Types.Beach
                 Func<float, float> prof = s => s >= rampLen ? hb : along(s) + math.lerp(ha - a0, hb - a1, math.saturate(s / rampLen));
                 float dev = 0f, run = 0f;
                 for (int i = 0; i < pts.Length; i++) { if (i > 0) run += math.distance(pts[i - 1], pts[i]); dev = math.max(dev, math.abs(prof(run) - H(pts[i]))); }
+                // (s30) On a cross slope the level strip stands proud on one side and cut on the other: the banks widen with that too.
+                for (int i = 0; i + 1 < pts.Length; i++)
+                {
+                    var t = math.normalizesafe(pts[i + 1] - pts[i]); var nn = new float2(-t.y, t.x) * (hw + 1.5f);
+                    dev = math.max(dev, 0.5f * math.abs(H(pts[i] + nn) - H(pts[i] - nn)));
+                }
                 // (s30) Level across well past the path edges: on the 2–4 m node grid a strip only 0.4 m wider than the path kept a
                 // cross slope under it, and a net flattens its own width, leaving a lip along its edge.
                 Sculpt.Corridor(pts, prof, hw + 1.5f, math.clamp(dev / 0.16f, 4f, 20f));
@@ -510,7 +519,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             Ctx.Plan.Facts["earthCut"] = e.CutVolume;
             Ctx.Plan.Facts["earthFill"] = e.FillVolume;
             Ctx.Plan.Facts["terrainRoughness"] = Sculpt.Roughness();
-            Result = Sculpt.Emit(Ctx, Clips);
+            Result = Sculpt.Emit(Ctx, Clips, Sculpt.MinChange, 2);
             Sculpt.Resnap(Ctx);
             DropTiltedFurniture();
             return Result;

@@ -409,11 +409,38 @@ namespace Placemaker.Core.Layers.Common
         /// whole cells only), registers the new ground with ctx.Ground (what this layer places afterwards stands on
         /// it) and returns the result (HeightAfter). Adds the permanent-change warning when anything changes.
         /// </summary>
-        public TerrainResult Emit(LayerContext ctx, IReadOnlyList<float2[]> clips, float minChange = MinChange)
+        public TerrainResult Emit(LayerContext ctx, IReadOnlyList<float2[]> clips, float minChange = MinChange, int skirt = 0)
         {
             var result = new TerrainResult { HeightAfter = ctx.H };
             int cx = Nx - 1, cy = Ny - 1;
             _cells = new byte[cx * cy];
+            // (s30) Skirt: cells within <skirt> cells of a changed cell are emitted too (with their ~zero change), so the build
+            // raster's own 4 m bank — which extrapolates the change of the outermost patch — starts where the field is already
+            // back on the original ground instead of pushing a berm out past it (a fill in front of a quay wall, a lip at a fade).
+            var emit = new bool[cx * cy];
+            for (int j = 0; j < cy; j++)
+                for (int i = 0; i < cx; i++)
+                {
+                    int k00 = j * Nx + i;
+                    float bg = math.max(math.max(math.abs(Offset(k00)), math.abs(Offset(k00 + 1))), math.max(math.abs(Offset(k00 + Nx)), math.abs(Offset(k00 + Nx + 1))));
+                    emit[j * cx + i] = bg >= minChange;
+                }
+            if (skirt > 0)
+            {
+                var grown = (bool[])emit.Clone();
+                for (int j = 0; j < cy; j++)
+                    for (int i = 0; i < cx; i++)
+                    {
+                        if (!emit[j * cx + i]) continue;
+                        for (int dj = -skirt; dj <= skirt; dj++)
+                            for (int di = -skirt; di <= skirt; di++)
+                            {
+                                int ii = i + di, jj = j + dj;
+                                if (ii >= 0 && jj >= 0 && ii < cx && jj < cy) grown[jj * cx + ii] = true;
+                            }
+                    }
+                emit = grown;
+            }
             // Cells crossed by a clip edge (sampled every third of a cell): only those need polygon clipping.
             var touched = new List<bool[]>();
             if (clips != null)
@@ -447,8 +474,7 @@ namespace Placemaker.Core.Layers.Common
                 {
                     int k00 = j * Nx + i, k10 = k00 + 1, k01 = k00 + Nx, k11 = k01 + 1;
                     float o00 = Offset(k00), o10 = Offset(k10), o01 = Offset(k01), o11 = Offset(k11);
-                    float big = math.max(math.max(math.abs(o00), math.abs(o10)), math.max(math.abs(o01), math.abs(o11)));
-                    if (big < minChange) continue;
+                    if (!emit[j * cx + i]) continue;
                     var p00 = Pos(k00); var p10 = Pos(k10); var p11 = Pos(k11); var p01 = Pos(k01);
                     var square = new[] { p00, p10, p11, p01 };
                     float mean = (o00 + o10 + o01 + o11) * 0.25f;

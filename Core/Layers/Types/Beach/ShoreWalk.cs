@@ -89,25 +89,30 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// </summary>
         public float Signed(float2 p, out float s, out float beyond)
         {
+            // The curve extended by straight rays along its end tangents: the closest point moves continuously past the ends
+            // (a closest point that jumped from the end to an interior bend made the field step there).
+            const float Ray = 400f;
+            int n = Line.Length;
             float best = float.MaxValue; int bk = 0; float bt = 0f;
-            for (int k = 0; k + 1 < Line.Length; k++)
+            for (int k = -1; k < n; k++)
             {
-                var a = Line[k]; var ab = Line[k + 1] - a;
+                float2 a, b;
+                if (k == -1) { b = Line[0]; a = b - Tan(0) * Ray; }
+                else if (k == n - 1) { a = Line[n - 1]; b = a + Tan(n - 2) * Ray; }
+                else { if (k + 1 >= n) break; a = Line[k]; b = Line[k + 1]; }
+                var ab = b - a;
                 float l2 = math.lengthsq(ab);
                 float t = l2 > 1e-9f ? math.saturate(math.dot(p - a, ab) / l2) : 0f;
                 float d = math.distancesq(p, a + ab * t);
                 if (d < best) { best = d; bk = k; bt = t; }
             }
-            s = math.lerp(S[bk], S[bk + 1], bt);
-            var tan = Tan(bk);
-            var q = math.lerp(Line[bk], Line[bk + 1], bt);
+            float2 q, tan;
             beyond = 0f;
-            if (bk == 0 && bt <= 0f) beyond = math.max(0f, math.dot(Line[0] - p, tan));
-            if (bk == Line.Length - 2 && bt >= 1f) beyond = math.max(0f, math.dot(p - Line[Line.Length - 1], tan));
+            if (bk == -1) { tan = Tan(0); q = Line[0] - tan * Ray * (1f - bt); beyond = Ray * (1f - bt); s = 0f; }
+            else if (bk == n - 1) { tan = Tan(n - 2); q = Line[n - 1] + tan * Ray * bt; beyond = Ray * bt; s = S[n - 1]; }
+            else { tan = Tan(bk); q = math.lerp(Line[bk], Line[bk + 1], bt); s = math.lerp(S[bk], S[bk + 1], bt); }
             var rel = p - q;
             float cross = tan.x * rel.y - tan.y * rel.x;
-            // Beyond an end the perpendicular part is the signed distance (the radial distance would bend the field round the end).
-            if (beyond > 0f) return cross;
             return cross >= 0f ? math.sqrt(best) : -math.sqrt(best);
         }
 
@@ -303,7 +308,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         // ───────────── metrics ─────────────
 
         /// <summary>Smallest radius of curvature (m) over a sliding chord of ±<paramref name="half"/> m (∞ for a straight line).</summary>
-        public static float MinRadius(float2[] line, float half = 6f)
+        public static float MinRadius(float2[] line, float half = 10f)
         {
             if (line == null || line.Length < 3) return float.PositiveInfinity;
             var s = Arc(line);
@@ -325,7 +330,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// <paramref name="minCurvature"/> (1/m) measured over ±<paramref name="half"/> m. A smooth meander scores ~1 per
         /// wave; a paving edge that follows every wiggle of a real waterline scores dozens.
         /// </summary>
-        public static int Wiggles(float2[] line, float half = 6f, float minCurvature = 1f / 150f)
+        public static int Wiggles(float2[] line, float half = 10f, float minCurvature = 1f / 150f)
         {
             if (line == null || line.Length < 3) return 0;
             var s = Arc(line);

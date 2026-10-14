@@ -23,9 +23,14 @@ namespace Placemaker.Tests.Types
     public static class ShoreSites
     {
         public const float Level = 0f;
-        public static readonly string[] Kinds = { "flat", "bank", "headland", "cliff" };
+        public static readonly string[] Kinds = { "flat", "bank", "headland", "cliff", "curved" };
 
         public static float Coast(float x) => 4f * math.sin(x / 41f) + 2f * math.sin(x / 17f + 1.3f);
+
+        /// <summary>(s30) A lake bay (playtests 54–57): one big curve with a real waterline's jagged 10–25 m wiggles on it.</summary>
+        public static float CurvedCoast(float x) => 22f * math.sin(math.PI * math.saturate(x / 250f)) - 10f + 1.6f * math.sin(x / 4.1f) + 1.1f * math.sin(x / 2.3f + 0.7f) + 0.6f * math.sin(x / 1.3f);
+
+        public static float CoastOf(string kind, float x) => kind == "curved" ? CurvedCoast(x) : Coast(x);
 
         private static float S(float e0, float e1, float x)
         {
@@ -35,21 +40,24 @@ namespace Placemaker.Tests.Types
 
         public static Func<float2, float> Ground(string kind, float width = 250f) => p =>
         {
-            float u = p.y - Coast(p.x);
+            float u = p.y - CoastOf(kind, p.x);
             float low = u >= 0f ? Level + 0.45f + 0.014f * u : math.max(Level - 5f, Level + 0.45f + 0.09f * u);
             float bank = u >= 0f ? Level + 0.4f + 6.5f * S(3f, 30f, u) + 0.012f * u : math.max(Level - 6f, Level + 0.4f + 0.16f * u);
             float cliff = u >= 0f ? Level + 0.5f + 13f * S(0f, 9f, u) + 0.02f * u : math.max(Level - 8f, Level + 0.5f + 0.45f * u);
+            // (s30) curved lake shore: a 3.5 m bank over 25 m with lumps (the hillside behind playtest 56's promenade).
+            float curved = u >= 0f ? Level + 0.35f + 3.5f * S(2f, 26f, u) + 0.03f * u + 0.45f * math.sin(p.x / 13f) * math.sin(p.y / 11f) * S(1f, 12f, u) : math.max(Level - 5f, Level + 0.35f + 0.14f * u);
             switch (kind)
             {
                 case "bank": return bank;
                 case "cliff": return cliff;
+                case "curved": return curved;
                 case "headland": return math.lerp(low, cliff, S(width * 0.42f, width * 0.62f, p.x));
                 default: return low;
             }
         };
 
         /// <summary>The game's water snapshot: depth sampled on an 8 m grid, bilinear (its zero line is blurred).</summary>
-        public static Func<float2, float> Depth(Func<float2, float> ground)
+        public static Func<float2, float> Depth(Func<float2, float> ground, string kind = null)
         {
             const float cell = 8f;
             var min = new float2(-120f, -120f);
@@ -59,7 +67,7 @@ namespace Placemaker.Tests.Types
                 for (int i = 0; i < nx; i++)
                 {
                     var p = min + new float2(i, j) * cell;
-                    d[j * nx + i] = p.y - Coast(p.x) < 6f ? math.max(0f, Level - ground(p)) : 0f;
+                    d[j * nx + i] = p.y - CoastOf(kind, p.x) < 6f ? math.max(0f, Level - ground(p)) : 0f;
                 }
             return q =>
             {
@@ -73,7 +81,7 @@ namespace Placemaker.Tests.Types
         public static SiteContext Site(string kind)
         {
             var g = Ground(kind);
-            return new SiteContext { HeightAt = g, WaterDepthAt = Depth(g) };
+            return new SiteContext { HeightAt = g, WaterDepthAt = Depth(g, kind) };
         }
 
         /// <summary>The real waterline z at x (bisection on ground = level).</summary>
@@ -119,6 +127,27 @@ namespace Placemaker.Tests.Types
             return gen.Plan(input, CancellationToken.None);
         }
 
+
+        /// <summary>(s30) Net tuples for TerrainMetrics (kind: terrain-following, quay, other deck).</summary>
+        public static List<(float3 a, float3 b, float3 c, float3 d, float halfWidth, int kind)> NetTuples(AreaPlan plan) =>
+            plan.Nets.Where(n => n != null && n.Role != NetRole.Fence)
+                .Select(n => (n.A, n.B, n.C, n.D, Composer.DefaultHalfWidth(n.Role),
+                    n.FollowTerrain ? TerrainMetrics.SeatFollow : n.Category == AssetCategories.NetQuay ? TerrainMetrics.SeatQuay : TerrainMetrics.SeatDeck)).ToList();
+
+        /// <summary>(s30) False within half a metre of any net's width (its own cut, wall or deck covers the ground there); cached on a 1 m grid.</summary>
+        public static Func<float2, bool> OffNets(AreaPlan plan)
+        {
+            var raw = TerrainMetrics.OffNets(NetTuples(plan));
+            var min = new float2(-60f, -80f);
+            int nx = 380, ny = 320;
+            var grid = new bool[nx * ny];
+            for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) grid[j * nx + i] = raw(min + new float2(i, j));
+            return p =>
+            {
+                int i = (int)math.round(p.x - min.x), j = (int)math.round(p.y - min.y);
+                return i < 0 || j < 0 || i >= nx || j >= ny ? raw(p) : grid[j * nx + i];
+            };
+        }
         public static IEnumerable<float2> Samples(PlannedNet n, int count = 16)
         {
             for (int i = 0; i <= count; i++) yield return Composer.Bezier(n.A, n.B, n.C, n.D, i / (float)count).xz;
@@ -135,7 +164,7 @@ namespace Placemaker.Tests.Types
         {
             foreach (var layer in new[] { "beach", "waterfront" })
                 foreach (var p in TestKit.Gen(layer).Presets)
-                    foreach (var kind in new[] { "flat", "bank", "headland" })
+                    foreach (var kind in new[] { "flat", "bank", "headland", "curved" })
                         yield return new object[] { layer, p.Id, kind };
         }
 
@@ -296,6 +325,8 @@ namespace Placemaker.Tests.Types
             }
 
             // 5. Terraform is smooth: no stepped artefacts (slope change per metre) and no local peaks, within the earthwork limits.
+            //    (s30) Not under a net: a quay wall or a walk cut into a hillside is a deliberate step its own net covers.
+            var offNets = ShoreSites.OffNets(plan);
             int steps = 0, peaks = 0;
             float worstCurv = 0f; float2 worstAt = 0f;
             for (float z = -30f; z < 190f; z += 1f)
@@ -303,7 +334,7 @@ namespace Placemaker.Tests.Types
                 {
                     var p = new float2(x, z);
                     float h = final(p);
-                    if (math.abs(h - original(p)) < 0.08f) continue;
+                    if (math.abs(h - original(p)) < 0.08f || !offNets(p) || h < ShoreSites.Level - 0.5f) continue;
                     foreach (var d in new[] { new float2(1, 0), new float2(0, 1) })
                     {
                         float c = math.abs(final(p + d) - 2f * h + final(p - d));
@@ -321,11 +352,11 @@ namespace Placemaker.Tests.Types
                         if (peak) peaks++;
                     }
                 }
-            bool riverSteps = preset == "riverSteps";
             _out.WriteLine($"{tag}: worst slope change {worstCurv:0.000}/m, stepped samples {steps}, peaks {peaks}, cut {plan.Facts.GetValueOrDefault("earthMaxCut"):0.0} fill {plan.Facts.GetValueOrDefault("earthMaxFill"):0.0}");
-            if (!riverSteps) Assert.True(steps <= 6, $"{tag}: {steps} stepped samples (worst {worstCurv:0.00}/m at {worstAt})");
+            Assert.True(steps <= 6, $"{tag}: {steps} stepped samples (worst {worstCurv:0.00}/m at {worstAt})");
             Assert.Equal(0, peaks);
-            Assert.True(plan.Facts.GetValueOrDefault("earthMaxCut") <= 5.01, $"{tag}: cut {plan.Facts["earthMaxCut"]:0.00} m");
+            // s30: the waterfront walk stays low near the water and cuts the hillside behind (graded or walled): up to 6.5 m on the 6.5 m bank.
+            Assert.True(plan.Facts.GetValueOrDefault("earthMaxCut") <= (layer == "waterfront" ? 6.6 : 5.01), $"{tag}: cut {plan.Facts["earthMaxCut"]:0.00} m");
             Assert.True(plan.Facts.GetValueOrDefault("earthMaxFill") <= 2.51, $"{tag}: fill {plan.Facts["earthMaxFill"]:0.00} m");
             Assert.All(plan.Terraform, t => Assert.True(t.Sloped || t.Kind == TerraformKind.Level, $"{tag}: a flat {t.Kind} patch"));
         }
@@ -348,7 +379,8 @@ namespace Placemaker.Tests.Types
                         if (p.x < 15f || p.x > 235f) continue;
                         float off = p.y - ShoreSites.WaterZ(kind, p.x);
                         // The deck's sea side on the waterline: its centre half a width inland (± 2 m).
-                        Assert.True(math.abs(off - (hw - 0.4f)) < 2.2f, $"{preset}/{kind}: quay at {p} is {off:0.0} m from the water");
+                        // s30: the quay is one smooth curve (σ ≥ 14 m, radius ≥ 40 m), so it rides over the waterline's small wiggles.
+                        Assert.True(math.abs(off - (hw - 0.4f)) < 2.7f, $"{preset}/{kind}: quay at {p} is {off:0.0} m from the water");
                         Assert.False(n.FollowTerrain);
                         Assert.True(n.A.y > ShoreSites.Level + 0.5f, "deck above the water");
                     }

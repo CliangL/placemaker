@@ -22,6 +22,12 @@ namespace Placemaker.Tests.Types
         public static IEnumerable<object[]> PresetIds() => TestKit.Gen("waterfront").Presets.Select(p => new object[] { p.Id });
         private static PresetInfo Preset(string id) => TestKit.Gen("waterfront").Presets.Single(p => p.Id == id);
 
+        private static bool PointOnBezier(PlannedNet n, float2 p)
+        {
+            for (int i = 0; i <= 32; i++) if (math.distance(Composer.Bezier(n.A, n.B, n.C, n.D, i / 32f).xz, p) < 0.6f) return true;
+            return false;
+        }
+
         [Fact]
         public void HasFourToSixPresetsAndDeepControls()
         {
@@ -82,15 +88,16 @@ namespace Placemaker.Tests.Types
             Assert.NotEmpty(boardwalk);
             Assert.All(boardwalk, n => Assert.False(n.FollowTerrain));
             Assert.True(plan.Facts["edgeLength"] > 180f);
-            Assert.True(plan.Nets.Any(n => n.Role == NetRole.PathwayWide && math.abs(n.A.z - n.D.z) < 1f && n.A.z > 12f && n.A.z < 16f), string.Join(" ", plan.Nets.Select(n => n.Role + ":" + n.A.xz + "-" + n.D.xz)));
-            Assert.True(plan.Facts["edgeLinks"] >= 2);
+            // s30: the walk is the band centre, a smooth line set back from the water by half the band, its shoulder and the bank.
+            Assert.True(plan.Nets.Any(n => n.Role == NetRole.PathwayWide && math.abs(n.A.z - n.D.z) < 1f && n.A.z > 12f && n.A.z < 20f), string.Join(" ", plan.Nets.Select(n => n.Role + ":" + n.A.xz + "-" + n.D.xz)));
+            Assert.True(plan.Facts["edgeLinks"] >= 2, string.Join(" ", plan.Facts.Select(kv => kv.Key + "=" + kv.Value)));
             // No railings on a graded embankment (nothing drops).
             Assert.DoesNotContain(plan.Nets, n => n.Role == NetRole.Fence);
             // Benches on the promenade's water side face the water; lamps on its land side; a tree row and planted beds behind.
             var benches = plan.Objects.Where(o => o.Role == ObjectRole.Bench).ToList();
             Assert.True(benches.Count >= 8);
-            Assert.All(benches, b => Assert.True(math.cos(b.Yaw) < -0.7f && b.Position.z < 14f));
-            Assert.Contains(plan.Objects, o => o.Role == ObjectRole.Lamp && o.Position.z > 14f);
+            Assert.All(benches, b => Assert.True(math.cos(b.Yaw) < -0.7f && b.Position.z < 16.5f));
+            Assert.Contains(plan.Objects, o => o.Role == ObjectRole.Lamp && o.Position.z > 16.5f);
             Assert.True(plan.Objects.Any(o => o.Role == ObjectRole.Tree && o.Position.z > 18f && o.Position.z < 30f));
             Assert.True(plan.Facts["beds"] >= 3);
             Assert.DoesNotContain(plan.Issues, i => i.Key == "Placemaker.Waterfront.Issue.PiersNeedWater");
@@ -104,10 +111,12 @@ namespace Placemaker.Tests.Types
             Assert.Equal(2, plan.Facts["piers"]);
             var decks = plan.Nets.Where(n => !n.FollowTerrain).ToList();
             Assert.True(decks.Count(n => n.Category == AssetCategories.NetPier) >= 2 + 2, "piers with T-heads");
-            // The pier park's water edge is a walkway quay, and each pier starts from a landing on the promenade.
+            // The pier park's water edge is a walkway quay; s30: each pier is a T junction ON it (no landing pads cut into the bank).
             Assert.Contains(decks, n => n.Category == AssetCategories.NetQuay);
-            Assert.True(plan.Surfaces.Count(s => s.Role == SurfaceRole.Paving) >= 2);
-            Assert.All(decks, n => Assert.True(n.A.y > 0f && n.D.y > 0f, "deck above the water"));
+            Assert.True(plan.Surfaces.Count(s => s.Role == SurfaceRole.Paving) >= 1);
+            var quay = decks.Where(n => n.Category == AssetCategories.NetQuay).ToList();
+            Assert.All(decks.Where(n => n.Category == AssetCategories.NetPier), p => Assert.True(quay.Any(q => math.distance(q.A.xz, p.A.xz) < 0.5f || math.distance(q.D.xz, p.A.xz) < 0.5f || PointOnBezier(q, p.A.xz)) || decks.Any(o => o != p && o.Category == AssetCategories.NetPier && math.distance(o.D.xz, p.A.xz) < 0.5f), $"pier at {p.A.xz} does not start on the quay"));
+            Assert.All(decks, n => Assert.True(n.A.y > 0f && n.D.y > 0f, $"deck above the water: {n.Role} {n.Category} {n.A} {n.D}"));
             Assert.Contains(decks, n => site.WaterDepthAt(n.D.xz) > 0f && n.D.z < 30f);
             // Nothing placed in the water.
             Assert.All(plan.Objects, o => Assert.False(site.WaterDepthAt(o.Position.xz) > 0f, $"{o.Role} in the water at {o.Position.xz}"));
@@ -125,10 +134,10 @@ namespace Placemaker.Tests.Types
             Assert.Contains(harbor.Objects, o => o.Category == AssetCategories.WaterfrontNautical);
             Assert.True(harbor.Facts["kiosks"] >= 2);
 
-            // River steps: paved flights down to a low walkway quay (deliberate levels), an avenue behind.
+            // River steps: paved flights on the smooth bank down to a low walkway quay (s30: no level patches), an avenue behind.
             var steps = P("riverSteps");
             Assert.True(steps.Facts["steps"] >= 2, "step flights");
-            Assert.True(steps.Terraform.Count(t => t.Kind == TerraformKind.Level) >= 6);
+            Assert.DoesNotContain(steps.Terraform, t => t.Kind == TerraformKind.Level && !t.Sloped);
             Assert.Contains(steps.Nets, n => n.Category == AssetCategories.NetQuay && n.Role == NetRole.Pathway);
             Assert.True(steps.Objects.Count(o => o.Role == ObjectRole.Tree) > P("promenade").Objects.Count(o => o.Role == ObjectRole.Tree));
 

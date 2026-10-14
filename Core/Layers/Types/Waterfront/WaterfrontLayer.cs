@@ -143,7 +143,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             // Promenade boardwalk: a timber boardwalk just off the bank, a lawn embankment up to a paved promenade
             // with benches facing the water, lamps between them, planted beds and a tree row, a park behind.
             Preset("promenade", ("style", "promenade"), ("edge", "boardwalk"), ("promWidth", 14.0), ("surface", "paved"), ("steps", "none"), ("trees", "row"),
-                ("piers", 1.0), ("pierLength", 24.0), ("backdrop", "park"), ("benchSpacing", 14.0), ("lampSpacing", 21.0), ("beds", true), ("railings", true), ("deckHeight", 1.0));
+                ("piers", 0.0), ("backdrop", "park"), ("benchSpacing", 14.0), ("lampSpacing", 21.0), ("beds", true), ("railings", true), ("deckHeight", 1.0));
             // Pier park: a walkway quay along the water, a promenade above a lawn bank, piers with T-heads starting
             // from the quay.
             Preset("pier", ("style", "pier"), ("edge", "walkway"), ("promWidth", 12.0), ("pathWidth", "wide"), ("surface", "paved"), ("steps", "none"), ("piers", 2.0),
@@ -373,7 +373,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 {
                     // The quay: its centre half a deck inland of the waterline, smoothed, at most EdgeReach past the outline.
                     Func<float2, bool> edgeOk = p => !g.OnCliff(p) && (shore.Outline.Contains(p) || shore.Depth(p) <= EdgeReach);
-                    foreach (var line in SmoothFromWater(shore, w.EdgeHw - 0.4f, run, 14f, null, edgeOk, 30f))
+                    foreach (var line in SmoothFromWater(shore, w.EdgeHw - 0.4f, run, 9f, null, edgeOk, 30f))
                     {
                         var edge = ShoreWalk.Of(line);
                         if (edge == null) continue;
@@ -437,7 +437,9 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 {
                     var p = walk.At(walk.S[i], out _, out var nrm);
                     fr.SeaW[i] = math.max(5f, (w.Water ? shore.FromWater(p) : 30f) - w.Ps - sh + 2f);
-                    fr.BackW[i] = math.clamp(math.abs(ctx.H(p + nrm * (w.Pl + sh + 18f)) - walk.H[i]) / 0.22f, 6f, 45f);
+                    // Cut banks up to ~22 %, fill banks (a promenade raised over low ground) gentler, ~15 %: no plinth.
+                    float rise = ctx.H(p + nrm * (w.Pl + sh + 18f)) - walk.H[i];
+                    fr.BackW[i] = math.clamp(math.abs(rise) / (rise >= 0f ? 0.22f : 0.15f), 8f, 45f);
                     float wallH = ctx.H(p + nrm * (w.Pl + 1.5f)) - walk.H[i];
                     if (wallH > 0.5f) wallLen += i > 0 ? walk.S[i] - walk.S[i - 1] : 0f;
                     wallMax = math.max(wallMax, wallH);
@@ -557,9 +559,13 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                     if (d < best) { best = d; fr = f; u = uu; s = ss; beyond = bb; }
                 }
                 float t = Target(w, fr, p, u, s, h0, sh);
-                if (!math.isfinite(t)) continue;
-                // Past the walk's ends the change dies out over ~20 m (the outline cap does the rest).
-                if (beyond > 0f) t = math.lerp(t, h0, Sculpt.Smooth01(beyond / 20f));
+                if (!math.isfinite(t)) t = h0;   // the ground stays (also on a re-run of the field)
+                // Past the walk's ends the change dies out over ~20 m, and within ~12 m of arc length outside its stretch of shore
+                // (a cliff run beside it keeps its own ground and its own cliff-top walk); the outline cap does the rest.
+                float along = g.AlongOf(k), outside = float.MaxValue;
+                foreach (var r in w.Runs) outside = math.min(outside, math.max(0f, math.max(r.x - along, along - r.y)));
+                float fade = math.max(beyond / 20f, outside / 12f);
+                if (fade > 0f) t = math.lerp(t, h0, Sculpt.Smooth01(fade));
                 sc.Target[k] = t;
             }
             // No smoothing pass: the smoothstep banks already meet the flat band with zero slope, and a pass would tilt the band.
@@ -573,7 +579,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             int i = (int)math.clamp(math.round(s / ShoreWalk.Spacing), 0, walk.Line.Length - 1);
             // Hillside wall: the original ground is kept from the walk net's centre line on, so the step lies under the net (its own cut
             // renders the retaining wall at its land edge, as with a road built into a slope) — never on open ground.
-            float flatS = w.Ps + sh, flatL = fr.Wall ? w.NetOff : w.Pl + sh;
+            float flatS = w.Ps + sh, flatL = fr.Wall ? w.NetOff + w.Hw * 0.5f : w.Pl + sh;
             if (u >= -flatS && u <= flatL) return H;
             if (u > flatL)
             {
@@ -581,20 +587,22 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 return math.lerp(H, h0, Sculpt.Smooth01((u - flatL) / fr.BackW[i]));
             }
             float a = -u - flatS;   // metres seaward of the sea shoulder
+            float sea = fr.SeaW[i];
+            float soft = a >= sea ? h0 : math.lerp(H, h0, Sculpt.Smooth01(a / sea));
             if (Hard(w) && fr.Edge != null)
             {
                 float ue = fr.Edge.Signed(p, out _, out float eb);
-                if (eb > 2f) return math.lerp(H, h0, Sculpt.Smooth01(a / math.max(5f, fr.SeaW[i])));
-                float landEdge = w.EdgeHw + 1f;
+                float landEdge = w.EdgeHw + 1f, hard;
                 // Under the deck and its land side: deck level; in front of the wall: the bed stays.
-                if (ue <= landEdge) return ue >= -(w.EdgeHw - 0.8f) ? w.Deck : float.NaN;
+                // (the fill eases down to the bed under the deck's outer half, ending at the wall line: on a 2 m node grid a sharp
+                // deck-to-bed edge stair-stepped out past the wall)
+                if (ue <= landEdge) hard = math.lerp(w.Deck, math.min(h0, w.Deck), Sculpt.Smooth01((-ue + (w.EdgeHw - 2.5f)) / 2.5f));
                 // Between the quay's land edge and the walk's sea shoulder: one smooth bank, measured between the two curves.
-                float x = (ue - landEdge) / math.max(0.5f, (ue - landEdge) + a);
-                return math.lerp(w.Deck, H, Sculpt.Smooth01(x));
+                else hard = math.lerp(w.Deck, H, Sculpt.Smooth01((ue - landEdge) / math.max(0.5f, (ue - landEdge) + a)));
+                // Past the quay's ends the soft bank takes over within 8 m (no deck fill without its quay wall).
+                return eb > 0f ? math.lerp(hard, soft, Sculpt.Smooth01(eb / 8f)) : hard;
             }
-            float sea = fr.SeaW[i];
-            if (a >= sea) return float.NaN;
-            return math.lerp(H, h0, Sculpt.Smooth01(a / sea));
+            return a >= sea ? float.NaN : soft;
         }
 
         // ───────────── edge element ─────────────
@@ -625,21 +633,36 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             var ids = board ? WaterfrontArt.Or(ctx.S("boardwalkAsset"), WaterfrontArt.Boardwalk)
                 : WaterfrontArt.Or(ctx.S("quayAsset"), w.Edge == "quay" ? WaterfrontArt.QuayWide : WaterfrontArt.QuayNarrow);
             var asset = new AssetRef("", ids);
+            if (!board)
+            {
+                // A quay ends where the ground behind it is no longer at its deck (near the outline the field has to fade out):
+                // never a free-standing quay end with its wall exposed on the land side. The longest such stretch is kept and the
+                // field is laid again around it (past its ends the soft bank takes over).
+                bool trimmed = false;
+                var map = new Dictionary<ShoreWalk, ShoreWalk>();
+                foreach (var fr in w.Fronts)
+                {
+                    if (fr.Edge == null) continue;
+                    if (!map.TryGetValue(fr.Edge, out var te))
+                    {
+                        var e = fr.Edge;
+                        float2[] best = null;
+                        foreach (var piece in Cut(e.Line, p => { e.Signed(p, out float es, out _); e.At(es, out _, out var en); return math.abs(w.G.H(p + en * (w.EdgeHw + 0.6f)) - w.Deck) < 0.3f; }, 16f))
+                            if (best == null || Shoreline.LengthOf(piece) > Shoreline.LengthOf(best)) best = piece;
+                        te = best == null ? null : best.Length >= e.Line.Length - 1 ? e : ShoreWalk.Of(best);
+                        if (te != null && te != e) for (int i = 0; i < te.H.Length; i++) te.H[i] = w.Deck;
+                        trimmed |= te != e;
+                        map[e] = te;
+                    }
+                    fr.Edge = te;
+                }
+                if (trimmed) Terrain(w);
+            }
             var done = new HashSet<ShoreWalk>();
             foreach (var fr in w.Fronts)
             {
                 if (fr.Edge == null || !done.Add(fr.Edge)) continue;
                 var src = fr.Edge.Line;
-                if (!board)
-                {
-                    // A quay ends where the ground behind it is no longer at its deck (the field fades out at the outline):
-                    // never a free-standing quay end with its wall exposed on the land side. The longest such stretch.
-                    float2[] best = null;
-                    foreach (var piece in Cut(src, p => { fr.Edge.Signed(p, out float es, out _); fr.Edge.At(es, out _, out var en); return math.abs(w.G.H(p + en * (w.EdgeHw + 0.6f)) - w.Deck) < 0.3f; }, 16f))
-                        if (best == null || Shoreline.LengthOf(piece) > Shoreline.LengthOf(best)) best = piece;
-                    if (best == null) continue;
-                    src = best;
-                }
                 var line = Chords(src, 8f);
                 for (int i = 1; i < line.Length; i++)
                 {
@@ -817,16 +840,18 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                     float2 foot, deckP = default;
                     if (board)
                     {
-                        // Down the bank until the planned ground reaches the deck level; then a level stub out to the boardwalk.
-                        foot = top; bool found = false;
-                        for (float d = w.Ps + Shoulder; d < 60f; d += 0.5f)
+                        // From the boardwalk straight inland to where the bank reaches the deck level: the link runs down the bank
+                        // to there and a short level timber stub crosses to the boardwalk (a T junction on it).
+                        deckP = ClosestOn(w.EdgePieces, ProjectToEdge(fr, top), out float dd);
+                        if (dd > 3f) continue;
+                        var inl = math.normalizesafe(top - deckP);
+                        foot = deckP; bool found = false;
+                        for (float d = 1.5f; d < 10f; d += 0.25f)
                         {
-                            var q = top - nrm * d;
-                            if (g.H(q) <= w.Deck + 0.05f) { foot = q; found = true; break; }
+                            var q = deckP + inl * d;
+                            if (g.H(q) >= w.Deck - 0.05f) { foot = q; found = true; break; }
                         }
-                        if (!found) continue;
-                        deckP = ClosestOn(w.EdgePieces, foot - nrm * 2f, out float dd);
-                        if (dd > 8f || math.distance(foot, deckP) < 1f) continue;
+                        if (!found || math.distance(foot, top) < w.Hw + 2f) continue;
                     }
                     else
                     {
@@ -1407,7 +1432,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                             if (s < 6f || s > fr.Walk.Length - 6f || w.InGap(fr, s, 4f)) continue;
                             var c = fr.Walk.At(s, out _, out var nrm);
                             // Harbour: on the apron facing the quay; else on the level shoulder just behind the paving (no pad).
-                            float u = w.Edge == "quay" ? -(w.Ps + 3f) : fr.Wall ? -(w.Ps - 3.4f) : w.Pl + 2.8f;
+                            float u = w.Edge == "quay" || fr.Wall ? -(w.Ps - 3.4f) : w.Pl + 2.8f;
                             var kp = c + nrm * u;
                             if (TerrainSurvey.Relief(g.H, kp, 3f) > 0.35f) continue;
                             uint v = Hashing.Mix(ctx.Seed, 0x6170u + (uint)w.Kiosks);
