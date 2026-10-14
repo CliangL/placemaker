@@ -161,7 +161,9 @@ namespace Placemaker.Core.Layers.Types.Golf
                         }
                         if (!Fits(region, occ, tee, b, g, len, spec, index > 0)) continue;
                         float score = -math.abs(len - target) / target * 2f;
-                        score += math.min(occ.Clearance(g, target), target) / target;
+                        score += 0.5f * math.min(occ.Clearance(g, target), target) / target;
+                        // Holes that hug the outline leave the interior in one piece for the holes still to come.
+                        score += 1.2f * (1f - math.saturate(region.BoundaryDistance(b, scale) / (scale * 0.2f)));
                         if ((bend > 0) == wantDogleg) score += 0.3f;
                         switch (spec.Style)
                         {
@@ -204,7 +206,9 @@ namespace Placemaker.Core.Layers.Types.Golf
             {
                 var p = s <= l1 ? math.lerp(tee, b, s / math.max(1e-3f, l1)) : math.lerp(b, g, (s - l1) / math.max(1e-3f, l2));
                 float hw = HalfWidthAt(s, len, spec);
-                if (!occ.Free(p, hw, hw + spec.EdgeMargin, spec.Gap)) return false;
+                // The tee end may sit a short walk from the previous green / clubhouse; the full safety gap applies down the hole.
+                float gap = math.lerp(0.5f, spec.Gap, math.saturate((s - 4f) / 12f));
+                if (!occ.Free(p, hw, hw + spec.EdgeMargin, gap)) return false;
             }
             return true;
         }

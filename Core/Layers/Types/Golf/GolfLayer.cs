@@ -23,6 +23,7 @@ namespace Placemaker.Core.Layers.Types.Golf
     public sealed partial class GolfLayer : LeisureLayer
     {
         public const string PracticeTag = "practice";
+        internal const int ClubKind = 53;
 
         protected override string Area => "Golf";
         public override string Id => "golf";
@@ -31,6 +32,14 @@ namespace Placemaker.Core.Layers.Types.Golf
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, StreetFrontage.ShopsTag, PracticeTag };
 
         public static readonly string[] Subtypes = { "course", "pitchPutt", "miniGolf", "drivingRange", "discGolf" };
+
+        /// <summary>A feature labelled with its layer name (no Placemaker.Feature.* key of its own).</summary>
+        private static FeatureInfo Plain(string layer, params (string key, object value)[] preset)
+        {
+            var f = Feature(layer, preset);
+            f.LabelKey = "";
+            return f;
+        }
 
         protected override List<FeatureInfo> BuildFeatures()
         {
@@ -41,7 +50,7 @@ namespace Placemaker.Core.Layers.Types.Golf
             return new List<FeatureInfo>
             {
                 practice, Feature("restrooms"), Feature("shops", ("count", 1.0), ("where", "entrances")), StreetShopsFeature(Area),
-                Feature("flowerbeds", ("density", 4.0)), Feature("bigtrees", ("density", 1.5)), Feature("rocks", ("clusters", 3.0)),
+                Plain("flowerbeds", ("density", 4.0)), Plain("bigtrees", ("density", 1.5)), Feature("rocks", ("clusters", 3.0)),
                 Feature("decals", ("theme", "leaves"), ("density", 1.0)),
             };
         }
@@ -77,9 +86,9 @@ namespace Placemaker.Core.Layers.Types.Golf
             c.Slider("roughLayer", 1, 1, 4, 1, "count", ControlTier.More, "planting").When("roughPaint=true").Tip();
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
 
-            c.Choice("miniTheme", "classic", ControlTier.Essential, "mini", "classic", "adventure", "garden").When("subtype=miniGolf").Tip();
-            c.Slider("bays", 14, 4, 40, 1, "count", ControlTier.Essential, "range").When("subtype=drivingRange").Tip();
-            c.Slider("targets", 5, 1, 8, 1, "count", ControlTier.Essential, "range").When("subtype=drivingRange");
+            c.Choice("miniTheme", "classic", ControlTier.Essential, "course", "classic", "adventure", "garden").When("subtype=miniGolf").Tip();
+            c.Slider("bays", 14, 4, 40, 1, "count", ControlTier.Essential, "course").When("subtype=drivingRange").Tip();
+            c.Slider("targets", 5, 1, 8, 1, "count", ControlTier.Essential, "course").When("subtype=drivingRange");
 
             c.Asset("fairwaySurface", AssetCategories.SurfaceGrass, ControlTier.More, "assets");
             c.Asset("greenSurface", AssetCategories.SurfaceGrass, ControlTier.More, "assets");
@@ -174,9 +183,10 @@ namespace Placemaker.Core.Layers.Types.Golf
             for (int k = 0; k < 8; k++)
             {
                 float a = math.atan2(inward.y, inward.x) + (k % 2 == 0 ? 1 : -1) * (k / 2) * math.radians(40f);
-                firstTees.Add(home + new float2(math.cos(a), math.sin(a)) * ((fmt.Disc ? 3f : 7f) + 9f));
+                firstTees.Add(home + new float2(math.cos(a), math.sin(a)) * ((fmt.Disc ? 3f : 7f) + 12f));
             }
-            var holes = GolfRouting.Route(region, occ, firstTees, home, spec, ctx.Cancel);
+            var holes = RouteBest(ctx, region, firstTees, home, fmt.Disc ? 3f : 7f, fmt, ref spec);
+            foreach (var h in holes) GolfRouting.Take(occ, h, spec);
             if (holes.Count < spec.Holes) ctx.Issue(IssueSeverity.Info, "Placemaker.Golf.Issue.FewerHoles", holes.Count, spec.Holes);
             if (holes.Count == 0) ctx.Issue(IssueSeverity.Warning, "Placemaker.Golf.Issue.NoHoles");
             foreach (var h in holes) { haz.Take(h.Green, spec.GreenRadius + 1f, GolfRouting.GreenKind); haz.Take(h.Tee, 3f, GolfRouting.TeeKind); }
@@ -359,7 +369,7 @@ namespace Placemaker.Core.Layers.Types.Golf
                     }
             }
             if (!found && !Spots.Find(occ, radius, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0xC1Bu), out home)) home = region.Centroid;
-            occ.Take(home, radius, 0);
+            occ.Take(home, radius, ClubKind);
             if (!ctx.B("clubhouse")) return home;
             var facing = gates.Count > 0 ? gates[0].Position : region.Centroid;
             string cat = LeisureKit.Category(ctx, "", chain);
@@ -380,6 +390,29 @@ namespace Placemaker.Core.Layers.Types.Golf
             return home;
         }
 
+        /// <summary>
+        /// Routes on a scratch occupancy; when hardly anything fits (small areas) it retries with a compact
+        /// course — narrower corridors, smaller greens, shorter holes — and keeps the attempt with most holes.
+        /// </summary>
+        private static List<GolfHole> RouteBest(LayerContext ctx, LayerRegion region, List<float2> firstTees, float2 home, float clubR, Format fmt, ref RoutingSpec spec)
+        {
+            List<GolfHole> best = null; var bestSpec = spec; var s = spec;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                var trial = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
+                trial.Take(home, clubR + 5f, 0);
+                var holes = GolfRouting.Route(region, trial, firstTees, home, s, ctx.Cancel);
+                if (best == null || holes.Count > best.Count) { best = holes; bestSpec = s; }
+                if (best.Count >= math.min(spec.Holes, 3)) break;
+                s.HalfWidth = math.max(fmt.MinHw * 0.6f, s.HalfWidth * 0.65f);
+                s.GreenRadius = math.max(fmt.MinRg * 0.8f, s.GreenRadius * 0.75f);
+                s.Length *= 0.6f; s.MinLength = math.max(20f, s.MinLength * 0.7f);
+                s.EdgeMargin *= 0.6f; s.Gap *= 0.6f; s.TeeOffset *= 0.75f;
+            }
+            spec = bestSpec;
+            return best;
+        }
+
         private static void CoursePaths(LayerContext ctx, Occupancy occ, Occupancy haz, List<Gate> gates, List<GolfHole> holes, float2 home,
             RoutingSpec spec, Format fmt, AssetRef asset)
         {
@@ -388,66 +421,113 @@ namespace Placemaker.Core.Layers.Types.Golf
             var role = cart ? NetRole.PathwayWide : NetRole.Pathway;
             float phw = Composer.DefaultHalfWidth(role);
             float clubR = fmt.Disc ? 3f : 7f;
+            int links = 0;
 
-            void Link(float2 a, float2 b)
+            void Emit(float2 a, float2 b)
             {
-                if (math.distance(a, b) < 2f) return;
-                if (!Clear(region, occ, a, b, phw)) return;
                 LeisureKit.Path(ctx, occ, a, b, role, asset);
                 haz.TakeCorridor(a, b, phw, 100);
+            }
+            // Straight link, else a dog-leg round the given obstacle centre (e.g. a green between the two ends).
+            bool Link(float2 a, float2 b, float2 around, float aroundR)
+            {
+                if (math.distance(a, b) < 2f) return true;
+                if (math.distance(a, b) <= 90f && Clear(region, occ, a, b, phw, 10f)) { Emit(a, b); links++; return true; }
+                var mid = math.lerp(a, b, 0.5f);
+                var away = math.normalizesafe(mid - around, Rot(math.normalizesafe(b - a), math.PI * 0.5f));
+                foreach (float extra in new[] { 1.5f, 5f })
+                {
+                    var w = around + away * (aroundR + phw + extra);
+                    if (math.distance(a, w) + math.distance(w, b) <= 110f && Clear(region, occ, a, w, phw, 10f) && Clear(region, occ, w, b, phw, 10f))
+                    { Emit(a, w); Emit(w, b); links++; return true; }
+                }
+                return false;
             }
 
             // Entrances to the clubhouse.
             foreach (var g in gates)
             {
                 var dir = math.normalizesafe(home - g.Position);
-                Link(g.Position, home - dir * (clubR + 0.6f + phw));
+                Link(g.Position, home - dir * (clubR + 0.6f + phw), home, clubR);
             }
-            float2? prevEnd = math.normalizesafe(region.Centroid - home) * (clubR + 0.6f + phw) + home;
+            float2 prevEnd = home + math.normalizesafe(holes.Count > 0 ? holes[0].Tee - home : region.Centroid - home) * (clubR + 0.6f + phw);
+            float2 prevAround = home; float prevR = clubR;
             for (int i = 0; i < holes.Count; i++)
             {
                 var h = holes[i];
                 var d = h.TeeDir; var side = new float2(-d.y, d.x);
-                float2 start = h.Tee + side * 4.5f - d * 1.5f;
-                float2 end = h.Green - h.ApproachDir * 2f + new float2(-h.ApproachDir.y, h.ApproachDir.x) * (spec.GreenRadius + 3f + phw);
+                // Walk ends beside the green on the side facing what comes next (next tee, or home after the last hole).
+                var ap = h.ApproachDir; var perp = new float2(-ap.y, ap.x);
+                var next = i + 1 < holes.Count ? holes[i + 1].Tee : home;
+                float endSide = Poly.Cross(ap, next - h.Green) >= 0f ? 1f : -1f;
+                float2 end = h.Green + ap * 1.5f + perp * endSide * (spec.GreenRadius + 3f + phw);
+                float teeSide = Poly.Cross(d, prevEnd - h.Tee) >= 0f ? 1f : -1f;
+                float2 start = h.Tee - d * 1.5f + side * teeSide * (GolfRouting.HalfWidthAt(0f, h.Length, spec) + phw + 1.5f);
                 if (cart)
                 {
-                    // Alongside the hole on whichever side fits, as a chain of short straight pieces.
-                    var best = (List<float2>)null;
-                    foreach (float s in new[] { 1f, -1f })
+                    // Alongside the hole on the side that fits best; blocked stretches split it into runs.
+                    List<List<float2>> best = null; int bestCount = -1;
+                    foreach (float s in new[] { teeSide, -teeSide })
                     {
-                        var pts = new List<float2>();
-                        for (int k = 0; k < h.Line.Length; k += 3)
+                        var runs = new List<List<float2>>(); var cur = new List<float2>(); int count = 0;
+                        for (int k = 0; k < h.Line.Length; k += 2)
                         {
                             float f = k / (float)math.max(1, h.Line.Length - 1);
                             var p = h.At(f, out var t);
                             var n = new float2(-t.y, t.x) * s;
-                            float off = math.max(GolfRouting.HalfWidthAt(f * h.Length, h.Length, spec) + phw + 1.5f, f > 0.8f ? spec.GreenRadius + phw + 3f : 0f);
+                            float off = math.max(GolfRouting.HalfWidthAt(math.min(h.Length, f * h.Length + 12f), h.Length, spec) + phw + 2.5f,
+                                f > 0.75f ? spec.GreenRadius + phw + 4f : 0f);
                             var q = p + n * off;
-                            if (!region.ContainsDisc(q, phw + 0.5f) || !occ.Free(q, phw, phw + 0.5f, 0.2f)) { pts = null; break; }
-                            pts.Add(q);
+                            if (region.ContainsDisc(q, phw + 0.5f) && occ.Free(q, phw, phw + 0.5f, 0.2f)) { cur.Add(q); count++; }
+                            else { if (cur.Count >= 2) runs.Add(cur); cur = new List<float2>(); }
                         }
-                        if (pts != null && pts.Count >= 2) { best = pts; break; }
+                        if (cur.Count >= 2) runs.Add(cur);
+                        if (count > bestCount) { bestCount = count; best = runs; }
                     }
-                    if (best != null)
+                    if (best != null && best.Count > 0)
                     {
-                        var simple = Poly.SimplifyPolyline(best, 1.5f);
-                        if (prevEnd.HasValue) Link(prevEnd.Value, simple[0]);
-                        for (int k = 0; k + 1 < simple.Length; k++) Link(simple[k], simple[k + 1]);
-                        prevEnd = simple[simple.Length - 1];
+                        Link(prevEnd, best[0][0], h.Tee, 3f);
+                        for (int r = 0; r < best.Count; r++)
+                        {
+                            var simple = Poly.SimplifyPolyline(best[r], 1.5f);
+                            for (int k = 0; k + 1 < simple.Length; k++) Emit(simple[k], simple[k + 1]);
+                            if (r + 1 < best.Count) Link(simple[simple.Length - 1], best[r + 1][0], h.Green, spec.GreenRadius + 2f);
+                            else prevEnd = simple[simple.Length - 1];
+                        }
+                        prevAround = h.Green; prevR = spec.GreenRadius + 2f;
                         continue;
                     }
                 }
-                // Walking format: a footpath from the previous green (or the clubhouse) to this tee.
-                if (prevEnd.HasValue) Link(prevEnd.Value, start);
-                prevEnd = end;
+                // Walking formats: a footpath from the previous green (or the clubhouse) to this tee.
+                Link(prevEnd, start, prevAround, prevR);
+                prevEnd = end; prevAround = h.Green; prevR = spec.GreenRadius + 2f;
             }
-            if (prevEnd.HasValue && holes.Count > 0 && math.distance(prevEnd.Value, home) < 160f)
-                Link(prevEnd.Value, home + math.normalizesafe(prevEnd.Value - home) * (clubR + 0.6f + phw));
+            if (holes.Count > 0 && math.distance(prevEnd, home) < 160f)
+                Link(prevEnd, home + math.normalizesafe(prevEnd - home) * (clubR + 0.6f + phw), prevAround, prevR);
+            ctx.Plan.Facts["pathLinks"] = links;
         }
 
         /// <summary>True when a straight path a→b stays inside and clear of everything taken (sampled).</summary>
-        internal static bool Clear(LayerRegion region, Occupancy occ, float2 a, float2 b, float hw)
+        /// <summary>
+        /// Disc test for paths. Close to its ends a path may touch what it leads to — the clubhouse, a tee
+        /// box, a green apron — but never a placed object or anything reserved.
+        /// </summary>
+        private static bool DiscBlocked(Occupancy occ, float2 p, float hw, bool nearEnd)
+        {
+            if (!nearEnd) return occ.Discs.Overlaps(p, hw, 0.2f);
+            var near = new List<int>();
+            occ.Discs.Query(p, hw + 0.2f, near);
+            foreach (int i in near)
+            {
+                var it = occ.Discs.Items[i];
+                if (it.Kind == ClubKind || it.Kind == GolfRouting.TeeKind || it.Kind == GolfRouting.GreenKind) continue;
+                float d = hw + it.R + 0.2f;
+                if (math.distancesq(p, it.P) < d * d) return true;
+            }
+            return false;
+        }
+
+        internal static bool Clear(LayerRegion region, Occupancy occ, float2 a, float2 b, float hw, float endSlack = 0f)
         {
             if (region.CrossesBoundary(a, b, true)) return false;
             float len = math.distance(a, b);
@@ -456,8 +536,9 @@ namespace Placemaker.Core.Layers.Types.Golf
             {
                 var p = math.lerp(a, b, i / (float)n);
                 if (i > 0 && i < n && !region.Contains(p)) return false;
-                if (occ.Discs.Overlaps(p, hw, 0.2f) || occ.HitsPolygon(p, hw)) return false;
-                if (occ.Corridors.Overlaps(p, hw, 0.2f) && !(i == 0 || i == n)) return false;
+                if (DiscBlocked(occ, p, hw, math.min(math.distance(p, a), math.distance(p, b)) < 5f) || occ.HitsPolygon(p, hw)) return false;
+                bool nearEnd = i == 0 || i == n || math.distance(p, a) < endSlack || math.distance(p, b) < endSlack;
+                if (!nearEnd && occ.Corridors.Overlaps(p, hw, 0.2f)) return false;
             }
             return true;
         }
@@ -579,7 +660,7 @@ namespace Placemaker.Core.Layers.Types.Golf
                 {
                     float a = k * math.PI / 6f;
                     var c = home + new float2(math.cos(a), math.sin(a)) * dist;
-                    if (!occ.Free(c, r + 1f, 1f, 0.5f)) continue;
+                    if (!occ.Free(c, r + 1f, r + 1.5f, 0.5f)) continue;
                     occ.Take(c, r + 1f, 80);
                     ctx.AddRegion(LayerRegion.Circle(c, r, 20), PracticeTag, PracticeTag, RegionTags.Green);
                     return;

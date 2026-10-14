@@ -26,13 +26,33 @@ namespace Placemaker.Core.Layers.Types.Golf
             ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
             LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
 
+            // Promenade on the long axis, shifted sideways when something reserved stands in the way.
             var spine = new List<(float2 a, float2 b)>();
-            if (LeisureKit.Chord(region, centre, axis, 3f, out var s0, out var s1))
+            float whw = Composer.DefaultHalfWidth(NetRole.PathwayWide);
+            foreach (float shift in new[] { 0f, 0.18f, -0.18f, 0.32f, -0.32f })
             {
+                var through = centre + side * (minor * shift);
+                if (!region.Contains(through) || !LeisureKit.Chord(region, through, axis, 3f, out var s0, out var s1)) continue;
+                if (!Clear(region, occ, s0, s1, whw)) continue;
                 LeisureKit.Path(ctx, occ, s0, s1, NetRole.PathwayWide, pathAsset);
                 spine.Add((s0, s1));
+                break;
             }
-            ConnectGates(ctx, occ, gates, spine, NetRole.Pathway, pathAsset);
+            float phw = Composer.DefaultHalfWidth(NetRole.Pathway);
+            foreach (var g in gates)
+            {
+                float best = float.MaxValue; float2 foot = g.Position;
+                foreach (var (a, b) in spine)
+                {
+                    // The foot of the perpendicular first, then points along the promenade (outlines with notches).
+                    var cands = new List<float2> { SegmentIndex.ClosestPoint(g.Position, a, b) };
+                    float len = math.distance(a, b);
+                    for (float s = 0f; s <= len; s += 6f) cands.Add(math.lerp(a, b, s / math.max(1f, len)));
+                    foreach (var q in cands)
+                        if (math.distance(q, g.Position) < best && Clear(region, occ, g.Position, q, phw, whw + phw + 1.5f)) { best = math.distance(q, g.Position); foot = q; }
+                }
+                if (best < float.MaxValue && best > 1f) LeisureKit.Path(ctx, occ, g.Position, foot, NetRole.Pathway, pathAsset);
+            }
             ctx.Check();
 
             // Ticket kiosk beside the path nearest the main entrance.
@@ -142,24 +162,39 @@ namespace Placemaker.Core.Layers.Types.Golf
             ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(ctx.S("fairwaySurface")), AssetCategories.SurfaceGrass);
             LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
 
-            // The range runs away from the main entrance along the long axis.
+            // The range runs away from the main entrance, preferably along the long axis. The tee line goes
+            // across the near end; on odd outlines (L-shapes) other directions and offsets are tried.
             var g0 = gates.Count > 0 ? gates[0].Position : centre - axis;
-            var dir = math.dot(g0 - centre, axis) <= 0f ? axis : -axis;
-            float minA = float.MaxValue, maxA = float.MinValue;
-            foreach (var p in region.Ring) { float a = math.dot(p - centre, dir); minA = math.min(minA, a); maxA = math.max(maxA, a); }
-
-            // Tee line across the near end.
+            var away = math.dot(g0 - centre, axis) <= 0f ? axis : -axis;
+            var awaySide = math.dot(g0 - centre, side) <= 0f ? side : -side;
             OrientedRect strip = default; bool haveStrip = false; int bays = 0;
-            for (float inset = 9f; inset < 40f && !haveStrip; inset += 5f)
+            float2 dir = away; float maxA = 0f;
+            foreach (var cand in new[] { away, awaySide, -awaySide, -away })
             {
-                var c = centre + dir * (minA + inset);
-                if (!region.Contains(c) || !LeisureKit.Chord(region, c, new float2(-dir.y, dir.x), 3f, out var c0, out var c1)) continue;
-                bays = math.min(ctx.I("bays"), (int)(math.distance(c0, c1) / 3.2f));
-                if (bays < 2) continue;
-                var mid = math.lerp(c0, c1, 0.5f);
-                var r = new OrientedRect { Center = mid, Axis = math.normalizesafe(c1 - c0), HalfLength = bays * 1.6f, HalfWidth = 3.5f };
-                if (!LeisureKit.RectFits(region, occ, r, 0.5f)) continue;
-                strip = r; haveStrip = true;
+                if (haveStrip) break;
+                var perp = new float2(-cand.y, cand.x);
+                float lo = float.MaxValue, hi = float.MinValue, plo = float.MaxValue, phi = float.MinValue;
+                foreach (var p in region.Ring)
+                {
+                    float a = math.dot(p - centre, cand), b = math.dot(p - centre, perp);
+                    lo = math.min(lo, a); hi = math.max(hi, a); plo = math.min(plo, b); phi = math.max(phi, b);
+                }
+                for (float inset = 9f; inset < 90f && !haveStrip; inset += 4f)
+                {
+                    if (hi - (lo + inset) < 60f) break;   // a range needs some length
+                    foreach (float lat in new[] { 0.5f, 0.3f, 0.7f, 0.15f, 0.85f })
+                    {
+                        var c = centre + cand * (lo + inset) + perp * math.lerp(plo, phi, lat);
+                        if (!region.Contains(c) || !LeisureKit.Chord(region, c, perp, 3f, out var c0, out var c1)) continue;
+                        for (int n = math.min(ctx.I("bays"), (int)(math.distance(c0, c1) / 3.2f)); n >= 3 && !haveStrip; n--)
+                        {
+                            var r = new OrientedRect { Center = math.lerp(c0, c1, 0.5f), Axis = math.normalizesafe(c1 - c0), HalfLength = n * 1.6f, HalfWidth = 3.5f };
+                            if (!LeisureKit.RectFits(region, occ, r, 0.5f)) continue;
+                            strip = r; haveStrip = true; bays = n; dir = cand; maxA = hi;
+                        }
+                        if (haveStrip) break;
+                    }
+                }
             }
             int targets = 0;
             if (!haveStrip) ctx.Issue(IssueSeverity.Warning, "Placemaker.Golf.Issue.NoHoles");

@@ -31,6 +31,14 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
 
         protected override int WantedEntrances(LayerRegion region) => math.min(2, Entrances.WantedByArea(region.Area));
 
+        /// <summary>A feature labelled with its layer name (no Placemaker.Feature.* key of its own).</summary>
+        private static FeatureInfo Plain(string layer, params (string key, object value)[] preset)
+        {
+            var f = Feature(layer, preset);
+            f.LabelKey = "";
+            return f;
+        }
+
         protected override List<FeatureInfo> BuildFeatures()
         {
             var view = Feature(ViewpointAddOn.LayerId);
@@ -40,7 +48,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             return new List<FeatureInfo>
             {
                 view, Feature("picnic", ("groups", 2.0)), Feature("restrooms"), Feature("shops", ("count", 1.0), ("where", "entrances")),
-                StreetShopsFeature(Area), Feature("rocks", ("clusters", 4.0), ("size", "large")), Feature("bigtrees", ("density", 1.5)),
+                StreetShopsFeature(Area), Feature("rocks", ("clusters", 4.0), ("size", "large")), Plain("bigtrees", ("density", 1.5)),
                 Feature("decals", ("theme", "leaves"), ("density", 1.5)),
             };
         }

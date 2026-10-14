@@ -6,8 +6,6 @@
   "Placemaker.UI.Group.course": "Course",
   "Placemaker.UI.Group.hazards": "Hazards",
   "Placemaker.UI.Group.greens": "Greens & tees",
-  "Placemaker.UI.Group.mini": "Mini golf",
-  "Placemaker.UI.Group.range": "Driving range",
 
   "Placemaker.Golf.subtype": "Format",
   "Placemaker.Golf.subtype.Tooltip": "What kind of golf: a full course, short pitch & putt, mini golf lanes, a driving range or a disc golf course.",
