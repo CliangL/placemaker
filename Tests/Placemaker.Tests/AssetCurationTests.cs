@@ -211,7 +211,8 @@ namespace Placemaker.Tests
             if (Has(AssetCategories.ParkingDecal)) t |= AssetTraits.HasSubLane | AssetTraits.ParkingLaneSubLane;
             if (Has(AssetCategories.Charger)) t |= AssetTraits.Charger;
             // Automatic for nothing in the game: excluded by component data (brand, wall/hanging, water placement).
-            if (!it.AnyAuto) t |= AssetTraits.BrandObject;
+            // Decals are never brand objects; a decal the game made automatic for nothing only failed the curated themes.
+            if (!it.AnyAuto && !Any(AssetCategories.Decal)) t |= AssetTraits.BrandObject;
             return t;
         }
 

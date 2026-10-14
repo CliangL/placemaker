@@ -130,6 +130,9 @@ namespace Placemaker.Core.Layers.Types.Logistics
             public float PitchA => Length + Aisle;
             public int Decals, Items, Bays, Machines, Lights;
             public const int MaxDecals = 900, MaxItems = 3200;
+            /// <summary>Ground before props (GroundCover): decals and stacked goods are accents on paved pads, capped per hectare.</summary>
+            public int DecalCap = MaxDecals, MarkCap = MaxDecals, ItemCap = MaxItems;
+            public const float DecalsPerHa = 110f, ItemsPerHa = 260f;
         }
 
         protected override void PlanCore(LayerContext ctx)
@@ -159,6 +162,9 @@ namespace Placemaker.Core.Layers.Types.Logistics
                 Aisle = ctx.F("aisleWidth"), Depth = ctx.F("blockDepth"), Length = ctx.F("blockLength"),
             };
 
+            y.DecalCap = GroundCover.AccentBudget(inner.Area, Yard.DecalsPerHa, 40, Yard.MaxDecals);
+            y.MarkCap = y.DecalCap * 3 / 5;
+            y.ItemCap = GroundCover.AccentBudget(inner.Area, Yard.ItemsPerHa, 60, Yard.MaxItems);
             Ground(y);
             Frame(y, gates);
             var entries = GateLanes(y, gates);
@@ -409,6 +415,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
 
         // ───────────── storage lattice ─────────────
 
+        private const int MaxStackItems = 18;
         private struct Slot { public float Length, Width; public string Kind; }
 
         private static Slot SlotFor(string kind)
@@ -474,7 +481,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
             {
                 for (int j = j0; j <= j1; j++)
                 {
-                    if (y.Items >= Yard.MaxItems) return;
+                    if (y.Items >= y.ItemCap) return;
                     var c = y.Centre + y.S * ((k + 0.5f) * y.PitchS) + y.A * ((j + 0.5f) * y.PitchA);
                     var block = new OrientedRect { Center = c, Axis = y.A, HalfLength = y.Length * 0.5f, HalfWidth = y.Depth * 0.5f };
                     // Cheap reject: block fully outside.
@@ -512,11 +519,22 @@ namespace Placemaker.Core.Layers.Types.Logistics
             if (slot.Length > block.HalfLength * 2f + 0.01f || slot.Width > block.HalfWidth * 2f + 0.01f) return 0;
             float spanU = nu * slot.Length + (nu - 1) * gapL, spanV = nv * slot.Width + (nv - 1) * gapW;
             float r = slot.Width * 0.5f;
+            // Ground before props (GroundCover): small goods (pallets, crates, barrels, lumber) are a compact
+            // representative stack on the block's paved pad — about 40 % of the slots, at most 18 — never
+            // the whole block tiled with props. Containers and bulk heaps keep filling their blocks.
+            int startCol = 0, stackCols = nu;
+            if (slot.Length < 7f && slot.Kind != "bulk")
+            {
+                int wantedItems = math.clamp((int)math.round(nu * nv * 0.4f), math.min(nu * nv, 4), MaxStackItems);
+                stackCols = math.clamp((wantedItems + nv - 1) / nv, 1, nu);
+                startCol = (int)(bh % (uint)math.max(1, nu - stackCols + 1));
+            }
             int samples = math.max(1, (int)math.ceil(slot.Length / slot.Width));
             for (int iu = 0; iu < nu; iu++)
                 for (int iv = 0; iv < nv; iv++)
                 {
-                    if (y.Items >= Yard.MaxItems) return placed;
+                    if (y.Items >= y.ItemCap) return placed;
+                    if (iu < startCol || iu >= startCol + stackCols) continue;
                     float u = -spanU * 0.5f + slot.Length * 0.5f + iu * (slot.Length + gapL);
                     float v = -spanV * 0.5f + slot.Width * 0.5f + iv * (slot.Width + gapW);
                     uint h = Hashing.Mix(bh, iu * 31 + 1, iv * 17 + 5);
@@ -569,7 +587,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
 
         private static void Decal(Yard y, float2 p, float yaw, string cat, uint salt)
         {
-            if (y.Decals >= Yard.MaxDecals || !y.Inner.ContainsDisc(p, 0.3f)) return;
+            if (y.Decals >= y.MarkCap || !y.Inner.ContainsDisc(p, 0.3f)) return;
             uint v = Hashing.Mix(y.Ctx.Seed, salt + (uint)y.Decals);
             y.Ctx.Object(p, yaw, ObjectRole.Decal, AssetMix.One(""), v, -1, cat);
             y.Decals++;
@@ -579,7 +597,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
         private static void BlockLines(Yard y, OrientedRect b, string cat)
         {
             float hl = b.HalfLength + 0.6f, hw = b.HalfWidth + 0.6f;
-            for (float u = -hl; u <= hl + 0.01f; u += 6f)
+            for (float u = -hl; u <= hl + 0.01f; u += math.max(hl, 6f))
             {
                 Decal(y, b.Local(u, -hw), b.Yaw, cat, 0xB10Cu);
                 Decal(y, b.Local(u, hw), b.Yaw, cat, 0xB10Du);
@@ -659,7 +677,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
         {
             if (!LeisureKit.Chord(y.Inner, through, dir, 3f, out var a, out var b)) return;
             float yaw = math.atan2(dir.x, dir.y);
-            foreach (var p in LeisureKit.Along(a, b, 7f))
+            foreach (var p in LeisureKit.Along(a, b, 14f))
                 if (!y.Occ.Discs.Overlaps(p, 0.8f)) Decal(y, p, yaw, cat, 0xA15Eu);
         }
 
@@ -674,7 +692,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
             uint clump = Hashing.Mix(ctx.Seed, 0x57A1u);
             foreach (var p in Scatter.Candidates(y.Inner, 2.5f, Hashing.Mix(ctx.Seed, 0x57A2u), wanted * 8 + 60, ctx.Cancel))
             {
-                if (n >= wanted || y.Decals >= Yard.MaxDecals + 600) break;
+                if (n >= wanted || y.Decals + n >= y.DecalCap) break;
                 if (Hashing.Unit(Hashing.Mix(clump, (int)(p.x * 3f), (int)(p.y * 3f))) > Scatter.Clustering(p, 14f, clump, 0.2f)) continue;
                 if (y.Occ.Discs.Overlaps(p, 0.5f)) continue;
                 uint v = Hashing.Mix(clump, (uint)n);
