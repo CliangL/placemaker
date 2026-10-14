@@ -258,7 +258,8 @@ namespace Placemaker.Core.Layers.Common
                     return ctx.H(p) + (ins[i] && math.abs(off[i]) >= MinChange ? off[i] : 0f);
                 };
                 // What this layer places afterwards stands on the new ground (LayerContext.P3/G).
-                ctx.Ground.Override(region, result.HeightAfter);
+                // No polygon test: outside the shaped cells HeightAfter already returns the original ground.
+                ctx.Ground.Override(region.Min, region.Max, result.HeightAfter);
                 ctx.Plan.Facts["terrainCells"] = cells;
                 ctx.Plan.Facts["terrainMaxRaise"] = maxO;
                 ctx.Plan.Facts["terrainMaxLower"] = -minO;
