@@ -96,7 +96,7 @@ export function normalizeCatalog(raw: unknown): Catalog {
             accepts: arr(l.accepts),
             emits: arr(l.emits),
             controls: arr<any>(l.controls).filter(isObj).map((c) => ({ ...c, options: arr(c.options) })),
-            presets: arr(l.presets),
+            presets: arr<any>(l.presets).filter((x) => isObj(x) && typeof x.id === "string" && x.id),
         })),
         recipes: arr<any>(v.recipes).filter(isObj),
     } as Catalog;
@@ -107,7 +107,16 @@ export const EMPTY_DESIGN: DesignState = { recipeId: "", modified: false, root: 
 export function normalizeDesign(raw: unknown): DesignState {
     const v = parseJson(raw);
     if (!isObj(v)) return EMPTY_DESIGN;
-    return { ...EMPTY_DESIGN, ...v, root: isObj(v.root) ? normalizeStep(v.root) : null } as DesignState;
+    const ap = isObj(v.activePreset) ? v.activePreset : null;
+    return {
+        ...EMPTY_DESIGN,
+        ...v,
+        root: isObj(v.root) ? normalizeStep(v.root) : null,
+        activePreset: ap
+            ? { id: String(ap.id ?? ""), layer: String(ap.layer ?? ""), modified: ap.modified === true, canSave: ap.canSave === true }
+            : undefined,
+        presetsFile: typeof v.presetsFile === "string" && v.presetsFile ? v.presetsFile : undefined,
+    } as DesignState;
 }
 
 function normalizeStep(s: Record<string, any>): StepView {
@@ -252,6 +261,15 @@ export const act = {
     setFeature: (path: string, featureLayerId: string, enabled: boolean) => fire(Triggers.setFeature, path, featureLayerId, enabled),
     /** Map preview: fast sketch overlay or the real translucent ghost (models + surfaces). */
     setPreviewMode: (mode: "sketch" | "ghost") => fire(Triggers.setPreviewMode, mode),
+    /** Select a type (its single-layer recipe) and apply one of its presets. */
+    selectPreset: (layerId: string, presetId: string) => fire(Triggers.selectPreset, layerId, presetId),
+    /** Overwrite a custom preset, or save over a built-in, with the step's current settings + features. */
+    savePreset: (path: string, presetId: string) => fire(Triggers.savePreset, path, presetId),
+    savePresetAs: (path: string, name: string) => fire(Triggers.savePresetAs, path, name),
+    renamePreset: (layerId: string, presetId: string, name: string) => fire(Triggers.renamePreset, layerId, presetId, name),
+    /** Custom: delete. Saved-over built-in: reset to its shipped settings. */
+    deletePreset: (layerId: string, presetId: string) => fire(Triggers.deletePreset, layerId, presetId),
+    exportPresets: () => fire(Triggers.exportPresets),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */

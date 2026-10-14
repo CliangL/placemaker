@@ -1,0 +1,311 @@
+@use "../styles/tokens" as *;
+
+// Category ▸ Type ▸ Preset browser and the active-preset bar (PresetBrowser.tsx). Dense "engineering
+// tool" rows: 22rem each, indent shows the level, the selected type and active preset are accent-tinted.
+
+.browser {
+    @include col;
+    min-width: 0;
+}
+
+// ── search ──
+.search {
+    @include row;
+    min-width: 0;
+    height: 24rem;
+    padding: 0 2rem 0 7rem;
+    margin-bottom: 3rem;
+    border-radius: $radius;
+    background-color: $c-shade;
+    @include border(1rem, $c-line);
+}
+
+.searchInput {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 22rem;
+    margin-left: 6rem;
+    padding: 0;
+    @include border(0, transparent);
+    background-color: transparent;
+    font-size: $fs;
+    font-family: var(--fontFamily);
+    color: #ffffff;
+    outline-width: 0;
+}
+
+.clear {
+    width: 20rem;
+    height: 20rem;
+}
+
+.tree {
+    @include col;
+    min-width: 0;
+}
+
+.empty {
+    padding: 6rem 8rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+}
+
+// ── rows ──
+.row {
+    @include row;
+    @include button-reset;
+    min-width: 0;
+    height: 22rem;
+    padding: 0 6rem 0 4rem;
+    border-radius: $radius-s;
+    text-align: left;
+    overflow: hidden;
+    transition-property: background-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+    }
+    &:focus {
+        background-color: $c-surface-strong;
+        outline-width: 0;
+    }
+}
+
+.rowOn {
+    background-color: rgba(143, 209, 255, 0.16);
+    &:hover {
+        background-color: rgba(143, 209, 255, 0.22);
+    }
+}
+
+.name {
+    flex: 1 1 auto;
+    margin-left: 6rem;
+    font-size: $fs;
+    @include ellipsis;
+}
+
+.count {
+    flex-shrink: 0;
+    margin-left: 6rem;
+    font-size: $fs-s;
+    color: $c-text-faint;
+}
+
+.cat {
+    @include col;
+    min-width: 0;
+}
+
+.catRow {
+    margin-top: 1rem;
+}
+
+.catName {
+    font-size: $fs-s;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: $c-text-dim;
+}
+
+.catSel {
+    flex: 0 1 auto;
+    margin-left: 6rem;
+    font-size: $fs-s;
+    color: var(--accentColorNormal);
+    @include ellipsis;
+}
+
+.type {
+    @include col;
+    min-width: 0;
+}
+
+.typeRow {
+    padding-left: 15rem;
+}
+
+.typeIcon {
+    @include row;
+    justify-content: center;
+    width: 16rem;
+    height: 16rem;
+    border-radius: $radius-s;
+    flex-shrink: 0;
+}
+
+.typeName {
+    color: #ffffff;
+}
+
+.presets {
+    @include col;
+    min-width: 0;
+    margin: 1rem 0 3rem 22rem;
+    padding-left: 4rem;
+    border-left-width: 1rem;
+    border-left-style: solid;
+    border-left-color: $c-line-strong;
+}
+
+.presetRow {
+    padding-left: 6rem;
+}
+
+.radio {
+    width: 8rem;
+    height: 8rem;
+    flex-shrink: 0;
+    border-radius: 4rem;
+    @include border(1rem, $c-text-faint);
+}
+
+.radioOn {
+    background-color: var(--accentColorNormal);
+    @include border-color(var(--accentColorNormal));
+}
+
+.star {
+    margin-left: 5rem;
+}
+
+.badge {
+    flex-shrink: 0;
+    height: 15rem;
+    line-height: 15rem;
+    margin-left: 5rem;
+    padding: 0 5rem;
+    border-radius: 8rem;
+    background-color: rgba(255, 181, 71, 0.16);
+    font-size: 11rem;
+    color: $c-warning;
+    white-space: nowrap;
+}
+
+.dot {
+    width: 6rem;
+    height: 6rem;
+    flex-shrink: 0;
+    margin-left: 5rem;
+    border-radius: 3rem;
+    background-color: $c-warning;
+}
+
+// ── active preset bar ──
+.bar {
+    @include col;
+    min-width: 0;
+    margin-bottom: 4rem;
+    padding: 3rem 3rem 3rem 8rem;
+    border-radius: $radius;
+    background-color: rgba(0, 0, 0, 0.2);
+    @include border(1rem, $c-line);
+}
+
+.barRow {
+    @include row;
+    min-width: 0;
+    height: 24rem;
+}
+
+.barStar {
+    margin-right: 5rem;
+}
+
+.barName {
+    flex: 0 1 auto;
+    font-size: $fs;
+    font-weight: bold;
+    color: #ffffff;
+    @include ellipsis;
+}
+
+.modified {
+    flex-shrink: 0;
+    margin-left: 6rem;
+    font-size: $fs-s;
+    color: $c-warning;
+    white-space: nowrap;
+}
+
+.flex {
+    flex: 1 1 auto;
+    min-width: 4rem;
+}
+
+.barBtn {
+    margin-left: 2rem;
+}
+
+.nameForm {
+    @include row;
+    min-width: 0;
+    height: 24rem;
+}
+
+.nameInput {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 24rem;
+    padding: 0 8rem;
+    margin-right: 4rem;
+    border-radius: $radius;
+    background-color: $c-shade;
+    @include border(1rem, $c-line-strong);
+    font-size: $fs;
+    font-family: var(--fontFamily);
+    color: #ffffff;
+    outline-width: 0;
+}
+
+.menu {
+    @include col;
+    min-width: 0;
+    margin-top: 3rem;
+    padding-top: 3rem;
+    border-top-width: 1rem;
+    border-top-style: solid;
+    border-top-color: $c-line;
+}
+
+.menuItem {
+    padding-left: 4rem;
+}
+
+.menuDanger {
+    color: $c-danger;
+}
+
+.exported {
+    @include col;
+    min-width: 0;
+    margin-top: 3rem;
+    padding: 4rem 0 2rem 0;
+    border-top-width: 1rem;
+    border-top-style: solid;
+    border-top-color: $c-line;
+}
+
+.exportedHead {
+    @include row;
+    min-width: 0;
+}
+
+.exportedNote {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 6rem;
+    font-size: $fs-s;
+    color: #dff1ff;
+}
+
+// Long path: wraps anywhere instead of being cut.
+.path {
+    margin: 3rem 4rem 0 18rem;
+    font-size: 11rem;
+    color: $c-text-dim;
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: break-word;
+    user-select: text;
+}

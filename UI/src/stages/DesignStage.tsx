@@ -1,13 +1,14 @@
 // Stage 2 — what to make, then its options, inspector-style.
-//   Make: single types only (Parking, Plaza, Park, Campground, Roads) as small icon + name cards, three
-//   per row; descriptions in tooltips. Mixes are shelved in the UI (playtest 2) — the engine keeps them.
-//   Options: the type's header (presets, randomize, reset), Entrances (typed markers), then one foldable
+//   Make: one browser, Category ▸ Type ▸ Preset, with search (PresetBrowser.tsx). Mixes are shelved in
+//   the UI (playtest 2) — the engine keeps them.
+//   Options: the active-preset bar (Save / Save as / ⋯), the type's header (randomize, reset),
+//   Entrances (typed markers), then one foldable
 //   section per control group (only the first essential one open), then Features: a switch per
 //   built-in feature, whose own options fold out underneath when it is on.
 //   "Places inside": reserved slot for round 3, hidden for now.
 import React from "react";
 import classNames from "classnames";
-import { Catalog, DesignState, FeatureView, LayerType, RecipeInfo, StepView, ToolState } from "../contract";
+import { Catalog, DesignState, FeatureView, LayerType, StepView, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { entityIcon, layerColor } from "../lib/icons";
 import { humanize, TFunc, useT } from "../lib/l10n";
@@ -16,6 +17,7 @@ import { ErrorBoundary } from "../lib/errorBoundary";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Section, Switch } from "../components/common";
 import { ControlList } from "../controls/Controls";
+import { PresetBar, TypeBrowser } from "./PresetBrowser";
 import s from "./design.module.scss";
 
 export const layerName = (t: TFunc, l: LayerType) => t(l.name, humanize(l.name || l.id));
@@ -205,137 +207,6 @@ const Entrances = ({ step, layer, state }: { step: StepView; layer: LayerType; s
     );
 };
 
-// ───────────── type cards ─────────────
-
-/**
- * A recipe is a "mix" when its id names more than one layer ("roads-with-parks", "split-park-plaza",
- * "park-with-playground"); a single layer or a variant of one ("parking", "parking-green") is a type.
- */
-export function isMix(catalog: Catalog, r: RecipeInfo) {
-    if (r.custom) return true;
-    const ids = new Set(catalog.layers.map((l) => l.id.toLowerCase()));
-    const named = r.id
-        .toLowerCase()
-        .split(/[-_+|]+/)
-        .filter((tok) => ids.has(tok) || (tok.endsWith("s") && ids.has(tok.slice(0, -1))));
-    return named.length > 1;
-}
-
-/**
- * The Make row: recipes that ARE a single fill type (id equals a fill layer's id — park, plaza,
- * parking, campground, roads). Mixes and player recipes are shelved in the UI. Falls back to the
- * id heuristic when no recipe matches a layer id (older catalogs).
- */
-export function makeRecipes(catalog: Catalog): RecipeInfo[] {
-    const fills = new Set(catalog.layers.filter((l) => l.kind === "fill" && !l.hidden).map((l) => l.id.toLowerCase()));
-    const singles = catalog.recipes.filter((r) => !r.custom && fills.has(r.id.toLowerCase()));
-    return singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
-}
-
-const TypeCard = ({ r, on }: { r: RecipeInfo; on: boolean }) => {
-    const { t } = useT();
-    const color = layerColor(r.id);
-    const name = r.custom ? r.name : t(r.name, humanize(r.name || r.id));
-    const desc = r.description ? t(r.description, "") : "";
-    return (
-        <div className={s.cardCell}>
-            <Tip title={name} description={desc || undefined}>
-                <button
-                    type="button"
-                    data-testid={`recipe-${r.id}`}
-                    aria-pressed={on ? "true" : "false"}
-                    className={classNames(s.card, { [s.cardOn]: on })}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (!on) act.selectRecipe(r.id);
-                    }}
-                >
-                    <div className={s.cardIcon} style={{ backgroundColor: color }}>
-                        <Icon name={entityIcon(r.id, r.icon)} size={13} tint="dark" />
-                    </div>
-                    <div className={s.cardName}>{name}</div>
-                </button>
-            </Tip>
-        </div>
-    );
-};
-
-// Make-row groups: a type lands in a group by its id (no catalog field needed), unknown ids in "Other".
-export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
-    { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
-    { id: "gardens", key: "Placemaker.UI.MakeGroup.Gardens", en: "Gardens" },
-    { id: "squares", key: "Placemaker.UI.MakeGroup.Squares", en: "Squares" },
-    { id: "sports", key: "Placemaker.UI.MakeGroup.Sports", en: "Sports" },
-    { id: "water", key: "Placemaker.UI.MakeGroup.Water", en: "Water" },
-    { id: "nature", key: "Placemaker.UI.MakeGroup.Nature", en: "Nature" },
-    { id: "farms", key: "Placemaker.UI.MakeGroup.Farms", en: "Farms" },
-    { id: "events", key: "Placemaker.UI.MakeGroup.Events", en: "Events" },
-    { id: "industrial", key: "Placemaker.UI.MakeGroup.Industrial", en: "Industrial" },
-    { id: "transport", key: "Placemaker.UI.MakeGroup.Transport", en: "Transport" },
-    { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
-    { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
-    { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
-];
-
-/** Group of a recipe: the group its type declares, else guessed from the id. */
-export function recipeGroup(r: RecipeInfo): string {
-    if (r.group && MAKE_GROUPS.some((g) => g.id === r.group)) return r.group;
-    return makeGroupOf(r.id);
-}
-
-/** Group of a type id (checked in this order: "parking" before "park", "market square" before parks). */
-export function makeGroupOf(id: string): string {
-    const x = id.toLowerCase();
-    if (/parking|car-?park|garage|lot/.test(x)) return "parking";
-    if (/road|street|avenue|grid/.test(x)) return "roads";
-    if (/plaza|square|market|piazza|amphi|festival|fair/.test(x)) return "squares";
-    if (/park|garden|camp|reserve|nature|forest|picnic|arboret|cemetery|green|playground|sport|golf|beach|lido|promenade|allotment|meadow|zoo|dog|botanic|skate/.test(x)) return "parks";
-    return "other";
-}
-
-/** Up to this many types show as one flat grid; more are grouped (collapsible, remembered). */
-const FLAT_MAX = 6;
-
-const TypeCards = ({ catalog, design }: { catalog: Catalog; design: DesignState }) => {
-    const { t } = useT();
-    const list = makeRecipes(catalog);
-    if (list.length <= FLAT_MAX)
-        return (
-            <div className={s.cards} data-testid="recipes">
-                {list.map((r) => (
-                    <TypeCard key={r.id} r={r} on={r.id === design.recipeId} />
-                ))}
-            </div>
-        );
-    const groups = MAKE_GROUPS.map((g) => ({ ...g, items: list.filter((r) => recipeGroup(r) === g.id) })).filter((g) => g.items.length);
-    return (
-        <div className={s.makeGroups} data-testid="recipes" data-grouped="true">
-            {groups.map((g) => {
-                const sel = g.items.find((r) => r.id === design.recipeId);
-                const selName = sel ? (sel.custom ? sel.name : t(sel.name, humanize(sel.name || sel.id))) : "";
-                return (
-                    <Collapsible
-                        key={g.id}
-                        id={"make:" + g.id}
-                        testId={"make-group-" + g.id}
-                        title={t(g.key, g.en)}
-                        summary={selName || String(g.items.length)}
-                        defaultOpen
-                        nested
-                        className={s.makeGroup}
-                    >
-                        <div className={s.cards}>
-                            {g.items.map((r) => (
-                                <TypeCard key={r.id} r={r} on={r.id === design.recipeId} />
-                            ))}
-                        </div>
-                    </Collapsible>
-                );
-            })}
-        </div>
-    );
-};
-
 // ───────────── places inside (round 3 slot) ─────────────
 
 /**
@@ -465,25 +336,6 @@ const StepOptions = ({ catalog, design, state, step }: { catalog: Catalog; desig
             </div>
             {step.enabled ? (
                 <div className={s.stepBody}>
-                    {layer.presets.length ? (
-                        <div className={s.presets} data-testid="presets">
-                            <div className={s.presetsLabel}>{t("Placemaker.UI.Presets", "Presets")}</div>
-                            {layer.presets.map((p) => (
-                                <button
-                                    key={p.id}
-                                    type="button"
-                                    data-testid={`preset-${p.id}`}
-                                    className={s.presetBtn}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        act.applyPreset(step.path, p.id);
-                                    }}
-                                >
-                                    <div className={s.presetText}>{t(p.name, humanize(p.name || p.id))}</div>
-                                </button>
-                            ))}
-                        </div>
-                    ) : null}
                     {!step.ready && step.nextStep && !typed ? (
                         <Tip title={t(step.nextStep.key, humanize(step.nextStep.key), step.nextStep.args)}>
                             <div className={s.nextStep} data-testid="next-step">
@@ -517,7 +369,7 @@ export const DesignStage = ({ catalog, design, state }: { catalog: Catalog; desi
         <div className={s.stage} data-testid="stage-design">
             <Section title={t("Placemaker.UI.Make", "Make")} className={s.first}>
                 <ErrorBoundary name="recipes">
-                    <TypeCards catalog={catalog} design={design} />
+                    <TypeBrowser catalog={catalog} design={design} />
                 </ErrorBoundary>
             </Section>
             <PlacesInside />
@@ -525,6 +377,9 @@ export const DesignStage = ({ catalog, design, state }: { catalog: Catalog; desi
                 <div className={s.emptyNote}>{t("Placemaker.UI.PickRecipe", "Pick a type")}</div>
             ) : (
                 <div className={s.options} data-testid="options">
+                    <ErrorBoundary name="preset-bar">
+                        <PresetBar catalog={catalog} design={design} step={root} />
+                    </ErrorBoundary>
                     <ErrorBoundary name={"step-" + root.path}>
                         <StepOptions catalog={catalog} design={design} state={state} step={root} />
                     </ErrorBoundary>
