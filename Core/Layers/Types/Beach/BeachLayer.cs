@@ -226,7 +226,13 @@ namespace Placemaker.Core.Layers.Types.Beach
             float top = b.HasPath ? b.D : b.D + 2f;
             var band = shore.Band(0f, top);
             if (ctx.B("paint"))
+            {
                 foreach (var ring in band) TerrainPaint.Patch(ctx, ring, ctx.I("paintLayer"), 1f, 3f);
+                // Dunes are sand too: lighter paint fading into the vegetation behind.
+                if (ctx.S("backdrop") == "dunes")
+                    foreach (var ring in shore.Band(top + b.Hw + 0.5f, top + b.Hw + 2.5f + ctx.F("duneDepth")))
+                        TerrainPaint.Patch(ctx, ring, ctx.I("paintLayer"), 0.6f, 4f);
+            }
             if (ctx.B("sandSurface") && AssetAvailability.Require(ctx.Plan, AssetCategories.SurfaceSand, new[] { ctx.S("sandAsset") }, Keys.Category(AssetCategories.SurfaceSand)))
                 foreach (var ring in band) ctx.Surface(ring, SurfaceRole.Ground, AssetMix.One(ctx.S("sandAsset")), AssetCategories.SurfaceSand);
             if (ctx.S("backdrop") == "lawn")
@@ -624,40 +630,14 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         private static void HutsAndKiosks(Work b)
         {
-            var ctx = b.Ctx; var shore = b.Shore;
             if (!b.HasPath) return;
-            string mode = ctx.S("huts");
-            string hut = mode == "none" ? null : LeisureKit.Category(ctx, ctx.S("hutAsset"), AssetCategories.BeachHut, AssetCategories.GardenShed);
-            var hutAsset = AssetMix.One(ctx.S("hutAsset"));
-            float hd = b.Hw + 2.8f;
-            if (hut != null)
-            {
-                foreach (var line in b.Lines)
-                {
-                    float len = Shoreline.LengthOf(line);
-                    var places = new List<float>();
-                    if (mode == "row")
-                        for (float s = 4f; s < len - 4f; s += 3.6f) places.Add(s);
-                    else
-                    {
-                        int groups = math.max(1, (int)(len / 70f));
-                        for (int g = 0; g < groups; g++)
-                        {
-                            float c = (g + 0.5f) * len / groups + 9f;
-                            for (int k = -1; k <= 1; k++) places.Add(c + k * 3.6f);
-                        }
-                    }
-                    foreach (float s in places)
-                    {
-                        if (s < 0f || s > len) continue;
-                        var p = Shoreline.PointOn(line, s, out _);
-                        shore.Nearest(p, out var inw, out _);
-                        var q = p + inw * hd;
-                        if (LeisureKit.Put(ctx, b.Occ, q, Yaw(-inw), ObjectRole.Furniture, hutAsset, hut, 1.5f, Hashing.Mix(ctx.Seed, 0x4070u + (uint)b.Huts), 0.6f, 0.15f))
-                            b.Huts++;
-                    }
-                }
-            }
+            Kiosks(b);   // first: a long hut row would otherwise take every spot behind the path
+            Huts(b);
+        }
+
+        private static void Kiosks(Work b)
+        {
+            var ctx = b.Ctx; var shore = b.Shore;
             int kiosks = ctx.I("kiosks");
             if (kiosks <= 0) return;
             string kcat = LeisureKit.Category(ctx, "", AssetCategories.Kiosk);
@@ -667,7 +647,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             if (tops.Count == 0) foreach (var line in b.Lines) tops.Add(Shoreline.PointOn(line, Shoreline.LengthOf(line) * 0.5f, out _));
             for (int i = 0; i < kiosks * 2 && b.Kiosks < kiosks; i++)
             {
-                // Spread over the access junctions (centre ones first), then try the remaining ones.
+                // Spread over the access junctions, then try the remaining ones.
                 int idx = i < kiosks ? (int)((i + 0.5f) * tops.Count / kiosks) % tops.Count : (i * 3 + 1) % tops.Count;
                 var p = tops[idx];
                 shore.Nearest(p, out var inw, out _);
@@ -677,6 +657,41 @@ namespace Placemaker.Core.Layers.Types.Beach
                     var q = p + inw * (b.Hw + 4f) + tan * along;
                     if (LeisureKit.Put(ctx, b.Occ, q, Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), kcat, 2.5f, Hashing.Mix(ctx.Seed, 0x6105u + (uint)b.Kiosks), 0.8f, 0.3f))
                     { b.Kiosks++; break; }
+                }
+            }
+        }
+
+        private static void Huts(Work b)
+        {
+            var ctx = b.Ctx; var shore = b.Shore;
+            string mode = ctx.S("huts");
+            string hut = mode == "none" ? null : LeisureKit.Category(ctx, ctx.S("hutAsset"), AssetCategories.BeachHut, AssetCategories.GardenShed);
+            if (hut == null) return;
+            var hutAsset = AssetMix.One(ctx.S("hutAsset"));
+            float hd = b.Hw + 2.8f;
+            foreach (var line in b.Lines)
+            {
+                float len = Shoreline.LengthOf(line);
+                var places = new List<float>();
+                if (mode == "row")
+                    for (float s = 4f; s < len - 4f; s += 3.6f) places.Add(s);
+                else
+                {
+                    int groups = math.max(1, (int)(len / 70f));
+                    for (int g = 0; g < groups; g++)
+                    {
+                        float c = (g + 0.5f) * len / groups + 9f;
+                        for (int k = -1; k <= 1; k++) places.Add(c + k * 3.6f);
+                    }
+                }
+                foreach (float s in places)
+                {
+                    if (s < 0f || s > len) continue;
+                    var p = Shoreline.PointOn(line, s, out _);
+                    shore.Nearest(p, out var inw, out _);
+                    var q = p + inw * hd;
+                    if (LeisureKit.Put(ctx, b.Occ, q, Yaw(-inw), ObjectRole.Furniture, hutAsset, hut, 1.5f, Hashing.Mix(ctx.Seed, 0x4070u + (uint)b.Huts), 0.6f, 0.15f))
+                        b.Huts++;
                 }
             }
         }
