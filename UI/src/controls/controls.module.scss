@@ -306,3 +306,28 @@
 .editorTight {
     flex: 0 0 auto;
 }
+
+// ── two columns (wide panel): cells pair up via flex-wrap, spaced by padding (Gameface has no gap) ──
+.grid {
+    @include row(flex-start);
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-left: -6rem;
+    margin-right: -6rem;
+}
+
+.half {
+    box-sizing: border-box;
+    width: 50%;
+    min-width: 0;
+    padding-left: 6rem;
+    padding-right: 6rem;
+}
+
+.full {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding-left: 6rem;
+    padding-right: 6rem;
+}

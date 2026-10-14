@@ -58,3 +58,16 @@ export function useOpen(key: string, def: boolean): [boolean, (open: boolean) =>
     const set = useCallback((open: boolean) => setOpen(key, open), [key]);
     return [isOpen(key, def), set];
 }
+
+/** Open/closed lookups that re-render the caller whenever any section folds (layouts that pack folded sections). */
+export function useSections(): (key: string, def: boolean) => boolean {
+    const [, bump] = useState(0);
+    useEffect(() => {
+        const l = () => bump((n) => n + 1);
+        listeners.add(l);
+        return () => {
+            listeners.delete(l);
+        };
+    }, []);
+    return isOpen;
+}

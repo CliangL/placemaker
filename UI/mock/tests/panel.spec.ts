@@ -40,7 +40,7 @@ test("docked right, tall, near-opaque; header drag moves it, position is remembe
     let b = (await wrap.boundingBox())!;
     expect(vp.width - (b.x + b.width)).toBeLessThan(20); // right edge
     expect(b.width).toBeGreaterThanOrEqual(380); // compact (round 3)
-    expect(b.width).toBeLessThanOrEqual(420);
+    expect(b.width).toBeLessThanOrEqual(580); // 560rem default on wide screens
     expect(b.y).toBeGreaterThan(40); // below the top bar
     expect(b.height).toBeGreaterThan(vp.height * 0.7); // tall
     expect(b.y + b.height).toBeLessThan(vp.height - 90); // above the bottom toolbar

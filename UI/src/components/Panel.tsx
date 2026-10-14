@@ -24,6 +24,7 @@ import { DesignStage, markerLabel } from "../stages/DesignStage";
 import { BuildingStage, ReviewStage } from "../stages/ReviewStage";
 import { ManageStage } from "../stages/ManageStage";
 import { Btn, Icon, Keys, Segmented } from "./common";
+import { layoutFor, MAX_SHARE, MIN_REM, NARROW_REM, PanelLayoutContext, WIDE_DEFAULT_REM, WIDE_SCREEN_PX } from "../lib/layout";
 import { AssetPickerCard, PickerContext, PickerRequest } from "./picker";
 import s from "./panel.module.scss";
 
@@ -33,11 +34,10 @@ const STAGES: { id: Stage; key: string; en: string }[] = [
     { id: "review", key: "Placemaker.UI.Stage.Review", en: "Review" },
 ];
 
-// ───────────── position (dock / drag) ─────────────
+// ───────────── position (dock / drag) and width (resize) ─────────────
 
 const POS_KEY = "placemaker.panelPos.v2";
-/** Panel width in rem (keep in sync with .wrap in panel.module.scss). */
-export const PANEL_REM = 400;
+const WIDTH_KEY = "placemaker.panelWidth.v1";
 /** Docked insets in rem (keep in sync with .wrap): below the top bar, above the bottom toolbar. */
 const DOCK_TOP = 64;
 const DOCK_BOTTOM = 112;
@@ -65,14 +65,45 @@ function savePos(p: Pos) {
     }
 }
 
+/** The player's chosen width in rem, or null (= the default for this screen). */
+function loadWidth(): number | null {
+    try {
+        const raw = window.localStorage?.getItem(WIDTH_KEY);
+        const v = raw ? Number(raw) : NaN;
+        return isFinite(v) && v > 0 ? v : null;
+    } catch {
+        return null;
+    }
+}
+
+function saveWidth(w: number | null) {
+    try {
+        if (w) window.localStorage?.setItem(WIDTH_KEY, String(Math.round(w)));
+        else window.localStorage?.removeItem(WIDTH_KEY);
+    } catch {
+        /* not remembered */
+    }
+}
+
+/** Default width: wider on big screens (≥ 1600 px), the classic 400rem otherwise. */
+const defaultWidth = () => (window.innerWidth >= WIDE_SCREEN_PX ? WIDE_DEFAULT_REM : NARROW_REM);
+
 function isInsideButton(el: HTMLElement | null, stop: HTMLElement | null) {
     for (let e = el; e && e !== stop; e = e.parentElement) if (e.tagName === "BUTTON" || e.tagName === "INPUT") return true;
     return false;
 }
 
+/** Pixels per rem: the root font size (the game scales it with resolution and UI scale). */
+function remPx() {
+    const fs = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return fs > 0 ? fs : window.innerHeight / 1080;
+}
+
 function usePanelPosition() {
     const [pos, setPos] = useState<Pos>(loadPos);
     const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+    const [chosen, setChosen] = useState<number | null>(loadWidth);
+    const [resizing, setResizing] = useState<number | null>(null);
     const [, bump] = useState(0);
     const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,16 +113,16 @@ function usePanelPosition() {
         return () => window.removeEventListener("resize", onResize);
     }, []);
 
-    const remPx = () => {
-        const w = wrapRef.current?.getBoundingClientRect().width;
-        return w && w > 0 ? w / PANEL_REM : window.innerHeight / 1080;
-    };
+    /** Width limits in rem: at least MIN_REM, at most MAX_SHARE of the screen. */
+    const maxWidth = () => Math.max(MIN_REM, Math.floor((window.innerWidth * MAX_SHARE) / remPx()));
+    const clampWidth = (w: number) => Math.max(MIN_REM, Math.min(maxWidth(), Math.round(w)));
+    const width = clampWidth(resizing ?? chosen ?? defaultWidth());
 
     /** Clamped pixel position: the whole width and at least the header stay on screen. */
-    const clamp = (x: number, y: number) => {
+    const clamp = (x: number, y: number, w = width) => {
         const r = remPx();
         return {
-            x: Math.max(0, Math.min(window.innerWidth - PANEL_REM * r, x)),
+            x: Math.max(0, Math.min(window.innerWidth - w * r, x)),
             y: Math.max(0, Math.min(window.innerHeight - 140 * r, y)),
         };
     };
@@ -125,25 +156,81 @@ function usePanelPosition() {
         window.addEventListener("mouseup", up);
     };
 
+    /** Drag the left edge: the right edge stays put (docked: the screen edge), the width follows. */
+    const onResizeMouseDown = (e: React.MouseEvent<HTMLElement>) => {
+        if (e.button !== 0) return;
+        const rect = wrapRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const r = remPx();
+        const sx = e.clientX;
+        const start = width;
+        const floating = !!pos;
+        const at = (ev: MouseEvent) => clampWidth(start + (sx - ev.clientX) / r);
+        const place = (w: number) => (floating ? clamp(rect.right - w * r, rect.top, w) : null);
+        const move = (ev: MouseEvent) => {
+            const w = at(ev);
+            setResizing(w);
+            const c = place(w);
+            if (c) setDrag(c);
+        };
+        const up = (ev: MouseEvent) => {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("mouseup", up);
+            const w = at(ev);
+            saveWidth(w);
+            setChosen(w);
+            setResizing(null);
+            const c = place(w);
+            if (c) {
+                const p = { fx: c.x / window.innerWidth, fy: c.y / window.innerHeight };
+                savePos(p);
+                setPos(p);
+                setDrag(null);
+            }
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+    };
+
+    /** Double-click the edge: back to the default width for this screen. */
+    const resetWidth = () => {
+        saveWidth(null);
+        setChosen(null);
+    };
+
     const reset = () => {
         savePos(null);
         setPos(null);
         setDrag(null);
     };
 
-    let style: React.CSSProperties | undefined;
+    const r = remPx();
+    let style: React.CSSProperties = { width: width + "rem" };
     let centerX = window.innerWidth; // docked right
     if (drag || pos) {
         const c = drag ?? clamp((pos as { fx: number }).fx * window.innerWidth, (pos as { fy: number }).fy * window.innerHeight);
-        const r = remPx();
         // Same height as when docked, but never past the bottom of the screen.
         const docked = window.innerHeight - (DOCK_TOP + DOCK_BOTTOM) * r;
         const height = Math.max(140 * r, Math.min(docked, window.innerHeight - c.y - 12 * r));
-        style = { left: c.x + "px", top: c.y + "px", right: "auto", bottom: "auto", height: height + "px" };
-        centerX = c.x + (PANEL_REM * r) / 2;
+        style = { ...style, left: c.x + "px", top: c.y + "px", right: "auto", bottom: "auto", height: height + "px" };
+        centerX = c.x + (width * r) / 2;
     }
     const side: TipDirection = centerX > window.innerWidth / 2 ? "left" : "right";
-    return { wrapRef, style, floating: !!(drag || pos), dragging: !!drag, onHeaderMouseDown, reset, side };
+    return {
+        wrapRef,
+        style,
+        floating: !!(drag || pos),
+        dragging: !!drag && resizing === null,
+        resizing: resizing !== null,
+        onHeaderMouseDown,
+        onResizeMouseDown,
+        resetWidth,
+        reset,
+        side,
+        width,
+    };
 }
 
 // ───────────── pieces ─────────────
@@ -474,6 +561,7 @@ export const PlacemakerPanel = () => {
     const [ack, setAck] = useState(false);
     const permKey = useMemo(() => JSON.stringify(summary.permanent), [summary.permanent]);
     const position = usePanelPosition();
+    const layout = useMemo(() => layoutFor(position.width), [position.width]);
 
     useEffect(() => setAck(false), [permKey, state.stage === "review"]);
     useEffect(() => {
@@ -629,6 +717,7 @@ export const PlacemakerPanel = () => {
     return (
         <PickerContext.Provider value={pickerCtx}>
             <TipDirectionContext.Provider value={position.side}>
+                <PanelLayoutContext.Provider value={layout}>
                 <div className={classNames(s.dock, { [s.rtl]: rtl })} data-testid="placemaker-dock">
                     {picker ? <div className={s.backdrop} data-testid="picker-backdrop" onMouseDown={closePicker} /> : null}
                     <div
@@ -637,7 +726,25 @@ export const PlacemakerPanel = () => {
                         style={position.style}
                         data-testid="placemaker-wrap"
                         data-docked={position.floating ? "false" : "true"}
+                        data-width={position.width}
+                        data-cols={layout.wide ? "2" : "1"}
                     >
+                        {collapsed ? null : (
+                            <Tip
+                                title={t("Placemaker.UI.Resize", "Resize the panel")}
+                                description={t("Placemaker.UI.ResizeTip", "Drag to make it wider or narrower. Double-click for the default width.")}
+                            >
+                                <div
+                                    className={classNames(s.resize, { [s.resizeActive]: position.resizing })}
+                                    data-testid="panel-resize"
+                                    onMouseDown={position.onResizeMouseDown}
+                                    onDoubleClick={(e) => {
+                                        e.stopPropagation();
+                                        position.resetWidth();
+                                    }}
+                                />
+                            </Tip>
+                        )}
                         <div className={classNames(s.panel, { [s.panelCompact]: collapsed })} data-testid="placemaker-panel" data-stage={state.stage}>
                             <div className={s.panelTint}>
                                 {header}
@@ -699,6 +806,7 @@ export const PlacemakerPanel = () => {
                         ) : null}
                     </div>
                 </div>
+                </PanelLayoutContext.Provider>
             </TipDirectionContext.Provider>
         </PickerContext.Provider>
     );
