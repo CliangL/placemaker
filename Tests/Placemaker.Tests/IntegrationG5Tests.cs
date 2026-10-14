@@ -78,6 +78,8 @@ namespace Placemaker.Tests
             Assert.True(ground(centre) > 12f, "raised centre " + ground(centre));
             var child = plan.Layers.Skip(1).FirstOrDefault(l => l.GeneratorId == "picnic");
             Assert.NotNull(child);
+            Assert.NotEmpty(child.Objects);
+            Assert.Contains(child.Objects, o => ground(o.Position.xz) > 10.5f);
             foreach (var o in child.Objects)
                 Assert.True(math.abs(o.Position.y - ground(o.Position.xz)) < 1e-3f, $"object at {o.Position} vs ground {ground(o.Position.xz)}");
         }
