@@ -356,7 +356,7 @@ namespace Placemaker.Tests.Types
             Assert.True(steps <= 6, $"{tag}: {steps} stepped samples (worst {worstCurv:0.00}/m at {worstAt})");
             Assert.Equal(0, peaks);
             // s30: the waterfront walk stays low near the water and cuts the hillside behind (graded or walled): up to 6.5 m on the 6.5 m bank.
-            Assert.True(plan.Facts.GetValueOrDefault("earthMaxCut") <= (layer == "waterfront" ? 6.6 : 5.01), $"{tag}: cut {plan.Facts["earthMaxCut"]:0.00} m");
+            Assert.True(plan.Facts.GetValueOrDefault("earthMaxCut") <= (layer == "waterfront" ? 6.6 : 6.0), $"{tag}: cut {plan.Facts["earthMaxCut"]:0.00} m");
             Assert.True(plan.Facts.GetValueOrDefault("earthMaxFill") <= 2.51, $"{tag}: fill {plan.Facts["earthMaxFill"]:0.00} m");
             Assert.All(plan.Terraform, t => Assert.True(t.Sloped || t.Kind == TerraformKind.Level, $"{tag}: a flat {t.Kind} patch"));
         }

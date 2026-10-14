@@ -468,20 +468,8 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             return room[i];
         }
 
-        /// <summary>Waterline offset over a run, smoothed until its radius is ≥ MinRadius (σ grows, at most three times).</summary>
-        private static List<float2[]> SmoothFromWater(Shoreline shore, float dw, float2 run, float sigma, Func<float2, float> minDw, Func<float2, bool> keep, float minLength)
-        {
-            List<float2[]> lines = null;
-            for (int k = 0; k < 4; k++)
-            {
-                lines = ShoreWalk.FromWater(shore, dw, run.x, run.y, sigma, minDw, keep, minLength);
-                bool ok = true;
-                foreach (var l in lines) if (ShoreWalk.MinRadius(l) < MinRadius) ok = false;
-                if (ok) break;
-                sigma *= 1.4f;
-            }
-            return lines;
-        }
+        private static List<float2[]> SmoothFromWater(Shoreline shore, float dw, float2 run, float sigma, Func<float2, float> minDw, Func<float2, bool> keep, float minLength) =>
+            ShoreWalk.SmoothFromWater(shore, dw, run, sigma, minDw, keep, minLength);
 
         /// <summary>A curve offset from another, then smoothed so the inside of a bend does not tighten below MinRadius.</summary>
         private static float2[] SmoothOffset(ShoreWalk c, float d)

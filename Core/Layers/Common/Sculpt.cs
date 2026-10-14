@@ -172,7 +172,7 @@ namespace Placemaker.Core.Layers.Common
         /// Limits the grade of what we CHANGED: between neighbours the target may differ by at most maxGrade·cell plus
         /// the original ground's own difference (a natural slope is not ours to fix); the node changed more gives way.
         /// </summary>
-        public void LimitGrade(float maxGrade, int passes = 12)
+        public void LimitGrade(float maxGrade, int passes = 12, bool absolute = false)
         {
             float step = maxGrade * Cell;
             for (int pass = 0; pass < passes; pass++)
@@ -188,7 +188,9 @@ namespace Placemaker.Core.Layers.Common
                             int ii = i + (n == 0 ? 1 : n == 1 ? -1 : 0), jj = j + (n == 2 ? 1 : n == 3 ? -1 : 0);
                             if (ii < 0 || jj < 0 || ii >= Nx || jj >= Ny) continue;
                             int m = jj * Nx + ii;
-                            float allowed = step + math.abs(Base[k] - Base[m]);
+                            // (s30) absolute: never steeper than maxGrade or the original slope there, whichever is steeper (the sum let a
+                            // cut into a 30 % bank reach 60 %, a sheet over one heightmap texel).
+                            float allowed = absolute ? math.max(step, math.abs(Base[k] - Base[m])) : step + math.abs(Base[k] - Base[m]);
                             float d = Target[k] - Target[m];
                             if (math.abs(d) <= allowed + 1e-4f) continue;
                             if (math.abs(Offset(k)) < math.abs(Offset(m)) && Free[m]) continue;   // the other node yields on its turn

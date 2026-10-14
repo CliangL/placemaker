@@ -87,25 +87,39 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// Signed distance from the curve (positive inland), the arc length of the closest point, and how far p lies
         /// beyond the curve's ends along the end tangent (0 alongside it).
         /// </summary>
+        private float4[] _box;
+        private int _last;
+
         public float Signed(float2 p, out float s, out float beyond)
         {
             // The curve extended by straight rays along its end tangents: the closest point moves continuously past the ends
-            // (a closest point that jumped from the end to an interior bend made the field step there).
+            // (a closest point that jumped from the end to an interior bend made the field step there). Bounding-box pruning
+            // with a warm start from the previous query (the field asks for every node of a 2 m grid).
             const float Ray = 400f;
             int n = Line.Length;
-            float best = float.MaxValue; int bk = 0; float bt = 0f;
+            if (_box == null)
+            {
+                _box = new float4[n + 1];
+                for (int k = -1; k < n; k++) { Seg(k, out var a, out var b); _box[k + 1] = new float4(math.min(a, b), math.max(a, b)); }
+            }
+            float Dist(int k, out float t)
+            {
+                Seg(k, out var a, out var b);
+                var ab = b - a; float l2 = math.lengthsq(ab);
+                t = l2 > 1e-9f ? math.saturate(math.dot(p - a, ab) / l2) : 0f;
+                return math.distancesq(p, a + ab * t);
+            }
+            int bk = math.clamp(_last, -1, n - 1);
+            float best = Dist(bk, out float bt);
             for (int k = -1; k < n; k++)
             {
-                float2 a, b;
-                if (k == -1) { b = Line[0]; a = b - Tan(0) * Ray; }
-                else if (k == n - 1) { a = Line[n - 1]; b = a + Tan(n - 2) * Ray; }
-                else { if (k + 1 >= n) break; a = Line[k]; b = Line[k + 1]; }
-                var ab = b - a;
-                float l2 = math.lengthsq(ab);
-                float t = l2 > 1e-9f ? math.saturate(math.dot(p - a, ab) / l2) : 0f;
-                float d = math.distancesq(p, a + ab * t);
-                if (d < best) { best = d; bk = k; bt = t; }
+                var bx = _box[k + 1];
+                float dx = math.max(0f, math.max(bx.x - p.x, p.x - bx.z)), dy = math.max(0f, math.max(bx.y - p.y, p.y - bx.w));
+                if (dx * dx + dy * dy > best) continue;
+                float d = Dist(k, out float t);
+                if (d < best || d == best && k < bk) { best = d; bk = k; bt = t; }
             }
+            _last = bk;
             float2 q, tan;
             beyond = 0f;
             if (bk == -1) { tan = Tan(0); q = Line[0] - tan * Ray * (1f - bt); beyond = Ray * (1f - bt); s = 0f; }
@@ -114,6 +128,13 @@ namespace Placemaker.Core.Layers.Types.Beach
             var rel = p - q;
             float cross = tan.x * rel.y - tan.y * rel.x;
             return cross >= 0f ? math.sqrt(best) : -math.sqrt(best);
+
+            void Seg(int k, out float2 a, out float2 b)
+            {
+                if (k == -1) { b = Line[0]; a = b - Tan(0) * Ray; }
+                else if (k == n - 1) { a = Line[n - 1]; b = a + Tan(n - 2) * Ray; }
+                else { a = Line[k]; b = Line[k + 1]; }
+            }
         }
 
         /// <summary>Polyline parallel to the curve at signed offset d (positive inland), loop-free.</summary>
@@ -229,6 +250,27 @@ namespace Placemaker.Core.Layers.Types.Beach
             return result;
         }
 
+
+        /// <summary>Smallest radius a walk or an edge curve may have (m).</summary>
+        public const float MinCurveRadius = 40f;
+
+        /// <summary>
+        /// <see cref="FromWater"/>, smoothed harder (σ × 1.4, at most three times) until every piece's radius is ≥
+        /// <see cref="MinCurveRadius"/>: a promenade or a deck never follows the waterline's small wiggles.
+        /// </summary>
+        public static List<float2[]> SmoothFromWater(Shoreline shore, float dw, float2 run, float sigma, Func<float2, float> minDw, Func<float2, bool> keep, float minLength)
+        {
+            List<float2[]> lines = null;
+            for (int k = 0; k < 4; k++)
+            {
+                lines = FromWater(shore, dw, run.x, run.y, sigma, minDw, keep, minLength);
+                bool ok = true;
+                foreach (var l in lines) if (MinRadius(l) < MinCurveRadius) ok = false;
+                if (ok) break;
+                sigma *= 1.4f;
+            }
+            return lines;
+        }
         /// <summary>A smooth envelope over a profile of needs: max over j of need_j · bump(|s_i − s_j| / width).</summary>
         public static float[] Dilate(float[] need, float spacing, float width)
         {

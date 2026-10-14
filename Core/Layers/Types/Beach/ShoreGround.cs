@@ -224,11 +224,36 @@ namespace Placemaker.Core.Layers.Types.Beach
             };
         }
 
+        private readonly List<(float2[] line, Func<float, float> profile, float hw, float blend)> _benches = new List<(float2[], Func<float, float>, float, float)>();
+
+        /// <summary>
+        /// (s30) Walk benches are laid again just before emission: pads, ramps, smoothing and grade relaxation placed after a
+        /// walk tilted the band under it (a net flattens its own width, so a tilted band left a lip along its edge).
+        /// </summary>
+        private void ReapplyBenches()
+        {
+            foreach (var (line, profile, hw, blend) in _benches)
+            {
+                // Its banks as wide as the height it now has to make up (≤ ~30 %), never a lip.
+                float dev = 0f, s = 0f;
+                for (int i = 0; i < line.Length; i++)
+                {
+                    if (i > 0) s += math.distance(line[i - 1], line[i]);
+                    var t = math.normalizesafe(line[math.min(i + 1, line.Length - 1)] - line[math.max(0, i - 1)]);
+                    var nn = new float2(-t.y, t.x) * (hw + blend);
+                    float h = profile(s);
+                    dev = math.max(dev, math.max(math.abs(Sculpt.HeightAt(line[i] + nn) - h), math.abs(Sculpt.HeightAt(line[i] - nn) - h)));
+                }
+                Sculpt.Corridor(line, profile, hw, math.max(blend, dev / 0.18f));
+            }
+        }
+
         /// <summary>A walk's level bench: <see cref="ProfileAlong"/>, flattened across the walk, blended back over <paramref name="blend"/> m.</summary>
         public Func<float, float> Bench(float2[] line, float halfWidth, float blend, float smoothing = 14f, float maxGrade = TerrainSurvey.WalkGrade, float minAboveWater = 0.6f)
         {
             var profile = ProfileAlong(line, halfWidth, smoothing, maxGrade, minAboveWater);
             Sculpt.Corridor(line, profile, halfWidth, blend);
+            _benches.Add((line, profile, halfWidth, blend));
             return profile;
         }
 
@@ -314,7 +339,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             Sculpt.Smooth(2, 0.45f);
             Sculpt.LimitEarthwork(maxCut, maxFill);
             Sculpt.FadeOut(fade);
-            Sculpt.LimitGrade(maxGrade);
+            Sculpt.LimitGrade(maxGrade, 24, true);
             _lockedDist = null;
         }
 
@@ -322,7 +347,9 @@ namespace Placemaker.Core.Layers.Types.Beach
         public void Ramp(float2 a, float ha, float2 b, float hb, float halfWidth, float blend)
         {
             float len = math.max(0.1f, math.distance(a, b));
-            Sculpt.Corridor(new[] { a, b }, s => math.lerp(ha, hb, math.saturate(s / len)), halfWidth, blend);
+            Func<float, float> rp = s => math.lerp(ha, hb, math.saturate(s / len));
+            Sculpt.Corridor(new[] { a, b }, rp, halfWidth, blend);
+            _benches.Add((new[] { a, b }, rp, halfWidth, blend));
         }
 
 
@@ -480,7 +507,8 @@ namespace Placemaker.Core.Layers.Types.Beach
                 float hf = H(from), ht = H(to);
                 if (math.abs(hf - ht) / best > TerrainSurvey.RampGrade) continue;
                 if (Ctx.LayerRegion.CrossesBoundary(from, to, true)) continue;
-                Sculpt.Corridor(new[] { from, to }, s => math.lerp(hf, ht, math.saturate(s / best)), hw + 1.5f, 5f);
+                Func<float, float> sp = s => math.lerp(hf, ht, math.saturate(s / best));
+                Sculpt.Corridor(new[] { from, to }, sp, hw + 1.5f, 5f);
                 LeisureKit.Path(Ctx, occ, from, to, role, asset);
                 reached[i] = true;
             }
@@ -513,6 +541,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         public TerrainResult FinishField(float borderGrade)
         {
             Sculpt.CapToBorder(borderGrade);
+            ReapplyBenches();
             var e = Sculpt.Measure();
             Ctx.Plan.Facts["earthMaxCut"] = e.MaxCut;
             Ctx.Plan.Facts["earthMaxFill"] = e.MaxFill;
@@ -537,13 +566,15 @@ namespace Placemaker.Core.Layers.Types.Beach
             Sculpt.CapToBorder(0.25f);
             Sculpt.LimitGrade(maxGrade);
             if (Sculpt.LimitEarthwork(maxCut, maxFill)) Ctx.Issue(IssueSeverity.Info, EarthworkKey, (int)math.round(maxCut), (int)math.round(maxFill));
+            ReapplyBenches();
+            Sculpt.CapToBorder(0.25f);
             var e = Sculpt.Measure();
             Ctx.Plan.Facts["earthMaxCut"] = e.MaxCut;
             Ctx.Plan.Facts["earthMaxFill"] = e.MaxFill;
             Ctx.Plan.Facts["earthCut"] = e.CutVolume;
             Ctx.Plan.Facts["earthFill"] = e.FillVolume;
             Ctx.Plan.Facts["terrainRoughness"] = Sculpt.Roughness();
-            Result = Sculpt.Emit(Ctx, Clips);
+            Result = Sculpt.Emit(Ctx, Clips, Sculpt.MinChange, 2);
             Sculpt.Resnap(Ctx);
             DropTiltedFurniture();
             return Result;
