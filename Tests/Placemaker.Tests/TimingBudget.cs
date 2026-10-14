@@ -11,6 +11,7 @@ namespace Placemaker.Tests
     /// Scale (first that applies):
     ///   PLACEMAKER_TIMING_SCALE=&lt;factor&gt;   explicit factor (e.g. 0 or "off" disables the budgets)
     ///   CI / PLACEMAKER_PARALLEL set        ×4 (CI runners, several test runs at once)
+    ///   another testhost process running    ×3 (parallel worktrees on one machine)
     ///   ≤ 2 logical processors              ×2
     ///   otherwise                           ×1
     /// Timing classes still run in TimingCollection (sequential, after the parallel tests).
@@ -32,8 +33,21 @@ namespace Placemaker.Tests
                 if (double.TryParse(env, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) && f >= 0) return f;
             }
             if (Set("CI") || Set("PLACEMAKER_PARALLEL") || Set("TF_BUILD") || Set("GITHUB_ACTIONS")) return 4;
+            // Another test run on this machine (parallel worktrees / builders) competes for the cores.
+            if (OtherTestRuns() > 0) return 3;
             if (Environment.ProcessorCount <= 2) return 2;
             return 1;
+        }
+
+        private static int OtherTestRuns()
+        {
+            try
+            {
+                int self = System.Diagnostics.Process.GetCurrentProcess().Id, n = 0;
+                foreach (var p in System.Diagnostics.Process.GetProcessesByName("testhost")) { if (p.Id != self) n++; p.Dispose(); }
+                return n;
+            }
+            catch (Exception) { return 0; }
         }
 
         private static bool Set(string name)
