@@ -60,5 +60,14 @@
   "Placemaker.Plaza.Preset.green": "Green square",
   "Placemaker.Plaza.Issue.NoRoomForAmenity": "There is no free room for the {0} on this square.",
   "Placemaker.Plaza.Issue.AmenityMoved": "The {0} did not fit at the chosen position and was placed elsewhere.",
-  "Placemaker.Plaza.Issue.TooSmallForLevels": "The square is too small for these levels (needs about 24 × 16 m)."
+  "Placemaker.Plaza.Issue.TooSmallForLevels": "The square is too small for these levels (needs about 24 × 16 m).",
+  "Placemaker.Plaza.paveStyle": "Paving style",
+  "Placemaker.Plaza.paveStyle.Tooltip": "The stones the square is laid in: field, framing bands, light accents and dark inlays. Automatic follows the square's character.",
+  "Placemaker.Plaza.paveStyle.auto": "Automatic",
+  "Placemaker.Plaza.paveStyle.civic": "Civic grey",
+  "Placemaker.Plaza.paveStyle.warm": "Warm sandstone",
+  "Placemaker.Plaza.paveStyle.garden": "Garden brick",
+  "Placemaker.Plaza.paveStyle.modern": "Modern slabs",
+  "Placemaker.Plaza.paveStyle.cobble": "Old-town cobbles",
+  "Placemaker.Plaza.Issue.NoLawn": "No room for lawns between the axes; make the square bigger or lower the lawn share."
 }

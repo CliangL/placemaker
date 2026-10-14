@@ -473,7 +473,8 @@ namespace Placemaker.Tests
                     break;
                 case "civic":
                     Assert.Contains(plan.Objects, o => o.Category == AssetCategories.Bollard);
-                    Assert.Contains(plan.Objects, o => o.Category == AssetCategories.DecalPaving);
+                    // Art pass a2: the pattern is laid in real paving (several stones), not decals.
+                    Assert.True(plan.Surfaces.Select(x => x.Asset.Id).Distinct().Count() >= 3);
                     break;
                 case "cafe":
                     Assert.Contains(plan.Objects, o => o.Category == AssetCategories.CafeSeating);
