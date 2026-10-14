@@ -110,8 +110,8 @@ namespace Placemaker.Core.Layers.Park
             var rng = Hashing.Rng(s.Seed, 0x3c6ef372u);
             var region = s.LayerRegion;
             float side = math.sqrt(region.Area);
-            float baseRadius = math.clamp(side * 0.16f, 12f, 30f);
-            float largest = math.max(8f, side * 0.28f);
+            float baseRadius = math.clamp(side * 0.16f, 12f, 30f) * style.GroveScale;
+            float largest = math.max(8f, side * 0.28f) * style.GroveScale;
             float budget = region.Area * style.GroveCoverage;
             float covered = 0;
             for (int attempt = 0; attempt < 4000 && s.Groves.Count < MaxGroves && (covered < budget || s.Groves.Count < 2); attempt++)
@@ -119,7 +119,7 @@ namespace Placemaker.Core.Layers.Park
                 var g = new Grove
                 {
                     Radius = math.clamp(baseRadius * (0.45f + 1.25f * math.pow(rng.NextFloat(), 1.8f)), 6f, largest),
-                    Aspect = rng.NextFloat(0.55f, 1f),
+                    Aspect = rng.NextFloat(style.GroveAspectMin, 1f),
                     Rotation = rng.NextFloat(0f, math.PI),
                     Lobes = rng.NextInt(2, 4),
                     FineLobes = rng.NextInt(4, 7),
@@ -148,6 +148,15 @@ namespace Placemaker.Core.Layers.Park
         {
             if (target <= 0) return;
             if (style.Formal) { FormalVegetation(s, target, tree, belt); return; }
+            if (style.Grid) { GridVegetation(s, target, tree, belt); return; }
+            if (style.RowBelt && belt && tree)
+            {
+                // Street-tree row first (its share of the target); the rest plants naturally without a band.
+                var rowRng = Hashing.Rng(s.Seed, 0xB017u);
+                target -= Row(s, (int)math.round(target * style.TreeBeltShare), 5f, 9f, true, rowRng.NextUInt(), ref rowRng);
+                belt = false;
+                if (target <= 0) return;
+            }
             var rng = Hashing.Rng(s.Seed, tree ? 0x51f15e21u : 0x9e3779b9u);
             var region = s.LayerRegion;
             var beltShape = belt ? new Belt(region, Hashing.Mix(s.Seed, 0x1234567u)) : null;
@@ -155,6 +164,7 @@ namespace Placemaker.Core.Layers.Park
             float baseSpacing = tree ? 7.5f : 4f;
             float groveShare = s.Groves.Count > 0 ? (tree ? style.TreeGroveShare : style.BushGroveShare) : 0f;
             float beltShare = belt ? (tree ? style.TreeBeltShare : style.BushBeltShare) : 0f;
+            float pathShare = s.Curves.Count > 0 ? (tree ? style.TreePathShare : style.BushPathShare) : 0f;
             var weights = new float[s.Groves.Count];
             float totalWeight = 0;
             for (int i = 0; i < s.Groves.Count; i++) weights[i] = totalWeight += s.Groves[i].Area;
@@ -192,6 +202,17 @@ namespace Placemaker.Core.Layers.Park
                     p = beltShape.Point(along, boundaryClearance + beltShape.MaxDepth(tree) * beltShape.DepthFactor(along) * math.pow(rng.NextFloat(), 0.8f));
                     variant = accent ? randomVariant : beltShape.SectionVariant(along, beltSpecies);
                     spacing = baseSpacing;
+                }
+                else if (source < groveShare + beltShare + pathShare && s.Curves.Count > 0)
+                {
+                    // Lined walks: a tree (or shrub) a few metres off a path, one species per path.
+                    int ci = rng.NextInt(0, s.Curves.Count);
+                    var curve = s.Curves[ci];
+                    var on = curve.At(rng.NextFloat(0.1f, 0.9f) * curve.Length, out var tangent);
+                    float sideSign = rng.NextFloat() < 0.5f ? -1f : 1f;
+                    p = on + new float2(-tangent.y, tangent.x) * sideSign * (curve.HalfWidth + (tree ? rng.NextFloat(3f, 5f) : rng.NextFloat(1.6f, 2.8f)));
+                    variant = accent ? randomVariant : Hashing.Mix(beltSpecies, (uint)ci + 0x5A7Bu);
+                    spacing = tree ? 8f : 3.2f;
                 }
                 else
                 {
@@ -289,6 +310,51 @@ namespace Placemaker.Core.Layers.Park
             else if (belt) placed += Row(s, target, 2.2f, 2.4f, false, species, ref rng);
             // Whatever is left goes in a regular grid on open lawn (formal parterres keep the clearing).
             if (placed < target) GridFill(s, target - placed, tree, species, ref rng);
+        }
+
+        /// <summary>
+        /// Modern planting: trees in one strict grid (a bosque, one species, 10 m pitch, aligned to the
+        /// park's axes) wherever the lawn is free; bushes only as a clipped hedge row along the outline.
+        /// </summary>
+        private static void GridVegetation(ParkSite s, int target, bool tree, bool belt)
+        {
+            var rng = Hashing.Rng(s.Seed, tree ? 0x6D0Du : 0x6D0Eu);
+            uint species = rng.NextUInt();
+            if (tree) BosqueFill(s, target, species);
+            else if (belt) Row(s, target, 2.2f, 2.2f, false, species, ref rng);
+        }
+
+        /// <summary>
+        /// One regular grid over the whole park: the pitch widens (10 → 30 m) until the free grid points
+        /// roughly match the wanted count, so a low density still reads as a complete, even grid.
+        /// </summary>
+        private static void BosqueFill(ParkSite s, int target, uint species)
+        {
+            var region = s.LayerRegion;
+            region.PrincipalAxes(out var c, out var axis, out _, out _);
+            var n = new float2(-axis.y, axis.x);
+            float ext = math.length(region.Max - region.Min) * 0.5f + 2f;
+            var points = new List<float2>();
+            for (float pitch = 10f; pitch <= 30f; pitch *= 1.12f)
+            {
+                s.Cancel.ThrowIfCancellationRequested();
+                points.Clear();
+                for (float u = -math.floor(ext / pitch) * pitch; u <= ext; u += pitch)
+                    for (float v = -math.floor(ext / pitch) * pitch; v <= ext; v += pitch)
+                    {
+                        var p = c + axis * u + n * v;
+                        if (region.Contains(p) && PlantFits(s, p, true, 2.5f, pitch * 0.9f, 4f)) points.Add(p);
+                    }
+                if (points.Count <= target * 1.15f) break;
+            }
+            int placed = 0;
+            foreach (var p in points)
+            {
+                if (placed >= target) break;
+                if (!PlantFits(s, p, true, 2.5f, 8f, 4f)) continue;
+                s.Add(new ParkItem { Kind = ParkItemKind.Tree, Position = p, Radius = 2.5f, Variant = species, Age = 3 });
+                placed++;
+            }
         }
 
         private static int Row(ParkSite s, int target, float inset, float interval, bool tree, uint species, ref Unity.Mathematics.Random rng)

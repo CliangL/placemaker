@@ -47,5 +47,18 @@
   "Placemaker.Plaza.Preset.fountain": "Fountain plaza",
   "Placemaker.Plaza.Preset.market": "Market",
   "Placemaker.Plaza.Preset.garden": "Garden plaza",
-  "Placemaker.Plaza.Issue.CenterpieceDoesNotFit": "The centerpiece does not fit this plaza and was left out."
+  "Placemaker.Plaza.Issue.CenterpieceDoesNotFit": "The centerpiece does not fit this plaza and was left out.",
+  "Placemaker.Plaza.levels.split": "Split level",
+  "Placemaker.Plaza.levels.cascade": "Cascade",
+  "Placemaker.Plaza.levels.podium": "Podium",
+  "Placemaker.Plaza.levels.sunkenCourt": "Sunken court",
+  "Placemaker.Plaza.Preset.splitLevel": "Split-level square",
+  "Placemaker.Plaza.Preset.cascade": "Cascade steps",
+  "Placemaker.Plaza.Preset.podium": "Podium square",
+  "Placemaker.Plaza.Preset.sunkenCourt": "Sunken court",
+  "Placemaker.Plaza.Preset.piazza": "Piazza",
+  "Placemaker.Plaza.Preset.green": "Green square",
+  "Placemaker.Plaza.Issue.NoRoomForAmenity": "There is no free room for the {0} on this square.",
+  "Placemaker.Plaza.Issue.AmenityMoved": "The {0} did not fit at the chosen position and was placed elsewhere.",
+  "Placemaker.Plaza.Issue.TooSmallForLevels": "The square is too small for these levels (needs about 24 × 16 m)."
 }

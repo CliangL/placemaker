@@ -17,9 +17,10 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Park
 {
-    public static class ParkPathStyles
+    public static partial class ParkPathStyles
     {
-        public static readonly string[] Styles = { "auto", "garden", "curvy", "formal", "lakeside", "scenic" };
+        public static readonly string[] Styles = { "auto", "garden", "curvy", "formal", "lakeside", "scenic",
+            "riverside", "figureEight", "spokeRing", "woodlandTrail", "boardwalk", "promenade", "circuit" };
 
         /// <summary>Breaks every edge into bends displaced sideways by value noise. <paramref name="ok"/> rejects bad points.</summary>
         public static ParkPathGraph Meander(ParkPathGraph g, IReadOnlyList<float2> gates, float amplitude, float wavelength, uint seed, Func<float2, bool> ok)
