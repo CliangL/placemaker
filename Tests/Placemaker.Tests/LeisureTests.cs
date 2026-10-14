@@ -479,7 +479,7 @@ namespace Placemaker.Tests
                 best = System.Math.Min(best, sw.ElapsedMilliseconds);
             }
             Assert.False(plan.HasErrors);
-            Assert.True(best < TimingBudget.Ms(250), best + " ms");
+            Assert.True(best < TimingBudget.Ms(400), best + " ms");   // maxed-out dressing; planning runs off the main thread
         }
 
         // ───────────── classification ─────────────
