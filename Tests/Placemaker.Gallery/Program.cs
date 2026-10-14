@@ -43,6 +43,7 @@ namespace Placemaker.Gallery
                     case "--repo": repo = next; i++; break;
                     case "--catalog": fixture = next; i++; break;
                     case "--only": only = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
+                    case "--showcase": Renderer.Showcase = true; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                 }
             }
@@ -203,7 +204,7 @@ namespace Placemaker.Gallery
                     jobs.Add(Make("preset-" + Safe(p.Id), "Preset " + p.Id, r => editor.ApplyPreset(r, RecipePaths.Root, p.Id)));
                 }
                 var features = Features.Of(gen);
-                if (features.Count > 0)
+                if (features.Count > 0 && !Renderer.Showcase)
                 {
                     jobs.Add(Make("features-all", "All features on", r =>
                     {
@@ -263,16 +264,57 @@ namespace Placemaker.Gallery
         /// <summary>Layout size the gallery renders at (--scale; default = the game option default, 0.5).</summary>
         public static float LayoutScale = SiteContext.DefaultLayoutScale;
 
+        /// <summary>--showcase: square site with streets on all four sides; entrances from the planner's own suggestions.</summary>
+        public static bool Showcase;
+
+        public static float3[] Square(float targetArea)
+        {
+            float a = (float)math.sqrt(targetArea);
+            return new[] { new float3(0, 0, 0), new float3(a, 0, 0), new float3(a, 0, a), new float3(0, 0, a) };
+        }
+
+        /// <summary>A 12 m road with sidewalks just outside each side (centre 8 m off the outline).</summary>
+        public static List<NearbyNet> RoadsAround(float3[] ring)
+        {
+            var nets = new List<NearbyNet>();
+            for (int i = 0; i < ring.Length; i++)
+            {
+                float3 p0 = ring[i], p1 = ring[(i + 1) % ring.Length];
+                float3 d = math.normalize(p1 - p0);
+                float3 n = new float3(d.z, 0, -d.x) * 8f;   // outward for a CCW ring in XZ
+                float3 a = p0 - d * 20f + n, b = p1 + d * 20f + n;
+                nets.Add(new NearbyNet { ExternalId = 9000 + i, A = a, B = math.lerp(a, b, 1f / 3f), C = math.lerp(a, b, 2f / 3f), D = b, Width = 12f, Category = NetCategory.Road, HasSidewalk = true });
+            }
+            return nets;
+        }
+
+        /// <summary>Use the layer's own suggestions as the placed markers (what a player gets by accepting the hints).</summary>
+        private static void ApplySuggestedMarkers(Recipe r, float3[] ring, SiteContext site)
+        {
+            var step = r.Root;
+            var gen = GeneratorRegistry.Get(step.Layer);
+            if (gen == null || step.Markers.Count > 0) return;
+            try
+            {
+                var input = new AreaInput { Shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn }, Site = site, Settings = step.Settings, Markers = step.Markers };
+                var sug = gen.SuggestMarkers(input);
+                if (sug != null) step.Markers.AddRange(sug);
+            }
+            catch (Exception) { }
+        }
+
         public static Result Run(Job job, Catalog catalog, string outDir)
         {
             var res = new Result();
-            var ring = Site(job.TargetArea);
+            var ring = Showcase ? Square(job.TargetArea) : Site(job.TargetArea);
             var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
             var site = new SiteContext { Assets = catalog.Items, LayoutScale = LayoutScale };
+            if (Showcase) site.NearbyNets = RoadsAround(ring);
             ComposedPlan plan;
             var sw = Stopwatch.StartNew();
             try
             {
+                if (Showcase) ApplySuggestedMarkers(job.Recipe, ring, site);
                 AddMarkersIfNeeded(job.Recipe, ring);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 plan = Composer.Compose(job.Recipe, shape, site, cts.Token);
