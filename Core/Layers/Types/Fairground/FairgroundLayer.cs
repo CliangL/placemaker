@@ -185,7 +185,7 @@ namespace Placemaker.Core.Layers.Types.Events
             var spine = new List<(float2 a, float2 b)>();
             foreach (var s in streets) spine.Add((s.A, s.B));
             if (hasCourt) foreach (var e in Edges(court, 3.5f)) spine.Add(e);
-            Connect(ctx, occ, region, gates, spine, pathAsset);
+            EventKit.ConnectGates(ctx, occ, region, gates, spine, pathAsset);
             ctx.Check();
 
             // 3. Food court (dining court for the court layout).
@@ -501,35 +501,6 @@ namespace Placemaker.Core.Layers.Types.Events
             return streets;
         }
 
-        /// <summary>Gate connections that never run through the stage, field or court (sampled before the path end).</summary>
-        private static void Connect(LayerContext ctx, Occupancy occ, LayerRegion region, List<Gate> gates, List<(float2 a, float2 b)> spine, AssetRef asset)
-        {
-            foreach (var g in gates)
-            {
-                var feet = new List<(float d, float2 q)>();
-                foreach (var (a, b) in spine)
-                {
-                    var q = SegmentIndex.ClosestPoint(g.Position, a, b);
-                    feet.Add((math.distance(q, g.Position), q));
-                }
-                feet.Sort((x, y) => x.d.CompareTo(y.d));
-                foreach (var (d, q) in feet)
-                {
-                    if (d <= 1f) break;
-                    if (region.CrossesBoundary(g.Position, q, true)) continue;
-                    bool clear = true;
-                    var dir = (q - g.Position) / d;
-                    for (float t = 1.5f; t < d - 3f; t += 1.5f)
-                    {
-                        var p = g.Position + dir * t;
-                        if (occ.Discs.Overlaps(p, 1.6f) || occ.Corridors.Overlaps(p, 1.6f)) { clear = false; break; }
-                    }
-                    if (!clear) continue;
-                    LeisureKit.Path(ctx, occ, g.Position, q, NetRole.Pathway, asset);
-                    break;
-                }
-            }
-        }
 
         private static List<(float2 a, float2 b)> Edges(OrientedRect r, float grow)
         {

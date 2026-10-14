@@ -219,6 +219,35 @@ namespace Placemaker.Core.Layers.Types.Events
             return n;
         }
 
+        /// <summary>Gate connections to the nearest spine point that never run through anything already claimed (sampled before the path end).</summary>
+        public static void ConnectGates(LayerContext ctx, Occupancy occ, LayerRegion region, List<Gate> gates, List<(float2 a, float2 b)> spine, AssetRef asset)
+        {
+            foreach (var g in gates)
+            {
+                var feet = new List<(float d, float2 q)>();
+                foreach (var (a, b) in spine)
+                {
+                    var q = SegmentIndex.ClosestPoint(g.Position, a, b);
+                    feet.Add((math.distance(q, g.Position), q));
+                }
+                feet.Sort((x, y) => x.d.CompareTo(y.d));
+                foreach (var (d, q) in feet)
+                {
+                    if (d <= 1f) break;
+                    if (region.CrossesBoundary(g.Position, q, true)) continue;
+                    bool clear = true;
+                    var dir = (q - g.Position) / d;
+                    for (float t = 1.5f; t < d - 3f; t += 1.5f)
+                    {
+                        var p = g.Position + dir * t;
+                        if (occ.Discs.Overlaps(p, 1.6f) || occ.Corridors.Overlaps(p, 1.6f)) { clear = false; break; }
+                    }
+                    if (!clear) continue;
+                    LeisureKit.Path(ctx, occ, g.Position, q, NetRole.Pathway, asset);
+                    break;
+                }
+            }
+        }
         /// <summary>Sum of placed objects with the given category (or role when category is null).</summary>
         public static int Count(AreaPlan plan, string category)
         {
