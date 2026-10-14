@@ -109,7 +109,7 @@ namespace Placemaker.Game.Tool
             }
 
             // Hover: the block a new stroke would paint in (only looked up when the cursor leaves it).
-            if (_in.HasHit && BrushRules.StayInBlock)
+            if (_in.HasHit && BrushRules.LockOn)
             {
                 bool inCurrent = Continues(BlockPaintCurrent, _in.Hit.xz);
                 bool inHover = _hoverFace?.Area != null && Poly.Contains(_hoverFace.Area.Ring2D(), _in.Hit.xz);
@@ -155,7 +155,7 @@ namespace Placemaker.Game.Tool
             if (!Continues(cur, p))
             {
                 // "Stay in one block" off: never lock to a block, only the stops limit the brush.
-                var face = !BrushRules.StayInBlock ? null
+                var face = !BrushRules.LockOn ? null
                     : _hoverFace != null && _hoverFace.Area != null && Poly.Contains(_hoverFace.Area.Ring2D(), p) ? _hoverFace
                     : PickFace(p, out _hoverFaceProblem);
                 bool switched;
@@ -227,7 +227,7 @@ namespace Placemaker.Game.Tool
             var ring = area.Ring2D();
             Poly.Bounds(ring, out var min, out var max);
             var obstacles = _bpObstacles.Gather(min - 1f, max + 1f, _editingGroup);
-            var water = rules.Water ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
+            var water = rules.WaterOn ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
             // A block target was chosen with the lock on: keep it a block even if the lock is switched off since.
             var blockRules = rules.Clone();
             blockRules.StayInBlock = true;
@@ -261,7 +261,7 @@ namespace Placemaker.Game.Tool
                 }
             }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read roads: " + e.Message); }
-            var water = rules.Water ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
+            var water = rules.WaterOn ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
             BlockBrush brush;
             try { brush = rules.Build(_bpSeed, null, obstacles, water, _bpMask.CellSize); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint fence failed: " + e.Message); return null; }

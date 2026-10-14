@@ -3,6 +3,7 @@
 // (corner, node, block, paint, marker) — never anything else.
 
 using System.Collections.Generic;
+using Placemaker.Core.Geometry;
 using Placemaker.Core.Tool;
 
 namespace Placemaker.Game.Tool
@@ -80,11 +81,11 @@ namespace Placemaker.Game.Tool
                 case SelectionMode.BlockPaint:
                     if (_stage != ToolStage.Area) break;
                     var rules = BrushRules;
-                    h.Add(new HintInfo(!rules.Roads ? "Placemaker.Hint.PaintPaint" : !BlockPaintHasTarget ? "Placemaker.Hint.BlockPaintStart" : "Placemaker.Hint.BlockPaintPaint"));
+                    h.Add(new HintInfo(!rules.Stops(BrushObstacleKind.Road) ? "Placemaker.Hint.PaintPaint" : !BlockPaintHasTarget ? "Placemaker.Hint.BlockPaintStart" : "Placemaker.Hint.BlockPaintPaint"));
                     h.Add(new HintInfo("Placemaker.Hint.BlockPaintErase"));
                     if (_brushSquare) h.Add(new HintInfo("Placemaker.Hint.PaintRotate", "Shift"));
                     if (BlockPaintCurrent?.Obstacles.Count > 0) h.Add(new HintInfo("Placemaker.Hint.BlockPaintBlocked"));
-                    if (BlockPaintHasTarget && rules.Roads) h.Add(new HintInfo("Placemaker.Hint.BlockPaintNewBlock"));
+                    if (BlockPaintHasTarget && rules.Stops(BrushObstacleKind.Road)) h.Add(new HintInfo("Placemaker.Hint.BlockPaintNewBlock"));
                     break;
             }
             AddBuildingHint(h);

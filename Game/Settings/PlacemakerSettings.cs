@@ -67,7 +67,8 @@ namespace Placemaker.Game.Settings
         /// (s15) Plain Paint cuts building lots out of the painted outline (default on). Off = the legacy outline
         /// over buildings; builds never touch buildings either way (Core/Build/SiteSafety).
         /// </summary>
-        [SettingsUISection(SectionMain, GroupGeneral)]
+        // s27: superseded by the shared brush rules (Buildings / Paint over anything); kept so the id stays valid.
+        [SettingsUIHidden]
         public bool PaintAvoidBuildings { get; set; }
 
 
@@ -88,11 +89,19 @@ namespace Placemaker.Game.Settings
         // ───────────── Brush rules (Block paint; plain Paint ignores them) ─────────────
         // Mirrored in the panel's Block paint "Rules" row (Core/Geometry/BrushRules). Ids are save format.
 
+        /// <summary>(s27) Master toggle: every stop (and the block lock) off — Paint's old behaviour.</summary>
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushPaintOverAnything { get; set; }
+
         [SettingsUISection(SectionMain, GroupBrush)]
         public bool BrushStopRoads { get; set; }
 
         [SettingsUISection(SectionMain, GroupBrush)]
         public bool BrushStopBuildings { get; set; }
+
+        /// <summary>(s27) Other Placemaker builds (owner lot + zone blocks).</summary>
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStopBuilds { get; set; }
 
         [SettingsUISection(SectionMain, GroupBrush)]
         public bool BrushStopLots { get; set; }
@@ -109,6 +118,10 @@ namespace Placemaker.Game.Settings
 
         [SettingsUISection(SectionMain, GroupBrush)]
         public bool BrushStayInBlock { get; set; }
+
+        /// <summary>(s27) Draw / Roads / Block outlines are clipped to free land (the polygon stops), not only off other builds.</summary>
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushDrawClip { get; set; }
 
         [SettingsUISlider(min = 0f, max = 20f, step = 1f, scalarMultiplier = 1)]
         [SettingsUISection(SectionMain, GroupBrush)]
@@ -134,6 +147,7 @@ namespace Placemaker.Game.Settings
             Roads = BrushStopRoads, Buildings = BrushStopBuildings, Lots = BrushStopLots, Zoned = BrushStopZoned,
             EmptyZones = BlockPaintAvoidEmptyZones, Water = BrushStopWater, StayInBlock = BrushStayInBlock,
             Snap = BrushSnapDistance, Smoothing = BrushSmoothing,
+            Builds = BrushStopBuilds, Anything = BrushPaintOverAnything, DrawClip = BrushDrawClip,
         }.Normalized();
 
         public void SetBrushRules(global::Placemaker.Core.Geometry.BrushRules r)
@@ -142,6 +156,7 @@ namespace Placemaker.Game.Settings
             BrushStopRoads = r.Roads; BrushStopBuildings = r.Buildings; BrushStopLots = r.Lots; BrushStopZoned = r.Zoned;
             BlockPaintAvoidEmptyZones = r.EmptyZones; BrushStopWater = r.Water; BrushStayInBlock = r.StayInBlock;
             BrushSnapDistance = r.Snap; BrushSmoothing = r.Smoothing;
+            BrushStopBuilds = r.Builds; BrushPaintOverAnything = r.Anything; BrushDrawClip = r.DrawClip;
         }
 
         // ───────────── Keys ─────────────

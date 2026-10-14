@@ -12,7 +12,7 @@ export const GROUP = "Placemaker";
  * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
  * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
  */
-export const PROTOCOL = 19;
+export const PROTOCOL = 20;
 
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
@@ -31,6 +31,12 @@ export interface BrushRules {
   emptyZones: boolean;   // the empty zone grid along roads
   water: boolean;
   stayInBlock: boolean;  // lock a stroke to the closed block it starts in
+  /** (s27) other Placemaker builds (owner lot + zone blocks), never the group being edited */
+  builds?: boolean;
+  /** (s27) "Paint over anything": every stop and the block lock off */
+  anything?: boolean;
+  /** (s27) Draw / Roads / Block outlines are clipped to free land (the polygon stops) */
+  drawClip?: boolean;
   snap: number;          // m, 0 = off (default 6)
   smoothing: number;     // 0–6 passes (default 1; Paint uses 6)
 }

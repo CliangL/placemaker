@@ -90,6 +90,8 @@ namespace Placemaker.Game.Selection
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read areas: " + e.Message); }
             try { ZoneCells(bounds, list); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read zoning: " + e.Message); }
+            try { BuildReceipts(bounds, ignoreGroup, list); }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: could not read other builds: " + e.Message); }
             return list;
         }
 
@@ -140,6 +142,48 @@ namespace Placemaker.Game.Selection
             }
         }
 
+        private static int GroupOf(Entity e)
+        {
+            try { return Services.Groups != null ? Services.Groups.GroupOf(e) : 0; }
+            catch (Exception) { return 0; }
+        }
+
+        // Receipt outlines per group (decoded once; a rebuild replaces the group, so ids never change meaning).
+        private readonly Dictionary<int, float2[]> _receiptRings = new Dictionary<int, float2[]>();
+
+        /// <summary>
+        /// (s27) Every Placemaker group's outline from its receipt — the footprint even when its owner lot is not
+        /// found in the area search tree (old saves, a lot the game dropped). Same kind as the owner lot.
+        /// </summary>
+        private void BuildReceipts(Bounds2 bounds, int ignoreGroup, List<BrushObstacle> into)
+        {
+            var groups = Services.Groups;
+            if (groups == null) return;
+            var live = new HashSet<int>(groups.AllGroups);
+            var gone = new List<int>();
+            foreach (var id in _receiptRings.Keys) if (!live.Contains(id)) gone.Add(id);
+            foreach (var id in gone) _receiptRings.Remove(id);
+            foreach (var id in live)
+            {
+                if (id == ignoreGroup) continue;
+                if (!_receiptRings.TryGetValue(id, out var ring))
+                {
+                    ring = null;
+                    try
+                    {
+                        var r = groups.GetReceipt(id);
+                        if (r?.Area?.Ring != null && r.Area.Ring.Length >= 3) ring = r.Area.Ring2D();
+                    }
+                    catch (Exception) { ring = null; }
+                    _receiptRings[id] = ring;
+                }
+                if (ring == null) continue;
+                Poly.Bounds(ring, out var mn, out var mx);
+                if (mn.x > bounds.max.x || mn.y > bounds.max.y || mx.x < bounds.min.x || mx.y < bounds.min.y) continue;
+                into.Add(new BrushObstacle(BrushObstacleKind.PlacemakerBuild, ring));
+            }
+        }
+
         private bool Skip(Entity e, int ignoreGroup)
         {
             if (_em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) return true;
@@ -168,8 +212,10 @@ namespace Placemaker.Game.Selection
                     if (!seen.Add(e)) continue;
                     if (!BuildingFootprints.IsBuilding(_em, e) || Skip(e, ignoreGroup)) continue;
                     BuildingFootprints.Of(_em, e, out var lot, out var footprint);
-                    if (lot != null) into.Add(new BrushObstacle(BrushObstacleKind.Building, lot));
-                    if (footprint != null) into.Add(new BrushObstacle(BrushObstacleKind.Building, footprint));
+                    // (s27) A building a Placemaker group placed (park companion…) belongs to that build.
+                    var kind = GroupOf(e) != 0 ? BrushObstacleKind.PlacemakerBuild : BrushObstacleKind.Building;
+                    if (lot != null) into.Add(new BrushObstacle(kind, lot));
+                    if (footprint != null) into.Add(new BrushObstacle(kind, footprint));
                 }
             }
             finally { results.Dispose(); }
@@ -195,7 +241,9 @@ namespace Placemaker.Game.Selection
                     if (nodes.Length < 3) continue;
                     var ring = new float2[nodes.Length];
                     for (int n = 0; n < nodes.Length; n++) ring[n] = nodes[n].m_Position.xz;
-                    into.Add(new BrushObstacle(BrushObstacleKind.Lot, ring));
+                    // (s27) Our owner lot "Placemaker Area" and the zone-block lots are members of their group: they are
+                    // "other Placemaker builds", a rule of their own (they used to count as plain lots).
+                    into.Add(new BrushObstacle(GroupOf(e) != 0 ? BrushObstacleKind.PlacemakerBuild : BrushObstacleKind.Lot, ring));
                 }
             }
             finally { results.Dispose(); }
