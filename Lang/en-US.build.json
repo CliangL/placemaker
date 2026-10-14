@@ -66,5 +66,18 @@
   "Placemaker.Group.PermanentTerrain": "Removing this build will not undo its terrain changes.",
 
   "Placemaker.Parking.Fee": "Parking fee",
-  "Placemaker.Parking.Capacity": "{0} parking spaces"
+  "Placemaker.Parking.Capacity": "{0} parking spaces",
+
+  "Placemaker.Build.Hidden.Object": "Built. {0} objects overlap something; the game may hide them.",
+  "Placemaker.Issue.GhostObjectsDropped": "{0} objects in the preview overlap something and could not be placed.",
+  "Placemaker.Issue.Declutter.Centerpiece": "{0} centerpieces didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Bench": "{0} benches didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Lamp": "{0} lamps didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Bin": "{0} bins didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Furniture": "{0} furniture pieces didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.FencePiece": "{0} fence or hedge pieces didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Tree": "{0} trees didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Bush": "{0} bushes or hedge pieces didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Planter": "{0} planters didn't fit and were left out.",
+  "Placemaker.Issue.Declutter.Decal": "{0} ground decals didn't fit and were left out."
 }

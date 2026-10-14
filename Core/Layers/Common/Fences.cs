@@ -79,6 +79,17 @@ namespace Placemaker.Core.Layers.Common
             return math.max(1, (int)math.ceil(length / piece - 0.05f));
         }
 
+        /// <summary>
+        /// FEEDBACK-4: pieces that fit a course WITHOUT overlapping (the game hides/cancels one of every two
+        /// overlapping props). Each piece sits centred in an equal cell of length/count ≥ piece + gap, so
+        /// small, even gaps replace the overlaps. Used by the build for prop fences and hedge pieces.
+        /// </summary>
+        public static int SpacedPieceCount(float length, float piece, float gap = Placemaker.Core.Build.Declutter.Gap)
+        {
+            if (!(length > 0f) || !(piece > 0f)) return 0;
+            return math.max(1, (int)math.floor(length / (piece + gap) + 1e-4f));
+        }
+
         private static void Cut(List<float2> spans, float g0, float g1, float len)
         {
             g0 = math.clamp(g0, 0f, len); g1 = math.clamp(g1, 0f, len);

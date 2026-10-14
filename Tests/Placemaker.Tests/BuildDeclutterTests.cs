@@ -89,6 +89,19 @@ namespace Placemaker.Tests
             Assert.Equal(10 - left.Count, (int)issue.Args[0]);
         }
 
+        [Theory]
+        [InlineData(10f, 4f, 2)]
+        [InlineData(8.1f, 4f, 2)]
+        [InlineData(8f, 4f, 1)]
+        [InlineData(1f, 4f, 1)]
+        [InlineData(41.2f, 4.12f, 9)]
+        public void PropFencePiecesNeverOverlap(float len, float piece, int expected)
+        {
+            int n = Placemaker.Core.Layers.Common.Fences.SpacedPieceCount(len, piece);
+            Assert.Equal(expected, n);
+            if (n > 1) Assert.True(len / n >= piece + Declutter.Gap - 1e-4f);
+        }
+
         [Fact]
         public void HedgeRowWithoutOverlapIsUntouched()
         {

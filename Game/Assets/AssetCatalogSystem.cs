@@ -134,10 +134,19 @@ namespace Placemaker.Game.Assets
             if (!_ready || plan == null) return 0;
             try
             {
-                return AutoAssets.Resolve(plan, new AutoAssetSource
+                int resolved = AutoAssets.Resolve(plan, new AutoAssetSource
                 {
                     Pool = AutomaticPool, Exists = PrefabExists, Palettes = _palettes, PaletteItems = PaletteItems,
                 });
+                // FEEDBACK-4: fit objects with their real collision boxes once per plan, right here, so the
+                // tool's preview/price, the ghost and the build (all call this resolver) see the same objects.
+                if (!plan.Decluttered)
+                {
+                    var report = Declutter.Run(plan, _infoMap);
+                    if (report.TotalDropped > 0 || report.TotalMoved > 0)
+                        Mod.Log.Info("Placemaker declutter: " + report);
+                }
+                return resolved;
             }
             catch (Exception e)
             {

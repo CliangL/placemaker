@@ -252,6 +252,15 @@ namespace Placemaker.Game.Build
                 var role = RoleFor(w);
                 var memberKind = kind == WorkKind.Net ? MemberKind.Edge : kind == WorkKind.Area ? MemberKind.Area : MemberKind.Object;
                 Tag(e, memberKind, role);
+                // FEEDBACK-4: an overridable object (prop, plant, decal) that still overlaps something gets
+                // Override instead of Error; after Apply the game's OverrideSystem hides it ("Overridden").
+                // Never silent: count it (docs/RESEARCH-NOTES-ADDENDUM.md, object collisions).
+                if (memberKind == MemberKind.Object && EntityManager.HasComponent<global::Game.Tools.Override>(e))
+                {
+                    var at = EntityManager.HasComponent<global::Game.Objects.Transform>(e)
+                        ? EntityManager.GetComponentData<global::Game.Objects.Transform>(e).m_Position : (float3?)null;
+                    NoteSkip("Placemaker.Build.Hidden.Object", at);
+                }
                 if (role == MemberRole.ParkingAisle && carrier)
                     EntityManager.GetBuffer<global::Game.Net.SubNet>(_carrier).Add(new global::Game.Net.SubNet(e));
                 if (role == MemberRole.ParkingBay && carrier)
