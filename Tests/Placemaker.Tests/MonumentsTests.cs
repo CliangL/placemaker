@@ -130,7 +130,7 @@ namespace Placemaker.Tests
             for (int i = 0; i < places.Count; i++)
                 for (int j = i + 1; j < places.Count; j++)
                     Assert.True(Poly.Intersection(places[i], places[j]).Sum(r => Poly.Area(r.Outer)) < 1f, Ids[i] + " overlaps " + Ids[j]);
-            Assert.True(sw.Elapsed.TotalMilliseconds < 1500, "took " + sw.Elapsed.TotalMilliseconds);
+            Assert.True(sw.Elapsed.TotalMilliseconds < TimingBudget.Ms(1500), "took " + sw.Elapsed.TotalMilliseconds);
         }
 
         // ───────────── standing alone (own spot), every preset ─────────────

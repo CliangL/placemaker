@@ -129,6 +129,44 @@ namespace Placemaker.Tests
             Assert.Equal("Gravel", l.Surfaces[1].Asset.Id);     // bark → dirt → natural
         }
 
+        [Fact]
+        public void Nets_ReachTypeRules_AndBikeNetsStayOutOfFootpaths()
+        {
+            var t = AssetTraits.Net | AssetTraits.Pathway;
+            var bike = AssetHeuristics.Classify("TwoWayBikePath", t);
+            Assert.Contains(AssetCategories.Pathway, bike);
+            Assert.Contains("net.bike", bike);
+            Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Pathway, "TwoWayBikePath", t));
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Pathway, "Pedestrian Pathway", t));
+            Assert.True(AssetHeuristics.DefaultScore(AssetCategories.Pathway, "PedestrianPathWithBikeLanes")
+                < AssetHeuristics.DefaultScore(AssetCategories.Pathway, "Gravel Pathway"));
+            Assert.DoesNotContain(AssetHeuristics.Classify("Basic Fence", AssetTraits.Net | AssetTraits.NetFence), c => !c.StartsWith("net.") && c != AssetCategories.Fence);
+            Assert.Contains(SurfaceCategories.Gravel, AssetHeuristics.Classify("Gravel Path Surface", AssetTraits.Surface));
+        }
+
+        [Fact]
+        public void PlannedNetCategory_ResolvesWithFallback()
+        {
+            var plan = new ComposedPlan();
+            var l = new AreaPlan { StepPath = "0@root", Seed = 1 };
+            var bike = Straight(new float3(0, 0, 0), new float3(20, 0, 0), NetRole.PathwayWide);
+            bike.Category = "net.bike";
+            var trail = Straight(new float3(0, 0, 10), new float3(20, 0, 10));
+            trail.Category = "net.trail";
+            l.Nets.Add(bike);
+            l.Nets.Add(trail);
+            plan.Layers.Add(l);
+            var pools = new Dictionary<string, IReadOnlyList<string>>
+            {
+                { "net.bike", new[] { "TwoWayBikePath" } },
+                { AssetCategories.Pathway, new[] { "Pedestrian Pathway" } },
+            };
+            AutoAssets.Resolve(plan, c => pools.TryGetValue(c, out var p) ? p : null);
+            Assert.Equal("TwoWayBikePath", bike.Asset.Id);
+            Assert.Equal("Pedestrian Pathway", trail.Asset.Id);   // empty net.trail → pathway
+            Assert.Equal("net.bike", RoleCategories.ForNet(bike));
+        }
+
         // ───────────── Path joins ─────────────
 
         [Fact]

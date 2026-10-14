@@ -19,6 +19,8 @@ namespace Placemaker.Core.Build
         public const string Bark = "surface.bark";       // bark mulch, wood chips
         public const string Clay = "surface.clay";       // clay courts, red earth, cinder
         public const string Track = "surface.track";     // running / athletics track
+        public const string Gravel = "surface.gravel";   // gravel, shingle, crushed stone
+        public const string Rock = "surface.rock";       // rock, scree, boulder ground
     }
 
     /// <summary>Optional companion to ICategoryRules: extra categories for SURFACE prefabs.</summary>
@@ -71,6 +73,10 @@ namespace Placemaker.Core.Build
                 AddOnce(r, SurfaceCategories.Bark);
             if (AssetHeuristics.ContainsAny(lower, "clay", "cinder", "red earth", "terre battue"))
                 AddOnce(r, SurfaceCategories.Clay);
+            if (AssetHeuristics.ContainsAny(lower, "gravel", "shingle", "crushed", "pebble"))
+                AddOnce(r, SurfaceCategories.Gravel);
+            if (AssetHeuristics.ContainsAny(lower, "rock", "scree", "boulder", "cliff"))
+                AddOnce(r, SurfaceCategories.Rock);
             if (AssetHeuristics.ContainsAny(lower, "running track", "runningtrack", "athletic", "tartan", "race track", "track surface"))
                 AddOnce(r, SurfaceCategories.Track);
         }
@@ -93,6 +99,11 @@ namespace Placemaker.Core.Build
             { SurfaceCategories.Clay, AssetCategories.SurfaceDirt },
             { AssetCategories.SurfaceDirt, AssetCategories.SurfaceNatural },
             { AssetCategories.SurfaceSand, AssetCategories.SurfaceNatural },
+            { SurfaceCategories.Gravel, AssetCategories.SurfaceNatural },
+            { SurfaceCategories.Rock, AssetCategories.SurfaceNatural },
+            // Park path tiers (g3): custom bike / trail nets fall back to the footpath pool.
+            { "net.bike", AssetCategories.Pathway },
+            { "net.trail", AssetCategories.Pathway },
         };
 
         public static void Register(string category, string parent)

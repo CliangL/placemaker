@@ -481,6 +481,11 @@ namespace Placemaker.Core
         public string[] Upgrades = Array.Empty<string>();
         /// <summary>Elevation behaviour: true = follow terrain exactly (split where needed).</summary>
         public bool FollowTerrain = true;
+        /// <summary>
+        /// (g5) Asset category for automatic resolution, or null/"" = the role's default (RoleCategories.ForNet),
+        /// e.g. "net.bike" / "net.trail" for park path tiers. An empty category falls back via CategoryFallbacks.
+        /// </summary>
+        public string Category;
     }
 
     public enum ObjectRole

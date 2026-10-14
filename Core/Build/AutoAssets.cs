@@ -145,7 +145,7 @@ namespace Placemaker.Core.Build
                 foreach (var n in l.Nets)
                     if (n != null && Needs(n.Asset, exists))
                         resolved += Set(ref n.Asset, n.Role == NetRole.Alley && exists != null && exists(AlleyPrefab)
-                            ? AlleyPrefab : Pick(step, RoleCategories.ForNet(n.Role), 0), exists);
+                            ? AlleyPrefab : Pick(step, RoleCategories.ForNet(n), 0), exists);
                 foreach (var s in l.Surfaces)
                     if (s != null && Needs(s.Asset, exists)) resolved += Set(ref s.Asset, Pick(step, RoleCategories.ForSurface(s), 0), exists);
                 foreach (var a in l.Areas)
