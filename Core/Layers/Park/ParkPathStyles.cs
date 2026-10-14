@@ -69,7 +69,20 @@ namespace Placemaker.Core.Layers.Park
         /// <summary>Long axis + cross axis through the centre; entrances join the nearest axis straight.</summary>
         public static ParkPathGraph Formal(LayerRegion region, IReadOnlyList<float2> gates, Func<float2, bool> ok)
         {
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
+            // Art pass (a1): on a near-square site the principal axes are ambiguous (often the diagonals, which sent
+            // every walk corner to corner); a formal park squares up with its longest street edge instead.
+            if (minor > major * 0.85f)
+            {
+                float best = 0f;
+                for (int i = 0; i < region.Ring.Length; i++)
+                {
+                    var e = region.Ring[(i + 1) % region.Ring.Length] - region.Ring[i];
+                    float l = math.length(e);
+                    if (l > best) { best = l; axis = e / l; }
+                }
+                side = new float2(-axis.y, axis.x);
+            }
             var axes = new List<(float2 a, float2 b)>();
             if (LeisureKit.Chord(region, centre, axis, 4f, out var a0, out var b0)) axes.Add((a0, b0));
             if (LeisureKit.Chord(region, centre, side, 4f, out var a1, out var b1)) axes.Add((a1, b1));

@@ -133,7 +133,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
             {
                 bool paved = AssetAvailability.Has(AssetCategories.SurfacePaving);
                 foreach (var strip in outer.BoundaryStrips(o.PromWidth, math.clamp((int)math.round(outer.Perimeter / 60f), 3, 10), ctx.Cancel))
-                    if (paved) ctx.Surface(strip, SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    if (paved) ctx.Surface(strip, SurfaceRole.Paving, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
                 float walkD = hw + 0.6f;
                 var loop = Poly.Resample(outer.InsetVertices(walkD), 8f);
                 for (int i = 0; i < loop.Length; i++)
@@ -147,8 +147,8 @@ namespace Placemaker.Core.Layers.AddOns.Water
                 }
                 int benches = 0, lamps = 0;
                 float benchD = walkD + hw + 0.3f + 1.3f;
-                var bench = AssetMix.One("");
-                var lampAsset = AssetMix.One("");
+                var bench = AssetMix.One("", ParkArt.Benches);
+                var lampAsset = AssetMix.One("", ParkArt.ParkLamps);
                 float per = outer.Perimeter;
                 if (o.BenchSpacing > 0f && benchD + 1.3f <= o.PromWidth + 0.1f)
                     for (float s = o.BenchSpacing * 0.5f; s < per; s += o.BenchSpacing)
@@ -222,7 +222,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
                         ShoreKit.Net(ctx, loop[i], loop[(i + 1) % loop.Length], islandTop, islandTop, NetRole.Pathway, walkAsset, false);
                     islandPaths++;
                     // Two benches on the loop looking out over the water.
-                    var bench = AssetMix.One("");
+                    var bench = AssetMix.One("", ParkArt.Benches);
                     int placed = 0;
                     for (int i = 0; i < loop.Length && placed < 2; i++)
                     {
@@ -256,7 +256,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
                     if (cat != null && iocc.Free(isl.C, 3f, 0.5f, 0.2f))
                     {
                         var g = ctx.Object(isl.C, Hashing.Unit(Hashing.Mix(ctx.Seed, 0x6A2Eu)) * 6.283f, cat == AssetCategories.Shelter ? ObjectRole.Furniture : ObjectRole.Centerpiece,
-                            AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x6A2Fu), -1, cat);
+                            cat == AssetCategories.Shelter ? AssetMix.One("", ParkArt.Gazebos) : AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x6A2Fu), -1, cat);
                         g.Position.y = islandTop;
                         iocc.Take(isl.C, 3f, 1);
                     }
@@ -269,7 +269,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
                     float ang = Hashing.Unit(v) * 6.283f, rad = math.sqrt(Hashing.Unit(Hashing.Mix(v, 1u))) * isl.R * 0.85f;
                     var p = isl.C + new float2(math.cos(ang), math.sin(ang)) * rad;
                     if (!iocc.Free(p, 1f, 0.6f, 0.2f)) continue;   // trunk clearance: canopies may overhang the island walk
-                    var tree = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Tree, AssetMix.One(""), v, 1 + (int)(v % 3u));
+                    var tree = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ParkArt.WaterTrees, v), v, 1 + (int)(v % 3u));
                     tree.Position.y = islandTop;
                     iocc.Take(p, 2.5f, 3);
                     occ.Take(p, 2.5f, 3);
@@ -281,12 +281,13 @@ namespace Placemaker.Core.Layers.AddOns.Water
             int jets = 0;
             if (o.Jets > 0)
             {
-                string cat = LeisureKit.Category(ctx, "", AssetCategories.CenterpieceFountain, AssetCategories.WaterJets, AssetCategories.Centerpiece);
+                // Art pass (a1): never "water.jets" here: in the vanilla catalog that is an agricultural sprinkler.
+                string cat = LeisureKit.Category(ctx, "", AssetCategories.CenterpieceFountain, AssetCategories.Centerpiece);
                 if (cat != null)
                     foreach (var p in JetSpots(wr, islands, anchor, o.Jets, o.JetLayout))
                     {
                         if (!wr.ContainsDisc(p, 4f) || occ.Discs.Overlaps(p, 1.5f, 0.5f) || occ.Corridors.Overlaps(p, 1.5f, 1f)) continue;
-                        var j = ctx.Object(p, 0f, ObjectRole.Centerpiece, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x7E70u + (uint)jets), -1, cat);
+                        var j = ctx.Object(p, 0f, ObjectRole.Centerpiece, AssetMix.One("", "SmallFountain02", "SmallFountain01"), Hashing.Mix(ctx.Seed, 0x7E70u + (uint)jets), -1, cat);
                         j.Position.y = level;
                         occ.Take(p, 1.5f, 9);
                         jets++;
@@ -390,7 +391,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
                 var bp = to + dir * (hw + 0.9f);
                 if (!occ.Discs.Overlaps(bp, 0.8f, 0.2f))
                 {
-                    var b = ctx.Object(bp, ShoreKit.Yaw(dir), ObjectRole.Bench, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x15B1u + (uint)math.abs((int)(isl.C.x * 7f))));
+                    var b = ctx.Object(bp, ShoreKit.Yaw(dir), ObjectRole.Bench, AssetMix.One("", ParkArt.Benches), Hashing.Mix(ctx.Seed, 0x15B1u + (uint)math.abs((int)(isl.C.x * 7f))));
                     b.Position.y = y;
                     occ.Take(bp, 0.8f, 1);
                 }

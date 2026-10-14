@@ -44,7 +44,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             flags.TooltipKey = K + "Feature.flagCircle.Tooltip";
             var trees = Feature("bigtrees", ("density", 1.5));
             trees.LabelKey = K + "Feature.bigtrees";
-            var beds = Feature("flowerbeds", ("density", 6.0));
+            var beds = Feature("flowerbeds", ("density", 6.0), ("assets", (string[])ParkArt.Flowerbeds.Clone()));
             beds.LabelKey = K + "Feature.flowerbeds";
             return MonumentFeatures.With(new List<FeatureInfo>
             {
