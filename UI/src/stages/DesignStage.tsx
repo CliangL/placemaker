@@ -17,7 +17,7 @@ import { ErrorBoundary } from "../lib/errorBoundary";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Section, Switch } from "../components/common";
 import { ControlList } from "../controls/Controls";
-import { PresetBar, TypeBrowser } from "./PresetBrowser";
+import { makeSummary, PresetBar, TypeBrowser } from "./PresetBrowser";
 import s from "./design.module.scss";
 
 export const layerName = (t: TFunc, l: LayerType) => t(l.name, humanize(l.name || l.id));
@@ -367,11 +367,18 @@ export const DesignStage = ({ catalog, design, state }: { catalog: Catalog; desi
     const root = design.root;
     return (
         <div className={s.stage} data-testid="stage-design">
-            <Section title={t("Placemaker.UI.Make", "Make")} className={s.first}>
+            <Collapsible
+                id="design:make"
+                testId="make"
+                title={t("Placemaker.UI.Make", "Make")}
+                summary={<div data-ellipsis>{makeSummary(t, catalog, design)}</div>}
+                defaultOpen
+                className={s.make}
+            >
                 <ErrorBoundary name="recipes">
                     <TypeBrowser catalog={catalog} design={design} />
                 </ErrorBoundary>
-            </Section>
+            </Collapsible>
             <PlacesInside />
             {!root ? (
                 <div className={s.emptyNote}>{t("Placemaker.UI.PickRecipe", "Pick a type")}</div>

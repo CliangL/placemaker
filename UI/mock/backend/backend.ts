@@ -325,14 +325,15 @@ export class MockBackend {
         return { values: clone(step.values), features };
     }
 
-    /** Stored data of a preset: own preset, saved-over built-in, or the shipped built-in (features undefined = keep). */
+    /** Stored data of a preset: own preset, saved-over built-in, or the shipped built-in (its values over the defaults, default features). */
     presetData(layerId: string, id: string): PresetData | null {
         const own = (this.customPresets[layerId] ?? []).find((p) => p.id === id);
         if (own) return clone(own.data);
         const ov = this.presetOverrides[layerId + "|" + id];
         if (ov) return clone(ov);
         const p = this.layer(layerId)?.presets.find((x) => x.id === id);
-        return p ? { values: { ...this.defaults(layerId), ...clone(p.values ?? {}) } } : null;
+        if (!p) return null;
+        return { values: { ...this.defaults(layerId), ...clone(p.values ?? {}) }, features: this.defaultData(layerId).features };
     }
 
     presetName(layerId: string, id: string): string {
@@ -359,9 +360,14 @@ export class MockBackend {
         }
     }
 
-    /** No preset: the type's defaults are the baseline. */
+    /** No preset ("Default"): the type's fresh defaults are the baseline, so a loaded build can read "modified". */
     resetActive() {
-        this.active = this.root ? { id: "", layer: this.root.layer, base: this.capture(this.root) } : null;
+        this.active = this.root ? { id: "", layer: this.root.layer, base: this.defaultData(this.root.layer) } : null;
+    }
+
+    defaultData(layerId: string): PresetData {
+        const r = this.recipes.find((x) => !x.info.custom && x.root.layer === layerId && !(x.root.children ?? []).length);
+        return this.capture(this.instantiate(r ? r.root : { layer: layerId }));
     }
 
     presetViews(l: MockLayer): PresetView[] {
@@ -811,7 +817,7 @@ export class MockBackend {
                 const isActive = !!this.active && this.active.layer === layerId && this.active.id === id;
                 if (list.some((p) => p.id === id)) {
                     this.customPresets[layerId] = list.filter((p) => p.id !== id);
-                    if (isActive) this.active!.id = "";
+                    if (isActive) this.active = { id: "", layer: layerId, base: this.defaultData(layerId) };
                     break;
                 }
                 const key = layerId + "|" + id;

@@ -90,6 +90,16 @@ export const presetName = (t: TFunc, p: PresetView) => (p.custom ? p.name : t(p.
 const recipeName = (t: TFunc, r: RecipeInfo) => (r.custom ? r.name : t(r.name, humanize(r.name || r.id)));
 const DEFAULT_ID = "";
 
+/** "Park · Formal garden" — what the folded Make section reads. */
+export function makeSummary(t: TFunc, catalog: Catalog, design: DesignState): string {
+    const r = catalog.recipes.find((x) => x.id === design.recipeId);
+    if (!r) return "";
+    const ap = design.activePreset;
+    const layer = typeLayer(catalog, r);
+    const p = ap && ap.id && layer ? layer.presets.find((x) => x.id === ap.id) : undefined;
+    return p ? recipeName(t, r) + " · " + presetName(t, p) : recipeName(t, r);
+}
+
 // ───────────── rows ─────────────
 
 /** Badges after a preset name: "edited" for saved-over built-ins, ★ for the player's own. */
@@ -240,6 +250,8 @@ export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: Des
     const has = (text: string) => text.toLowerCase().includes(q);
 
     const cats: CatView[] = [];
+    let firstHit: { recipe: string; layer: string; preset?: string } | null = null;
+    let firstType: { recipe: string; layer: string } | null = null;
     for (const g of MAKE_GROUPS) {
         const members = list.filter((r) => recipeGroup(r) === g.id);
         if (!members.length) continue;
@@ -255,11 +267,18 @@ export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: Des
                 continue;
             }
             const hits = all.filter((p) => has(presetName(t, p)));
-            if (hits.length) items.push({ r, presets: hits.length === all.length ? all : hits });
-            else if (catHit || has(recipeName(t, r))) items.push({ r, presets: selected && layer ? all : null });
+            if (hits.length) {
+                items.push({ r, presets: hits.length === all.length ? all : hits });
+                if (!firstHit && layer) firstHit = { recipe: r.id, layer: layer.id, preset: hits[0].id };
+            } else if (catHit || has(recipeName(t, r))) {
+                items.push({ r, presets: selected && layer ? all : null });
+                if (!firstType) firstType = { recipe: r.id, layer: layer?.id ?? r.id };
+            }
         }
         if (items.length) cats.push({ id: g.id, title, items, selected: members.find((r) => r.id === design.recipeId), total: members.length });
     }
+
+    if (!firstHit) firstHit = firstType;
 
     const rows = () => Array.from(root.current?.querySelectorAll<HTMLElement>("[data-nav]") ?? []);
     const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -295,8 +314,9 @@ export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: Des
                             setQuery("");
                             e.preventDefault();
                         } else if (e.key === "Enter") {
-                            const first = root.current?.querySelector<HTMLElement>(q ? '[data-nav="preset"], [data-nav="type"]' : '[data-nav="type"]');
-                            first?.click();
+                            // first matching preset, else the first matching type
+                            if (firstHit?.preset) act.selectPreset(firstHit.layer, firstHit.preset);
+                            else if (firstHit && firstHit.recipe !== design.recipeId) act.selectRecipe(firstHit.recipe);
                             e.preventDefault();
                         } else if (e.key === "ArrowDown") {
                             rows()[0]?.focus();
@@ -406,7 +426,15 @@ export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design:
     ) : null;
 
     return (
-        <div className={s.bar} data-testid="preset-bar" data-modified={ap.modified ? "true" : "false"}>
+        <div
+            className={s.bar}
+            data-testid="preset-bar"
+            data-modified={ap.modified ? "true" : "false"}
+            onKeyDown={(e) => {
+                // Enter on a focused bar button presses that button, not the tool's primary action.
+                if (e.key === "Enter") e.stopPropagation();
+            }}
+        >
             {mode === "saveAs" ? (
                 <NameField
                     testId="preset-save-as-form"

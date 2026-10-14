@@ -260,3 +260,12 @@
     border-left-style: solid;
     border-left-color: $c-line-strong;
 }
+
+// Make browser (folds to "Park · Formal garden").
+.make {
+    margin-bottom: 2rem;
+}
+
+.make > div + div {
+    padding-left: 0;
+}

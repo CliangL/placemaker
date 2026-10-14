@@ -19,23 +19,21 @@ async function expandAll(page: Page) {
     }
 }
 
-test("Make row: single types only, three per row, no mixes", async ({ page }) => {
+test("Make: one browser of single types (category ▸ type rows), no mixes", async ({ page }) => {
     const errors = await open(page);
     await toDesign(page, "park");
     const ids = await page.locator('[data-testid="recipes"] [data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    expect(ids).toEqual(["recipe-parking", "recipe-plaza", "recipe-park", "recipe-roads", "recipe-campground"]);
+    expect(ids).toEqual(["recipe-park", "recipe-campground", "recipe-plaza", "recipe-parking", "recipe-roads"]);
     await expect(page.getByTestId("mixes")).toHaveCount(0);
-    // hidden layers (split, pond) never get a card
+    // hidden layers (split, pond) never get a row
     await expect(page.getByTestId("placemaker-panel")).not.toContainText("Mixes");
-    // icon + name only, three per row, compact
-    const boxes = await Promise.all(["parking", "plaza", "park", "roads"].map((id) => page.getByTestId(`recipe-${id}`).boundingBox()));
-    expect(Math.abs(boxes[0]!.y - boxes[2]!.y)).toBeLessThan(2);
-    expect(boxes[3]!.y).toBeGreaterThan(boxes[0]!.y + 10);
-    expect(boxes[0]!.height).toBeLessThanOrEqual(32);
+    // one compact row each: icon + name, stacked
+    const boxes = await Promise.all(["park", "campground"].map((id) => page.getByTestId(`recipe-${id}`).boundingBox()));
+    expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + 10);
+    expect(boxes[0]!.height).toBeLessThanOrEqual(24);
     for (const id of ["parking", "park"]) {
-        const card = page.getByTestId(`recipe-${id}`);
-        await expect(card.locator("img")).toHaveCount(1);
-        expect((await card.innerText()).split("\n").filter(Boolean).length).toBe(1);
+        const row = page.getByTestId(`recipe-${id}`);
+        await expect(row.locator("img")).toHaveCount(1);
     }
     expect(errors).toEqual([]);
 });
@@ -188,7 +186,10 @@ test("compact: the whole park design fits without scrolling; full-HD screenshots
     await panelShot(page, "r3-panel-2-design-parking");
     await page.getByTestId("recipe-park").click();
     await waitPlanned(page);
-    // folded by default, the park's options and features need no scrolling
+    // once the type is picked the Make browser folds to one line ("Park"); folded by default, the park's
+    // options and features then need no scrolling
+    await page.getByTestId("make-toggle").click();
+    await expect(page.getByTestId("make-summary")).toHaveText("Park");
     const body = page.getByTestId("panel-body");
     const fits = await body.evaluate((el) => el.scrollHeight <= el.clientHeight + 1);
     expect(fits).toBe(true);
@@ -198,6 +199,7 @@ test("compact: the whole park design fits without scrolling; full-HD screenshots
     await page.getByTestId("feature-toggle-plaza").click();
     await waitPlanned(page);
     await panelShot(page, "r3-panel-2-design-park-features");
+    await page.getByTestId("make-toggle").click();
     await page.getByTestId("recipe-plaza").click();
     await waitPlanned(page);
     await panelShot(page, "r3-panel-2-design-plaza");
@@ -212,7 +214,7 @@ test("compact: the whole park design fits without scrolling; full-HD screenshots
     await page.evaluate(() => localStorage.removeItem("placemaker.sections.v1"));
 });
 
-test("places-inside slot is reserved under the type cards (hidden until round 3)", async ({ page }) => {
+test("places-inside slot is reserved under the type browser (hidden until round 3)", async ({ page }) => {
     await open(page);
     await toDesign(page, "park");
     await expect(page.getByTestId("places-inside")).toHaveCount(0);
