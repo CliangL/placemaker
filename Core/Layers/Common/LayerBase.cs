@@ -464,7 +464,19 @@ namespace Placemaker.Core.Layers.Common
             if (tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0)
             {
                 // s9: no entrance placed yet (park family) → no connectors: paths stop inside the outline.
+                // With entrances placed, a path meets the outline only at one of them: other ends on the
+                // outline stop just inside the edge band.
                 if (!CheckReady(input).Ready) TrimOutlineEnds(plan, region, unplacedInset);
+                else if (!CheckReady(new AreaInput { Shape = input.Shape, Settings = input.Settings, Markers = new List<EdgeMarker>() }).Ready)
+                {
+                    var markers = new List<float2>();
+                    foreach (var m in input.Markers) markers.Add(m.Position.xz);
+                    TrimOutlineEnds(plan, region, PathQuality.Band + 0.5f, p =>
+                    {
+                        foreach (var m in markers) if (math.distancesq(m, p) < 25f) return true;
+                        return false;
+                    });
+                }
                 KeepPathEndsInside(plan, region);
             }
             // Children plan on the ground this layer leaves: the composer derives it from
@@ -494,7 +506,7 @@ namespace Placemaker.Core.Layers.Common
         /// within 1 m of) the outline is cut back to <paramref name="inset"/> m inside; a path lying wholly in
         /// that band is dropped. Benches, lamps and bins left beside a removed stretch go with it.
         /// </summary>
-        public static void TrimOutlineEnds(AreaPlan plan, LayerRegion region, float inset)
+        public static void TrimOutlineEnds(AreaPlan plan, LayerRegion region, float inset, Func<float2, bool> keepEnd = null)
         {
             if (plan?.Nets == null || region == null || inset <= 0f) return;
             const int samples = 48;
@@ -506,8 +518,8 @@ namespace Placemaker.Core.Layers.Common
             {
                 var n = plan.Nets[i];
                 if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide) continue;
-                bool atA = n.StartAttach < 0 && Depth(n.A.xz) <= 1f;
-                bool atD = n.EndAttach < 0 && Depth(n.D.xz) <= 1f;
+                bool atA = n.StartAttach < 0 && Depth(n.A.xz) <= 1f && (keepEnd == null || !keepEnd(n.A.xz));
+                bool atD = n.EndAttach < 0 && Depth(n.D.xz) <= 1f && (keepEnd == null || !keepEnd(n.D.xz));
                 if (!atA && !atD) continue;
                 float tA = 0f, tD = 1f;
                 if (atA)
@@ -554,6 +566,7 @@ namespace Placemaker.Core.Layers.Common
                 foreach (bool isA in new[] { true, false })
                 {
                     var e = isA ? o.A.xz : o.D.xz;
+                    if (Depth(e) <= 1f) continue;   // ends kept on the outline (entrances) never move
                     foreach (var x in exposed) if (math.distancesq(x, e) < 0.01f) { ends.Add((o, isA)); break; }
                 }
             }
@@ -563,7 +576,7 @@ namespace Placemaker.Core.Layers.Common
             float3 End((PlannedNet net, bool isA) e) => e.isA ? e.net.A : e.net.D;
             for (int a = 0; a < ends.Count; a++)
                 for (int b = a + 1; b < ends.Count; b++)
-                    if (math.distancesq(End(ends[a]).xz, End(ends[b]).xz) < 9f) parent[Find(a)] = Find(b);
+                    if (math.distancesq(End(ends[a]).xz, End(ends[b]).xz) < 4f) parent[Find(a)] = Find(b);
             var sums = new Dictionary<int, (float3 sum, int count)>();
             for (int k = 0; k < ends.Count; k++)
             {
