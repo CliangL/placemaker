@@ -248,7 +248,7 @@ namespace Placemaker.Core.Build
                 {
                     case "alphabet": case "number": case "letter": case "text": case "speed": case "bus": case "taxi": case "stop": case "slow":
                     case "only": case "wrong": case "court": case "field": case "football": case "basketball": case "tennis": case "sport":
-                    case "playground": case "grid": case "container": case "ban": case "tracks":
+                    case "playground": case "grid": case "container": case "ban": case "tracks": case "arrow": case "merge":
                         return true;
                 }
             return false;

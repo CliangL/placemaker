@@ -177,7 +177,8 @@ namespace Placemaker.Game.Assets
         // Ranking lives in Core (AutoPoolRanking) so the curation test replays exactly the game's order.
         private PoolCandidate Candidate(string category, CatalogItem it) =>
             new PoolCandidate(it.Id, IsVanilla(it),
-                category == AssetCategories.Fence && EntityManager.HasComponent<NetData>(it.Prefab), it.Info.NetWidth);
+                category == AssetCategories.Fence && EntityManager.HasComponent<NetData>(it.Prefab), it.Info.NetWidth,
+                Math.Max(it.Info.BoundsMax.x - it.Info.BoundsMin.x, it.Info.BoundsMax.z - it.Info.BoundsMin.z));
 
         private int CompareAuto(string category, CatalogItem a, CatalogItem b) =>
             AutoPoolRanking.Compare(category, Candidate(category, a), Candidate(category, b));

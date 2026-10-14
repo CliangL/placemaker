@@ -15,10 +15,12 @@ namespace Placemaker.Core.Build
         /// <summary>A network fence (continuous, corner-joined): always before prop fence pieces.</summary>
         public readonly bool NetFence;
         public readonly float NetWidth;
+        /// <summary>Largest horizontal size of the prefab in metres (0 = unknown).</summary>
+        public readonly float Footprint;
 
-        public PoolCandidate(string id, bool vanilla, bool netFence = false, float netWidth = 0f)
+        public PoolCandidate(string id, bool vanilla, bool netFence = false, float netWidth = 0f, float footprint = 0f)
         {
-            Id = id; Vanilla = vanilla; NetFence = netFence; NetWidth = netWidth;
+            Id = id; Vanilla = vanilla; NetFence = netFence; NetWidth = netWidth; Footprint = footprint;
         }
     }
 
@@ -32,6 +34,13 @@ namespace Placemaker.Core.Build
             int score = AssetHeuristics.DefaultScore(category, c.Id, c.NetWidth);
             int tier = c.Vanilla ? 0 : 1;
             if (category == AssetCategories.Fence && !c.NetFence) tier += 2;
+            // Scatter decals read as wear only when small: 30-60 m "ground texture" sheets painted the
+            // whole park (playtest 4b, gallery). Big ones stay pickable, just last.
+            if (c.Footprint > 0f && (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal)))
+            {
+                if (c.Footprint > 12f) score -= 300;
+                else if (c.Footprint > 7f) score -= 60;
+            }
             return (tier, score);
         }
 
