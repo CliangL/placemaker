@@ -142,7 +142,8 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             }
             else if (centre == "statue" && statueCat != null)
             {
-                var o = MonumentKit.Put(ctx, occ, R, MonumentKit.Yaw(fw), ObjectRole.Centerpiece, statueAsset, statueCat, 2f, Hashing.Mix(ctx.Seed, 0x57Au), math.max(1.5f, colScale * 1.4f), 0.2f, 0.1f);
+                float s = MonumentKit.IsFigure(statueCat) || !string.IsNullOrEmpty(ctx.S("statueAsset")) ? math.max(1.5f, colScale * 1.4f) : 1f;
+                var o = MonumentKit.Put(ctx, occ, R, MonumentKit.Yaw(fw), ObjectRole.Centerpiece, statueAsset, statueCat, 2f, Hashing.Mix(ctx.Seed, 0x57Au), s, 0.2f, 0.1f);
                 if (o == null) ctx.Issue(IssueSeverity.Info, K + "Issue.NoRoomForCentre");
             }
 
@@ -165,7 +166,7 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
 
             // Rotunda ring of columns.
             string colCat = MonumentKit.Columns(ctx, ctx.S("columnAsset"), out var colRole);
-            var colAsset = AssetMix.One(ctx.S("columnAsset"));
+            var colAsset = colRole == ObjectRole.Tree && string.IsNullOrEmpty(ctx.S("columnAsset")) ? MonumentKit.ColumnTree : AssetMix.One(ctx.S("columnAsset"));
             float colR = colRole == ObjectRole.Tree ? 1.2f : 0.55f * math.max(1f, colScale * 0.7f);
             float colS = colRole == ObjectRole.Tree ? 1f : colScale;
             int ring = 0, colonnade = 0;
@@ -215,7 +216,12 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
 
             // Statues on a ring outside the columns, behind and beside (not where the walk passes).
             int statues = 0;
-            if (statueCat != null && ctx.I("statues") > 0)
+            // The ring takes ornaments: chosen statues, else figures, else urns (never a ring of fountains).
+            string ringCat = string.IsNullOrEmpty(ctx.S("statueAsset")) ? MonumentKit.Quiet("", MonumentKit.OrnamentChain) : statueCat;
+            var ringRole = ObjectRole.Centerpiece;
+            var ringAsset = statueAsset;
+            if (string.IsNullOrEmpty(ctx.S("statueAsset"))) ringAsset = MonumentKit.OrnamentAsset(ringCat, out ringRole);
+            if (ringCat != null && ctx.I("statues") > 0)
             {
                 int n = ctx.I("statues");
                 float baseA = math.atan2(-fw.y, -fw.x);
@@ -224,7 +230,8 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
                     float a = baseA + (n == 1 ? 0f : (i / (float)(n - 1) - 0.5f) * math.radians(200f));
                     var p = R + new float2(math.cos(a), math.sin(a)) * (Rr + 2.4f);
                     if (!MonumentKit.Inside(site, p, 1f)) continue;
-                    if (MonumentKit.Put(ctx, occ, p, a, ObjectRole.Centerpiece, statueAsset, statueCat, 0.9f, Hashing.Mix(ctx.Seed, 0x5701u + (uint)i), math.max(1f, colScale * 0.8f), 0.3f, 0.1f) != null) statues++;
+                    if (MonumentKit.Put(ctx, occ, p, a, ringRole, ringAsset, ringCat, 0.9f, Hashing.Mix(ctx.Seed, 0x5701u + (uint)i),
+                        ringRole == ObjectRole.Planter ? 1f : math.max(1f, colScale * 0.8f), 0.3f, 0.1f) != null) statues++;
                 }
             }
             ctx.Plan.Facts["statues"] = statues;

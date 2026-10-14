@@ -88,14 +88,16 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             {
                 ObjectRole role = corners == "lamps" ? ObjectRole.Lamp : corners == "planters" ? ObjectRole.Planter : ObjectRole.Centerpiece;
                 string cc = corners == "lamps" ? MonumentKit.Quiet("", AssetCategories.Lamp) : corners == "planters" ? MonumentKit.Quiet("", AssetCategories.Planter, AssetCategories.Bush)
-                    : MonumentKit.Quiet("", MonumentKit.StatueChain);
+                    : MonumentKit.Quiet("", MonumentKit.OrnamentChain);
                 if (cc == AssetCategories.Bush) role = ObjectRole.Bush;
+                var cornerAsset = new AssetRef("");
+                if (role == ObjectRole.Centerpiece) cornerAsset = MonumentKit.OrnamentAsset(cc, out role);
                 float cr = court == "round" ? half * 0.72f : courtHalf * 0.82f * math.SQRT2;
                 if (cc != null)
                     for (int i = 0; i < 4; i++)
                     {
                         var dir = math.normalize(dirs[i] + dirs[(i + 1) % 4]);
-                        MonumentKit.Put(ctx, occ, C + dir * cr, MonumentKit.Yaw(-dir), role, new AssetRef(""), cc, 0.7f, Hashing.Mix(ctx.Seed, 0xC0u + (uint)i));
+                        MonumentKit.Put(ctx, occ, C + dir * cr, MonumentKit.Yaw(-dir), role, cornerAsset, cc, 0.7f, Hashing.Mix(ctx.Seed, 0xC0u + (uint)i));
                     }
             }
             if (ctx.B("flowers"))
