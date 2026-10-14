@@ -43,6 +43,7 @@ namespace Placemaker.Gallery
                     case "--repo": repo = next; i++; break;
                     case "--catalog": fixture = next; i++; break;
                     case "--only": only = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
+                    case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                 }
             }
             repo ??= FindRepo();
@@ -259,12 +260,15 @@ namespace Placemaker.Gallery
             return BaseRing.Select(p => new float3(p.x * s, 0, p.y * s)).ToArray();
         }
 
+        /// <summary>Layout size the gallery renders at (--scale; default = the game option default, 0.5).</summary>
+        public static float LayoutScale = SiteContext.DefaultLayoutScale;
+
         public static Result Run(Job job, Catalog catalog, string outDir)
         {
             var res = new Result();
             var ring = Site(job.TargetArea);
             var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
-            var site = new SiteContext { Assets = catalog.Items };
+            var site = new SiteContext { Assets = catalog.Items, LayoutScale = LayoutScale };
             ComposedPlan plan;
             var sw = Stopwatch.StartNew();
             try

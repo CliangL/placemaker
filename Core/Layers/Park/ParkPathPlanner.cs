@@ -26,7 +26,7 @@ namespace Placemaker.Core.Layers.Park
     {
         // Layout size (FEEDBACK-4): distances are design metres × Layout.Scale; the boundary clearance is the
         // one edge margin plus a wide path's half width (never less than the scaled design value).
-        private static double BoundaryClearance => Math.Max(Layout.M(5f), Layout.EdgeMargin + Composer.DefaultHalfWidth(NetRole.PathwayWide));
+        private static double BoundaryClearance => Math.Max(Layout.M(5f), Layout.EdgeMargin + Composer.DefaultHalfWidth(NetRole.Pathway) + 1f);
         private static double PreferredBoundaryClearance => Math.Max(BoundaryClearance + 1.0, Layout.M(12f));
         private const double MinimumGateDirectionCosine = 0.7071067811865476;
         private static double MinimumPathSeparation => Layout.M(8f, 4f);
@@ -385,14 +385,14 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        private static int SelectCoverageAnchor(List<Node> nodes, int terminals, HashSet<int> netNodes, LayerRegion region, uint seed)
+        private static int SelectCoverageAnchor(List<Node> nodes, int terminals, HashSet<int> netNodes, LayerRegion region, uint seed, HashSet<int> tried = null)
         {
             int bestNode = -1; double bestScore = double.MinValue;
             var netList = new List<int>(netNodes);
             netList.Sort();
             for (int c = terminals; c < nodes.Count; c++)
             {
-                if (netNodes.Contains(c) || nodes[c].GateApproach) continue;
+                if (netNodes.Contains(c) || nodes[c].GateApproach || tried != null && tried.Contains(c)) continue;
                 double netDistance = double.MaxValue;
                 if (netList.Count == 0)
                     for (int t = 0; t < terminals; t++) netDistance = Math.Min(netDistance, Distance(nodes[c].Position, nodes[t].Position));
@@ -411,8 +411,21 @@ namespace Placemaker.Core.Layers.Park
         {
             if (netNodes.Count == 0) return false;
             var original = new HashSet<int>(netNodes);
-            int anchor = SelectCoverageAnchor(nodes, terminals, original, region, seed);
-            if (anchor < 0) return false;
+            // The farthest anchor often cannot close a clean loop (separation / acute branches): try the next few.
+            var tried = new HashSet<int>();
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                int anchor = SelectCoverageAnchor(nodes, terminals, original, region, seed, tried);
+                if (anchor < 0) return false;
+                tried.Add(anchor);
+                if (TryCoverageLoop(anchor, nodes, graph, original, netNodes, netEdges, output)) return true;
+            }
+            return false;
+        }
+
+        private static bool TryCoverageLoop(int anchor, List<Node> nodes, Graph graph, HashSet<int> original,
+            HashSet<int> netNodes, HashSet<long> netEdges, List<float2> output)
+        {
             var first = ShortestPath(anchor, original, graph, null);
             if (!first.Found) return false;
             var blocked = new HashSet<long>();

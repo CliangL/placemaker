@@ -134,12 +134,13 @@ namespace Placemaker.Core.Layers.Park
         {
             if (Nodes.Count == 0 || Edges.Count == 0) return double.MaxValue;
             var adjacency = Adjacency(Nodes.Count, Edges);
-            double score = Nodes.Count * 0.4 + TotalLength * 0.015;
+            double score = Nodes.Count * 0.4 + TotalLength / Common.Layout.Scale * 0.015;
             foreach (var e in Edges)
             {
                 float len = math.distance(Nodes[e.A].Position, Nodes[e.B].Position);
-                if (len < 8f) score += (8f - len) * 5.0;
-                if (len > 65f) score += (len - 65f) * 0.35;
+                float shortLen = Common.Layout.M(8f), longLen = Common.Layout.M(65f);   // layout size: judge edges at design size
+                if (len < shortLen) score += (shortLen - len) / Common.Layout.Scale * 5.0;
+                if (len > longLen) score += (len - longLen) / Common.Layout.Scale * 0.35;
             }
             for (int node = 0; node < Nodes.Count; node++)
             {
@@ -161,7 +162,7 @@ namespace Placemaker.Core.Layers.Park
             }
             int components = Components(adjacency);
             int loops = Math.Max(0, Edges.Count - Nodes.Count + components);
-            score += Math.Abs(loops - wantedLoops) * 35.0;
+            score += Math.Abs(loops - wantedLoops) * (loops < wantedLoops ? 80.0 : 35.0);   // a missing loop is worse than an extra one
             score += CoveragePenalty(region);
             return score;
         }
@@ -180,7 +181,7 @@ namespace Placemaker.Core.Layers.Park
                     total += Math.Sqrt(nearest);
                     samples++;
                 }
-            return samples == 0 ? 0 : total / samples * 1.8;
+            return samples == 0 ? 0 : total / samples / Common.Layout.Scale * 1.8;
         }
 
         public List<int>[] Adjacency() => Adjacency(Nodes.Count, Edges);

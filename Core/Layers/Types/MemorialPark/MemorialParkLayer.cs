@@ -191,7 +191,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             string lighting = ctx.S("lighting");
             float spacing = ctx.F("lampSpacing");
             if (lighting == "lanterns") PathLights(st, spacing, chainLow: false, pairs: true);
-            else if (lighting == "bollards") PathLights(st, spacing * 0.5f, chainLow: true, pairs: false);
+            else if (lighting == "bollards") PathLights(st, math.max(5f, spacing * 0.5f), chainLow: true, pairs: false);
             // FEEDBACK-4: seats and bins stand beside the path nets (never out on the lawn).
             if (!trail) ctx.Plan.Facts["pathBenches"] = PathBenches(ctx, st.Occ, 40f, AssetMix.One(""), 0xBE7Au);
             ctx.Plan.Facts["pathBins"] = PathBins(ctx, st.Occ, 80f, 0xB1A0u);

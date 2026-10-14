@@ -453,6 +453,10 @@ namespace Placemaker.Core.Build
                     if (IsBikeName(lower)) score -= 500;   // a footpath must not become a bike path
                     if (lower.StartsWith("pedestrian", StringComparison.Ordinal) || lower.Contains("pathway")) score += 40;
                     score -= (int)(netWidth * 2);   // narrow by default
+                    // FEEDBACK-4: the thin vanilla "Pavement Path" leads the pool; wide walks, bridges, piers and quays never do.
+                    if (lower.Contains("pavement path")) score += 120;
+                    if (lower.Contains("wide")) score -= 60;
+                    if (ContainsAny(lower, "bridge", "pier", "quay", "tunnel", "elevated")) score -= 300;
                     break;
                 case AssetCategories.InvisiblePath:
                     // Drivable invisible road paths for parking (PLT used these vanilla names).

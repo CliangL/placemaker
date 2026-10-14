@@ -446,9 +446,41 @@ namespace Placemaker.Core.Layers.Common
                 if (HostsStreetShops && input.HasChild(StreetShopsLayer)) CarveStreetShops(ctx, input);
                 PlanCore(ctx);
             }
+            // Only the selected area itself: inside a parent, ends on the outline may meet the parent's paths.
+            if (tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0) KeepPathEndsInside(plan, region);
             // Children plan on the ground this layer leaves: the composer derives it from
             // plan.Terraform (every sculptor emits PlannedTerraform), unless the layer set HeightAfter.
             return plan;
+        }
+
+        /// <summary>
+        /// (FEEDBACK-4 / gallery) A walk that ends on the outline without joining a road would stick out of the
+        /// area by its half width (the rounded end cap). Pull such free ends back along the path so the cap
+        /// stays inside; ends attached to a road keep their node on the road edge.
+        /// </summary>
+        public static void KeepPathEndsInside(AreaPlan plan, LayerRegion region)
+        {
+            if (plan?.Nets == null || region == null) return;
+            foreach (var n in plan.Nets)
+            {
+                if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide) continue;
+                float hw = Composer.DefaultHalfWidth(n.Role);
+                if (n.StartAttach < 0) n.A = PullIn(n.A, n.B, n.D, hw, region);
+                if (n.EndAttach < 0) n.D = PullIn(n.D, n.C, n.A, hw, region);
+            }
+        }
+
+        private static float3 PullIn(float3 end, float3 control, float3 other, float hw, LayerRegion region)
+        {
+            var p = end.xz;
+            float inside = region.Contains(p) ? region.BoundaryDistance(p, hw + 1f) : -region.BoundaryDistance(p, 50f);
+            float need = hw - inside;
+            if (need <= 0.05f) return end;
+            var toward = math.lengthsq(control.xz - p) > 0.01f ? control.xz : other.xz;
+            float len = math.distance(toward, p);
+            if (len < need * 2f + 0.5f) return end;   // too short to shorten: leave it
+            var q = p + (toward - p) / len * need;
+            return new float3(q.x, end.y, q.y);
         }
 
         // ───────────── "Shops along the street" (edgeZoning feature on a "shops" target) ─────────────

@@ -76,9 +76,19 @@ namespace Placemaker.Core.Layers.Leisure
             ParkPaths.Index(curves, occ.Paths, 100);
             ParkPaths.Emit(ctx, curves, gates, pathAsset);
             float axisHw = Composer.DefaultHalfWidth(NetRole.Pathway);
+            float rp = math.clamp(ins * 0.22f, ctx.M(5f, 4f), ctx.M(12f, 5f));
+            // The main axis (the parterres' spine, where the cross walks join) must exist: the formal style
+            // sometimes keeps only the cross axis.
+            if (LeisureKit.Chord(region, centre, axis, keep + axisHw, out var m0, out var m1))
+                foreach (var end in new[] { m0, m1 })
+                {
+                    var from = centre + math.normalizesafe(end - centre) * rp;
+                    var mid = (from + end) * 0.5f;
+                    if (math.distance(from, end) < 4f || occ.Paths.Overlaps(mid, 0.5f, 0f)) continue;
+                    if (!region.CrossesBoundary(from, end, false)) LeisureKit.Path(ctx, occ, from, end, NetRole.Pathway, pathAsset);
+                }
 
             // Round point with the basin (its paving is the plaza of the garden).
-            float rp = math.clamp(ins * 0.22f, ctx.M(5f, 4f), ctx.M(12f, 5f));
             ctx.Surface(LayerRegion.Circle(centre, rp, 24), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
             occ.Take(centre, rp, 0);
             if (ctx.B("fountain"))
