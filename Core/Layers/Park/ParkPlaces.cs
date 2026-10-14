@@ -95,7 +95,7 @@ namespace Placemaker.Core.Layers.Park
             Split(l0, l1, l2, l3, u, out _, out _, out _, out _, out var r0, out var r1, out var r2, out var r3);
             var s = new PathCurve
             {
-                A = r0, B = r1, C = r2, D = r3, Role = c.Role, HalfWidth = c.HalfWidth, Kind = c.Kind,
+                A = r0, B = r1, C = r2, D = r3, Role = c.Role, HalfWidth = c.HalfWidth, Kind = c.Kind, Tier = c.Tier,
                 GateA = t0 <= 0f ? c.GateA : -1, GateD = t1 >= 1f ? c.GateD : -1,
             };
             ParkPaths.Sample(s);
