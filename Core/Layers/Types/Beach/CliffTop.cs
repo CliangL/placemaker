@@ -103,35 +103,45 @@ namespace Placemaker.Core.Layers.Types.Beach
                     LeisureKit.Put(ctx, occ, p - sea * (hw + 1f), 0f, ObjectRole.Lamp, lamp, null, 0.4f, Hashing.Mix(ctx.Seed, 0xC1A0u + (uint)k), 0.3f, 0.1f);
                     res.Lookouts++;
                 }
-                // Railing runs on the sea side where the ground drops (the cliff edge comes close).
-                var run = new List<float2>();
-                void Flush()
-                {
-                    if (run.Count >= 2)
-                    {
-                        var simple = Poly.SimplifyPolyline(run, 0.3f);
-                        for (int i = 1; i < simple.Length; i++)
-                            if (math.distance(simple[i - 1], simple[i]) >= 1.5f)
-                            {
-                                ctx.StraightNet(simple[i - 1], simple[i], NetRole.Fence, railing);
-                                occ.TakeCorridor(simple[i - 1], simple[i], 0.3f, 5);
-                                res.Railings++;
-                            }
-                    }
-                    run.Clear();
-                }
+                // Railing along the sea side where the ground drops (the cliff edge comes close): s30 — ONE continuous chain per
+                // stretch of drop (dips ≤ 12 m bridged, stretches < 10 m left out, equal ~6 m pieces sharing their nodes), open
+                // only at the lookouts (they carry their own railing). It was a scatter of short pieces at different angles.
+                var qs = new List<float2>(); var flag = new List<bool>(); var openAt = new List<bool>();
                 for (float s = 0f; s <= len; s += 2f)
                 {
                     var p = Shoreline.PointOn(line, s, out var t);
                     var sea = new float2(t.y, -t.x);   // land on the left of a chain-ordered line → sea on the right
                     if (shore.FromWater(p + sea) > shore.FromWater(p)) sea = -sea;
                     var q = p + sea * (hw + 0.9f);
-                    bool drop = g.H(q + sea * 3f) < g.H(q) - DropForRailing;
                     bool atLookout = false;
                     foreach (var lr in lookouts) if (Poly.Contains(lr, q) || Poly.DistanceToBoundary(lr, q) < 0.6f) { atLookout = true; break; }
-                    if (drop && !atLookout && shore.Land.ContainsDisc(q, 0.3f)) run.Add(q); else Flush();
+                    qs.Add(q);
+                    openAt.Add(atLookout);
+                    flag.Add(g.H(q + sea * 3f) < g.H(q) - DropForRailing && !atLookout && shore.Land.ContainsDisc(q, 0.3f));
                 }
-                Flush();
+                for (int i = 0, j; i < flag.Count; i = j)
+                {
+                    j = i + 1;
+                    if (flag[i]) continue;
+                    while (j < flag.Count && !flag[j]) j++;
+                    bool inner = i > 0 && j < flag.Count, open = false;
+                    for (int k = i; k < j; k++) open |= openAt[k];
+                    if (inner && !open && (j - i) * 2f <= 12f) for (int k = i; k < j; k++) flag[k] = true;
+                }
+                for (int i = 0, j; i < flag.Count; i = j)
+                {
+                    j = i + 1;
+                    if (!flag[i]) continue;
+                    while (j < flag.Count && flag[j]) j++;
+                    if ((j - 1 - i) * 2f < 10f) continue;
+                    var chain = Poly.ResamplePolyline(qs.GetRange(i, j - i), 6f);
+                    for (int k = 1; k < chain.Length; k++)
+                    {
+                        ctx.StraightNet(chain[k - 1], chain[k], NetRole.Fence, railing);
+                        occ.TakeCorridor(chain[k - 1], chain[k], 0.3f, 5);
+                        res.Railings++;
+                    }
+                }
             }
             return res;
         }

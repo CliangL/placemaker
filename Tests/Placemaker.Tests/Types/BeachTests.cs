@@ -66,6 +66,7 @@ namespace Placemaker.Tests.Types
         [Fact]
         public void FastOnFiveHectares()
         {
+            PlanPreset("beach", TestKit.Gen("beach").Presets[0], FiveHa, SeaSouth(0.04f));   // JIT (as the other types' timing tests)
             foreach (var p in TestKit.Gen("beach").Presets)
             {
                 long ms = Time(() => PlanPreset("beach", p, FiveHa, SeaSouth(0.04f)));
