@@ -112,7 +112,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             // 60 → 30 m at the default layout size). No lifeguards/huts: no vanilla asset exists for either.
             Preset("sandy", ("style", "sandy"), ("beachDepth", 60.0), ("umbrellas", 45.0), ("layout", "scattered"), ("backdrop", "dunes"), ("huts", "none"),
                 ("lifeguards", 0.0), ("duneDepth", 24.0), ("grassDensity", 70.0), ("treeDensity", 40.0), ("kiosks", 1.0));
-            Preset("resort", ("style", "sandy"), ("beachDepth", 56.0), ("umbrellas", 70.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "none"), ("pathWidth", "wide"),
+            Preset("resort", ("style", "sandy"), ("beachDepth", 56.0), ("umbrellas", 115.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "none"), ("pathWidth", "wide"),
                 ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 0.0), ("slope", 3.0), ("treeDensity", 30.0));
             Preset("rocky", ("style", "rocky"), ("umbrellas", 5.0), ("sandSurface", false), ("paintLayer", 3.0), ("backdrop", "none"), ("huts", "none"),
                 ("lifeguards", 0.0), ("kiosks", 0.0), ("rockClusters", 8.0), ("tidePools", 5.0), ("beachDepth", 36.0), ("slope", 8.0), ("treeDensity", 30.0),

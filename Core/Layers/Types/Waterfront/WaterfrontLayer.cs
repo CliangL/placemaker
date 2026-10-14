@@ -84,7 +84,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
 
             c.Choice("trees", "row", ControlTier.More, "planting", "none", "row", "double").Tip();
             c.Slider("treeSpacing", 12, 6, 30, 1, "m", ControlTier.More, "planting").Layout(6);
-            c.Choice("backdrop", "lawn", ControlTier.More, "planting", "lawn", "park", "none").Tip();
+            c.Choice("backdrop", "park", ControlTier.More, "planting", "lawn", "park", "none").Tip();   // park: an empty lawn read as unfinished (art pass a3)
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
 
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
