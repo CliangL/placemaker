@@ -104,6 +104,8 @@ namespace Placemaker.Game.Assets
 
         public Entity Resolve(AssetRef asset, string category)
         {
+            // s14: zone plans name the EU prefab; a city on another theme gets its own (NA …) when it exists.
+            if (category == AssetCategories.Zone) asset = new AssetRef(Core.Layers.Common.ZoneKinds.ForTheme(asset.Id, ThemePrefix()), Fallbacks(asset, asset.Id));
             var e = ResolveName(asset.Id, category);
             if (e != Entity.Null) return e;
             if (asset.Fallbacks != null)
@@ -113,6 +115,27 @@ namespace Placemaker.Game.Assets
                     if (e != Entity.Null) return e;
                 }
             return DefaultFor(category);
+        }
+
+        private static string[] Fallbacks(AssetRef asset, string original)
+        {
+            var list = new List<string>();
+            if (asset.Fallbacks != null) list.AddRange(asset.Fallbacks);
+            list.Add(original);
+            return list.ToArray();
+        }
+
+        /// <summary>City theme prefix ("EU" / "NA", ThemePrefab.assetPrefix); "" when unknown.</summary>
+        private string ThemePrefix()
+        {
+            try
+            {
+                var config = World.GetExistingSystemManaged<global::Game.City.CityConfigurationSystem>();
+                var theme = config != null ? config.defaultTheme : Entity.Null;
+                if (theme != Entity.Null && _prefabs.TryGetPrefab(theme, out ThemePrefab prefab) && prefab != null) return prefab.assetPrefix ?? "";
+            }
+            catch (Exception) { }
+            return "";
         }
 
         public Dictionary<string, AssetInfo> InfoMap() => new Dictionary<string, AssetInfo>(_infoMap, StringComparer.Ordinal);

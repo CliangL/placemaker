@@ -33,6 +33,13 @@ namespace Placemaker.Core.Layers.Common
         public const string LayoutId = "shopLayout", AmountId = "shopAmount", DepthId = "shopDepth";
         public const string Row = "band", Speckled = "pads", Clusters = "clusters", Inward = "inward", Lane = "lane";
         public static readonly string[] Layouts = { Row, Speckled, Clusters, Inward, Lane };
+        /// <summary>
+        /// s14: the Zoning feature on parks/plazas is plain cutouts — Row or Speckled only (user: "literally cutouts for
+        /// zoning, no fanciness"). The other layouts live on in the Commercial "Shops & park" type.
+        /// </summary>
+        public static readonly string[] FeatureLayouts = { Row, Speckled };
+        /// <summary>Saved feature layouts from s12 (clusters, facing in, alley) and unknown values plan as Row.</summary>
+        public static string FeatureLayout(string layout) => Array.IndexOf(FeatureLayouts, layout) >= 0 ? layout : Row;
         public const string None = "none", Few = "few", Some = "some", Lots = "lots";
         public static readonly string[] Amounts = { None, Few, Some, Lots };
 
@@ -76,12 +83,12 @@ namespace Placemaker.Core.Layers.Common
                 { "marketSquare", (true, Row, Lots) },
                 { "park", (true, Speckled, Few) },
                 { "waterfront", (true, Row, Some) },
-                { "fairground", (true, Clusters, Few) },
+                { "fairground", (true, Row, Few) },
                 { "amphitheatre", (true, Speckled, Few) },
                 { "greenwayPark", (true, Speckled, Few) },
                 { "sportsPark", (false, Speckled, Few) },
                 { "formalGarden", (false, Row, Some) },
-                { "botanicalGarden", (false, Clusters, Few) },
+                { "botanicalGarden", (false, Row, Few) },
                 { "picnicGrounds", (false, Speckled, Few) },
                 { "dogPark", (false, Speckled, Few) },
                 { "communityGarden", (false, Speckled, Few) },
@@ -89,7 +96,7 @@ namespace Placemaker.Core.Layers.Common
                 { "abandonedLot", (false, Row, Some) },
                 { "urbanRuins", (false, Speckled, Few) },
                 { "urbanFarm", (false, Speckled, Few) },
-                { "campground", (false, Clusters, Few) },
+                { "campground", (false, Row, Few) },
             };
 
         public static (bool on, string layout, string amount) DefaultFor(string layerId) =>
@@ -99,7 +106,7 @@ namespace Placemaker.Core.Layers.Common
         public static string NormalizeLayout(string layout) => Array.IndexOf(Layouts, layout) >= 0 ? layout : Row;
         public static string NormalizeAmount(string amount) => Array.IndexOf(Amounts, amount) >= 0 ? amount : Some;
 
-        private struct Run
+        public struct Run
         {
             public float2 A, Dir, In;
             public float From, To;
@@ -151,7 +158,7 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>Road-facing outline runs with the entrance gaps cut out (intervals ≥ 2 cells).</summary>
-        private static List<Run> Runs(LayerRegion region, List<StreetFrontage.RoadLine> roads, IReadOnlyList<float2> gates, Func<float2, float> water)
+        public static List<Run> Runs(LayerRegion region, List<StreetFrontage.RoadLine> roads, IReadOnlyList<float2> gates, Func<float2, float> water)
         {
             var runs = new List<Run>();
             foreach (var (a, b) in StreetFrontage.Edges(region.Ring, roads, 2 * Cell))

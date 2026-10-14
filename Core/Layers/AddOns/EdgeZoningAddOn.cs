@@ -19,6 +19,10 @@ namespace Placemaker.Core.Layers.AddOns
         public const string LayerId = "edgeZoning";
         public const string ZoneControl = "zone";
         public const string DepthControl = "depth";
+        /// <summary>s14: zone type by name (ZoneKinds); the asset control "zone" overrides it when set.</summary>
+        public const string KindControl = "zoneKind";
+        /// <summary>Set by the Zoning feature on its child step: zone the whole cutout (no own depth).</summary>
+        public const string CutoutSetting = "cutout";
 
         /// <summary>CS2 zone cells are 8 m; blocks reach 6 cells deep.</summary>
         public const float CellSize = 8f;
@@ -35,19 +39,40 @@ namespace Placemaker.Core.Layers.AddOns
         {
             _controls = new List<ControlSchema>
             {
-                new ControlSchema
-                {
-                    Id = ZoneControl, Kind = ControlKind.Asset, Tier = ControlTier.Essential, Group = "zoning",
-                    LabelKey = "Placemaker.EdgeZoning.Control.zone", TooltipKey = "Placemaker.EdgeZoning.Control.zone.Tooltip",
-                    AssetCategory = AssetCategories.Zone, Default = "", Cheap = true,
-                },
+                ZoneKindControl(),
                 new ControlSchema
                 {
                     Id = DepthControl, Kind = ControlKind.Slider, Tier = ControlTier.Essential, Group = "zoning",
                     LabelKey = "Placemaker.EdgeZoning.Control.depth", TooltipKey = "Placemaker.EdgeZoning.Control.depth.Tooltip",
                     Min = CellSize, Max = 6 * CellSize, Step = CellSize, Unit = "m", Default = 6.0 * CellSize, Cheap = true,
+                    // s14: inside a zoning cutout the cutout itself is the depth (the host's "Depth"); the feature sets "cutout".
+                    VisibleWhen = CutoutSetting + "=false",
+                },
+                new ControlSchema
+                {
+                    Id = ZoneControl, Kind = ControlKind.Asset, Tier = ControlTier.More, Group = "zoning",
+                    LabelKey = "Placemaker.EdgeZoning.Control.zone", TooltipKey = "Placemaker.EdgeZoning.Control.zone.Tooltip",
+                    AssetCategory = AssetCategories.Zone, Default = "", Cheap = true,
+                },
+                // s14: a settings flag, never shown (its VisibleWhen can never hold): the Zoning feature sets it on its child.
+                new ControlSchema
+                {
+                    Id = CutoutSetting, Kind = ControlKind.Toggle, Tier = ControlTier.More, Group = "zoning", Default = false, Cheap = true,
+                    LabelKey = "Placemaker.EdgeZoning.Control.cutout", TooltipKey = "Placemaker.EdgeZoning.Control.cutout.Tooltip", VisibleWhen = CutoutSetting + "=hidden",
                 },
             };
+        }
+
+        /// <summary>Zone type choice (labels Placemaker.Zone.<kind>, shared with every type that zones).</summary>
+        public static ControlSchema ZoneKindControl(string id = KindControl, string group = "zoning", string def = Common.ZoneKinds.Default)
+        {
+            var c = new ControlSchema
+            {
+                Id = id, Kind = ControlKind.Choice, Tier = ControlTier.Essential, Group = group, Default = def, Cheap = true,
+                LabelKey = "Placemaker.Zone.Type", TooltipKey = "Placemaker.Zone.Type.Tooltip",
+            };
+            foreach (var k in Common.ZoneKinds.All) c.Options.Add(new ControlOption { Value = k, LabelKey = "Placemaker.Zone." + k, TooltipKey = "Placemaker.Zone." + k + ".Tooltip" });
+            return c;
         }
 
         public string Id => LayerId;
@@ -85,7 +110,11 @@ namespace Placemaker.Core.Layers.AddOns
             var settings = input.Settings ?? new SettingsBag();
             float depth = (float)Math.Max(CellSize, Math.Min(6 * CellSize, settings.Num(DepthControl, 6 * CellSize)));
             if (!math.isfinite(depth)) depth = 6 * CellSize;
-            string zone = settings.S(ZoneControl, "");
+            string zone = Common.ZoneKinds.Resolve(settings.S(KindControl, Common.ZoneKinds.Default), settings.S(ZoneControl, ""));
+            // s14: a zoning cutout (region tagged "shops") is kept empty by its host and by Cutouts.Enforce, so whatever
+            // a sibling put there first must not shorten the zoned rows.
+            bool cutout = input.RegionTags != null && Array.IndexOf(input.RegionTags, Common.StreetFrontage.ShopsTag) >= 0;
+            if (cutout || settings.B(CutoutSetting, false)) depth = 6 * CellSize;
             Func<float2, float> h = input.Site?.HeightAt ?? (_ => 0f);
 
             var roads = CollectRoads(input);
@@ -113,7 +142,7 @@ namespace Placemaker.Core.Layers.AddOns
                     float2 inward = new float2(-dir.y, dir.x); // CCW ring: interior on the left
                     float d = FitDepth(ring, p0, p1, inward, depth);
                     // Stop short of anything an earlier layer placed; whole cells only.
-                    while (d >= CellSize * 0.75f && Occupied(input.Reserved, p0, p1, inward, d)) d -= CellSize;
+                    while (d >= CellSize * 0.75f && !cutout && Occupied(input.Reserved, p0, p1, inward, d)) d -= CellSize;
                     if (d < CellSize * 0.75f) continue;
                     float2 q0 = p0 - inward * RoadSideOverlap, q1 = p1 - inward * RoadSideOverlap;
                     float2 q2 = p1 + inward * d, q3 = p0 + inward * d;

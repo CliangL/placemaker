@@ -1,5 +1,6 @@
-// s12: "Street shops" layouts (Core/Layers/Common/StreetShops.cs): row, speckled, clusters, facing in
-// (U-shaped alley), alley (dead-end lane); amount none/few/some/lots; per-type defaults.
+// s12/s14: the Zoning feature on parks, plazas… (Core/Layers/Common/StreetShops.cs): plain cutouts in a row or
+// speckled; amount none/few/some/lots; per-type defaults. s12's alley layouts live on in the Commercial
+// "Shops & park" type (CommercialTests); their saved values plan as a row here.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -84,7 +85,7 @@ namespace Placemaker.Tests
         public static IEnumerable<object[]> Cases()
         {
             foreach (var host in new[] { "park", "plaza", "marketSquare" })
-                foreach (var layout in StreetShops.Layouts)
+                foreach (var layout in StreetShops.FeatureLayouts)
                     foreach (var amount in new[] { StreetShops.Some, StreetShops.Lots })
                         yield return new object[] { host, layout, amount };
         }
@@ -117,30 +118,8 @@ namespace Placemaker.Tests
                 for (int k = i + 1; k < shops.Count; k++)
                     Assert.False(StreetShops.ConvexOverlap(shops[i], shops[k], 0.05f), $"{layout}: shop regions {i} and {k} overlap");
 
-            // Alleys: only for the alley layouts, every one joined to an existing street.
-            var alleys = host.Nets.Where(n => n.Role == NetRole.Alley).ToList();
-            if (layout == StreetShops.Inward || layout == StreetShops.Lane)
-            {
-                Assert.NotEmpty(alleys);
-                int attached = alleys.Count(n => n.StartAttach >= 0) + alleys.Count(n => n.EndAttach >= 0);
-                int units = (int)host.Facts["shopAlleys"];
-                Assert.Equal(layout == StreetShops.Inward ? 2 * units : units, attached);
-                foreach (var n in alleys)
-                {
-                    if (n.StartAttach >= 0) Assert.Contains(site.NearbyNets, r => r.ExternalId == n.StartAttach && math.distance(Composer.Bezier(r.A, r.B, r.C, r.D, n.StartAttachT).xz, n.A.xz) < 0.5f);
-                    if (n.EndAttach >= 0) Assert.Contains(site.NearbyNets, r => r.ExternalId == n.EndAttach && math.distance(Composer.Bezier(r.A, r.B, r.C, r.D, n.EndAttachT).xz, n.D.xz) < 0.5f);
-                    // Free ends are joined to the next alley piece (identical node) — or the lane's dead end.
-                    foreach (var (end, att) in new[] { (n.A.xz, n.StartAttach), (n.D.xz, n.EndAttach) })
-                    {
-                        if (att >= 0) continue;
-                        bool joined = alleys.Any(o => o != n && (math.distance(o.A.xz, end) < 1e-3f || math.distance(o.D.xz, end) < 1e-3f));
-                        Assert.True(joined || layout == StreetShops.Lane, $"{layout}: alley end {end} is loose");
-                    }
-                    foreach (var p in Samples(n))
-                        Assert.DoesNotContain(shops, q => Poly.Contains(Inset(q, 0.3f), p));
-                }
-            }
-            else Assert.Empty(alleys);
+            // Plain cutouts: the feature plans no alleys.
+            Assert.DoesNotContain(host.Nets, n => n.Role == NetRole.Alley);
 
             // The place plans around the shops: no object of any layer but the zoning stands on shop land, and
             // no path runs over it.
@@ -191,6 +170,9 @@ namespace Placemaker.Tests
         [InlineData("band")]
         [InlineData("pads")]
         [InlineData("retiredValue")]
+        [InlineData("clusters")]
+        [InlineData("inward")]
+        [InlineData("lane")]
         public void OldSavedLayoutsStillPlan(string saved)
         {
             // Pre-s12 recipes have shopLayout band|pads and no shopAmount; anything unknown plans as a row.
@@ -203,21 +185,15 @@ namespace Placemaker.Tests
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
             Assert.False(plan.HasErrors);
             Assert.NotEmpty(plan.Layers.SelectMany(l => l.Zoning));
+            Assert.DoesNotContain(plan.Layers.SelectMany(l => l.Nets), n => n.Role == NetRole.Alley);
             Assert.Equal("band", StreetShops.NormalizeLayout("retiredValue"));
-        }
-
-        [Fact]
-        public void TheLaneContinuesAsAParkPath()
-        {
-            var ring = TestKit.Rect(Side, Side);
-            var site = Streets(ring);
-            var plan = Compose("park", StreetShops.Lane, StreetShops.Some, ring, site);
-            var park = plan.Layers.First(l => l.GeneratorId == "park");
-            var lane = park.Nets.Where(n => n.Role == NetRole.Alley).ToList();
-            Assert.Single(lane);
-            var deadEnd = lane[0].StartAttach >= 0 ? lane[0].D : lane[0].A;
-            // CS2 joins nets only at identical nodes: a park path ends exactly on the lane's dead end.
-            Assert.Contains(park.Nets.Where(PathJoins.IsPath), n => math.distance(n.A, deadEnd) < 1e-3f || math.distance(n.D, deadEnd) < 1e-3f);
+            // s14: retired feature layouts (clusters, facing in, alley) load as Row, in the plan and in the editor.
+            var park = (LayerBase)GeneratorRegistry.Get("park");
+            string expect = saved == "pads" ? "pads" : "band";
+            Assert.Equal(expect, park.Merge(r.Root.Settings).S(StreetShops.LayoutId, ""));
+            var loaded = r.Clone();
+            Editor.ApplyDefaults(loaded);
+            Assert.Equal(expect, loaded.Root.Settings.S(StreetShops.LayoutId, ""));
         }
 
         [Fact]

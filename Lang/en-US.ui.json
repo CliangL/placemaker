@@ -74,6 +74,7 @@
   "Placemaker.UI.Locked": "Kept when randomizing",
   "Placemaker.UI.LockedHint": "Click to let Randomize change it again.",
   "Placemaker.UI.Make": "Make",
+  "Placemaker.UI.MakeGroup.Commercial": "Commercial",
   "Placemaker.UI.MakeGroup.Events": "Events",
   "Placemaker.UI.MakeGroup.Farms": "Farms",
   "Placemaker.UI.MakeGroup.Gardens": "Gardens",
