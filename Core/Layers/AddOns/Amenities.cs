@@ -57,6 +57,8 @@ namespace Placemaker.Core.Layers.AddOns
             new AmenitySpec { Layer = "bandstand", Length = 26f, Width = 22f, DefaultAt = "centre" },
             new AmenitySpec { Layer = "dogRun", Length = 34f, Width = 24f, DefaultAt = "corner" },
             new AmenitySpec { Layer = "noticeboard", Length = 6f, Width = 4f, DefaultAt = "entrance" },
+            // Monuments & follies (grand park wave, g4): see AddOns/Monuments.
+            new AmenitySpec { Layer = "bigStatue", Length = 36f, Width = 26f, DefaultAt = "centre" },
         };
 
         public static AmenitySpec Spec(string layer)
