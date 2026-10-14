@@ -37,7 +37,7 @@ namespace Placemaker.Core.Layers.Types.Ruins
         {
             Feature(DebrisAddOn.LayerId, ("mix", "junk"), ("where", "edges")),
             Feature(DirtJumpsAddOn.LayerId, ("lines", 1.0), ("height", 1.25)),
-            Feature("bigtrees", ("density", 1.5)),
+            DecayKit.Relabel(Feature("bigtrees", ("density", 1.5)), "Placemaker.Abandoned.Feature.bigtrees"),
             Feature("rocks", ("size", "small"), ("clusters", 3.0)),
             Feature("decals", ("theme", "dirt"), ("ground", "lawn"), ("density", 1.5)),
             Feature("terrain", ("shape", "mounds"), ("height", 1.0)),

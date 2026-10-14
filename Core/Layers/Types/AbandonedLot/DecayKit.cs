@@ -62,6 +62,9 @@ namespace Placemaker.Core.Layers.Types.Ruins
 
     public static class DecayKit
     {
+        /// <summary>Gives a reused feature a type-specific label ("Surviving old trees").</summary>
+        public static FeatureInfo Relabel(FeatureInfo f, string labelKey) { f.LabelKey = labelKey; return f; }
+
         /// <summary>
         /// First category of the chain that can be placed (the first when the player chose assets).
         /// Adds the shared "no assets" Info issue once per category when nothing in the chain exists.
