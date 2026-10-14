@@ -9,7 +9,7 @@
 //   terraform as height tint + 1 m contours, plan issues as red/amber rings, a 10 m scale bar.
 // Writes <out>/<type>/<variant>.png, <out>/index.html and <out>/gallery.json (metrics per image).
 //
-//   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark]
+//   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront]
 
 using System;
 using System.Collections.Generic;
@@ -44,6 +44,7 @@ namespace Placemaker.Gallery
                     case "--catalog": fixture = next; i++; break;
                     case "--only": only = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--showcase": Renderer.Showcase = true; break;
+                    case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                 }
             }
@@ -266,6 +267,15 @@ namespace Placemaker.Gallery
 
         /// <summary>--showcase: square site with streets on all four sides; entrances from the planner's own suggestions.</summary>
         public static bool Showcase;
+        /// <summary>
+        /// --water a,b/preset-x (test-only fixture; the gallery site is otherwise dry): for these types (or type/variant) the south strip of the
+        /// site (z &lt; 18 % of its depth) and everything beyond it is a lake. Land stays at 0 m, the water surface is at
+        /// -0.6 m and the lake bed shelves down to -5 m; the street on that side is dropped. Lets shore types
+        /// (beach, waterfront, wetland, lakeshore trails) find real water instead of an assumed side.
+        /// </summary>
+        public static HashSet<string> WaterTypes;
+        public const float WaterSurface = -0.6f;
+        [ThreadStatic] private static float _waterZ;
         [ThreadStatic] private static List<NearbyNet> _roads;
         [ThreadStatic] private static List<EdgeMarker> _markers;
 
@@ -312,6 +322,16 @@ namespace Placemaker.Gallery
             var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
             var site = new SiteContext { Assets = catalog.Items, LayoutScale = LayoutScale };
             if (Showcase) site.NearbyNets = RoadsAround(ring);
+            _waterZ = float.NaN;
+            if (WaterTypes != null && (WaterTypes.Contains(job.Type) || WaterTypes.Contains(job.Type + "/" + job.Variant)))
+            {
+                float zMin = ring.Min(p => p.z), zMax = ring.Max(p => p.z), wz = zMin + (zMax - zMin) * 0.18f;
+                _waterZ = wz;
+                Func<float2, float> bed = p => p.y >= wz ? 0f : math.max(-5f, -1f - (wz - p.y) * 0.12f);
+                site.HeightAt = bed;
+                site.WaterDepthAt = p => p.y >= wz ? 0f : WaterSurface - bed(p);
+                site.NearbyNets = site.NearbyNets.Where(n => math.max(n.A.z, n.D.z) > zMin + 0.5f).ToList();
+            }
             _roads = site.NearbyNets;
             ComposedPlan plan;
             var sw = Stopwatch.StartNew();
@@ -452,6 +472,11 @@ namespace Placemaker.Gallery
                     cv.DashedPolyline(rp, cv.Px(1f), 4f, 4f, Rgba.Hex("#ffffff", 0.8f));
                 }
             cv.FillPolygon(ring2, Ground);
+            if (!float.IsNaN(_waterZ))
+            {
+                float wz = _waterZ;   // test water fixture (--water): lake south of wz
+                cv.Shade(p => p.y < wz ? Rgba.Hex("#8fbde6") : default, min, max);
+            }
 
             // Terraform: height after all layers (last plan with HeightAfter wins), tinted + 1 m contours.
             Func<float2, float> height = null;
