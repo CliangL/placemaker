@@ -18,6 +18,7 @@ namespace Placemaker.Game.Build
             // run unconditionally so saves that reference the clones by name always resolve (rule 3).
             updateSystem.UpdateBefore<SurfaceCloneSystem, global::Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
             updateSystem.UpdateBefore<ParkingCompanionPrefabSystem, global::Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
+            updateSystem.UpdateBefore<ParkCompanionPrefabSystem, global::Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
             // "Placemaker Area" owner lot (US7): one selectable/bulldozable thing per build.
             updateSystem.UpdateBefore<OwnerAreaPrefabSystem, global::Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
 
@@ -51,6 +52,8 @@ namespace Placemaker.Game.Build
             updateSystem.UpdateAfter<ParkingEconomySystem, global::Game.Pathfind.ParkingLaneDataSystem>(SystemUpdatePhase.ModificationEnd);
             // Companion components must exist before Game.Buildings.InitializeSystem sees the Building.
             updateSystem.UpdateBefore<ParkingCompanionSystem, global::Game.Buildings.InitializeSystem>(SystemUpdatePhase.Modification2);
+            updateSystem.UpdateBefore<ParkCompanionSystem, global::Game.Buildings.InitializeSystem>(SystemUpdatePhase.Modification2);
+            updateSystem.UpdateAt<ParkCompanionCleanupSystem>(SystemUpdatePhase.PreTool);
             // Upkeep usage / workers are set before vanilla charges upkeep and hires.
             updateSystem.UpdateBefore<ParkingCompanionUpkeepSystem, global::Game.Simulation.CityServiceUpkeepSystem>(SystemUpdatePhase.GameSimulation);
         }

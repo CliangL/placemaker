@@ -16,8 +16,8 @@ namespace Placemaker.Core.Build
     {
         /// <summary>"PMGR" little-endian.</summary>
         public const uint Magic = 0x52474D50;
-        /// <summary>Bump when appending fields. v1 = initial layout.</summary>
-        public const int CurrentVersion = 1;
+        /// <summary>Bump when appending fields. v1 = initial layout; v2 (s17) = park stats block after the area block.</summary>
+        public const int CurrentVersion = 2;
 
         // Corrupt data must never make us allocate gigabytes or recurse forever.
         private const int MaxCount = 1_000_000;
@@ -56,6 +56,11 @@ namespace Placemaker.Core.Build
                 // (e.g. a layer changed meaning) loses only the receipt, never the group itself.
                 Block(w, bw => { bw.Write(r.Recipe != null); if (r.Recipe != null) WriteRecipe(bw, r.Recipe); });
                 Block(w, bw => { bw.Write(r.Area != null); if (r.Area != null) WriteArea(bw, r.Area); });
+                // v2: park stats (settings + applied values). The recipe's own copy of the settings is not in the recipe
+                // block (older readers would choke on it); Decode puts it back on the recipe for Edit.
+                var parkStats = r.ParkStats ?? (r.Recipe?.ParkStats != null && !r.Recipe.ParkStats.IsDefault
+                    ? new ParkStatsRecord { Settings = r.Recipe.ParkStats.Clone() } : null);
+                Block(w, bw => { bw.Write(parkStats != null); if (parkStats != null) WriteParkStats(bw, parkStats); });
                 w.Flush();
                 return ms.ToArray();
             }
@@ -93,7 +98,12 @@ namespace Placemaker.Core.Build
 
                     r.Recipe = ReadBlock(rd, br => br.ReadBoolean() ? ReadRecipe(br) : null);
                     r.Area = ReadBlock(rd, br => br.ReadBoolean() ? ReadArea(br) : null);
-                    // version >= 2 fields would be read here, guarded by `version`.
+                    if (version >= 2 && ms.Position < ms.Length)
+                    {
+                        r.ParkStats = ReadBlock(rd, br => br.ReadBoolean() ? ReadParkStats(br) : null);
+                        if (r.ParkStats?.Settings != null && r.Recipe != null) r.Recipe.ParkStats = r.ParkStats.Settings.Clone();
+                    }
+                    // version >= 3 fields would be read here, guarded by `version`.
                     return r;
                 }
             }
@@ -101,6 +111,32 @@ namespace Placemaker.Core.Build
             {
                 return null;
             }
+        }
+
+        // ───────────── park stats (v2) ─────────────
+
+        private static void WriteParkStats(BinaryWriter w, ParkStatsRecord p)
+        {
+            var st = p.Settings ?? new ParkStatsSettings();
+            w.Write(st.KeepVanilla);
+            w.Write(st.Overrides.Count);
+            foreach (var kv in st.Overrides) { Str(w, kv.Key); w.Write(kv.Value); }
+            w.Write(p.Applied?.Count ?? 0);
+            if (p.Applied != null) foreach (var kv in p.Applied) { Str(w, kv.Key); w.Write(kv.Value); }
+            w.Write(p.Kind);
+            w.Write(p.LeisureType);
+        }
+
+        private static ParkStatsRecord ReadParkStats(BinaryReader rd)
+        {
+            var p = new ParkStatsRecord { Settings = new ParkStatsSettings { KeepVanilla = rd.ReadBoolean() } };
+            int n = Count(rd);
+            for (int i = 0; i < n; i++) { var k = Str(rd) ?? ""; p.Settings.Overrides[k] = rd.ReadDouble(); }
+            n = Count(rd);
+            for (int i = 0; i < n; i++) { var k = Str(rd) ?? ""; p.Applied[k] = rd.ReadDouble(); }
+            p.Kind = rd.ReadInt32();
+            p.LeisureType = rd.ReadInt32();
+            return p;
         }
 
         // ───────────── recipe ─────────────

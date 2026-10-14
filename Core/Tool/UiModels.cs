@@ -80,6 +80,13 @@ namespace Placemaker.Core.Tool
         public bool PermanentAcknowledged;
         /// <summary>Extra issues from the tool itself (build failure, timeout…).</summary>
         public List<PlanIssue> ExtraIssues = new List<PlanIssue>();
+        /// <summary>(s17) Selected area in m² (park stats scale with it). 0 = the plan's outline is unknown: no park stats.</summary>
+        public double AreaM2;
+        /// <summary>(s17) Setting "Real park stats (companion building)".</summary>
+        public bool ParkCompanion;
+        /// <summary>(s17) Outline (XZ) and the nets around it, to find the companion's road frontage. Null = none.</summary>
+        public IReadOnlyList<float2> Outline;
+        public IReadOnlyList<NearbyNet> Roads;
     }
 
     public static class UiModels
@@ -89,7 +96,7 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 17;   // s18: ground-palette option swatches (roles field/border/focal/path/inlay)
+        public const int Protocol = 18;   // s17: park stats (summary.parkStats, setParkStat…, companion)
 
         // ───────────── state ─────────────
 
@@ -770,6 +777,68 @@ namespace Placemaker.Core.Tool
             o.Set("permanent", permanent);
             // Extension (docs/proposals/gametool.md): whether acknowledgePermanent(true) covers the current effects.
             o.Set("permanentAcknowledged", effects.Count == 0 || s.PermanentAcknowledged);
+            // Extension (docs/proposals/s17.md): park stats of the planned build.
+            if (s.AreaM2 > 0 && s.Recipe != null)
+            {
+                Placemaker.Core.Build.ParkStatsResult stats = null;
+                try { stats = Placemaker.Core.Build.ParkStatsEstimator.Estimate(Placemaker.Core.Build.ParkStatsInput.From(plan, s.AreaM2, s.Recipe), s.Recipe.ParkStats); }
+                catch (Exception) { stats = null; }
+                if (stats != null && stats.Applicable)
+                {
+                    var site = new Placemaker.Core.Build.ParkCompanionSite { ReasonKey = Placemaker.Core.Build.ParkCompanionPlanner.NoRoadKey };
+                    if (s.ParkCompanion)
+                        try
+                        {
+                            var objs = new List<float2>();
+                            var paths = new List<(float2, float2, float)>();
+                            Placemaker.Core.Build.ParkCompanionPlanner.Obstacles(plan, objs, paths);
+                            site = Placemaker.Core.Build.ParkCompanionPlanner.Find(s.Outline, s.Roads, objs, paths);
+                        }
+                        catch (Exception) { }
+                    Placemaker.Core.Build.ParkStatsEstimator.WithCompanion(stats, s.ParkCompanion, site);
+                    o.Set("parkStats", ParkStats(stats));
+                }
+            }
+            return o;
+        }
+
+        /// <summary>(s17) contract.ts ParkStatsView.</summary>
+        public static JsonValue ParkStats(Placemaker.Core.Build.ParkStatsResult r)
+        {
+            var o = JsonValue.Obj()
+                .Set("kind", r.Kind.ToString().ToLowerInvariant())
+                .Set("leisureType", r.LeisureType == Placemaker.Core.Build.LeisureKind.CityBeach ? "beach" : "park")
+                .Set("keepVanilla", r.KeepVanilla)
+                .Set("companion", r.Companion == Placemaker.Core.Build.ParkCompanionState.Yes ? "yes"
+                    : r.Companion == Placemaker.Core.Build.ParkCompanionState.NoRoad ? "noRoad" : "off")
+                .Set("quality", Math.Round(r.Quality, 2));
+            var arr = JsonValue.Arr();
+            foreach (var st in r.Stats)
+            {
+                var so = JsonValue.Obj()
+                    .Set("id", st.Id)
+                    .Set("value", st.Value)
+                    .Set("suggested", st.Suggested)
+                    .Set("bandMin", st.BandMin)
+                    .Set("bandMax", st.BandMax)
+                    .Set("min", st.Min)
+                    .Set("max", st.Max)
+                    .Set("step", st.Step)
+                    .Set("unit", st.Unit)
+                    .Set("applied", st.Applied)
+                    .Set("overridden", st.Overridden)
+                    .Set("clamped", st.Clamped);
+                var f = JsonValue.Arr();
+                foreach (var line in st.Formula) f.Add(line.ToJson());
+                so.Set("formula", f);
+                var sim = JsonValue.Arr();
+                foreach (var kv in st.Similar)
+                    sim.Add(JsonValue.Obj().Set("id", kv.Key.Id).Set("name", kv.Key.Name).Set("nameKey", kv.Key.NameKey)
+                        .Set("areaM2", kv.Key.AreaM2).Set("value", kv.Value));
+                so.Set("similar", sim);
+                arr.Add(so);
+            }
+            o.Set("stats", arr);
             return o;
         }
 

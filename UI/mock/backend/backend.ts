@@ -118,6 +118,8 @@ export class MockBackend {
     preview = new Map<string, SettingValue>();
     markerMode: { stepPath: string; kind: string } | null = null;
     ackPermanent = false;
+    /** s17 park stats choices (sent to the host with each compose). */
+    parkStats: { keepVanilla: boolean; overrides: Record<string, number> } = { keepVanilla: true, overrides: {} };
     /** Player's preview choice and the stage it was made on (a new stage starts from its default again). */
     previewChoice: { mode: "sketch" | "ghost"; stage: Stage } | null = null;
     /** Real preview being rebuilt after a change (spinner on the toggle). */
@@ -940,6 +942,21 @@ export class MockBackend {
             case "acknowledgePermanent":
                 this.ackPermanent = !!a[0];
                 break;
+            case "setParkStat": {
+                const v = Number(JSON.parse(String(a[1] ?? "null")));
+                if (Number.isFinite(v)) this.parkStats.overrides[String(a[0])] = v;
+                this.schedulePlan(0);
+                break;
+            }
+            case "resetParkStat":
+                if (a[0]) delete this.parkStats.overrides[String(a[0])];
+                else this.parkStats.overrides = {};
+                this.schedulePlan(0);
+                break;
+            case "setParkStatsKeepVanilla":
+                this.parkStats.keepVanilla = !!a[0];
+                this.schedulePlan(0);
+                break;
             case "locate":
                 // contract: locate(x, y, z)
                 this.toast = "Camera moved there";
@@ -1344,7 +1361,7 @@ export class MockBackend {
                 plan = await fetch("/api/compose", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ recipe: this.stepToJson(root), ring: this.ring }),
+                    body: JSON.stringify({ recipe: this.stepToJson(root), ring: this.ring, parkStats: this.parkStats }),
                 }).then((r) => r.json());
                 plan.source = "core";
                 this.hostMs = performance.now() - t0;
@@ -1585,6 +1602,7 @@ export class MockBackend {
             layers: p.perLayer,
             issues,
             permanent: p.permanent,
+            parkStats: p.parkStats ?? undefined,
         };
     }
 

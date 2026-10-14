@@ -1,7 +1,8 @@
 // Stage 3 — "you're told the price, it's all there", compact (playtest: Review was too wordy and its
 // text overlapped): one key-numbers row (cost · upkeep) and one row of stat chips; issues as single
 // lines (ellipsis, the full text in a tooltip, click to locate, first few with "N more"); the per-layer
-// breakdown folded by default; an explicit acknowledgement for permanent effects before Build.
+// breakdown folded by default; park stats (s17) as the last thing to tune; an explicit acknowledgement for
+// permanent effects before Build.
 import React, { useState } from "react";
 import classNames from "classnames";
 import { Catalog, Issue, Summary, ToolState } from "../contract";
@@ -13,6 +14,7 @@ import { layerOf } from "../lib/schema";
 import { Btn, Check, Collapsible, Icon } from "../components/common";
 import { Tip } from "../lib/tips";
 import { layerName, targetLabel } from "./DesignStage";
+import { ParkStatsSection } from "./ParkStatsSection";
 import s from "./stages.module.scss";
 
 const SEVERITY: Record<Issue["severity"], { icon: string; tint: "danger" | "warn" | "accent" }> = {
@@ -103,6 +105,9 @@ export const ReviewStage = ({
                                 );
                             })}
                         </Collapsible>
+                    ) : null}
+                    {summary.parkStats && summary.parkStats.stats && summary.parkStats.stats.length ? (
+                        <ParkStatsSection ps={summary.parkStats} pending={pending} />
                     ) : null}
                     {summary.permanent.length ? (
                         <div className={classNames(s.callout, s.calloutWarn)} data-testid="permanent">

@@ -64,8 +64,14 @@ namespace Placemaker.Core
         public string Icon = "";
         public int FormatVersion = 1;
         public RecipeStep Root = new RecipeStep();
+        /// <summary>
+        /// (s17) The player's park-stats choices for this build (overrides + "keep within vanilla range"). Null =
+        /// suggested values. Per build: saved in the receipt (ReceiptCodec v2), not in recipe JSON or presets, and
+        /// not part of the "modified" fingerprint.
+        /// </summary>
+        public Build.ParkStatsSettings ParkStats;
 
-        public Recipe Clone() => new Recipe { Id = Id, NameKey = NameKey, Name = Name, Icon = Icon, FormatVersion = FormatVersion, Root = Root.Clone() };
+        public Recipe Clone() => new Recipe { Id = Id, NameKey = NameKey, Name = Name, Icon = Icon, FormatVersion = FormatVersion, Root = Root.Clone(), ParkStats = ParkStats?.Clone() };
 
         /// <summary>The simplest recipe: one layer with its defaults.</summary>
         public static Recipe Single(IAreaGenerator g, uint seed) => new Recipe

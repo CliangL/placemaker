@@ -481,3 +481,13 @@ depends on patches and custom serialization — too heavy and fragile to copy or
 the cutouts". Placemaker blocks cells with a vanilla mechanism (physical lots) and zones the road cells that exist
 (`Core/Build/ZoneGuard`, `Game/Build/BuildService.ZoneBlock`). Own parcels would only be worth it for plots facing no
 road block at all (a lane-less inner court) — not needed by any current type (`docs/proposals/s19.md`).
+
+## Park stats (s17, decompiled 1.6.2f1) — details in docs/PARK-STATS.md
+
+73. Park effects live on the park BUILDING prefab (Attraction, LeisureProvider, ServiceCoverage, Park, ServiceConsumption);
+    AttractionSystem, ServiceCoverageSystem and ParkAISystem read the *prefab* data, so per-instance values need per-instance prefabs.
+74. TourismSystem sums `AttractivenessProvider` of ANY non-temp entity (Σ a²/10000 → sigmoid): a lot can carry one.
+    AttractionSystem only rewrites entities with an `UpdateFrame` (buildings), so a value on a lot stays.
+75. Leisure, park coverage (wellbeing up to +20), land value from attractiveness and tourist destinations all need a
+    pathfinding source/target: a Building with a road connection. A lot has none (targets = 0, silently ignored).
+76. Vanilla park upkeep = price / 5 per month; attractiveness ≈ 1.9 × (area/1000 m²)^0.85 for ordinary parks.
