@@ -155,7 +155,7 @@ namespace Placemaker.Tests.Types.T04
                     // dog-park poles as disc golf baskets) instead of an empty "nothing installed" note.
                     string pin = p.Id == "discGolf" ? "DogParkPole01" : "SportParkFlag01";
                     Assert.Contains(Layer(plan).Objects, o => o.Asset.Id == pin);
-                    Assert.DoesNotContain(Layer(plan).Objects, o => o.Role == ObjectRole.Decal);
+                    Assert.DoesNotContain(Layer(plan).Objects, o => o.Role == ObjectRole.Decal && Placemaker.Core.Decals.DecalCatalog.IsFunctionalCategory(o.Category));   // s21: dressing decals are decorative
                 }
         }
 

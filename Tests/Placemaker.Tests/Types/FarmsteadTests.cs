@@ -279,8 +279,8 @@ namespace Placemaker.Tests.Types
         {
             var g = TestKit.Gen(Id);
             Assert.Equal("farms", GeneratorGroups.Of(g));
-            Assert.InRange(g.Controls.Count, 15, 40);
-            Assert.InRange(g.Controls.Select(c => c.Group).Distinct().Count(), 4, 9);
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            Assert.InRange(g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().Count(), 4, 9);
             Assert.Contains(g.Controls, c => c.Id == "subtype" && c.Kind == ControlKind.Choice && c.Tier == ControlTier.Essential);
             Assert.Equal("identity", g.Controls[0].Group);
         }

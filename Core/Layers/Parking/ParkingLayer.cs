@@ -94,7 +94,7 @@ namespace Placemaker.Core.Layers.Parking
         }
 
         // Groups in display order — the UI shows every control, so the most used come first.
-        internal static readonly string[] GroupOrder = { "entrances", "layout", "spaces", "planting", "lighting", "surfaces", "zoning", "fee" };
+        internal static readonly string[] GroupOrder = { "entrances", "layout", "spaces", "planting", "lighting", "surfaces", "zoning", "fee", "decals" };
 
         private static IReadOnlyList<ControlSchema> BuildControls()
         {
@@ -185,6 +185,11 @@ namespace Placemaker.Core.Layers.Parking
 
             // ── Fee ──
             l.Add(Slider(ParkingIds.Fee, ControlTier.More, "fee", 10, 0, 50, 1, "money", cheap: true));
+
+            // ── Decals (s21): oil in the bays, tyre marks, litter under lot trees — Core/Decals/Dressing ──
+            var groups = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var c in l) groups.Add(c.Group);
+            l.AddRange(Decals.DressingControls.For(LayerId, groups.Contains));
             return l;
         }
 
@@ -194,6 +199,7 @@ namespace Placemaker.Core.Layers.Parking
             {
                 var p = new PresetInfo { Id = id, LabelKey = K + "Preset." + id };
                 foreach (var v in values) p.Values.Values[v.Key] = v.Value;
+                p.Values.Values[Decals.DressingControls.StyleId] = Decals.DressingControls.Styles[(int)Decals.DressingProfiles.StyleFor(LayerId, id)];
                 return p;
             }
             return new[]

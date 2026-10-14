@@ -27,8 +27,8 @@ namespace Placemaker.Tests.Types
         {
             var g = TestKit.Gen("waterfront");
             Assert.InRange(g.Presets.Count, 4, 6);
-            Assert.InRange(g.Controls.Count, 15, 40);
-            Assert.InRange(g.Controls.Select(c => c.Group).Distinct().Count(), 4, 10);
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            Assert.InRange(g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().Count(), 4, 10);
             Assert.Equal("water", GeneratorGroups.Of(g));
         }
 

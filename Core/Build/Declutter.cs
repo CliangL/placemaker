@@ -11,8 +11,10 @@
 // price and build see the same objects. Pure and deterministic:
 //   1. Rows (hedge/fence pieces of one prefab and yaw on one line) that overlap are re-spaced
 //      evenly over the same span with as many pieces as fit without touching.
-//   2. Objects are accepted greedily by role priority (centerpieces > furniture > trees > bushes >
-//      decals; plan order within a tier). An object that overlaps an accepted object or a planned
+//   2. Objects are accepted greedily by role priority (centerpieces > furniture > trees > bushes;
+//      plan order within a tier). Decals take no space (s21): they never take part, are never nudged
+//      or dropped and never cause a "didn't fit" issue; the build sinks them so the game does not
+//      collide them either (BuildService.EmitObjectDefinition, docs/DECALS.md). An object that overlaps an accepted object or a planned
 //      net (real width) is nudged (small radial search, ≤ ~1/2 its size, max 2 m) or dropped.
 //   3. Drops are reported per role as PlanIssues ("12 bushes didn't fit") — never silent.
 // Legal overlaps the game allows are honoured: markers/net-attached objects are ignored, objects
@@ -80,7 +82,7 @@ namespace Placemaker.Core.Build
         /// <summary>Roles that take part (everything else — markers, caps, spawners — never collides or is net-owned).</summary>
         public static bool Participates(ObjectRole r) => Tier(r) >= 0;
 
-        /// <summary>0 = centerpiece … 4 = decal; 5 = fixed obstacle (parking pieces), -1 = ignored.</summary>
+        /// <summary>0 = centerpiece … 3 = bushes; 5 = fixed obstacle (parking pieces), -1 = ignored (markers, decals).</summary>
         public static int Tier(ObjectRole r)
         {
             switch (r)
@@ -89,7 +91,7 @@ namespace Placemaker.Core.Build
                 case ObjectRole.Bench: case ObjectRole.Lamp: case ObjectRole.Bin: case ObjectRole.Furniture: case ObjectRole.FencePiece: return 1;
                 case ObjectRole.Tree: return 2;
                 case ObjectRole.Bush: case ObjectRole.Planter: return 3;
-                case ObjectRole.Decal: return 4;
+                case ObjectRole.Decal: return -1;   // s21: decals take no space
                 case ObjectRole.ParkingBay: case ObjectRole.Charger: case ObjectRole.Arrow: return 5;
                 default: return -1;
             }

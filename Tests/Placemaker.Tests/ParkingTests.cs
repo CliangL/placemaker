@@ -73,6 +73,8 @@ namespace Placemaker.Tests
         {
             var root = Path.GetFullPath(Path.Combine(ParkingKit.FixtureDir(), "..", "..", "..", ".."));
             var en = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(root, "Lang", "en-US.parking.json")));
+            // s21: the shared decal dressing controls live in en-US.dress.json.
+            foreach (var kv in JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(root, "Lang", "en-US.dress.json")))) en[kv.Key] = kv.Value;
             var g = new ParkingLayer();
             var keys = new List<string> { g.NameKey };
             foreach (var c in g.Controls)

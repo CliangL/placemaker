@@ -9,7 +9,8 @@
 //   terraform as height tint + 1 m contours, plan issues as red/amber rings, a 10 m scale bar.
 // Writes <out>/<type>/<variant>.png, <out>/index.html and <out>/gallery.json (metrics per image).
 //
-//   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront]
+//   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront] [--decals]
+//   --decals: also "decals-max" (Decals 300 %) and "decals-off" (0 %) per type; decals are drawn in category colours with a legend.
 
 using System;
 using System.Collections.Generic;
@@ -46,6 +47,7 @@ namespace Placemaker.Gallery
                     case "--only": only = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--showcase": Renderer.Showcase = true; break;
                     case "--shops": Variants.ShopVariants = true; break;
+                    case "--decals": Variants.DecalVariants = true; break;
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
@@ -199,6 +201,8 @@ namespace Placemaker.Gallery
         public static bool NoShops;
         /// <summary>--shops: one image per street-shop layout/amount (s12) for every type that hosts street shops.</summary>
         public static bool ShopVariants;
+        /// <summary>--decals: Decals amount at 300 % and 0 % for every type with decal dressing (s21).</summary>
+        public static bool DecalVariants;
         private static readonly (string layout, string amount)[] ShopCombos =
         {
             // s14: the Zoning feature is plain cutouts (Row / Speckled); the elaborate layouts are the Commercial types.
@@ -256,6 +260,12 @@ namespace Placemaker.Gallery
                     if (p == null || string.IsNullOrEmpty(p.Id)) continue;
                     if (PresetFilter != null && !PresetFilter.Contains(p.Id)) continue;
                     jobs.Add(Make("preset-" + Safe(p.Id), "Preset " + p.Id, r => editor.ApplyPreset(r, RecipePaths.Root, p.Id)));
+                }
+                if (DecalVariants && gen.Controls.Any(c => c.Id == Placemaker.Core.Decals.DressingControls.AmountId))
+                {
+                    jobs.Add(Make("decals-max", "Decals 300 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 300.0));
+                    jobs.Add(Make("decals-gritty", "Decals gritty", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.StyleId] = "gritty"));
+                    jobs.Add(Make("decals-off", "Decals 0 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 0.0));
                 }
                 var paletteControl = (gen.Controls ?? Array.Empty<ControlSchema>()).FirstOrDefault(c => c.Id == "palette" && c.Kind == ControlKind.Choice);
                 if (Palettes && paletteControl != null)
@@ -458,6 +468,7 @@ namespace Placemaker.Gallery
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 plan = Composer.Compose(job.Recipe, shape, site, cts.Token);
                 AutoAssets.Resolve(plan, catalog.Source());
+                Placemaker.Core.Decals.DecalFit.Orient(plan, catalog.Items);
             }
             catch (Exception e)
             {
@@ -820,6 +831,8 @@ namespace Placemaker.Gallery
             foreach (var f in fps.OrderBy(f => Order(f.o)))
                 DrawObject(cv, f.o, f.cat, f.poly, f.r);
 
+            DrawDecalLegend(cv, objs);
+
             // Issues
             foreach (var i in plan.AllIssues())
             {
@@ -846,6 +859,61 @@ namespace Placemaker.Gallery
             res.EdgeSpikes = spikes.Count;
             foreach (var sp in spikes) cv.StrokePolyline(new[] { sp.From, sp.To }, 1.6f, Rgba.Hex("#e01010", 0.85f));
             cv.SavePng(file);
+        }
+
+        /// <summary>Category colour of a decal (s21 gallery legend). Functional markings white.</summary>
+        internal static Rgba DecalColor(string cat)
+        {
+            switch (cat ?? "")
+            {
+                case "decal.leaves": return Rgba.Hex("#d9822b");
+                case "decal.leaves.edge": return Rgba.Hex("#f0a030");
+                case "decal.mulch": return Rgba.Hex("#6b3e1e");
+                case "decal.moss": return Rgba.Hex("#3f8f3a");
+                case "decal.wear": case "decal.dirt": return Rgba.Hex("#a07850");
+                case "decal.mud": return Rgba.Hex("#5c4330");
+                case "decal.sand": return Rgba.Hex("#e3c66d");
+                case "decal.wetsand": return Rgba.Hex("#9a8a5a");
+                case "decal.wet": case "decal.puddles": return Rgba.Hex("#3d7fd6");
+                case "decal.rocks": return Rgba.Hex("#7d7d85");
+                case "decal.stain": return Rgba.Hex("#4a4a4a");
+                case "decal.oil": return Rgba.Hex("#101010");
+                case "decal.cracks": return Rgba.Hex("#6a5acd");
+                case "decal.patch": return Rgba.Hex("#2f3f5f");
+                case "decal.tyre": return Rgba.Hex("#c02060");
+                case "decal.litter": return Rgba.Hex("#e040e0");
+                case "decal.glass": return Rgba.Hex("#20d0d0");
+                case "decal.beach": return Rgba.Hex("#1f9e8f");
+                case "decal.footprints": return Rgba.Hex("#b0a080");
+                case "decal.graffiti": return Rgba.Hex("#ff3070");
+                default: return Placemaker.Core.Decals.DecalCatalog.IsFunctionalCategory(cat) ? Rgba.Hex("#ffffff") : Rgba.Hex("#8f7a5a");
+            }
+        }
+
+        /// <summary>Top-left legend: one swatch + category + count per decal category present.</summary>
+        private static void DrawDecalLegend(Canvas cv, List<PlannedObject> objs)
+        {
+            var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            foreach (var o in objs)
+            {
+                if (o.Role != ObjectRole.Decal) continue;
+                string c = RoleCategories.ForObject(o) ?? "decal";
+                counts[c] = counts.TryGetValue(c, out var n) ? n + 1 : 1;
+            }
+            if (counts.Count == 0) return;
+            int total = counts.Values.Sum();
+            int x = 6, y = 6, row = 13, w = 172;
+            cv.RectPx(x - 3, y - 3, w, row * (counts.Count + 1) + 4, Rgba.Hex("#ffffff", 0.82f));
+            cv.TextPx(x, y, "DECALS " + total, Rgba.Hex("#202020"), 1);
+            int i = 1;
+            foreach (var kv in counts)
+            {
+                int yy = y + i * row;
+                cv.RectPx(x, yy, 9, 9, DecalColor(kv.Key));
+                string label = kv.Key.StartsWith("decal.", StringComparison.Ordinal) ? kv.Key.Substring(6) : kv.Key;
+                cv.TextPx(x + 14, yy + 1, label + " " + kv.Value, Rgba.Hex("#202020"), 1);
+                i++;
+            }
         }
 
         private static float Safe(Func<float2, float> f, float2 p) { try { return f(p); } catch (Exception) { return 0; } }
@@ -921,8 +989,13 @@ namespace Placemaker.Gallery
                     cv.StrokeCircle(p, math.max(r, cv.Px(2.5f)), cv.Px(0.8f), Rgba.Hex("#5a4a00"));
                     return;
                 case ObjectRole.Decal:
-                    cv.FillPolygon(poly, col.WithA(0.12f));
+                {
+                    // s21: faint fill + outline in the decal's category colour (legend top-left), so dressing reads by kind.
+                    var dc = DecalColor(cat);
+                    cv.FillPolygon(poly, dc.WithA(0.30f));
+                    cv.StrokePolyline(poly, cv.Px(0.8f), dc.WithA(0.75f), closed: true);
                     return;
+                }
                 case ObjectRole.ParkingBay:
                     cv.StrokePolyline(poly, cv.Px(1f), Rgba.Hex("#ffffff", 0.9f), closed: true);
                     return;

@@ -225,6 +225,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool OverlayPavedSurfaces { get; set; }
 
+        /// <summary>(s21) Decals take no space: emitted so the game never collides them (BuildService.SinkDecals).</summary>
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool DecalsNeverCollide { get; set; }
+
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool ChargeNetConstruction { get; set; }
 
@@ -285,6 +289,7 @@ namespace Placemaker.Game.Settings
                 global::Placemaker.Game.Build.BuildService.BlockZoning = KeepZonedBuildingsOff;
                 global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;
                 global::Placemaker.Game.Build.BuildService.OverlayPavedSurfaces = OverlayPavedSurfaces;
+                global::Placemaker.Game.Build.BuildService.SinkDecals = DecalsNeverCollide;
                 global::Placemaker.Game.Build.BuildService.ChargeNetConstruction = ChargeNetConstruction;
                 global::Placemaker.Game.Build.BuildService.ApplyParkStats = ApplyParkStats;
                 global::Placemaker.Game.Economy.ParkCompanionSystem.Enabled = RealParkStats;
@@ -333,6 +338,7 @@ namespace Placemaker.Game.Settings
             KeepZonedBuildingsOff = true;
             RecoverRejectedPieces = true;
             OverlayPavedSurfaces = true;
+            DecalsNeverCollide = true;
             ChargeNetConstruction = true;
             SelectAsOneThing = true;
             ApplyParkStats = true;

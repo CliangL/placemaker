@@ -162,9 +162,9 @@ namespace Placemaker.Tests
             var objs = p.Layers[0].Objects;
             Assert.Contains(objs, o => o.Role == ObjectRole.Centerpiece && o.Position.Equals(new float3(-1, 0, -1)));
             Assert.Contains(objs, o => o.Role == ObjectRole.Bench);
-            Assert.DoesNotContain(objs, o => o.Role == ObjectRole.Decal);   // a 6 m decal cannot dodge in 2 m
-            Assert.Equal(IssueSeverity.Info, p.Issues.Single(i => i.Key == Declutter.IssueKey(ObjectRole.Decal)).Severity);
-            AssertNoOverlaps(p);
+            // s21: decals take no space — the 6 m decal stays where it was, under the bench and fountain, with no issue.
+            Assert.Contains(objs, o => o.Role == ObjectRole.Decal && o.Position.Equals(new float3(0, 0, 0)));
+            Assert.DoesNotContain(p.Issues, i => i.Key == Declutter.IssueKey(ObjectRole.Decal));
         }
 
         [Fact]

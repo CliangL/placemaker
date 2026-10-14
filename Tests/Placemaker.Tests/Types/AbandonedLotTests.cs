@@ -192,11 +192,11 @@ namespace Placemaker.Tests.Types
             Assert.Equal("industrial", GeneratorGroups.Of(gen));
             Assert.Equal(LayerKind.Fill, gen.Kind);
             Assert.InRange(gen.Presets.Count, 4, 6);
-            Assert.InRange(gen.Controls.Count, 15, 40);
+            Assert.InRange(gen.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
             var subtype = gen.Controls.Single(c => c.Id == "subtype");
             Assert.Equal(gen.Presets.Select(p => p.Id), subtype.Options.Select(o => o.Value));
             foreach (var p in gen.Presets) Assert.Equal(p.Id, p.Values.S("subtype", ""));
-            var groups = gen.Controls.Select(c => c.Group).Distinct().ToList();
+            var groups = gen.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().ToList();
             Assert.InRange(groups.Count(g => g != "entrances" && g != "shops"), 4, 8);
             Assert.Contains(Features.Of(gen), f => f.Layer == "debris");
             Assert.Contains(Features.Of(gen), f => f.Layer == "dirtJumps");

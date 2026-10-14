@@ -98,13 +98,13 @@ namespace Placemaker.Tests
             Assert.EndsWith("@" + Amenities.Place(id), m.StepPath);
             Assert.True(m.Objects.Count >= 5, id + " placed only " + m.Objects.Count + " objects");
             TestKit.AssertSurfacesAccepted(m);
-            foreach (var o in m.Objects)
+            foreach (var o in m.Objects.Where(o => o.Role != ObjectRole.Decal))
                 Assert.True(Poly.Contains(place, o.Position.xz) || Poly.DistanceToBoundary(place, o.Position.xz) < 0.05f, $"{id} {o.Role} outside its place");
             foreach (var t in m.Terraform)
                 foreach (var p in t.Ring) Assert.True(Poly.Contains(place, p.xz) || Poly.DistanceToBoundary(place, p.xz) < 0.1f, $"{id} terraform leaves its place");
             TypeWaveKit06.AssertTerraformBlended(m, ring, _ => 0f);
             // The park keeps its planting out; the monument keeps its objects off the park's paths and its own.
-            foreach (var o in park.Objects) Assert.False(Poly.Contains(place, o.Position.xz), $"park {o.Role} inside the {id}");
+            foreach (var o in park.Objects.Where(o => o.Role != ObjectRole.Decal)) Assert.False(Poly.Contains(place, o.Position.xz), $"park {o.Role} inside the {id}");
             foreach (var o in m.Objects.Where(o => o.Role != ObjectRole.Decal && !Astride(o)))
                 foreach (var n in park.Nets.Where(n => n.Role != NetRole.Fence))
                     Assert.True(TestKit.DistanceToCurve(o.Position.xz, n) >= Composer.DefaultHalfWidth(n.Role) + 0.2f, $"{id} {o.Role} on a park path");
