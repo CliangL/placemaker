@@ -222,6 +222,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool OverlayPavedSurfaces { get; set; }
 
+        /// <summary>(s21) Decals take no space: emitted so the game never collides them (BuildService.SinkDecals).</summary>
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool DecalsNeverCollide { get; set; }
+
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool ChargeNetConstruction { get; set; }
 
@@ -273,6 +277,7 @@ namespace Placemaker.Game.Settings
                 global::Placemaker.Game.Build.BuildService.ClearExistingObjects = ClearExistingTreesAndProps;
                 global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;
                 global::Placemaker.Game.Build.BuildService.OverlayPavedSurfaces = OverlayPavedSurfaces;
+                global::Placemaker.Game.Build.BuildService.SinkDecals = DecalsNeverCollide;
                 global::Placemaker.Game.Build.BuildService.ChargeNetConstruction = ChargeNetConstruction;
                 global::Placemaker.Game.Groups.OwnerAreaPrefabSystem.FeatureEnabled = SelectAsOneThing;
                 global::Placemaker.Game.Groups.Patches.RaycastLiftPatch.Enabled = SelectAsOneThing;
@@ -318,6 +323,7 @@ namespace Placemaker.Game.Settings
             ClearExistingTreesAndProps = true;
             RecoverRejectedPieces = true;
             OverlayPavedSurfaces = true;
+            DecalsNeverCollide = true;
             ChargeNetConstruction = true;
             SelectAsOneThing = true;
             ConfirmBulldoze = true;

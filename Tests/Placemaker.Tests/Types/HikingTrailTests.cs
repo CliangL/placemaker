@@ -43,8 +43,8 @@ namespace Placemaker.Tests.Types
             Assert.NotNull(g);
             Assert.Equal("nature", GeneratorGroups.Of(g));
             Assert.InRange(g.Presets.Count, 4, 6);
-            Assert.InRange(g.Controls.Count, 15, 40);
-            Assert.InRange(g.Controls.Select(c => c.Group).Distinct().Count(), 4, 8);
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            Assert.InRange(g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().Count(), 4, 8);
             Assert.Contains(g.Controls, c => c.Id == "landscape" && c.Kind == ControlKind.Choice);
         }
 

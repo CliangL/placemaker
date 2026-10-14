@@ -223,13 +223,13 @@ namespace Placemaker.Tests
             var field = Layer(plan, id);
             Assert.EndsWith("@" + Amenities.Place(id), field.StepPath);
             Assert.True(field.Facts.ContainsKey("fieldFormat"), id + " built nothing in its place");
-            foreach (var o in field.Objects)
+            foreach (var o in field.Objects.Where(o => o.Role != ObjectRole.Decal))
                 Assert.True(Poly.Contains(place, o.Position.xz) || Poly.DistanceToBoundary(place, o.Position.xz) < 0.05f, $"{id} {o.Role} outside its place");
             foreach (var s in field.Surfaces)
                 foreach (var p in s.Ring) Assert.True(Poly.Contains(place, p.xz) || Poly.DistanceToBoundary(place, p.xz) < 0.3f, $"{id} surface leaves its place");
             foreach (var n in field.Nets)
                 foreach (var p in new[] { n.A.xz, n.D.xz }) Assert.True(Poly.Contains(place, p) || Poly.DistanceToBoundary(place, p) < 0.3f, $"{id} fence leaves its place");
-            foreach (var o in park.Objects) Assert.False(Poly.Contains(place, o.Position.xz), $"park {o.Role} inside the {id}");
+            foreach (var o in park.Objects.Where(o => o.Role != ObjectRole.Decal)) Assert.False(Poly.Contains(place, o.Position.xz), $"park {o.Role} inside the {id}");
             foreach (var o in field.Objects.Where(o => o.Role != ObjectRole.Decal))
                 foreach (var n in park.Nets.Where(n => n.Role != NetRole.Fence))
                     Assert.True(TestKit.DistanceToCurve(o.Position.xz, n) >= Composer.DefaultHalfWidth(n.Role) + 0.2f, $"{id} {o.Role} on a path");

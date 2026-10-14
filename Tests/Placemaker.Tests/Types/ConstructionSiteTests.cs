@@ -30,8 +30,8 @@ namespace Placemaker.Tests.Types
         public void SchemaIsDeepButTidy()
         {
             var g = GeneratorRegistry.Get(Id);
-            Assert.InRange(g.Controls.Count, 15, 40);
-            Assert.InRange(g.Controls.Select(c => c.Group).Distinct().Count(), 4, 9);
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            Assert.InRange(g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().Count(), 4, 9);
             Assert.InRange(g.Presets.Count, 4, 6);
             Assert.Contains(g.Controls, c => c.Id == "subtype" && c.Kind == ControlKind.Choice && c.Tier == ControlTier.Essential);
             Assert.Equal("industrial", GeneratorGroups.Of(g));

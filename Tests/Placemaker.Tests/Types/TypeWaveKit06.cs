@@ -199,8 +199,8 @@ namespace Placemaker.Tests.Types
         public static void AssertSchemaShape(string id, string subtypeControl, string group)
         {
             var g = TestKit.Gen(id);
-            Assert.InRange(g.Controls.Count, 15, 40);
-            Assert.InRange(g.Controls.Select(c => c.Group).Distinct().Count(), 4, 8);
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            Assert.InRange(g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().Count(), 4, 8);
             var sub = g.Controls.First();
             Assert.Equal(subtypeControl, sub.Id);
             Assert.Equal(ControlKind.Choice, sub.Kind);

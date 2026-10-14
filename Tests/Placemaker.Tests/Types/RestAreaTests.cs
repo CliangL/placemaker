@@ -191,8 +191,8 @@ namespace Placemaker.Tests.Types
         public static void ControlCountAndGroups(string id)
         {
             var g = TestKit.Gen(id);
-            Assert.InRange(g.Controls.Count, 15, 40);
-            var groups = g.Controls.Select(c => c.Group).Distinct().ToList();
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            var groups = g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().ToList();
             Assert.InRange(groups.Count(x => x != "entrances" && x != "assets"), 4, 8);
             Assert.Contains(g.Controls, c => c.Id == "style" && c.Kind == ControlKind.Choice && c.Options.Count == g.Presets.Count);
         }

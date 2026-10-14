@@ -28,6 +28,18 @@ namespace Placemaker.Game.Build
         /// <summary>Setting: paved surfaces (paving/asphalt/plaza/decorative) draw on top (priority −94).</summary>
         public static bool OverlayPavedSurfaces = true;
 
+        /// <summary>
+        /// (s21) Decals take no space. A decal-only prop still has a 1 m tall collision box (a leaves decal: 6×1×6 m) and
+        /// meets every prop, tree and path it lies on: the ghost cancels both, the build hides one (OverrideSystem).
+        /// ObjectUtils.GetCollisionMask gives an object with Elevation &lt; 0 (and no Lowered flag) only the Underground
+        /// mask, which no ground prop, tree or surface net shares (decompiled 1.6.2f1: Objects.ValidationHelpers
+        /// ObjectIterator/NetIterator, OverrideSystem — all use the elevation-aware mask). So decals are emitted with a
+        /// hair of negative elevation; the decal still projects onto the ground (its box spans ±0.5 m).
+        /// Needs in-game confirmation (docs/DECALS.md, open problems).
+        /// </summary>
+        public static bool SinkDecals = true;
+        public const float DecalSink = -0.01f;
+
         private static bool IsPaved(SurfaceRole r) => r == SurfaceRole.Paving || r == SurfaceRole.Asphalt || r == SurfaceRole.Plaza || r == SurfaceRole.Decorative;
         /// <summary>Resolved prefab per work item key.</summary>
         private readonly Dictionary<long, Entity> _itemPrefab = new Dictionary<long, Entity>();
@@ -323,13 +335,14 @@ namespace Placemaker.Game.Build
             // Uniform categories (benches, lamps, bins…): one random seed per build, so colour/mesh
             // variations do not turn a row of one bench into a mix (FEEDBACK-2 #1).
             int? seed = AutoAssets.IsUniform(w.Category) ? AutoAssets.UniformSeed(w.Category, (uint)_groupId) : (int?)null;
-            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed);
+            float elevation = SinkDecals && o.Role == ObjectRole.Decal ? DecalSink : 0f;
+            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation);
             NoteUsed(prefab);
         }
 
         private static readonly float[] AgeStages = { 0f, 0.17500001f, 0.425f, 0.77500004f };   // ToolUtils.GetRandomAge
 
-        private void EmitObjectDefinition(Entity prefab, float3 position, float yaw, float scale, int age, uint variation, long key, bool snapToGround, int? randomSeed = null)
+        private void EmitObjectDefinition(Entity prefab, float3 position, float yaw, float scale, int age, uint variation, long key, bool snapToGround, int? randomSeed = null, float elevation = 0f)
         {
             _objectIndex = _objectIndex ?? new PlanIndex();
             var p = position;
@@ -356,6 +369,7 @@ namespace Placemaker.Game.Build
                 m_Probability = 100,
                 m_PrefabSubIndex = -1,
                 m_ParentMesh = -1,
+                m_Elevation = elevation,
             });
             _objectIndex.AddPoint(key, PrefabId(prefab), p.xz);
             _emittedObjects++;

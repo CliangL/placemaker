@@ -294,12 +294,12 @@ namespace Placemaker.Tests
             Assert.True(amenity.Objects.Count + amenity.Surfaces.Count > 1, id + " built nothing");
             Assert.True(amenity.Objects.Count(o => o.Role != ObjectRole.Decal) >= 1, id + " placed no objects");
             TestKit.AssertSurfacesAccepted(amenity);
-            foreach (var o in amenity.Objects)
+            foreach (var o in amenity.Objects.Where(o => o.Role != ObjectRole.Decal))
                 Assert.True(Poly.Contains(place, o.Position.xz) || Poly.DistanceToBoundary(place, o.Position.xz) < 0.05f, $"{id} {o.Role} outside its place");
             foreach (var s in amenity.Surfaces)
                 foreach (var p in s.Ring) Assert.True(Poly.Contains(place, p.xz) || Poly.DistanceToBoundary(place, p.xz) < 0.2f, $"{id} surface leaves its place");
             // The park keeps planting, furniture and its own paths' interiors out of the place.
-            foreach (var o in park.Objects) Assert.False(Poly.Contains(place, o.Position.xz), $"park {o.Role} inside the {id}");
+            foreach (var o in park.Objects.Where(o => o.Role != ObjectRole.Decal)) Assert.False(Poly.Contains(place, o.Position.xz), $"park {o.Role} inside the {id}");
             // Amenity objects keep clear of every path of the park.
             foreach (var o in amenity.Objects.Where(o => o.Role != ObjectRole.Decal))
                 foreach (var n in park.Nets.Where(n => n.Role != NetRole.Fence))
@@ -514,7 +514,7 @@ namespace Placemaker.Tests
                 Assert.False(Poly.Contains(place, o.Position.xz), $"plaza {o.Role} inside the {id}");
             var amenity = Layer(plan, id);
             Assert.NotEmpty(amenity.Objects);
-            foreach (var o in amenity.Objects)
+            foreach (var o in amenity.Objects.Where(o => o.Role != ObjectRole.Decal))
                 Assert.True(Poly.Contains(place, o.Position.xz) || Poly.DistanceToBoundary(place, o.Position.xz) < 0.05f, $"{id} {o.Role} outside its place");
         }
 

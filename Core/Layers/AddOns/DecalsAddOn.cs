@@ -5,7 +5,10 @@
 //   paving   paving only, on a lattice    markings paving only, aligned to aisles/paths
 //   graffiti paving near the outline
 // "Paving" = reserved path/aisle corridors, or the whole region when it is paved (ground = paved,
-// or the region is tagged paved/lot). Decals never go under objects and never reserve space.
+// or the region is tagged paved/lot). Decals take no space (s21): they may lie under objects and on paths,
+// never reserve space, and there is never "no room" — a theme whose ground is missing here (cracks in a
+// park without paving) falls back to any dry ground. Water is the only place they never go.
+// Context-aware dressing (leaves under trees, oil in bays…) is the composer's pass: Core/Decals/Dressing.
 
 using System.Collections.Generic;
 using Placemaker.Core.Layers.Common;
@@ -81,9 +84,14 @@ namespace Placemaker.Core.Layers.AddOns
             uint clump = Hashing.Mix(ctx.Seed, 0xDEC0u);
             int placed = 0;
             float cell = theme == "paving" ? 3f : 1.2f;
-            foreach (var cand in Scatter.Candidates(region, cell, Hashing.Mix(ctx.Seed, 0xDEC1u), math.min(80000, wanted * 12 + 100), ctx.Cancel))
+            var candidates = Scatter.Candidates(region, cell, Hashing.Mix(ctx.Seed, 0xDEC1u), math.min(80000, wanted * 12 + 100), ctx.Cancel);
+            for (int pass = 0; pass < 2 && placed < wanted; pass++)
+            foreach (var cand in candidates)
             {
                 if (placed >= wanted) break;
+                // Pass 1 (only when pass 0 found no ground for the theme): anywhere dry, no gathering rule.
+                bool strict = pass == 0;
+                if (!strict && (placed > 0 || theme == "markings" || theme == "paving")) break;
                 var p = cand;
                 float yaw;
                 uint v = Hashing.Mix(ctx.Seed, (uint)placed * 2654435761u + 17u);
@@ -102,8 +110,9 @@ namespace Placemaker.Core.Layers.AddOns
                     float chance = Scatter.Clustering(p, 12f, clump, 1f - clustering);
                     if (Hashing.Unit(Hashing.Mix(clump, (int)(p.x * 11f), (int)(p.y * 5f))) > chance) continue;
                 }
-                if (occ.Discs.Overlaps(p, 0.6f, 0.1f) || occ.HitsPolygon(p, 0.3f) || !region.ContainsDisc(p, 0.3f)) continue;
-                if (theme == "leaves" || theme == "dirt")
+                // Places (another feature's ground, zoning cutouts) are not ours; objects never block a decal.
+                if (!region.ContainsDisc(p, 0.3f) || OnWater(ctx, p) || occ.HitsPolygon(p, 0.3f)) continue;
+                if (strict && (theme == "leaves" || theme == "dirt"))
                 {
                     // Leaves and dirt gather along path edges and round trees, benches and lamps; open lawn
                     // gets only a rare one (playtest 4b: no uniform carpets of decal squares).
@@ -136,7 +145,7 @@ namespace Placemaker.Core.Layers.AddOns
                     case "graffiti": ok = paved && !lawnOnly && edge < 4f; break;
                     default: ok = true; break;
                 }
-                if (!ok) continue;
+                if (!ok && strict) continue;
                 if (spacing > 0f)
                 {
                     bool crowded = false;
@@ -147,7 +156,6 @@ namespace Placemaker.Core.Layers.AddOns
                 ctx.Object(p, yaw, ObjectRole.Decal, AssetMix.Pick(ids, v), v, -1, category);
                 placed++;
             }
-            if (placed == 0) ctx.Issue(IssueSeverity.Info, "Placemaker.AddOn.Decals.Issue.NoGround");
             ctx.Stat("Placemaker.Stat.Decals", placed, Keys.UnitCount);
         }
 
@@ -163,6 +171,12 @@ namespace Placemaker.Core.Layers.AddOns
                 case "graffiti": return 2f;
                 default: return 1.5f;
             }
+        }
+
+        private static bool OnWater(LayerContext ctx, float2 p)
+        {
+            try { return ctx.Site?.WaterDepthAt != null && ctx.Site.WaterDepthAt(p) > 0.05f; }
+            catch (System.Exception) { return false; }
         }
 
         private static bool HasTag(AreaInput input, params string[] tags)

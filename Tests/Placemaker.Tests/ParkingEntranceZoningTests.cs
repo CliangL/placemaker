@@ -89,9 +89,11 @@ namespace Placemaker.Tests
                 Assert.False(string.IsNullOrEmpty(o.Icon), o.Value);
             }
             var order = new[] { "entrances", "layout", "spaces", "planting", "lighting", "surfaces", "zoning", "fee" };
-            var idx = g.Controls.Select(c => Array.IndexOf(order, c.Group)).ToList();
+            // s21: the shared decal dressing controls (own section / host sections) are not part of the lot's own order.
+            var own = g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).ToList();
+            var idx = own.Select(c => Array.IndexOf(order, c.Group)).ToList();
             Assert.DoesNotContain(-1, idx);
-            for (int i = 1; i < idx.Count; i++) Assert.True(idx[i] >= idx[i - 1], "groups are contiguous and ordered at " + g.Controls[i].Id);
+            for (int i = 1; i < idx.Count; i++) Assert.True(idx[i] >= idx[i - 1], "groups are contiguous and ordered at " + own[i].Id);
             Assert.Equal(order, idx.Distinct().Select(i => order[i]).ToArray());
             Assert.Equal(AssetCategories.Zone, g.Controls.Single(c => c.Id == "zoneType").AssetCategory);
             Assert.DoesNotContain(g.Controls, c => c.Id == "entranceStyle");    // replaced by marker kinds

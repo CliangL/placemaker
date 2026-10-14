@@ -140,10 +140,14 @@ namespace Placemaker.Core
             var result = new ComposedPlan();
             var reserved = new ReservedSpace();
             int budget = MaxSteps;
-            Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, null, "0", 0, result, ref budget, cancel);
+            var dress = new Dictionary<AreaPlan, Decals.DressSettings>();
+            Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, null, "0", 0, result, ref budget, cancel, null, dress);
             // CS2 joins paths only at identical nodes: split a path where a spur (often a feature's
             // "path to it") ends on it (g5).
             Layers.Common.PathJoins.JoinAll(result);
+            // s21: decals complement what was planned (leaves under trees, oil in bays, wear at junctions…). Before
+            // cutouts and building lots are enforced, so those rules apply to decals too.
+            Decals.Dressing.Apply(result, area, site, dress, cancel);
             // s14: zoning cutouts stay empty whatever a feature placed (Layers/Common/Cutouts.cs).
             Layers.Common.Cutouts.Enforce(result);
             // (s15) Never build on existing buildings: drop / cut whatever would touch a building lot.
@@ -152,7 +156,8 @@ namespace Placemaker.Core
         }
 
         private static void Run(RecipeStep step, AreaShape shape, string[] tags, string regionKey, SiteContext site,
-            ReservedSpace reserved, List<float2[]> ownPlaces, string path, int depth, ComposedPlan result, ref int budget, CancellationToken cancel)
+            ReservedSpace reserved, List<float2[]> ownPlaces, string path, int depth, ComposedPlan result, ref int budget, CancellationToken cancel,
+            Decals.DressSettings parentDress = null, Dictionary<AreaPlan, Decals.DressSettings> dress = null)
         {
             cancel.ThrowIfCancellationRequested();
             if (!step.Enabled) return;
@@ -204,6 +209,11 @@ namespace Placemaker.Core
             plan.StepPath = path + "@" + regionKey;
             plan.Seed = input.Seed;
             result.Layers.Add(plan);
+            // Dressing settings: a fill step with decal controls owns its own; features and children share their parent's.
+            var ownDress = Decals.DressingControls.Read(gen, step.Settings);
+            if (ownDress != null) ownDress.Ring = shape.Ring2D();
+            var stepDress = ownDress ?? parentDress;
+            if (dress != null && stepDress != null) dress[plan] = stepDress;
             Reserve(plan, reserved);
             var places = ReservePlaces(plan, reserved);
             // Features of a terraforming layer plan on the NEW ground (g5: TerrainField).
@@ -215,7 +225,7 @@ namespace Placemaker.Core
                 string childPath = path + "/" + ci;
                 if (string.IsNullOrEmpty(child.Target))
                 {
-                    Run(child, shape, tags, regionKey, childSite, reserved, ownPlaces, childPath, depth + 1, result, ref budget, cancel);
+                    Run(child, shape, tags, regionKey, childSite, reserved, ownPlaces, childPath, depth + 1, result, ref budget, cancel, stepDress, dress);
                     continue;
                 }
                 foreach (var region in plan.Regions)
@@ -225,7 +235,7 @@ namespace Placemaker.Core
                     var sub = new AreaShape { Ring = region.Ring, Source = shape.Source, Attachments = AttachmentsOn(shape.Attachments, region.Ring) };
                     var inside = ownPlaces;
                     if (places.TryGetValue(region, out var own)) inside = new List<float2[]>(ownPlaces ?? new List<float2[]>()) { own };
-                    Run(effective, sub, region.Tags, region.Key, childSite, reserved, inside, childPath, depth + 1, result, ref budget, cancel);
+                    Run(effective, sub, region.Tags, region.Key, childSite, reserved, inside, childPath, depth + 1, result, ref budget, cancel, stepDress, dress);
                 }
             }
         }

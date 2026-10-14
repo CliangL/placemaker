@@ -168,8 +168,8 @@ namespace Placemaker.Tests.Types
             var g = TestKit.Gen(id);
             Assert.Equal(group, GeneratorGroups.Of(g));
             Assert.Equal(LayerKind.Fill, g.Kind);
-            Assert.InRange(g.Controls.Count, 15, 40);
-            int groups = g.Controls.Select(c => c.Group).Distinct().Count();
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            int groups = g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().Count();
             Assert.InRange(groups, 4, 8);
             Assert.InRange(g.Presets.Count, 4, 6);
             Assert.Equal(g.Controls.Count, g.Controls.Select(c => c.Id).Distinct().Count());

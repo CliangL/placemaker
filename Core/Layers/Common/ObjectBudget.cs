@@ -5,7 +5,8 @@
 //   cap = max(MinCap, perHectare × area ha). Above the cap the plan is THINNED — the biggest
 //   repetitive groups first (water-filling: every "bulk" group, i.e. a category with ≥ BulkGroup
 //   objects of a thinnable role, is cut down to one common level), never below (1 − MaxThin) of a
-//   group. Thinnable roles: decals, bushes, planters, furniture, trees. Never touched: benches,
+//   group. Decals are not objects here (s21): they take no space, have their own budget (Decals/Dressing)
+//   and never count toward or get thinned by this cap. Thinnable roles: bushes, planters, furniture, trees. Never touched: benches,
 //   lamps, bins, centerpieces, fence pieces, hedges / fences (rows must stay closed), functional
 //   objects (parking bays, markers…) and small groups (a barn, a fountain). Thinning keeps an even
 //   stride in plan order (rows stay rows, just sparser). The Review panel gets a Warning.
@@ -32,7 +33,7 @@ namespace Placemaker.Core.Layers.Common
             if (o == null) return false;
             switch (o.Role)
             {
-                case ObjectRole.Decal: case ObjectRole.Bush: case ObjectRole.Planter: case ObjectRole.Furniture: case ObjectRole.Tree: break;
+                case ObjectRole.Bush: case ObjectRole.Planter: case ObjectRole.Furniture: case ObjectRole.Tree: break;
                 default: return false;
             }
             var c = o.Category ?? "";
@@ -44,7 +45,8 @@ namespace Placemaker.Core.Layers.Common
         {
             if (plan?.Objects == null) return 0;
             int cap = Cap(areaM2, perHectare);
-            int before = plan.Objects.Count;
+            int before = 0;
+            foreach (var o in plan.Objects) if (o != null && o.Role != ObjectRole.Decal) before++;
             if (before <= cap) return 0;
             int excess = before - cap;
 
