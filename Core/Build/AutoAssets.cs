@@ -51,7 +51,7 @@ namespace Placemaker.Core.Build
         public const int MaxVariety = 6;
 
         /// <summary>True when every automatic object of this category in a step is the same prefab.</summary>
-        public static bool IsUniform(string category) => category == null || !VarietyCategories.Contains(category);
+        public static bool IsUniform(string category) => category == null || (!VarietyCategories.Contains(category) && !VarietyRegistry.Contains(category));
 
         /// <summary>
         /// Random seed for game objects/edges of a uniform category: the same within a build, so colour

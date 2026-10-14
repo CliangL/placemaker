@@ -64,3 +64,37 @@ namespace Placemaker.Core.Build
         }
     }
 }
+
+namespace Placemaker.Core.Build
+{
+    /// <summary>
+    /// Optional companion to ICategoryRules: categories whose automatic picks should VARY per object
+    /// (piles, junk, crops, wrecks…) instead of one prefab per build. Discovered by reflection.
+    /// </summary>
+    public interface IVarietyCategories
+    {
+        System.Collections.Generic.IEnumerable<string> VarietyCategories { get; }
+    }
+
+    public static class VarietyRegistry
+    {
+        private static System.Collections.Generic.HashSet<string> _set;
+
+        public static bool Contains(string category)
+        {
+            if (category == null) return false;
+            if (_set == null)
+            {
+                var s = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+                foreach (var t in typeof(VarietyRegistry).Assembly.GetTypes())
+                {
+                    if (t.IsAbstract || t.IsInterface || !typeof(IVarietyCategories).IsAssignableFrom(t)) continue;
+                    try { foreach (var c in ((IVarietyCategories)System.Activator.CreateInstance(t)).VarietyCategories) if (c != null) s.Add(c); }
+                    catch (System.Exception) { }
+                }
+                _set = s;
+            }
+            return _set.Contains(category);
+        }
+    }
+}
