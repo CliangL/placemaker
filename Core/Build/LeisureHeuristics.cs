@@ -75,6 +75,8 @@ namespace Placemaker.Core.Build
             if (Has(lower, "lookout", "observation", "viewpoint", "watchtower", "watch tower", "binocular", "viewing"))
             { r.Add(AssetCategories.Lookout); return true; }
             if (Has(lower, "chess")) { r.Add(AssetCategories.CafeSeating); r.Add(AssetCategories.Picnic); return true; }
+            // Campground / picnic table sets are the picnic tables the vanilla "picnic" pool lacked (art a2).
+            if (Has(lower, "picnictable", "picnic table", "campgroundtableset", "campground tableset")) r.Add(AssetCategories.Picnic);
             if (Has(lower, "cafe", "café", "patio", "parasol", "umbrella", "bistro", "tableset", "table set", "outdoortable", "outdoor table", "terrace"))
             { r.Add(AssetCategories.CafeSeating); return true; }
             if (Has(lower, "market", "stall", "awning"))

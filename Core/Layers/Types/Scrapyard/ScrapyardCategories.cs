@@ -53,7 +53,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
         {
             if ((traits & (AssetTraits.Plant | AssetTraits.Tree | AssetTraits.Building)) != 0) return false;
             // Play and pet equipment made of tyres/barrels belongs to the leisure pools.
-            if (Has(lower, "dog", "swing", "playground", "play ", "playset", "toy")) return false;
+            if (Has(lower, "dog", "swing", "playground", "play ", "playset", "playcabin", "toy")) return false;
 
             if (Has(lower, "wreck", "burnt car", "burntcar", "burned car", "scrapcar", "scrap car", "junkcar", "junk car",
                     "abandonedcar", "abandoned car", "crushedcar", "crushed car", "carcass", "carbody", "car body", "rustycar", "rusty car"))
