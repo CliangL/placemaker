@@ -4,6 +4,7 @@
 
 using System.Collections.Generic;
 using Placemaker.Core.Layers.Common;
+using Placemaker.Core.Layers.Park;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Leisure
@@ -33,7 +34,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("shelterAsset", AssetCategories.Shelter, ControlTier.More, "picnic");
             c.Toggle("facilities", true, ControlTier.More, "facilities").Tip();
             c.Asset("binAsset", AssetCategories.Bin, ControlTier.More, "facilities");
-            c.Slider("treeDensity", 20, 0, 80, 5, "perHa", ControlTier.More, "planting");
+            c.Slider("treeDensity", 28, 0, 80, 5, "perHa", ControlTier.More, "planting");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
             EntranceMarkers(c);
@@ -44,9 +45,27 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefinePresets()
         {
-            Preset("family", ("groups", 10.0), ("tables", 3.0), ("shelters", 2.0), ("grills", true));
+            // Art pass (a1): families spread blankets on the lawn; the barbecue and shady grounds use picnic table sets.
+            Preset("family", ("groups", 10.0), ("tables", 3.0), ("shelters", 2.0), ("grills", true), ("tableAsset", "PicnicBlanket01"));
             Preset("bbq", ("groups", 16.0), ("tables", 2.0), ("shelters", 4.0), ("grills", true), ("openLawn", 15.0));
             Preset("shady", ("groups", 8.0), ("treeDensity", 55.0), ("openLawn", 20.0), ("shelters", 0.0));
+        }
+
+        private static bool CircuitPath(LayerContext ctx, Occupancy occ, List<Gate> gates, AssetRef asset)
+        {
+            var region = ctx.LayerRegion;
+            var pts = LeisureKit.Points(gates);
+            float keep = math.max(ctx.M(3f), ctx.EdgeMargin + 1f);
+            System.Func<float2, bool> ok = p => region.ContainsDisc(p, keep) && !occ.HitsPolygon(p, 2f);
+            var graph = ParkPathStyles.Circuit(region, pts, ok);
+            if (graph == null || graph.IsEmpty) return false;
+            var curves = ParkPaths.Build(graph, region, true, "narrow");
+            if (curves.Count == 0) return false;
+            ParkPaths.Index(curves, occ.Corridors, 100);
+            ParkPaths.Index(curves, occ.Paths, 100);
+            ParkPaths.Emit(ctx, curves, gates, asset);
+            ctx.Plan.Facts["circuit"] = 1;
+            return true;
         }
 
         protected override void PlanCore(LayerContext ctx)
@@ -54,15 +73,20 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
-            NaturalPaths(ctx, occ, gates, 1, 5f, 30f, "narrow", AssetMix.One(ctx.S("pathAsset")), true);
+            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            // Art pass (a1): the promised "gentle loop round a big open lawn" — a circuit walk inset from the edge with
+            // the entrances joined to it; the generic planner (a teardrop to one side) only when no circuit fits.
+            if (!CircuitPath(ctx, occ, gates, AssetMix.One(ctx.S("pathAsset"))))
+                NaturalPaths(ctx, occ, gates, 1, 5f, 30f, "narrow", AssetMix.One(ctx.S("pathAsset")), true);
 
             // The open lawn in the middle (kept free of trees, used by a playground feature as core).
             var lawnCentre = region.DeepestPoint(out float ins, (q, cap) => occ.Clearance(q, cap), 14);
             float open = math.min(ins - 2f, math.sqrt(region.Area * ctx.F("openLawn") / 100f / math.PI));
 
             bool canTables = AssetAvailability.Require(ctx.Plan, AssetCategories.Picnic, new[] { ctx.S("tableAsset") }, Keys.Category(AssetCategories.Picnic));
-            var table = AssetMix.One(ctx.S("tableAsset"));
+            var table = AssetMix.One(ctx.S("tableAsset"), CampArt.Tables);
+            // Blankets go straight on the grass in looser groups; table sets keep their ring.
+            bool blankets = ctx.S("tableAsset").StartsWith("PicnicBlanket");
             int tables = 0, shelters = 0, groups = 0;
 
             // Shelters with tables beside the path.
@@ -72,7 +96,7 @@ namespace Placemaker.Core.Layers.Leisure
                 string cat = LeisureKit.Category(ctx, ctx.S("shelterAsset"), AssetCategories.Shelter);
                 if (cat != null)
                 {
-                    var asset = AssetMix.One(ctx.S("shelterAsset"));
+                    var asset = AssetMix.One(ctx.S("shelterAsset"), CampArt.Shelter);
                     float r = AssetMix.FootprintRadius(ctx.Site, asset, 5f);
                     foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, r, 8f, 1.5f), wantedShelters, 30f, false))
                     {
@@ -82,8 +106,9 @@ namespace Placemaker.Core.Layers.Leisure
                         ctx.Object(a.Position, yaw, ObjectRole.Furniture, asset, v, -1, cat);
                         // Two tables under the roof (inside the shelter's own footprint).
                         var along = a.Tangent;
-                        ctx.Object(a.Position + along * 1.6f, yaw, ObjectRole.Furniture, table, Hashing.Mix(v, 1u), -1, AssetCategories.Picnic);
-                        ctx.Object(a.Position - along * 1.6f, yaw, ObjectRole.Furniture, table, Hashing.Mix(v, 2u), -1, AssetCategories.Picnic);
+                        var roofTable = AssetMix.One("", CampArt.Tables);   // never a blanket under a roof
+                        ctx.Object(a.Position + along * 1.6f, yaw, ObjectRole.Furniture, roofTable, Hashing.Mix(v, 1u), -1, AssetCategories.Picnic);
+                        ctx.Object(a.Position - along * 1.6f, yaw, ObjectRole.Furniture, roofTable, Hashing.Mix(v, 2u), -1, AssetCategories.Picnic);
                         occ.Take(a.Position, r, 0);
                         tables += 2; shelters++;
                     }
@@ -92,8 +117,9 @@ namespace Placemaker.Core.Layers.Leisure
 
             // Picnic groups over the grass, around (not in) the open lawn.
             string grill = ctx.B("grills") ? LeisureKit.Category(ctx, "", AssetCategories.CampingFire, AssetCategories.Picnic) : null;
-            var bin = AssetMix.One(ctx.S("binAsset"));
+            var bin = AssetMix.One(ctx.S("binAsset"), ParkArt.Bins);
             var treeIds = ctx.L("treeSpecies");
+            if (treeIds.Length == 0) treeIds = PicnicArt.ShadeTrees;
             bool canTrees = AssetAvailability.Has(AssetCategories.Tree) || treeIds.Length > 0;
             if (canTables)
             {
@@ -109,10 +135,10 @@ namespace Placemaker.Core.Layers.Leisure
                     for (int k = 0; k < perGroup; k++)
                     {
                         float a = phase + k * 6.283f / perGroup;
-                        var p = c + new float2(math.cos(a), math.sin(a)) * (perGroup == 1 ? 0f : 2.8f);
+                        var p = c + new float2(math.cos(a), math.sin(a)) * (perGroup == 1 ? 0f : blankets ? 3.2f : 2.8f);
                         if (LeisureKit.Put(ctx, occ, p, a + 1.57f, ObjectRole.Furniture, table, AssetCategories.Picnic, 1.3f, Hashing.Mix(v, (uint)k), 0.5f, 0.2f)) tables++;
                     }
-                    if (grill != null) LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 3.4f), math.sin(phase + 3.4f)) * 5f, phase, ObjectRole.Furniture, AssetMix.One(""), grill, 0.8f, Hashing.Mix(v, 50u));
+                    if (grill != null) LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 3.4f), math.sin(phase + 3.4f)) * 5f, phase, ObjectRole.Furniture, AssetMix.Pick(PicnicArt.Grills, v), grill, 0.8f, Hashing.Mix(v, 50u));
                     LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 2.2f), math.sin(phase + 2.2f)) * 4.6f, 0f, ObjectRole.Bin, bin, null, 0.5f, Hashing.Mix(v, 51u));
                     if (canTrees) LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 1.2f), math.sin(phase + 1.2f)) * 6.5f, phase, ObjectRole.Tree, AssetMix.Pick(treeIds, v), null, 2.5f, Hashing.Mix(v, 52u), 1f, 0.3f, 3, 3);
                     groups++;
@@ -129,7 +155,7 @@ namespace Placemaker.Core.Layers.Leisure
                     int wanted = math.max(1, (int)math.round(region.Area / 15000f));
                     int n = 0;
                     foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 4f, 8f, 1.2f), wanted, 40f, false))
-                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(""), cat, 4f, Hashing.Mix(ctx.Seed, 0x7700u + (uint)n), 0.5f, 0.3f, 0)) n++;
+                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One("", ParkArt.Toilets), cat, 4f, Hashing.Mix(ctx.Seed, 0x7700u + (uint)n), 0.5f, 0.3f, 0)) n++;
                     ctx.Stat(Keys.StatRestrooms, n, Keys.UnitCount);
                 }
             }
@@ -145,5 +171,12 @@ namespace Placemaker.Core.Layers.Leisure
             ctx.Plan.Facts["picnicGroups"] = groups;
             ctx.Plan.Facts["shelters"] = shelters;
         }
+    }
+
+    /// <summary>Art pass (a1): picnic defaults — broad shade trees and real grills (the "picnic" pool is all blankets).</summary>
+    public static class PicnicArt
+    {
+        public static readonly string[] ShadeTrees = { "OakTree01", "EU_ChestnutTree01", "NA_LondonPlaneTree01", "NA_LindenTree01" };
+        public static readonly string[] Grills = { "Grill01", "Grill02", "Grill03" };
     }
 }
