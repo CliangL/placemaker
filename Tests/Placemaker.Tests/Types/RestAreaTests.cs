@@ -321,12 +321,27 @@ namespace Placemaker.Tests.Types
         }
 
         [Fact]
-        public void MissingCategoriesDegradeToInfo() => TransportTypeChecks.MissingCategoriesDegradeToInfo(Id, new Dictionary<string, int>
+        public void MissingCategoriesDegradeToInfo()
         {
-            [AssetCategories.Vending] = 0, [AssetCategories.FuelPump] = 0, [AssetCategories.Wayfinding] = 0, [AssetCategories.Lookout] = 0,
-            [AssetCategories.Shelter] = 0, [AssetCategories.DogAmenity] = 0, [AssetCategories.Bin] = 0, [AssetCategories.CafeSeating] = 0,
-            [AssetCategories.Picnic] = 0,
-        });
+            // Art pass: tables, shelters, kiosks, vending, map boards and the view pavilion are explicit vanilla
+            // ids, so empty categories never leave an automatic (droppable) pick behind; fuel pumps (no vanilla
+            // stand-in) still degrade to the Info note.
+            var none = new Dictionary<string, int>
+            {
+                [AssetCategories.Vending] = 0, [AssetCategories.FuelPump] = 0, [AssetCategories.Wayfinding] = 0, [AssetCategories.Lookout] = 0,
+                [AssetCategories.Shelter] = 0, [AssetCategories.DogAmenity] = 0, [AssetCategories.Bin] = 0, [AssetCategories.CafeSeating] = 0,
+                [AssetCategories.Picnic] = 0,
+            };
+            using (AssetAvailability.Scope(none))
+                foreach (var p in TestKit.Gen(Id).Presets)
+                {
+                    var plan = TransportTypeChecks.Compose(TransportTypeChecks.With(Id, p.Values), TransportTypeChecks.FiveHa, TransportTypeChecks.Road(TransportTypeChecks.FiveHa));
+                    Assert.True(string.IsNullOrEmpty(TransportTypeChecks.Errors(plan)), TransportTypeChecks.Errors(plan));
+                    Assert.DoesNotContain(plan.Layers[0].Objects, o => none.ContainsKey(o.Category ?? "") && o.Role != ObjectRole.Decal && string.IsNullOrEmpty(o.Asset.Id));
+                    if (p.Id == "truck") Assert.Contains(plan.AllIssues(), i => i.Key == Keys.NoAssetsIssue && i.Severity == IssueSeverity.Info);
+                    Assert.DoesNotContain(plan.Layers[0].Objects, o => o.Asset.Id == "MakeshiftTent01" || o.Asset.Id == "WaterTower01 Viewing Deck");
+                }
+        }
 
         [Fact]
         public void TransportAssetsAreClassified()
