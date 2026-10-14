@@ -237,7 +237,7 @@ namespace Placemaker.Core.Decals
                         if (gap > math.radians(150f)) continue;   // a straight-through side has no corner to cut
                         var bis = math.normalizesafe(d1 + d2, Perp(d1));
                         uint hk = Ctx.H2(h, k);
-                        if (Ctx.Roll(hk, 0.6f * aWear))
+                        if (Ctx.Roll(hk, 0.35f * aWear))   // s28: fewer
                             c.Emit(J + bis * (hw + 1.2f), Ctx.Yaw(Perp(bis)), DecalPools.Wear, 2.6f, Ctx.H2(hk, 1), ForbidPaved);
                     }
                     if (Ctx.Roll(Ctx.H2(h, 40), 0.35f * aCrack))
@@ -248,7 +248,7 @@ namespace Placemaker.Core.Decals
                     // An entrance: trodden verges on both sides, dirt and leaves carried onto the path.
                     var t = -ends[i].dir; var nrm = Perp(t);
                     for (int side = -1; side <= 1; side += 2)
-                        if (Ctx.Roll(Ctx.H2(h, 50 + side), 0.7f * aWear))
+                        if (Ctx.Roll(Ctx.H2(h, 50 + side), 0.4f * aWear))   // s28: fewer
                             c.Emit(J + nrm * side * (hw + 0.9f) + t * 1.5f, Ctx.Yaw(t), DecalPools.Wear, 2.7f, Ctx.H2(h, 52 + side), ForbidPaved);
                     if (Ctx.Roll(Ctx.H2(h, 55), 0.4f * aLeaves))
                         c.Emit(J + t * 2.5f, Ctx.Yaw(t), DecalPools.LeavesEdge, 2.0f, Ctx.H2(h, 56));

@@ -145,7 +145,7 @@ Decals stay ON by default (Decals 100 %, the Decals feature as before); the art 
 
 - **Opacity** (RESEARCH-NOTES-ADDENDUM 82–83): there is no per-instance decal opacity, so the build swaps each decorative
   decal for a runtime see-through clone of its prefab per tier (`Game/Build/DecalOpacitySystem`, `DecalLook.Tier`, tiers
-  20/35/50/100 %). Every decorative pool is 20 % except sand dust and wet sand (35 %); markings, stalls and field lines
+  20/35/50/100 % then; s28 below). Every decorative pool was 20 % except sand dust and wet sand (35 %); markings, stalls and field lines
   stay 100 %.
 - **Edge classes** (`DecalEdge`): Soft (feathered: G87 stains A–H, dust, wet effects, Ground Dirt, mulch, moss, fallen-leaf
   scatters, golden sand), Item (discrete things on a clear ground: litter, glass, shells, driftwood, palm leaves), Shaped
@@ -170,6 +170,22 @@ Decals stay ON by default (Decals 100 %, the Decals feature as before); the art 
   footprints are never automatic, open paving stays clean unless Gritty, and the Decals feature's leaves/dirt themes only
   gather under crowns or by benches, lamps and bins — never on open lawn or on a path.
 
+## s28: really see-through, fewer, no clashing colours
+
+- **Why s23's copies never got lighter** (RESEARCH-NOTES-ADDENDUM 85): the pack decals use the DefaultDecal shader graph,
+  which reads  as a vector (w = alpha) plus  / ; s23 scaled   and a  colour, which that material ignores.  now scales the vector's w and the normal
+  and metallic opacities, prewarms copies while the preview resolves, and logs  and, per build, .
+- **Tiers** 10/15/25/35/50/100 %. Most pools 10 %, wear, stones, glass and wrack 15 %, sand dust and wet sand 25 %; the
+  Decals feature's themes 10–15 %. Parking oil rarer and fainter; leaf litter sparser, brown/green only.
+- **Colour** (screenshot 58: orange-brown discs at junctions and under lamps on a green lawn, a dark splotch on a light
+  path). A soft filter, not a colour-matching engine (lead: hyper-transparent and fewer first): every pool has a host
+  ground (: lawn, paving, asphalt, sand, dirt) and an automatic pick must not clearly clash with it
+  (: the texture's measured mean colour, , 723 decals, against the host colour —
+  chroma distance ≤ 30, at most 60 darker (any darker on asphalt), at most 45 brighter; sparse specks under 10 % coverage
+  and decals with no measurement pass). The Decals feature's leaves/dirt/cracks/puddles/litter themes use the same check.
+  Lawn wear is grass-tone (moss, weeds, wet-grass effects), never the brown Ground Dirt discs; dressing pools no longer
+  fall back to broader pools; junction and entrance wear is rarer.
+
 ## Open problems
 
 - In-game confirmation of the sunk-decal trick (renders on the Tunnel mesh layer; projection unaffected?). Fallback: the
@@ -185,7 +201,7 @@ Decals stay ON by default (Decals 100 %, the Decals feature as before); the art 
 
 ## Census (generated)
 
-Source: `catalog-dump.json v14 2026-10-14T20:45:05.0029742Z` — 960 decal objects (199 vanilla, 761 from asset packs).
+Source: `catalog-dump.json v20 2026-10-14T22:24:40.3004482Z` — 960 decal objects (199 vanilla, 761 from asset packs).
 Family/shape/ground/orientation come from `Core/Decals/DecalCatalog.Describe` with the real footprint; `pools` = the dressing pools
 (`DecalPools`) an item can be picked for automatically (size caps apply when the game builds the pools). `mask` = the pack's
 `colossal_DecalLayerMask` (read as DecalLayers: T terrain, R roads/paths, B buildings, O other; blank = vanilla/unknown — the
@@ -296,8 +312,8 @@ CustomDecals encoding is unverified, see finding 3). Confidence: ●● item wor
 
 | decal | size m | shape | ground | orientation | mask | conf | pools |
 |---|---|---|---|---|---|---|---|
-| Ground Texture Decal Pack Ground Moss01 Decal | 2.5×2.5 | Blob | Paved, Grass, Dirt | Random | TRBO | ●● | moss |
-| Ground Texture Decal Pack Ground Weeds01 Decal | 2.5×2.5 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | moss |
+| Ground Texture Decal Pack Ground Moss01 Decal | 2.5×2.5 | Blob | Paved, Grass, Dirt | Random | TRBO | ●● | moss wear |
+| Ground Texture Decal Pack Ground Weeds01 Decal | 2.5×2.5 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | moss wear |
 
 #### Overgrowth (20) — grass growing through / patchy grass on dirt
 
@@ -328,31 +344,31 @@ CustomDecals encoding is unverified, see finding 3). Confidence: ●● item wor
 
 | decal | size m | shape | ground | orientation | mask | conf | pools |
 |---|---|---|---|---|---|---|---|
-| Ground Texture Decal Pack Ground Dirt01 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear |
-| Ground Texture Decal Pack Ground Dirt02 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear |
-| Ground Texture Decal Pack Ground Dirt03 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear |
-| Ground Texture Decal Pack Ground Dirt04 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear |
+| Ground Texture Decal Pack Ground Dirt01 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear mud |
+| Ground Texture Decal Pack Ground Dirt02 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear mud |
+| Ground Texture Decal Pack Ground Dirt03 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear mud |
+| Ground Texture Decal Pack Ground Dirt04 Decal | 6×6 | Blob | Paved, Grass, Dirt | Random | TRB | ●● | wear mud |
 | RealVision Decals Ground Texture117 - Dirt Path Decal | 25×15 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture118 - Dirt Patch Decal | 25×15 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture127 - Dirt Terrain Decal | 30×30 | Sheet | Paved, Grass, Dirt | Random | B | ●● |  |
 | RealVision Decals Ground Texture128 - Dirt Terrain Decal | 30×30 | Sheet | Paved, Grass, Dirt | Random | B | ●● |  |
-| RealVision Decals Ground Texture130 - Road Side Dirt Decal | 10×2 | Strip | Paved, Grass, Dirt | AlongHost | TR | ●● | wear |
+| RealVision Decals Ground Texture130 - Road Side Dirt Decal | 10×2 | Strip | Paved, Grass, Dirt | AlongHost | TR | ●● | wear mud |
 | RealVision Decals Ground Texture132 - Dirt Terrain Decal | 30×15 | Sheet | Paved, Grass, Dirt | Random | B | ●● |  |
 | RealVision Decals Ground Texture134 - Dirt Broken Pavement Decal | 20×5 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture145 - Road Side Dirt Decal | 20×5 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture151 - Dirt Path Decal | 20×15 | Sheet | Paved, Grass, Dirt | Random | B | ●● |  |
-| RealVision Decals Ground Texture152 - Dirt Patch Decal | 10×2.5 | Strip | Paved, Grass, Dirt | AlongHost | RB | ●● | wear |
+| RealVision Decals Ground Texture152 - Dirt Patch Decal | 10×2.5 | Strip | Paved, Grass, Dirt | AlongHost | RB | ●● | wear mud |
 | RealVision Decals Ground Texture182 - Dirt Path Decal | 22×12 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture20 - Dirt Decal | 40×40 | Sheet | Paved, Grass, Dirt | Random | B | ●● |  |
 | RealVision Decals Ground Texture20 - DirtPatch Decal | 20×15 | Sheet | Paved, Grass, Dirt | Random | TRB | ●● |  |
 | RealVision Decals Ground Texture216 - Dirt Park Decal | 60×60 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture43 - Dirt Decal | 20×20 | Sheet | Paved, Grass, Dirt | Random | B | ●● |  |
-| RealVision Decals Ground Texture44 - Dirt Decal | 15×10 | Blob | Paved, Grass, Dirt | Random | T | ●● | wear |
+| RealVision Decals Ground Texture44 - Dirt Decal | 15×10 | Blob | Paved, Grass, Dirt | Random | T | ●● | wear mud |
 | RealVision Decals Ground Texture49 - Dirt Decal | 25×10 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture50 - Dirt Decal | 20×10 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture54 - Dirt Decal | 20×15 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture65 - DirtPath Decal | 60×60 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
-| RealVision Decals Ground Texture66 - DirtTerrain Decal | 10×10 | Blob | Paved, Grass, Dirt | Random | B | ●● | wear |
+| RealVision Decals Ground Texture66 - DirtTerrain Decal | 10×10 | Blob | Paved, Grass, Dirt | Random | B | ●● | wear mud |
 | RealVision Decals Ground Texture81 - Dirt Curve Decal | 40×20 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture82 - Dirt Patch Decal | 20×20 | Sheet | Paved, Grass, Dirt | Random | TR | ●● |  |
 | RealVision Decals Ground Texture86 - Dirt Decal | 30×15 | Sheet | Paved, Grass, Dirt | Random |  | ●● |  |
@@ -361,10 +377,10 @@ CustomDecals encoding is unverified, see finding 3). Confidence: ●● item wor
 
 | decal | size m | shape | ground | orientation | mask | conf | pools |
 |---|---|---|---|---|---|---|---|
-| G87 Trash Decals Dirty Pack Trash G87 Dust 01 Grey Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand |
-| G87 Trash Decals Dirty Pack Trash G87 Dust 02 Brown Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand |
-| G87 Trash Decals Dirty Pack Trash G87 Dust 03 Red Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand |
-| RealVision Decals Ground Texture90 - Road Dust Decal | 15×10 | Blob | Paved, Dirt | Random | RB | ●● | wear mud sand |
+| G87 Trash Decals Dirty Pack Trash G87 Dust 01 Grey Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand stain |
+| G87 Trash Decals Dirty Pack Trash G87 Dust 02 Brown Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand stain |
+| G87 Trash Decals Dirty Pack Trash G87 Dust 03 Red Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand stain |
+| RealVision Decals Ground Texture90 - Road Dust Decal | 15×10 | Blob | Paved, Dirt | Random | RB | ●● | wear mud sand stain |
 | RealVision Decals Ground Texture91 - Road Dust Decal | 25×15 | Sheet | Paved, Dirt | Random | RB | ●● |  |
 | RealVision Decals Ground Texture92 - Road Dust Decal | 20×10 | Sheet | Paved, Dirt | Random | RB | ●● |  |
 | RealVision Decals Ground Texture93 - Road Dust Decal | 20×10 | Sheet | Paved, Dirt | Random | B | ●● |  |
@@ -456,41 +472,41 @@ CustomDecals encoding is unverified, see finding 3). Confidence: ●● item wor
 
 | decal | size m | shape | ground | orientation | mask | conf | pools |
 |---|---|---|---|---|---|---|---|
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 01 A S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 02 A M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 01 A S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 02 A M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain oil |
 | G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 03 A L Decal | 20×20 | Sheet | Paved | Random | TRB | ●● |  |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 04 B S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 05 B M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 04 B S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 05 B M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain oil |
 | G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 06 B L Decal | 20×20 | Sheet | Paved | Random | TRB | ●● |  |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 07 C S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 08 C M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 07 C S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 08 C M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain oil |
 | G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 09 C L Decal | 20×20 | Sheet | Paved | Random | TRB | ●● |  |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 10 D S Decal | 5×10 | Strip | Paved | AlongHost | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 11 D L Decal | 8×14 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 12 E S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 13 E M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 10 D S Decal | 5×10 | Strip | Paved | AlongHost | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 11 D L Decal | 8×14 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 12 E S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 13 E M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain oil |
 | G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 14 E L Decal | 20×20 | Sheet | Paved | Random | TRB | ●● |  |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 15 F S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 16 F M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 15 F S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 16 F M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain oil |
 | G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 17 F L Decal | 20×20 | Sheet | Paved | Random | TRB | ●● |  |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 18 G S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 19 G M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 18 G S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 19 G M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain oil |
 | G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 20 G L Decal | 20×20 | Sheet | Paved | Random | TRB | ●● |  |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 21 H S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 22 H M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 21 H S Decal | 5×5 | Blob | Paved | Random | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 22 H M Decal | 12.5×12.5 | Blob | Paved | Random | TRB | ●● | stain oil |
 | G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 23 H L Decal | 20×20 | Sheet | Paved | Random | TRB | ●● |  |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 40 Band A Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 41 Band B Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 44 Trio Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 45 Lone Medium Decal | 4×2 | Strip | Paved | AlongHost | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 46 Wide Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain |
-| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 47 Narrow Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 40 Band A Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 41 Band B Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 44 Trio Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 45 Lone Medium Decal | 4×2 | Strip | Paved | AlongHost | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 46 Wide Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain oil |
+| G87 Stains and Puddles Decals Wet Pack Stains G87 Stain 47 Narrow Decal | 2×6 | Strip | Paved | AlongHost | TRB | ●● | stain oil |
 | Light Stains - Decals RoadAssets Stain Rectangle L Decal | 16×32 | Sheet | Paved | Random |  | ● |  |
 | Light Stains - Decals RoadAssets Stain Rectangle M Decal | 8×16 | Sheet | Paved | Random |  | ● |  |
 | Light Stains - Decals RoadAssets Stain Square L Decal | 16×16 | Sheet | Paved | Random |  | ● |  |
-| Light Stains - Decals RoadAssets Stain Square M Decal | 8×8 | Blob | Paved | Random |  | ● | stain |
+| Light Stains - Decals RoadAssets Stain Square M Decal | 8×8 | Blob | Paved | Random |  | ● | stain oil |
 | Stains and Leakage Decal Pack Stains Stain 1 - Large Decal | 20×20 | Sheet | Paved | Random | TR | ●● |  |
-| Stains and Leakage Decal Pack Stains Stain 1 - Small Decal | 12×12 | Blob | Paved | Random | TR | ●● | stain |
+| Stains and Leakage Decal Pack Stains Stain 1 - Small Decal | 12×12 | Blob | Paved | Random | TR | ●● | stain oil |
 | Stains and Leakage Decal Pack Stains Stain 2 - Large Decal | 40×10 | Sheet | Paved | Random | TR | ●● |  |
 | Stains and Leakage Decal Pack Stains Stain 2 - Small Decal | 20×5 | Sheet | Paved | Random | TR | ●● |  |
 | Stains and Leakage Decal Pack Stains Stain 3 - Large Decal | 35×17.5 | Sheet | Paved | Random | TR | ●● |  |
@@ -541,24 +557,24 @@ CustomDecals encoding is unverified, see finding 3). Confidence: ●● item wor
 
 | decal | size m | shape | ground | orientation | mask | conf | pools |
 |---|---|---|---|---|---|---|---|
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 80 A S Decal | 1×1 | Tiny | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 81 A M Decal | 3×3 | Blob | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 83 B S Decal | 1×1 | Tiny | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 84 B M Decal | 3×3 | Blob | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 86 C S Decal | 1×1 | Tiny | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 87 C M Decal | 3×3 | Blob | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Prop 1S Decal | 2×2 | Blob | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Prop 2M Decal | 5×5 | Blob | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Prop 3L Decal | 10×10 | Blob | Any | Random | TRBO | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 091 A 70 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 092 B 50 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 093 B 50 Medium Grass Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 095 B 70 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 096 C 50 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 097 C 70 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 098 C 50 Medium Grass Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
-| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 099 C 70 Medium Grass Decal | 10×10 | Blob | Any | Random | TRB | ●● | wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 80 A S Decal | 1×1 | Tiny | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 81 A M Decal | 3×3 | Blob | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 83 B S Decal | 1×1 | Tiny | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 84 B M Decal | 3×3 | Blob | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 86 C S Decal | 1×1 | Tiny | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 87 C M Decal | 3×3 | Blob | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Prop 1S Decal | 2×2 | Blob | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Prop 2M Decal | 5×5 | Blob | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 090 A 50 Medium Prop 3L Decal | 10×10 | Blob | Any | Random | TRBO | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 091 A 70 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 092 B 50 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 093 B 50 Medium Grass Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 095 B 70 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 096 C 50 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 097 C 70 Medium Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 098 C 50 Medium Grass Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
+| G87 Stains and Puddles Decals Wet Pack Puddles G87 Wet Effect 099 C 70 Medium Grass Decal | 10×10 | Blob | Any | Random | TRB | ●● | wear wet |
 | RealVision Decals Ground Texture222 - Wave Crashing Decal | 30×20.5 | Sheet | Any | Random | B | ●● |  |
 
 #### Crack (25) — cracks, broken surface
