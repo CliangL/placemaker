@@ -1,13 +1,19 @@
-// Sports park: a straight promenade along the long axis with the entrances joined to it, and the
-// facilities packed beside it — football pitches (grass surface, goals, optional stands and
-// floodlights), basketball courts (asphalt, hoops) and tennis courts (asphalt, net, fenced cage).
-// Line markings are decals. An outdoor gym line along the promenade, a changing hut near the main
-// entrance, trees in what is left.
+// Sports park (s10 redesign, playtest: "a grid of identical grey fenced courts… uninspired, needs more
+// padding, a little more dynamic padding… like an artist painting it"; and "facilities controls AND
+// park features for the same things").
 //
-// Sizes include run-off: pitch full 68×46 / small 44×28, tennis 34×17, basketball 30×17 (m).
+// One concept for facilities: the sports park has no facility controls of its own. Its facilities are
+// the shared field / amenity add-ons (AddOns/Fields: pitch, baseball diamond, running track, cricket
+// ground, tennis courts, basketball court, skate bowl; amenities: volleyball, table tennis, fitness),
+// offered as FEATURES with host options for how many and how big. The park composes them
+// (SportsParkComposer): it carves a sized place for each one ("place:<id>" + SizedTag), and the add-on
+// lays the field out inside. Old receipts with the retired "pitches / basketball / tennis…" settings are
+// migrated into feature children on load (Migrate, via LayerAliases step migrations).
 
 using System;
 using System.Collections.Generic;
+using Placemaker.Core.Layers.AddOns;
+using Placemaker.Core.Layers.AddOns.Fields;
 using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
 
@@ -16,215 +22,227 @@ namespace Placemaker.Core.Layers.Leisure
     [AreaGenerator(51, Group = "sports")]
     public sealed class SportsParkLayer : LeisureLayer
     {
+        public const string LayerId = "sportsPark";
+
+        /// <summary>Extra tag on the places the sports park sizes itself: the field takes the size of its place.</summary>
+        public const string SizedTag = FieldAddOn.HostSizedTag;
+
         protected override string Area => "Sports";
-        public override string Id => "sportsPark";
+        public override string Id => LayerId;
         public override string Icon => "Media/Game/Icons/SportsParks.svg";
         public override float MinArea => 1200f;
 
-        protected override List<FeatureInfo> BuildFeatures() => AddOns.Fields.FieldSpecs.WithFields(new List<FeatureInfo>
+        /// <summary>Big fields (a hero candidate each), then courts, then small amenities.</summary>
+        public static readonly string[] BigFields = { "runningTrack", "cricketGround", "pitch", "baseballDiamond" };
+        public static readonly string[] Courts = { "tennisCourts", "basketballCourt", "skateBowl" };
+        public static readonly string[] Small = { "volleyball", "tableTennis", "fitness" };
+
+        public static IEnumerable<string> Facilities()
         {
-            Feature("restrooms"), Feature("shops", ("count", 2.0), ("where", "entrances")), CoreFeature("playground", ("size", "small")),
-            StreetShopsFeature(Area), Feature("decals", ("theme", "cracks"), ("ground", "auto")), Feature("terrain", ("shape", "flatten")),
-        });
+            foreach (var s in BigFields) yield return s;
+            foreach (var s in Courts) yield return s;
+            foreach (var s in Small) yield return s;
+        }
+
+        /// <summary>Feature id → host option ids (count, size) shown under its toggle.</summary>
+        public static string[] OptionsOf(string layer)
+        {
+            switch (layer)
+            {
+                case "pitch": case "baseballDiamond": case "tennisCourts": return new[] { layer + "Count", layer + "Size" };
+                case "runningTrack": case "cricketGround": return new[] { layer + "Size" };
+                case "skateBowl": return Array.Empty<string>();
+                default: return new[] { layer + "Count" };
+            }
+        }
+
+        public override string[] Emits
+        {
+            get
+            {
+                var tags = new List<string> { RegionTags.Green, RegionTags.Core, StreetFrontage.ShopsTag, SizedTag };
+                foreach (var f in Facilities()) tags.Add(Amenities.Place(f));
+                return tags.ToArray();
+            }
+        }
+
+        protected override string[] DefaultFeatures => new[] { "pitch", "tennisCourts", "basketballCourt", "playground", "decals" };
+
+        protected override List<FeatureInfo> BuildFeatures()
+        {
+            var list = new List<FeatureInfo>();
+            foreach (var f in Facilities())
+                list.Add(new FeatureInfo
+                {
+                    Layer = f, Target = Amenities.Place(f), LabelKey = "Placemaker.Feature." + f, TooltipKey = "Placemaker.Feature." + f + ".Tooltip",
+                    Options = OptionsOf(f),
+                    // One table per spot: the park's "how many" is the number of spots (no second count).
+                    Preset = f == "tableTennis" ? new SettingsBag { Values = { ["tables"] = 1.0 } } : new SettingsBag(),
+                });
+            // Kids' play and the toilets sit in the clubhouse yard (the "core" region next to the clubhouse).
+            list.Add(CoreFeature("playground", ("size", "small")));
+            list.Add(CoreFeature("restrooms"));
+            list.Add(Feature("shops", ("count", 2.0), ("where", "entrances")));
+            list.Add(StreetShopsFeature(Area));
+            list.Add(Feature("decals", ("theme", "cracks"), ("ground", "auto")));
+            return list;
+        }
+
+        public static readonly string[] Subtypes = { "community", "stadium", "tennisClub", "campus", "neighbourhood" };
+        public static readonly string[] Heroes = { "auto", "pitch", "runningTrack", "baseballDiamond", "cricketGround", "tennisCourts", "none" };
+
+        private static string[] WithAuto(FieldFormat[] f)
+        {
+            var r = new string[f.Length + 1];
+            r[0] = "auto";
+            for (int i = 0; i < f.Length; i++) r[i + 1] = f[i].Id;
+            return r;
+        }
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("pitches", 1, 0, 4, 1, "count", ControlTier.Essential, "facilities");
-            c.Slider("basketball", 2, 0, 8, 1, "count", ControlTier.Essential, "facilities");
-            c.Slider("tennis", 2, 0, 8, 1, "count", ControlTier.Essential, "facilities");
-            c.Toggle("fitness", true, ControlTier.Essential, "facilities").Tip();
-            c.Choice("pitchSize", "small", ControlTier.More, "facilities", "small", "full");
-            c.Toggle("stands", true, ControlTier.More, "facilities").Tip();
-            c.Toggle("floodlights", true, ControlTier.More, "facilities");
-            c.Toggle("markings", true, ControlTier.More, "facilities").Tip();
-            c.Toggle("cages", true, ControlTier.More, "facilities").Tip();
-            c.Toggle("changingHut", true, ControlTier.More, "facilities").Tip();
-            c.Asset("courtSurface", AssetCategories.SurfaceAsphalt, ControlTier.More, "assets");
-            c.Asset("pitchSurface", AssetCategories.SurfaceGrass, ControlTier.More, "assets");
-            c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "assets");
-            c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
-            c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
-            c.Slider("treeDensity", 25, 0, 100, 5, "perHa", ControlTier.More, "planting");
-            c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
+            // Layout (essentials): what kind of park, which field is the centrepiece, how much room between things.
+            c.Choice("subtype", "community", ControlTier.Essential, "layout", Subtypes).Tip();
+            c.Choice("hero", "auto", ControlTier.Essential, "layout", Heroes).Tip();
+            c.Slider("spacing", 100, 60, 200, 10, "%", ControlTier.Essential, "layout").Tip();
+            c.Choice("fieldAxis", "edge", ControlTier.More, "layout", "edge", "northSouth", "eastWest").Tip();
+
+            // Facility features: how many and how big (shown under each feature's toggle).
+            c.Slider("pitchCount", 1, 1, 4, 1, "count", ControlTier.More, "facilities");
+            c.Choice("pitchSize", "auto", ControlTier.More, "facilities", WithAuto(FieldSpecs.Pitch)).Tip();
+            c.Slider("baseballDiamondCount", 1, 1, 3, 1, "count", ControlTier.More, "facilities");
+            c.Choice("baseballDiamondSize", "auto", ControlTier.More, "facilities", WithAuto(FieldSpecs.Baseball));
+            c.Choice("runningTrackSize", "auto", ControlTier.More, "facilities", WithAuto(FieldSpecs.Track));
+            c.Choice("cricketGroundSize", "auto", ControlTier.More, "facilities", WithAuto(FieldSpecs.Cricket));
+            c.Slider("tennisCourtsCount", 1, 1, 4, 1, "count", ControlTier.More, "facilities").Tip();
+            c.Choice("tennisCourtsSize", "two", ControlTier.More, "facilities", "four", "three", "two", "one").Tip();
+            c.Slider("basketballCourtCount", 1, 1, 6, 1, "count", ControlTier.More, "facilities");
+            c.Slider("volleyballCount", 1, 1, 4, 1, "count", ControlTier.More, "facilities");
+            c.Slider("tableTennisCount", 2, 1, 6, 1, "count", ControlTier.More, "facilities");
+            c.Slider("fitnessCount", 1, 1, 3, 1, "count", ControlTier.More, "facilities");
+
+            // Clubhouse: changing pavilion with a spectator terrace beside the main field.
+            c.Toggle("changingHut", true, ControlTier.Essential, "clubhouse").Tip();
+            c.Toggle("terrace", true, ControlTier.More, "clubhouse").Tip();
+            c.Toggle("kiosk", true, ControlTier.More, "clubhouse").Tip();
+
+            // Paths.
+            c.Choice("promenade", "both", ControlTier.More, "paths", "loop", "spine", "both").Tip();
+            c.Toggle("entrancePlaza", true, ControlTier.More, "paths").Tip();
+            c.Slider("bikeRacks", 6, 0, 20, 1, "count", ControlTier.More, "paths").Tip();
+            c.Toggle("lamps", true, ControlTier.More, "paths");
+            c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "paths");
+            c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "paths");
+
+            // Landscape.
+            c.Choice("treeBelt", "single", ControlTier.More, "landscape", "none", "single", "double").Tip();
+            c.Slider("treeDensity", 25, 0, 100, 5, "perHa", ControlTier.More, "landscape").Tip();
+            c.Toggle("berms", true, ControlTier.More, "landscape").Tip();
+            c.Toggle("fence", false, ControlTier.More, "landscape");
+            c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "landscape").When("fence=true");
+            c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "landscape");
+
+            // Parking: only a tidy lot on the street side of a large park.
+            c.Choice("parking", "auto", ControlTier.More, "parking", "auto", "off", "on").Tip();
+            c.Slider("lotShare", 8, 3, 20, 1, "%", ControlTier.More, "parking").When("parking!=off").Tip();
+
             EntranceMarkers(c);
             DefineStreetShopControls(c);
-            c.RandomRange("pitches", 0, 2);
-            c.RandomRange("basketball", 0, 3);
-            c.RandomRange("tennis", 0, 3);
+            foreach (var id in new[] { "subtype", "hero", "fieldAxis", "pitchSize", "baseballDiamondSize", "runningTrackSize", "cricketGroundSize", "tennisCourtsSize", "parking", "promenade" })
+                c.Fixed(id);
+            c.RandomRange("spacing", 80, 140);
+            c.RandomRange("treeDensity", 15, 45);
         }
 
         protected override void DefinePresets()
         {
-            Preset("community", ("pitches", 1.0), ("basketball", 2.0), ("tennis", 1.0), ("pitchSize", "small"));
-            Preset("football", ("pitches", 2.0), ("basketball", 0.0), ("tennis", 0.0), ("pitchSize", "full"), ("stands", true), ("floodlights", true));
-            Preset("tennisClub", ("pitches", 0.0), ("basketball", 0.0), ("tennis", 6.0), ("fitness", false));
-            Preset("streetball", ("pitches", 0.0), ("basketball", 4.0), ("tennis", 0.0), ("floodlights", true));
+            Preset("community", ("subtype", "community"), ("hero", "auto"), ("pitchCount", 1.0), ("pitchSize", "auto"), ("tennisCourtsCount", 1.0),
+                ("tennisCourtsSize", "two"), ("basketballCourtCount", 1.0), ("promenade", "both"), ("treeBelt", "single"), ("berms", true), ("spacing", 100.0));
+            PresetFeatures("community", "fitness");
+            Preset("stadium", ("subtype", "stadium"), ("hero", "runningTrack"), ("runningTrackSize", "auto"), ("pitchCount", 1.0), ("pitchSize", "seven"),
+                ("treeBelt", "double"), ("berms", true), ("parking", "on"), ("bikeRacks", 14.0), ("spacing", 120.0), ("promenade", "both"), ("kiosk", true));
+            PresetFeatures("stadium", "runningTrack", "fitness", "-tennisCourts", "-basketballCourt", "-playground");
+            Preset("tennisClub", ("subtype", "tennisClub"), ("hero", "tennisCourts"), ("tennisCourtsCount", 3.0), ("tennisCourtsSize", "two"),
+                ("promenade", "spine"), ("treeBelt", "single"), ("berms", false), ("treeDensity", 35.0), ("spacing", 90.0), ("fence", true));
+            PresetFeatures("tennisClub", "tableTennis", "-pitch", "-basketballCourt");
+            Preset("campus", ("subtype", "campus"), ("hero", "pitch"), ("pitchCount", 2.0), ("pitchSize", "auto"), ("baseballDiamondCount", 1.0),
+                ("tennisCourtsCount", 2.0), ("tennisCourtsSize", "two"), ("basketballCourtCount", 2.0), ("volleyballCount", 2.0),
+                ("treeBelt", "double"), ("berms", true), ("parking", "on"), ("spacing", 110.0), ("promenade", "both"));
+            PresetFeatures("campus", "baseballDiamond", "volleyball", "skateBowl", "fitness");
+            Preset("neighbourhood", ("subtype", "neighbourhood"), ("hero", "none"), ("basketballCourtCount", 2.0), ("tennisCourtsCount", 1.0),
+                ("tennisCourtsSize", "one"), ("tableTennisCount", 2.0), ("volleyballCount", 1.0), ("promenade", "loop"), ("treeBelt", "single"),
+                ("treeDensity", 45.0), ("berms", false), ("parking", "off"), ("spacing", 85.0), ("changingHut", true), ("terrace", false));
+            PresetFeatures("neighbourhood", "-pitch", "tableTennis", "volleyball", "skateBowl", "fitness");
         }
-
-        private enum Facility { Pitch, Tennis, Basketball }
 
         protected override void PlanCore(LayerContext ctx)
         {
-            var region = ctx.LayerRegion;
-            var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
-            var gates = Gates(ctx);
-            var pathAsset = AssetMix.One(ctx.S("pathAsset"));
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
-
-            // Promenade along the long axis (shifted to one third so one side holds the big pitches).
-            var spine = new List<(float2 a, float2 b)>();
-            var through = centre - side * (minor * 0.18f);
-            if (!region.Contains(through)) through = centre;
-            if (LeisureKit.Chord(region, through, axis, 3f, out var s0, out var s1))
-            {
-                LeisureKit.Path(ctx, occ, s0, s1, NetRole.PathwayWide, pathAsset);
-                spine.Add((s0, s1));
-            }
-            ConnectGates(ctx, occ, gates, spine, NetRole.Pathway, pathAsset);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
-            ctx.Check();
-
-            // Facilities, biggest first.
-            bool full = ctx.S("pitchSize") == "full";
-            var wanted = new List<(Facility f, int n, float l, float w)>
-            {
-                (Facility.Pitch, ctx.I("pitches"), full ? 68f : 44f, full ? 46f : 28f),
-                (Facility.Tennis, ctx.I("tennis"), 34f, 17f),
-                (Facility.Basketball, ctx.I("basketball"), 30f, 17f),
-            };
-            var placed = new List<(Facility f, OrientedRect r)>();
-            foreach (var (f, n, l, w) in wanted)
-            {
-                if (n <= 0) continue;
-                var rects = LeisureKit.Pack(region, occ, centre, axis, l, w, 4f, 4f, n, 1.5f);
-                if (rects.Count < n)
-                {
-                    // Try across the axis too (narrow sites).
-                    rects.AddRange(LeisureKit.Pack(region, occ, centre, axis, l, w, 4f, 4f, n - rects.Count, 1.5f, false, false));
-                }
-                foreach (var r in rects) placed.Add((f, r));
-                if (rects.Count < n) ctx.Issue(IssueSeverity.Info, "Placemaker.Sports.Issue.Fewer", rects.Count, n);
-            }
-            ctx.Check();
-
-            var fence = AssetMix.One(ctx.S("fenceAsset"));
-            int equipment = 0;
-            for (int i = 0; i < placed.Count; i++)
-            {
-                var (f, r) = placed[i];
-                uint v = Hashing.Mix(ctx.Seed, 0x5A00u + (uint)i * 31u);
-                // Playing surface: the real field inside the run-off.
-                float fl = f == Facility.Pitch ? r.HalfLength - 3f : f == Facility.Tennis ? 11.9f : 14f;
-                float fw = f == Facility.Pitch ? r.HalfWidth - 3f : f == Facility.Tennis ? 5.5f : 7.5f;
-                var field = new OrientedRect { Center = r.Center, Axis = r.Axis, HalfLength = fl, HalfWidth = fw };
-                if (f == Facility.Pitch) ctx.Surface(field.Ring, SurfaceRole.Grass, AssetMix.One(ctx.S("pitchSurface")), AssetCategories.SurfaceGrass);
-                else ctx.Surface(r.Ring, SurfaceRole.Asphalt, AssetMix.One(ctx.S("courtSurface")), AssetCategories.SurfaceAsphalt);
-                if (ctx.B("markings") && AssetAvailability.Has(AssetCategories.DecalMarkings))
-                    foreach (var (u, w) in new[] { (0f, 0f), (-fl * 0.7f, 0f), (fl * 0.7f, 0f) })
-                        ctx.Object(field.Local(u, w), r.Yaw, ObjectRole.Decal, AssetMix.One(""), Hashing.Mix(v, 77u), -1, AssetCategories.DecalMarkings);
-                switch (f)
-                {
-                    case Facility.Pitch:
-                    {
-                        string goal = LeisureKit.Category(ctx, "", AssetCategories.SportsGoal, AssetCategories.Sports);
-                        if (goal != null)
-                            for (int e = -1; e <= 1; e += 2)
-                            {
-                                var p = field.Local(e * (fl - 0.5f), 0f);
-                                ctx.Object(p, r.Yaw + (e > 0 ? math.PI : 0f), ObjectRole.Furniture, AssetMix.One(""), v, -1, goal);
-                                equipment++;
-                            }
-                        if (ctx.B("stands"))
-                        {
-                            string stand = LeisureKit.Category(ctx, "", AssetCategories.SportsStand, AssetCategories.Bench);
-                            if (stand != null)
-                                for (float u = -fl * 0.5f; u <= fl * 0.5f + 0.1f; u += math.max(6f, fl * 0.5f))
-                                {
-                                    var p = r.Local(u, r.HalfWidth + 2.5f);
-                                    var role = stand == AssetCategories.Bench ? ObjectRole.Bench : ObjectRole.Furniture;
-                                    LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, r.Center), role, AssetMix.One(ctx.S("benchAsset")), stand, 1.6f, Hashing.Mix(v, (uint)(u + 100)));
-                                }
-                        }
-                        break;
-                    }
-                    case Facility.Basketball:
-                    {
-                        string hoop = LeisureKit.Category(ctx, "", AssetCategories.SportsBasketball, AssetCategories.Sports);
-                        if (hoop != null)
-                            for (int e = -1; e <= 1; e += 2)
-                            {
-                                ctx.Object(field.Local(e * (fl - 0.3f), 0f), r.Yaw + (e > 0 ? math.PI : 0f), ObjectRole.Furniture, AssetMix.One(""), v, -1, hoop);
-                                equipment++;
-                            }
-                        break;
-                    }
-                    default:
-                    {
-                        string net = LeisureKit.Category(ctx, "", AssetCategories.SportsTennis, AssetCategories.Sports);
-                        if (net != null) { ctx.Object(r.Center, r.Yaw + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One(""), v, -1, net); equipment++; }
-                        break;
-                    }
-                }
-                // Cages round the courts (gate gap on the promenade side).
-                if (f != Facility.Pitch && ctx.B("cages"))
-                {
-                    var ring = r.Ring;
-                    for (int k = 0; k < 4; k++)
-                    {
-                        float2 a = ring[k], b = ring[(k + 1) % 4];
-                        if (k == 3) { var mid = math.lerp(a, b, 0.5f); var d = math.normalizesafe(b - a); ctx.StraightNet(a, mid - d * 1.5f, NetRole.Fence, fence); ctx.StraightNet(mid + d * 1.5f, b, NetRole.Fence, fence); }
-                        else ctx.StraightNet(a, b, NetRole.Fence, fence);
-                    }
-                }
-                if (ctx.B("floodlights"))
-                {
-                    string light = LeisureKit.Category(ctx, "", AssetCategories.FloodLight, AssetCategories.Lamp);
-                    if (light != null)
-                        foreach (var (u, w) in new[] { (-1f, -1f), (1f, -1f), (1f, 1f), (-1f, 1f) })
-                        {
-                            var p = r.Local(u * (r.HalfLength + 1.2f), w * (r.HalfWidth + 1.2f));
-                            LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, r.Center), ObjectRole.Lamp, AssetMix.One(""), light == AssetCategories.Lamp ? null : light, 0.6f,
-                                Hashing.Mix(v, (uint)(u * 3 + w + 9)), 0.3f, 0.1f);
-                        }
-                }
-            }
-            ctx.Check();
-
-            // Outdoor gym along the promenade, changing hut near the first entrance.
-            if (ctx.B("fitness") && spine.Count > 0)
-            {
-                string gym = LeisureKit.Category(ctx, "", AssetCategories.SportsFitness, AssetCategories.Sports);
-                if (gym != null)
-                {
-                    var anchors = PathAnchors.Beside(occ, 1.8f, 9f, 1f);
-                    int n = 0;
-                    foreach (var a in PathAnchors.Pick(anchors, 8, 7f, false))
-                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(""), gym, 1.8f, Hashing.Mix(ctx.Seed, 0x6E00u + (uint)n))) n++;
-                    equipment += n;
-                }
-            }
-            if (ctx.B("changingHut") && !ctx.Input.HasChild("restrooms"))
-            {
-                string hut = LeisureKit.Category(ctx, "", AssetCategories.Restroom, AssetCategories.Shelter);
-                if (hut != null)
-                {
-                    var picks = PathAnchors.Pick(PathAnchors.Beside(occ, 4f, 6f, 1.2f), 1, 10f, true);
-                    foreach (var a in picks)
-                        LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(""), hut, 4f, Hashing.Mix(ctx.Seed, 0x4C7u), 0.5f, 0.3f, 0);
-                }
-            }
-            PathBenches(ctx, occ, 35f, AssetMix.One(ctx.S("benchAsset")), 0xBE50u);
-
-            // Trees in what is left, mostly at the edges.
-            int trees = (int)(region.Area / 10000f * ctx.F("treeDensity"));
-            if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, ctx.L("treeSpecies"), Keys.Category(AssetCategories.Tree)))
-                LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, ctx.L("treeSpecies"), 2.5f, 18f, 0.5f, 0x7A00u, p => region.BoundaryDistance(p, 20f) > 14f);
-
-            EmitGreenRegions(ctx, occ);
+            new SportsParkComposer(ctx, Gates(ctx)).Run();
             CommonStats(ctx);
-            ctx.Stat("Placemaker.Stat.Facilities", placed.Count, Keys.UnitCount);
-            ctx.Stat("Placemaker.Stat.Equipment", equipment, Keys.UnitCount);
-            ctx.Plan.Facts["facilities"] = placed.Count;
+        }
+
+        // ───────────── migration of the retired facility controls ─────────────
+
+        /// <summary>
+        /// Rewrites a loaded sports park step from the retired facility controls (pitches, basketball,
+        /// tennis, fitness, pitchSize small/full) to feature children with host counts, and moves field
+        /// children that used to find their own spot into their places. Idempotent.
+        /// </summary>
+        public static int Migrate(RecipeStep step)
+        {
+            if (step == null || step.Layer != LayerId) return 0;
+            int n = 0;
+            var v = step.Settings.Values;
+            void Child(string layer)
+            {
+                string target = Amenities.Place(layer);
+                foreach (var ch in step.Children)
+                    if (ch != null && ch.Layer == layer && (ch.Target ?? "") == target) { ch.Enabled = true; return; }
+                var gen = GeneratorRegistry.Get(layer);
+                step.Children.Add(new RecipeStep
+                {
+                    Layer = layer, Target = target, Seed = Hashing.Mix(step.Seed, Seeds.Hash(layer)), Settings = gen?.Defaults() ?? new SettingsBag(),
+                });
+            }
+            // Field children planned before the redesign found their own spot (Target ""): they now fill a place.
+            foreach (var ch in step.Children)
+                if (ch != null && string.IsNullOrEmpty(ch.Target))
+                    foreach (var f in Facilities())
+                        if (ch.Layer == f) { ch.Target = Amenities.Place(f); n++; }
+            if (v.TryGetValue("pitches", out var p))
+            {
+                int k = (int)math.round(Convert.ToDouble(p));
+                if (k > 0) { Child("pitch"); v["pitchCount"] = (double)math.clamp(k, 1, 4); }
+                v.Remove("pitches"); n++;
+            }
+            if (v.TryGetValue("pitchSize", out var ps) && ps is string size && size == "small") { v["pitchSize"] = "seven"; n++; }
+            if (v.TryGetValue("tennis", out var t))
+            {
+                int k = (int)math.round(Convert.ToDouble(t));
+                if (k > 0)
+                {
+                    Child("tennisCourts");
+                    int per = math.min(4, k);
+                    v["tennisCourtsSize"] = per >= 4 ? "four" : per == 3 ? "three" : per == 2 ? "two" : "one";
+                    v["tennisCourtsCount"] = (double)math.clamp((k + 3) / 4, 1, 4);
+                }
+                v.Remove("tennis"); n++;
+            }
+            if (v.TryGetValue("basketball", out var b))
+            {
+                int k = (int)math.round(Convert.ToDouble(b));
+                if (k > 0) { Child("basketballCourt"); v["basketballCourtCount"] = (double)math.clamp(k, 1, 6); }
+                v.Remove("basketball"); n++;
+            }
+            if (v.TryGetValue("fitness", out var fit))
+            {
+                if (fit is bool on && on) Child("fitness");
+                v.Remove("fitness"); n++;
+            }
+            foreach (var gone in new[] { "stands", "floodlights", "markings", "cages", "courtSurface", "pitchSurface" })
+                if (v.Remove(gone)) n++;
+            foreach (var id in new[] { "pitches", "tennis", "basketball", "fitness" }) step.Locked.Remove(id);
+            return n;
         }
     }
 }

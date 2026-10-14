@@ -99,6 +99,8 @@ namespace Placemaker.Core.Layers.Common
                 step.Layer = a.To;
                 n++;
             }
+            // Retired control ids of a live layer (s10: the sports park's facility controls became feature children).
+            n += Leisure.SportsParkLayer.Migrate(step);
             foreach (var c in step.Children) n += Normalize(c, depth + 1);
             foreach (var kv in step.RegionOverrides) n += Normalize(kv.Value, depth + 1);
             return n;

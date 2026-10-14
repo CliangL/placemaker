@@ -104,6 +104,11 @@ namespace Placemaker.Core.Layers.AddOns.Fields
 
         public const string SmallerKey = "Placemaker.Field.Issue.Smaller";
         public const string OrientationKey = "Placemaker.Field.Issue.Orientation";
+        /// <summary>
+        /// Region tag a host adds to a place it sized itself (the sports park: "how many, how big" are its options):
+        /// the field then takes the biggest format that fits the place, whatever its own format setting says.
+        /// </summary>
+        public const string HostSizedTag = "hostSized";
 
         /// <summary>The formats of this field (biggest first).</summary>
         protected abstract FieldFormat[] Formats(LayerContext ctx);
@@ -169,6 +174,25 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         // ───────────── planning ─────────────
 
         private bool Hosted(AreaInput input) => input.RegionTags != null && Array.IndexOf(input.RegionTags, Amenities.Place(Id)) >= 0;
+        private bool HostSized(AreaInput input) => Hosted(input) && Array.IndexOf(input.RegionTags, HostSizedTag) >= 0;
+
+        /// <summary>
+        /// Where people arrive from, for a field in a host's place: the nearest walk of the whole recipe. The place's own
+        /// occupancy only sees what overlaps the place, so the touchline walk beside it would be missed.
+        /// </summary>
+        private static bool NearestReservedPath(ReservedSpace reserved, float2 p, out float2 onPath)
+        {
+            onPath = p; float best = float.MaxValue;
+            if (reserved == null) return false;
+            foreach (var c in reserved.Corridors)
+            {
+                if (c.Tag != nameof(NetRole.Pathway) && c.Tag != nameof(NetRole.PathwayWide)) continue;
+                var q = SegmentIndex.ClosestPoint(p, c.A, c.B);
+                float d = math.distancesq(q, p);
+                if (d < best) { best = d; onPath = q; }
+            }
+            return best < 300f * 300f;
+        }
 
         protected override void PlanCore(LayerContext ctx)
         {
@@ -211,7 +235,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                 // The spur first, so the field's own furniture keeps clear of it.
                 if (ctx.B("pathTo")) FieldKit.Spur(ctx, occ, site, AssetMix.One(""));
             }
-            var toward = Toward(occ, site);
+            var toward = Hosted(ctx.Input) && NearestReservedPath(ctx.Input.Reserved, site.Center, out var onPath) ? onPath : Toward(occ, site);
             Build(ctx, occ, site, toward);
             ctx.Plan.Facts["amenityLength"] = site.HalfLength * 2f;
             ctx.Plan.Facts["amenityWidth"] = site.HalfWidth * 2f;
@@ -220,12 +244,13 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         protected sealed override void Build(LayerContext ctx, Occupancy occ, OrientedRect site, float2 toward)
         {
             var formats = Formats(ctx);
-            int want = Wanted(ctx, formats);
+            bool sized = HostSized(ctx.Input);
+            int want = sized ? 0 : Wanted(ctx, formats);
             int k = -1;
             for (int i = want; i < formats.Length; i++)
                 if (formats[i].Length <= site.HalfLength * 2f + 0.6f && formats[i].Width <= site.HalfWidth * 2f + 0.6f) { k = i; break; }
             if (k < 0) { NoSpace(ctx, NameKey); return; }
-            if (k > want && !Auto(ctx)) ctx.Issue(IssueSeverity.Info, SmallerKey, NameKey);
+            if (k > want && !sized && !Auto(ctx)) ctx.Issue(IssueSeverity.Info, SmallerKey, NameKey);
             var f = formats[k];
             var place = new OrientedRect
             {
@@ -241,6 +266,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             {
                 Ctx = ctx, Occ = occ, Site = site, Place = place, Toward = toward, Format = f.Id, Seed = Hashing.Mix(ctx.Seed, Seeds.Hash(Id)),
                 Ground = FieldGround.Level(ctx, pad, outer, ctx.B("level")),
+                HostSized = sized,
             };
             Lay(job);
             ctx.Check();

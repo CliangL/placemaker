@@ -262,6 +262,8 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         public readonly LinePainter Lines = new LinePainter();
         public uint Seed;
         public int Equipment, Lights, Stands, Benches;
+        /// <summary>The host sized the place (FieldAddOn.HostSizedTag): the format is the place's, not the player's own setting.</summary>
+        public bool HostSized;
 
         public uint V(uint salt) => Hashing.Mix(Seed, salt);
         /// <summary>+1/−1: the long side of the place facing where people arrive from.</summary>
