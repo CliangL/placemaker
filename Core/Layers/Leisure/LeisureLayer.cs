@@ -122,15 +122,26 @@ namespace Placemaker.Core.Layers.Leisure
             int n = 0;
             if (designInterval <= 0f) return 0;
             float interval = ctx.M(designInterval, 4f);
+            // Walk chained segments (a sampled curve is many short ones) by distance, so a lamp comes every
+            // interval along the path, not once per segment (gallery: 130 lamps lining a botanical garden).
+            float2 last = new float2(float.NaN);
+            float next = interval * 0.5f, at = 0f;
+            int k = 0;
             foreach (var s in new List<SegmentIndex.Seg>(occ.Paths.Segments))
             {
-                var dir = math.normalizesafe(s.B - s.A);
+                float len = math.distance(s.A, s.B);
+                if (len < 1e-3f) continue;
+                if (!(math.distancesq(s.A, last) < 0.01f)) { at = 0f; next = math.min(interval * 0.5f, len * 0.5f); }
+                last = s.B;
+                var dir = (s.B - s.A) / len;
                 var nrm = new float2(-dir.y, dir.x);
-                foreach (var p in LeisureKit.Along(s.A, s.B, interval))
+                for (; next <= at + len; next += interval)
                 {
-                    var q = p + nrm * ((n & 1) == 0 ? 1f : -1f) * (s.HalfWidth + 0.8f);
+                    var p = s.A + dir * (next - at);
+                    var q = p + nrm * ((k++ & 1) == 0 ? 1f : -1f) * (s.HalfWidth + 0.8f);
                     if (LeisureKit.Put(ctx, occ, q, 0f, ObjectRole.Lamp, lamp, null, 0.5f, Hashing.Mix(ctx.Seed, salt + (uint)n), 0.4f, 0.2f)) n++;
                 }
+                at += len;
             }
             return n;
         }

@@ -250,10 +250,11 @@ namespace Placemaker.Core.Layers.Leisure
             foreach (var an in PathAnchors.Pick(PathAnchors.Beside(occ, 3f, 8f, 0.6f), 200, ctx.F("restStops"), false))
             {
                 var t = an.Tangent;
-                bool ok = LeisureKit.Put(ctx, occ, an.Position + t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stops));
-                LeisureKit.Put(ctx, occ, an.Position - t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5780u + (uint)stops));
-                LeisureKit.Put(ctx, occ, an.Position - t * 3.2f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5800u + (uint)stops));
                 var away = math.normalizesafe(an.Position - an.Toward);
+                var seat = an.Position - away * 1.7f;   // seats at the path edge (the anchor disc reaches 3 m out)
+                bool ok = LeisureKit.Put(ctx, occ, seat + t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stops));
+                LeisureKit.Put(ctx, occ, seat - t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5780u + (uint)stops));
+                LeisureKit.Put(ctx, occ, seat - t * 3.2f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5800u + (uint)stops));
                 LeisureKit.Put(ctx, occ, an.Position + away * 4f, 0f, ObjectRole.Tree, AssetMix.One(""), null, 2.4f, Hashing.Mix(ctx.Seed, 0x5880u + (uint)stops), 1f, 0.3f, 3, 3);
                 if (ok) stops++;
             }
