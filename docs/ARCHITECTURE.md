@@ -84,3 +84,10 @@ ToolSystem (stage machine) ─ Selection (draw|block|paint|perimeter) → AreaSh
       └─ primary(build) → IBuildService.Start(plan) → definitions → Temp → validate → apply → group
 UI ⇄ PlacemakerUISystem: 6 JSON values (state, catalog, design, summary, assets, managed) + triggers (contract.ts)
 ```
+
+## Visual check (mandatory for layout work)
+
+Render before you claim a layout is good:
+`dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery` (≈35 s, real planners + real asset
+footprints). Read the PNGs of the types/presets you touched and iterate until they look right. Renders are not
+committed (ignored); `docs/gallery/REVIEW.md` holds known visual problems.
