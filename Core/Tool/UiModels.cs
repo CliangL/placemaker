@@ -130,6 +130,12 @@ namespace Placemaker.Core.Tool
                 .Set("label", (p.Label ?? new LocText("")).ToJson())
                 .Set("enabled", p.Enabled);
             if (!p.Enabled && p.Reason != null) o.Set("reason", p.Reason.ToJson());
+            // Additive: which step / marker kind a placeMarkers action is about (the UI reveals its Entrances).
+            if (p.Kind == PrimaryKind.PlaceMarkers && !string.IsNullOrEmpty(p.StepPath))
+            {
+                o.Set("stepPath", p.StepPath);
+                if (!string.IsNullOrEmpty(p.MarkerKind)) o.Set("markerKind", p.MarkerKind);
+            }
             return o;
         }
 

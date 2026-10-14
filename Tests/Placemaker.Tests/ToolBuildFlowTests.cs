@@ -212,48 +212,14 @@ namespace Placemaker.Tests
         private static AreaShape Shape() => new AreaShape { Ring = ToolTestData.Square(10) };
 
         [Fact]
-        public void SuggestionsBecomeRealMarkersOnWholeOutlineSteps()
+        public void NoEntranceLeavesStepUnreadyAndPrimaryLeadsToPlacement()
         {
+            // Entrances are never placed automatically (FEEDBACK-4b): a fresh step that needs one is unready …
             var g = Gen();
-            var r = RecipeFor(g);
-            Assert.True(MarkerAuto.Apply(r, Shape(), null, new HashSet<string>(), false, _ => g));
-            Assert.Single(r.Root.Markers);                      // unknown kinds dropped
-            Assert.Equal("entrance", r.Root.Markers[0].Kind);
-            Assert.Empty(r.Root.Children[0].Markers);           // region-targeted child: its layer handles its own blocks
-            Assert.Single(r.Root.Children[1].Markers);          // add-on on the whole area
-            Assert.False(MarkerAuto.Apply(r, Shape(), null, new HashSet<string>(), false, _ => g));
-        }
-
-        [Fact]
-        public void EditedStepsAreNeverRefilled()
-        {
-            var g = Gen();
-            var r = RecipeFor(g);
-            var edited = new HashSet<string> { RecipePaths.Root };
-            MarkerAuto.Apply(r, Shape(), null, edited, true, _ => g);
-            Assert.Empty(r.Root.Markers);   // the player removed them all: stays empty, step unready
-            var ready = g.CheckReady(new AreaInput { Markers = r.Root.Markers });
-            Assert.False(ready.Ready);
-        }
-
-        [Fact]
-        public void FillOnlyKeepsExistingAndReplaceRefreshes()
-        {
-            var g = Gen();
-            var r = RecipeFor(g);
-            r.Root.Markers.Add(new EdgeMarker { Kind = "entrance", Position = new float3(0, 0, 5) });
-            Assert.False(MarkerAuto.Apply(r, Shape(), null, new HashSet<string> { "0/1" }, false, _ => g));
-            Assert.Equal(new float3(0, 0, 5), r.Root.Markers[0].Position);
-            Assert.True(MarkerAuto.Apply(r, Shape(), null, new HashSet<string> { "0/1" }, true, _ => g));
-            Assert.Equal(new float3(5, 0, 0), r.Root.Markers[0].Position);
-        }
-
-        [Fact]
-        public void NoSuggestionPossibleLeavesStepUnready()
-        {
-            var g = new ToolFakeGenerator { NeedsEntrance = true };
             var r = new Recipe { Id = "t", Root = new RecipeStep { Layer = g.Id } };
-            Assert.False(MarkerAuto.Apply(r, Shape(), null, new HashSet<string>(), true, _ => g));
+            Assert.Empty(r.Root.Markers);
+            Assert.False(g.CheckReady(new AreaInput { Markers = r.Root.Markers }).Ready);
+            // … and the primary button stays disabled ("Add at least one entrance") but points at the step.
             var f = new StageFacts
             {
                 AreaValid = true, HasRecipe = true, PlanReady = true, UnreadyStepPath = "0", UnreadyMarkerKind = "entrance",
@@ -261,6 +227,14 @@ namespace Placemaker.Tests
             };
             var p = StageMachine.Primary(ToolStage.Review, f);
             Assert.Equal(PrimaryKind.PlaceMarkers, p.Kind);
+            Assert.False(p.Enabled);
+            Assert.Equal(StageMachine.AddEntranceKey, p.Reason.Key);
+            Assert.Equal("Placemaker.Primary.Build", p.Label.Key);
+            var j = UiModels.Primary(p);
+            Assert.Equal("placeMarkers", j["action"].AsString());
+            Assert.False(j["enabled"].AsBool());
+            Assert.Equal("0", j["stepPath"].AsString());
+            Assert.Equal("entrance", j["markerKind"].AsString());
         }
 
         [Fact]

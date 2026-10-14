@@ -27,6 +27,7 @@
   "Placemaker.Reason.NoArea": "Draw, pick or paint an area first.",
   "Placemaker.Reason.CloseArea": "Close the outline: click the first corner again or double-click.",
   "Placemaker.Reason.NoRecipe": "Choose what this area should become.",
+  "Placemaker.Reason.AddEntrance": "Add at least one entrance",
   "Placemaker.Reason.StepNotReady": "A layer of this design still needs something from you.",
   "Placemaker.Reason.Planning": "Planning the layout…",
   "Placemaker.Reason.PlanErrors": "Fix the problems listed in the review first.",

@@ -152,7 +152,7 @@ namespace Placemaker.Core.Tool
                 {
                     if (!f.AreaValid) return AreaPrimary(f);
                     if (!f.HasRecipe) return Make(PrimaryKind.None, "Placemaker.Primary.ChooseType", false, "Placemaker.Reason.NoRecipe");
-                    var markers = MarkerStep(f);
+                    var markers = MarkerStep(f, "Placemaker.Primary.Review");
                     if (markers != null) return markers;
                     if (f.UnreadyStepPath != null)
                     {
@@ -169,11 +169,11 @@ namespace Placemaker.Core.Tool
                 {
                     if (!f.AreaValid) return AreaPrimary(f);
                     if (!f.HasRecipe) return Make(PrimaryKind.None, "Placemaker.Primary.ChooseType", false, "Placemaker.Reason.NoRecipe");
-                    var markers = MarkerStep(f);
-                    if (markers != null) return markers;
-
                     var kind = f.Editing ? PrimaryKind.FinishEdit : PrimaryKind.Build;
                     string label = f.Editing ? "Placemaker.Primary.ApplyEdit" : "Placemaker.Primary.Build";
+                    var markers = MarkerStep(f, label);
+                    if (markers != null) return markers;
+
                     if (f.UnreadyStepPath != null)
                     {
                         var p = Make(kind, label, false, null);
@@ -219,18 +219,27 @@ namespace Placemaker.Core.Tool
             return Make(PrimaryKind.None, "Placemaker.Primary.SelectArea", false, "Placemaker.Reason.NoArea");
         }
 
-        private static PrimaryAction MarkerStep(StageFacts f)
+        /// <summary>
+        /// A step still needs markers (no entrance yet). Entrances are never placed automatically
+        /// (FEEDBACK-4b): the button keeps its stage label but stays disabled with "Add at least one
+        /// entrance"; pressing it anyway (click or Enter) starts placement on that step, and the UI
+        /// scrolls to / opens / highlights its Entrances section.
+        /// </summary>
+        private static PrimaryAction MarkerStep(StageFacts f, string label)
         {
             if (f.UnreadyStepPath == null || string.IsNullOrEmpty(f.UnreadyMarkerKind)) return null;
             return new PrimaryAction
             {
                 Kind = PrimaryKind.PlaceMarkers,
-                Label = f.UnreadyNextStep ?? new LocText("Placemaker.Primary.PlaceMarkers"),
-                Enabled = true,
+                Label = new LocText(label),
+                Enabled = false,
+                Reason = new LocText(AddEntranceKey),
                 StepPath = f.UnreadyStepPath,
                 MarkerKind = f.UnreadyMarkerKind,
             };
         }
+
+        public const string AddEntranceKey = "Placemaker.Reason.AddEntrance";
 
         private static PrimaryAction Make(PrimaryKind kind, string label, bool enabled, string reasonKey) => new PrimaryAction
         {

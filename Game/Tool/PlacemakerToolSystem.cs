@@ -66,7 +66,6 @@ namespace Placemaker.Game.Tool
         private ToolStage _stage = ToolStage.Area;
         private string _markerPath, _markerKind;
         private HashSet<string> _markersEdited = new HashSet<string>(StringComparer.Ordinal);
-        private int _autoShapeVersion = -1, _autoDesignVersion = -1;
         private int _editingGroup;
         private bool _panelCollapsed;
         private bool _anarchy;
@@ -277,7 +276,6 @@ namespace Placemaker.Game.Tool
             var facts = Facts();
             var normalized = StageMachine.Normalize(_stage, facts);
             if (normalized != _stage) SetStage(normalized);
-            UpdateAutoMarkers();
             ResolveAssets();
             if (_markerKind != null && (_shape == null || RecipePaths.Resolve(_recipe, _markerPath) == null)) ExitMarkerMode();
             UpdateHintActions();
@@ -312,7 +310,13 @@ namespace Placemaker.Game.Tool
         {
             var facts = Facts();
             var p = StageMachine.Primary(_stage, facts);
-            if (!p.Enabled) { Flash(p.Reason); return; }
+            if (!p.Enabled)
+            {
+                // "Add at least one entrance": pressing anyway starts placing one on that step (FEEDBACK-4b).
+                if (p.Kind == PrimaryKind.PlaceMarkers && _markerKind == null && !string.IsNullOrEmpty(p.StepPath)) StartMarkers(p.StepPath, p.MarkerKind);
+                Flash(p.Reason);
+                return;
+            }
             switch (p.Kind)
             {
                 case PrimaryKind.ToDesign: SetStage(ToolStage.Design); break;

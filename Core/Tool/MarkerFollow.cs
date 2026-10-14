@@ -5,9 +5,9 @@
 //   * same vertex count and at most two vertices moved (a point or edge drag): the marker keeps its
 //     RingSegment/RingT, so it slides with the edited edge;
 //   * otherwise: the closest point of the new outline to its old position.
-// Markers of untouched (automatic) steps are re-suggested afterwards by MarkerAuto; until then
-// (e.g. during a drag) they follow too, and are dropped when they end up far from every road.
-// Player-placed markers are never dropped. Pure: the tool calls it before committing the undo
+// Markers of steps not marked as edited (none since automatic entrances were removed, FEEDBACK-4b)
+// follow too, and are dropped when they end up far from every road. Player-placed markers are never
+// dropped. Pure: the tool calls it before committing the undo
 // step, so the snapshot holds outline and markers together.
 
 using System;
