@@ -404,7 +404,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
                     }
                 }
             }
-            int benches = PathBenches(ctx, occ, ctx.F("benchEvery"), bench, 0xBE70u) + gladeBenches;
+            int benches = PathBenches(ctx, occ, ctx.Raw("benchEvery"), bench, 0xBE70u) + gladeBenches;
             int lamps = ctx.B("lamps") ? PathLamps(ctx, occ, 22f, AssetMix.One(""), 0x1A70u) : 0;
 
             // 9. Harvest crates / ladders under some trees.

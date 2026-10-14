@@ -164,7 +164,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             if (run) RunDressing(ctx, occ, region, runA, runB);
             if (spec.Shape == HillShape.Terraced) TerraceBenches(ctx, occ, field, spec);
             if (sub == "kiteHill") Kites(ctx, occ, field, summit);
-            if (ctx.I("restSpots") > 0 && pathLen > 0f) PathBenches(ctx, occ, pathLen / ctx.I("restSpots"), AssetMix.One(""), 0xBE60u);
+            if (ctx.I("restSpots") > 0 && pathLen > 0f) PathBenches(ctx, occ, pathLen / ctx.I("restSpots") / ctx.Scale, AssetMix.One(""), 0xBE60u);
             if (ctx.B("lamps")) PathLamps(ctx, occ, 22f, AssetMix.One(""), 0x1A60u);
             ctx.Check();
 

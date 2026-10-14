@@ -187,7 +187,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             // ── 8. Path furniture ──
             var bench = AssetMix.One(ctx.S("benchAsset"));
             PathBenches(ctx, occ, 45f, bench, 0xBE00u);
-            if (ctx.B("lamps")) PathLamps(ctx, occ, ctx.F("lampSpacing"), AssetMix.One(ctx.S("lampAsset")), 0x1A00u);
+            if (ctx.B("lamps")) PathLamps(ctx, occ, ctx.Raw("lampSpacing"), AssetMix.One(ctx.S("lampAsset")), 0x1A00u);
 
             // ── 9. Trees: a belt along the outline (screen) and shade clumps ──
             var treeIds = ctx.L("treeSpecies");

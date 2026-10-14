@@ -241,7 +241,7 @@ namespace Placemaker.Core.Layers.Leisure
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
             ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
-            NaturalPaths(ctx, occ, gates, 0, 4f, 40f, "wide", AssetMix.One(ctx.S("pathAsset")));
+            NaturalPaths(ctx, occ, gates, 0, 4f, 40f, "narrow", AssetMix.One(ctx.S("pathAsset")));
             LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
             if (ctx.B("secondPath") && minor > 28f && LeisureKit.Chord(region, centre + side * (minor * 0.28f), axis, 4f, out var a, out var b))
                 LeisureKit.Path(ctx, occ, a, b, NetRole.Pathway, AssetMix.One(ctx.S("pathAsset")));

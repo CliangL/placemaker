@@ -83,25 +83,45 @@ namespace Placemaker.Core.Layers.Leisure
             }
         }
 
-        /// <summary>Benches beside the paths every <paramref name="interval"/> m (spread), facing the path.</summary>
-        protected static int PathBenches(LayerContext ctx, Occupancy occ, float interval, AssetRef bench, uint salt)
+        /// <summary>
+        /// Benches beside the paths every <paramref name="designInterval"/> m of path at design size (scaled by
+        /// the layout size, so a smaller layout gets them closer), spread, facing the path.
+        /// </summary>
+        protected static int PathBenches(LayerContext ctx, Occupancy occ, float designInterval, AssetRef bench, uint salt)
         {
-            if (interval <= 0f || occ.Paths.Count == 0) return 0;
+            float interval = ctx.M(designInterval, 4f);
+            if (designInterval <= 0f || occ.Paths.Count == 0) return 0;
             float total = 0f;
             foreach (var s in occ.Paths.Segments) total += math.distance(s.A, s.B);
             int wanted = math.clamp((int)(total / interval), 0, 200);
-            var picks = PathAnchors.Pick(PathAnchors.Beside(occ, 1.3f, 6f, 0.4f), wanted, interval * 0.6f, false);
+            var picks = PathAnchors.Pick(PathAnchors.Beside(occ, 1.3f, math.clamp(interval * 0.4f, 2f, 6f), 0.4f), wanted, interval * 0.6f, false);
             int n = 0;
             foreach (var a in picks)
                 if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Bench, bench, null, 1.3f, Hashing.Mix(ctx.Seed, salt + (uint)n))) n++;
             return n;
         }
 
-        /// <summary>Lamps beside the paths every <paramref name="interval"/> m.</summary>
-        protected static int PathLamps(LayerContext ctx, Occupancy occ, float interval, AssetRef lamp, uint salt)
+        /// <summary>Bins beside the paths every <paramref name="designInterval"/> m (design size, scaled), never on the lawn.</summary>
+        protected static int PathBins(LayerContext ctx, Occupancy occ, float designInterval, uint salt)
+        {
+            float interval = ctx.M(designInterval, 6f);
+            if (designInterval <= 0f || occ.Paths.Count == 0 || !AssetAvailability.Has(AssetCategories.Bin)) return 0;
+            float total = 0f;
+            foreach (var s in occ.Paths.Segments) total += math.distance(s.A, s.B);
+            int wanted = math.clamp((int)(total / interval), 0, 120);
+            var picks = PathAnchors.Pick(PathAnchors.Beside(occ, 0.6f, math.clamp(interval * 0.4f, 2f, 6f), 0.3f), wanted, interval * 0.6f, false);
+            int n = 0;
+            foreach (var a in picks)
+                if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Bin, AssetMix.One(""), null, 0.6f, Hashing.Mix(ctx.Seed, salt + (uint)n))) n++;
+            return n;
+        }
+
+        /// <summary>Lamps beside the paths every <paramref name="designInterval"/> m (design size, scaled by the layout size).</summary>
+        protected static int PathLamps(LayerContext ctx, Occupancy occ, float designInterval, AssetRef lamp, uint salt)
         {
             int n = 0;
-            if (interval <= 0f) return 0;
+            if (designInterval <= 0f) return 0;
+            float interval = ctx.M(designInterval, 4f);
             foreach (var s in new List<SegmentIndex.Seg>(occ.Paths.Segments))
             {
                 var dir = math.normalizesafe(s.B - s.A);
@@ -117,7 +137,8 @@ namespace Placemaker.Core.Layers.Leisure
 
         /// <summary>
         /// Natural path network (ParkManager planner) with meandering bends, emitted and indexed as
-        /// corridors and walkable paths. Returns the curves.
+        /// corridors and walkable paths. Returns the curves. Amplitude / wavelength are design metres
+        /// (scaled by the layout size); the paths keep the one edge margin plus their half width.
         /// </summary>
         protected static List<PathCurve> NaturalPaths(LayerContext ctx, Occupancy occ, List<Gate> gates, int loops, float amplitude, float wavelength,
             string width, AssetRef asset, bool stretch = false)
@@ -126,7 +147,8 @@ namespace Placemaker.Core.Layers.Leisure
             var pts = LeisureKit.Points(gates);
             uint seed = Hashing.Mix(ctx.Seed, 0x9A75u);
             var graph = ParkPathPlanner.PlanBest(region, pts, new ParkPathPlanner.Options { Loops = loops, StretchLoop = stretch }, seed, ctx.Cancel);
-            if (amplitude > 0f) graph = ParkPathStyles.Meander(graph, pts, amplitude, wavelength, seed, p => region.ContainsDisc(p, 3f) && !occ.HitsPolygon(p, 2f));
+            float keep = math.max(ctx.M(3f), ctx.EdgeMargin + 1f);
+            if (amplitude > 0f) graph = ParkPathStyles.Meander(graph, pts, ctx.M(amplitude), ctx.M(wavelength), seed, p => region.ContainsDisc(p, keep) && !occ.HitsPolygon(p, 2f));
             var curves = ParkPaths.Build(graph, region, true, width);
             ParkPaths.Index(curves, occ.Corridors, 100);
             ParkPaths.Index(curves, occ.Paths, 100);
