@@ -6,10 +6,10 @@ const { CssLintPlugin } = require("./tools/css-lint");
 const TerserPlugin = require("terser-webpack-plugin");
 const gray = (text) => `\x1b[90m${text}\x1b[0m`;
 
-// Output: PLACEMAKER_UI_OUT (set by the csproj) > CSII_USERDATAPATH Mods folder > ./build
+// Output: PLACEMAKER_UI_OUT (set by the csproj) > ./build. A bare `npm run build` never writes into the game; deploying goes through the csproj.
 const CSII_USERDATAPATH = process.env.CSII_USERDATAPATH;
 
-const OUTPUT_DIR = process.env.PLACEMAKER_UI_OUT || (CSII_USERDATAPATH ? path.join(CSII_USERDATAPATH, "Mods", MOD.id) : path.join(__dirname, "build"));
+const OUTPUT_DIR = process.env.PLACEMAKER_UI_OUT || path.join(__dirname, "build");
 
 const banner = `
  * Cities: Skylines II UI Module
