@@ -273,17 +273,17 @@ namespace Placemaker.Core.Tool
         /// <param name="plan">Latest finished plan (for the regions each step produced), may be null.</param>
         public static JsonValue Design(Recipe recipe, string recipeId, bool modified, string focus,
             IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, Func<string, IAreaGenerator> generators = null,
-            ActivePresetInfo activePreset = null, string presetsFile = null)
+            ActivePresetInfo activePreset = null, string presetsFile = null, bool planStale = false)
         {
             var o = JsonValue.Obj().Set("recipeId", recipeId ?? "").Set("modified", modified);
             if (activePreset != null) o.Set("activePreset", ActivePreset(activePreset));
             if (!string.IsNullOrEmpty(presetsFile)) o.Set("presetsFile", presetsFile);
-            o.Set("root", recipe?.Root != null ? Step(recipe, recipe.Root, RecipePaths.Root, status, plan, 0, generators ?? GeneratorRegistry.Get) : JsonValue.Null);
+            o.Set("root", recipe?.Root != null ? Step(recipe, recipe.Root, RecipePaths.Root, status, plan, planStale, 0, generators ?? GeneratorRegistry.Get) : JsonValue.Null);
             o.Set("focus", focus ?? RecipePaths.Root);
             return o;
         }
 
-        private static JsonValue Step(Recipe recipe, RecipeStep s, string path, IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, int depth,
+        private static JsonValue Step(Recipe recipe, RecipeStep s, string path, IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, bool stale, int depth,
             Func<string, IAreaGenerator> generators)
         {
             var o = JsonValue.Obj()
@@ -324,7 +324,7 @@ namespace Placemaker.Core.Tool
             }
             o.Set("markerKinds", kinds);
             o.Set("markersRequired", MarkerKinds.Required(gen, s.Settings));
-            o.Set("features", FeatureViews(s, path, gen, generators));
+            o.Set("features", FeatureViews(s, path, gen, generators, plan, stale));
             StepStatus st = null;
             if (status != null) status.TryGetValue(path, out st);
             o.Set("ready", st == null || st.Ready);
@@ -332,7 +332,7 @@ namespace Placemaker.Core.Tool
             var children = JsonValue.Arr();
             if (depth < Composer.MaxDepth + 2)
                 for (int i = 0; i < s.Children.Count; i++)
-                    if (s.Children[i] != null) children.Add(Step(recipe, s.Children[i], RecipePaths.Child(path, i), status, plan, depth + 1, generators));
+                    if (s.Children[i] != null) children.Add(Step(recipe, s.Children[i], RecipePaths.Child(path, i), status, plan, stale, depth + 1, generators));
             o.Set("children", children);
             var overrides = JsonValue.Obj();
             if (depth < Composer.MaxDepth + 2)
@@ -341,7 +341,7 @@ namespace Placemaker.Core.Tool
                 ok.Sort(StringComparer.Ordinal);
                 foreach (var k in ok)
                     if (s.RegionOverrides[k] != null)
-                        overrides.Set(k, Step(recipe, s.RegionOverrides[k], RecipePaths.Override(path, s, k), status, plan, depth + 1, generators));
+                        overrides.Set(k, Step(recipe, s.RegionOverrides[k], RecipePaths.Override(path, s, k), status, plan, stale, depth + 1, generators));
             }
             o.Set("overrides", overrides);
             o.Set("regions", Regions(plan, path));
@@ -349,7 +349,8 @@ namespace Placemaker.Core.Tool
         }
 
         /// <summary>Built-in features of a step (mirrors UI FeatureView): toggle state, child path and the parent options shown under it.</summary>
-        public static JsonValue FeatureViews(RecipeStep s, string path, IAreaGenerator gen, Func<string, IAreaGenerator> generators)
+        public static JsonValue FeatureViews(RecipeStep s, string path, IAreaGenerator gen, Func<string, IAreaGenerator> generators,
+            ComposedPlan plan = null, bool planStale = false)
         {
             var arr = JsonValue.Arr();
             foreach (var f in Features.Of(gen))
@@ -370,10 +371,76 @@ namespace Placemaker.Core.Tool
                 if (index >= 0) fo.Set("path", RecipePaths.Child(path, index));
                 fo.Set("options", Strings(f.Options ?? Array.Empty<string>()));
                 if (f.DefaultOn) fo.Set("defaultOn", true);
+                if (on)
+                {
+                    var fit = FeatureFit(plan, path, RecipePaths.Child(path, index), f.Layer, planStale);
+                    if (fit != null) fo.Set("status", fit);
+                }
                 arr.Add(fo);
             }
             return arr;
         }
+
+        /// <summary>Issues about the build itself (permanent terrain / water effects), not about whether a feature fitted.</summary>
+        private static bool IsFitIssue(PlanIssue i) =>
+            i != null && !string.IsNullOrEmpty(i.Key) && i.Key.IndexOf("Permanent", StringComparison.Ordinal) < 0;
+
+        private static bool PlacedAnything(AreaPlan l) =>
+            l.Objects.Count + l.Nets.Count + l.Surfaces.Count + l.Areas.Count + l.Terraform.Count + l.Paint.Count + l.Zoning.Count + l.Regions.Count > 0;
+
+        /// <summary>
+        /// Fit status of an enabled feature from the latest plan (mirrors UI FeatureView.status):
+        /// "ok" = placed as asked; "reduced" = placed, but smaller / fewer / only in some regions (text says why);
+        /// "failed" = nothing placed (no room, or the region it runs in was never carved out). Null while
+        /// there is no run of the parent to judge by. With a stale plan only runs of the same layer count
+        /// and a missing run is not judged (the next plan may simply not have run it yet).
+        /// </summary>
+        public static JsonValue FeatureFit(ComposedPlan plan, string parentPath, string childPath, string layer, bool planStale = false)
+        {
+            if (plan == null || string.IsNullOrEmpty(childPath)) return null;
+            string parentPrefix = PlanPathOf(parentPath) + "@", childPrefix = PlanPathOf(childPath) + "@";
+            bool parentRan = false;
+            int runs = 0, failed = 0, reduced = 0;
+            PlanIssue firstFail = null, firstReduced = null;
+            foreach (var l in plan.Layers)
+            {
+                if (l?.StepPath == null) continue;
+                if (l.StepPath.StartsWith(parentPrefix, StringComparison.Ordinal)) { parentRan = true; continue; }
+                if (!l.StepPath.StartsWith(childPrefix, StringComparison.Ordinal) || l.GeneratorId != layer) continue;
+                runs++;
+                PlanIssue worst = null;
+                foreach (var i in l.Issues)
+                    if (IsFitIssue(i) && (worst == null || i.Severity > worst.Severity)) worst = i;
+                if (!PlacedAnything(l) || (worst != null && worst.Severity == IssueSeverity.Error))
+                {
+                    failed++;
+                    if (firstFail == null) firstFail = worst;
+                }
+                else if (worst != null)
+                {
+                    reduced++;
+                    if (firstReduced == null) firstReduced = worst;
+                }
+            }
+            if (runs == 0)
+            {
+                if (!parentRan || planStale) return null;
+                return JsonValue.Obj().Set("kind", "failed").Set("text", new LocText(NoRoomKey).ToJson());
+            }
+            var o = JsonValue.Obj();
+            if (failed == runs)
+                o.Set("kind", "failed").Set("text", (firstFail != null ? new LocText(firstFail.Key, firstFail.Args ?? Array.Empty<object>()) : new LocText(NoRoomKey)).ToJson());
+            else if (failed > 0)
+                o.Set("kind", "reduced").Set("text", new LocText(SomeMissingKey, runs - failed, runs).ToJson());
+            else if (reduced > 0)
+                o.Set("kind", "reduced").Set("text", new LocText(firstReduced.Key, firstReduced.Args ?? Array.Empty<object>()).ToJson());
+            else o.Set("kind", "ok");
+            if (planStale) o.Set("stale", true);
+            return o;
+        }
+
+        public const string NoRoomKey = "Placemaker.UI.Feature.NoRoom";
+        public const string SomeMissingKey = "Placemaker.UI.Feature.SomeMissing";
 
         /// <summary>Regions produced by the plans of the step at <paramref name="stepPath"/> (all its region runs).</summary>
         public static JsonValue Regions(ComposedPlan plan, string stepPath)

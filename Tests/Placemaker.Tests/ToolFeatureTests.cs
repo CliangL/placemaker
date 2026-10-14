@@ -120,6 +120,67 @@ namespace Placemaker.Tests
             Assert.True(sawRestrooms && sawPlayground);
         }
 
+        private static AreaPlan Run(string gen, string path, int objects, params PlanIssue[] issues)
+        {
+            var p = new AreaPlan { GeneratorId = gen, StepPath = path };
+            for (int i = 0; i < objects; i++) p.Objects.Add(new PlannedObject());
+            p.Issues.AddRange(issues);
+            return p;
+        }
+
+        private JsonValue FeatureJson(Recipe r, ComposedPlan plan, string layer, bool stale = false)
+        {
+            var json = UiModels.Design(r, "park", false, "0", null, plan, id => _gens.TryGetValue(id ?? "", out var g) ? g : null, null, null, stale);
+            foreach (var f in json["root"]["features"].Items) if (f["layer"].AsString() == layer) return f;
+            return null;
+        }
+
+        [Fact]
+        public void FeatureFitStatusFollowsTheLatestPlan()
+        {
+            var e = Editor();
+            var r = e.SingleLayerRecipe(_gens["park"], 1);
+            e.SetFeature(r, "0", "restrooms", true, 2);   // 0/0
+            e.SetFeature(r, "0", "playground", true, 3);  // 0/1 (core)
+            e.SetFeature(r, "0", "fountain", true, 4);    // 0/2
+
+            // No plan yet: nothing to say.
+            Assert.False(FeatureJson(r, null, "restrooms").Has("status"));
+
+            var plan = new ComposedPlan();
+            plan.Layers.Add(Run("park", "0@root", 5));
+            plan.Layers.Add(Run("restrooms", "0/0@root", 2));
+            plan.Layers.Add(Run("playground", "0/1@core", 4, new PlanIssue { Severity = IssueSeverity.Info, Key = "Placemaker.AddOn.Playground.Issue.Smaller" },
+                new PlanIssue { Severity = IssueSeverity.Warning, Key = "Placemaker.Common.Issue.TerrainPermanent" }));
+            // fountain never ran (its region was not carved out) → no room
+
+            var ok = FeatureJson(r, plan, "restrooms")["status"];
+            Assert.Equal("ok", ok["kind"].AsString());
+            var reduced = FeatureJson(r, plan, "playground")["status"];
+            Assert.Equal("reduced", reduced["kind"].AsString());
+            Assert.Equal("Placemaker.AddOn.Playground.Issue.Smaller", reduced["text"]["key"].AsString());
+            var failed = FeatureJson(r, plan, "fountain")["status"];
+            Assert.Equal("failed", failed["kind"].AsString());
+            Assert.Equal(UiModels.NoRoomKey, failed["text"]["key"].AsString());
+            Assert.False(FeatureJson(r, plan, "picnic").Has("status"));   // off → no status
+
+            // A stale plan never claims "no room" for a feature it simply has not run yet.
+            Assert.False(FeatureJson(r, plan, "fountain", true).Has("status"));
+            Assert.True(FeatureJson(r, plan, "restrooms", true)["status"]["stale"].AsBool());
+
+            // Ran but placed nothing, with a NoSpace warning → failed with that text.
+            plan.Layers.Add(Run("fountain", "0/2@root", 0, new PlanIssue { Severity = IssueSeverity.Warning, Key = "Placemaker.Common.Issue.NoSpace", Args = new object[] { "x" } }));
+            var noSpace = FeatureJson(r, plan, "fountain")["status"];
+            Assert.Equal("failed", noSpace["kind"].AsString());
+            Assert.Equal("Placemaker.Common.Issue.NoSpace", noSpace["text"]["key"].AsString());
+
+            // Runs in several regions, some empty → reduced "fits in 1 of 2".
+            plan.Layers.Add(Run("restrooms", "0/0@block:2", 0));
+            var some = FeatureJson(r, plan, "restrooms")["status"];
+            Assert.Equal("reduced", some["kind"].AsString());
+            Assert.Equal(UiModels.SomeMissingKey, some["text"]["key"].AsString());
+        }
+
         [Fact]
         public void MakeRowShowsSingleTypesOnly()
         {
