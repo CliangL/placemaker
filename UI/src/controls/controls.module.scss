@@ -331,3 +331,12 @@
     padding-left: 6rem;
     padding-right: 6rem;
 }
+
+// Half rows: a shorter label column leaves the slider a usable track.
+.half .label {
+    width: 92rem;
+}
+
+.half .labelWide {
+    width: auto;
+}

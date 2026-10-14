@@ -269,8 +269,9 @@ export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: Des
     // the longest name allows, balanced rows — names are never cut.
     const inner = layout.width - BODY_PAD_REM - 4;
     const widths = tiles.map((r) => tileRem(recipeName(t, r)) + 4);
-    const oneRow = widths.reduce((n, w) => n + w, 0) <= inner;
-    const cols = oneRow ? tiles.length : tileColumns(tiles.length, inner, Math.max(96, ...widths), 6);
+    const oneRow = tiles.length >= 3 && widths.reduce((n, w) => n + w, 0) <= inner;
+    // one or two tiles (a narrow category, a search hit) keep a third of the row each, not all of it
+    const cols = oneRow ? tiles.length : Math.max(tiles.length < 3 ? 3 : 1, tileColumns(tiles.length, inner, Math.max(96, ...widths), 6));
     const tileWidth = oneRow ? null : 100 / cols + "%";
 
     // presets: the selected type's (Default first), or the search hits of every type
