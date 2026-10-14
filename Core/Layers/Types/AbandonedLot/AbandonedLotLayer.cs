@@ -109,10 +109,14 @@ namespace Placemaker.Core.Layers.Types.Ruins
         }
 
         /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
-        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = new Dictionary<string, GritAssets.Set>
+        {
+            // Squatters keep warm round a burn barrel (the pool's "campfire" was a tent).
+            [AssetCategories.CampingFire] = new GritAssets.Set(true, "BarrelFire01|BarrelFire02", "BarrelFire02|BarrelFire01"),
+        }, ArtSurfaces = null;
 
         // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
-        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 110f); }
 
         private void PlanArt(LayerContext ctx)
         {
