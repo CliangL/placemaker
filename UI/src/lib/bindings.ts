@@ -279,6 +279,12 @@ export const act = {
     /** Custom: delete. Saved-over built-in: reset to its shipped settings. */
     deletePreset: (layerId: string, presetId: string) => fire(Triggers.deletePreset, layerId, presetId),
     exportPresets: () => fire(Triggers.exportPresets),
+    /** s17: override one park stat for this build (undoable, no re-plan). */
+    setParkStat: (id: string, value: number) => fire(Triggers.setParkStat, id, JSON.stringify(value)),
+    /** s17: back to the suggested value; "" = every stat. */
+    resetParkStat: (id: string) => fire(Triggers.resetParkStat, id),
+    /** s17: clamp park stats to the range vanilla parks of this size use. */
+    setParkStatsKeepVanilla: (keep: boolean) => fire(Triggers.setParkStatsKeepVanilla, keep),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */

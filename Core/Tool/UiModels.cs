@@ -71,6 +71,8 @@ namespace Placemaker.Core.Tool
         public bool PermanentAcknowledged;
         /// <summary>Extra issues from the tool itself (build failure, timeout…).</summary>
         public List<PlanIssue> ExtraIssues = new List<PlanIssue>();
+        /// <summary>(s17) Selected area in m² (park stats scale with it). 0 = the plan's outline is unknown: no park stats.</summary>
+        public double AreaM2;
     }
 
     public static class UiModels
@@ -540,6 +542,52 @@ namespace Placemaker.Core.Tool
             o.Set("permanent", permanent);
             // Extension (docs/proposals/gametool.md): whether acknowledgePermanent(true) covers the current effects.
             o.Set("permanentAcknowledged", effects.Count == 0 || s.PermanentAcknowledged);
+            // Extension (docs/proposals/s17.md): park stats of the planned build.
+            if (s.AreaM2 > 0 && s.Recipe != null)
+            {
+                Placemaker.Core.Build.ParkStatsResult stats = null;
+                try { stats = Placemaker.Core.Build.ParkStatsEstimator.Estimate(Placemaker.Core.Build.ParkStatsInput.From(plan, s.AreaM2, s.Recipe), s.Recipe.ParkStats); }
+                catch (Exception) { stats = null; }
+                if (stats != null && stats.Applicable) o.Set("parkStats", ParkStats(stats));
+            }
+            return o;
+        }
+
+        /// <summary>(s17) contract.ts ParkStatsView.</summary>
+        public static JsonValue ParkStats(Placemaker.Core.Build.ParkStatsResult r)
+        {
+            var o = JsonValue.Obj()
+                .Set("kind", r.Kind.ToString().ToLowerInvariant())
+                .Set("leisureType", r.LeisureType == Placemaker.Core.Build.LeisureKind.CityBeach ? "beach" : "park")
+                .Set("keepVanilla", r.KeepVanilla)
+                .Set("quality", Math.Round(r.Quality, 2));
+            var arr = JsonValue.Arr();
+            foreach (var st in r.Stats)
+            {
+                var so = JsonValue.Obj()
+                    .Set("id", st.Id)
+                    .Set("value", st.Value)
+                    .Set("suggested", st.Suggested)
+                    .Set("bandMin", st.BandMin)
+                    .Set("bandMax", st.BandMax)
+                    .Set("min", st.Min)
+                    .Set("max", st.Max)
+                    .Set("step", st.Step)
+                    .Set("unit", st.Unit)
+                    .Set("applied", st.Applied)
+                    .Set("overridden", st.Overridden)
+                    .Set("clamped", st.Clamped);
+                var f = JsonValue.Arr();
+                foreach (var line in st.Formula) f.Add(line.ToJson());
+                so.Set("formula", f);
+                var sim = JsonValue.Arr();
+                foreach (var kv in st.Similar)
+                    sim.Add(JsonValue.Obj().Set("id", kv.Key.Id).Set("name", kv.Key.Name).Set("nameKey", kv.Key.NameKey)
+                        .Set("areaM2", kv.Key.AreaM2).Set("value", kv.Value));
+                so.Set("similar", sim);
+                arr.Add(so);
+            }
+            o.Set("stats", arr);
             return o;
         }
 

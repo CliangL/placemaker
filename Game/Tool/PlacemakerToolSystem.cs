@@ -408,6 +408,7 @@ namespace Placemaker.Game.Tool
             _shape = s.Shape;
             _shapeDirty = false;
             _recipe = s.Recipe?.Clone();
+            _parkStatsVersion++;   // undo/redo of a park-stats edit changes no plan input
             _recipeId = s.RecipeId ?? "";
             _focus = s.Focus ?? RecipePaths.Root;
             _markersEdited = s.MarkersEdited != null ? new HashSet<string>(s.MarkersEdited, StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);

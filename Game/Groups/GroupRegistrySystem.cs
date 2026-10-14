@@ -641,6 +641,7 @@ namespace Placemaker.Game.Groups
             }
             if (restored > 0) Mod.Log.Info($"Placemaker restored {restored} parking aisle links after load.");
             foreach (var id in _records.Keys) GetRecord(id);
+            SyncParkStats();
             Mod.Log.Info($"Placemaker loaded {_records.Count} groups.");
             Bump();
         }

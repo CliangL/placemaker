@@ -391,3 +391,13 @@ What Placemaker does now (`Core/Build/PaintRaster.cs`, `Game/Build/BuildService.
 - Unverified in game: the stamp texture orientation (we reuse the terraform calibration, default identity: u = +x,
   v = +z — an asymmetric gradient would show on the wrong side if this is mirrored), the channel the kernel samples
   (all four set equal), and whether `m_Strength = 1` with a mask equals the vanilla look at the same strength.
+
+## Park stats (s17, decompiled 1.6.2f1) — details in docs/PARK-STATS.md
+
+63. Park effects live on the park BUILDING prefab (Attraction, LeisureProvider, ServiceCoverage, Park, ServiceConsumption);
+    AttractionSystem, ServiceCoverageSystem and ParkAISystem read the *prefab* data, so per-instance values need per-instance prefabs.
+64. TourismSystem sums `AttractivenessProvider` of ANY non-temp entity (Σ a²/10000 → sigmoid): a lot can carry one.
+    AttractionSystem only rewrites entities with an `UpdateFrame` (buildings), so a value on a lot stays.
+65. Leisure, park coverage (wellbeing up to +20), land value from attractiveness and tourist destinations all need a
+    pathfinding source/target: a Building with a road connection. A lot has none (targets = 0, silently ignored).
+66. Vanilla park upkeep = price / 5 per month; attractiveness ≈ 1.9 × (area/1000 m²)^0.85 for ordinary parks.

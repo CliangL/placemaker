@@ -45,4 +45,6 @@ export interface ComposeResult {
     permanent: LocText[];
     ms: number;
     source: "core" | "fake";
+    /** s17: park stats from the real Core estimator (host only). */
+    parkStats?: import("../../src/contract").ParkStatsView | null;
 }

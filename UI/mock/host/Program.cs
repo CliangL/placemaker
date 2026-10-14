@@ -256,6 +256,13 @@ namespace Placemaker.MockHost
         {
             var sw = Stopwatch.StartNew();
             var recipe = new Recipe { Id = "mock", Root = Step(body?["recipe"]) };
+            // s17 park stats: the player's overrides travel with each compose request.
+            if (body?["parkStats"] is JsonObject ps)
+            {
+                recipe.ParkStats = new Placemaker.Core.Build.ParkStatsSettings { KeepVanilla = ps["keepVanilla"]?.GetValue<bool>() ?? true };
+                if (ps["overrides"] is JsonObject ov)
+                    foreach (var kv in ov) if (kv.Value != null) recipe.ParkStats.Overrides[kv.Key] = kv.Value.GetValue<double>();
+            }
             var shape = new AreaShape { Ring = Ring(body?["ring"]), Source = AreaSource.Drawn };
             var site = new SiteContext();
             ComposedPlan plan;
@@ -329,8 +336,14 @@ namespace Placemaker.MockHost
                 foreach (var t in l.Terraform)
                     if (t.Permanent) permanent.Add(new JsonObject { ["key"] = "Placemaker.UI.Permanent.Terraform" });
 
+            JsonNode parkStats = null;
+            var stats = Placemaker.Core.Build.ParkStatsEstimator.Estimate(
+                Placemaker.Core.Build.ParkStatsInput.From(plan, Pricing.PolygonArea(shape.Ring), recipe), recipe.ParkStats);
+            if (stats.Applicable) parkStats = JsonNode.Parse(Placemaker.Core.Tool.UiModels.ParkStats(stats).ToString());
+
             return new JsonObject
             {
+                ["parkStats"] = parkStats,
                 ["layers"] = layers,
                 ["issues"] = Issues(plan.Issues, ""),
                 ["stats"] = Stats(plan.MergedStats()),

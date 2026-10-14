@@ -253,6 +253,49 @@ export interface Summary {
   permanent: LocText[];
   /** True once the player ticked the permanent-effects box for exactly these effects. */
   permanentAcknowledged?: boolean;
+  /** Additive (s17, docs/PARK-STATS.md): park stats of the planned build. Absent = not a park type (parking,
+   *  roads, industrial) or no plan yet. */
+  parkStats?: ParkStatsView;
+}
+
+/** s17 park stat ids (save format, never renamed). */
+export type ParkStatId = "attractiveness" | "leisure" | "coverageRange" | "coverageCapacity" | "entertainment" | "upkeep";
+
+/** One stat the player can tune in Review (C# Core/Build/ParkStats.cs ParkStatEstimate). */
+export interface ParkStatView {
+  id: ParkStatId;
+  /** What the build gets (override or suggested; clamped to [bandMin, bandMax] while keepVanilla). */
+  value: number;
+  /** Placemaker's estimate, already inside the vanilla range. */
+  suggested: number;
+  /** Range vanilla parks of a comparable size use, scaled to this size. */
+  bandMin: number;
+  bandMax: number;
+  /** Hard limits (slider range while keepVanilla is off). */
+  min: number;
+  max: number;
+  step: number;
+  unit: "count" | "money" | "";
+  /** The game uses this value for the build today (attractiveness → tourism). Others are shown and saved only. */
+  applied: boolean;
+  overridden: boolean;
+  /** The set value was outside the vanilla range and got clamped. */
+  clamped: boolean;
+  /** How it is calculated, one line each (C# LocText, numbers in args). */
+  formula: LocText[];
+  /** Comparable vanilla parks: game name key ("Assets.NAME[id]") with an English fallback, lot area and their real value. */
+  similar: { id: string; name: string; nameKey: string; areaM2: number; value: number }[];
+}
+
+export interface ParkStatsView {
+  kind: "park" | "plaza" | "playground" | "sports" | "nature";
+  /** Kind of leisure citizens get (vanilla LeisureType CityPark / CityBeach). */
+  leisureType: "park" | "beach";
+  /** "Keep within vanilla range" (default true). */
+  keepVanilla: boolean;
+  /** Quality multiplier 0.55–2 (trees, water, landmarks, amenities, play, seating). */
+  quality: number;
+  stats: ParkStatView[];
 }
 
 export interface AssetItem {
@@ -346,6 +389,10 @@ export const Triggers = {
   renamePreset: "renamePreset",             // (layerId: string, presetId: string, name: string) — custom only
   deletePreset: "deletePreset",             // (layerId: string, presetId: string) — custom: delete; overridden built-in: reset to default
   exportPresets: "exportPresets",           // () — (re)write presets.json, sets design.presetsFile
+  // s17 park stats (Review). Per build: kept with the recipe (undoable) and the build's receipt; never re-plans.
+  setParkStat: "setParkStat",               // (id: ParkStatId, valueJson: string) — override one stat
+  resetParkStat: "resetParkStat",           // (id: ParkStatId | "") — back to suggested; "" = all
+  setParkStatsKeepVanilla: "setParkStatsKeepVanilla", // (keep: boolean) — clamp to the vanilla range
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────
