@@ -238,7 +238,16 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     }
                 }
 
-            if (ctx.B("lamps")) PathLamps(ctx, occ, 22f, AssetMix.One(""), 0x1AD0u);
+            if (ctx.B("lamps"))
+            {
+                int k = 0;
+                foreach (var (p, nrm, hw) in PathWalk.Every(occ, 24f))
+                {
+                    var q = p + nrm * ((k & 1) == 0 ? 1f : -1f) * (hw + 0.8f);
+                    LeisureKit.Put(ctx, occ, q, 0f, ObjectRole.Lamp, AssetMix.One(""), null, 0.4f, Hashing.Mix(ctx.Seed, 0x1AD0u + (uint)k), 0.3f, 0.2f);
+                    k++;
+                }
+            }
             ctx.Check();
 
             // Planting fills the rest, never inside a sightline corridor.
@@ -321,7 +330,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                         z.Items = math.max(2, (int)math.round(total * Weight(k) / math.max(0.1f, weights)));
                         z.ItemRadius = k == ZoneKind.Toddler ? 1.6f : k == ZoneKind.Jungle ? 3.2f : 2.6f;
                         z.Spacing = z.ItemRadius * 2f + clear;
-                        z.Radius = z.Spacing * 0.55f * math.sqrt(z.Items) + z.ItemRadius + clear * 0.5f + (k == ZoneKind.Jungle ? 2f : 0f);
+                        z.Radius = z.Spacing * 0.62f * math.sqrt(z.Items) + z.ItemRadius + clear * 0.5f + (k == ZoneKind.Jungle ? 2f : 0f);
                         break;
                     }
                 }
@@ -475,7 +484,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             }
             for (int i = start; i < z.Items * 4 + start && n < z.Items; i++)
             {
-                float rr = z.Spacing * 0.55f * math.sqrt(i + 0.5f);
+                float rr = z.Spacing * 0.62f * math.sqrt(i + 0.5f);
                 if (rr + z.ItemRadius > z.Radius - 0.3f) break;
                 float a = phase + i * golden;
                 var p = z.Centre + new float2(math.cos(a), math.sin(a)) * rr;

@@ -773,6 +773,8 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                     if (st.Sculptures < want) ctx.Issue(IssueSeverity.Info, K + "Issue.FewerSculptures", st.Sculptures, want);
                 }
             }
+            // Benches along the trail between the sculptures.
+            PathBenches(ctx, occ, 45f, AssetMix.One(""), 0xBE77u);
         }
 
         // ───────────── edges & lights ─────────────
@@ -805,20 +807,15 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (chainLow && cat == null) return;
             var lamp = AssetMix.One(ctx.S("lampAsset"));
             int n = 0;
-            foreach (var s in new List<SegmentIndex.Seg>(st.Occ.Paths.Segments))
+            int k = 0;
+            foreach (var (p, nrm, hw) in PathWalk.Every(st.Occ, interval))
             {
-                var d = math.normalizesafe(s.B - s.A);
-                var nrm = new float2(-d.y, d.x);
-                int k = 0;
-                foreach (var p in LeisureKit.Along(s.A, s.B, interval))
+                foreach (int sgn in pairs ? new[] { -1, 1 } : new[] { (k & 1) == 0 ? 1 : -1 })
                 {
-                    foreach (int sgn in pairs ? new[] { -1, 1 } : new[] { (k & 1) == 0 ? 1 : -1 })
-                    {
-                        var q = p + nrm * sgn * (s.HalfWidth + 0.7f);
-                        if (LeisureKit.Put(ctx, st.Occ, q, 0f, ObjectRole.Lamp, lamp, cat, 0.35f, Hashing.Mix(ctx.Seed, 0x1A30u + (uint)n), 0.3f, 0.15f)) n++;
-                    }
-                    k++;
+                    var q = p + nrm * sgn * (hw + 0.7f);
+                    if (LeisureKit.Put(ctx, st.Occ, q, 0f, ObjectRole.Lamp, lamp, cat, 0.35f, Hashing.Mix(ctx.Seed, 0x1A30u + (uint)n), 0.3f, 0.15f)) n++;
                 }
+                k++;
             }
             ctx.Plan.Facts["pathLights"] = n;
         }

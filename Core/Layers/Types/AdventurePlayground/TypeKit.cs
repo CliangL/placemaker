@@ -35,6 +35,36 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
         }
     }
 
+    public static class PathWalk
+    {
+        /// <summary>
+        /// Points every <paramref name="interval"/> metres of path length (accumulated over consecutive
+        /// segments, so curved paths made of many short pieces do not get one point per piece), with the
+        /// path's left normal and half width. Only this layer's own paths (kind 100).
+        /// </summary>
+        public static List<(float2 p, float2 n, float hw)> Every(Occupancy occ, float interval, float phase = 0.5f)
+        {
+            var r = new List<(float2, float2, float)>();
+            if (interval <= 0f) return r;
+            float acc = interval * phase;
+            foreach (var s in occ.Paths.Segments)
+            {
+                if (s.Kind != 100) continue;
+                float len = math.distance(s.A, s.B);
+                if (len < 0.01f) continue;
+                var d = (s.B - s.A) / len;
+                float at = interval - acc;
+                while (at <= len)
+                {
+                    r.Add((s.A + d * at, new float2(-d.y, d.x), s.HalfWidth));
+                    at += interval;
+                }
+                acc = len - (at - interval);
+            }
+            return r;
+        }
+    }
+
     public static class Mounds
     {
         /// <summary>
