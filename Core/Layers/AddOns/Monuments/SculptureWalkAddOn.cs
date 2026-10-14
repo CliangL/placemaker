@@ -49,7 +49,7 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             string chosen = ids.Length > 0 ? ids[0] : "";
             string cat = LeisureKit.Category(ctx, chosen, MonumentKit.SculptureChain);
             if (cat == null) return;
-            var entry = MonumentKit.Entry(occ, site, toward);
+            var entry = MonumentKit.Entry(occ, site, toward, true);
             float e = EndSign(site, entry);
             var d = site.Axis * -e;
             var side = new float2(-d.y, d.x);

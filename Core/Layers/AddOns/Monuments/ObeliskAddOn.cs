@@ -53,7 +53,7 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             float baseR = AssetMix.FootprintRadius(ctx.Site, asset, 1f) * scale;
             int steps = ctx.I("steps");
             float top = baseR + 0.6f, outer = top + steps * 0.9f;
-            float maxOuter = half * 0.45f;
+            float maxOuter = half * 0.5f;
             if (outer > maxOuter) { float k = maxOuter / outer; scale *= k; top *= k; outer = maxOuter; ctx.Issue(IssueSeverity.Info, K + "Issue.ScaledDown", NameKey); }
 
             var entry = MonumentKit.Entry(occ, site, toward);

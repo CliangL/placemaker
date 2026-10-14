@@ -101,7 +101,7 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
         }
 
         /// <summary>Where people arrive: the end of a reserved path touching the rectangle (the host's "Path to it"), else the edge point nearest <paramref name="toward"/>.</summary>
-        public static float2 Entry(Occupancy occ, OrientedRect site, float2 toward)
+        public static float2 Entry(Occupancy occ, OrientedRect site, float2 toward, bool preferEnd = false)
         {
             var ring = site.Ring;
             float best = 1.2f; float2 hit = default; bool found = false;
@@ -112,6 +112,8 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
                     if (d < best) { best = d; hit = e; found = true; }
                 }
             if (found) return hit;
+            // Nobody arrives by path (standalone): linear layouts start at the end nearest the visitors.
+            if (preferEnd) return LocalOf(site, toward).x >= 0f ? site.Local(site.HalfLength, 0f) : site.Local(-site.HalfLength, 0f);
             return ClosestOnRect(site, toward);
         }
 

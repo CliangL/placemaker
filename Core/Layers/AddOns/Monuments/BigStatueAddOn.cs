@@ -77,7 +77,7 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             }
             if (outer < 1.5f) { NoSpace(ctx, NameKey); return; }
 
-            var entry = MonumentKit.Entry(occ, site, toward);
+            var entry = MonumentKit.Entry(occ, site, toward, true);
             float e = EndSign(site, entry);
             var d = site.Axis * e;                 // from the statue towards the visitors
             var side = new float2(-d.y, d.x);

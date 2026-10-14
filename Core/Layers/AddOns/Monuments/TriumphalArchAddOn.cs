@@ -42,32 +42,36 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
 
         protected override void Build(LayerContext ctx, Occupancy occ, OrientedRect site, float2 toward)
         {
-            var entry = MonumentKit.Entry(occ, site, toward);
-            float e = EndSign(site, entry);
-            var d = site.Axis * -e;                       // walking direction: from the entry end through the gate
+            var entry = MonumentKit.Entry(occ, site, toward, true);
+            // The walk runs from the side people arrive at straight through to the opposite side: along
+            // the long axis when they come to an end, across when the host's path meets a long side.
+            var l = MonumentKit.LocalOf(site, entry);
+            bool along = math.abs(l.x) / site.HalfLength >= math.abs(l.y) / site.HalfWidth;
+            var axis = along ? site.Axis : site.Side;
+            float e = (along ? l.x : l.y) >= 0f ? 1f : -1f;
+            var d = axis * -e;                            // walking direction: from the entry through the gate
             var side = new float2(-d.y, d.x);
-            float hl = site.HalfLength, hw = site.HalfWidth;
+            float hl = along ? site.HalfLength : site.HalfWidth, hw = along ? site.HalfWidth : site.HalfLength;
             var C = site.Center;
-            var A = site.Local(e * hl, 0f); var B = site.Local(-e * hl, 0f);
+            var B = C + d * hl;
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
             float scale = ctx.F("size") / 100f;
 
             // Ground first: the paved square under the gate.
-            float sqHalf = math.min(hl * 0.35f, 7f);
+            float sqHalf = math.min(math.max(hl * 0.35f, 3.5f), 7f);
             if (ctx.B("square"))
                 ctx.Surface(new OrientedRect { Center = C, Axis = d, HalfLength = sqHalf, HalfWidth = hw - 0.6f }.Ring, SurfaceRole.Paving,
                     AssetMix.One(ctx.S("pavingAsset")), AssetCategories.SurfacePaving);
 
-            // The walk: A → B through the centre, joined to the entry (shared node) when it arrives from a side.
+            // The walk: entry → through the centre → the opposite side; a dog-leg when the entry is off the axis.
             var nodes = new List<float2>();
-            float la = math.dot(entry - C, d), lat = math.dot(entry - C, side);
+            float lat = math.dot(entry - C, side);
             if (math.abs(lat) < 1.5f) { nodes.Add(entry); nodes.Add(B); }
             else
             {
-                var knee = C + d * math.clamp(la, -hl + 1f, hl - 1f);
-                if (math.abs(math.dot(knee - C, d)) < sqHalf + 1f) knee = C - d * (sqHalf + 1.5f);
+                var knee = C - d * math.max(sqHalf + 1.5f, (hl + sqHalf) * 0.5f);
                 MonumentKit.Path(ctx, occ, entry, knee, NetRole.Pathway, pathAsset);
-                nodes.Add(A); nodes.Add(knee); nodes.Add(B);
+                nodes.Add(knee); nodes.Add(B);
             }
             for (int i = 0; i + 1 < nodes.Count; i++) MonumentKit.Path(ctx, occ, nodes[i], nodes[i + 1], NetRole.PathwayWide, pathAsset);
             float walk = Composer.DefaultHalfWidth(NetRole.PathwayWide);
@@ -103,12 +107,12 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             {
                 string cat = MonumentKit.Columns(ctx, ctx.S("columnAsset"), out var role);
                 if (cat == null) return;
-                float spacing = 2.6f * math.max(1f, scale * 0.6f);
+                float spacing = math.clamp(2.2f * scale * 0.6f, 2.2f, 3f);
                 for (int k = 0; k < 4; k++)
                     for (int s = -1; s <= 1; s += 2)
                     {
                         float off = walk + 1.4f + k * spacing;
-                        if (off > hw - 1.2f) break;
+                        if (off > hw - 1f) break;
                         // Two rows (front and back) make the screen read as a porch, not a fence.
                         for (int row = -1; row <= 1; row += 2)
                             if (MonumentKit.Put(ctx, occ, C + side * s * off + d * row * 1.6f, MonumentKit.Yaw(d), role, AssetMix.One(ctx.S("columnAsset")), cat, 0.6f,
