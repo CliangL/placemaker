@@ -216,6 +216,7 @@ namespace Placemaker.Game.Build
             ResetTransaction();
             _request = request;
             _startFrame = UnityEngine.Time.frameCount;
+            DumpBegin();   // s30: "Debug: dump terrain after build" (ground before the build)
             _status = new BuildStatus { Phase = BuildPhase.Preparing, Progress = 0f, ErrorPositions = new List<float3>(), Warnings = new List<PlanIssue>() };
             // US5: the same concrete assets as preview and price (idempotent if the tool already did it).
             int auto = _catalog.ResolveAutomatic(request.Plan);
@@ -602,6 +603,7 @@ namespace Placemaker.Game.Build
             if (_ownerTemp == Entity.Null) NoteSkip("Placemaker.Build.OwnerUnavailable", null, IssueSeverity.Info, 0);
             var issues = ComposeWarnings(dropped);
             var warnings = new List<string>(_warnings);
+            DumpFinish(groupId);   // s30: live ground, water, nets and objects to ModsData/Placemaker/debug (when enabled)
             ResetTransaction();
             _warnings.AddRange(warnings);
             PlanIssue headline = null;

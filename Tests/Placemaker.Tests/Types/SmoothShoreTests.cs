@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Placemaker.Core;
 using Placemaker.Core.Build;
+using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Types.Beach;
 using Unity.Mathematics;
@@ -162,6 +163,53 @@ namespace Placemaker.Tests.Types
                     foreach (var p in ShoreSites.Samples(n, 8))
                         Assert.True(p.y > ShoreSites.CurvedCoast(p.x) + 2f, $"{preset}: walk at {p} is on or past the water");
             }
+        }
+    }
+}
+
+namespace Placemaker.Tests.Types
+{
+    /// <summary>(s30) The in-game terrain dump format: what the game writes, the gallery reads.</summary>
+    public class TerrainDumpTests
+    {
+        public static TerrainDump FromPlan(AreaPlan plan, SiteContext site)
+        {
+            var final = ShoreSites.Final(plan, site.HeightAt);
+            var d = new TerrainDump { Origin = new float2(-20f, -40f), Cell = 2f, Nx = 146, Ny = 131, Group = "7", When = "test" };
+            d.Before = new float[d.Count]; d.After = new float[d.Count]; d.Water = new float[d.Count]; d.Planned = new float[d.Count];
+            for (int j = 0; j < d.Ny; j++)
+                for (int i = 0; i < d.Nx; i++)
+                {
+                    var p = d.Pos(i, j); int k = j * d.Nx + i;
+                    d.Before[k] = site.HeightAt(p); d.After[k] = final(p); d.Water[k] = math.max(0f, ShoreSites.Level - final(p));
+                    d.Planned[k] = math.abs(d.After[k] - d.Before[k]) > 0.01f ? d.After[k] : float.NaN;
+                }
+            d.WaterLevel = ShoreSites.Level;
+            foreach (var n in plan.Nets)
+                d.Nets.Add(new TerrainDump.Net { A = n.A, B = n.B, C = n.C, D = n.D, Width = Composer.DefaultHalfWidth(n.Role) * 2f, Follow = n.FollowTerrain, Quay = n.Category == AssetCategories.NetQuay, Prefab = n.Asset.Id ?? "" });
+            foreach (var o in plan.Objects) d.Objects.Add(new TerrainDump.Obj { Position = o.Position, Yaw = o.Yaw, Prefab = o.Asset.Id ?? "" });
+            foreach (var kv in plan.Facts) d.Facts.Add(new KeyValuePair<string, double>(kv.Key, kv.Value));
+            d.Outlines.Add(ShoreSites.Ring().Select(v => v.xz).ToArray());
+            return d;
+        }
+
+        [Fact]
+        public void DumpRoundTripsAndMeasures()
+        {
+            var site = ShoreSites.Site("curved");
+            var plan = ShoreSites.Plan("waterfront", "promenade", "curved");
+            var d = FromPlan(plan, site);
+            var json = d.ToJson();
+            var back = TerrainDump.FromJson(json);
+            Assert.Equal(d.Nx, back.Nx);
+            Assert.Equal(d.Nets.Count, back.Nets.Count);
+            Assert.Equal(d.Objects.Count, back.Objects.Count);
+            Assert.True(math.isnan(back.Planned[0]) == math.isnan(d.Planned[0]));
+            for (int k = 0; k < d.Count; k += 97) Assert.InRange(back.After[k] - d.After[k], -0.006f, 0.006f);
+            Assert.Contains(back.Facts, kv => kv.Key == "walkMinRadius");
+            Assert.Contains("curtain", back.Metrics());
+            // A sample for the gallery's --terrain-dump (the game writes the same file to ModsData/Placemaker/debug).
+            System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "placemaker-terrain-dump-sample.json"), json);
         }
     }
 }

@@ -10,6 +10,7 @@
 // Writes <out>/<type>/<variant>.png, <out>/index.html and <out>/gallery.json (metrics per image).
 //
 //   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront] [--decals]
+//   (s30) ... -- --terrain-dump <ModsData/Placemaker/debug/x.json or folder> --out <dir>: renders in-game terrain dumps
 //   --decals: also "decals-on" (100 %), "decals-max" (300 %) and "decals-gritty" per type (decals are off by default); decals are drawn in category colours with a legend.
 
 using System;
@@ -34,7 +35,7 @@ namespace Placemaker.Gallery
     {
         public static int Main(string[] args)
         {
-            string outDir = "docs/gallery", repo = null, fixture = null, dump = null;
+            string outDir = "docs/gallery", repo = null, fixture = null, dump = null, terrainDump = null;
             HashSet<string> only = null;
             for (int i = 0; i < args.Length; i++)
             {
@@ -59,10 +60,12 @@ namespace Placemaker.Gallery
                     case "--no-features": Variants.NoFeatureVariants = true; break;
                     case "--no-shops": Variants.NoShops = true; break;
                     case "--dump": dump = next; i++; break;
+                    case "--terrain-dump": terrainDump = next; i++; break;   // s30: render in-game terrain dumps (DumpView)
                 }
             }
             repo ??= FindRepo();
             if (!Path.IsPathRooted(outDir)) outDir = Path.GetFullPath(Path.Combine(repo, outDir));
+            if (terrainDump != null) return DumpView.Run(terrainDump, outDir);
             fixture ??= Path.Combine(repo, "Tests", "Placemaker.Tests", "Fixtures", "catalog-bounds.json");
             var catalog = Catalog.Load(fixture);
             // s18: the player's full catalog dump (when present) decides which explicit ids exist, so designed

@@ -404,6 +404,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             ctx.Plan.Facts["shoreMode"] = (int)s.Mode;
             ctx.Plan.Facts["shoreCliffShare"] = s.CliffShare;
             ctx.Plan.Facts["shoreWaterline"] = s.HasWaterline ? 1 : 0;
+            if (math.isfinite(s.WaterLevel)) ctx.Plan.Facts["shoreWaterLevel"] = s.WaterLevel;   // s30: for the terrain dump and gallery
             return s;
         }
 

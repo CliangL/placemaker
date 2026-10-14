@@ -239,6 +239,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool SelectAsOneThing { get; set; }
 
+        /// <summary>(s30) After each build, write the live terrain, water, nets and objects around it to ModsData/Placemaker/debug.</summary>
+        [SettingsUISection(SectionMain, GroupMaintenance)]
+        public bool DebugTerrainDump { get; set; }
+
         /// <summary>(s17) Park attractiveness of builds counts for the city's tourism (owner lot AttractivenessProvider).</summary>
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool ApplyParkStats { get; set; }
@@ -296,6 +300,7 @@ namespace Placemaker.Game.Settings
                 global::Placemaker.Game.Build.BuildService.SinkDecals = DecalsNeverCollide;
                 global::Placemaker.Game.Build.DecalOpacitySystem.FeatureEnabled = SeeThroughDecals;
                 global::Placemaker.Game.Build.BuildService.ChargeNetConstruction = ChargeNetConstruction;
+                global::Placemaker.Game.Build.BuildService.DebugTerrainDump = DebugTerrainDump;
                 global::Placemaker.Game.Build.BuildService.ApplyParkStats = ApplyParkStats;
                 global::Placemaker.Game.Economy.ParkCompanionSystem.Enabled = RealParkStats;
                 global::Placemaker.Game.Groups.OwnerAreaPrefabSystem.FeatureEnabled = SelectAsOneThing;
@@ -347,6 +352,7 @@ namespace Placemaker.Game.Settings
             SeeThroughDecals = true;
             ChargeNetConstruction = true;
             SelectAsOneThing = true;
+            DebugTerrainDump = false;
             ApplyParkStats = true;
             RealParkStats = true;
             ConfirmBulldoze = true;
