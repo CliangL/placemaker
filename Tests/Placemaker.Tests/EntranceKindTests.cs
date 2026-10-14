@@ -172,7 +172,7 @@ namespace Placemaker.Tests
                 foreach (var l in layers) Assert.True(f.Any(x => x.Layer == l && x.DefaultOn), $"{type}: {l} not on by default");
             }
             On("park", "playground", "picnic", "restrooms", "bigtrees", "flowerbeds", "decals");
-            On("plaza", "plazatrees", "fountain", "flowerbeds");
+            On("plaza", "fountain");   // art pass a2: the square plants its own trees and beds
             On("campground", "restrooms", "decals");
             On("sportsPark", "restrooms");
             On("waterfront", "flowerbeds", "bigtrees");

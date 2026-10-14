@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
+using Placemaker.Core.Layers.Plaza;
 using Placemaker.Core.Layers.Types.Events;
 using Unity.Mathematics;
 
@@ -268,8 +269,8 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             Rim(ctx, region, occ, b, style);
             int trees = (int)(region.Area / 10000f * ctx.F("treeDensity"));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, ctx.L("treeSpecies"), Keys.Category(AssetCategories.Tree)))
-                LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, ctx.L("treeSpecies"), 2.5f, 18f, 0.5f, 0x7B00u, p => b.InBowl(p, 4f));
-            PathBenches(ctx, occ, 50f, AssetMix.One(ctx.S("benchAsset")), 0xBE90u);
+                LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, Species(ctx, RimTrees), 2.5f, 18f, 0.5f, 0x7B00u, p => b.InBowl(p, 4f));
+            PathBenches(ctx, occ, 50f, PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0u), 0xBE90u);
             ctx.Check();
 
             // Regions: the bowl is a place (features keep out), the orchestra is the core, the rest green.
@@ -555,6 +556,26 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
 
         // ───────────── stage, extras ─────────────
 
+        // Art pass a2: designed defaults. The automatic pools would put billboards on the stage
+        // (stage / kiosk categories), clock hands beside it (centerpiece.statue), a 17 m branded
+        // marquee in the crowd (events.tent) and random conifers behind it.
+        private static readonly string[] RimTrees = { "OakTree01", "NA_LindenTree01", "EU_ChestnutTree01" };
+        private static readonly string[] Poplars = { "EU_PoplarTree01", "BirchTree01" };
+        private static readonly string[] Deckchairs = { "DeckChair01", "DeckChair02", "DeckChair03" };
+        private static readonly string[] Blankets = { "PicnicBlanket01", "PicnicBlanket02", "PicnicBlanket04", "PicnicBlanket05" };
+        private static readonly AssetRef Screen = new AssetRef("BillboardLarge01 - Placesstages", "BillboardHuge02 - Placesstages", "StageSmall01");
+        private static readonly AssetRef Bandstand = new AssetRef("Gazebo03", "Gazebo02", "Gazebo01");
+        private static readonly AssetRef Tent = new AssetRef("CampgroundShelter02", "Pergola02", "Pergola01");
+
+        private static AssetRef StageAsset(LayerContext ctx, string kind) =>
+            PlazaArt.Or(ctx, "stageAsset", kind == "screen" ? Screen : kind == "bandstand" ? Bandstand : PlazaArt.Stage);
+
+        private static string[] Species(LayerContext ctx, string[] designed)
+        {
+            var l = ctx.L("treeSpecies");
+            return l != null && l.Length > 0 ? l : designed;
+        }
+
         private static string StageCategory(LayerContext ctx, string kind)
         {
             string chosen = ctx.S("stageAsset");
@@ -570,25 +591,26 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         private static void Stage(LayerContext ctx, LayerRegion region, Occupancy occ, Bowl b, string style)
         {
             var orch = EventKit.Clip(region, LayerRegion.Circle(b.F, math.max(1.5f, b.R0 - 0.5f), 24));
-            if (ctx.B("orchestra") && orch != null) ctx.Surface(orch, SurfaceRole.Paving, AssetMix.One(ctx.S("seatSurface")), AssetCategories.SurfacePaving);
+            if (ctx.B("orchestra") && orch != null) ctx.Surface(orch, SurfaceRole.Paving, PlazaArt.Or(ctx, "seatSurface", PavingPalettes.Warm.Accent), AssetCategories.SurfacePaving);
             string kind = ctx.S("stageKind");
             string cat = StageCategory(ctx, kind);
             var stagePos = b.Full ? b.F : b.F - b.D * (b.R0 * (kind == "screen" ? 0.5f : 0.35f));
             float yaw = b.Full ? b.Base : math.atan2(b.D.x, b.D.y);
             if (cat != null)
             {
-                var o = EventKit.Place(ctx, stagePos, yaw, cat, AssetMix.One(ctx.S("stageAsset")), Hashing.Mix(ctx.Seed, 0x57A6u));
+                var o = EventKit.Place(ctx, stagePos, yaw, cat, StageAsset(ctx, kind), Hashing.Mix(ctx.Seed, 0x57A6u));
                 o.Position.y = HeightAfter(ctx, region, b, stagePos, 4f);
             }
             if (style == "classic" && !b.Full)
             {
-                string statue = EventKit.Optional("", AssetCategories.CenterpieceStatue);
+                // Flags either side of the stage (the statue category holds clock hands).
+                string statue = EventKit.Optional("", AssetCategories.MemorialFlag, AssetCategories.CenterpieceStatue);
                 if (statue != null)
                     foreach (int s in new[] { -1, 1 })
                     {
                         var p = stagePos + b.Perp * (s * (b.StageSize * 0.8f + 1f));
                         if (math.distance(p, b.F) < b.R0 - 1f && region.ContainsDisc(p, 1f))
-                            EventKit.Place(ctx, p, yaw, statue, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x57A7u + (uint)(s + 1)));
+                            EventKit.Place(ctx, p, yaw, statue, PlazaArt.FlagPole, Hashing.Mix(ctx.Seed, 0x57A7u + (uint)(s + 1)));
                     }
             }
             // Backdrop: an arc of trees behind the stage.
@@ -600,7 +622,8 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
                 {
                     var p = b.F + EventKit.Dir(b.Base + math.PI + a) * r;
                     uint v = Hashing.Mix(ctx.Seed, 0xBD00u + (uint)n++);
-                    if (LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ctx.L("treeSpecies"), v), null, 2.5f, v, 1f, 0.3f, 3, 3))
+                    // Columnar poplars: a green wall behind the stage (acoustic screen of the classic open-air theatre).
+                    if (LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(Species(ctx, Poplars), v), null, 2.5f, v, 1f, 0.3f, 3, 3))
                         ctx.Plan.Objects[ctx.Plan.Objects.Count - 1].Position.y = HeightAfter(ctx, region, b, p, 4f);
                 }
             }
@@ -625,7 +648,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
                     if (tent != null)
                     {
                         var p = b.F + b.D * (b.R0 + (b.ROut - b.R0) * 0.55f);
-                        if (EventKit.Put(ctx, occ, p, math.atan2(-b.D.x, -b.D.y), tent, AssetMix.One(""), 2.5f, Hashing.Mix(ctx.Seed, 0xF0Fu), 0.5f, 0.3f, 0))
+                        if (EventKit.Put(ctx, occ, p, math.atan2(-b.D.x, -b.D.y), tent, Tent, 3f, Hashing.Mix(ctx.Seed, 0xF0Fu), 0.5f, 0.3f, 0))
                             ctx.Plan.Objects[ctx.Plan.Objects.Count - 1].Position.y = HeightAfter(ctx, region, b, p, cell);
                     }
                     string toilet = LeisureKit.Category(ctx, "", AssetCategories.EventToilet, AssetCategories.Restroom);
@@ -640,7 +663,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
                     if (booth != null)
                     {
                         var p = b.F + b.D * (b.Rim + 3.5f);
-                        EventKit.Put(ctx, occ, p, math.atan2(-b.D.x, -b.D.y), booth, AssetMix.One(""), 2f, Hashing.Mix(ctx.Seed, 0xB007u), 0.5f, 0.2f, 0);
+                        EventKit.Put(ctx, occ, p, math.atan2(-b.D.x, -b.D.y), booth, AssetMix.Pick(PlazaArt.Kiosks, 0u), 2.4f, Hashing.Mix(ctx.Seed, 0xB007u), 0.5f, 0.2f, 0);
                     }
                     break;
                 }
@@ -713,7 +736,8 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         {
             string ground = ctx.S("seatGround");
             if (ground == "grass") return;
-            var asset = AssetMix.One(ground == "paved" ? ctx.S("seatSurface") : "");
+            // Warm sandstone rows round a pale orchestra (PavingKit palette) unless the player chose a surface.
+            var asset = ground == "paved" ? PlazaArt.Or(ctx, "seatSurface", PavingPalettes.Warm.Field) : AssetMix.One("");
             foreach (var ring in BowlRings(b, b.R0, b.ROut))
             {
                 var clipped = EventKit.Clip(region, ring);
@@ -735,15 +759,15 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             switch (kind)
             {
                 case "deckchairs":
-                    cat = LeisureKit.Category(ctx, "", AssetCategories.EventDeckchair, AssetCategories.Bench); radius = 0.7f; perSeat = 1f; asset = AssetMix.One(""); break;
+                    cat = LeisureKit.Category(ctx, "", AssetCategories.EventDeckchair, AssetCategories.Bench); radius = 0.7f; perSeat = 1f; asset = AssetMix.Pick(Deckchairs, 0u); break;
                 case "picnic":
-                    cat = LeisureKit.Category(ctx, "", AssetCategories.Picnic, AssetCategories.Bench); radius = 1.4f; perSeat = 6f; asset = AssetMix.One(""); break;
+                    cat = LeisureKit.Category(ctx, "", AssetCategories.Picnic, AssetCategories.Bench); radius = 1.4f; perSeat = 6f; asset = AssetMix.Pick(Blankets, 0u); break;
                 default:
                     cat = AssetAvailability.Require(ctx.Plan, AssetCategories.Bench, new[] { ctx.S("benchAsset") }, Keys.Category(AssetCategories.Bench)) ? AssetCategories.Bench : null;
-                    radius = 0.9f; perSeat = 4f; asset = AssetMix.One(ctx.S("benchAsset")); break;
+                    radius = 0.9f; perSeat = 4f; asset = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0u); break;
             }
             if (cat == null) { capacity = area / 1.2f; return 0; }
-            if (cat == AssetCategories.Bench) { radius = 0.9f; perSeat = 4f; asset = AssetMix.One(ctx.S("benchAsset")); }
+            if (cat == AssetCategories.Bench) { radius = 0.9f; perSeat = 4f; asset = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0u); }
             radius = math.max(0.4f, math.min(radius, b.RowDepth * 0.5f - 0.1f));   // neighbouring rows must not block each other
             float spacing = math.max(ctx.F("seatSpacing"), radius * 2f + 0.2f);
             int seats = 0;
@@ -811,7 +835,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             float lamps = ctx.F("lampSpacing");
             if (lamps > 0f && b.Promenade)
             {
-                var lamp = AssetMix.One(ctx.S("lampAsset"));
+                var lamp = PlazaArt.Or(ctx, "lampAsset", PlazaArt.ParkLamp);
                 int n = math.max(1, (int)(length / lamps));
                 for (int i = 0; i <= n; i++)
                 {
@@ -833,7 +857,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
                         float r = outer + 2.8f + (i / (kiosks * 3)) * 2.5f;
                         float f = kiosks == 1 && i == 0 ? 0.7f : -0.85f + 1.7f * ((i * 0.618034f) % 1f);
                         var p = b.Straight ? b.F + b.D * r + b.Perp * (f * (r * b.Tan + 3f)) : b.F + EventKit.Dir(b.Base + f * half) * r;
-                        if (EventKit.Put(ctx, occ, p, LeisureKit.Yaw(p, b.F), cat, AssetMix.One(""), 2f, Hashing.Mix(ctx.Seed, 0x6170u + (uint)i), 0.8f, 0.3f)) placed++;
+                        if (EventKit.Put(ctx, occ, p, LeisureKit.Yaw(p, b.F), cat, AssetMix.Pick(style == "meadow" ? PlazaArt.Carts : PlazaArt.Kiosks, (uint)i), 2.4f, Hashing.Mix(ctx.Seed, 0x6170u + (uint)i), 0.8f, 0.3f)) placed++;
                     }
                 }
             }
@@ -848,7 +872,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
                     foreach (var p in LeisureKit.Along(b.F + b.D * r - b.Perp * w, b.F + b.D * r + b.Perp * w, 9f))
                     {
                         uint v = Hashing.Mix(ctx.Seed, 0x7C00u + (uint)n++);
-                        LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ctx.L("treeSpecies"), v), null, 2.5f, v, 1f, 0.4f, 3, 3);
+                        LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(Species(ctx, RimTrees), v), null, 2.5f, v, 1f, 0.4f, 3, 3);
                     }
                 }
                 else
@@ -857,7 +881,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
                         if (b.Full && a > h2 - 9f / r) break;
                         var p = b.F + EventKit.Dir(b.Base + a) * r;
                         uint v = Hashing.Mix(ctx.Seed, 0x7C00u + (uint)n++);
-                        LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ctx.L("treeSpecies"), v), null, 2.5f, v, 1f, 0.4f, 3, 3);
+                        LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(Species(ctx, RimTrees), v), null, 2.5f, v, 1f, 0.4f, 3, 3);
                     }
             }
         }
@@ -869,8 +893,8 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         {
             var c = region.DeepestPoint(out float clear, null, 16);
             string cat = StageCategory(ctx, ctx.S("stageKind"));
-            if (cat != null && clear > 3f) { EventKit.Place(ctx, c, 0f, cat, AssetMix.One(ctx.S("stageAsset")), Hashing.Mix(ctx.Seed, 0x57A6u)); occ.Take(c, 3f, 0); }
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            if (cat != null && clear > 3f) { EventKit.Place(ctx, c, 0f, cat, StageAsset(ctx, ctx.S("stageKind")), Hashing.Mix(ctx.Seed, 0x57A6u)); occ.Take(c, 3f, 0); }
+            var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0u);
             for (int i = 0; i < 8; i++)
             {
                 var p = c + EventKit.Dir(i * math.PI / 4f) * math.min(8f, clear - 1f);

@@ -4,6 +4,7 @@
 // space between. Lamps along the aisles, cafe tables under the trees, bollards on the road edges.
 
 using System.Collections.Generic;
+using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Plaza;
 using Unity.Mathematics;
@@ -73,85 +74,102 @@ namespace Placemaker.Core.Layers.Leisure
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Entrances.Resolve(ctx.Input, region, AccessKind, math.clamp((int)(region.Perimeter / 80f), 2, 8));
             ctx.NavigationArea(region.Ring, AreaRole.PedestrianArea, new AssetRef("", "Pedestrian Area", "Walking Area"));
-            ctx.Surface(region.Ring, SurfaceRole.Plaza, AssetMix.One(ctx.S("surface"), "Pavement Surface 01"));
             foreach (var g in gates)
             {
                 var inward = region.InwardNormal(g.Segment);
                 ctx.Object(g.Position, math.atan2(inward.x, inward.y), ObjectRole.AccessPoint, new AssetRef("", "Pedestrian Access Location"), 0);
                 occ.TakeCorridor(g.Position, g.Position + inward * 6f, 1.5f, 6);   // keep the way in clear
             }
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            LeisureKit.Frame(region, out var centre, out _, out _, out _, out _);
+            var axis = PlazaDressing.SquareAxis(region);
             region.DeepestPoint(out float ins, null, 12);
-
-            // Centrepiece.
+            // Art pass a2: an old-town square in setts (a fountain square in warm sandstone), framed in dark
+            // flags, the market floor in a lighter stone, trees in pits — one paving tiling (PavingKit).
             string kind = ctx.S("centerKind");
-            float coreR = 0f;
-            if (kind != "none")
+            var palette = PavingPalettes.WithField(kind == "fountain" ? PavingPalettes.Warm : PavingPalettes.Cobble, ctx.S("surface"));
+            var pave = new PavingPlan { Axis = axis };
+            var pits = new List<float2>();
+
+            // Centrepiece on its own rondel: the market cross the stalls gather round.
+            float coreR = 0f, rondel = 0f;
+            if (kind != "none" && ins > 10f)
             {
                 string sub = PlazaDressing.CenterCategory(kind);
                 string cat = LeisureKit.Category(ctx, ctx.S("centerpiece"), sub ?? AssetCategories.Centerpiece, AssetCategories.Centerpiece);
-                if (cat != null && ins > 10f)
+                if (cat != null)
                 {
-                    coreR = math.clamp(ins * 0.18f, 5f, 10f);
-                    ctx.Object(centre, math.atan2(axis.x, axis.y), ObjectRole.Centerpiece, AssetMix.One(ctx.S("centerpiece")), Hashing.Mix(ctx.Seed, 0xCE0u), -1, cat);
-                    occ.Take(centre, coreR, 0);
+                    var asset = PlazaDressing.CenterAsset(ctx, kind == "any" ? "fountain" : kind);
+                    coreR = math.clamp(ins * 0.16f, 5f, 9f);
+                    rondel = coreR;
+                    ctx.Object(centre, math.atan2(axis.x, axis.y), ObjectRole.Centerpiece, asset, Hashing.Mix(ctx.Seed, 0xCE0u), -1, cat);
+                    occ.Take(centre, coreR + 1.5f, 0);
+                    // Benches on the rondel's diagonals, looking at it.
+                    for (int k = 0; k < 4; k++)
+                    {
+                        float a = math.atan2(axis.y, axis.x) + math.PI * 0.25f + k * math.PI * 0.5f;
+                        var dir = new float2(math.cos(a), math.sin(a));
+                        var p = centre + dir * (coreR - 1.2f);
+                        ctx.Object(p, math.atan2(-dir.x, -dir.y), ObjectRole.Bench, PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0), Hashing.Mix(ctx.Seed, 0xCE10u + (uint)k));
+                    }
                 }
             }
 
-            // Tree ring with benches between the trees.
+            // Tree ring just inside the frame, a bench between every other pair looking into the square.
+            float fw = PlazaDressing.FrameWidth(region);
             if (ctx.B("treeRing") && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, new[] { ctx.S("treeAsset") }, Keys.Category(AssetCategories.Tree)))
             {
-                var tree = AssetMix.One(ctx.S("treeAsset"));
-                var bench = AssetMix.One(ctx.S("benchAsset"));
-                float spacing = ctx.F("treeSpacing");
+                var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0);
+                var ids = string.IsNullOrEmpty(ctx.S("treeAsset")) ? PlazaArt.ChestnutTrees : new[] { ctx.S("treeAsset") };
+                float spacing = math.max(7f, ctx.Raw("treeSpacing"));
+                var inner = region.InsetVertices(fw + 2.6f);
+                var ringRegion = Poly.IsSimple(inner) && Poly.SignedArea(inner) > 0f ? LayerRegion.From(inner) : null;
                 int t = 0;
-                for (float s = spacing * 0.5f; s < region.Perimeter; s += spacing)
+                if (ringRegion != null)
                 {
-                    var b = region.PointAt(s, out var tan, out var inward, out _);
-                    var p = b + inward * 3.5f;
-                    if (LeisureKit.Put(ctx, occ, p, 0f, ObjectRole.Tree, tree, null, 2f, Hashing.Mix(ctx.Seed, 0x7100u + (uint)t), 2f, 0.2f, 3, 3))
+                    int count = math.max(1, (int)math.round(ringRegion.Perimeter / spacing));
+                    float step = ringRegion.Perimeter / count;
+                    float2 prev = default; bool havePrev = false;
+                    for (int i = 0; i < count; i++)
                     {
-                        t++;
-                        var q = region.PointAt(s + spacing * 0.5f, out var tan2, out var in2, out _) + in2 * 3.5f;
-                        LeisureKit.Put(ctx, occ, q, LeisureKit.Yaw(q, q + in2), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x7200u + (uint)t), 1f);
+                        var p = ringRegion.PointAt(step * (i + 0.5f), out _, out var inward, out _);
+                        bool ok = !PlazaDressing.NearGate(p, gates, 6f) &&
+                            LeisureKit.Put(ctx, occ, p, 0f, ObjectRole.Tree, AssetMix.Pick(ids, 0), null, 2.2f, Hashing.Mix(ctx.Seed, 0x7100u + (uint)t), 1f, 0.2f, 3, 3);
+                        if (ok)
+                        {
+                            pits.Add(p);
+                            if (havePrev && (t & 1) == 1 && math.distance(prev, p) < spacing * 1.4f)
+                            {
+                                var mid = (prev + p) * 0.5f;
+                                LeisureKit.Put(ctx, occ, mid + inward * 0.6f, math.atan2(inward.x, inward.y), ObjectRole.Bench, bench, null, 1.1f, Hashing.Mix(ctx.Seed, 0x7200u + (uint)t), 0.5f, 0.1f);
+                            }
+                            t++;
+                        }
+                        prev = p; havePrev = ok;
                     }
                 }
                 ctx.Plan.Facts["ringTrees"] = t;
             }
             ctx.Check();
 
-            // Stall grid: back-to-back pairs (8 m deep incl. the back gap) with aisles between the pairs.
+            // The market block: stalls back to back round the centre, facing their aisles, on a lighter floor.
             int stalls = 0;
             int wanted = ctx.I("stalls");
-            if (wanted > 0)
+            if (wanted > 0 && PlazaArt.Available(ctx, "stallAsset", AssetCategories.MarketStall, AssetCategories.Kiosk))
             {
-                string cat = LeisureKit.Category(ctx, ctx.S("stallAsset"), AssetCategories.MarketStall, AssetCategories.Kiosk);
-                if (cat != null)
-                {
-                    var asset = AssetMix.One(ctx.S("stallAsset"));
-                    var pairs = LeisureKit.Pack(region, occ, centre, axis, 4f, 6.4f, 0.8f, ctx.F("aisle"), (wanted + 1) / 2, 1.5f);
-                    var lamp = AssetMix.One(ctx.S("lampAsset"));
-                    for (int i = 0; i < pairs.Count && stalls < wanted; i++)
-                    {
-                        var r = pairs[i];
-                        for (int k = -1; k <= 1 && stalls < wanted; k += 2)
-                        {
-                            var p = r.Local(0f, k * 1.6f);
-                            float yaw = math.atan2(r.Side.x * k, r.Side.y * k);   // facing its aisle
-                            ctx.Object(p, yaw, ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stalls), -1, cat);
-                            stalls++;
-                        }
-                        if (i % 3 == 0) LeisureKit.Put(ctx, occ, r.Local(r.HalfLength + 0.6f, r.HalfWidth + 0.8f), 0f, ObjectRole.Lamp, lamp, null, 0.4f, Hashing.Mix(ctx.Seed, 0x1A00u + (uint)i), 0.5f, 0.1f);
-                    }
-                    if (stalls < wanted) ctx.Issue(IssueSeverity.Info, "Placemaker.Market.Issue.Fewer", stalls, wanted);
-                }
+                stalls = PlazaDressing.StallBlock(ctx, occ, region, centre, axis, wanted, ctx.F("aisle"), "stallAsset", 0x5700u, out var block);
+                if (stalls > 0)
+                    pave.Add(new OrientedRect { Center = block.Center, Axis = block.Axis, HalfLength = block.HalfLength + 2.5f, HalfWidth = block.HalfWidth + 1.5f }.Ring,
+                        SurfaceRole.Plaza, palette.Accent, AssetCategories.SurfacePaving);
+                if (stalls < wanted) ctx.Issue(IssueSeverity.Info, "Placemaker.Market.Issue.Fewer", stalls, wanted);
             }
             ctx.Check();
 
             // Shared plaza dressing (same controls: cafe/cafeAsset, bollards/bollardAsset, pattern).
             PlazaDressing.Cafe(ctx, occ);
             PlazaDressing.Bollards(ctx, occ, region, gates);
-            PlazaDressing.Pattern(ctx, occ, region);
+            PlazaDressing.Lighting(ctx, occ, region, gates, centre, 0f, PlazaArt.ParkLamp);
+            PlazaDressing.Ground(ctx, pave, region, gates, centre, rondel, palette, pits, axis, false);
+            pave.Emit(ctx, region.Ring, SurfaceRole.Plaza, palette.Field, AssetCategories.SurfacePaving);
 
             ctx.AddRegion(region.Ring, "paved", RegionTags.Paved);
             if (coreR > 0f) ctx.AddRegion(LayerRegion.Circle(centre, coreR, 20), "core", RegionTags.Core, RegionTags.Paved);

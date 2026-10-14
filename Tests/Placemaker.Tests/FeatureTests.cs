@@ -243,6 +243,7 @@ namespace Placemaker.Tests
         public void PlazaWithTrees(string layout)
         {
             var r = With("plaza", "plazatrees");
+            r.Root.Settings.Values["treeLayout"] = "none";   // the square's own allée off: the feature's trees alone
             r.Root.Children[0].Settings.Values["layout"] = layout;
             var plan = Compose(r, TestKit.Rect(90, 70));
             Assert.False(plan.HasErrors, Errors(plan));

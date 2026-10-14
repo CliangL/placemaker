@@ -341,7 +341,8 @@ namespace Placemaker.Tests.Types
             Assert.DoesNotContain(xmas.Nets, n => n.Role == NetRole.Fence && math.distance(n.A.xz, n.D.xz) > 30f);
             var trucks = EventsKit.Plan(Id, EventsKit.FiveHa, Preset("foodTrucks"));
             Assert.True(trucks.Objects.Count(o => o.Category == AssetCategories.EventFoodTruck) >= 10);
-            Assert.True(trucks.Objects.Count(o => o.Category == AssetCategories.Picnic) >= 20);
+            // Art pass a2: dining tables are table sets (seating.cafe); the picnic pool holds grills and blankets.
+            Assert.True(trucks.Objects.Count(o => o.Category == AssetCategories.CafeSeating || o.Category == AssetCategories.Picnic) >= 20);
             var fest = EventsKit.Plan(Id, EventsKit.FiveHa, Preset("festival"));
             Assert.True(fest.Objects.Count(o => o.Category == AssetCategories.EventToilet) >= 16);
             Assert.True(fest.Objects.Count(o => o.Category == AssetCategories.EventTent) >= 10);
