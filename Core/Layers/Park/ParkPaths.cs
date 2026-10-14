@@ -168,6 +168,9 @@ namespace Placemaker.Core.Layers.Park
             foreach (var c in curves)
             {
                 var net = ctx.CurvedNet(c.A, c.B, c.C, c.D, c.Role, assetFor(c.Tier));
+                // Tier-specific automatic pools (bike route / dirt trail); empty pools fall back to pathway.
+                if (c.Tier == PathTier.Bike) net.Category = AssetCategories.BikePath;
+                else if (c.Tier == PathTier.Trail) net.Category = AssetCategories.TrailPath;
                 if (c.GateA >= 0 && c.GateA < gates.Count && gates[c.GateA].AttachId >= 0)
                 { net.StartAttach = gates[c.GateA].AttachId; net.StartAttachT = gates[c.GateA].AttachT; }
                 if (c.GateD >= 0 && c.GateD < gates.Count && gates[c.GateD].AttachId >= 0)
