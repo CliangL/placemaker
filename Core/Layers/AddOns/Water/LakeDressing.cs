@@ -418,7 +418,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
                     occ.Take(house, 3f, 1);
                 }
                 float deck = level + 0.6f;
-                ShoreKit.Net(ctx, edge + outN * 0.5f, jettyEnd, math.max(deck, ctx.H(edge)), deck, NetRole.Pathway, asset, false);
+                ShoreKit.Net(ctx, house - outN * 3.3f, jettyEnd, deck, deck, NetRole.Pathway, asset, false);
                 occ.TakeCorridor(edge, jettyEnd, 1.8f, 9);
                 links.Add(house + outN * 4f);
                 int boats = 0;

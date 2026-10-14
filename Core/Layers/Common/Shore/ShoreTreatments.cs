@@ -218,7 +218,7 @@ namespace Placemaker.Core.Layers.Common.Shore
         /// Fills the water next to the shore over [from, to] out to <paramref name="depth"/> into a quay
         /// (only where the area covers water). Returns false when nothing could be filled.
         /// </summary>
-        public static bool Wharf(ShoreWork w, float from, float to, float depth, float bollardSpacing, int boats, bool cargo, float lampSpacing)
+        public static bool Wharf(ShoreWork w, float from, float to, float depth, float bollardSpacing, int boats, bool cargo, float lampSpacing, float keepClear = float.NaN)
         {
             var ctx = w.Ctx; var shore = w.Shore;
             if (!w.Inside || !w.HasWaterLevel || to - from < 10f || depth < 4f) return false;
@@ -266,6 +266,12 @@ namespace Placemaker.Core.Layers.Common.Shore
             ShoreTerrain.Warn(ctx);
             w.Gaps.Add(new float2(from, to));
             w.Wharves++;
+            if (math.isfinite(keepClear))
+            {
+                // The pier's way across the quay stays free of bollards, lamps and cargo.
+                var kc = shore.At(keepClear, out var kin, out _);
+                w.Occ.TakeCorridor(kc + kin * 0.3f, kc - kin * (depth + 1f), 2.2f, 9);
+            }
 
             // Quay edge: bollards just inside, boats moored beyond.
             string bollard = LeisureKit.Category(ctx, "", AssetCategories.WaterfrontMooring, AssetCategories.Bollard);
@@ -286,7 +292,7 @@ namespace Placemaker.Core.Layers.Common.Shore
                     if (ShoreKit.PutAt(ctx, w.Occ, edge + inw * 0.9f, quay, ShoreKit.Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), bollard, 0.5f,
                         Hashing.Mix(ctx.Seed, 0xB011u + (uint)w.Bollards), 0.2f, 0.1f, 6))
                         w.Bollards++;
-                if (boat != null && placedBoats < boats && s >= nextBoat)
+                if (boat != null && placedBoats < boats && s >= nextBoat && !(math.abs(s - keepClear) < 10f))
                 {
                     var bp = edge - inw * 4f;
                     if (w.OnWater(bp, 3f) && ShoreKit.PutAt(ctx, w.Occ, bp, w.Water, ShoreKit.Yaw(tan), ObjectRole.Furniture, w.Boat, boat, 3f,
@@ -578,10 +584,10 @@ namespace Placemaker.Core.Layers.Common.Shore
                     uint v = Hashing.Mix(clump, (int)(s * 3f), (int)(d * 7f + 100f));
                     var p = c + inw * d + tan * (Hashing.Unit(v) - 0.5f) * 1.2f;
                     // Clumps: value noise along the shore, thinning away from the waterline.
-                    float chance = Scatter.Clustering(p, 9f, clump, 0.15f) * density * (1f - math.abs(d) / (math.max(landDepth, waterDepth) + 2f));
+                    float chance = Scatter.Clustering(p, 9f, clump, 0.3f) * density * (1f - math.abs(d) / (math.max(landDepth, waterDepth) + 2f));
                     if (Hashing.Unit(Hashing.Mix(v, 3u)) > chance) continue;
                     bool wet = shore.IsWet(p);
-                    if (wet ? !(shore.Outline.ContainsDisc(p, 0.8f) && depthAt != null && depthAt(p) <= 0.9f) : !shore.Land.ContainsDisc(p, 0.8f)) continue;
+                    if (wet ? !(shore.Outline.ContainsDisc(p, 0.8f) && depthAt != null && (depthAt(p) <= 1.2f || d > -2.5f)) : !shore.Land.ContainsDisc(p, 0.8f)) continue;
                     if (!w.Occ.Free(p, 0.8f, 0.3f, 0.1f)) continue;
                     ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 5u)) * 6.283f, role, AssetMix.One(""), v, -1, cat);
                     w.Occ.Take(p, 0.8f, 4);

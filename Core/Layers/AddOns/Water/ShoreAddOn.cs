@@ -120,7 +120,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
                     if (style == "auto") wl = math.min(wl, 90f);
                     float a = (L - wl) * 0.5f, b = a + wl;
                     ShoreTreatments.Walk(w, walkDepth, end, L - end);
-                    bool filled = ShoreTreatments.Wharf(w, a, b, ctx.F("wharfDepth"), ctx.F("bollardSpacing"), boats, ctx.B("cargo"), lamps);
+                    bool filled = ShoreTreatments.Wharf(w, a, b, ctx.F("wharfDepth"), ctx.F("bollardSpacing"), boats, ctx.B("cargo"), lamps, piers > 0 ? (a + b) * 0.5f : float.NaN);
                     if (!filled && style == "wharf") ctx.Issue(IssueSeverity.Info, NeedsWaterInsideKey);
                     // A pier off the middle of the quay, more along the promenade.
                     if (piers > 0) ShoreTreatments.Pier(w, (a + b) * 0.5f, pierLength, heads, filled ? 0 : 2, lamps > 0f);
