@@ -165,8 +165,8 @@ namespace Placemaker.Core.Layers.Leisure
             Preset("tennisClub", ("subtype", "tennisClub"), ("hero", "tennisCourts"), ("tennisCourtsCount", 3.0), ("tennisCourtsSize", "two"),
                 ("promenade", "spine"), ("treeBelt", "single"), ("berms", false), ("treeDensity", 35.0), ("spacing", 90.0), ("fence", true));
             PresetFeatures("tennisClub", "tableTennis", "-pitch", "-basketballCourt");
-            Preset("campus", ("subtype", "campus"), ("hero", "pitch"), ("pitchCount", 2.0), ("pitchSize", "auto"), ("baseballDiamondCount", 1.0),
-                ("tennisCourtsCount", 2.0), ("tennisCourtsSize", "two"), ("basketballCourtCount", 2.0), ("volleyballCount", 2.0),
+            Preset("campus", ("subtype", "campus"), ("hero", "pitch"), ("pitchCount", 1.0), ("pitchSize", "auto"), ("baseballDiamondCount", 1.0),
+                ("tennisCourtsCount", 1.0), ("tennisCourtsSize", "two"), ("basketballCourtCount", 2.0), ("volleyballCount", 2.0),
                 ("treeBelt", "double"), ("berms", true), ("parking", "on"), ("spacing", 110.0), ("promenade", "both"));
             PresetFeatures("campus", "baseballDiamond", "volleyball", "skateBowl", "fitness");
             Preset("neighbourhood", ("subtype", "neighbourhood"), ("hero", "none"), ("basketballCourtCount", 2.0), ("tennisCourtsCount", 1.0),

@@ -98,10 +98,10 @@ namespace Placemaker.Core.Layers.Leisure
 
             PlaceHero();
             ctx.Check();
-            PlaceBigFields();
             PlaceTerrace(1f);
-            ctx.Check();
             PlanSpine();
+            ctx.Check();
+            PlaceBigFields();
             var missing = PlaceCourts(CourtOrder);
             if (missing.Count > 0 && _terrace != null)
             {
@@ -293,7 +293,7 @@ namespace Placemaker.Core.Layers.Leisure
             return _zoneGap;
         }
 
-        private bool Fits(OrientedRect r, string group, Kind kind, Item ignore = null, LayerRegion within = null)
+        private bool Fits(OrientedRect r, string group, Kind kind, string ignoreGroup = null, LayerRegion within = null)
         {
             var area = within ?? (kind == Kind.Big ? _playBig : _play);
             var ring = r.Ring;
@@ -301,7 +301,7 @@ namespace Placemaker.Core.Layers.Leisure
             for (int i = 0; i < 4; i++) if (area.CrossesBoundary(ring[i], ring[(i + 1) % 4], false)) return false;
             foreach (var it in _items)
             {
-                if (it == ignore) continue;
+                if (ignoreGroup != null && it.Group == ignoreGroup) continue;
                 if (RectGap(r, it.Rect) < Gap(it, group, kind) - 0.01f) return false;
             }
             if (_hasPlaza && RectGap(r, _plaza) < _zoneGap * 0.5f) return false;
@@ -532,17 +532,42 @@ namespace Placemaker.Core.Layers.Leisure
             float2 anchor;
             if (math.abs(gv) >= math.abs(gu) * 0.8f) anchor = _playCentre + _side * (gv > 0f ? v0 : v1) + _axis * ((u0 + u1) * 0.5f);
             else anchor = _playCentre + _axis * (gu > 0f ? u0 : u1) + _side * ((v0 + v1) * 0.5f);
-            var kind = layer == "tennisCourts" ? Kind.Court : Kind.Big;
+            // Several big fields: the hero takes the far corner so the others can line up beside it.
+            int bigTotal = 0;
+            foreach (var f in SportsParkLayer.BigFields) if (Wants(f)) bigTotal += Count(f);
             int others = 0;
             foreach (var f in SportsParkLayer.Facilities()) if (Wants(f) && f != layer) others++;
             float cap = others == 0 ? 0.8f : others <= 2 ? 0.45f : 0.36f;
+            if (bigTotal > Count(layer)) cap = math.min(cap, 0.25f);   // other big fields share the ground
+            // …unless the hero is so long that the others cannot sit beside it anyway (a running track): then centred.
+            var heroLadder = Ladder(layer);
+            float heroLen = 0f;
+            bool autoSize = (_ctx.S(layer + "Size") ?? "auto") == "auto";
+            for (int k = FirstRung(layer, heroLadder); k < heroLadder.Length; k++)
+                if (!autoSize || heroLadder[k].Length * heroLadder[k].Width <= cap * _play.Area || k == heroLadder.Length - 1) { heroLen = heroLadder[k].Length; break; }
+            bool alongU = math.abs(gv) >= math.abs(gu) * 0.8f;
+            float extent = alongU ? u1 - u0 : v1 - v0;
+            if (bigTotal > 1 && heroLen < extent * 0.6f)
+            {
+                if (math.abs(gv) >= math.abs(gu) * 0.8f) anchor += _axis * ((gu > 0f ? u0 : u1) - (u0 + u1) * 0.5f);
+                else anchor += _side * ((gv > 0f ? v0 : v1) - (v0 + v1) * 0.5f);
+            }
+            var kind = layer == "tennisCourts" ? Kind.Court : Kind.Big;
             _hero = PlaceOne(layer, kind, anchor, null, cap);
+            if (Environment.GetEnvironmentVariable("PM_SPORTS_DEBUG") == "1") Console.WriteLine($"   hero {layer} anchor={anchor} at={(_hero != null ? _hero.Rect.Center.ToString() : "-")} big={bigTotal} len={heroLen} ext={extent} gu={gu} gv={gv} cap={cap}");
             if (_hero == null) return;
-            // The long side facing the park.
-            var toward = _playCentre - _hero.Rect.Center;
-            if (math.lengthsq(toward) < 1f) toward = gate - _hero.Rect.Center;
-            _heroFront = math.dot(toward, _hero.Rect.Side) >= 0f ? _hero.Rect.Side : -_hero.Rect.Side;
             Cluster(_hero, Count(layer), kind);
+            // The side of the hero (group) facing the park: a long side, unless the field is nearly square.
+            var box = GroupBox(_hero.Group, _hero.Rect.Axis);
+            var toward = _playCentre - box.Center;
+            if (math.lengthsq(toward) < 1f) toward = gate - box.Center;
+            float best = float.MinValue;
+            foreach (var n in new[] { box.Side, -box.Side, box.Axis, -box.Axis })
+            {
+                bool longSide = math.abs(math.dot(n, box.Side)) > 0.7f;
+                float score = math.dot(math.normalizesafe(toward), n) + (longSide && box.HalfLength > box.HalfWidth * 1.25f ? 0.35f : 0f);
+                if (score > best) { best = score; _heroFront = n; }
+            }
         }
 
         private void PlaceBigFields()
@@ -556,7 +581,11 @@ namespace Placemaker.Core.Layers.Leisure
                 {
                     // Stay in the hero's band (same side of the park), line up beside it.
                     float hv = math.dot(_hero.Rect.Center - _playCentre, _heroFront);
-                    extra = p => 1.5f * math.abs(math.dot(p - _playCentre, _heroFront) - hv);
+                    var hb = GroupBox(_hero.Group, new float2(-_heroFront.y, _heroFront.x));
+                    var hc = hb.Center; var fr = _heroFront; float reach = hb.HalfLength;
+                    // …and leave the hero's park-facing side to the terrace and clubhouse.
+                    extra = p => 1.5f * math.abs(math.dot(p - _playCentre, fr) - hv)
+                        + (math.dot(p - hc, fr) > 0f && math.abs(math.dot(p - hc, new float2(-fr.y, fr.x))) < reach ? 120f : 0f);
                 }
                 var first = PlaceOne(f, Kind.Big, anchor, extra, 0.18f);
                 if (first != null) Cluster(first, Count(f), Kind.Big);
@@ -576,17 +605,32 @@ namespace Placemaker.Core.Layers.Leisure
             float depth = _tDepth + _cDepth, length;
             if (_hero != null)
             {
-                length = math.clamp(_hero.Rect.HalfLength * 1.0f, S(34f, 20f), S(120f, 60f));
-                // Along the hero's front, centred; slide along it when the middle is taken.
-                var along = new float2(-_heroFront.y, _heroFront.x);
-                float hl = _hero.Rect.HalfLength, front = math.abs(math.dot(_heroFront, _hero.Rect.Side)) > 0.7f ? _hero.Rect.HalfWidth : _hero.Rect.HalfLength;
-                for (int tries = 0; tries < 3 && _terrace == null; tries++, length *= 0.75f)
-                    foreach (float slide in new[] { 0f, 0.25f, -0.25f, 0.5f, -0.5f })
-                    {
-                        var c = _hero.Rect.Center + _heroFront * (front + 0.4f + depth * 0.5f) + along * (slide * hl);
-                        var r = new OrientedRect { Center = c, Axis = along, HalfLength = length * 0.5f, HalfWidth = depth * 0.5f };
-                        if (Fits(r, "terrace", Kind.Structure, _hero)) { _terrace = Add("", "terrace", Kind.Structure, r, false); break; }
-                    }
+                // The hero's sides in order of preference (the park-facing long side first); the first with room wins.
+                var hb = GroupBox(_hero.Group, _hero.Rect.Axis);
+                var toward = math.normalizesafe(_playCentre - hb.Center, _heroFront);
+                var sides = new List<(float score, float2 n)>();
+                foreach (var n in new[] { hb.Side, -hb.Side, hb.Axis, -hb.Axis })
+                {
+                    bool longSide = math.abs(math.dot(n, hb.Side)) > 0.7f && hb.HalfLength > hb.HalfWidth * 1.25f;
+                    sides.Add((math.dot(toward, n) + (longSide ? 0.6f : 0f) + (math.all(n == _heroFront) ? 0.3f : 0f), n));
+                }
+                sides.Sort((x, y) => y.score.CompareTo(x.score));
+                foreach (var (_, n) in sides)
+                {
+                    if (_terrace != null) break;
+                    var along = new float2(-n.y, n.x);
+                    var box = GroupBox(_hero.Group, along);
+                    float front = math.abs(math.dot(n, box.Side)) > 0.7f ? box.HalfWidth : box.HalfLength;
+                    float hl = math.abs(math.dot(along, box.Axis)) > 0.7f ? box.HalfLength : box.HalfWidth;
+                    length = math.clamp(hl * 1.6f, S(34f, 20f), S(120f, 60f));
+                    for (int tries = 0; tries < 3 && _terrace == null; tries++, length *= 0.75f)
+                        foreach (float slide in new[] { 0f, 0.25f, -0.25f, 0.5f, -0.5f })
+                        {
+                            var c = box.Center + n * (front + 0.4f + depth * 0.5f) + along * (slide * hl);
+                            var r = new OrientedRect { Center = c, Axis = along, HalfLength = length * 0.5f, HalfWidth = depth * 0.5f };
+                            if (Fits(r, "terrace", Kind.Structure, _hero.Group)) { _terrace = Add("", "terrace", Kind.Structure, r, false); _heroFront = n; break; }
+                        }
+                }
             }
             if (_terrace == null)
             {
@@ -602,6 +646,25 @@ namespace Placemaker.Core.Layers.Leisure
         }
 
         private readonly List<(float2 a, float2 b)> _spine = new List<(float2, float2)>();
+
+        /// <summary>The rectangle (axis <paramref name="axis"/>) enclosing every item of a group.</summary>
+        private OrientedRect GroupBox(string group, float2 axis)
+        {
+            axis = math.normalizesafe(axis, _axis);
+            var side = new float2(-axis.y, axis.x);
+            float a0 = float.MaxValue, a1 = float.MinValue, b0 = float.MaxValue, b1 = float.MinValue;
+            foreach (var it in _items)
+            {
+                if (it.Group != group) continue;
+                foreach (var q in it.Rect.Ring)
+                {
+                    float a = math.dot(q, axis), b = math.dot(q, side);
+                    a0 = math.min(a0, a); a1 = math.max(a1, a); b0 = math.min(b0, b); b1 = math.max(b1, b);
+                }
+            }
+            if (a0 > a1) return default;
+            return new OrientedRect { Center = axis * (a0 + a1) * 0.5f + side * (b0 + b1) * 0.5f, Axis = axis, HalfLength = (a1 - a0) * 0.5f, HalfWidth = (b1 - b0) * 0.5f };
+        }
 
         /// <summary>The spine's line from the entrance plaza (or main gate) to the clubhouse door, kept free for the courts.</summary>
         private void PlanSpine(bool reserve = true)
@@ -708,21 +771,6 @@ namespace Placemaker.Core.Layers.Leisure
                 LeisureKit.TakeRect(_occ, Shrink(_plaza, 1.2f), 5);
             }
 
-            // Gate spurs through the belt to the loop (or to the spine / plaza).
-            foreach (var g in _gates)
-            {
-                if (!EntranceKinds.Walks(g.Kind)) continue;
-                _region.ClosestOnBoundary(g.Position, out int seg, out _);
-                var inward = _region.InwardNormal(seg);
-                if (_loopSegs.Count > 0 && NearestOn(_loopSegs, g.Position, out var foot) && math.distance(foot, g.Position) < _belt * 3f + 8f
-                    && !_region.CrossesBoundary(g.Position, foot, true) && !HitsItems(g.Position, foot, 0.8f))
-                    Walk(g.Position, foot, NetRole.Pathway);
-                else if (!loop)
-                {
-                    var end = g.Position + inward * math.min(_belt + 6f, 20f);
-                    if (_region.Contains(end) && !HitsItems(g.Position, end, 0.8f)) Walk(g.Position, end, NetRole.Pathway);
-                }
-            }
 
             // Spine: plaza → clubhouse, wide and tree-lined (its line was kept free before the courts were placed).
             if (_terrace != null && _spine.Count > 0)
@@ -739,6 +787,18 @@ namespace Placemaker.Core.Layers.Leisure
                 a += toHero * (r.HalfWidth - _hw - 0.4f); b += toHero * (r.HalfWidth - _hw - 0.4f);
                 Walk(a, b, NetRole.Pathway);
             }
+            // Gate spurs through the belt to the loop; without a loop, to the nearest walk (straight or with one bend).
+            foreach (var g in _gates)
+            {
+                if (!EntranceKinds.Walks(g.Kind)) continue;
+                if (_hasPlaza && math.distance(g.Position, _main.Position) < 0.5f && _spine.Count > 0 && _loopSegs.Count == 0) continue;
+                _region.ClosestOnBoundary(g.Position, out int seg, out _);
+                var inward = _region.InwardNormal(seg);
+                if (_loopSegs.Count > 0 && NearestOn(_loopSegs, g.Position, out var foot) && math.distance(foot, g.Position) < _belt * 3f + 8f
+                    && !_region.CrossesBoundary(g.Position, foot, true) && !HitsItems(g.Position, foot, 0.8f))
+                    Walk(g.Position, foot, NetRole.Pathway);
+                else if (!loop && _walks.Count > 0) JoinGate(g.Position, inward);
+            }
             // Short connectors to every facility not already beside a walk.
             foreach (var it in _items)
             {
@@ -752,6 +812,32 @@ namespace Placemaker.Core.Layers.Leisure
             {
                 var fence = AssetMix.One(ctx.S("fenceAsset"));
                 foreach (var run in Fences.Runs(_region, _gates, 3.75f)) ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
+            }
+        }
+
+        /// <summary>A gate without a loop joins the nearest reachable walk: straight, or in through the belt and along the field axes.</summary>
+        private void JoinGate(float2 gate, float2 inward)
+        {
+            var into = gate + inward * math.min(_belt + 4f, 18f);
+            var targets = new List<(float d, float2 q)>();
+            foreach (var (a, b) in new List<(float2, float2)>(_walks))
+            {
+                var q = SegmentIndex.ClosestPoint(gate, a, b);
+                targets.Add((math.distance(q, gate), q));
+            }
+            targets.Sort((x, y) => x.d.CompareTo(y.d));
+            for (int i = 0; i < targets.Count && i < 8; i++)
+            {
+                var w = targets[i].q;
+                if (targets[i].d < 1f) return;
+                if (ClearPath(gate, w, false)) { Walk(gate, w, NetRole.Pathway); return; }
+                if (!ClearPath(gate, into, false)) continue;
+                foreach (var dir in new[] { _axis, _side })
+                {
+                    var v = into + dir * math.dot(w - into, dir);
+                    if (ClearPath(into, v, false) && ClearPath(v, w, false)) { Walk(gate, into, NetRole.Pathway); Walk(into, v, NetRole.Pathway); Walk(v, w, NetRole.Pathway); return; }
+                }
+                if (ClearPath(into, w, false)) { Walk(gate, into, NetRole.Pathway); Walk(into, w, NetRole.Pathway); return; }
             }
         }
 
@@ -1064,14 +1150,14 @@ namespace Placemaker.Core.Layers.Leisure
             LeisureKit.Put(_ctx, _occ, p, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.6f, Hashing.Mix(_ctx.Seed, salt), 0.3f, 0.2f);
         }
 
-        private bool Tree(float2 p, uint salt, int age)
+        private bool Tree(float2 p, uint salt, int age, float radius = 2.4f)
         {
             var ids = _ctx.L("treeSpecies");
             if (!AssetAvailability.Has(AssetCategories.Tree) && (ids == null || ids.Length == 0)) return false;
             uint v = Hashing.Mix(_ctx.Seed, salt * 31u + 7u);
-            if (!_occ.Free(p, 2.4f, 1.5f, 0.4f)) return false;
+            if (!_occ.Free(p, radius, 1.5f, 0.4f)) return false;
             _ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ids, v), v, age);
-            _occ.Take(p, 2.4f, 3);
+            _occ.Take(p, radius, 3);
             return true;
         }
 
@@ -1140,13 +1226,49 @@ namespace Placemaker.Core.Layers.Leisure
                 {
                     if (Berm(piece, c, major, majorSpan, minorSpan, (uint)i)) bermCount++;
                 }
-                int want = (int)(piece.Area / 10000f * density * 2.2f);
-                if (want <= 0) continue;
-                groveTrees += LeisureKit.Plant(ctx, _occ, piece, want, ObjectRole.Tree, ctx.L("treeSpecies"), 2.6f, 26f, 0.04f, 0x6A00u + (uint)i * 13u,
-                    p => InItem(p, math.min(_zoneGap * 0.4f, 4f)));
+                groveTrees += Groves(piece, density, (uint)i);
             }
             ctx.Plan.Facts["berms"] = bermCount;
             ctx.Plan.Facts["groveTrees"] = groveTrees;
+        }
+
+        /// <summary>
+        /// Groves: tree groups of 3–9 around spaced centres (open mown lawn between them), not an even scatter.
+        /// Group spacing and size follow the density slider; centres keep off the facilities' buffers.
+        /// </summary>
+        private int Groves(LayerRegion piece, float density, uint salt)
+        {
+            if (density <= 0f) return 0;
+            var ctx = _ctx;
+            int wantTrees = (int)(piece.Area / 10000f * density * 2.2f);
+            if (wantTrees <= 0) return 0;
+            float spacing = math.clamp(S(46f, 24f) * math.sqrt(30f / math.max(5f, density)), 18f, 70f);
+            var centres = new List<float2>();
+            uint seed = Hashing.Mix(ctx.Seed, 0x6A00u + salt * 13u);
+            foreach (var c in Scatter.Candidates(piece, 4f, seed, 600, ctx.Cancel))
+            {
+                if (InItem(c, math.min(_zoneGap * 0.5f, 5f) + 3f)) continue;
+                bool far = true;
+                foreach (var q in centres) if (math.distancesq(q, c) < spacing * spacing) { far = false; break; }
+                if (far) centres.Add(c);
+            }
+            int placed = 0, k = 0;
+            foreach (var c in centres)
+            {
+                if (placed >= wantTrees) break;
+                uint h = Hashing.Mix(seed, (uint)k++);
+                int n = 3 + (int)(Hashing.Unit(h) * 7f);
+                float r0 = 3.3f;
+                for (int j = 0; j < n && placed < wantTrees; j++)
+                {
+                    // Phyllotaxis with jitter: a natural clump, the biggest tree in the middle.
+                    float a = j * 2.39996f + Hashing.Unit(h + 1u) * 6.28f, rr = r0 * math.sqrt(j) * (0.85f + 0.3f * Hashing.Unit(Hashing.Mix(h, (uint)j)));
+                    var p = c + new float2(math.cos(a), math.sin(a)) * rr;
+                    if (!piece.Contains(p) || InItem(p, math.min(_zoneGap * 0.35f, 3.5f))) continue;
+                    if (Tree(p, h + (uint)j * 7u, j == 0 ? 3 : 1 + (int)((h >> (j & 7)) % 3u), 1.6f)) placed++;
+                }
+            }
+            return placed;
         }
 
         private bool InItem(float2 p, float margin)
@@ -1164,7 +1286,7 @@ namespace Placemaker.Core.Layers.Leisure
         private bool Berm(LayerRegion piece, float2 c, float2 major, float majorSpan, float minorSpan, uint salt)
         {
             var ctx = _ctx;
-            float a = math.min(majorSpan * 0.36f, 40f), b = math.min(minorSpan * 0.3f, 7f);
+            float b = math.min(minorSpan * 0.3f, 7f), a = math.min(math.min(majorSpan * 0.36f, 40f), b * 2.6f);
             if (a < 6f || b < 3f) return false;
             var side = new float2(-major.y, major.x);
             float2[] Ellipse(float k)
