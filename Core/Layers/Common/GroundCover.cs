@@ -176,7 +176,7 @@ namespace Placemaker.Core.Layers.Common
         /// Wheel ruts along the rows: one line of straight track decals (≈12 m pieces) through the field along
         /// <paramref name="dir"/>, only when a farm-track decal set is installed. Capped per field and per plan.
         /// </summary>
-        public static int RowTracks(LayerContext ctx, float2[] field, float2 dir, ref int budget, uint salt, int maxPerField = 6, float pieceLength = 12f)
+        public static int RowTracks(LayerContext ctx, Occupancy occ, float2[] field, float2 dir, ref int budget, uint salt, int maxPerField = 6, float pieceLength = 12f)
         {
             if (budget <= 0 || !AssetAvailability.Has(AssetCategories.DecalFarm) || field == null) return 0;
             if (Poly.Area(field) < 250f) return 0;
@@ -197,6 +197,7 @@ namespace Placemaker.Core.Layers.Common
             for (int i = 0; i < n && budget > 0; i++)
             {
                 var p = c + dir * (start + i * pieceLength);
+                if (occ != null && (occ.Corridors.Overlaps(p, 1f, 0f) || occ.HitsPolygon(p, 1f))) continue;   // never over a path or a reserved corridor
                 ctx.Object(p, yaw, ObjectRole.Decal, AssetMix.One(""), Hashing.Mix(salt, 0xD7u), -1, AssetCategories.DecalFarm);
                 placed++; budget--;
             }

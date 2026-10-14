@@ -279,7 +279,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                         string cat = LeisureKit.Category(ctx, ctx.L("cropAssets").Length > 0 ? "x" : "", AssetCategories.GardenCrop, AssetCategories.Bush);
                         GroundCover.RowHeads(ctx, occ, f.Ring, rowDir, 1.4f / density, 1.0f, 2.2f, 2, FarmKit.RoleFor(cat ?? AssetCategories.Bush), cat,
                             ctx.L("cropAssets"), perField, ref budget, salt);
-                        GroundCover.RowTracks(ctx, f.Ring, rowDir, ref tracksBudget, salt, 3);
+                        GroundCover.RowTracks(ctx, occ, f.Ring, rowDir, ref tracksBudget, salt, 3);
                         break;
                     }
                     case "lavender":
@@ -289,7 +289,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                         string cat = LeisureKit.Category(ctx, ctx.S("lavenderAsset"), AssetCategories.CityFarmLavender, AssetCategories.Flowerbed, AssetCategories.Bush);
                         GroundCover.RowHeads(ctx, occ, f.Ring, rowDir, 1.8f / density, 1.0f, 3.2f, 1, FarmKit.RoleFor(cat ?? AssetCategories.Bush), cat,
                             new[] { ctx.S("lavenderAsset") }, perField, ref budget, salt);
-                        GroundCover.RowTracks(ctx, f.Ring, rowDir, ref tracksBudget, salt, 3);
+                        GroundCover.RowTracks(ctx, occ, f.Ring, rowDir, ref tracksBudget, salt, 3);
                         break;
                     }
                     case "vines":
