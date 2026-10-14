@@ -56,6 +56,8 @@ namespace Placemaker.Game.UI
             Trigger("redo", () => _tool.Redo());
             Trigger<string>("setAreaMode", m => { if (SelectionModes.TryParse(m, out var mode)) _tool.SetAreaMode(mode); });
             Trigger<string, double, double>("setBrush", (shape, size, angle) => _tool.SetBrush(shape == "square", (float)size, (float)angle));
+            Trigger<string>("setBrushRules", json => _tool.SetBrushRules(UiModels.ParseBrushRules(json, _tool.BrushRules)));
+            Trigger("resetBrushRules", () => _tool.ResetBrushRules());
             Trigger("clearArea", () => _tool.ClearArea());
 
             Trigger<string>("selectRecipe", id => _tool.SelectRecipe(id));

@@ -67,8 +67,11 @@ namespace Placemaker.Core.Tool
     {
         public List<HalfEdge> Face = new List<HalfEdge>();
         public Placemaker.Core.Geometry.BrushMask.Snapshot Mask;
+        /// <summary>Open-land fallback (no closed block under the first stroke): Face is empty, Seed is where it started.</summary>
+        public bool Open;
+        public Unity.Mathematics.float2 Seed;
 
-        public BlockPaintState Clone() => new BlockPaintState { Face = new List<HalfEdge>(Face), Mask = Mask };
+        public BlockPaintState Clone() => new BlockPaintState { Face = new List<HalfEdge>(Face), Mask = Mask, Open = Open, Seed = Seed };
 
         /// <summary>Same block (same set of road edges), independent of where the loop starts.</summary>
         public static bool SameFace(IReadOnlyList<HalfEdge> a, IReadOnlyList<HalfEdge> b)

@@ -16,8 +16,8 @@ namespace Placemaker.Game.Settings
     public enum PreviewDetail { Simple = 0, Normal = 1, Detailed = 2 }
 
     [FileLocation("ModsSettings/Placemaker/Placemaker")]
-    [SettingsUIGroupOrder(GroupGeneral, GroupBuild, GroupKeys, GroupMaintenance)]
-    [SettingsUIShowGroupName(GroupGeneral, GroupBuild, GroupKeys, GroupMaintenance)]
+    [SettingsUIGroupOrder(GroupGeneral, GroupBrush, GroupBuild, GroupKeys, GroupMaintenance)]
+    [SettingsUIShowGroupName(GroupGeneral, GroupBrush, GroupBuild, GroupKeys, GroupMaintenance)]
     [SettingsUIKeyboardAction(ActionToggleTool, ActionType.Button)]
     [SettingsUIKeyboardAction(ActionPrimary, ActionType.Button)]
     [SettingsUIKeyboardAction(ActionUndo, ActionType.Button)]
@@ -30,6 +30,7 @@ namespace Placemaker.Game.Settings
         public const string GroupKeys = "Keys";
         public const string GroupMaintenance = "Maintenance";
         public const string GroupBuild = "Build";
+        public const string GroupBrush = "Brush";
 
         public const string ActionToggleTool = "ToggleTool";
         public const string ActionPrimary = "Primary";
@@ -62,9 +63,6 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupGeneral)]
         public bool KeepOffExistingRoads { get; set; }
 
-        /// <summary>Block paint also keeps off visible zone cells nobody zoned yet (zoned cells are always avoided).</summary>
-        [SettingsUISection(SectionMain, GroupGeneral)]
-        public bool BlockPaintAvoidEmptyZones { get; set; }
 
         /// <summary>
         /// (FEEDBACK-4) Layout size in percent: scales layout distances (path loops, spacing, plaza and feature
@@ -79,6 +77,65 @@ namespace Placemaker.Game.Settings
         [SettingsUICustomFormat(fractionDigits = 1)]
         [SettingsUISection(SectionMain, GroupGeneral)]
         public float EdgeMargin { get; set; }
+
+        // ───────────── Brush rules (Block paint; plain Paint ignores them) ─────────────
+        // Mirrored in the panel's Block paint "Rules" row (Core/Geometry/BrushRules). Ids are save format.
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStopRoads { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStopBuildings { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStopLots { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStopZoned { get; set; }
+
+        /// <summary>Block paint also keeps off visible zone cells nobody zoned yet (id kept from s11).</summary>
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BlockPaintAvoidEmptyZones { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStopWater { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStayInBlock { get; set; }
+
+        [SettingsUISlider(min = 0f, max = 20f, step = 1f, scalarMultiplier = 1)]
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public float BrushSnapDistance { get; set; }
+
+        [SettingsUISlider(min = 0, max = 6, step = 1, scalarMultiplier = 1)]
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public int BrushSmoothing { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        [SettingsUIButton]
+        public bool ResetBrushRules
+        {
+            set
+            {
+                try { SetBrushRules(global::Placemaker.Core.Geometry.BrushRules.Defaults()); ApplyAndSave(); }
+                catch (Exception e) { Mod.Log.Error(e, "Placemaker: reset brush rules failed"); }
+            }
+        }
+
+        public global::Placemaker.Core.Geometry.BrushRules GetBrushRules() => new global::Placemaker.Core.Geometry.BrushRules
+        {
+            Roads = BrushStopRoads, Buildings = BrushStopBuildings, Lots = BrushStopLots, Zoned = BrushStopZoned,
+            EmptyZones = BlockPaintAvoidEmptyZones, Water = BrushStopWater, StayInBlock = BrushStayInBlock,
+            Snap = BrushSnapDistance, Smoothing = BrushSmoothing,
+        }.Normalized();
+
+        public void SetBrushRules(global::Placemaker.Core.Geometry.BrushRules r)
+        {
+            r = (r ?? global::Placemaker.Core.Geometry.BrushRules.Defaults()).Normalized();
+            BrushStopRoads = r.Roads; BrushStopBuildings = r.Buildings; BrushStopLots = r.Lots; BrushStopZoned = r.Zoned;
+            BlockPaintAvoidEmptyZones = r.EmptyZones; BrushStopWater = r.Water; BrushStayInBlock = r.StayInBlock;
+            BrushSnapDistance = r.Snap; BrushSmoothing = r.Smoothing;
+        }
 
         // ───────────── Keys ─────────────
 
@@ -241,7 +298,7 @@ namespace Placemaker.Game.Settings
             SketchSurfaceFill = true;
             SnapToRoadsWhenDrawing = true;
             KeepOffExistingRoads = true;
-            BlockPaintAvoidEmptyZones = false;
+            SetBrushRules(global::Placemaker.Core.Geometry.BrushRules.Defaults());
             LayoutSize = (int)System.Math.Round(global::Placemaker.Core.SiteContext.DefaultLayoutScale * 100f);
             EdgeMargin = global::Placemaker.Core.SiteContext.DefaultEdgeMargin;
             BrushSize = 150f;

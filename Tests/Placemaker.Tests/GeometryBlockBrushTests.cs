@@ -278,6 +278,271 @@ namespace Placemaker.Tests
             }
         }
 
+        // ───────────── open-land fallback (no closed block) ─────────────
+
+        private static Placemaker.Core.NearbyNet Road(float2 a, float2 b, float width = 12f) => new Placemaker.Core.NearbyNet
+        {
+            A = new float3(a.x, 0, a.y), B = new float3(math.lerp(a, b, 1f / 3f).x, 0, math.lerp(a, b, 1f / 3f).y),
+            C = new float3(math.lerp(a, b, 2f / 3f).x, 0, math.lerp(a, b, 2f / 3f).y), D = new float3(b.x, 0, b.y),
+            Width = width, Category = Placemaker.Core.NetCategory.Road,
+        };
+
+        private static List<IReadOnlyList<float2>> Footprints(params Placemaker.Core.NearbyNet[] nets) =>
+            Placemaker.Core.Tool.AreaClip.Corridors(nets, new float2(-1000), new float2(1000), 0f);
+
+        [Fact]
+        public void Open_PaintAlongAStraightRoad_NeverCrossesAndSnapsToItsEdge()
+        {
+            var road = Footprints(Road(new float2(-400, 0), new float2(400, 0)));   // edges at z = ±6
+            var bb = BlockBrush.Open(new float2(-100, 12), road);
+            Assert.True(bb.IsOpen);
+            Assert.False(bb.Full);
+            var m = Paint(bb);
+            m.Stamp(new float2(-100, 12), 15f, false);
+            m.Stroke(new float2(-100, 12), new float2(100, 12), 15f, false);   // brush reaches z = -3
+            Assert.False(m.IsPaintedAt(new float2(0, 0)));
+            Assert.False(m.IsPaintedAt(new float2(0, -2)));
+            var o = bb.Outline(m);
+            Assert.NotNull(o);
+            G.AssertSimpleCcw(o.Ring);
+            Assert.True(o.Ring.All(p => p.y >= 6f - 0.05f), G.Dump(o.Ring));
+            foreach (var c in road) Assert.True(OverlapArea(o.Ring, c.ToArray()) < 0.5f);
+            var onEdge = o.Ring.Where(p => math.abs(p.y - 6f) < 0.05f).Select(p => p.x).ToList();
+            Assert.True(onEdge.Count >= 2 && onEdge.Max() - onEdge.Min() > 150f, G.Dump(o.Ring));
+            Assert.True(SurfaceAcceptance.IsAccepted(o.Ring));
+        }
+
+        [Fact]
+        public void Open_StrokeDraggedAcrossARoad_StaysOnItsStartingSide()
+        {
+            var road = Footprints(Road(new float2(-400, 0), new float2(400, 0)));
+            var bb = BlockBrush.Open(new float2(0, 40), road);
+            var m = Paint(bb);
+            m.Stamp(new float2(0, 40), 10f, false);
+            m.Stroke(new float2(0, 40), new float2(0, -40), 10f, false);
+            m.Stroke(new float2(0, -40), new float2(60, -40), 10f, false);
+            Assert.False(m.IsPaintedAt(new float2(0, -40)));
+            Assert.False(m.IsPaintedAt(new float2(60, -40)));
+            Assert.True(m.IsPaintedAt(new float2(0, 30)));
+            var o = bb.Outline(m, 50f);
+            Assert.NotNull(o);
+            Assert.True(o.Ring.All(p => p.y > 5.9f), G.Dump(o.Ring));
+        }
+
+        [Fact]
+        public void Open_DeadEndRoad_PaintWrapsAroundItsEnd()
+        {
+            var road = Footprints(Road(new float2(0, -400), new float2(0, 100)));   // dead end at z = 100
+            var bb = BlockBrush.Open(new float2(25, 50), road);
+            var m = Paint(bb);
+            m.Stamp(new float2(25, 50), 15f, false);
+            m.Stroke(new float2(25, 50), new float2(0, 135), 15f, false);
+            m.Stroke(new float2(0, 135), new float2(-25, 50), 15f, false);
+            Assert.True(m.IsPaintedAt(new float2(-25, 50)));        // reached around the end: same side
+            Assert.False(m.IsPaintedAt(new float2(0, 90)));         // never on the road
+            var o = bb.Outline(m);
+            Assert.NotNull(o);
+            G.AssertSimpleCcw(o.Ring);
+            foreach (var c in road) Assert.True(OverlapArea(o.Ring, c.ToArray()) < 0.5f, $"overlaps road by {OverlapArea(o.Ring, c.ToArray()):F1} m²");
+            Assert.Contains(o.Ring, p => p.x < -10f);
+            Assert.Contains(o.Ring, p => p.x > 10f);
+        }
+
+        [Fact]
+        public void Open_StartingOnTheRoad_HasNothingToPaint()
+        {
+            var bb = BlockBrush.Open(new float2(0, 0), Footprints(Road(new float2(-400, 0), new float2(400, 0))));
+            Assert.True(bb.Full);
+        }
+
+        [Fact]
+        public void Open_WithoutRoads_AvoidsTheSameObstaclesAsABlock()
+        {
+            var lot = Rect(-10, -10, 10, 10);
+            var bb = BlockBrush.Open(new float2(-40, 0), new[] { lot }, BrushMask.DefaultCellSize, p => p.x > 60f);
+            var m = Paint(bb);
+            m.Stamp(new float2(0, 0), 50f, false);
+            Assert.False(m.IsPaintedAt(new float2(0, 0)));
+            Assert.False(m.IsPaintedAt(new float2(70, 0)));
+            var o = bb.Outline(m);
+            Assert.NotNull(o);
+            Assert.True(OverlapArea(o.Ring, lot) < 0.5f);
+        }
+
+        // ───────────── brush rules (player toggles) ─────────────
+
+        private static List<BrushObstacle> Kinded()
+        {
+            return new List<BrushObstacle>
+            {
+                new BrushObstacle(BrushObstacleKind.Building, Rect(20, 20, 40, 40)),
+                new BrushObstacle(BrushObstacleKind.Lot, Rect(60, 20, 80, 40)),
+                new BrushObstacle(BrushObstacleKind.ZonedCell, Rect(100, 20, 120, 40)),
+                new BrushObstacle(BrushObstacleKind.EmptyZoneCell, Rect(140, 20, 160, 40)),
+            };
+        }
+
+        private static readonly (BrushObstacleKind kind, float2 probe)[] Probes =
+        {
+            (BrushObstacleKind.Building, new float2(30, 30)), (BrushObstacleKind.Lot, new float2(70, 30)),
+            (BrushObstacleKind.ZonedCell, new float2(110, 30)), (BrushObstacleKind.EmptyZoneCell, new float2(150, 30)),
+        };
+
+        private static BrushMask PaintStrip(BlockBrush bb)
+        {
+            var m = Paint(bb);
+            m.Stamp(new float2(10, 30), 20f, false);
+            m.Stroke(new float2(10, 30), new float2(185, 30), 20f, false);
+            return m;
+        }
+
+        [Fact]
+        public void Rules_EachObstacleToggleDecidesWhetherItIsPainted()
+        {
+            foreach (var (kind, probe) in Probes)
+            {
+                foreach (bool on in new[] { true, false })
+                {
+                    var rules = new BrushRules { Buildings = false, Lots = false, Zoned = false, EmptyZones = false, Water = false };
+                    switch (kind)
+                    {
+                        case BrushObstacleKind.Building: rules.Buildings = on; break;
+                        case BrushObstacleKind.Lot: rules.Lots = on; break;
+                        case BrushObstacleKind.ZonedCell: rules.Zoned = on; break;
+                        case BrushObstacleKind.EmptyZoneCell: rules.EmptyZones = on; break;
+                    }
+                    var bb = rules.Build(new float2(10, 30), Block, Kinded());
+                    var m = PaintStrip(bb);
+                    Assert.Equal(!on, m.IsPaintedAt(probe));
+                    foreach (var (other, p2) in Probes) if (other != kind) Assert.True(m.IsPaintedAt(p2), $"{other} blocked while only {kind} is on");
+                    var o = bb.Outline(m);
+                    Assert.NotNull(o);
+                    Assert.Equal(!on, Poly.Contains(o.Ring, probe));
+                }
+            }
+        }
+
+        [Fact]
+        public void Rules_DefaultsStopAtEverythingButEmptyZoneCells()
+        {
+            var bb = BrushRules.Defaults().Build(new float2(10, 30), Block, Kinded());
+            var m = PaintStrip(bb);
+            Assert.False(m.IsPaintedAt(new float2(30, 30)));
+            Assert.False(m.IsPaintedAt(new float2(70, 30)));
+            Assert.False(m.IsPaintedAt(new float2(110, 30)));
+            Assert.True(m.IsPaintedAt(new float2(150, 30)));
+        }
+
+        [Fact]
+        public void Rules_WaterToggle()
+        {
+            Func<float2, bool> wet = p => p.x > 150f;
+            foreach (bool on in new[] { true, false })
+            {
+                var bb = new BrushRules { Water = on }.Build(new float2(100, 60), Block, null, wet);
+                var m = Paint(bb);
+                m.Stamp(new float2(150, 60), 40f, false);
+                Assert.Equal(!on, m.IsPaintedAt(new float2(170, 60)));
+            }
+        }
+
+        [Fact]
+        public void Rules_RoadsToggle_InOpenLand()
+        {
+            var road = Footprints(Road(new float2(-400, 0), new float2(400, 0)))
+                .Select(r => new BrushObstacle(BrushObstacleKind.Road, r.ToArray())).ToList();
+            foreach (bool on in new[] { true, false })
+            {
+                var bb = new BrushRules { Roads = on }.Build(new float2(0, 40), null, road);
+                var m = Paint(bb);
+                m.Stamp(new float2(0, 40), 10f, false);
+                m.Stroke(new float2(0, 40), new float2(0, -40), 10f, false);
+                Assert.Equal(!on, m.IsPaintedAt(new float2(0, 0)));
+                Assert.Equal(!on, m.IsPaintedAt(new float2(0, -40)));
+            }
+        }
+
+        [Fact]
+        public void Rules_StayInBlockOff_LetsTheBrushLeaveTheBlock()
+        {
+            var on = new BrushRules().Build(new float2(100, 60), Block, null);
+            var mOn = Paint(on);
+            mOn.Stamp(new float2(190, 60), 30f, false);
+            Assert.False(mOn.IsPaintedAt(new float2(210, 60)));
+
+            // Lock off and roads off (no road footprints given anyway): only obstacles limit it.
+            var off = new BrushRules { StayInBlock = false, Roads = false }.Build(new float2(100, 60), Block, Kinded());
+            Assert.False(off.Unconstrained);
+            var mOff = Paint(off);
+            mOff.Stamp(new float2(190, 60), 30f, false);
+            Assert.True(mOff.IsPaintedAt(new float2(210, 60)));
+            mOff.Stamp(new float2(30, 30), 5f, false);
+            Assert.False(mOff.IsPaintedAt(new float2(30, 30)));   // the building still stops it
+        }
+
+        [Fact]
+        public void Rules_SnapZero_LeavesTheGapToTheCurb()
+        {
+            foreach (float snap in new[] { 0f, 6f })
+            {
+                var bb = new BrushRules { Snap = snap }.Build(new float2(43, 60), Block, null);
+                var m = Paint(bb);
+                m.Stamp(new float2(41, 60), 40f, false);
+                var o = bb.Outline(m);
+                Assert.NotNull(o);
+                bool onCurb = o.Ring.Count(p => math.abs(p.x) < 0.01f) >= 2;
+                Assert.Equal(snap > 0f, onCurb);
+            }
+        }
+
+        [Fact]
+        public void Rules_SmoothingChangesTheEdge()
+        {
+            var sharp = new BrushRules { Smoothing = 0 }.Build(new float2(100, 60), Block, null);
+            var soft = new BrushRules { Smoothing = 6 }.Build(new float2(100, 60), Block, null);
+            var m1 = Paint(sharp); m1.Stamp(new float2(100, 60), 25f, false);
+            var m2 = Paint(soft); m2.Stamp(new float2(100, 60), 25f, false);
+            Assert.True(Poly.Area(sharp.Outline(m1).Ring) > Poly.Area(soft.Outline(m2).Ring) + 20f);
+        }
+
+        [Fact]
+        public void Rules_AllOff_IsPlainPaint()
+        {
+            var rules = new BrushRules { Roads = false, Buildings = false, Lots = false, Zoned = false, EmptyZones = false, Water = false, StayInBlock = false, Smoothing = 6 };
+            Assert.True(rules.AllOff);
+            var road = Footprints(Road(new float2(-400, 0), new float2(400, 0))).Select(r => new BrushObstacle(BrushObstacleKind.Road, r.ToArray()));
+            var bb = rules.Build(new float2(10, 30), Block, Kinded().Concat(road), p => true);
+            Assert.True(bb.Unconstrained);
+            Assert.False(bb.Full);
+
+            var fenced = PaintStrip(bb);
+            fenced.Stroke(new float2(185, 30), new float2(185, -500), 20f, false);   // across the road and out of any box
+            var plain = new BrushMask();
+            plain.Stamp(new float2(10, 30), 20f, false);
+            plain.Stroke(new float2(10, 30), new float2(185, 30), 20f, false);
+            plain.Stroke(new float2(185, 30), new float2(185, -500), 20f, false);
+            Assert.Equal(plain.PaintedCellCount, fenced.PaintedCellCount);
+
+            var expected = Poly.To2D(plain.Outline());
+            var got = bb.Outline(fenced).Ring;
+            Assert.Equal(expected.Length, got.Length);
+            for (int i = 0; i < got.Length; i++) Assert.True(math.distance(expected[i], got[i]) < 1e-4f);
+        }
+
+        [Fact]
+        public void Rules_JsonFromThePanel_MergesAndClamps()
+        {
+            var cur = BrushRules.Defaults();
+            var r = Placemaker.Core.Tool.UiModels.ParseBrushRules("{\"roads\":false,\"snap\":99,\"smoothing\":-3}", cur);
+            Assert.False(r.Roads);
+            Assert.True(r.Buildings);
+            Assert.Equal(BrushRules.MaxSnap, r.Snap);
+            Assert.Equal(0, r.Smoothing);
+            Assert.Equal(cur, Placemaker.Core.Tool.UiModels.ParseBrushRules("not json", cur));
+            var json = Placemaker.Core.Tool.UiModels.BrushRulesJson(r).ToString();
+            Assert.Equal(r, Placemaker.Core.Tool.UiModels.ParseBrushRules(json, BrushRules.Defaults()));
+        }
+
         [Fact]
         public void BlockPaintMode_RoundTripsAndComparesFaces()
         {

@@ -16,6 +16,7 @@ using Game.Common;
 using Game.Prefabs;
 using Game.Simulation;
 using Game.Tools;
+using Placemaker.Core.Geometry;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -77,18 +78,17 @@ namespace Placemaker.Game.Selection
         }
 
         /// <summary>
-        /// Obstacle polygons (XZ) touching the box [min, max]. emptyZoneCells: also avoid visible zone
-        /// cells nobody zoned yet. ignoreGroup: Placemaker group whose members are not obstacles (0 = none).
+        /// Obstacle polygons (XZ) touching the box [min, max], tagged by kind (the brush rules pick which count). ignoreGroup: Placemaker group whose members are not obstacles (0 = none).
         /// </summary>
-        public List<float2[]> Gather(float2 min, float2 max, bool emptyZoneCells, int ignoreGroup)
+        public List<BrushObstacle> Gather(float2 min, float2 max, int ignoreGroup)
         {
-            var list = new List<float2[]>();
+            var list = new List<BrushObstacle>();
             var bounds = new Bounds2(min, max);
             try { Buildings(bounds, ignoreGroup, list); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read buildings: " + e.Message); }
             try { Lots(bounds, ignoreGroup, list); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read areas: " + e.Message); }
-            try { ZoneCells(bounds, emptyZoneCells, list); }
+            try { ZoneCells(bounds, list); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read zoning: " + e.Message); }
             return list;
         }
@@ -140,7 +140,7 @@ namespace Placemaker.Game.Selection
             return false;
         }
 
-        private void Buildings(Bounds2 bounds, int ignoreGroup, List<float2[]> into)
+        private void Buildings(Bounds2 bounds, int ignoreGroup, List<BrushObstacle> into)
         {
             if (_objectSearch == null) return;
             var tree = _objectSearch.GetStaticSearchTree(true, out var deps);
@@ -162,13 +162,13 @@ namespace Placemaker.Game.Selection
                     var lot = (float2)_em.GetComponentData<BuildingData>(prefab).m_LotSize * 8f;
                     var tr = _em.GetComponentData<global::Game.Objects.Transform>(e);
                     var q = global::Game.Objects.ObjectUtils.CalculateBaseCorners(tr.m_Position, tr.m_Rotation, lot);
-                    into.Add(new[] { q.a.xz, q.b.xz, q.c.xz, q.d.xz });
+                    into.Add(new BrushObstacle(BrushObstacleKind.Building, new[] { q.a.xz, q.b.xz, q.c.xz, q.d.xz }));
                 }
             }
             finally { results.Dispose(); }
         }
 
-        private void Lots(Bounds2 bounds, int ignoreGroup, List<float2[]> into)
+        private void Lots(Bounds2 bounds, int ignoreGroup, List<BrushObstacle> into)
         {
             if (_areaSearch == null) return;
             var tree = _areaSearch.GetSearchTree(true, out var deps);
@@ -188,13 +188,13 @@ namespace Placemaker.Game.Selection
                     if (nodes.Length < 3) continue;
                     var ring = new float2[nodes.Length];
                     for (int n = 0; n < nodes.Length; n++) ring[n] = nodes[n].m_Position.xz;
-                    into.Add(ring);
+                    into.Add(new BrushObstacle(BrushObstacleKind.Lot, ring));
                 }
             }
             finally { results.Dispose(); }
         }
 
-        private void ZoneCells(Bounds2 bounds, bool emptyCells, List<float2[]> into)
+        private void ZoneCells(Bounds2 bounds, List<BrushObstacle> into)
         {
             if (_zoneSearch == null) return;
             var tree = _zoneSearch.GetSearchTree(true, out var deps);
@@ -219,20 +219,23 @@ namespace Placemaker.Game.Selection
                     // Cell index y runs from the road (0) into the block; merge consecutive cells of a column.
                     for (int x = 0; x < size.x; x++)
                     {
-                        int start = -1;
+                        // Runs of the same kind (zoned / empty); hidden or blocked cells end a run.
+                        int start = -1, kind = 0;
                         for (int y = 0; y <= size.y; y++)
                         {
-                            bool take = y < size.y && Avoid(cells[x + y * size.x], emptyCells);
-                            if (take && start < 0) start = y;
-                            if (!take && start >= 0)
+                            int k = y < size.y ? CellKind(cells[x + y * size.x]) : 0;
+                            if (k != kind && start >= 0)
                             {
                                 var a = global::Game.Zones.ZoneUtils.GetCellPosition(block, new int2(x, start)).xz;
                                 var b = global::Game.Zones.ZoneUtils.GetCellPosition(block, new int2(x, y - 1)).xz;
                                 // GetCellPosition steps against m_Direction as y grows: a is the road end.
                                 float2 front = a + dir * 4f, back = b - dir * 4f;
-                                into.Add(new[] { front + right * 4f, front - right * 4f, back - right * 4f, back + right * 4f });
+                                into.Add(new BrushObstacle(kind == 1 ? BrushObstacleKind.ZonedCell : BrushObstacleKind.EmptyZoneCell,
+                                    new[] { front + right * 4f, front - right * 4f, back - right * 4f, back + right * 4f }));
                                 start = -1;
                             }
+                            if (k != 0 && start < 0) start = y;
+                            kind = k;
                         }
                     }
                 }
@@ -240,13 +243,13 @@ namespace Placemaker.Game.Selection
             finally { results.Dispose(); }
         }
 
-        private static bool Avoid(global::Game.Zones.Cell cell, bool emptyCells)
+        /// <summary>0 = not part of the visible grid, 1 = zoned, 2 = empty (zoneable).</summary>
+        private static int CellKind(global::Game.Zones.Cell cell)
         {
             var s = cell.m_State;
             // Hidden or blocked cells (under a road, a lot, an area) are not part of the visible grid.
-            if ((s & global::Game.Zones.CellFlags.Visible) == 0 || (s & global::Game.Zones.CellFlags.Blocked) != 0) return false;
-            if (!cell.m_Zone.Equals(global::Game.Zones.ZoneType.None)) return true;
-            return emptyCells;
+            if ((s & global::Game.Zones.CellFlags.Visible) == 0 || (s & global::Game.Zones.CellFlags.Blocked) != 0) return 0;
+            return cell.m_Zone.Equals(global::Game.Zones.ZoneType.None) ? 2 : 1;
         }
     }
 }

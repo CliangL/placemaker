@@ -22,6 +22,34 @@ namespace Placemaker.Game.Overlay
         private List<(float2 a, float2 b)> _bpBoundary = new List<(float2, float2)>();
         private PlacemakerToolSystem.BlockPaintContext _bpSigFor;
         private long _bpSig;
+        private List<float3[]> _bpShown;
+        private List<float3[]> _bpNear = new List<float3[]>();
+        private PlacemakerToolSystem.BlockPaintContext _bpNearFor;
+        private float2 _bpNearAt = new float2(float.MaxValue);
+
+        /// <summary>
+        /// Obstacles within reach of the brush (open-land fallback: the work box holds hundreds of road
+        /// pieces and zone cells). Re-filtered only after the cursor moved 16 m, so the fill mesh is not
+        /// rebuilt every frame.
+        /// </summary>
+        private List<float3[]> NearBrush(PlacemakerToolSystem.BlockPaintContext cur)
+        {
+            float2 at = _tool.CursorValid ? _tool.Cursor.xz : cur.Seed;
+            if (ReferenceEquals(_bpNearFor, cur) && math.distance(at, _bpNearAt) < 16f) return _bpNear;
+            _bpNearFor = cur;
+            _bpNearAt = at;
+            float reach = _tool.BrushSize * 0.5f + 60f;
+            var list = new List<float3[]>();
+            foreach (var o in cur.Obstacles)
+            {
+                float2 mn = new float2(float.MaxValue), mx = new float2(float.MinValue);
+                foreach (var p in o) { mn = math.min(mn, p.xz); mx = math.max(mx, p.xz); }
+                float2 d = math.max(math.max(mn - at, at - mx), 0f);
+                if (math.length(d) <= reach) list.Add(o);
+            }
+            _bpNear = list;
+            return list;
+        }
 
         private void DrawBlockPaintMode(OverlayRenderSystem.Buffer buffer, float w, AreaShape shape)
         {
@@ -29,11 +57,18 @@ namespace Placemaker.Game.Overlay
             bool selecting = _tool.Stage == ToolStage.Area || _tool.Painting;
             if (cur != null)
             {
-                Ring(buffer, cur.Block, OutlineDim, w * 0.8f, dashed: true);
+                // Open-land fallback: no block line; the shading shows the roads/obstacles near the brush.
+                if (cur.Block != null) Ring(buffer, cur.Block, OutlineDim, w * 0.8f, dashed: true);
                 if (selecting && cur.Obstacles.Count > 0)
                 {
-                    if (!ReferenceEquals(_bpSigFor, cur)) { _bpSigFor = cur; _bpSig = FilledPreviewSystem.Signature(cur.Obstacles); }
-                    _fill.SetLayer("blockPaintBlocked", cur.Obstacles, Blocked, -93.8f, _bpSig);
+                    var shown = cur.Open ? NearBrush(cur) : cur.Obstacles;
+                    if (!ReferenceEquals(_bpSigFor, cur) || !ReferenceEquals(_bpShown, shown))
+                    {
+                        _bpSigFor = cur;
+                        _bpShown = shown;
+                        _bpSig = FilledPreviewSystem.Signature(shown);
+                    }
+                    if (shown.Count > 0) _fill.SetLayer("blockPaintBlocked", shown, Blocked, -93.8f, _bpSig);
                 }
             }
 

@@ -279,6 +279,35 @@ namespace Placemaker.Core.Geometry
             return hits.Count;
         }
 
+        /// <summary>
+        /// A new mask (same cell size) with the painted cells 4-connected to the cell under seed;
+        /// empty when that cell is not painted. maxCells bounds the flood (the rest is left out).
+        /// </summary>
+        public BrushMask ConnectedComponent(float2 seed, int maxCells = 4_000_000)
+        {
+            var result = new BrushMask(CellSize);
+            if (!Poly.IsFinite(seed)) return result;
+            int2 start = (int2)math.floor(seed / CellSize);
+            if (!IsPainted(start.x, start.y)) return result;
+            var seen = new HashSet<long> { Key(start.x, start.y) };
+            var stack = new List<int2> { start };
+            result._changed.Clear();
+            while (stack.Count > 0 && seen.Count <= maxCells)
+            {
+                int2 c = stack[stack.Count - 1];
+                stack.RemoveAt(stack.Count - 1);
+                if (result.Set(c.x, c.y, true)) result._changed.Add(c);
+                Visit(c.x + 1, c.y); Visit(c.x - 1, c.y); Visit(c.x, c.y + 1); Visit(c.x, c.y - 1);
+            }
+            result.CommitChanges();
+            return result;
+
+            void Visit(int i, int j)
+            {
+                if (IsPainted(i, j) && seen.Add(Key(i, j))) stack.Add(new int2(i, j));
+            }
+        }
+
         private void CommitChanges()
         {
             if (_changed.Count == 0) return;

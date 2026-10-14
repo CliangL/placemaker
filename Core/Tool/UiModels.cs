@@ -26,6 +26,8 @@ namespace Placemaker.Core.Tool
         public bool BrushSquare;
         public float BrushSize = 150f;
         public float BrushAngle;
+        /// <summary>Block paint brush rules (null = not sent).</summary>
+        public Placemaker.Core.Geometry.BrushRules BrushRules;
         public bool AreaValid, AreaClosed;
         public int PointCount;
         public double AreaM2, PerimeterM;
@@ -84,7 +86,9 @@ namespace Placemaker.Core.Tool
             foreach (var st in s.Reachable) reach.Add(StageMachine.Id(st));
             o.Set("reachable", reach);
             o.Set("areaMode", SelectionModes.Id(s.Mode));
-            o.Set("brush", JsonValue.Obj().Set("shape", s.BrushSquare ? "square" : "round").Set("size", Round(s.BrushSize, 1)).Set("angle", Round(s.BrushAngle, 1)));
+            var brush = JsonValue.Obj().Set("shape", s.BrushSquare ? "square" : "round").Set("size", Round(s.BrushSize, 1)).Set("angle", Round(s.BrushAngle, 1));
+            if (s.BrushRules != null) brush.Set("rules", BrushRulesJson(s.BrushRules));
+            o.Set("brush", brush);
             var area = JsonValue.Obj()
                 .Set("valid", s.AreaValid).Set("closed", s.AreaClosed).Set("pointCount", s.PointCount)
                 .Set("areaM2", Round(s.AreaM2, 0)).Set("perimeterM", Round(s.PerimeterM, 1));
@@ -632,6 +636,30 @@ namespace Placemaker.Core.Tool
         }
 
         private static double Round(double v, int digits) => double.IsNaN(v) || double.IsInfinity(v) ? 0 : Math.Round(v, digits);
+
+        public static JsonValue BrushRulesJson(Placemaker.Core.Geometry.BrushRules r) => JsonValue.Obj()
+            .Set("roads", r.Roads).Set("buildings", r.Buildings).Set("lots", r.Lots).Set("zoned", r.Zoned)
+            .Set("emptyZones", r.EmptyZones).Set("water", r.Water).Set("stayInBlock", r.StayInBlock)
+            .Set("snap", Round(r.Snap, 1)).Set("smoothing", r.Smoothing);
+
+        /// <summary>UI "setBrushRules": fields present in the JSON override <paramref name="current"/>; the result is clamped.</summary>
+        public static Placemaker.Core.Geometry.BrushRules ParseBrushRules(string json, Placemaker.Core.Geometry.BrushRules current)
+        {
+            var r = (current ?? Placemaker.Core.Geometry.BrushRules.Defaults()).Clone();
+            JsonValue v;
+            try { v = JsonValue.Parse(json ?? ""); } catch (Exception) { return r; }
+            if (v == null || !v.IsObject) return r;
+            r.Roads = v["roads"].AsBool(r.Roads);
+            r.Buildings = v["buildings"].AsBool(r.Buildings);
+            r.Lots = v["lots"].AsBool(r.Lots);
+            r.Zoned = v["zoned"].AsBool(r.Zoned);
+            r.EmptyZones = v["emptyZones"].AsBool(r.EmptyZones);
+            r.Water = v["water"].AsBool(r.Water);
+            r.StayInBlock = v["stayInBlock"].AsBool(r.StayInBlock);
+            r.Snap = (float)v["snap"].AsNumber(r.Snap);
+            r.Smoothing = (int)Math.Round(v["smoothing"].AsNumber(r.Smoothing));
+            return r.Normalized();
+        }
 
         public static string Invariant(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
     }
