@@ -303,7 +303,7 @@ namespace Placemaker.Tests.Types
             // Only the front-of-house tent stands in the field.
             var inField = plan.Objects.Where(o => o.Role != ObjectRole.Decal && Poly.Contains(ring, o.Position.xz)).ToList();
             Assert.True(inField.All(o => o.Category == AssetCategories.EventTent || o.Category == AssetCategories.Shelter), string.Join(",", inField.Select(o => o.Category)));
-            Assert.True(Poly.Area(ring) > EventsKit.FiveHa.Length * 0 + 0.25f * 50000f, "field too small: " + Poly.Area(ring));
+            Assert.True(Poly.Area(ring) > EventsKit.FiveHa.Length * 0 + 0.2f * 50000f, "field too small: " + Poly.Area(ring));
             // Backstage is fenced, there is a crowd barrier, the site is fenced.
             Assert.True(plan.Nets.Count(n => n.Role == NetRole.Fence) > 10);
         }

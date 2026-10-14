@@ -146,7 +146,7 @@ namespace Placemaker.Core.Layers.Types.Events
             var inDir = g > 0f ? -axis : axis;   // from the entrance end towards the far end
 
             // Loop inset first: the stage and field then go inside the loop.
-            float loopInset = math.clamp(minor * 0.2f, 10f, 28f);
+            float loopInset = math.clamp(minor * 0.12f, 9f, 20f);
             float2[] loop = null;
             if (layout == "loop")
             {
@@ -161,8 +161,15 @@ namespace Placemaker.Core.Layers.Types.Events
             var st = new StageSite();
             if (ctx.B("stage"))
             {
-                float inset = loop != null ? loopInset + ctx.F("streetWidth") * 0.5f + 8f : 3f;
-                st = PlanStage(ctx, occ, region, centre, inDir, side, mainGate, inset);
+                // Inside a loop, the stage and field must leave room for the loop's inner stall row.
+                var fit = region;
+                if (loop != null)
+                {
+                    var inner = region.InsetVertices(loopInset + ctx.F("streetWidth") * 0.5f + 6f);
+                    var innerRegion = inner.Length >= 3 && Poly.IsSimple(inner) && Poly.SignedArea(inner) > 300f ? LayerRegion.From(inner) : null;
+                    if (innerRegion != null) fit = innerRegion;
+                }
+                st = PlanStage(ctx, occ, region, fit, centre, inDir, side, mainGate);
             }
             ctx.Check();
 
@@ -281,7 +288,46 @@ namespace Placemaker.Core.Layers.Types.Events
 
         // ───────────── stage, backstage, field ─────────────
 
-        private StageSite PlanStage(LayerContext ctx, Occupancy occ, LayerRegion region, float2 centre, float2 inDir, float2 side, float2 mainGate, float inset)
+        private static float2 StageDims(LayerContext ctx)
+        {
+            switch (ctx.S("stageSize"))
+            {
+                case "small": return new float2(10f, 8f);
+                case "large": return new float2(26f, 16f);
+                default: return new float2(16f, 12f);
+            }
+        }
+
+        /// <summary>Cheap screen for a big rectangle: a grid of probes (≤ 10 m apart) inside the region with margin, clear of reserved polygons.</summary>
+        private static bool QuickFits(LayerRegion fit, Occupancy occ, OrientedRect r, float margin)
+        {
+            int nu = math.max(2, (int)math.ceil(r.HalfLength / 5f)), nv = math.max(2, (int)math.ceil(r.HalfWidth / 5f));
+            for (int i = 0; i <= nu; i++)
+                for (int j = 0; j <= nv; j++)
+                {
+                    var p = r.Local(-r.HalfLength + 2f * r.HalfLength * i / nu, -r.HalfWidth + 2f * r.HalfWidth * j / nv);
+                    if (!fit.ContainsDisc(p, margin) || occ.HitsPolygon(p, 1f) || occ.Discs.Overlaps(p, 1f)) return false;
+                }
+            return true;
+        }
+
+        // (scale of the wanted area, across : along aspect), best first.
+        private static readonly float2[] FieldScales = { new float2(1f, 1.25f), new float2(1f, 0.8f), new float2(0.85f, 1.25f), new float2(0.85f, 0.8f), new float2(0.7f, 1.25f), new float2(0.7f, 0.8f), new float2(0.55f, 1f), new float2(0.4f, 1f), new float2(0.28f, 1f) };
+
+        private static OrientedRect FieldRect(LayerContext ctx, LayerRegion region, OrientedRect stage, float2 dir, float2 shape)
+        {
+            float want = region.Area * ctx.F("field") / 100f;
+            float sw = stage.HalfLength * 2f, sd = stage.HalfWidth * 2f;
+            float scale = shape.x, w0 = math.max(sw + 8f, math.sqrt(want * shape.y)), l0 = math.max(10f, want / w0);
+            float w = math.max(sw + 4f, w0 * math.sqrt(scale)), l = math.max(8f, l0 * math.sqrt(scale));
+            return new OrientedRect { Center = stage.Center - dir * (sd * 0.5f + 2f + l * 0.5f), Axis = stage.Axis, HalfLength = w * 0.5f, HalfWidth = l * 0.5f };
+        }
+
+        /// <summary>
+        /// Stage at the chosen end, searched jointly with its crowd field: the first stage spot (nearest the
+        /// end) whose field fits at ≥ 70 % of the wanted size wins; otherwise the spot with the biggest field.
+        /// </summary>
+        private StageSite PlanStage(LayerContext ctx, Occupancy occ, LayerRegion region, LayerRegion fit, float2 centre, float2 inDir, float2 side, float2 mainGate)
         {
             var st = new StageSite();
             float2 dir;
@@ -291,27 +337,28 @@ namespace Placemaker.Core.Layers.Types.Events
                 case "side": dir = math.dot(mainGate - centre, side) > 0f ? -side : side; break;
                 default: dir = inDir; break;
             }
-            float sd, sw;
-            switch (ctx.S("stageSize"))
-            {
-                case "small": sd = 8f; sw = 10f; break;
-                case "large": sd = 16f; sw = 26f; break;
-                default: sd = 12f; sw = 16f; break;
-            }
-            if (!LeisureKit.Chord(region, centre, dir, 0f, out var ca, out var cb)) { ctx.Issue(IssueSeverity.Info, K + "Issue.NoStage"); return st; }
+            var dims = StageDims(ctx);
+            float sw = dims.x, sd = dims.y;
+            var from = fit.Contains(centre) ? centre : fit.Centroid;
+            if (!LeisureKit.Chord(fit, from, dir, 0f, out var ca, out var cb)) { ctx.Issue(IssueSeverity.Info, K + "Issue.NoStage"); return st; }
             var end = math.dot(cb - ca, dir) >= 0f ? cb : ca;
             float chord = math.distance(ca, cb);
             var across = new float2(-dir.y, dir.x);
             bool found = false;
             OrientedRect stage = default;
-            for (float t = inset + sd * 0.5f; t < chord * 0.7f && !found; t += 2f)
-                for (float shift = 0f; shift <= 24f && !found; shift += 8f)
-                    for (int sgn = -1; sgn <= 1 && !found; sgn += 2)
+            int bestScale = FieldScales.Length; int tried = 0;
+            for (float t = sd * 0.5f + 2f; t < chord * 0.8f && bestScale > 3 && tried < 60; t += 2f)
+                for (float shift = 0f; shift <= 24f && bestScale > 3; shift += 8f)
+                    for (int sgn = -1; sgn <= 1 && bestScale > 3; sgn += 2)
                     {
                         if (shift == 0f && sgn > 0) continue;
                         var c = end - dir * t + across * (shift * sgn);
                         var r = new OrientedRect { Center = c, Axis = across, HalfLength = sw * 0.5f, HalfWidth = sd * 0.5f };
-                        if (LeisureKit.RectFits(region, occ, r, 1f)) { stage = r; found = true; }
+                        if (!LeisureKit.RectFits(fit, occ, r, 1f)) continue;
+                        tried++;
+                        int k = 0;
+                        while (k < bestScale && !QuickFits(fit, occ, FieldRect(ctx, region, r, dir, FieldScales[k]), 1.5f)) k++;
+                        if (!found || k < bestScale) { stage = r; found = true; bestScale = k; }
                     }
             if (!found) { ctx.Issue(IssueSeverity.Info, K + "Issue.NoStage"); return st; }
             st.Ok = true; st.Stage = stage; st.Dir = dir;
@@ -321,29 +368,16 @@ namespace Placemaker.Core.Layers.Types.Events
             string stageCat = LeisureKit.Category(ctx, ctx.S("stageAsset"), AssetCategories.Stage, AssetCategories.Shelter, AssetCategories.Centerpiece);
             if (stageCat != null) EventKit.Place(ctx, stage.Center, facing, stageCat, AssetMix.One(ctx.S("stageAsset")), Hashing.Mix(ctx.Seed, 0x57A6u));
 
-            // Crowd field in front of the stage, shrunk until it fits.
-            float want = region.Area * ctx.F("field") / 100f;
-            float w0 = math.max(sw + 8f, math.sqrt(want * 1.25f)), l0 = math.max(10f, want / w0);
-            foreach (float s in new[] { 1f, 0.85f, 0.7f, 0.55f, 0.4f, 0.28f })
+            // Crowd field in front of the stage (verified exactly, shrunk further when the screen was optimistic).
+            for (int k = math.min(bestScale, FieldScales.Length - 1); k < FieldScales.Length; k++)
             {
-                float w = math.max(sw + 4f, w0 * math.sqrt(s)), l = math.max(8f, l0 * math.sqrt(s));
-                var fc = stage.Center - dir * (sd * 0.5f + 2f + l * 0.5f);
-                var fr = new OrientedRect { Center = fc, Axis = across, HalfLength = w * 0.5f, HalfWidth = l * 0.5f };
-                if (!LeisureKit.RectFits(region, occ, fr, 1.5f)) continue;
+                var fr = FieldRect(ctx, region, stage, dir, FieldScales[k]);
+                if (!LeisureKit.RectFits(fit, occ, fr, 1.5f)) continue;
                 st.Field = fr; st.HasField = true;
                 break;
             }
             if (!st.HasField) ctx.Issue(IssueSeverity.Info, K + "Issue.SmallField");
             else EventKit.TakeRectTight(occ, st.Field, 0);
-
-            // Speakers and screens beside the stage front (optional props, quiet when missing).
-            string speaker = EventKit.Optional("", AssetCategories.EventSpeaker);
-            string screen = EventKit.Optional("", AssetCategories.EventScreen);
-            for (int k = -1; k <= 1; k += 2)
-            {
-                if (speaker != null) EventKit.Put(ctx, occ, stage.Center + across * (k * (sw * 0.5f + 1.5f)) - dir * (sd * 0.35f), facing, speaker, AssetMix.One(""), 1f, Hashing.Mix(ctx.Seed, 0x5E00u + (uint)(k + 2)), 0.5f, 0.1f);
-                if (screen != null) EventKit.Put(ctx, occ, stage.Center + across * (k * (sw * 0.5f + 4.5f)), facing, screen, AssetMix.One(""), 1.8f, Hashing.Mix(ctx.Seed, 0x5C00u + (uint)(k + 2)), 0.5f, 0.1f);
-            }
 
             // Backstage yard: behind the stage, else beside it. Gravel, fenced, a gate towards the stage.
             if (ctx.B("backstage"))
@@ -352,18 +386,28 @@ namespace Placemaker.Core.Layers.Types.Events
                 {
                     stage.Center + dir * (sd * 0.5f + 1.5f + 5f),
                     stage.Center + across * (sw * 0.5f + 2f + 7f), stage.Center - across * (sw * 0.5f + 2f + 7f),
+                    stage.Center + across * (sw * 0.5f + 2f + 7f) + dir * 4f, stage.Center - across * (sw * 0.5f + 2f + 7f) + dir * 4f,
                 };
                 bool placed = false;
                 foreach (var c in cands)
                 {
                     var r = new OrientedRect { Center = c, Axis = across, HalfLength = 7f, HalfWidth = 5f };
-                    if (!LeisureKit.RectFits(region, occ, r, 0.8f)) continue;
+                    if (!LeisureKit.RectFits(fit, occ, r, 0.8f)) continue;
                     EventKit.TakeRectTight(occ, r, 0);
                     Backstage(ctx, r, stage.Center);
                     placed = true;
                     break;
                 }
                 if (!placed) ctx.Issue(IssueSeverity.Info, K + "Issue.NoBackstage");
+            }
+
+            // Speakers and screens beside the stage front (optional props, quiet when missing).
+            string speaker = EventKit.Optional("", AssetCategories.EventSpeaker);
+            string screen = EventKit.Optional("", AssetCategories.EventScreen);
+            for (int k = -1; k <= 1; k += 2)
+            {
+                if (speaker != null) EventKit.Put(ctx, occ, stage.Center + across * (k * (sw * 0.5f + 1.5f)) - dir * (sd * 0.35f), facing, speaker, AssetMix.One(""), 1f, Hashing.Mix(ctx.Seed, 0x5E00u + (uint)(k + 2)), 0.5f, 0.1f);
+                if (screen != null) EventKit.Put(ctx, occ, stage.Center + across * (k * (sw * 0.5f + 4.5f)) - dir * (sd * 0.35f), facing, screen, AssetMix.One(""), 1.8f, Hashing.Mix(ctx.Seed, 0x5C00u + (uint)(k + 2)), 0.5f, 0.1f);
             }
 
             if (st.HasField)
