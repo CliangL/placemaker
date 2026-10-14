@@ -14,6 +14,9 @@ step's park palette has the category (variety categories need ≥ 3 palette item
 Visual check: object icons are not on disk (game `coui://ail/...` sprites) and the thumbs folder holds surface
 swatches only, so nothing here was confirmed by eye; picks were checked by name, tags and real bounds
 (footprint/height column) — e.g. raised beds are hard 2×2 m boxes, wild bushes 1.3–2 m organic plants.
+Layouts were checked in the gallery (`Tests/Placemaker.Gallery`, which now also draws terrain paint):
+park/features-all shows rocky outcrops as soft graded paint blobs with small odd rock huddles.
+Decal pools also rank by real footprint: sheets wider than 12 m go last (RealVision 30–60 m ground textures).
 
 | category | before (game log) | after: first 10 automatic picks (footprint m × height m) |
 |---|---|---|

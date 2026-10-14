@@ -337,6 +337,9 @@ namespace Placemaker.Tests
             sb.AppendLine("Visual check: object icons are not on disk (game `coui://ail/...` sprites) and the thumbs folder holds surface");
             sb.AppendLine("swatches only, so nothing here was confirmed by eye; picks were checked by name, tags and real bounds");
             sb.AppendLine("(footprint/height column) — e.g. raised beds are hard 2×2 m boxes, wild bushes 1.3–2 m organic plants.");
+            sb.AppendLine("Layouts were checked in the gallery (`Tests/Placemaker.Gallery`, which now also draws terrain paint):");
+            sb.AppendLine("park/features-all shows rocky outcrops as soft graded paint blobs with small odd rock huddles.");
+            sb.AppendLine("Decal pools also rank by real footprint: sheets wider than 12 m go last (RealVision 30–60 m ground textures).");
             sb.AppendLine();
             sb.AppendLine("| category | before (game log) | after: first 10 automatic picks (footprint m × height m) |");
             sb.AppendLine("|---|---|---|");
