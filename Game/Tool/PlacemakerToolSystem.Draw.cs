@@ -282,6 +282,7 @@ namespace Placemaker.Game.Tool
             if (s.Paint != null) _paint.Restore(s.Paint); else _paint.Clear();
             _paintSnap = s.Paint;
             _paintSnapVersion = _paint.Version;
+            RestoreBlockPaint(s.BlockPaint);
             _shape = s.Shape;
             _shapeDirty = false;
             ShapeChanged(alreadyBuilt: true);

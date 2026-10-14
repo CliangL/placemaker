@@ -1360,6 +1360,8 @@ export class MockBackend {
                         return [h("Placemaker.Hint.BlockPick", ["Click"]), h("Placemaker.Hint.BlockAdd", ["Shift", "Click"]), h("Placemaker.Hint.Primary", ["Enter"])];
                     case "paint":
                         return [h("Placemaker.Hint.PaintPaint", ["Left drag"]), h("Placemaker.Hint.PaintErase", ["Right drag"]), h("Placemaker.Hint.PaintRotate", ["Shift", "Move"]), h("Placemaker.Hint.Primary", ["Enter"])];
+                    case "blockPaint":
+                        return [h("Placemaker.Hint.BlockPaintStart", ["Left drag"]), h("Placemaker.Hint.BlockPaintErase", ["Right drag"]), h("Placemaker.Hint.PaintRotate", ["Shift", "Move"]), h("Placemaker.Hint.Primary", ["Enter"])];
                     case "perimeter":
                         return [h("Placemaker.Hint.PerimeterAdd", ["Click"]), h("Placemaker.Hint.DrawAddOrClose", ["Click first"]), h("Placemaker.Hint.Undo", ["Ctrl", "Z"])];
                 }

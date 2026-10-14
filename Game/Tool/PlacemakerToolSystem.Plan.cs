@@ -75,6 +75,7 @@ namespace Placemaker.Game.Tool
                     case SelectionMode.Block: s = BuildBlockShape(); break;
                     case SelectionMode.Perimeter: s = BuildPerimeterShape(); break;
                     case SelectionMode.Paint: s = BuildPaintShape(); break;
+                    case SelectionMode.BlockPaint: s = BuildBlockPaintShape(); break;
                 }
             }
             catch (Exception e)
@@ -273,6 +274,7 @@ namespace Placemaker.Game.Tool
             if (_shape == null)
             {
                 if (_mode == SelectionMode.Paint && !_paint.IsEmpty) return new LocText("Placemaker.Problem.PaintTooSmall");
+                if (_mode == SelectionMode.BlockPaint && !_bpMask.IsEmpty) return new LocText("Placemaker.Problem.PaintTooSmall");
                 return null;
             }
             var gen = _recipe != null ? GeneratorRegistry.Get(_recipe.Root.Layer) : null;
@@ -372,6 +374,7 @@ namespace Placemaker.Game.Tool
                 if (_mode == SelectionMode.Draw && _draw.Closed) return _draw.Area();
                 if (_shape != null) return Pricing.PolygonArea(_shape.Ring);
                 if (_mode == SelectionMode.Paint) return _paint.Area;
+                if (_mode == SelectionMode.BlockPaint) return _bpMask.Area;
                 return 0;
             }
         }

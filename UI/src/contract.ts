@@ -11,7 +11,8 @@ export const GROUP = "Placemaker";
 
 /** Workflow stages. The player can always click back to an earlier stage; nothing is lost. */
 export type Stage = "area" | "design" | "review" | "building" | "manage";
-export type AreaMode = "draw" | "block" | "paint" | "perimeter";
+/** "blockPaint" (s11): a brush fenced to the city block under the cursor; uses the same brush settings as "paint". */
+export type AreaMode = "draw" | "block" | "paint" | "perimeter" | "blockPaint";
 export type BrushShape = "round" | "square";
 
 export interface LocText { key: string; args?: (string | number)[] }

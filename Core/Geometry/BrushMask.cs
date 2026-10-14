@@ -52,6 +52,19 @@ namespace Placemaker.Core.Geometry
         /// <summary>Painted area (m²).</summary>
         public float Area => _count * CellSize * CellSize;
 
+        private BrushMask _limit;
+
+        /// <summary>
+        /// Optional fence (Block paint): when set, cells can only be painted where the limit mask is
+        /// painted; erasing is never limited. Must use the same cell size (otherwise it is ignored).
+        /// Snapshots and Restore do not carry it — the owner re-attaches it.
+        /// </summary>
+        public BrushMask Limit
+        {
+            get => _limit;
+            set => _limit = value == null || value == this || math.abs(value.CellSize - CellSize) > 1e-6f ? null : value;
+        }
+
         // ───────────────────────────── cells ─────────────────────────────
 
         private static long Key(int i, int j) => ((long)i << 32) ^ (uint)j;
@@ -83,6 +96,7 @@ namespace Placemaker.Core.Geometry
 
         private bool Set(int i, int j, bool painted)
         {
+            if (painted && _limit != null && !_limit.IsPainted(i, j)) return false;
             bool[] tile = Tile(i, j, painted);
             if (tile == null) return false;
             int index = ((j & (TileSize - 1)) << TileBits) | (i & (TileSize - 1));
@@ -251,6 +265,20 @@ namespace Placemaker.Core.Geometry
             CommitChanges();
         }
 
+        /// <summary>Erases every painted cell whose centre satisfies the predicate; returns how many were erased.</summary>
+        public int EraseWhere(Func<float2, bool> atCellCentre)
+        {
+            if (atCellCentre == null || _count == 0) return 0;
+            var hits = new List<int2>();
+            foreach (int2 c in PaintedCells())
+                if (atCellCentre(((float2)c + 0.5f) * CellSize)) hits.Add(c);
+            _changed.Clear();
+            foreach (int2 c in hits)
+                if (Set(c.x, c.y, false)) _changed.Add(c);
+            CommitChanges();
+            return hits.Count;
+        }
+
         private void CommitChanges()
         {
             if (_changed.Count == 0) return;
@@ -375,9 +403,10 @@ namespace Placemaker.Core.Geometry
         /// Smoothed outlines of the painted area as regions (outer CCW + holes CW), largest first.
         /// keepIslands = false keeps only the largest island; keepHoles = false fills holes. Islands
         /// below minIslandArea and holes below minHoleArea (default: 4 cells) are dropped / filled.
-        /// Every ring is simple and rings of a region never cross.
+        /// Every ring is simple and rings of a region never cross. smoothPasses caps the moving-average
+        /// passes (6 = Paint mode; fewer keeps small strokes closer to the painted cells).
         /// </summary>
-        public List<Region> Outlines(bool keepIslands = true, bool keepHoles = true, float minIslandArea = 0f, float minHoleArea = -1f)
+        public List<Region> Outlines(bool keepIslands = true, bool keepHoles = true, float minIslandArea = 0f, float minHoleArea = -1f, int smoothPasses = 6)
         {
             var regions = new List<Region>();
             if (_count == 0) return regions;
@@ -530,7 +559,7 @@ namespace Placemaker.Core.Geometry
             for (int k = 0; k < outers.Count; k++)
             {
                 if (Poly.SignedAreaD(outers[k]) < minIslandArea) continue;
-                var reg = SmoothRegion(outers[k], holeLists[k], cell);
+                var reg = SmoothRegion(outers[k], holeLists[k], cell, smoothPasses);
                 if (reg != null) regions.Add(reg);
             }
             regions.Sort((a, b) => b.Area.CompareTo(a.Area));
@@ -574,9 +603,9 @@ namespace Placemaker.Core.Geometry
         /// steps; smoothing is reduced (6, 4, 2, 0 passes) until every ring is simple and no two
         /// rings cross.
         /// </summary>
-        private static Region SmoothRegion(List<float2> outer, List<List<float2>> holes, float cell)
+        private static Region SmoothRegion(List<float2> outer, List<List<float2>> holes, float cell, int maxPasses = 6)
         {
-            for (int passes = 6; passes >= 0; passes -= 2)
+            for (int passes = math.clamp(maxPasses, 0, 12); passes >= 0; passes -= 2)
             {
                 var o = SmoothRing(outer, passes, cell);
                 if (o == null) continue;

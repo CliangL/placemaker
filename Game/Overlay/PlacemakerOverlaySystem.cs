@@ -149,6 +149,7 @@ namespace Placemaker.Game.Overlay
                 case SelectionMode.Block: DrawBlockMode(buffer, w, shape); break;
                 case SelectionMode.Perimeter: DrawPerimeterMode(buffer, w, shape); break;
                 case SelectionMode.Paint: DrawPaintMode(buffer, w, shape); break;
+                case SelectionMode.BlockPaint: DrawBlockPaintMode(buffer, w, shape); break;
             }
             if (clipped && _tool.Mode == SelectionMode.Draw) Ring(buffer, shape.Ring, Outline, w);
         }
@@ -276,9 +277,12 @@ namespace Placemaker.Game.Overlay
                 }
             }
             else Ring(buffer, shape.Ring, Outline, w);
+            DrawBrushCursor(buffer, w, _tool.Painting ? Brush : new Color(Brush.r, Brush.g, Brush.b, 0.2f));
+        }
 
+        private void DrawBrushCursor(OverlayRenderSystem.Buffer buffer, float w, Color c)
+        {
             if (!_tool.CursorValid) return;
-            var c = _tool.Painting ? Brush : new Color(Brush.r, Brush.g, Brush.b, 0.2f);
             float size = _tool.BrushSize;
             if (!_tool.BrushSquare)
                 buffer.DrawCircle(Outline, c, w * 0.6f, 0, new float2(0, 1), _tool.Cursor, size);
