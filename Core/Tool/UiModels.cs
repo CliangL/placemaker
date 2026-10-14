@@ -542,8 +542,10 @@ namespace Placemaker.Core.Tool
         /// <summary>Permanent effects of a plan the player must acknowledge before Build (lake excavation, terraforming).</summary>
         public static List<LocText> Permanent(ComposedPlan plan)
         {
+            // One plain sentence per kind of change (playtest: dozens of per-patch lines were noise).
             var list = new List<LocText>();
             if (plan == null) return list;
+            double ground = 0, water = 0, paint = 0;
             foreach (var l in plan.Layers)
             {
                 if (l == null) continue;
@@ -551,11 +553,19 @@ namespace Placemaker.Core.Tool
                 {
                     if (t == null || !t.Permanent) continue;
                     double area = Pricing.PolygonArea(t.Ring ?? Array.Empty<float3>());
-                    list.Add(new LocText(float.IsNaN(t.WaterLevel) ? "Placemaker.Permanent.Terraform" : "Placemaker.Permanent.Water", Math.Round(area)));
+                    if (float.IsNaN(t.WaterLevel)) ground += area; else water += area;
                 }
+                if (l.Paint != null)
+                    foreach (var p in l.Paint)
+                        if (p != null) paint += Pricing.PolygonArea(p.Ring ?? Array.Empty<float3>());
             }
+            if (ground > 0) list.Add(new LocText("Placemaker.Permanent.Terraform", RoundArea(ground)));
+            if (water > 0) list.Add(new LocText("Placemaker.Permanent.Water", RoundArea(water)));
+            if (paint > 0) list.Add(new LocText("Placemaker.Permanent.Paint", RoundArea(paint)));
             return list;
         }
+
+        private static double RoundArea(double m2) => m2 < 100 ? Math.Round(m2) : Math.Round(m2 / 10) * 10;
 
         /// <summary>Identity of a set of permanent effects: an acknowledgement covers exactly these (reset when they change).</summary>
         public static string PermanentFingerprint(List<LocText> effects)

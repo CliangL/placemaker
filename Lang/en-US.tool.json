@@ -12,7 +12,6 @@
   "Placemaker.Mode.Paint.Tooltip": "Paint the area with a round or square brush. Right-click erases.",
   "Placemaker.Mode.Perimeter": "Road loop",
   "Placemaker.Mode.Perimeter.Tooltip": "Click road intersections around the area; the roads in between are followed automatically.",
-
   "Placemaker.Primary.SelectArea": "Select an area",
   "Placemaker.Primary.Next": "Next: design",
   "Placemaker.Primary.ChooseType": "Choose what to make",
@@ -23,7 +22,6 @@
   "Placemaker.Primary.DoneMarkers": "Done placing",
   "Placemaker.Primary.CancelBuild": "Cancel building",
   "Placemaker.Primary.PickBuilt": "Pick something you built",
-
   "Placemaker.Reason.NoArea": "Draw, pick or paint an area first.",
   "Placemaker.Reason.CloseArea": "Close the outline: click the first corner again or double-click.",
   "Placemaker.Reason.NoRecipe": "Choose what this area should become.",
@@ -37,7 +35,6 @@
   "Placemaker.Reason.GroupsUnavailable": "Built areas cannot be managed right now.",
   "Placemaker.Reason.NothingToCancel": "Nothing is being built.",
   "Placemaker.Reason.PickBuilt": "Click something Placemaker built to see, edit or remove it.",
-
   "Placemaker.Problem.AlreadyClosed": "The outline is already closed.",
   "Placemaker.Problem.TooManyPoints": "That is the most corners an outline can have.",
   "Placemaker.Problem.TooClose": "Too close to another corner.",
@@ -67,7 +64,6 @@
   "Placemaker.Problem.CannotDeletePreset": "Built-in presets cannot be deleted.",
   "Placemaker.Problem.CannotEdit": "This area cannot be edited (its design was not stored).",
   "Placemaker.Problem.RemoveFailed": "It could not be removed.",
-
   "Placemaker.Hint.DrawAdd": "Click to add a corner",
   "Placemaker.Hint.DrawAddOrClose": "Click to add a corner, click the first corner to finish",
   "Placemaker.Hint.DrawRemoveLast": "Right-click: remove a corner",
@@ -110,7 +106,6 @@
   "Placemaker.Hint.PresetReset": "Preset reset to its default.",
   "Placemaker.Hint.PresetsExported": "Presets written to presets.json.",
   "Placemaker.Hint.Removed": "Removal started.",
-
   "Placemaker.Undo.AddPoint": "add corner",
   "Placemaker.Undo.RemovePoint": "remove corner",
   "Placemaker.Undo.InsertPoint": "insert corner",
@@ -146,7 +141,6 @@
   "Placemaker.Undo.SelectPreset": "choose preset",
   "Placemaker.Undo.Randomize": "randomize",
   "Placemaker.Undo.UnlockValue": "unlock setting",
-
   "Placemaker.Marker.entrance": "Entrances",
   "Placemaker.Marker.access": "Access points",
   "Placemaker.Marker.split": "Dividing line",
@@ -154,7 +148,6 @@
   "Placemaker.Campground.Marker.Entrance": "Entrance",
   "Placemaker.Plaza.Marker.Access": "Access point",
   "Placemaker.Split.Marker.Split": "Dividing line",
-
   "Placemaker.Issue.PlanFailed": "The layout could not be planned: {0}",
   "Placemaker.Issue.PlanTimeout": "Planning took longer than {0} s and was stopped. Try a smaller area.",
   "Placemaker.Issue.KeptOffRoads": "The area was trimmed to keep off existing roads ({0} m² left out).",
@@ -162,13 +155,11 @@
   "Placemaker.Issue.BuildRefused": "Building could not start.",
   "Placemaker.Issue.BuildFailed": "Building failed.",
   "Placemaker.Issue.BuildFailedNext": "Red circles show where it went wrong. Adjust the outline or the settings and build again, or go back. The circles disappear as soon as you change something.",
-  "Placemaker.Permanent.Terraform": "Reshapes the terrain permanently ({0} m²). Removing it later does not restore the ground.",
-  "Placemaker.Permanent.Water": "Digs a permanent water basin ({0} m²). Removing it later does not restore the ground.",
+  "Placemaker.Permanent.Terraform": "Reshapes the ground (about {0} m²). This stays even if you remove the build later.",
+  "Placemaker.Permanent.Water": "Digs a pond or lake (about {0} m²). The hollow stays even if you remove the build later.",
   "Placemaker.Recipe.Unknown": "Placemaker area",
-
   "Placemaker.Tooltip.Area": "Area",
   "Placemaker.Tooltip.Cost": "Cost",
-
   "Placemaker.Settings.Tab.Main": "Placemaker",
   "Placemaker.Settings.Group.General": "General",
   "Placemaker.Settings.Group.Keys": "Keys",
@@ -239,5 +230,6 @@
   "Placemaker.Settings.Action.Primary": "Next step / build",
   "Placemaker.Settings.Action.Undo": "Undo",
   "Placemaker.Settings.Action.Redo": "Redo",
-  "Placemaker.Settings.Action.RedoAlt": "Redo (alternative)"
+  "Placemaker.Settings.Action.RedoAlt": "Redo (alternative)",
+  "Placemaker.Permanent.Paint": "Paints the ground texture (about {0} m²). The painted ground stays even if you remove the build later."
 }
