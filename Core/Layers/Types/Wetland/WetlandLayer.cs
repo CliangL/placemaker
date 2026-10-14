@@ -68,7 +68,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
             c.Asset("boardwalkAsset", AssetCategories.Pathway, ControlTier.More, "trails").Tip();
 
             c.Slider("reeds", 70, 0, 100, 5, "%", ControlTier.Essential, "planting").Tip();
-            c.Slider("reedBelt", 4, 1, 10, 0.5, "m", ControlTier.More, "planting").Tip();
+            c.Slider("reedBelt", 4, 1, 10, 0.5, "m", ControlTier.More, "planting").Layout(1).Tip();
             c.Slider("treeDensity", 60, 0, 250, 10, "perHa", ControlTier.More, "planting");
             c.Slider("bushDensity", 80, 0, 300, 10, "perHa", ControlTier.More, "planting");
             c.Toggle("screen", false, ControlTier.More, "planting").Tip();

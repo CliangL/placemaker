@@ -65,10 +65,10 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             c.Choice("style", "apple", ControlTier.Essential, "identity", "apple", "cherry", "olive", "citrus", "community").Tip();
 
             c.Choice("grid", "square", ControlTier.Essential, "layout", "square", "quincunx", "rows", "blocks").Tip();
-            c.Slider("spacing", 7, 4, 14, 0.5, "m", ControlTier.Essential, "layout").Tip();
+            c.Slider("spacing", 7, 4, 14, 0.5, "m", ControlTier.Essential, "layout").Layout(5).Tip();
             c.Choice("rowAngle", "along", ControlTier.Essential, "layout", "along", "across", "diagonal").Tip();
             c.Choice("paths", "grid", ControlTier.Essential, "layout", "cross", "grid", "loop", "avenue").Tip();
-            c.Slider("blockSize", 45, 20, 100, 5, "m", ControlTier.More, "layout").Tip();
+            c.Slider("blockSize", 45, 20, 100, 5, "m", ControlTier.More, "layout").Layout(15).Tip();
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
 
             c.AssetMulti("treeSpecies", AssetCategories.FruitTree, ControlTier.More, "trees");
@@ -85,7 +85,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             c.Slider("aisleLayer", 2, 1, 4, 1, "count", ControlTier.More, "meadow").When("mownAisles=true").Tip();
 
             c.Slider("picnicSpots", 4, 0, 20, 1, "count", ControlTier.More, "picnic").Tip();
-            c.Slider("benchEvery", 40, 0, 120, 5, "m", ControlTier.More, "picnic").Tip();
+            c.Slider("benchEvery", 40, 0, 120, 5, "m", ControlTier.More, "picnic").Layout(10).Tip();
             c.Toggle("lamps", false, ControlTier.More, "picnic");
             c.Toggle("harvestProps", true, ControlTier.More, "picnic").Tip();
             c.Toggle("glade", true, ControlTier.More, "picnic").Tip();

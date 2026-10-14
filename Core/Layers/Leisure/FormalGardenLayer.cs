@@ -29,7 +29,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("bedSize", 10, 5, 20, 1, "m", ControlTier.Essential, "parterres").Tip();
+            c.Slider("bedSize", 10, 5, 20, 1, "m", ControlTier.Essential, "parterres").Layout(5).Tip();
             c.Toggle("hedges", true, ControlTier.Essential, "parterres").Tip();
             c.Toggle("fountain", true, ControlTier.Essential, "parterres");
             c.Toggle("allees", true, ControlTier.Essential, "parterres").Tip();

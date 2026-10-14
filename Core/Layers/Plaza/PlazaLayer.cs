@@ -113,10 +113,10 @@ namespace Placemaker.Core.Layers.Plaza
             c.RandomRange("furniture", 2, 16);
 
             c.Slider("centerSize", 5, 2, 20, 0.5, "m", ControlTier.More, "centre").Tip();
-            c.Slider("centerSpacing", 20, 5, 60, 1, "m", ControlTier.More, "centre");
+            c.Slider("centerSpacing", 20, 5, 60, 1, "m", ControlTier.More, "centre").Layout(5);
             c.Arrangement("arrangement", "", new[] { "bench", "lamp", "bench" }, ControlTier.More, "furniture").Tip();
             c.Choice("arrangementMode", "center", ControlTier.More, "furniture", "center", "edges");
-            c.Slider("arrangementGap", 4, 0, 20, 0.5, "m", ControlTier.More, "furniture");
+            c.Slider("arrangementGap", 4, 0, 20, 0.5, "m", ControlTier.More, "furniture").Layout(0);
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "assets");
             c.Asset("binAsset", AssetCategories.Bin, ControlTier.More, "assets");

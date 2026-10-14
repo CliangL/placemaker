@@ -55,13 +55,13 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             c.Choice("surface", "paved", ControlTier.More, "promenade", "paved", "gravel", "grass", "none").Tip();
             c.Asset("surfaceAsset", AssetCategories.SurfacePaving, ControlTier.More, "promenade").When("surface=paved");
             c.Choice("pathWidth", "wide", ControlTier.More, "promenade", "wide", "narrow");
-            c.Slider("lampSpacing", 20, 0, 60, 5, "m", ControlTier.More, "promenade").Tip();
-            c.Slider("benchSpacing", 16, 0, 60, 2, "m", ControlTier.More, "promenade").Tip();
+            c.Slider("lampSpacing", 20, 0, 60, 5, "m", ControlTier.More, "promenade").Layout(5).Tip();
+            c.Slider("benchSpacing", 16, 0, 60, 2, "m", ControlTier.More, "promenade").Layout(5).Tip();
             c.Slider("kiosks", 1, 0, 6, 1, "count", ControlTier.More, "promenade");
 
             c.Asset("railingAsset", AssetCategories.Fence, ControlTier.More, "edge").When("railings=true");
             c.Toggle("moorings", false, ControlTier.More, "edge").Tip();
-            c.Slider("mooringSpacing", 8, 4, 30, 1, "m", ControlTier.More, "edge").When("moorings=true");
+            c.Slider("mooringSpacing", 8, 4, 30, 1, "m", ControlTier.More, "edge").Layout(3).When("moorings=true");
             c.Toggle("riprap", false, ControlTier.More, "edge").Tip();
 
             c.Choice("steps", "spots", ControlTier.More, "steps", "none", "spots", "continuous").Tip();
@@ -74,11 +74,11 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             c.Toggle("pierHeads", false, ControlTier.More, "piers").Tip();
 
             c.Toggle("fishing", false, ControlTier.More, "harbor").Tip();
-            c.Slider("fishingSpacing", 20, 8, 60, 2, "m", ControlTier.More, "harbor").When("fishing=true");
+            c.Slider("fishingSpacing", 20, 8, 60, 2, "m", ControlTier.More, "harbor").Layout(5).When("fishing=true");
             c.Toggle("nautical", false, ControlTier.More, "harbor").Tip();
 
             c.Choice("trees", "row", ControlTier.More, "planting", "none", "row", "double").Tip();
-            c.Slider("treeSpacing", 12, 6, 30, 1, "m", ControlTier.More, "planting");
+            c.Slider("treeSpacing", 12, 6, 30, 1, "m", ControlTier.More, "planting").Layout(6);
             c.Choice("backdrop", "lawn", ControlTier.More, "planting", "lawn", "park", "none").Tip();
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
 

@@ -36,14 +36,14 @@ namespace Placemaker.Core.Layers.Park
         {
             if (!Spine(region, ok, out var c, out var axis, out var side, out var a, out var b, out float halfWidth)) return ParkPathGraph.Empty();
             float len = math.distance(a, b);
-            if (len < 50f || halfWidth < 12f) return ParkPathGraph.Empty();
+            if (len < Layout.M(50f) || halfWidth < Layout.M(12f)) return ParkPathGraph.Empty();
             for (int attempt = 0; attempt < 5; attempt++)
             {
                 float shrink = 1f - attempt * 0.18f;
-                float amp = math.clamp(halfWidth * 0.32f, 3f, 26f) * shrink;
-                float bank = math.clamp(halfWidth * 0.22f, 5f, 16f) * shrink;
-                int n = math.clamp((int)math.round(len / 18f), 6, 26);
-                float waves = math.max(1f, math.round(len / math.max(60f, halfWidth * 2.6f)));
+                float amp = math.clamp(halfWidth * 0.32f, Layout.M(3f), Layout.M(26f)) * shrink;
+                float bank = math.clamp(halfWidth * 0.22f, Layout.M(5f), Layout.M(16f)) * shrink;
+                int n = math.clamp((int)math.round(len / Layout.M(18f)), 6, 26);
+                float waves = math.max(1f, math.round(len / math.max(Layout.M(60f), halfWidth * 2.6f)));
                 float phase = Hashing.Unit(Hashing.Mix(seed, 0x51u)) * math.PI;
                 var left = new List<float2>(); var right = new List<float2>();
                 bool good = true;
@@ -71,7 +71,7 @@ namespace Placemaker.Core.Layers.Park
                 if (!SegmentsOk(region, segs, ok)) continue;
                 // A footbridge across the ribbon in the middle (a crossing path between the banks).
                 int mid = n / 2;
-                if (n >= 8 && math.distance(left[mid], right[mid]) > 6f) { segs.Add(left[mid]); segs.Add(right[mid]); }
+                if (n >= 8 && math.distance(left[mid], right[mid]) > Layout.M(6f)) { segs.Add(left[mid]); segs.Add(right[mid]); }
                 JoinGates(region, gates, pts, segs, ok);
                 return ParkPathGraph.FromSegments(segs, gates);
             }
@@ -88,7 +88,7 @@ namespace Placemaker.Core.Layers.Park
             const int N = 32;   // multiple of 4: t = π/2 and 3π/2 land exactly on the crossing
             for (int attempt = 0; attempt < 7; attempt++, a *= 0.86f)
             {
-                if (a < 16f) break;
+                if (a < Layout.M(16f)) break;
                 // Lemniscate of Bernoulli; the lobes are widened to use the park's width.
                 float ky = math.clamp(halfWidth * 0.85f / (0.354f * a), 0.7f, 2.4f);
                 var pts = new List<float2>();
@@ -120,17 +120,17 @@ namespace Placemaker.Core.Layers.Park
             var hub = region.DeepestPoint(out float inscribed, null, 16);
             bool plazaHub = plaza != null && plaza.Length >= 3;
             if (plazaHub) hub = Poly.Centroid(plaza);
-            if (inscribed < 18f) return ParkPathGraph.Empty();
-            int spokes = math.clamp((int)math.round(math.sqrt(region.Area) / 45f) + 3, 4, 6);
+            if (inscribed < Layout.M(18f)) return ParkPathGraph.Empty();
+            int spokes = math.clamp((int)math.round(math.sqrt(Layout.DesignArea(region.Area)) / 45f) + 3, 4, 6);
             for (int attempt = 0; attempt < 4; attempt++)
             {
-                float depth = math.max(6f, inscribed * (0.32f + attempt * 0.08f));
-                var ring = LargestInset(region, depth, 16f);
+                float depth = math.max(Layout.M(6f), inscribed * (0.32f + attempt * 0.08f));
+                var ring = LargestInset(region, depth, Layout.M(16f));
                 if (ring == null || ring.Length < 6 || !Poly.Contains(ring, hub)) continue;
                 bool good = true;
                 foreach (var p in ring) if (!ok(p)) { good = false; break; }
                 if (!good) continue;
-                float hubR = plazaHub ? 0f : math.clamp(inscribed * 0.12f, 5f, 10f);
+                float hubR = plazaHub ? 0f : math.clamp(inscribed * 0.12f, Layout.M(5f), Layout.M(10f));
                 float phase = math.atan2(ring[0].y - hub.y, ring[0].x - hub.x);
                 var segs = new List<float2>();
                 var hubPts = new List<float2>();
@@ -169,8 +169,8 @@ namespace Placemaker.Core.Layers.Park
         public static ParkPathGraph WoodlandTrail(LayerRegion region, IReadOnlyList<float2> gates, uint seed, Func<float2, bool> ok)
         {
             var c = region.DeepestPoint(out float inscribed, null, 16);
-            if (inscribed < 10f || !ok(c)) return ParkPathGraph.Empty();
-            int k = math.clamp((int)math.round(math.sqrt(region.Area) / 30f) + 4, 5, 10);
+            if (inscribed < Layout.M(10f) || !ok(c)) return ParkPathGraph.Empty();
+            int k = math.clamp((int)math.round(math.sqrt(Layout.DesignArea(region.Area)) / 30f) + 4, 5, 10);
             float phase = Hashing.Unit(Hashing.Mix(seed, 0x7A11u)) * 2f * math.PI;
             float far = math.length(region.Max - region.Min);
             var way = new List<float2>();
@@ -182,7 +182,7 @@ namespace Placemaker.Core.Layers.Park
                 float reach = 0f;
                 for (float d = 2f; d < far; d += 2f) { if (!ok(c + dir * d)) break; reach = d; }
                 float r = reach * (0.5f + 0.32f * Hashing.Unit(Hashing.Mix(h, 3u)));
-                if (r < 7f) continue;
+                if (r < Layout.M(7f)) continue;
                 way.Add(c + dir * r);
             }
             if (way.Count < 4) return ParkPathGraph.Empty();
@@ -203,7 +203,7 @@ namespace Placemaker.Core.Layers.Park
             {
                 var p = way[i]; var q = way[(i + 1) % way.Count];
                 if (!LegOk(region, p, q, ok)) return ParkPathGraph.Empty();
-                AddMeander(segs, p, q, 4.5f, 13f, Hashing.Mix(seed, (uint)i + 0x900u), ok);
+                AddMeander(segs, p, q, Layout.M(4.5f), Layout.M(13f), Hashing.Mix(seed, (uint)i + 0x900u), ok);
             }
             if (!SegmentsOk(region, segs, ok))
             {
@@ -232,8 +232,8 @@ namespace Placemaker.Core.Layers.Park
                 else
                 {
                     region.DeepestPoint(out float inscribed, null, 12);
-                    if (inscribed < 14f) return ParkPathGraph.Empty();
-                    loop = LargestInset(region, math.max(7f, inscribed * (0.3f + attempt * 0.1f)), 0f);
+                    if (inscribed < Layout.M(14f)) return ParkPathGraph.Empty();
+                    loop = LargestInset(region, math.max(Layout.M(7f), inscribed * (0.3f + attempt * 0.1f)), 0f);
                 }
                 if (loop == null || loop.Length < 3) continue;
                 // Straight runs with a dog-leg every ~22 m (boards are laid straight, never curved).
@@ -245,12 +245,12 @@ namespace Placemaker.Core.Layers.Park
                     var p = simple[i]; var q = simple[(i + 1) % simple.Length];
                     pts.Add(p);
                     float len = math.distance(p, q);
-                    int pieces = (int)math.floor(len / 22f);
+                    int pieces = (int)math.floor(len / Layout.M(22f));
                     if (pieces < 2) continue;
                     var n = math.normalizesafe(new float2(-(q - p).y, (q - p).x));
                     for (int j = 1; j < pieces; j++)
                     {
-                        float jog = ((j + i) & 1) == 0 ? 2.5f : -2.5f;
+                        float jog = ((j + i) & 1) == 0 ? Layout.M(2.5f) : -Layout.M(2.5f);
                         var basePt = math.lerp(p, q, j / (float)pieces);
                         var x = basePt + n * jog;
                         pts.Add(ok(x) ? x : basePt);
@@ -275,21 +275,21 @@ namespace Placemaker.Core.Layers.Park
         {
             avenueA = avenueB = float2.zero;
             if (!Spine(region, ok, out var c, out var axis, out var side, out var a, out var b, out float halfWidth)) return ParkPathGraph.Empty();
-            if (math.distance(a, b) < 30f) return ParkPathGraph.Empty();
+            if (math.distance(a, b) < Layout.M(30f)) return ParkPathGraph.Empty();
             avenueA = a; avenueB = b;
             var segs = new List<float2>();
-            int n = math.max(1, (int)math.round(math.distance(a, b) / 24f));
+            int n = math.max(1, (int)math.round(math.distance(a, b) / Layout.M(24f)));
             var spine = new List<float2>();
             for (int i = 0; i <= n; i++) spine.Add(math.lerp(a, b, i / (float)n));
             for (int i = 1; i <= n; i++) { segs.Add(spine[i - 1]); segs.Add(spine[i]); }
             var pts = new List<float2>(spine);
             // Side walks where the park is wide enough (one each side, else one, else the avenue alone).
-            float offset = math.clamp(halfWidth * 0.55f, 9f, 30f);
+            float offset = math.clamp(halfWidth * 0.55f, Layout.M(9f), Layout.M(30f));
             foreach (float sgn in new[] { 1f, -1f })
             {
-                if (halfWidth < 16f) break;
+                if (halfWidth < Layout.M(16f)) break;
                 var o = side * offset * sgn;
-                float shorten = math.min(10f, math.distance(a, b) * 0.15f);
+                float shorten = math.min(Layout.M(10f), math.distance(a, b) * 0.15f);
                 var sa = a + axis * shorten + o; var sb = b - axis * shorten + o;
                 if (!ok(sa) || !ok(sb) || !LegOk(region, sa, sb, ok)) continue;
                 var walk = new List<float2>();
@@ -310,10 +310,10 @@ namespace Placemaker.Core.Layers.Park
         public static ParkPathGraph Circuit(LayerRegion region, IReadOnlyList<float2> gates, Func<float2, bool> ok)
         {
             region.DeepestPoint(out float inscribed, null, 12);
-            if (inscribed < 10f) return ParkPathGraph.Empty();
+            if (inscribed < Layout.M(10f)) return ParkPathGraph.Empty();
             for (int attempt = 0; attempt < 4; attempt++)
             {
-                float depth = math.min(math.clamp(math.sqrt(region.Area) * 0.08f, 7f, 16f) + attempt * 3f, inscribed * 0.6f);
+                float depth = math.min(math.clamp(math.sqrt(region.Area) * 0.08f, Layout.M(7f), Layout.M(16f)) + attempt * Layout.M(3f), inscribed * 0.6f);
                 var loop = LargestInset(region, depth, 15f);
                 if (loop == null || loop.Length < 5) continue;
                 loop = Poly.SmoothLoop(loop, 2);

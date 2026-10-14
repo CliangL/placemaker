@@ -59,7 +59,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             c.Slider("height", 16, 3, 40, 1, "m", ControlTier.Essential, "hill").Tip();
             c.Choice("shape", "mound", ControlTier.Essential, "hill", "mound", "cone", "dome", "mesa", "terraced").Tip();
             c.Choice("summitAt", "centre", ControlTier.More, "hill", "centre", "far", "highest").Tip();
-            c.Slider("plateau", 8, 3, 30, 1, "m", ControlTier.More, "hill").Tip();
+            c.Slider("plateau", 8, 3, 30, 1, "m", ControlTier.More, "hill").Layout(3).Tip();
             c.Slider("maxSlope", 30, 10, 45, 5, "%", ControlTier.More, "hill").Tip();
             c.Slider("roughness", 30, 0, 100, 10, "%", ControlTier.More, "hill").Tip();
             c.Slider("levels", 3, 2, 5, 1, "count", ControlTier.More, "hill").When("shape=terraced");

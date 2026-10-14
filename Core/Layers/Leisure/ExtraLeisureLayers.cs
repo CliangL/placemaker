@@ -122,7 +122,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("sectionSize", 24, 12, 40, 2, "m", ControlTier.Essential, "sections").Tip();
+            c.Slider("sectionSize", 24, 12, 40, 2, "m", ControlTier.Essential, "sections").Layout(12).Tip();
             c.Slider("graveSpacing", 2.5, 1.8, 4, 0.1, "m", ControlTier.Essential, "sections");
             c.Toggle("hedges", true, ControlTier.Essential, "sections");
             c.Toggle("chapel", true, ControlTier.Essential, "sections").Tip();
@@ -219,7 +219,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("restStops", 60, 25, 200, 5, "m", ControlTier.Essential, "layout").Tip();
+            c.Slider("restStops", 60, 25, 200, 5, "m", ControlTier.Essential, "layout").Layout(20).Tip();
             c.Slider("treeDensity", 60, 0, 200, 5, "perHa", ControlTier.Essential, "planting");
             c.Toggle("secondPath", true, ControlTier.Essential, "layout").Tip();
             c.Slider("bushDensity", 80, 0, 250, 5, "perHa", ControlTier.More, "planting");

@@ -39,7 +39,7 @@ namespace Placemaker.Core.Layers.Park
         private static void AddMeander(List<float2> segs, float2 a, float2 b, float amplitude, float wavelength, uint seed, Func<float2, bool> ok)
         {
             float len = math.distance(a, b);
-            int pieces = math.max(1, (int)math.round(len / math.max(8f, wavelength)));
+            int pieces = math.max(1, (int)math.round(len / math.max(Layout.M(8f), wavelength)));
             var dir = (b - a) / math.max(0.001f, len);
             var n = new float2(-dir.y, dir.x);
             float amp = math.min(amplitude, len * 0.18f);
@@ -118,7 +118,7 @@ namespace Placemaker.Core.Layers.Park
             float2[] loop = null; float area = 0f;
             foreach (var r in rings) { float a = Poly.Area(r); if (a > area) { area = a; loop = r; } }
             if (loop == null) return ParkPathGraph.Empty();
-            loop = Poly.Resample(loop, 14f);
+            loop = Poly.Resample(loop, Layout.M(14f));
             foreach (var p in loop) if (!region.ContainsDisc(p, 2.5f)) return ParkPathGraph.Empty();
             var segs = new List<float2>();
             for (int i = 0; i < loop.Length; i++) { segs.Add(loop[i]); segs.Add(loop[(i + 1) % loop.Length]); }
@@ -149,7 +149,7 @@ namespace Placemaker.Core.Layers.Park
             if (gates.Count == 1)
             {
                 var g0 = region.ClosestOnBoundary(gates[0], out int seg, out _);
-                cur = g0 + region.InwardNormal(seg) * 8f;
+                cur = g0 + region.InwardNormal(seg) * Layout.M(8f);
                 route.Add(cur);
             }
             while (left.Count > 0)
@@ -167,7 +167,7 @@ namespace Placemaker.Core.Layers.Park
             for (int i = 1; i < route.Count; i++)
             {
                 if (region.CrossesBoundary(route[i - 1], route[i], true)) continue;
-                AddMeander(segs, route[i - 1], route[i], 7f, 22f, Hashing.Mix(seed, (uint)i), ok);
+                AddMeander(segs, route[i - 1], route[i], Layout.M(7f), Layout.M(22f), Hashing.Mix(seed, (uint)i), ok);
             }
             for (int gi = 1; gi < gates.Count - 1; gi++)
             {

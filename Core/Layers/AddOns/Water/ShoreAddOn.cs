@@ -47,13 +47,13 @@ namespace Placemaker.Core.Layers.AddOns.Water
 
             c.Slider("wharfDepth", 12, 4, 30, 1, "m", ControlTier.More, "harbor").Tip();
             c.Slider("wharfShare", 45, 10, 100, 5, "%", ControlTier.More, "harbor").Tip();
-            c.Slider("bollardSpacing", 8, 4, 20, 1, "m", ControlTier.More, "harbor");
+            c.Slider("bollardSpacing", 8, 4, 20, 1, "m", ControlTier.More, "harbor").Layout(3);
             c.Slider("boats", 4, 0, 12, 1, "count", ControlTier.More, "harbor").Tip();
             c.Toggle("cargo", true, ControlTier.More, "harbor").Tip();
 
             c.Toggle("railings", true, ControlTier.More, "edge");
-            c.Slider("benchSpacing", 14, 0, 40, 1, "m", ControlTier.More, "edge");
-            c.Slider("lampSpacing", 18, 0, 40, 1, "m", ControlTier.More, "edge");
+            c.Slider("benchSpacing", 14, 0, 40, 1, "m", ControlTier.More, "edge").Layout(4);
+            c.Slider("lampSpacing", 18, 0, 40, 1, "m", ControlTier.More, "edge").Layout(4);
             c.Slider("reedDensity", 0, 0, 100, 10, "%", ControlTier.More, "edge").Tip();
 
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");

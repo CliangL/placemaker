@@ -69,7 +69,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             c.Asset("stageAsset", AssetCategories.Stage, ControlTier.More, "amphiStage");
 
             c.Toggle("promenade", true, ControlTier.More, "amphiRim").Tip();
-            c.Slider("lampSpacing", 16, 0, 60, 2, "m", ControlTier.More, "amphiRim").Tip();
+            c.Slider("lampSpacing", 16, 0, 60, 2, "m", ControlTier.More, "amphiRim").Layout(4).Tip();
             c.Toggle("rimTrees", true, ControlTier.More, "amphiRim");
             c.Slider("kiosks", 1, 0, 8, 1, "count", ControlTier.More, "amphiRim").Tip();
             c.Toggle("lightTowers", false, ControlTier.More, "amphiRim").Tip();

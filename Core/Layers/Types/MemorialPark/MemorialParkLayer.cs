@@ -61,7 +61,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.Slider("processionWidth", 6, 3, 12, 1, "m", ControlTier.Essential, "composition").Tip();
             c.Toggle("crossAxis", false, ControlTier.More, "composition").Tip();
             // Monument.
-            c.Slider("forecourt", 10, 5, 24, 1, "m", ControlTier.Essential, "monument").Tip();
+            c.Slider("forecourt", 10, 5, 24, 1, "m", ControlTier.Essential, "monument").Layout(5).Tip();
             c.Toggle("raised", false, ControlTier.Essential, "monument").Tip();
             c.Slider("raiseHeight", 1.5, 0.5, 3, 0.5, "m", ControlTier.More, "monument").When("raised=true");
             c.Slider("plaques", 4, 0, 16, 1, "count", ControlTier.More, "monument").Tip();
@@ -77,18 +77,18 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.Asset("poolAsset", AssetCategories.SurfaceWater, ControlTier.More, "water").When("pool=true");
             // Hedged rooms.
             c.Toggle("rooms", true, ControlTier.Essential, "rooms").Tip();
-            c.Slider("roomSize", 14, 8, 24, 1, "m", ControlTier.More, "rooms").When("rooms=true");
+            c.Slider("roomSize", 14, 8, 24, 1, "m", ControlTier.More, "rooms").Layout(9).When("rooms=true");
             c.Choice("roomContent", "mixed", ControlTier.More, "rooms", "mixed", "benches", "flowers", "sculpture", "tree").When("rooms=true").Tip();
             c.Asset("hedgeAsset", AssetCategories.Hedge, ControlTier.More, "rooms");
             // Planting.
             c.Toggle("allees", true, ControlTier.Essential, "planting").Tip();
-            c.Slider("treeSpacing", 9, 6, 16, 1, "m", ControlTier.More, "planting").When("allees=true");
+            c.Slider("treeSpacing", 9, 6, 16, 1, "m", ControlTier.More, "planting").Layout(6).When("allees=true");
             c.Slider("lawnTrees", 20, 0, 80, 5, "perHa", ControlTier.More, "planting").Tip();
             c.Toggle("flowerRing", true, ControlTier.More, "planting").Tip();
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             // Lighting.
             c.Choice("lighting", "bollards", ControlTier.Essential, "lighting", "bollards", "lanterns", "uplights", "none").Tip();
-            c.Slider("lampSpacing", 14, 6, 30, 1, "m", ControlTier.More, "lighting");
+            c.Slider("lampSpacing", 14, 6, 30, 1, "m", ControlTier.More, "lighting").Layout(5);
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "lighting");
             // Boundary.
             c.Choice("enclosure", "hedge", ControlTier.More, "boundary", "hedge", "fence", "none").Tip();

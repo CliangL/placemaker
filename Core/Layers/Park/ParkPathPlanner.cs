@@ -24,10 +24,12 @@ namespace Placemaker.Core.Layers.Park
 {
     public static class ParkPathPlanner
     {
-        private const double BoundaryClearance = 5.0;
-        private const double PreferredBoundaryClearance = 12.0;
+        // Layout size (FEEDBACK-4): distances are design metres × Layout.Scale; the boundary clearance is the
+        // one edge margin plus a wide path's half width (never less than the scaled design value).
+        private static double BoundaryClearance => Math.Max(Layout.M(5f), Layout.EdgeMargin + Composer.DefaultHalfWidth(NetRole.PathwayWide));
+        private static double PreferredBoundaryClearance => Math.Max(BoundaryClearance + 1.0, Layout.M(12f));
         private const double MinimumGateDirectionCosine = 0.7071067811865476;
-        private const double MinimumPathSeparation = 8.0;
+        private static double MinimumPathSeparation => Layout.M(8f, 4f);
         private const double MaximumAcuteBranchCosine = 0.8660254037844386;
         private const int MaximumRoadmapNodes = 420;
         public const int CandidateCount = 6;
@@ -91,7 +93,12 @@ namespace Placemaker.Core.Layers.Park
             return best ?? ParkPathGraph.Empty();
         }
 
-        public static int LoopsByArea(float area) => area > 12000f ? 2 : area > 1800f ? 1 : 0;
+        /// <summary>Coverage loops by area, judged at design size (a smaller layout gets more, smaller loops).</summary>
+        public static int LoopsByArea(float area)
+        {
+            float a = Layout.DesignArea(area);
+            return a > 12000f ? 2 : a > 1800f ? 1 : 0;
+        }
 
         private static ParkPathGraph Generate(LayerRegion region, IReadOnlyList<float2> gates, float2 hub, uint seed,
             int loops, bool stretch, List<Triangle> triangles, CancellationToken cancel)
@@ -217,7 +224,7 @@ namespace Placemaker.Core.Layers.Park
         private static double SamplingSpacing(LayerRegion region)
         {
             var size = region.Max - region.Min;
-            double spacing = Math.Max(16.0, Math.Min(38.0, Math.Sqrt(region.Area) / 5.0));
+            double spacing = Math.Max(Layout.M(16f), Math.Min(Layout.M(38f), Math.Sqrt(region.Area) / 5.0));
             double estimated = (double)size.x * size.y / (spacing * spacing);
             if (estimated > MaximumRoadmapNodes) spacing *= Math.Sqrt(estimated / MaximumRoadmapNodes);
             return spacing;
@@ -256,7 +263,7 @@ namespace Placemaker.Core.Layers.Park
             {
                 result[t] = -1;
                 var inward = InwardNormal(nodes[t].Position, region);
-                double preferred = Math.Max(8.0, Math.Min(14.0, spacing * 0.5));
+                double preferred = Math.Max(Layout.M(8f, 4f), Math.Min(Layout.M(14f), spacing * 0.5));
                 for (int attempt = 0; attempt < 4; attempt++)
                 {
                     double depth = preferred * (1.0 - attempt * 0.22);
