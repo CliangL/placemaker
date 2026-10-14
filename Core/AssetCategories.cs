@@ -5,7 +5,7 @@ namespace Placemaker.Core
     /// catalog (which classifies prefabs into these). Add new categories here; the catalog maps
     /// unknown categories to an empty list instead of failing.
     /// </summary>
-    public static class AssetCategories
+    public static partial class AssetCategories
     {
         // Surfaces (area prefabs of type Surface)
         public const string SurfaceAny = "surface";

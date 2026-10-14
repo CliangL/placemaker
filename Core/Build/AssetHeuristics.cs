@@ -132,6 +132,7 @@ namespace Placemaker.Core.Build
             // Everything below must be visible: mesh-less static objects crash when spawned mid-game.
             if ((t & AssetTraits.HasMesh) == 0) return r;
             if (ContainsAny(lower, "random", "source", "effect", "particle")) return r;
+            if (CategoryRules.Classify(lower, t, r)) return r;
             if (LeisureHeuristics.Classify(lower, t, r)) return r;
 
             if ((t & AssetTraits.Plant) != 0)
@@ -238,6 +239,8 @@ namespace Placemaker.Core.Build
             if (isNet || isArea) return true;
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
+            var ruled = CategoryRules.AutoEligible(category, lower, t);
+            if (ruled.HasValue) return ruled.Value;
             if (LeisureHeuristics.AutoEligible(category, lower, out bool leisure)) return leisure;
             if ((t & AssetTraits.NetAttached) != 0 && category != AssetCategories.Lamp && category != AssetCategories.Bollard
                 && category != AssetCategories.ParkingDecal && category != AssetCategories.Charger) return false;

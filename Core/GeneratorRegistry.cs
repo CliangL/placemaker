@@ -11,6 +11,8 @@ namespace Placemaker.Core
         public int Order { get; }
         /// <summary>Not offered in the Make row (still usable by recipes and features), e.g. split, pond.</summary>
         public bool Hidden { get; set; }
+        /// <summary>Make-row group: "parks", "gardens", "squares", "sports", "water", "industrial", "farms", "events", "transport", "parking", "roads", "nature".</summary>
+        public string Group { get; set; } = "";
         public AreaGeneratorAttribute(int order) { Order = order; }
     }
 
@@ -50,6 +52,20 @@ namespace Placemaker.Core
         {
             foreach (var g in All) if (g.Id == id) return g;
             return null;
+        }
+    }
+}
+
+namespace Placemaker.Core
+{
+    public static class GeneratorGroups
+    {
+        /// <summary>Make-row group from [AreaGenerator(Group=…)]; "" when unset (UI falls back to id words).</summary>
+        public static string Of(IAreaGenerator g)
+        {
+            if (g == null) return "";
+            var attr = (AreaGeneratorAttribute)System.Attribute.GetCustomAttribute(g.GetType(), typeof(AreaGeneratorAttribute));
+            return attr?.Group ?? "";
         }
     }
 }
