@@ -62,6 +62,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupGeneral)]
         public bool KeepOffExistingRoads { get; set; }
 
+        /// <summary>Block paint also keeps off visible zone cells nobody zoned yet (zoned cells are always avoided).</summary>
+        [SettingsUISection(SectionMain, GroupGeneral)]
+        public bool BlockPaintAvoidEmptyZones { get; set; }
+
         /// <summary>
         /// (FEEDBACK-4) Layout size in percent: scales layout distances (path loops, spacing, plaza and feature
         /// footprints, margins); props and real-dimension layouts keep their size. → SiteContext.LayoutScale.
@@ -237,6 +241,7 @@ namespace Placemaker.Game.Settings
             SketchSurfaceFill = true;
             SnapToRoadsWhenDrawing = true;
             KeepOffExistingRoads = true;
+            BlockPaintAvoidEmptyZones = false;
             LayoutSize = (int)System.Math.Round(global::Placemaker.Core.SiteContext.DefaultLayoutScale * 100f);
             EdgeMargin = global::Placemaker.Core.SiteContext.DefaultEdgeMargin;
             BrushSize = 150f;

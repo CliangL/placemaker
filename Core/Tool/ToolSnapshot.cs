@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Placemaker.Core.Tool
 {
-    public enum SelectionMode { Draw = 0, Block = 1, Paint = 2, Perimeter = 3 }
+    public enum SelectionMode { Draw = 0, Block = 1, Paint = 2, Perimeter = 3, BlockPaint = 4 }
 
     public static class SelectionModes
     {
@@ -14,6 +14,7 @@ namespace Placemaker.Core.Tool
                 case SelectionMode.Block: return "block";
                 case SelectionMode.Paint: return "paint";
                 case SelectionMode.Perimeter: return "perimeter";
+                case SelectionMode.BlockPaint: return "blockPaint";
                 default: return "draw";
             }
         }
@@ -26,6 +27,7 @@ namespace Placemaker.Core.Tool
                 case "block": mode = SelectionMode.Block; return true;
                 case "paint": mode = SelectionMode.Paint; return true;
                 case "perimeter": mode = SelectionMode.Perimeter; return true;
+                case "blockPaint": mode = SelectionMode.BlockPaint; return true;
                 default: mode = SelectionMode.Draw; return false;
             }
         }
@@ -35,7 +37,8 @@ namespace Placemaker.Core.Tool
             switch (m)
             {
                 case SelectionMode.Block: return AreaSource.Block;
-                case SelectionMode.Paint: return AreaSource.Painted;
+                case SelectionMode.Paint:
+                case SelectionMode.BlockPaint: return AreaSource.Painted;
                 case SelectionMode.Perimeter: return AreaSource.Perimeter;
                 default: return AreaSource.Drawn;
             }
@@ -52,6 +55,28 @@ namespace Placemaker.Core.Tool
             var c = new BlockSelectionState();
             foreach (var f in Faces) c.Faces.Add(new List<HalfEdge>(f));
             return c;
+        }
+    }
+
+    /// <summary>
+    /// Block paint: the block the strokes are fenced to (CCW loop of road half-edges; empty = none yet)
+    /// and the painted cells. The obstacles are not stored — the game layer gathers them again
+    /// for the block (they are world state, not selection state).
+    /// </summary>
+    public sealed class BlockPaintState
+    {
+        public List<HalfEdge> Face = new List<HalfEdge>();
+        public Placemaker.Core.Geometry.BrushMask.Snapshot Mask;
+
+        public BlockPaintState Clone() => new BlockPaintState { Face = new List<HalfEdge>(Face), Mask = Mask };
+
+        /// <summary>Same block (same set of road edges), independent of where the loop starts.</summary>
+        public static bool SameFace(IReadOnlyList<HalfEdge> a, IReadOnlyList<HalfEdge> b)
+        {
+            if (a == null || b == null || a.Count != b.Count || a.Count == 0) return false;
+            var set = new HashSet<HalfEdge>(a);
+            foreach (var h in b) if (!set.Contains(h)) return false;
+            return true;
         }
     }
 
@@ -85,6 +110,7 @@ namespace Placemaker.Core.Tool
         public Placemaker.Core.Geometry.BrushMask.Snapshot Paint;
         public BlockSelectionState Block = new BlockSelectionState();
         public PerimeterSelectionState Perimeter = new PerimeterSelectionState();
+        public BlockPaintState BlockPaint = new BlockPaintState();
         /// <summary>The resulting area, or null when there is none.</summary>
         public AreaShape Shape;
 

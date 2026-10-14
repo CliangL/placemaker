@@ -76,6 +76,13 @@ namespace Placemaker.Game.Tool
                     h.Add(new HintInfo("Placemaker.Hint.PaintErase"));
                     if (_brushSquare) h.Add(new HintInfo("Placemaker.Hint.PaintRotate", "Shift"));
                     break;
+                case SelectionMode.BlockPaint:
+                    h.Add(new HintInfo(_bpFace.Count == 0 ? "Placemaker.Hint.BlockPaintStart" : "Placemaker.Hint.BlockPaintPaint"));
+                    h.Add(new HintInfo("Placemaker.Hint.BlockPaintErase"));
+                    if (_brushSquare) h.Add(new HintInfo("Placemaker.Hint.PaintRotate", "Shift"));
+                    if (BlockPaintCurrent?.Obstacles.Count > 0) h.Add(new HintInfo("Placemaker.Hint.BlockPaintBlocked"));
+                    if (_bpFace.Count > 0) h.Add(new HintInfo("Placemaker.Hint.BlockPaintNewBlock"));
+                    break;
             }
             if (_history.CanUndo) h.Add(new HintInfo("Placemaker.Hint.Undo", "Ctrl", "Z"));
             var p = StageMachine.Primary(_stage, Facts());

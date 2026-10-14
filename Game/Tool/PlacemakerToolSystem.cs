@@ -110,7 +110,7 @@ namespace Placemaker.Game.Tool
             {
                 _brushSize = math.clamp(_settings.BrushSize, BrushMask.MinDiameter, BrushMask.MaxDiameter);
                 _brushSquare = _settings.BrushSquare;
-                _mode = (SelectionMode)math.clamp(_settings.LastAreaMode, 0, 3);
+                _mode = (SelectionMode)math.clamp(_settings.LastAreaMode, 0, 4);
                 _panelCollapsed = _settings.PanelCollapsed;
             }
         }
@@ -253,6 +253,7 @@ namespace Placemaker.Game.Tool
                         case SelectionMode.Block: UpdateBlock(); break;
                         case SelectionMode.Paint: UpdatePaint(); break;
                         case SelectionMode.Perimeter: UpdatePerimeter(); break;
+                        case SelectionMode.BlockPaint: UpdateBlockPaint(); break;
                     }
                 }
                 FinishFrame();
@@ -359,6 +360,7 @@ namespace Placemaker.Game.Tool
                 Paint = PaintSnapshot(),
                 Block = _blocks.Clone(),
                 Perimeter = _perimeter.Clone(),
+                BlockPaint = BlockPaintSnapshot(),
                 Shape = _shape,
                 Recipe = _recipe?.Clone(),
                 RecipeId = _recipeId ?? "",
@@ -402,6 +404,7 @@ namespace Placemaker.Game.Tool
             _paintSnapVersion = _paint.Version;
             _blocks = s.Block?.Clone() ?? new BlockSelectionState();
             _perimeter = s.Perimeter?.Clone() ?? new PerimeterSelectionState();
+            RestoreBlockPaint(s.BlockPaint);
             _shape = s.Shape;
             _shapeDirty = false;
             _recipe = s.Recipe?.Clone();
@@ -473,6 +476,7 @@ namespace Placemaker.Game.Tool
             _paint.Clear();
             _blocks = new BlockSelectionState();
             _perimeter = new PerimeterSelectionState();
+            ClearBlockPaint();
             _shape = null;
             _shapeDirty = false;
             _hoverFace = null;
@@ -480,7 +484,7 @@ namespace Placemaker.Game.Tool
         }
 
         private bool HasSelection() =>
-            _shape != null || !_draw.IsEmpty || !_paint.IsEmpty || _blocks.Faces.Count > 0 || _perimeter.Nodes.Count > 0;
+            _shape != null || !_draw.IsEmpty || !_paint.IsEmpty || _blocks.Faces.Count > 0 || _perimeter.Nodes.Count > 0 || !_bpMask.IsEmpty;
 
         public void SetBrush(bool square, float size, float angle)
         {

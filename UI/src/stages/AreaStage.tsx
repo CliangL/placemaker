@@ -1,4 +1,4 @@
-// Stage 1 — choose the area: Draw / Block / Paint / Roads as one row of compact buttons (descriptions
+// Stage 1 — choose the area: Draw / Block / Block paint / Paint / Roads as one row of compact buttons (descriptions
 // in tooltips), brush settings, and a one-line readout of the current area with what to do next.
 import React from "react";
 import classNames from "classnames";
@@ -28,6 +28,16 @@ export function modeOptions(t: TFunc) {
             description: t("Placemaker.UI.Mode.BlockTip", "Click a city block. Shift+click adds neighbours."),
         },
         {
+            value: "blockPaint",
+            icon: "blockPaint",
+            label: t("Placemaker.UI.Mode.BlockPaint", "Block paint"),
+            title: t("Placemaker.UI.Mode.BlockPaint", "Block paint"),
+            description: t(
+                "Placemaker.UI.Mode.BlockPaintTip",
+                "Paint inside one block: the brush stops at its roads and skips zoned cells, buildings and other areas. Right mouse or Shift erases."
+            ),
+        },
+        {
             value: "paint",
             icon: "paint",
             label: t("Placemaker.UI.Mode.Paint", "Paint"),
@@ -48,6 +58,7 @@ const HOWTO: Record<string, [string, string]> = {
     draw: ["Placemaker.UI.Area.HowDraw", "Click corners; click the first to finish"],
     block: ["Placemaker.UI.Area.HowBlock", "Click a block; Shift+click adds more"],
     paint: ["Placemaker.UI.Area.HowPaint", "Paint with left mouse; right erases"],
+    blockPaint: ["Placemaker.UI.Area.HowBlockPaint", "Paint inside a block; roads and zoning stop the brush"],
     perimeter: ["Placemaker.UI.Area.HowPerimeter", "Click intersections around the area"],
 };
 
@@ -115,7 +126,7 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                     })}
                 </div>
             </Section>
-            {state.areaMode === "paint" ? (
+            {state.areaMode === "paint" || state.areaMode === "blockPaint" ? (
                 <Section title={t("Placemaker.UI.Brush.Title", "Brush")} testId="brush">
                     <div className={s.brushRow}>
                         <div className={s.brushLabel}>{t("Placemaker.UI.Brush.Shape", "Shape")}</div>

@@ -164,7 +164,7 @@ export function MapView({ backend }: { backend: MockBackend }) {
         }
 
         // paint cells
-        if (toolArea && b.mode === "paint" && b.cells.size && b.stage === "area") {
+        if (toolArea && (b.mode === "paint" || b.mode === "blockPaint") && b.cells.size && b.stage === "area") {
             g.fillStyle = "rgba(143, 209, 255, 0.18)";
             b.cells.forEach((k) => {
                 const [i, j] = k.split(",").map(Number);
@@ -248,7 +248,7 @@ export function MapView({ backend }: { backend: MockBackend }) {
         }
 
         // brush cursor
-        if (b.open && b.stage === "area" && b.mode === "paint" && mp) {
+        if (b.open && b.stage === "area" && (b.mode === "paint" || b.mode === "blockPaint") && mp) {
             const r = b.brush.size / 2;
             g.strokeStyle = "rgba(255,255,255,0.85)";
             g.lineWidth = 1.5 * px;
@@ -335,6 +335,14 @@ export function MapView({ backend }: { backend: MockBackend }) {
                 drag.current = { kind: right ? "erase" : "paint" };
                 b.paintAt(p, right);
                 return;
+            case "blockPaint": {
+                // Mock: no road graph, so no fence; Shift+drag erases like the game.
+                const erase = right || e.shiftKey;
+                b.beginGesture({ key: erase ? "Placemaker.UI.History.Erase" : "Placemaker.UI.History.Paint" });
+                drag.current = { kind: erase ? "erase" : "paint" };
+                b.paintAt(p, erase);
+                return;
+            }
             case "perimeter": {
                 if (right) {
                     if (!b.closed && b.ring.length) b.removePoint(b.ring.length - 1);
@@ -355,7 +363,7 @@ export function MapView({ backend }: { backend: MockBackend }) {
         const d = drag.current;
         if (d?.kind === "corner" && d.index !== undefined) b.movePoint(d.index, p);
         else if (d?.kind === "paint" || d?.kind === "erase") b.paintAt(p, d.kind === "erase");
-        else if (e.shiftKey && b.mode === "paint" && b.brush.shape === "square" && prev) {
+        else if (e.shiftKey && (b.mode === "paint" || b.mode === "blockPaint") && b.brush.shape === "square" && prev) {
             b.brush = { ...b.brush, angle: Math.round((b.brush.angle + (p[0] - prev[0]) * 2 + 360) % 90) };
             b.publishAll();
         }
