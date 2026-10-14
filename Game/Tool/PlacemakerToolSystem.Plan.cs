@@ -183,6 +183,13 @@ namespace Placemaker.Game.Tool
                 }
                 return;
             }
+            // The Layout size / Edge margin options changed in the Options menu: plan again.
+            var layout = LayoutOptions();
+            if (layout != _layoutPlanned)
+            {
+                if (_layoutPlanned.scale > 0f) { _inputRevision++; _lastInputChange = UnityEngine.Time.realtimeSinceStartup; }
+                _layoutPlanned = layout;
+            }
             if (_shapeDirty || _planRevision == _inputRevision || _requestedRevision == _inputRevision) return;
 
             // Committed edits plan at once; only a running drag (or a hover) is debounced (Core/Tool/PlanSchedule).
@@ -197,6 +204,13 @@ namespace Placemaker.Game.Tool
             _worker.Request(_inputRevision, _recipe.Clone(), _shape, site);
             Touch();
         }
+
+        private (float scale, float margin) _layoutPlanned = (-1f, -1f);
+
+        /// <summary>Options "Layout size" (fraction) and "Edge margin" (design metres) handed to the planner via SiteContext.</summary>
+        private (float scale, float margin) LayoutOptions() => _settings == null
+            ? (SiteContext.DefaultLayoutScale, SiteContext.DefaultEdgeMargin)
+            : (_settings.LayoutSize / 100f, _settings.EdgeMargin);
 
         private float _planStartedAt = -1f;
         private float _planningTouchAt;
@@ -228,13 +242,21 @@ namespace Placemaker.Game.Tool
             // Re-capture only when the outline changed (or the catalog delivered new asset info).
             bool assetsWereReady = _site.AssetsReady;
             _site.Assets();
-            if (_siteCache != null && _siteShapeVersion == _shapeVersion && assetsWereReady == _site.AssetsReady) return _siteCache;
+            var (scale, margin) = LayoutOptions();
+            if (_siteCache != null && _siteShapeVersion == _shapeVersion && assetsWereReady == _site.AssetsReady)
+            {
+                // Layout size / edge margin options: a fresh copy (the worker may still read the old one).
+                if (_siteCache.LayoutScale != scale || _siteCache.EdgeMargin != margin) _siteCache = _siteCache.WithLayout(scale, margin);
+                return _siteCache;
+            }
             try { _siteCache = _site.Capture(shape); }
             catch (Exception e)
             {
                 Mod.Log.Warn("Placemaker: site capture failed: " + e.Message);
                 _siteCache = new SiteContext();
             }
+            _siteCache.LayoutScale = scale;
+            _siteCache.EdgeMargin = margin;
             _siteShapeVersion = _shapeVersion;
             return _siteCache;
         }

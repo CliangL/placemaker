@@ -58,6 +58,20 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupGeneral)]
         public bool KeepOffExistingRoads { get; set; }
 
+        /// <summary>
+        /// (FEEDBACK-4) Layout size in percent: scales layout distances (path loops, spacing, plaza and feature
+        /// footprints, margins); props and real-dimension layouts keep their size. → SiteContext.LayoutScale.
+        /// </summary>
+        [SettingsUISlider(min = 25, max = 150, step = 5, scalarMultiplier = 1, unit = global::Game.UI.Unit.kPercentage)]
+        [SettingsUISection(SectionMain, GroupGeneral)]
+        public int LayoutSize { get; set; }
+
+        /// <summary>(FEEDBACK-4) The one edge margin (m at 100 % layout size) between the outline and the layout. → SiteContext.EdgeMargin.</summary>
+        [SettingsUISlider(min = 0f, max = 10f, step = 0.5f, scalarMultiplier = 1)]
+        [SettingsUICustomFormat(fractionDigits = 1)]
+        [SettingsUISection(SectionMain, GroupGeneral)]
+        public float EdgeMargin { get; set; }
+
         // ───────────── Keys ─────────────
 
         [SettingsUIKeyboardBinding(BindingKeyboard.A, ActionToggleTool, ctrl: true, shift: true)]
@@ -213,6 +227,8 @@ namespace Placemaker.Game.Settings
             PreviewDetail = PreviewDetail.Normal;
             SnapToRoadsWhenDrawing = true;
             KeepOffExistingRoads = true;
+            LayoutSize = (int)System.Math.Round(global::Placemaker.Core.SiteContext.DefaultLayoutScale * 100f);
+            EdgeMargin = global::Placemaker.Core.SiteContext.DefaultEdgeMargin;
             BrushSize = 150f;
             BrushSquare = false;
             LastAreaMode = 0;
