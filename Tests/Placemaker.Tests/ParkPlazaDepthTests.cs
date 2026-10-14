@@ -131,7 +131,7 @@ namespace Placemaker.Tests
         {
             foreach (var ring in new[] { TestKit.Rect(250, 200), L(6f) })
             {
-                var plan = TestKit.Plan("park", TestKit.Input(ring, Bag(("pathStyle", style)), seed: 5, site: TestKit.RoadAlongBottom(250)));
+                var plan = TestKit.Plan("park", TestKit.Entered("park", TestKit.Input(ring, Bag(("pathStyle", style)), seed: 5, site: TestKit.RoadAlongBottom(250))));
                 Assert.DoesNotContain(plan.Issues, i => i.Key == "Placemaker.Park.Issue.PathStyleFallback");
                 Assert.True(plan.Nets.Count(n => n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide) >= 4, style);
                 // Entrances are joined: some path end lies on the road side.

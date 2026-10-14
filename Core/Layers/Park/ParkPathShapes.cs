@@ -403,15 +403,30 @@ namespace Placemaker.Core.Layers.Park
         {
             int joined = 0;
             var order = new List<(float d, int i)>();
+            bool Leg(float2 a, float2 b)
+            {
+                float len = math.distance(a, b);
+                bool fromGate = region.BoundaryDistance(a, 1f) < 0.5f;
+                for (float s = fromGate ? 4f : 1f; s < len; s += 3f) if (!ok(math.lerp(a, b, s / len))) return false;
+                for (int j = 0; j + 1 < segs.Count; j += 2)
+                    if (CrossesProperly(a, b, segs[j], segs[j + 1])) return false;
+                return true;
+            }
             foreach (var g in gates)
             {
+                // s9: straight in from the edge first (GateApproach); the nearest-point join only as a fallback,
+                // and then only heading inward (never a leg sideways along the outline).
+                int before = segs.Count;
+                ParkPathStyles.JoinGates(region, segs, new[] { g }, 0, 1, Leg);
+                if (segs.Count > before) { joined++; continue; }
+                var inward = GateApproach.Inward(region, g);
                 order.Clear();
                 for (int i = 0; i < points.Count; i++) order.Add((math.distancesq(g, points[i]), i));
                 order.Sort((x, y) => x.d != y.d ? x.d.CompareTo(y.d) : x.i.CompareTo(y.i));
                 for (int k = 0; k < order.Count && k < 24; k++)
                 {
                     var p = points[order[k].i];
-                    if (region.CrossesBoundary(g, p, true)) continue;
+                    if (region.CrossesBoundary(g, p, true) || math.dot(math.normalizesafe(p - g), inward) < 0.5f) continue;
                     bool clear = true;
                     float len = math.distance(g, p);
                     for (float s = 4f; s < len && clear; s += 3f) if (!ok(math.lerp(g, p, s / len))) clear = false;

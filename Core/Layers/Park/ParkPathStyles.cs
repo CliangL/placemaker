@@ -66,23 +66,19 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
-        /// <summary>Long axis + cross axis through the centre; entrances join the nearest axis straight.</summary>
+        /// <summary>
+        /// Long axis + cross axis through the centre, aimed at the entrances (LeisureKit.FrameToward); each
+        /// entrance joins an axis straight in from the edge (GateApproach), never sideways along it.
+        /// </summary>
         public static ParkPathGraph Formal(LayerRegion region, IReadOnlyList<float2> gates, Func<float2, bool> ok)
         {
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
-            // Art pass (a1): on a near-square site the principal axes are ambiguous (often the diagonals, which sent
-            // every walk corner to corner); a formal park squares up with its longest street edge instead.
-            if (minor > major * 0.85f)
-            {
-                float best = 0f;
-                for (int i = 0; i < region.Ring.Length; i++)
-                {
-                    var e = region.Ring[(i + 1) % region.Ring.Length] - region.Ring[i];
-                    float l = math.length(e);
-                    if (l > best) { best = l; axis = e / l; }
-                }
-                side = new float2(-axis.y, axis.x);
-            }
+            LeisureKit.FrameToward(region, gates, out var centre, out var axis, out var side, out _, out _);
+            return Formal(region, gates, centre, axis, side);
+        }
+
+        /// <summary>Formal axes for an explicit frame (the formal garden centres its round point on it).</summary>
+        public static ParkPathGraph Formal(LayerRegion region, IReadOnlyList<float2> gates, float2 centre, float2 axis, float2 side)
+        {
             var axes = new List<(float2 a, float2 b)>();
             if (LeisureKit.Chord(region, centre, axis, 4f, out var a0, out var b0)) axes.Add((a0, b0));
             if (LeisureKit.Chord(region, centre, side, 4f, out var a1, out var b1)) axes.Add((a1, b1));
@@ -93,20 +89,25 @@ namespace Placemaker.Core.Layers.Park
             if (axes.Count == 2 && Intersect(axes[0].a, axes[0].b, axes[1].a, axes[1].b, out float t0, out float t1))
             { stops[0].Add(t0); stops[1].Add(t1); }
             var segs = new List<float2>();
+            float approach = math.max(Layout.M(8f, 5f), Layout.EdgeMargin + 4f);
             foreach (var gp in gates)
             {
+                var route = GateApproach.Route(region, gp, axes, approach);
+                if (route == null) continue;
+                var foot = route[route.Count - 1];
                 int bestAx = -1; float bestT = 0f, bestD = float.MaxValue;
                 for (int i = 0; i < axes.Count; i++)
                 {
                     var (a, b) = axes[i];
-                    var q = SegmentIndex.ClosestPoint(gp, a, b);
-                    float d = math.distance(gp, q);
-                    if (d < bestD && !region.CrossesBoundary(gp, q, true)) { bestD = d; bestAx = i; bestT = math.dot(q - a, b - a) / math.max(1e-4f, math.lengthsq(b - a)); }
+                    var q = SegmentIndex.ClosestPoint(foot, a, b);
+                    float d = math.distance(foot, q);
+                    if (d < bestD) { bestD = d; bestAx = i; bestT = math.dot(q - a, b - a) / math.max(1e-4f, math.lengthsq(b - a)); }
                 }
                 if (bestAx < 0) continue;
                 var (aa, bb) = axes[bestAx];
-                var foot = math.lerp(aa, bb, bestT);
-                if (bestD > 0.5f) { segs.Add(gp); segs.Add(foot); }
+                route[route.Count - 1] = math.lerp(aa, bb, bestT);
+                for (int i = 1; i < route.Count; i++)
+                    if (math.distance(route[i - 1], route[i]) > 0.5f) { segs.Add(route[i - 1]); segs.Add(route[i]); }
                 stops[bestAx].Add(bestT);
             }
             for (int i = 0; i < axes.Count; i++)
@@ -135,17 +136,40 @@ namespace Placemaker.Core.Layers.Park
             foreach (var p in loop) if (!region.ContainsDisc(p, 2.5f)) return ParkPathGraph.Empty();
             var segs = new List<float2>();
             for (int i = 0; i < loop.Length; i++) { segs.Add(loop[i]); segs.Add(loop[(i + 1) % loop.Length]); }
-            foreach (var g in gates)
-            {
-                int best = -1; float bd = float.MaxValue;
-                for (int i = 0; i < loop.Length; i++)
-                {
-                    float d = math.distance(g, loop[i]);
-                    if (d < bd && !CrossesRing(g, loop[i], lake) && !region.CrossesBoundary(g, loop[i], true)) { bd = d; best = i; }
-                }
-                if (best >= 0) { segs.Add(g); segs.Add(loop[best]); }
-            }
+            JoinGates(region, segs, gates, 0, gates.Count, (a, b) => !CrossesRing(a, b, lake));
             return ParkPathGraph.FromSegments(segs, gates);
+        }
+
+        /// <summary>
+        /// Joins gates [from, to) to the segment list (pairs) straight in from the edge (GateApproach, s9): the
+        /// host segment is split at the junction so the graph stays connected. Gates already on it are skipped.
+        /// </summary>
+        public static void JoinGates(LayerRegion region, List<float2> segs, IReadOnlyList<float2> gates, int from, int to, Func<float2, float2, bool> clear = null)
+        {
+            float approach = math.max(Layout.M(8f, 5f), Layout.EdgeMargin + 4f);
+            for (int gi = from; gi < to; gi++)
+            {
+                var g = gates[gi];
+                var spine = new List<(float2 a, float2 b)>();
+                for (int i = 0; i + 1 < segs.Count; i += 2) spine.Add((segs[i], segs[i + 1]));
+                var route = GateApproach.Route(region, g, spine, approach, clear);
+                if (route == null || route.Count < 2) continue;
+                var foot = route[route.Count - 1];
+                int host = -1; float bd = float.MaxValue;
+                for (int i = 0; i < spine.Count; i++)
+                {
+                    float d = math.sqrt(SegmentIndex.DistSq(foot, spine[i].a, spine[i].b));
+                    if (d < bd) { bd = d; host = i; }
+                }
+                if (host < 0) continue;
+                var (a, b) = spine[host];
+                foot = SegmentIndex.ClosestPoint(foot, a, b);
+                if (math.distance(foot, a) < 1.5f) foot = a;
+                else if (math.distance(foot, b) < 1.5f) foot = b;
+                else { segs[host * 2 + 1] = foot; segs.Add(foot); segs.Add(b); }
+                route[route.Count - 1] = foot;
+                for (int i = 1; i < route.Count; i++) { segs.Add(route[i - 1]); segs.Add(route[i]); }
+            }
         }
 
         /// <summary>
@@ -158,13 +182,11 @@ namespace Placemaker.Core.Layers.Park
             if (gates.Count == 0 || stops.Count == 0) return ParkPathGraph.Empty();
             var left = new List<(float2 c, float r)>(stops);
             var route = new List<float2> { gates[0] };
-            var cur = gates[0];
-            if (gates.Count == 1)
-            {
-                var g0 = region.ClosestOnBoundary(gates[0], out int seg, out _);
-                cur = g0 + region.InwardNormal(seg) * Layout.M(8f);
-                route.Add(cur);
-            }
+            // s9: every entrance on the route starts with a straight approach along its edge normal.
+            float approach = math.max(Layout.M(8f, 5f), Layout.EdgeMargin + 4f);
+            var cur = gates[0] + GateApproach.Inward(region, gates[0]) * approach;
+            if (!region.ContainsDisc(cur, 1f)) cur = gates[0] + GateApproach.Inward(region, gates[0]) * Layout.M(8f);
+            route.Add(cur);
             while (left.Count > 0)
             {
                 int best = 0; float bd = float.MaxValue;
@@ -174,24 +196,24 @@ namespace Placemaker.Core.Layers.Park
                 if (!region.ContainsDisc(rim, 2f)) continue;
                 route.Add(rim); cur = rim;
             }
-            if (gates.Count >= 2) route.Add(gates[gates.Count - 1]);
+            if (gates.Count >= 2)
+            {
+                var last = gates[gates.Count - 1];
+                var app = last + GateApproach.Inward(region, last) * approach;
+                if (region.ContainsDisc(app, 1f)) route.Add(app);
+                route.Add(last);
+            }
             else route.Add(route[1]);   // loop back to the entry node
             var segs = new List<float2>();
             for (int i = 1; i < route.Count; i++)
             {
                 if (region.CrossesBoundary(route[i - 1], route[i], true)) continue;
-                AddMeander(segs, route[i - 1], route[i], Layout.M(7f), Layout.M(22f), Hashing.Mix(seed, (uint)i), ok);
+                // The approach legs at the entrances stay straight.
+                bool straight = i == 1 || (gates.Count >= 2 && i == route.Count - 1);
+                if (straight) { segs.Add(route[i - 1]); segs.Add(route[i]); }
+                else AddMeander(segs, route[i - 1], route[i], Layout.M(7f), Layout.M(22f), Hashing.Mix(seed, (uint)i), ok);
             }
-            for (int gi = 1; gi < gates.Count - 1; gi++)
-            {
-                int best = -1; float bd = float.MaxValue;
-                for (int i = 1; i < segs.Count; i++)
-                {
-                    float d = math.distance(gates[gi], segs[i]);
-                    if (d < bd && !region.CrossesBoundary(gates[gi], segs[i], true)) { bd = d; best = i; }
-                }
-                if (best >= 0) { segs.Add(gates[gi]); segs.Add(segs[best]); }
-            }
+            JoinGates(region, segs, gates, 1, gates.Count - 1);
             return ParkPathGraph.FromSegments(segs, gates);
         }
 

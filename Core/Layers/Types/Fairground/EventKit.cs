@@ -222,8 +222,29 @@ namespace Placemaker.Core.Layers.Types.Events
         /// <summary>Gate connections to the nearest spine point that never run through anything already claimed (sampled before the path end).</summary>
         public static void ConnectGates(LayerContext ctx, Occupancy occ, LayerRegion region, List<Gate> gates, List<(float2 a, float2 b)> spine, AssetRef asset)
         {
+            float approach = math.max(ctx.M(8f, 5f), ctx.EdgeMargin + 4f);
             foreach (var g in gates)
             {
+                // s9: straight in from the entrance (GateApproach), clear of the stalls; never sideways along the edge.
+                bool Clear(float2 p, float2 q)
+                {
+                    float len = math.distance(p, q);
+                    if (len < 1e-3f) return true;
+                    var step = (q - p) / len;
+                    for (float t = 1.5f; t < len - 3f; t += 1.5f)
+                    {
+                        var s = p + step * t;
+                        if (occ.Discs.Overlaps(s, 1.6f) || occ.Corridors.Overlaps(s, 1.6f)) return false;
+                    }
+                    return true;
+                }
+                var route = GateApproach.Route(region, g.Position, spine, approach, Clear);
+                if (route != null)
+                {
+                    for (int i = 1; i < route.Count; i++) LeisureKit.Path(ctx, occ, route[i - 1], route[i], NetRole.Pathway, asset);
+                    continue;
+                }
+                var inward = GateApproach.Inward(region, g.Position);
                 var feet = new List<(float d, float2 q)>();
                 foreach (var (a, b) in spine)
                 {
@@ -237,6 +258,7 @@ namespace Placemaker.Core.Layers.Types.Events
                     if (region.CrossesBoundary(g.Position, q, true)) continue;
                     bool clear = true;
                     var dir = (q - g.Position) / d;
+                    if (math.dot(dir, inward) < 0.5f) continue;   // never a leg along the outline
                     for (float t = 1.5f; t < d - 3f; t += 1.5f)
                     {
                         var p = g.Position + dir * t;

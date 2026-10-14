@@ -153,20 +153,7 @@ namespace Placemaker.Core.Layers.Leisure
             ParkPaths.Index(curves, occ.Corridors, 100);
             ParkPaths.Index(curves, occ.Paths, 100);
             ParkPaths.Emit(ctx, curves, gates, AssetMix.One(""));
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
-            // Art pass (a1): sections square to the street like the paths (ParkPathStyles.Formal): on a near-square site
-            // the principal axes are ambiguous and the grave rows ran diagonally.
-            if (minor > major * 0.85f)
-            {
-                float best = 0f;
-                for (int i = 0; i < region.Ring.Length; i++)
-                {
-                    var e = region.Ring[(i + 1) % region.Ring.Length] - region.Ring[i];
-                    float l = math.length(e);
-                    if (l > best) { best = l; axis = e / l; }
-                }
-                side = new float2(-axis.y, axis.x);
-            }
+            LeisureKit.FrameToward(region, LeisureKit.Points(gates), out var centre, out var axis, out var side, out _, out _);
 
             if (ctx.B("chapel"))
             {

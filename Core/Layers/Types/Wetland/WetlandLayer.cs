@@ -343,6 +343,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
                     if (island) continue;
                     var h = s + outward * (r + 1.2f);
                     if (water.InWater(h, r + 0.5f) || !occ.Free(h, r, 1f, 0.5f)) continue;
+                    if (!ctx.LayerRegion.ContainsDisc(h, r + 5f)) continue;   // s9: no hide (and spur) squeezed against the outline
                     float spread = float.MaxValue;
                     foreach (var d in done) spread = math.min(spread, math.distance(d, h));
                     if (spread < 35f) continue;

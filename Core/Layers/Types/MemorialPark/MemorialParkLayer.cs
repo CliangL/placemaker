@@ -275,13 +275,39 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             return spur != null;
         }
 
+        /// <summary>
+        /// Entrance joined to the trunk paths straight in from the edge (GateApproach, s9): never a leg along
+        /// the outline. Falls back to the old nearest-point spur only when no inward route exists.
+        /// </summary>
+        private static void GateSpur(State st, float2 gate)
+        {
+            var spine = new List<(float2 a, float2 b)>();
+            var owners = new List<Line>();
+            foreach (var l in st.Lines)
+            {
+                if (l.IsSpur) continue;
+                for (int i = 0; i + 1 < l.Nodes.Count; i++) { spine.Add((l.Nodes[i], l.Nodes[i + 1])); owners.Add(l); }
+            }
+            var route = GateApproach.Route(st.Region, gate, spine, LeisureLayer.ApproachLength(st.Ctx));
+            if (route == null) { Spur(st, gate, NetRole.Pathway, 400f, true, GateApproach.Inward(st.Region, gate)); return; }
+            if (route.Count < 2) return;
+            var last = route[route.Count - 1];
+            Line host = null; float best = float.MaxValue;
+            foreach (var l in owners) { float d = l.Distance(last, out _, out _); if (d < best) { best = d; host = l; } }
+            if (host == null) return;
+            route[route.Count - 1] = host.Junction(last);
+            var spur = AddLine(st, NetRole.Pathway, true, route.ToArray());
+            if (spur != null) spur.IsSpur = true;
+        }
+
         // ───────────── axial composition ─────────────
 
         private bool Axial(State st, List<Gate> gates, out float2 vistaA, out float2 vistaB, out float vista)
         {
             var ctx = st.Ctx; var region = st.Region; var occ = st.Occ;
             vistaA = vistaB = default; vista = 0f;
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            // s9: the procession aims at the first entrance (axis along its edge normal, shifted through it).
+            LeisureKit.FrameToward(region, LeisureKit.Points(gates), out var centre, out var axis, out var side, out _, out _);
             if (!LeisureKit.Chord(region, centre, axis, 4f, out var a0, out var a1)) return false;
             // Art pass (a1): the procession comes straight in from the main entrance when that axis is nearly as
             // long — on a square site the principal axis is a diagonal, which put the monument in a corner.
@@ -394,7 +420,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                     if (math.dot(r0 - c0, nrm) > 2f && AddLine(st, mainRole, c0, r0) != null) spans.Add((c0, r0));
                     if (math.dot(c1 - r1, nrm) > 2f && AddLine(st, mainRole, r1, c1) != null) spans.Add((r1, c1));
                 }
-            foreach (var g in gates) if (math.distance(g.Position, start) > 2f) Spur(st, g.Position, NetRole.Pathway, 400f, true);
+            foreach (var g in gates) if (math.distance(g.Position, start) > 0.5f) GateSpur(st, g.Position);
             ctx.Check();
 
             Monument(st, dir, squareCourt);

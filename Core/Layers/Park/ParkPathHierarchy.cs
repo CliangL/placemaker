@@ -253,8 +253,71 @@ namespace Placemaker.Core.Layers.Park
             if (tracks > 0) ctx.Plan.Facts["serviceTracks"] = tracks;
         }
 
-        /// <summary>Straight curve from <paramref name="from"/> to the nearest path point (splitting that path), or null.</summary>
+        /// <summary>
+        /// Curve from entrance <paramref name="from"/> into the network (s9): straight in along the edge normal
+        /// (GateApproach), turning towards the nearest reachable path only after a short approach — never a
+        /// leg sideways along the outline. The host path is split at the junction. Null when unreachable.
+        /// </summary>
         private static PathCurve Link(ParkSite s, float2 from)
+        {
+            var spine = new List<(float2 a, float2 b)>();
+            foreach (var c0 in s.Curves)
+                for (int i = 1; i < c0.Samples.Length; i++) spine.Add((c0.Samples[i - 1], c0.Samples[i]));
+            bool Dry(float2 a, float2 b)
+            {
+                for (int k = 1; k < 10; k++) if (s.InLake(math.lerp(a, b, k / 10f), 1.5f)) return false;
+                return true;
+            }
+            float approach = math.max(Layout.M(8f, 5f), Layout.EdgeMargin + 4f);
+            var route = GateApproach.Route(s.LayerRegion, from, spine, approach, Dry);
+            if (route == null) return LinkNearest(s, from, GateApproach.Inward(s.LayerRegion, from));
+            if (route.Count < 2) return null;
+            var target = route[route.Count - 1];
+            int bestCurve = -1; float bestT = 0f, bestD = float.MaxValue;
+            for (int i = 0; i < s.Curves.Count; i++)
+            {
+                float t = ClosestT(s.Curves[i], target, out float d);
+                if (d < bestD) { bestD = d; bestCurve = i; bestT = t; }
+            }
+            if (bestCurve < 0) return null;
+            var q = SplitForLink(s, bestCurve, bestT);
+            var c = new PathCurve { A = from, D = q, GateD = -1 };
+            if (route.Count == 3) { c.B = math.lerp(from, route[1], 0.75f); c.C = math.lerp(q, route[1], 0.6f); }
+            else { c.B = math.lerp(from, q, 1f / 3f); c.C = math.lerp(from, q, 2f / 3f); }
+            ParkPaths.Sample(c);
+            return math.distance(from, q) > 0.5f ? c : null;
+        }
+
+        private static float ClosestT(PathCurve c, float2 p, out float d)
+        {
+            float best = float.MaxValue, bt = 0f;
+            for (int k = 0; k <= 64; k++)
+            {
+                float dd = math.distancesq(c.Point(k / 64f), p);
+                if (dd < best) { best = dd; bt = k / 64f; }
+            }
+            d = math.sqrt(best);
+            return bt;
+        }
+
+        /// <summary>Splits curve <paramref name="index"/> at t (unless near an end) and returns the junction point.</summary>
+        private static float2 SplitForLink(ParkSite s, int index, float t)
+        {
+            var host = s.Curves[index];
+            if (t > 0.05f && t < 0.95f)
+            {
+                var first = ParkPlaces.Sub(host, 0f, t);
+                var second = ParkPlaces.Sub(host, t, 1f);
+                first.GateD = -1; second.GateA = -1;
+                s.Curves[index] = first;
+                s.Curves.Add(second);
+                return first.D;
+            }
+            return t <= 0.05f ? host.A : host.D;
+        }
+
+        /// <summary>Old straight link to the nearest path point, only when it heads inward (within 60° of the edge normal).</summary>
+        private static PathCurve LinkNearest(ParkSite s, float2 from, float2 inward)
         {
             int bestCurve = -1; float bestT = 0f, bestD = float.MaxValue; float2 q = from;
             for (int i = 0; i < s.Curves.Count; i++)
@@ -265,6 +328,7 @@ namespace Placemaker.Core.Layers.Park
                     if (d < bestD) { bestD = d; bestCurve = i; bestT = k / 32f; q = p; }
                 }
             if (bestCurve < 0 || bestD < 1f) return null;
+            if (math.dot(math.normalizesafe(q - from), inward) < 0.5f) return null;
             float len = math.sqrt(bestD);
             for (int k = 1; k < 10; k++)
             {
@@ -620,7 +684,7 @@ namespace Placemaker.Core.Layers.Park
         private static int Trails(ParkSite s, Func<float2, bool> okPoint, SegmentIndex reserved, int wanted, uint seed)
         {
             var region = s.LayerRegion;
-            float inset = math.clamp(math.sqrt(region.Area) * 0.04f, 4.5f, 7f);
+            float inset = math.clamp(math.sqrt(region.Area) * 0.04f, 6f, 8f);   // s9: wobble (±1.6 m) never brings it within the 3 m edge band
             var ring = region.InsetVertices(inset);
             if (ring == null || ring.Length < 3 || Poly.SignedArea(ring) < 50f || !Poly.IsSimple(ring)) return 0;
             ring = Poly.Resample(ring, 6f);

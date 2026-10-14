@@ -128,21 +128,23 @@ namespace Placemaker.Core.Layers.Leisure
                 else ctx.AddRegion(pieces[i], "green:" + i, RegionTags.Green);
         }
 
-        /// <summary>Straight path from each gate to the nearest point of the given spine segments (when it stays inside).</summary>
+        /// <summary>
+        /// Each gate joined to the spine segments by GateApproach (s9): straight in along the edge normal,
+        /// never a leg sideways along the outline.
+        /// </summary>
         protected static void ConnectGates(LayerContext ctx, Occupancy occ, List<Gate> gates, List<(float2 a, float2 b)> spine, NetRole role, AssetRef asset)
         {
+            float approach = ApproachLength(ctx);
             foreach (var g in gates)
             {
-                float best = float.MaxValue; float2 foot = g.Position;
-                foreach (var (a, b) in spine)
-                {
-                    var q = SegmentIndex.ClosestPoint(g.Position, a, b);
-                    float d = math.distance(q, g.Position);
-                    if (d < best && !ctx.LayerRegion.CrossesBoundary(g.Position, q, true)) { best = d; foot = q; }
-                }
-                if (best < float.MaxValue && best > 1f) LeisureKit.Path(ctx, occ, g.Position, foot, role, asset);
+                var route = GateApproach.Route(ctx.LayerRegion, g.Position, spine, approach);
+                if (route == null) continue;
+                for (int i = 1; i < route.Count; i++) LeisureKit.Path(ctx, occ, route[i - 1], route[i], role, asset);
             }
         }
+
+        /// <summary>Straight approach from an entrance before a connector may turn (m): clear of the edge band.</summary>
+        public static float ApproachLength(LayerContext ctx) => math.max(ctx.M(8f, 5f), ctx.EdgeMargin + 4f);
 
         /// <summary>
         /// Benches beside the paths every <paramref name="designInterval"/> m of path at design size (scaled by
@@ -219,7 +221,7 @@ namespace Placemaker.Core.Layers.Leisure
             var pts = LeisureKit.Points(gates);
             uint seed = Hashing.Mix(ctx.Seed, 0x9A75u);
             var graph = ParkPathPlanner.PlanBest(region, pts, new ParkPathPlanner.Options { Loops = loops, StretchLoop = stretch }, seed, ctx.Cancel);
-            float keep = math.max(ctx.M(3f), ctx.EdgeMargin + 1f);
+            float keep = math.max(math.max(ctx.M(3f), ctx.EdgeMargin + 1f), PathQuality.Band + 1.5f);   // s9: bends never hug the outline
             if (amplitude > 0f) graph = ParkPathStyles.Meander(graph, pts, ctx.M(amplitude), ctx.M(wavelength), seed, p => region.ContainsDisc(p, keep) && !occ.HitsPolygon(p, 2f));
             var curves = ParkPaths.Build(graph, region, true, width);
             ParkPaths.Index(curves, occ.Corridors, 100);

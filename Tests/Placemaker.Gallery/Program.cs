@@ -240,7 +240,7 @@ namespace Placemaker.Gallery
     {
         public string Summary = "", File = "";
         public double Ms;
-        public int Objects, Nets, Surfaces, Errors, Warnings, BenchesOffPath, Overlaps, Outside, Decals;
+        public int Objects, Nets, Surfaces, Errors, Warnings, BenchesOffPath, Overlaps, Outside, Decals, EdgeSpikes;
         public double PathMetres;
         public Dictionary<string, int> ByRole = new Dictionary<string, int>();
         public Dictionary<string, int> ByCategory = new Dictionary<string, int>();
@@ -358,7 +358,7 @@ namespace Placemaker.Gallery
             _markers = job.Recipe?.Root?.Markers;
             Draw(plan, ring, catalog, Path.Combine(dir, job.Variant + ".png"), res);
             if (res.Failure == null)
-                res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.Ms:0} ms";
+                res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.EdgeSpikes} spikes, {res.Ms:0} ms";
             return res;
         }
 
@@ -616,6 +616,10 @@ namespace Placemaker.Gallery
             cv.StrokePolyline(new[] { sb, sb + new float2(20, 0), sb + new float2(20, cv.Px(4)), sb + new float2(0, cv.Px(4)) }, cv.Px(1), Rgba.Hex("#222222"), closed: true);
 
             Metrics(res, fps, polylines.Select(p => (p.n, p.pts, p.hw)).ToList(), ring2);
+            // s9: edge spikes (paths hugging or leaving the outline) drawn as red bars.
+            var spikes = Placemaker.Core.Layers.Common.PathQuality.EdgeSpikes(plan, ring);
+            res.EdgeSpikes = spikes.Count;
+            foreach (var sp in spikes) cv.StrokePolyline(new[] { sp.From, sp.To }, 1.6f, Rgba.Hex("#e01010", 0.85f));
             cv.SavePng(file);
         }
 
@@ -857,6 +861,7 @@ namespace Placemaker.Gallery
                         if (r.BenchesOffPath > 0) flags.Add($"{r.BenchesOffPath} benches off-path");
                         if (r.Overlaps > 0) flags.Add($"{r.Overlaps} overlapping objects");
                         if (r.Outside > 0) flags.Add($"{r.Outside} outside area");
+                        if (r.EdgeSpikes > 0) flags.Add($"{r.EdgeSpikes} edge spikes");
                         if (r.Errors > 0) flags.Add($"{r.Errors} errors");
                         if (flags.Count > 0) sb.Append($"<span class=\"bad\">{string.Join(" · ", flags)}</span><br>");
                         if (r.IssueKeys.Count > 0) sb.Append(Esc(string.Join(", ", r.IssueKeys.Distinct().Take(6))));
@@ -866,7 +871,7 @@ namespace Placemaker.Gallery
                     {
                         type = j.Type, variant = j.Variant, file = r.File, ms = Math.Round(r.Ms), failure = r.Failure, objects = r.Objects, nets = r.Nets,
                         pathMetres = Math.Round(r.PathMetres), surfaces = r.Surfaces, errors = r.Errors, warnings = r.Warnings,
-                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(),
+                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, edgeSpikes = r.EdgeSpikes, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(),
                     });
                 }
                 sb.Append("</div>");
