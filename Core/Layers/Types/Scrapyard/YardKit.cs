@@ -413,7 +413,9 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 foreach (var g in gates) if (math.distance(g.Position, e) < gateClear) { nearGate = true; break; }
                 if (nearGate || (allowed != null && !allowed(c))) continue;
                 var rect = new OrientedRect { Center = c, Axis = tangent, HalfLength = bayWidth * 0.5f, HalfWidth = bayDepth * 0.5f };
-                if (!LeisureKit.RectFits(region, occ, rect, 0.4f, 0.2f)) continue;
+                // Walls sit on the rectangle's edges: test a grown copy so the blocks keep clear too.
+                var grown = new OrientedRect { Center = c, Axis = tangent, HalfLength = rect.HalfLength + 0.7f, HalfWidth = rect.HalfWidth + 0.7f };
+                if (!LeisureKit.RectFits(region, occ, grown, 0.1f, 0.2f)) continue;
                 if (wall != null)
                 {
                     var back0 = rect.Local(-rect.HalfLength, -rect.HalfWidth); var back1 = rect.Local(rect.HalfLength, -rect.HalfWidth);

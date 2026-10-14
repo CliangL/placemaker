@@ -146,11 +146,10 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             Ground(y, ctx.S("ground"));
             YardKit.Fence(ctx, y.Gates, ctx.S("fence"), AssetMix.One(ctx.S("fenceAsset")), y.Salt(0xFE7Cu));
             y.EdgeInset = 1.5f;
-            if (ctx.B("screenTrees") && region.Area > 1500f)
-            {
-                YardKit.Screen(ctx, y.Occ, y.Gates, 2.6f, 7.5f, ctx.L("treeSpecies"), y.Salt(0x5C2Eu));
-                y.EdgeInset = 5.5f;
-            }
+            // Room for the screening belt is kept now; the trees go in after the yard so roads,
+            // paths and bays never have to dodge them.
+            bool screen = ctx.B("screenTrees") && region.Area > 1500f;
+            if (screen) y.EdgeInset = 6.2f;
             ctx.Check();
 
             Circulation(y);
@@ -169,6 +168,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             }
             ctx.Check();
 
+            if (screen) YardKit.Screen(ctx, y.Occ, y.Gates, 2.6f, 7.5f, ctx.L("treeSpecies"), y.Salt(0x5C2Eu));
             Skips(y, ctx.I("skips"));
             Machines(y, ctx.I("machines"), style);
             Strays(y, ctx.F("strays"));
@@ -354,22 +354,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 if (walk) LeisureKit.Path(ctx, y.Occ, a, b, NetRole.Pathway, pathAsset);
                 else YardKit.Haul(ctx, y.Occ, new[] { a, b }, math.min(y.Aisle, 5f), y.HaulRole, AssetMix.One(""), y.HaulCategory);
             }
-            if (walk && aisles.Count > 0 && y.Gates.Count > 0)
-            {
-                // Visitors walk in from the gate to the nearest aisle.
-                var g = y.Gates[0].Position;
-                float best = float.MaxValue; float2 foot = g;
-                foreach (var (a, b, _) in aisles)
-                {
-                    var q = SegmentIndex.ClosestPoint(g, a, b);
-                    float d = math.distance(q, g);
-                    if (d < best && !y.Region.CrossesBoundary(g, q, true)) { best = d; foot = q; }
-                }
-                var inward = y.Region.InwardNormal(y.Gates[0].Segment);
-                var side = new float2(inward.y, -inward.x);
-                var from = g + side * (y.Aisle * 0.5f + 2f) + inward * 0.5f;
-                if (best < float.MaxValue && y.Region.Contains(from) && !y.Region.CrossesBoundary(from, foot, true)) LeisureKit.Path(ctx, y.Occ, from, foot, NetRole.Pathway, pathAsset);
-            }
+            if (walk) ConnectVisitors(y, aisles, pathAsset);
             // Goods rows on both sides of each aisle.
             string[] goods = { AssetCategories.ScrapWreck, AssetCategories.ScrapPallet, AssetCategories.ScrapBarrel, AssetCategories.ScrapHeap, AssetCategories.ScrapTire, AssetCategories.ScrapPallet };
             int rowIndex = 0;
@@ -414,6 +399,23 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 if (Spots.Find(y.Occ, 4f, Spots.Preference.Open, y.Salt(0x5ED0u), out var spot, new List<float2> { far }, 0f, 2f, 600))
                     LeisureKit.Put(ctx, y.Occ, spot, LeisureKit.Yaw(spot, y.Start), ObjectRole.Furniture, AssetMix.One(""), shed, 3.5f, y.Salt(0x5ED1u), 1f, 0.3f);
             }
+        }
+
+        /// <summary>Visitors walk in down the middle of the haul spine (clear of the gate compound), then across to the nearest aisle.</summary>
+        private static void ConnectVisitors(Yard y, List<(float2 a, float2 b, int k)> aisles, AssetRef pathAsset)
+        {
+            if (aisles.Count == 0 || y.Gates.Count == 0) return;
+            var ctx = y.Ctx;
+            var g = y.Gates[0].Position + y.Region.InwardNormal(y.Gates[0].Segment) * 0.3f;
+            float best = float.MaxValue; float2 foot = y.Start;
+            foreach (var (a, b, _) in aisles)
+            {
+                var q = SegmentIndex.ClosestPoint(y.Start, a, b);
+                float d = math.distance(q, y.Start);
+                if (d < best && !y.Region.CrossesBoundary(y.Start, q, true)) { best = d; foot = q; }
+            }
+            if (!y.Region.CrossesBoundary(g, y.Start, true)) LeisureKit.Path(ctx, y.Occ, g, y.Start, NetRole.Pathway, pathAsset);
+            if (best < float.MaxValue) LeisureKit.Path(ctx, y.Occ, y.Start, foot, NetRole.Pathway, pathAsset);
         }
 
         /// <summary>Container blocks with reach-stacker aisles, floodlight masts at block ends, a fence row.</summary>
@@ -552,11 +554,13 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
             const float carLen = 4.8f;
             float pitch = y.Aisle + carLen * 2f + 0.8f;
-            foreach (var (a, b, _) in YardKit.Lines(y.Core, y.Centre, y.Side, pitch, 0f, 2f))
+            var lanes = YardKit.Lines(y.Core, y.Centre, y.Side, pitch, 0f, 2f);
+            foreach (var (a, b, _) in lanes)
             {
                 if (walk) LeisureKit.Path(ctx, y.Occ, a, b, NetRole.Pathway, pathAsset);
                 else YardKit.Haul(ctx, y.Occ, new[] { a, b }, math.min(y.Aisle, 5f), y.HaulRole, AssetMix.One(""), y.HaulCategory);
             }
+            if (walk) ConnectVisitors(y, lanes, pathAsset);
             string tire = YardKit.CatQuiet(AssetCategories.ScrapTire);
             int rowIndex = 0;
             foreach (var off in new[] { pitch * 0.5f - carLen * 0.5f - 0.4f, pitch * 0.5f + carLen * 0.5f + 0.4f })
