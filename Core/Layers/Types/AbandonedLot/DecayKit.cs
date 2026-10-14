@@ -287,7 +287,8 @@ namespace Placemaker.Core.Layers.Types.Ruins
                     if (!occ.Free(p, r, r * 0.5f + 0.3f, 0.15f)) continue;
                     var asset = !auto ? AssetMix.Pick(ids, v) : pile ? GritAssets.For(pileCategory, v, seed) : GritAssets.Ref(Chunks, v);
                     var o = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 4u)) * 6.283f, ObjectRole.Furniture, asset, v, -1, pileCategory);
-                    o.Scale = auto ? 0.85f + 0.3f * Hashing.Unit(Hashing.Mix(v, 5u))
+                    // Real assets carry the size now; scale only nudges (piles a touch larger than chunks).
+                    o.Scale = auto ? (pile ? 1f : 0.8f) + 0.15f * Hashing.Unit(Hashing.Mix(v, 5u))
                         : pile ? pileScale * (0.9f + 0.6f * Hashing.Unit(Hashing.Mix(v, 5u))) : 0.45f + 0.4f * Hashing.Unit(Hashing.Mix(v, 5u));
                     occ.Take(p, r, 2);
                     if (pile) res.Piles++; else res.Chunks++;
