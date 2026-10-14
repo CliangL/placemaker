@@ -14,7 +14,7 @@ using Placemaker.Core.Tool;
 using Unity.Mathematics;
 using Xunit;
 
-namespace Placemaker.Tests
+namespace Placemaker.Tests.Types
 {
     public static class WorkSiteTestKit
     {

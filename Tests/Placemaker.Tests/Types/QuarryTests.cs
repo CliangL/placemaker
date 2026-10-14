@@ -12,9 +12,9 @@ using Placemaker.Core.Tool;
 using Unity.Mathematics;
 using Xunit;
 using Xunit.Abstractions;
-using K = Placemaker.Tests.WorkSiteTestKit;
+using K = Placemaker.Tests.Types.WorkSiteTestKit;
 
-namespace Placemaker.Tests
+namespace Placemaker.Tests.Types
 {
     public class QuarryTests
     {
