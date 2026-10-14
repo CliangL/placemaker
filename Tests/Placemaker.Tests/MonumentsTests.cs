@@ -333,7 +333,7 @@ namespace Placemaker.Tests
             var noStatues = new Dictionary<string, int>
             {
                 [AssetCategories.CenterpieceStatue] = 0, [AssetCategories.MemorialMonument] = 0, [AssetCategories.MemorialSculpture] = 0,
-                [AssetCategories.Centerpiece] = 0, [AssetCategories.MonumentSculpture] = 0,
+                [AssetCategories.Centerpiece] = 0, [AssetCategories.MonumentSculpture] = 0, [AssetCategories.CenterpieceFountain] = 0,
             };
             using (AssetAvailability.Scope(noStatues))
                 foreach (var id in new[] { BigStatueAddOn.LayerId, SculptureWalkAddOn.LayerId })

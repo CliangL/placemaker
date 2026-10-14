@@ -166,7 +166,8 @@ namespace Placemaker.Core.Layers.AddOns
                 // small one elsewhere; it sits in the middle and takes its own disc.
                 var fountain = AssetMix.One("", r >= 6.5f ? AddOnAssets.SplashFountain : new[] { "SmallFountain03", "SmallFountain02" });
                 float fr = r >= 6.5f ? 4.7f : 2.1f;
-                if (Put(ctx, occ, site.Center, Hashing.Unit(ctx.Seed) * 6.283f, ObjectRole.Centerpiece, fountain, AssetCategories.CenterpieceFountain, fr, Hashing.Mix(ctx.Seed, 0xF0u))) placed++;
+                if (AssetAvailability.Require(ctx.Plan, AssetCategories.CenterpieceFountain, null, Keys.Category(AssetCategories.CenterpieceFountain))
+                    && Put(ctx, occ, site.Center, Hashing.Unit(ctx.Seed) * 6.283f, ObjectRole.Centerpiece, fountain, AssetCategories.CenterpieceFountain, fr, Hashing.Mix(ctx.Seed, 0xF0u))) placed++;
                 // A sprinkle of wet splashes on the deck round it (flat decals; never reserve space).
                 if (AssetAvailability.Has(AssetCategories.DecalPuddles))
                 {
