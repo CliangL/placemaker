@@ -144,10 +144,40 @@ namespace Placemaker.Core.Layers.Types.Quarry
         }
 
         /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
-        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+        private static readonly Dictionary<string, GritAssets.Set> ArtSurfaces = null;
 
-        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
-        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
+        // Mining plant, not site plant: haul trucks, wheel loaders and one big excavator.
+        private static readonly GritAssets.Set MiningMachines = new GritAssets.Set(false,
+            "Prop_FrontendLoader01|Prop_CoalTruck01", "Prop_OreMiningTruck01|Prop_CoalTruck01", "Prop_FrontendLoader01|Prop_CoalTruck01",
+            "Prop_MiningExcavator01|Prop_FrontendLoader01", "Prop_OreMiningTruck01|Prop_CoalTruck01");
+
+        /// <summary>Stockpiles by what the pit wins: the game's real bulk heaps, not truck loads.</summary>
+        private static GritAssets.Set Piles(string subtype)
+        {
+            switch (subtype)
+            {
+                case "sandPit": return new GritAssets.Set(false, "PileSandSmall01|Prop_PileSandSmall01_Full", "Prop_PileSandSmall01_Partial2|PileSandSmall01");
+                case "gravelPit":
+                case "lakeDig": return new GritAssets.Set(false, "PileStoneSmall01|Prop_PileStoneSmall01_Full", "PileSandSmall01", "Prop_PileStoneSmall01_Partial2|PileStoneSmall01");
+                case "abandoned":
+                case "flooded": return new GritAssets.Set(false, "Prop_PileStoneSmall01_Partial1|PileStoneSmall01", "OreMiningTruck01_OrePile01|CoalTruck01_StonePile01");
+                default: return new GritAssets.Set(false, "PileStoneSmall01|Prop_PileStoneSmall01_Full", "Prop_PileStoneSmall01_Partial2|PileStoneSmall01", "PileStoneSmall01");
+            }
+        }
+
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets);
+        // decals are thinned to a believable density.
+        protected override void PlanCore(LayerContext ctx)
+        {
+            PlanArt(ctx);
+            var objects = new Dictionary<string, GritAssets.Set>
+            {
+                [AssetCategories.ConstructionMachine] = MiningMachines,
+                [AssetCategories.ConstructionPile] = Piles(ctx.S("subtype")),
+            };
+            GritAssets.Apply(ctx.Plan, ctx.Seed, objects, ArtSurfaces);
+            GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 110f);
+        }
 
         private void PlanArt(LayerContext ctx)
         {
@@ -577,7 +607,11 @@ namespace Placemaker.Core.Layers.Types.Quarry
             var ids = ctx.L("pileAssets");
             string pile = SiteKit.Cat(ctx, ids, AssetCategories.ConstructionPile, AssetCategories.Rock);
             if (pile == null) return;
-            float r = q.Subtype == "gravelPit" || q.Subtype == "lakeDig" ? 4f : 3f;
+            // Real bulk heaps (9 × 15 m) when automatic; the player's own piles keep the old spacing.
+            bool bulk = ids == null || ids.Length == 0;
+            float r = bulk ? 7f : q.Subtype == "gravelPit" || q.Subtype == "lakeDig" ? 4f : 3f;
+            // Each bulk heap holds what several truck-load cones did.
+            if (bulk) wanted = math.max(2, (wanted + 1) / 2);
             // Rows of conical heaps along the rim near the road entry (bays a loader can reach).
             var target = q.Pit != null ? q.Entry : q.Region.Centroid;
             int placed = 0;
@@ -587,7 +621,8 @@ namespace Placemaker.Core.Layers.Types.Quarry
                 if (!RimSpot(q, r * 2f, 0x57C0u + (uint)g * 13u, p => -math.distance(p, target) * 0.5f, out var c)) break;
                 var dir = q.Pit != null ? math.normalizesafe(new float2(-(c - target).y, (c - target).x)) : new float2(1, 0);
                 int n = math.min(4, wanted - placed);
-                placed += SiteKit.Row(ctx, q.Occ, c - dir * n * r * 1.2f, c + dir * n * r * 1.2f, r * 2.4f, pile, ids, r, 0x57D0u + (uint)g * 17u);
+                float pitch = bulk ? 10.5f : r * 2.4f;
+                placed += SiteKit.Row(ctx, q.Occ, c - dir * (n - 1) * pitch * 0.5f, c + dir * (n - 1) * pitch * 0.5f, pitch, pile, ids, bulk ? 5f : r, 0x57D0u + (uint)g * 17u, bulk);
                 mud.Add(LayerRegion.Circle(c, r * (n + 1.5f), 12));
             }
             q.Heaps += placed;

@@ -206,6 +206,28 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                     n.Asset = Merge(Ref(f, Hashing.Mix(salt, 0xFE7Cu)), n.Asset);
         }
 
+        /// <summary>
+        /// Thins decals to at most <paramref name="perHa"/> per hectare of <paramref name="areaM2"/>, evenly
+        /// over plan order (every k-th kept), so wear stays wear and never turns into a carpet of stickers.
+        /// </summary>
+        public static int CapDecals(AreaPlan plan, float areaM2, float perHa)
+        {
+            if (plan == null || areaM2 <= 0f) return 0;
+            int decals = 0;
+            foreach (var o in plan.Objects) if (o != null && o.Role == ObjectRole.Decal) decals++;
+            int max = (int)(areaM2 / 10000f * perHa);
+            if (decals <= max) return 0;
+            float keep = max / (float)decals, acc = 0f;
+            int removed = plan.Objects.RemoveAll(o =>
+            {
+                if (o == null || o.Role != ObjectRole.Decal) return false;
+                acc += keep;
+                if (acc >= 1f) { acc -= 1f; return false; }
+                return true;
+            });
+            return removed;
+        }
+
         /// <summary>Keeps any built-in fallbacks the layer already gave (after the curated ones).</summary>
         private static AssetRef Merge(AssetRef curated, AssetRef existing)
         {
