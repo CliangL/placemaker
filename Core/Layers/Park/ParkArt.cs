@@ -50,3 +50,22 @@ namespace Placemaker.Core.Layers.Park
         public static readonly string[] Mulch = { "EAI - Surface Pack Ground Mulch Surface", Forest };
     }
 }
+
+namespace Placemaker.Core.Layers.Park
+{
+    /// <summary>Campground defaults (vanilla CampfireSite palette: makeshift tents, campground table sets and shelters, info signs).</summary>
+    public static class CampArt
+    {
+        public static readonly string[] Tents = { "MakeshiftTent01", "MakeshiftTent02", "MakeshiftTent03", "MakeshiftTent04" };
+        /// <summary>No vanilla campfire prop exists; a small charcoal grill stands in for the pitch fire.</summary>
+        public static readonly string[] Fire = { "Grill02", "Grill01" };
+        public static readonly string[] Tables = { "CampgroundTableset01", "CampgroundTableset02" };
+        public static readonly string[] Pad = { ParkArt.Forest };
+        /// <summary>Caravan hardstanding: fine gravel (Terrain Surfaces pack), the forest floor without it.</summary>
+        public const string Hardstanding = "Terrain Surfaces Pack Rock gaga TTP - Small Pebbles grey M Surface";
+        public static readonly string[] Sign = { "ParkInfosign03", "ParkInfosign01" };
+        public static readonly string[] Shelter = { "CampgroundShelter02", "CampgroundShelter01" };
+        public static readonly string[] Trees = { "OakTree01", "BirchTree01", "EU_AlderTree01", "NA_HickoryTree01", "PineTree01", "SpruceTree01" };
+        public static readonly string[] ForestTrees = { "PineTree01", "SpruceTree01", "BirchTree01", "EuropeanSpruce01" };
+    }
+}
