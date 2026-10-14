@@ -193,7 +193,7 @@ namespace Placemaker.Tests
             var b = Compose(Recipe(type), Site);
             var da = Decals(a); var db = Decals(b);
             _out.WriteLine(type + ": " + da.Count + " decorative decals: " + string.Join(", ", da.GroupBy(o => o.Category).Select(g => g.Key + " " + g.Count())));
-            Assert.True(da.Count > 40, type + " has only " + da.Count + " decals");
+            Assert.True(da.Count > 10, type + " has only " + da.Count + " decals");   // s23: few, deliberate
             Assert.Equal(da.Count, db.Count);
             for (int i = 0; i < da.Count; i++)
             {
@@ -239,7 +239,7 @@ namespace Placemaker.Tests
         [Fact]
         public void ParkingOilAlignsWithTheBayAndTyreMarksWithTheAisle()
         {
-            var p = Compose(Recipe("parking"), Site);
+            var p = Compose(Recipe("parking", 7, r => r.Root.Settings.Values[DressingControls.StyleId] = "gritty"), Site);   // tyre marks are Gritty only (s23)
             var lot = p.Layers.First(l => l.GeneratorId == "parking");
             var bays = lot.Objects.Where(o => o.Role == ObjectRole.ParkingBay).ToList();
             var oil = lot.Objects.Where(o => o.Role == ObjectRole.Decal && o.Category == DecalPools.Oil).ToList();
@@ -267,7 +267,7 @@ namespace Placemaker.Tests
         [Fact]
         public void PathEdgeLeavesFollowThePath()
         {
-            var p = Compose(Recipe("park"), Site);
+            var p = Compose(Recipe("park", 7, r => r.Root.Settings.Values[DressingControls.StyleId] = "gritty"), Site);   // edge drifts are Gritty only (s23)
             int n = 0;
             foreach (var l in p.Layers)
                 foreach (var o in l.Objects.Where(o => o.Role == ObjectRole.Decal && o.Category == DecalPools.LeavesEdge))
@@ -329,7 +329,7 @@ namespace Placemaker.Tests
         {
             var ring = TestKit.Rect(120, 90);
             var site = Types.WaterTypesKit.WaterInside(18f);
-            var p = Compose(Recipe("beach"), ring, site);
+            var p = Compose(Recipe("beach", 7, r => r.Root.Settings.Values[DressingControls.StyleId] = "gritty"), ring, site);   // wrack is Gritty only (s23)
             var d = Decals(p);
             _out.WriteLine(string.Join(", ", d.GroupBy(o => o.Category).Select(g => g.Key + " " + g.Count())));
             Assert.Contains(d, o => o.Category == DecalPools.WetSand);

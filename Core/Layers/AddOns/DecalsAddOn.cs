@@ -84,6 +84,17 @@ namespace Placemaker.Core.Layers.AddOns
             uint clump = Hashing.Mix(ctx.Seed, 0xDEC0u);
             int placed = 0;
             float cell = theme == "paving" ? 3f : 1.2f;
+            // s23: the objects leaves and dirt belong to (trees/shrubs; benches, lamps, bins), indexed once.
+            var hosts = new List<ReservedSpace.Disc>();
+            var hostGrid = new Decals.DressingWorld.Grid(8f);
+            foreach (var d in ctx.Input.Reserved.Discs)
+            {
+                bool host = theme == "leaves" ? d.Tag == ObjectRole.Tree.ToString() || d.Tag == ObjectRole.Bush.ToString()
+                    : d.Tag == ObjectRole.Bench.ToString() || d.Tag == ObjectRole.Lamp.ToString() || d.Tag == ObjectRole.Bin.ToString();
+                if (!host) continue;
+                hostGrid.Add(d.Center, d.Radius, hosts.Count);
+                hosts.Add(d);
+            }
             var candidates = Scatter.Candidates(region, cell, Hashing.Mix(ctx.Seed, 0xDEC1u), math.min(80000, wanted * 12 + 100), ctx.Cancel);
             for (int pass = 0; pass < 2 && placed < wanted; pass++)
             foreach (var cand in candidates)
@@ -112,13 +123,16 @@ namespace Placemaker.Core.Layers.AddOns
                 }
                 // Places (another feature's ground, zoning cutouts) are not ours; objects never block a decal.
                 if (!region.ContainsDisc(p, 0.3f) || OnWater(ctx, p) || occ.HitsPolygon(p, 0.3f)) continue;
-                if (strict && (theme == "leaves" || theme == "dirt"))
+                if (theme == "leaves" || theme == "dirt")
                 {
-                    // Leaves and dirt gather along path edges and round trees, benches and lamps; open lawn
-                    // gets only a rare one (playtest 4b: no uniform carpets of decal squares).
-                    float near = math.min(occ.Corridors.Clearance(p, 3f), occ.Discs.Clearance(p, 3f) + 0.8f);
-                    float gather = near < 2.5f ? 1f - math.max(0f, near) / 3f : 0.03f;
-                    if (Hashing.Unit(Hashing.Mix(v, 0x6A7u)) > gather) continue;
+                    // s23 (user: "poop all over the floor"): leaves lie under crowns, dirt where feet stop (benches, lamps,
+                    // bins); never on open lawn far from anything, never on the path itself.
+                    if (occ.Corridors.Clearance(p, 1f) < 0f) continue;
+                    float reach = theme == "leaves" ? 3.5f : 2f;
+                    float near = float.MaxValue;
+                    foreach (int hi in hostGrid.Near(p, reach + 3f))
+                        near = math.min(near, math.distance(hosts[hi].Center, p) - hosts[hi].Radius);
+                    if (near > reach || Hashing.Unit(Hashing.Mix(v, 0x6A7u)) > 1f - math.max(0f, near) / (reach + 0.5f)) continue;
                 }
                 // On a path/aisle: well inside it (the reserved corridors approximate curves by chords).
                 bool onCorridor = occ.Corridors.Clearance(p, 1f) < -0.6f;

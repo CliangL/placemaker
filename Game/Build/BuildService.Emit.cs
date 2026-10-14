@@ -330,6 +330,12 @@ namespace Placemaker.Game.Build
             var prefab = PrefabOf(w);
             if (prefab == Entity.Null) return;
             var o = _request.Plan.Layers[w.Layer].Objects[w.Index];
+            // s23: decorative decals are built see-through (runtime clone per opacity tier; the original until it is ready).
+            if (o.Role == ObjectRole.Decal && _decalClones != null)
+            {
+                float opacity = Core.Decals.DecalLook.OpacityOf(o);
+                if (opacity < 0.995f) prefab = _decalClones.CloneFor(prefab, opacity);
+            }
             long key = PlanWork.Key(w);
             _itemByKey[key] = w;
             // Uniform categories (benches, lamps, bins…): one random seed per build, so colour/mesh

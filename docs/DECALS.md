@@ -16,11 +16,10 @@ room for decals — they don't take up space."*
    collision box (a leaves decal is 6×1×6 m) and meets every prop, tree and path it lies on: the ghost cancels both
    optional temps, a real build hides one (`OverrideSystem`). That — plus our own Declutter treating decals as tier-4
    objects — is where "no room for decals" came from.
-3. **Pack decals carry a projection mask** (`colossal_DecalLayerMask` in the pack's `decal.json`: values 1, 2, 3, 4, 6,
-   7, 36, 39). If it maps 1:1 to `DecalLayers` (Terrain 1, Roads 2, Buildings 4, Other 32), mask-3/7 decals also draw
-   on paths and lots and mask-1 ones only on terrain — but 84 RealVision *ground* textures (foliage, grass patches, dirt)
-   carry 4, so the CustomDecals encoding is probably not 1:1. Unverified; the census lists the mask, and the classifier
-   excludes wall/roof/window/curb decals by name instead (family BuildingOnly).
+3. **Pack decals carry a projection mask** (`colossal_DecalLayerMask` in the pack's `decal.json`), and it IS `DecalLayers`
+   (s23: ExtraAssetsImporter sets `DecalProperties.m_LayerMask` from it; Terrain 1, Roads 2, Buildings 4, Other 32). The 84
+   RealVision decals with 4 and 22 with 36 project onto buildings only. The catalog marks decals without the Terrain bit
+   `WallOrHanging`, so they are never automatic.
 4. **Pack prefixes lie.** "G87 Stains and Puddles Decals Wet Pack Stains G87 Oil 1 Decal" is an oil blot; the item part
    (after the last "G87", or after the pack's "… Pack"/"… Decals") decides. "Puddle Mirror" is a puddle, not glass.
 
@@ -137,6 +136,40 @@ Path wear under *Paths*, Worn patches under *Picnic*/*Furniture*, Shore wrack un
 (save format): `dressAmount`, `dressStyle`, `dress<Family>`. Old saves without them load the defaults. The existing
 Decals feature (theme scatter) is unchanged in settings.
 
+## Art pass (s23): see-through, soft-edged, deliberate
+
+User after seeing them in game: the leaf scatter was "hard, opaque, crisp"; an opaque dark-brown mud rectangle over a
+junction and a grey wet streak "look odd"; a faint sand dusting over paving at an edge was "perfect, you almost don't
+notice it". Most should be ~80 % transparent, used artistically rather than randomly, more of them in the good spots.
+Decals stay ON by default (Decals 100 %, the Decals feature as before); the art pass is the fix.
+
+- **Opacity** (RESEARCH-NOTES-ADDENDUM 82–83): there is no per-instance decal opacity, so the build swaps each decorative
+  decal for a runtime see-through clone of its prefab per tier (`Game/Build/DecalOpacitySystem`, `DecalLook.Tier`, tiers
+  20/35/50/100 %). Every decorative pool is 20 % except sand dust and wet sand (35 %); markings, stalls and field lines
+  stay 100 %.
+- **Edge classes** (`DecalEdge`): Soft (feathered: G87 stains A–H, dust, wet effects, Ground Dirt, mulch, moss, fallen-leaf
+  scatters, golden sand), Item (discrete things on a clear ground: litter, glass, shells, driftwood, palm leaves), Shaped
+  (specific cracks, damage, repairs, tyre tracks, bands, drips, potholes, lined drifts, seaweed lines), Hard (RealVision
+  texture tiles, the G87 dirt-road transitions (the mud rectangle), asphalt/sidewalk/grass tiles, the G87 "Dirty Pack
+  Leaf" squares that print leaves on grass). Scatter pools take Soft (+Item); placed pools (tyre, cracks, repairs, edge
+  drifts) take Shaped; Hard is never automatic, neither in dressing nor in the Decals feature's theme pools.
+- **Placement**: sand dust along every sand↔paving seam on the paving side, in soft runs (new Seams rule; dirt dust where
+  dirt meets paving); verge wear only near path junctions and entrances, bench/table wear from their own rule; leaf drifts
+  on path edges only in the shade of trees; the litter bed under a crown fades toward paths; path cracks along the edge,
+  oriented with it; paving stains and cracks gather at the paving's edges; no random scatter on open lawn (leaves only in
+  shade, stones only in natural types); no sand dust on sand. A higher amount raises the chances in these spots instead of
+  spreading wider.
+- **Gallery** draws decals at their tier opacity; `--decals` renders decals-on (100 %), decals-max (300 %), decals-gritty.
+- **Second look** (screenshots 37/38, "it just looks like there's poop all over the floor"): the test is that from a normal
+  camera height no single decal is consciously noticed. Clean and Lived-in dress only with what blends (`Dressing.Allowed`):
+  faint leaf litter under crowns (light/scattered kinds, never red, never dense "medium" piles, never on paths), faint dirt
+  dust where feet stop (path junctions and entrances, bench fronts, play items, goalmouths), sand dust where sand meets
+  paving, wet sand at the waterline, faint oil in parking bays and faint stains by benches, bins and kiosks. Cracks,
+  repairs, tyre marks, mud, puddles, moss, mulch, stones, litter, glass, wrack and graffiti are Gritty only (still placeable
+  by hand with the Decals feature). Golden Sand discs count as hard-edged (never automatic), sand dust is pale (never red),
+  footprints are never automatic, open paving stays clean unless Gritty, and the Decals feature's leaves/dirt themes only
+  gather under crowns or by benches, lamps and bins — never on open lawn or on a path.
+
 ## Open problems
 
 - In-game confirmation of the sunk-decal trick (renders on the Tunnel mesh layer; projection unaffected?). Fallback: the
@@ -152,7 +185,7 @@ Decals feature (theme scatter) is unchanged in settings.
 
 ## Census (generated)
 
-Source: `catalog-dump.json v19 2026-10-14T17:45:48.4809165Z` — 960 decal objects (199 vanilla, 761 from asset packs).
+Source: `catalog-dump.json v14 2026-10-14T20:45:05.0029742Z` — 960 decal objects (199 vanilla, 761 from asset packs).
 Family/shape/ground/orientation come from `Core/Decals/DecalCatalog.Describe` with the real footprint; `pools` = the dressing pools
 (`DecalPools`) an item can be picked for automatically (size caps apply when the game builds the pools). `mask` = the pack's
 `colossal_DecalLayerMask` (read as DecalLayers: T terrain, R roads/paths, B buildings, O other; blank = vanilla/unknown — the
@@ -328,10 +361,10 @@ CustomDecals encoding is unverified, see finding 3). Confidence: ●● item wor
 
 | decal | size m | shape | ground | orientation | mask | conf | pools |
 |---|---|---|---|---|---|---|---|
-| G87 Trash Decals Dirty Pack Trash G87 Dust 01 Grey Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud |
-| G87 Trash Decals Dirty Pack Trash G87 Dust 02 Brown Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud |
-| G87 Trash Decals Dirty Pack Trash G87 Dust 03 Red Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud |
-| RealVision Decals Ground Texture90 - Road Dust Decal | 15×10 | Blob | Paved, Dirt | Random | RB | ●● | wear mud |
+| G87 Trash Decals Dirty Pack Trash G87 Dust 01 Grey Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand |
+| G87 Trash Decals Dirty Pack Trash G87 Dust 02 Brown Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand |
+| G87 Trash Decals Dirty Pack Trash G87 Dust 03 Red Decal | 10×10 | Blob | Paved, Dirt | Random | TRB | ●● | wear mud sand |
+| RealVision Decals Ground Texture90 - Road Dust Decal | 15×10 | Blob | Paved, Dirt | Random | RB | ●● | wear mud sand |
 | RealVision Decals Ground Texture91 - Road Dust Decal | 25×15 | Sheet | Paved, Dirt | Random | RB | ●● |  |
 | RealVision Decals Ground Texture92 - Road Dust Decal | 20×10 | Sheet | Paved, Dirt | Random | RB | ●● |  |
 | RealVision Decals Ground Texture93 - Road Dust Decal | 20×10 | Sheet | Paved, Dirt | Random | B | ●● |  |

@@ -26,6 +26,7 @@ namespace Placemaker.Core.Decals
         public readonly List<Tree> Trees = new List<Tree>();
         public readonly List<Seg> Segs = new List<Seg>();
         public readonly List<Poly> Polys = new List<Poly>();
+        public readonly List<AreaPlan> Plans = new List<AreaPlan>();
         /// <summary>Zoning cutouts (Cutouts.Of): no decal reaches into one.</summary>
         public readonly List<float2[]> Cutouts;
         private readonly Grid _treeGrid = new Grid(8f), _segGrid = new Grid(8f), _polyGrid = new Grid(16f);
@@ -41,6 +42,7 @@ namespace Placemaker.Core.Decals
             foreach (var l in plan.Layers)
             {
                 if (l == null) continue;
+                Plans.Add(l);
                 foreach (var o in l.Objects)
                 {
                     if (o == null || o.Role != ObjectRole.Tree) continue;

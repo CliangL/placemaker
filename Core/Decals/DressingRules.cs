@@ -59,8 +59,11 @@ namespace Placemaker.Core.Decals
             public static float Yaw(float2 dir) => math.atan2(dir.x, dir.y);
             public static float RandomYaw(uint h) => Hashing.Unit(h) * math.PI * 2f;
 
-            public void Emit(float2 p, float yaw, string pool, float priority, uint h, int forbid = 0) =>
+            public void Emit(float2 p, float yaw, string pool, float priority, uint h, int forbid = 0)
+            {
+                if (!Dressing.Allowed(pool, S.Style)) return;
                 Out.Add(new Dressing.Candidate { P = p, Yaw = yaw, Pool = pool, Priority = priority, Hash = h, Layer = Layer, Forbid = forbid });
+            }
         }
 
         public static void Run(Ctx c)
@@ -72,6 +75,7 @@ namespace Placemaker.Core.Decals
             if (c.S.Of(DressFamily.Play) > 0f) Play(c);
             if (c.S.Of(DressFamily.Sports) > 0f) Sports(c);
             if (c.S.Of(DressFamily.Ground) > 0f && c.Main) Ground(c);
+            if (c.Main && (c.S.Of(DressFamily.Ground) > 0f || c.S.Of(DressFamily.Paved) > 0f || c.S.Of(DressFamily.Shore) > 0f || c.S.Of(DressFamily.Works) > 0f)) Seams(c);
             if (c.S.Of(DressFamily.Shore) > 0f && c.Main) Shore(c);
             if (c.S.Of(DressFamily.Works) > 0f) Works(c);
             if (c.S.Of(DressFamily.Ruins) > 0f) Ruins(c);
@@ -118,6 +122,8 @@ namespace Placemaker.Core.Decals
                     float ang = Ctx.U(Ctx.H2(hk, 1)) * math.PI * 2f;
                     float dist = math.sqrt(Ctx.U(Ctx.H2(hk, 2))) * crown * 0.85f;
                     var q = p + new float2(math.cos(ang), math.sin(ang)) * dist;
+                    // s23: the litter bed fades toward paths and paving — only a few leaves are carried onto them.
+                    if (c.W.GroundAt(q) == GroundKind.Paved) continue;   // leaf clumps on a path read as dirt (user, s23)
                     // Conifers drop needles (mulch-like beds); broadleaves leaves, with a mulch ring at some trunks.
                     string pool = conifer ? DecalPools.Mulch
                         : tree && dist < crown * 0.35f && Ctx.U(Ctx.H2(hk, 3)) < 0.3f ? DecalPools.Mulch : AssetCategories.DecalLeaves;
@@ -135,6 +141,9 @@ namespace Placemaker.Core.Decals
             float aLeaves = c.A(DressFamily.Paths, Kind.Leaves), aWear = c.A(DressFamily.Paths, Kind.Wear), aCrack = c.A(DressFamily.Paths, Kind.Crack),
                 aMoss = c.A(DressFamily.Paths, Kind.Moss), aPuddle = c.A(DressFamily.Paths, Kind.Puddle), aLitter = c.A(DressFamily.Paths, Kind.Litter);
             var ends = new List<(float2 p, float2 dir, float hw, bool attached)>();
+            // s23 (user: "be much more conscious of where they are"): wear and dust follow feet — near junctions, entrances
+            // and benches — instead of lining every metre of path.
+            var traffic = Traffic(c);
             for (int ni = 0; ni < c.L.Nets.Count; ni++)
             {
                 var n = c.L.Nets[ni];
@@ -146,22 +155,24 @@ namespace Placemaker.Core.Decals
                     uint h = c.H(ni, 22, s++);
                     float treeD = c.W.NearestTree(p, 9f, out _);
                     float shade = treeD < 8f ? 1f - treeD / 8f : 0f;
+                    float feet = TrafficAt(traffic, p, 9f);
                     var nrm = Perp(t);
                     for (int side = -1; side <= 1; side += 2)
                     {
                         uint hs = Ctx.H2(h, side + 5);
                         var edge = nrm * side;
-                        if (Ctx.Roll(Ctx.H2(hs, 1), (0.07f + 0.6f * shade) * aLeaves))
+                        if (Ctx.Roll(Ctx.H2(hs, 1), (0.7f * shade) * aLeaves))
                             c.Emit(p + edge * (hw + 0.25f), Ctx.Yaw(t), DecalPools.LeavesEdge, 2.2f + shade, Ctx.H2(hs, 2));
-                        if (Ctx.Roll(Ctx.H2(hs, 3), 0.1f * aWear))
-                            c.Emit(p + edge * (hw + 0.8f), Ctx.Yaw(t), DecalPools.Wear, 1.6f, Ctx.H2(hs, 4), ForbidPaved);
+                        if (feet > 0f && Ctx.Roll(Ctx.H2(hs, 3), 0.45f * feet * aWear))
+                            c.Emit(p + edge * (hw + 0.6f), Ctx.Yaw(t), DecalPools.Wear, 1.6f + feet, Ctx.H2(hs, 4), ForbidPaved);
                         if (shade > 0f && Ctx.Roll(Ctx.H2(hs, 5), 0.14f * shade * aMoss))
                             c.Emit(p + edge * math.max(0.2f, hw - 0.3f), Ctx.Yaw(t), DecalPools.Moss, 1.8f, Ctx.H2(hs, 6));
                     }
                     float lat = (Ctx.U(Ctx.H2(h, 9)) - 0.5f) * hw * 1.2f;
-                    if (Ctx.Roll(Ctx.H2(h, 10), 0.12f * aCrack))
-                        c.Emit(p + nrm * lat, Ctx.RandomYaw(Ctx.H2(h, 11)), AssetCategories.DecalCracks, 1.7f, Ctx.H2(h, 12));
-                    if (Ctx.Roll(Ctx.H2(h, 13), 0.035f * aPuddle))
+                    // Cracks run along the path edge (where paving breaks), oriented with it.
+                    if (Ctx.Roll(Ctx.H2(h, 10), 0.08f * aCrack))
+                        c.Emit(p + nrm * (Ctx.U(Ctx.H2(h, 11)) < 0.5f ? -1f : 1f) * math.max(0.3f, hw - 0.5f), Ctx.Yaw(t), AssetCategories.DecalCracks, 1.7f, Ctx.H2(h, 12));
+                    if (Ctx.Roll(Ctx.H2(h, 13), 0.02f * aPuddle))
                         c.Emit(p + nrm * lat * 0.4f, Ctx.Yaw(t), AssetCategories.DecalPuddles, 1.2f, Ctx.H2(h, 14));
                     if (Ctx.Roll(Ctx.H2(h, 15), 0.03f * aLitter))
                         c.Emit(p + nrm * lat, Ctx.RandomYaw(Ctx.H2(h, 16)), AssetCategories.DecalLitter, 1.0f, Ctx.H2(h, 17));
@@ -170,6 +181,34 @@ namespace Placemaker.Core.Decals
                 ends.Add((n.D.xz, math.normalizesafe(n.C.xz - n.D.xz, math.normalizesafe(n.A.xz - n.D.xz)), hw, n.EndAttach >= 0));
             }
             Junctions(c, ends, aWear, aCrack, aLeaves);
+        }
+
+        /// <summary>Where feet cut the verge: path junctions and free ends (entrances). Benches and tables have their own wear (Play).</summary>
+        private static List<float2> Traffic(Ctx c)
+        {
+            var ends = new Dictionary<long, (float2 p, int n)>();
+            foreach (var l in c.W.Plans)
+                foreach (var n in l.Nets)
+                {
+                    if (n == null || !IsPath(n.Role)) continue;
+                    foreach (var e in new[] { n.A.xz, n.D.xz })
+                    {
+                        long k = ((long)math.floor(e.x * 2f) << 32) ^ (uint)math.floor(e.y * 2f);
+                        ends[k] = ends.TryGetValue(k, out var v) ? (v.p, v.n + 1) : (e, 1);
+                    }
+                }
+            var pts = new List<float2>();
+            foreach (var v in ends.Values)
+                if (v.n >= 3 || (v.n == 1 && c.W.Root.BoundaryDistance(v.p, 5f) < 4f)) pts.Add(v.p);
+            return pts;
+        }
+
+        /// <summary>1 at a traffic point, fading to 0 at <paramref name="reach"/> m.</summary>
+        private static float TrafficAt(List<float2> pts, float2 p, float reach)
+        {
+            float best = reach;
+            foreach (var q in pts) best = math.min(best, math.distance(p, q));
+            return 1f - best / reach;
         }
 
         /// <summary>Corner-cutting wear at junctions (people short-cut every corner) and scuffed entrances.</summary>
@@ -255,6 +294,7 @@ namespace Placemaker.Core.Decals
                 if (s?.Ring == null || s.Ring.Length < 3 || DressingWorld.KindOf(s) != GroundKind.Paved) continue;
                 var reg = LayerRegion.From(s.Ring);
                 if (reg == null || reg.Area < 20f) continue;
+                if (S.Style != DressStyle.Gritty) break;   // s23: open paving stays clean unless the place is meant to be gritty
                 bool asphalt = s.Role == SurfaceRole.Asphalt || (s.Category ?? "").StartsWith("surface.asphalt", StringComparison.Ordinal);
                 Scatter(c, reg, amt, si * 7 + 101, new[]
                 {
@@ -265,7 +305,7 @@ namespace Placemaker.Core.Decals
                     (AssetCategories.DecalLitter, 0.12f * Dressing.Weight(S.Style, Kind.Litter), 1.0f, 0),
                     (DecalPools.Glass, 0.05f * Dressing.Weight(S.Style, Kind.Glass), 0.9f, 0),
                     (AssetCategories.DecalGraffiti, 0.012f * Dressing.Weight(S.Style, Kind.Graffiti), 0.8f, 0),
-                }, 14f);
+                }, 14f, q => reg.BoundaryDistance(q, 4f) < 3f ? 1.7f : 0.45f);   // s23: wear gathers at the paving's edges, the middle stays clean
             }
             // Hot spots on paving: where people sit, eat, throw things away and splash.
             float aStain = c.A(DressFamily.Paved, Kind.Stain), aLitter = c.A(DressFamily.Paved, Kind.Litter), aWet = c.A(DressFamily.Paved, Kind.Puddle) + 0.4f * amt;
@@ -326,7 +366,7 @@ namespace Placemaker.Core.Decals
         /// Clustered scatter over a region: <paramref name="kinds"/> = (pool, expected per 100 m², priority, forbid mask).
         /// Value-noise clumps (patches of wear, not an even sprinkle); <paramref name="clump"/> = clump size (m).
         /// </summary>
-        private static void Scatter(Ctx c, LayerRegion reg, float amount, int salt, (string pool, float per100, float pri, int forbid)[] kinds, float clump)
+        private static void Scatter(Ctx c, LayerRegion reg, float amount, int salt, (string pool, float per100, float pri, int forbid)[] kinds, float clump, Func<float2, float> bias = null)
         {
             if (amount <= 0f || reg == null) return;
             float total = 0f;
@@ -345,7 +385,7 @@ namespace Placemaker.Core.Decals
             {
                 var p = cands[i];
                 uint h = c.H(salt, 73, i);
-                float cl = Layers.Common.Scatter.Clustering(p, clump, clumpSeed, 0.05f);
+                float cl = Layers.Common.Scatter.Clustering(p, clump, clumpSeed, 0.05f) * (bias != null ? bias(p) : 1f);
                 if (!Ctx.Roll(h, perCand * cl * 1.9f)) continue;
                 float pick = Ctx.U(Ctx.H2(h, 1)) * total;
                 foreach (var k in kinds)
@@ -552,7 +592,7 @@ namespace Placemaker.Core.Decals
             if (amt <= 0f) return;
             var reg = c.Region;
             bool natural = NaturalTypes.Contains(S.LayerId);
-            const float cell = 3f;
+            const float cell = 4f;
             int max = math.min(40000, (int)(reg.Area / (cell * cell)) + 8);
             var cands = Layers.Common.Scatter.Candidates(reg, cell, c.H(131, 1), max, default);
             uint clump = c.H(131, 2);
@@ -575,14 +615,16 @@ namespace Placemaker.Core.Decals
                             (AssetCategories.DecalPuddles, 0.03f * wMud), (AssetCategories.DecalLitter, 0.02f * wLitter) };
                         break;
                     case GroundKind.Sand:
-                        kinds = new[] { (DecalPools.Sand, 0.3f * wWear), (DecalPools.Beach, 0.12f * wWrack), (DecalPools.Footprints, 0.08f), (AssetCategories.DecalLitter, 0.02f * wLitter) };
+                        // Sand on sand is invisible: sand ground gets wrack and footprints; sand DUST goes where sand meets paving (Seams).
+                        kinds = new[] { (DecalPools.Sand, 0f), (DecalPools.Beach, 0.1f * wWrack), (DecalPools.Footprints, 0.08f), (AssetCategories.DecalLitter, 0.015f * wLitter) };
                         break;
                     default:
                         float treeD = c.W.NearestTree(p, 10f, out _);
                         float shade = treeD < 9f ? 1f - treeD / 9f : 0f;
-                        kinds = new[] { (AssetCategories.DecalLeaves, (0.03f + 0.12f * shade) * wLeaves), (DecalPools.Wear, 0.05f * wWear),
-                            (DecalPools.Moss, (natural ? 0.05f : 0.015f + 0.04f * shade) * wMoss), (DecalPools.Rocks, (natural ? 0.07f : 0f) * wRocks),
-                            (AssetCategories.DecalLitter, 0.006f * wLitter) };
+                        // s23: open lawn is not scattered at random — only shade (leaves, moss) and natural ground (stones).
+                        kinds = new[] { (AssetCategories.DecalLeaves, 0.06f * shade * wLeaves), (DecalPools.Wear, 0f),
+                            (DecalPools.Moss, (natural ? 0.04f : 0.04f * shade) * wMoss), (DecalPools.Rocks, (natural ? 0.06f : 0f) * wRocks),
+                            (AssetCategories.DecalLitter, 0f) };
                         break;
                 }
                 float total = 0f;
@@ -599,6 +641,50 @@ namespace Placemaker.Core.Decals
             }
         }
 
+        // ───────────────────────── Seams: where one ground meets another ─────────────────────────
+
+        /// <summary>
+        /// (s23, user: the sand dusting spreading over paving at an edge was "perfect — you almost don't notice it"). Along
+        /// every sand or dirt area's outline where it meets paving or a path, the ground is carried over: sand dust or dirt
+        /// dust on the paving side, along the edge, in soft runs. The most effective decal there is.
+        /// </summary>
+        private static void Seams(Ctx c)
+        {
+            float amt = c.S.Master * math.max(math.max(c.S.Of(DressFamily.Ground), c.S.Of(DressFamily.Paved)), math.max(c.S.Of(DressFamily.Shore), c.S.Of(DressFamily.Works)));
+            if (amt <= 0f) return;
+            float wWear = Dressing.Weight(c.S.Style, Kind.Wear);
+            uint run = c.H(301, 1);
+            for (int pi = 0; pi < c.W.Polys.Count; pi++)
+            {
+                var poly = c.W.Polys[pi];
+                if (poly.Kind != GroundKind.Sand && poly.Kind != GroundKind.Dirt) continue;
+                bool sand = poly.Kind == GroundKind.Sand;
+                var ring = Geometry.Poly.EnsureCcw(poly.Ring);
+                for (int i = 0; i < ring.Length; i++)
+                {
+                    var a = ring[i]; var b = ring[(i + 1) % ring.Length];
+                    float len = math.distance(a, b);
+                    if (len < 0.5f) continue;
+                    var t = (b - a) / len;
+                    var outward = new float2(t.y, -t.x);   // CCW ring: right of the edge is outside
+                    for (float d = 1.25f; d < len; d += 2.5f)
+                    {
+                        var p = a + t * d;
+                        if (!c.Region.Contains(p)) continue;
+                        var outside = p + outward * 1.5f;
+                        if (c.W.GroundAt(outside) != GroundKind.Paved) continue;
+                        uint h = c.H(pi, i, (int)(d * 4f) + 305);
+                        // Soft runs along the edge (value noise), not an even dotted line.
+                        float runs = ValueNoise.Sample((p + 500f) / 7f, run);
+                        float prob = (sand ? 0.75f : 0.5f * wWear) * amt * (0.35f + runs);
+                        int count = Ctx.Count(h, prob);
+                        for (int k = 0; k < count; k++)
+                            c.Emit(p + outward * (0.6f + 0.7f * k + Ctx.U(Ctx.H2(h, k)) * 0.4f), Ctx.Yaw(t), sand ? DecalPools.Sand : DecalPools.Wear, 2.9f - k * 0.2f, Ctx.H2(h, 10 + k));
+                    }
+                }
+            }
+        }
+
         // ───────────────────────── Shore: waterline bands and wrack ─────────────────────────
 
         private static void Shore(Ctx c)
@@ -610,6 +696,12 @@ namespace Placemaker.Core.Decals
             var size = reg.Max - reg.Min;
             if (size.x * size.y / (step * step) > 60000f) return;
             bool beachy = c.S.LayerId == "beach" || c.S.LayerId == "waterfront";
+            // Cheap probe first: no water anywhere near the step (10 m grid) → no shore.
+            bool any = false;
+            for (float y = reg.Min.y - 4f; y <= reg.Max.y + 4f && !any; y += 10f)
+                for (float x = reg.Min.x - 4f; x <= reg.Max.x + 4f && !any; x += 10f)
+                    if (c.W.IsWater(new float2(x, y))) any = true;
+            if (!any) return;
             var dirs = new float2[8];
             for (int k = 0; k < 8; k++) { float a = k * math.PI / 4f; dirs[k] = new float2(math.cos(a), math.sin(a)); }
             var taken = new HashSet<long>();

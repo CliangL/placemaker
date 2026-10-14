@@ -541,3 +541,24 @@ is the water types' terrain step (real waterline, bank kind, sculpt, pads, bench
 water lies above it, decides wet/dry by the finer terrain heights; the waterline in front of every station is found by probing and
 bisection up to 45 m past the outline. Unverified in game: the raster's per-texel MVC on twisted quads, quay walls forming from
 explicit-height courses exactly as with the hand tool, the boardwalk (LeisurePier) running parallel to and close over the shore.
+
+## Decal opacity and projection (s23 decal art pass, decompiled 1.6.2f1 + ExtraAssetsImporter 1.x)
+
+82. **No per-instance decal opacity.** A decal object is a box mesh with an HDRP decal material
+    (`ManagedBatchSystem`: `DecalProperties` → render queue + `m_RendererPriority`, `TextureArea`, `MeshSize`,
+    `decalLayerMask` on the material key). The only per-instance colour data, `MeshColor` → `ObjectProperty.ColorMask1..3`
+    (`BatchDataSystem`), feeds `colossal_ColorMask*` of shaders that declare them; decal materials don't. Opacity is a
+    material property: HDRP decal **`_DecalBlend`** (global opacity, serialised as 1.0 in every decal material in
+    resources.assets) and the alpha of `_BaseColor`.
+83. **Runtime see-through clones work in memory.** `SurfaceAsset` is mutable (`CopyFrom`, `UpdateFloats/Colors`); its data
+    "load" is a pure ref count (`IncrementRefCount(Data)` returns true only for the first reference), so a copy made with
+    `CopyFrom` and kept referenced never re-reads a stream it doesn't have when `ManagedBatchSystem` calls
+    `LoadProperties`. ExtraAssetsImporter builds every pack decal exactly like this (in-memory `SurfaceAsset` registered with
+    `AddAsset<SurfaceAsset>(path, guid)`, `RenderPrefab` with `geometryAsset`/`surfaceAssets`/`bounds`/counts set,
+    `DecalProperties` from the decal.json). Placemaker (`Game/Build/DecalOpacitySystem`) clones StaticObjectPrefab →
+    RenderPrefab → SurfaceAsset per opacity tier (20/35/50 %) with `_DecalBlend` × tier and `_BaseColor.a` × tier, sharing
+    geometry and textures; AddPrefab in PrefabUpdate before PrefabInitializeSystem; used clones remembered in
+    ModsData/Placemaker/decal-opacity.txt for saves. Unverified in game (setting "See-through decals" to switch off).
+84. **Pack projection masks are `DecalLayers`.** EAI sets `DecalProperties.m_LayerMask = (DecalLayers)colossal_DecalLayerMask`
+    (decal.json). Mask 4/36 decals (84 + 22 RealVision items, incl. "foliage" and "dirt") project onto buildings only and
+    never show on the ground; the catalog now marks decal objects without the Terrain bit `WallOrHanging` → never automatic.

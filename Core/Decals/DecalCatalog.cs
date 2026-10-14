@@ -57,9 +57,17 @@ namespace Placemaker.Core.Decals
         Fixed = 3,
     }
 
+    /// <summary>
+    /// (s23) How a decal's texture ends. Soft = feathered blob that blends anywhere; Item = discrete things on a
+    /// transparent ground (leaves, bottles, shells); Shaped = a specific crack, track, band or drip that only reads in
+    /// the right spot and direction; Hard = a rectangular texture tile with visible edges (never scattered).
+    /// </summary>
+    public enum DecalEdge { Soft = 0, Item = 1, Shaped = 2, Hard = 3 }
+
     public struct DecalSpec
     {
         public DecalFamily Family;
+        public DecalEdge Edge;
         public DecalShape Shape;
         public DecalGround Ground;
         public DecalOrientation Orientation;
@@ -123,6 +131,7 @@ namespace Placemaker.Core.Decals
             s.Ground = GroundOf(s.Family);
             s.Shape = ShapeOf(s.Family, sizeX, sizeZ);
             s.Orientation = OrientationOf(s.Family, s.Shape);
+            s.Edge = EdgeOf(lower, item, w, s.Family, s.Shape);
             return s;
         }
 
@@ -216,6 +225,45 @@ namespace Placemaker.Core.Decals
                 return DecalFamily.Paving;
             if (Any(w, "road", "asphalt", "rural", "garden", "concreted", "concrete", "side", "texture")) return DecalFamily.GroundSheet;
             return DecalFamily.Unknown;
+        }
+
+        /// <summary>
+        /// (s23) Edge class from the pack and item words, checked against the packs' textures (docs/DECALS.md): RealVision
+        /// ground textures, G87 road-transition strips, asphalt/sidewalk/grass tiles and the G87 "Dirty Pack Leaf" squares
+        /// (leaves printed on a grass square) are hard rectangles; G87 stains A–H, dust, wet effects, ground dirt, mulch,
+        /// moss, fallen-leaf scatters and golden sand are feathered; cracks, damage, repairs, tracks, bands, drips, potholes
+        /// and lined drifts are shaped.
+        /// </summary>
+        private static DecalEdge EdgeOf(string lower, string item, HashSet<string> w, DecalFamily f, DecalShape shape)
+        {
+            if (IsFunctional(f) || f == DecalFamily.Paving || f == DecalFamily.LawnPattern || f == DecalFamily.GroundSheet || shape == DecalShape.Sheet) return DecalEdge.Hard;
+            if (lower.StartsWith("realvision", StringComparison.Ordinal)) return f == DecalFamily.Graffiti ? DecalEdge.Shaped : DecalEdge.Hard;
+            if (w.Contains("transition") || lower.Contains("g87 vanilla asphalt") || lower.Contains("sidewalk") || lower.Contains("light stains - decals")) return DecalEdge.Hard;
+            if (lower.Contains("dirty pack leaf")) return DecalEdge.Hard;
+            switch (f)
+            {
+                case DecalFamily.Crack: case DecalFamily.Patch: case DecalFamily.Tyre: case DecalFamily.Leak: case DecalFamily.LeafEdge:
+                case DecalFamily.Footprint: case DecalFamily.Graffiti:
+                    return DecalEdge.Shaped;
+                case DecalFamily.Puddle:
+                    return DecalEdge.Shaped;
+                case DecalFamily.Litter: case DecalFamily.Glass: case DecalFamily.PalmLitter: case DecalFamily.Rubble:
+                    return DecalEdge.Item;
+                case DecalFamily.BeachWrack:
+                    return lower.Contains("seaweed 0") || lower.Contains("seaweed red") ? DecalEdge.Shaped : DecalEdge.Item;   // G87 seaweed are wrack LINES
+                case DecalFamily.Stain:
+                    return Any(w, "band", "track", "trio", "lone", "wide", "narrow") ? DecalEdge.Shaped : DecalEdge.Soft;
+                case DecalFamily.Wet:
+                    return w.Contains("splash") ? DecalEdge.Shaped : DecalEdge.Soft;
+                case DecalFamily.WetSand:
+                    return w.Contains("band") ? DecalEdge.Shaped : DecalEdge.Soft;
+                case DecalFamily.Sand:
+                    // Golden Sand base/medium/thick/thin are hard-edged saturated discs in game (user screenshot, s23).
+                    if (lower.Contains("golden sand") && !w.Contains("path")) return DecalEdge.Hard;
+                    return w.Contains("path") ? DecalEdge.Shaped : DecalEdge.Soft;
+                case DecalFamily.Unknown: return DecalEdge.Hard;
+                default: return DecalEdge.Soft;
+            }
         }
 
         private static DecalGround GroundOf(DecalFamily f)
