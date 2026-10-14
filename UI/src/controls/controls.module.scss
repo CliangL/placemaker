@@ -502,9 +502,12 @@
     color: $c-text-faint;
 }
 
-.assetUnused {
-    flex-shrink: 0;
-    margin-right: 4rem;
-    font-size: 11rem;
-    color: $c-text-faint;
+// s15 — disabled with reason: the control is shown (so the player knows it exists) but greyed out; the reason
+// is the label's tooltip. The editor takes no clicks.
+.rowDisabled {
+    opacity: 0.45;
+}
+
+.editorOff {
+    pointer-events: none;
 }

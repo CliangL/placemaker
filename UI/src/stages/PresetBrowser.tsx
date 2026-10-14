@@ -47,7 +47,7 @@ export function makeRecipes(catalog: Catalog): RecipeInfo[] {
     return singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
 }
 
-/** Category order of the strip and tiles: Roads first (playtest), Parking last before Other. */
+/** Category order of the strip and tiles: Roads first (playtest), Parking and Commercial (s14) last before Other. */
 export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
     { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
     { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
@@ -61,6 +61,7 @@ export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
     { id: "industrial", key: "Placemaker.UI.MakeGroup.Industrial", en: "Industrial" },
     { id: "transport", key: "Placemaker.UI.MakeGroup.Transport", en: "Transport" },
     { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
+    { id: "commercial", key: "Placemaker.UI.MakeGroup.Commercial", en: "Commercial" },
     { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
 ];
 
@@ -73,6 +74,7 @@ export function recipeGroup(r: RecipeInfo): string {
 /** Group of a type id (checked in this order: "parking" before "park", "market square" before parks). */
 export function makeGroupOf(id: string): string {
     const x = id.toLowerCase();
+    if (/mall|retail|commercial|shopping/.test(x)) return "commercial";
     if (/parking|car-?park|garage|lot/.test(x)) return "parking";
     if (/road|street|avenue|grid/.test(x)) return "roads";
     if (/plaza|square|market|piazza|amphi|festival|fair/.test(x)) return "squares";

@@ -61,7 +61,7 @@ namespace Placemaker.Core.Tool
                 foreach (var v in step.Settings.Values)
                 {
                     var schema = FindControl(gen, v.Key);
-                    var coerced = schema != null ? Coerce(schema, v.Value) : v.Value;
+                    var coerced = schema != null ? Coerce(schema, Migrated(gen, v.Key, v.Value)) : v.Value;
                     if (coerced != null) merged.Values[v.Key] = coerced;
                 }
                 step.Settings = merged;
@@ -475,6 +475,10 @@ namespace Placemaker.Core.Tool
             catch (Exception) { }
             return null;
         }
+
+        /// <summary>s14: a saved value of a retired option, mapped to its successor by the layer (LayerBase.Migrate).</summary>
+        private static object Migrated(IAreaGenerator gen, string id, object value) =>
+            gen is Placemaker.Core.Layers.Common.LayerBase lb ? lb.Migrate(id, value) : value;
 
         /// <summary>Converts a raw value to the control's storage type; null when it does not fit.</summary>
         public static object Coerce(ControlSchema c, object value)

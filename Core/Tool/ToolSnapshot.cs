@@ -7,6 +7,9 @@ namespace Placemaker.Core.Tool
 
     public static class SelectionModes
     {
+        /// <summary>Every mode, in panel order (state.areaModes).</summary>
+        public static readonly SelectionMode[] All = { SelectionMode.Draw, SelectionMode.Block, SelectionMode.BlockPaint, SelectionMode.Paint, SelectionMode.Perimeter };
+
         public static string Id(SelectionMode m)
         {
             switch (m)

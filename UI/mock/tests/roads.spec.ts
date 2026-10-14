@@ -38,8 +38,8 @@ test("roads: Automatic names its road, legend by role, road mixes", async ({ pag
     await expect(step.getByTestId("asset-name-streetAsset")).toHaveText("Automatic · Two-Lane Road");
     // No avenues in the default grid: still says what Automatic would place, marked as not in this layout.
     await expect(step.getByTestId("asset-name-avenueAsset")).toHaveText("Automatic · Four-Lane Road");
-    await expect(step.getByTestId("asset-unused-avenueAsset")).toBeVisible();
-    await expect(step.getByTestId("asset-unused-streetAsset")).toHaveCount(0);
+    await expect(step.getByTestId("control-avenueAsset")).toHaveAttribute("data-reason", "Not used by this layout");
+    await expect(step.getByTestId("control-streetAsset")).not.toHaveAttribute("data-disabled", "true");
     await expect(step.getByTestId("description-streetAsset")).toHaveText("The ordinary streets between blocks.");
 
     // The legend lists only the roles of this plan.

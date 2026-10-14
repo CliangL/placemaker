@@ -209,6 +209,10 @@ namespace Placemaker.MockHost
                 };
                 if (!string.IsNullOrEmpty(c.TooltipKey)) o["tooltip"] = c.TooltipKey;
                 if (!string.IsNullOrEmpty(c.DescriptionKey)) o["description"] = c.DescriptionKey;
+                // s15 disabled-with-reason fields, as UiModels.Control sends them.
+                if (c.HideWhenOff) o["hideWhenOff"] = true;
+                if (!string.IsNullOrEmpty(c.EnabledWhen)) o["enabledWhen"] = c.EnabledWhen;
+                if (!string.IsNullOrEmpty(c.DisabledReasonKey)) o["disabledReason"] = c.DisabledReasonKey;
                 if (!string.IsNullOrEmpty(c.Icon)) o["icon"] = c.Icon;
                 if (!string.IsNullOrEmpty(c.AssetCategory)) o["assetCategory"] = c.AssetCategory;
                 if (!string.IsNullOrEmpty(c.VisibleWhen)) o["visibleWhen"] = c.VisibleWhen;

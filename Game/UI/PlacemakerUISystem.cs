@@ -24,6 +24,7 @@ namespace Placemaker.Game.UI
         private ValueBinding<string> _state, _catalog, _design, _summary, _assets, _managed;
 
         private int _stateStamp = -1;
+        private int _statePushFrame = -100;
         private int _designStamp = -1, _designPlanStamp = -1, _designAssetsStamp = -1;
         private int _designPushFrame = -100;
         private string _summaryStamp;
@@ -155,6 +156,10 @@ namespace Placemaker.Game.UI
         {
             // Money, planning and hover states change without an edit: also refresh twice a second.
             if (_stateStamp == _tool.ViewVersion && _frame % 30 != 0) return;
+            // s15: a brush stroke changes the view every frame (area readout): build the state JSON (hints,
+            // stage facts, readiness) at most ~10×/s while it runs; the stroke's end pushes at once.
+            if (_tool.Painting && _frame - _statePushFrame < 6) return;
+            _statePushFrame = _frame;
             _stateStamp = _tool.ViewVersion;
             _state.Update(UiModels.State(_tool.StateInput()).ToString());
         }
@@ -198,7 +203,7 @@ namespace Placemaker.Game.UI
             _designPlanStamp = _tool.PlanRevision;
             _designAssetsStamp = _tool.AssetsResolvedStamp;
             _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan,
-                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale, AssetLabelOf).ToString());
+                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale, _tool.Unavailability(), AssetLabelOf).ToString());
         }
 
         // (s16) Prefab id → localised display name + thumbnail, for "Automatic · Two-Lane Road" and the road legend.

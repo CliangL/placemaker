@@ -11,7 +11,7 @@ namespace Placemaker.Core
         public int Order { get; }
         /// <summary>Not offered in the Make row (still usable by recipes and features), e.g. split, pond.</summary>
         public bool Hidden { get; set; }
-        /// <summary>Make-row group: "parks", "gardens", "squares", "sports", "water", "industrial", "farms", "events", "transport", "parking", "roads", "nature".</summary>
+        /// <summary>Make-row group: "parks", "gardens", "squares", "sports", "water", "industrial", "farms", "events", "transport", "parking", "commercial", "roads", "nature".</summary>
         public string Group { get; set; } = "";
         /// <summary>
         /// Loose build (user: "a grid of roads is just roads"): what this layer builds becomes ordinary

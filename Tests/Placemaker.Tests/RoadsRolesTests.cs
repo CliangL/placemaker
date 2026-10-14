@@ -155,7 +155,7 @@ namespace Placemaker.Tests
             var plan = Composer.Compose(recipe, new AreaShape { Ring = Rect, Source = AreaSource.Drawn }, new SiteContext { Assets = fx.Items }, CancellationToken.None);
             AutoAssets.Resolve(plan, fx.Source());
             Func<string, string, AssetLabel> label = (cat, id) => new AssetLabel { Name = RoadRoles.NameOf(id), Icon = "thumb://" + id };
-            var j = JsonValue.Parse(UiModels.Design(recipe, "roads", false, "0", null, plan, null, null, null, false, label).ToString())["root"];
+            var j = JsonValue.Parse(UiModels.Design(recipe, "roads", false, "0", null, plan, null, null, null, false, assetLabel: label).ToString())["root"];
             var res = j["resolvedAssets"];
             Assert.Equal("Small Road", res["streetAsset"]["id"].AsString());
             Assert.Equal("Two-Lane Road", res["streetAsset"]["name"].AsString());
@@ -167,6 +167,10 @@ namespace Placemaker.Tests
             Assert.Equal("Small Road Oneway", res["roundaboutAsset"]["id"].AsString());
             Assert.True(res["roundaboutAsset"]["unused"].AsBool());
             Assert.True(res["streetAsset"]["unused"].IsNull);
+            // ... and greyed out with s15's disabled-with-reason.
+            Assert.Equal(UiModels.NotInLayoutKey, j["disabled"]["roundaboutAsset"]["key"].AsString());
+            Assert.Equal(UiModels.NotInLayoutKey, j["disabled"]["localAsset"]["key"].AsString());
+            Assert.True(j["disabled"]["streetAsset"].IsNull);
             var legend = j["netLegend"];
             var roles = Enumerable.Range(0, legend.Count).Select(i => legend.Items[i]["role"].AsString()).ToList();
             Assert.Equal(new[] { "street", "avenue", "perimeter" }, roles);

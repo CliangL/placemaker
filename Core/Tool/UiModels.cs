@@ -56,6 +56,8 @@ namespace Placemaker.Core.Tool
         public PreviewMode PreviewMode;
         /// <summary>contract: state.ghostPending.</summary>
         public bool GhostPending;
+        /// <summary>(s15) Selection modes this DLL knows but cannot offer right now, with the reason (null = all available).</summary>
+        public Dictionary<SelectionMode, LocText> ModeUnavailable;
     }
 
     public sealed class RecipeListEntry
@@ -82,6 +84,13 @@ namespace Placemaker.Core.Tool
 
     public static class UiModels
     {
+        /// <summary>
+        /// (s15) UI ↔ DLL contract version, mirrored by PROTOCOL in UI/src/contract.ts. Bump both together whenever
+        /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
+        /// DLL only on restart, so after an update they can disagree until the player restarts.
+        /// </summary>
+        public const int Protocol = 16;
+
         // ───────────── state ─────────────
 
         public static JsonValue State(ToolStateInput s)
@@ -130,6 +139,20 @@ namespace Placemaker.Core.Tool
             o.Set("panelCollapsed", s.PanelCollapsed);
             o.Set("previewMode", PreviewModes.Id(s.PreviewMode));
             o.Set("ghostPending", s.GhostPending);
+            // s15: the UI compares this with its own PROTOCOL (contract.ts) to detect a UI / DLL mismatch
+            // (the UI file is reloaded by the game, the DLL only on restart) and lists the modes this DLL handles.
+            o.Set("protocol", Protocol);
+            var modes = JsonValue.Arr();
+            foreach (var m in SelectionModes.All)
+            {
+                var mo = JsonValue.Obj().Set("mode", SelectionModes.Id(m));
+                LocText no = null;
+                bool off = s.ModeUnavailable != null && s.ModeUnavailable.TryGetValue(m, out no) && no != null;
+                mo.Set("enabled", !off);
+                if (off) mo.Set("reason", no.ToJson());
+                modes.Add(mo);
+            }
+            o.Set("areaModes", modes);
             return o;
         }
 
@@ -288,6 +311,10 @@ namespace Placemaker.Core.Tool
             if (!string.IsNullOrEmpty(c.AssetCategory)) o.Set("assetCategory", c.AssetCategory);
             if (c.MarkerKinds != null && c.MarkerKinds.Length > 0) o.Set("markerKinds", Strings(c.MarkerKinds));
             if (!string.IsNullOrEmpty(c.VisibleWhen)) o.Set("visibleWhen", c.VisibleWhen);
+            // s15: disabled-with-reason (additive): a non-applying control is shown greyed unless hideWhenOff.
+            if (c.HideWhenOff) o.Set("hideWhenOff", true);
+            if (!string.IsNullOrEmpty(c.EnabledWhen)) o.Set("enabledWhen", c.EnabledWhen);
+            if (!string.IsNullOrEmpty(c.DisabledReasonKey)) o.Set("disabledReason", c.DisabledReasonKey);
             if (c.Cheap) o.Set("cheap", true);
             if (c.Default != null && c.Kind != ControlKind.Markers) o.Set("default", DesignEditor.ToJson(c.Default));
             return o;
@@ -305,13 +332,14 @@ namespace Placemaker.Core.Tool
         /// <param name="plan">Latest finished plan (for the regions each step produced), may be null.</param>
         public static JsonValue Design(Recipe recipe, string recipeId, bool modified, string focus,
             IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, Func<string, IAreaGenerator> generators = null,
-            ActivePresetInfo activePreset = null, string presetsFile = null, bool planStale = false, Func<string, string, AssetLabel> assetLabel = null)
+            ActivePresetInfo activePreset = null, string presetsFile = null, bool planStale = false,
+            IReadOnlyDictionary<string, Dictionary<string, LocText>> unavailable = null, Func<string, string, AssetLabel> assetLabel = null)
         {
             _assetLabel = assetLabel;
             var o = JsonValue.Obj().Set("recipeId", recipeId ?? "").Set("modified", modified);
             if (activePreset != null) o.Set("activePreset", ActivePreset(activePreset));
             if (!string.IsNullOrEmpty(presetsFile)) o.Set("presetsFile", presetsFile);
-            o.Set("root", recipe?.Root != null ? Step(recipe, recipe.Root, RecipePaths.Root, status, plan, planStale, 0, generators ?? GeneratorRegistry.Get) : JsonValue.Null);
+            o.Set("root", recipe?.Root != null ? Step(recipe, recipe.Root, RecipePaths.Root, status, plan, planStale, 0, generators ?? GeneratorRegistry.Get, unavailable) : JsonValue.Null);
             o.Set("focus", focus ?? RecipePaths.Root);
             return o;
         }
@@ -320,7 +348,7 @@ namespace Placemaker.Core.Tool
         [ThreadStatic] private static Func<string, string, AssetLabel> _assetLabel;
 
         private static JsonValue Step(Recipe recipe, RecipeStep s, string path, IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, bool stale, int depth,
-            Func<string, IAreaGenerator> generators)
+            Func<string, IAreaGenerator> generators, IReadOnlyDictionary<string, Dictionary<string, LocText>> unavailable = null)
         {
             var o = JsonValue.Obj()
                 .Set("path", path)
@@ -371,7 +399,17 @@ namespace Placemaker.Core.Tool
             }
             o.Set("markerKinds", kinds);
             o.Set("markersRequired", MarkerKinds.Required(gen, s.Settings));
-            o.Set("features", FeatureViews(s, path, gen, generators, plan, stale));
+            Dictionary<string, LocText> why = null;
+            unavailable?.TryGetValue(path, out why);
+            o.Set("features", FeatureViews(s, path, gen, generators, plan, stale, why));
+            if (why != null)
+            {
+                var dis = JsonValue.Obj();
+                var ids = new List<string>(why.Keys);
+                ids.Sort(StringComparer.Ordinal);
+                foreach (var id in ids) if (!id.StartsWith(Unavailable.FeaturePrefix, StringComparison.Ordinal)) dis.Set(id, why[id].ToJson());
+                o.Set("disabled", dis);
+            }
             StepStatus st = null;
             if (status != null) status.TryGetValue(path, out st);
             o.Set("ready", st == null || st.Ready);
@@ -379,7 +417,7 @@ namespace Placemaker.Core.Tool
             var children = JsonValue.Arr();
             if (depth < Composer.MaxDepth + 2)
                 for (int i = 0; i < s.Children.Count; i++)
-                    if (s.Children[i] != null) children.Add(Step(recipe, s.Children[i], RecipePaths.Child(path, i), status, plan, stale, depth + 1, generators));
+                    if (s.Children[i] != null) children.Add(Step(recipe, s.Children[i], RecipePaths.Child(path, i), status, plan, stale, depth + 1, generators, unavailable));
             o.Set("children", children);
             var overrides = JsonValue.Obj();
             if (depth < Composer.MaxDepth + 2)
@@ -388,7 +426,7 @@ namespace Placemaker.Core.Tool
                 ok.Sort(StringComparer.Ordinal);
                 foreach (var k in ok)
                     if (s.RegionOverrides[k] != null)
-                        overrides.Set(k, Step(recipe, s.RegionOverrides[k], RecipePaths.Override(path, s, k), status, plan, stale, depth + 1, generators));
+                        overrides.Set(k, Step(recipe, s.RegionOverrides[k], RecipePaths.Override(path, s, k), status, plan, stale, depth + 1, generators, unavailable));
             }
             o.Set("overrides", overrides);
             o.Set("regions", Regions(plan, path));
@@ -396,14 +434,34 @@ namespace Placemaker.Core.Tool
             // (best guess while the new one runs); the next push replaces it.
             var resolved = ResolvedAssets(plan, path, lg, _assetLabel, s.Settings);
             if (resolved.Count > 0) o.Set("resolvedAssets", resolved);
+            // A control this layout does not use (no avenues in a plain grid) is shown greyed out with s15's
+            // disabled-with-reason, still naming what Automatic would place there. An explicit pick never is.
+            var notUsed = new List<string>();
+            foreach (var kv in resolved.Properties)
+                if (kv.Value["unused"].AsBool() && (s.Settings == null || string.IsNullOrEmpty(s.Settings.S(kv.Key, "")))) notUsed.Add(kv.Key);
+            if (notUsed.Count > 0)
+            {
+                var dis = JsonValue.Obj();
+                if (why != null)
+                {
+                    var wids = new List<string>(why.Keys);
+                    wids.Sort(StringComparer.Ordinal);
+                    foreach (var id in wids) if (!id.StartsWith(Unavailable.FeaturePrefix, StringComparison.Ordinal)) dis.Set(id, why[id].ToJson());
+                }
+                foreach (var id in notUsed) if (!dis.Has(id)) dis.Set(id, new LocText(NotInLayoutKey).ToJson());
+                o.Set("disabled", dis);
+            }
             var legend = NetLegend(plan, path, _assetLabel);
             if (legend.Count > 0) o.Set("netLegend", legend);
             return o;
         }
 
+        /// <summary>(s16) Reason for an asset control the current layout does not use (StepView.disabled).</summary>
+        public const string NotInLayoutKey = "Placemaker.UI.Why.NotInLayout";
+
         /// <summary>Built-in features of a step (mirrors UI FeatureView): toggle state, child path and the parent options shown under it.</summary>
         public static JsonValue FeatureViews(RecipeStep s, string path, IAreaGenerator gen, Func<string, IAreaGenerator> generators,
-            ComposedPlan plan = null, bool planStale = false)
+            ComposedPlan plan = null, bool planStale = false, IReadOnlyDictionary<string, LocText> unavailable = null)
         {
             var arr = JsonValue.Arr();
             foreach (var f in Features.Of(gen))
@@ -421,6 +479,7 @@ namespace Placemaker.Core.Tool
                     if (s.Children[i] != null && s.Children[i].Layer == f.Layer && (s.Children[i].Target ?? "") == (f.Target ?? "")) { index = i; break; }
                 bool on = index >= 0 && s.Children[index].Enabled;
                 fo.Set("enabled", on);
+                if (unavailable != null && unavailable.TryGetValue(Unavailable.Feature(f.Layer), out var no) && no != null) fo.Set("disabled", no.ToJson());
                 if (index >= 0) fo.Set("path", RecipePaths.Child(path, index));
                 fo.Set("options", Strings(f.Options ?? Array.Empty<string>()));
                 if (f.DefaultOn) fo.Set("defaultOn", true);

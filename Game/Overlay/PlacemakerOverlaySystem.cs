@@ -124,11 +124,49 @@ namespace Placemaker.Game.Overlay
 
         // ───────────── selection ─────────────
 
+        private static readonly Color KeptBuilding = new Color(1f, 0.3f, 0.25f, 0.22f);
+        private int _keptSigVersion = -1;
+        private long _keptSig;
+        private int _paintNearVersion = -1;
+        private float2 _paintNearAt = new float2(float.MaxValue);
+        private List<float3[]> _paintNear = new List<float3[]>();
+        private long _paintNearSig;
+
+        /// <summary>
+        /// Plain Paint (keep off buildings on): the buildings near the brush, shaded while painting. Re-filtered
+        /// only after the cursor moved 16 m or the gathered set changed, so the fill mesh is not rebuilt per frame.
+        /// </summary>
+        private void DrawPaintBuildings()
+        {
+            if (!_tool.PaintAvoidsBuildings || !_tool.CursorValid) return;
+            var all = _tool.PaintBuildings3D;
+            if (all.Count == 0) return;
+            float2 at = _tool.Cursor.xz;
+            if (_paintNearVersion != _tool.PaintBuildingsVersion || math.distance(at, _paintNearAt) >= 16f)
+            {
+                _paintNearVersion = _tool.PaintBuildingsVersion;
+                _paintNearAt = at;
+                float reach = _tool.BrushSize * 0.5f + 60f;
+                var list = new List<float3[]>();
+                foreach (var o in all)
+                {
+                    float2 mn = new float2(float.MaxValue), mx = new float2(float.MinValue);
+                    foreach (var p in o) { mn = math.min(mn, p.xz); mx = math.max(mx, p.xz); }
+                    if (math.length(math.max(math.max(mn - at, at - mx), 0f)) <= reach) list.Add(o);
+                }
+                _paintNear = list;
+                _paintNearSig = FilledPreviewSystem.Signature(list);
+            }
+            if (_paintNear.Count > 0) _fill.SetLayer("paintBuildings", _paintNear, KeptBuilding, -93.8f, _paintNearSig);
+        }
+
         private void DrawSelection(OverlayRenderSystem.Buffer buffer, float w)
         {
             var shape = _tool.Shape;
             bool bad = _tool.AreaProblem() != null;
-            if (shape != null && shape.Ring.Length >= 3)
+            // s15: during a brush stroke the outline is stale until mouse-up — only the painted cells are drawn.
+            bool stroke = _tool.Painting && (_tool.Mode == SelectionMode.Paint || _tool.Mode == SelectionMode.BlockPaint);
+            if (shape != null && shape.Ring.Length >= 3 && !stroke)
             {
                 var rings = new[] { shape.Ring };
                 _fill.SetLayer("selection", rings, _tool.SketchObjects == SketchObjects.Hidden ? FillUnderGhost : Fill, -94f, FilledPreviewSystem.Signature(rings));
@@ -136,11 +174,23 @@ namespace Placemaker.Game.Overlay
 
             // Keep off existing roads: the parts on roads are left out — shaded grey, the outline used is drawn solid.
             var away = _tool.ClippedAway;
-            bool clipped = away != null && away.Count > 0 && shape != null;
+            bool clipped = away != null && away.Count > 0 && shape != null && !stroke;
             if (clipped)
             {
                 var list = new List<float3[]>(away);
                 _fill.SetLayer("clipped", list, ClippedFill, -93.9f, FilledPreviewSystem.Signature(list));
+            }
+
+            // s15: existing buildings under the selection stay — shaded red, in every mode.
+            var kept = _tool.BuildingsInSelection;
+            if (kept.Count > 0 && shape != null && !stroke && _tool.Stage != ToolStage.Building)
+            {
+                if (_keptSigVersion != _tool.BuildingsInSelectionVersion)
+                {
+                    _keptSigVersion = _tool.BuildingsInSelectionVersion;
+                    _keptSig = FilledPreviewSystem.Signature(kept);
+                }
+                _fill.SetLayer("keptBuildings", kept, KeptBuilding, -93.7f, _keptSig);
             }
 
             switch (_tool.Mode)
@@ -260,6 +310,7 @@ namespace Placemaker.Game.Overlay
         private void DrawPaintMode(OverlayRenderSystem.Buffer buffer, float w, AreaShape shape)
         {
             var paint = _tool.Paint;
+            if (_tool.Painting) DrawPaintBuildings();
             if (paint.Version != _paintVersion)
             {
                 _paintVersion = paint.Version;
@@ -277,7 +328,7 @@ namespace Placemaker.Game.Overlay
                 }
             }
             else Ring(buffer, shape.Ring, Outline, w);
-            DrawBrushCursor(buffer, w, _tool.Painting ? Brush : new Color(Brush.r, Brush.g, Brush.b, 0.2f));
+            if (_tool.BrushLive) DrawBrushCursor(buffer, w, _tool.Painting ? Brush : new Color(Brush.r, Brush.g, Brush.b, 0.2f));
         }
 
         private void DrawBrushCursor(OverlayRenderSystem.Buffer buffer, float w, Color c)
