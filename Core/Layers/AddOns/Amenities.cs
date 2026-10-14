@@ -59,6 +59,11 @@ namespace Placemaker.Core.Layers.AddOns
             new AmenitySpec { Layer = "noticeboard", Length = 6f, Width = 4f, DefaultAt = "entrance" },
             // Monuments & follies (grand park wave, g4): see AddOns/Monuments.
             new AmenitySpec { Layer = "bigStatue", Length = 36f, Width = 26f, DefaultAt = "centre" },
+            new AmenitySpec { Layer = "folly", Length = 72f, Width = 54f, DefaultAt = "edge" },
+            new AmenitySpec { Layer = "obelisk", Length = 20f, Width = 20f, DefaultAt = "entrance" },
+            new AmenitySpec { Layer = "triumphalArch", Length = 30f, Width = 16f, DefaultAt = "entrance" },
+            new AmenitySpec { Layer = "sculptureWalk", Length = 64f, Width = 18f, DefaultAt = "edge" },
+            new AmenitySpec { Layer = "terraceGarden", Length = 60f, Width = 50f, DefaultAt = "centre" },
         };
 
         public static AmenitySpec Spec(string layer)

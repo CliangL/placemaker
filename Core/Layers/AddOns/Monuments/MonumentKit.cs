@@ -333,3 +333,25 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
         }
     }
 }
+
+namespace Placemaker.Core.Layers.AddOns.Monuments
+{
+    /// <summary>The monuments as features of hosts without places (memorial park, formal garden): each finds its own spot.</summary>
+    public static class MonumentFeatures
+    {
+        public static readonly string[] All = { BigStatueAddOn.LayerId, ObeliskAddOn.LayerId, TriumphalArchAddOn.LayerId, SculptureWalkAddOn.LayerId, TerraceGardenAddOn.LayerId, FollyAddOn.LayerId };
+
+        /// <summary>The host's own features followed by the monuments.</summary>
+        public static System.Collections.Generic.List<FeatureInfo> With(System.Collections.Generic.List<FeatureInfo> own)
+        {
+            own.AddRange(Own());
+            return own;
+        }
+
+        public static System.Collections.Generic.IEnumerable<FeatureInfo> Own()
+        {
+            foreach (var id in All)
+                yield return new FeatureInfo { Layer = id, LabelKey = "Placemaker.Feature." + id, TooltipKey = "Placemaker.Feature." + id + ".Tooltip" };
+        }
+    }
+}
