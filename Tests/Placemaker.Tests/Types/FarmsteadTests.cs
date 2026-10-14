@@ -252,6 +252,7 @@ namespace Placemaker.Tests.Types
         }
     }
 
+    [Collection(TimingCollection.Name)]
     public class FarmsteadTests
     {
         private const string Id = "farmstead";
