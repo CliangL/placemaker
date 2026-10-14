@@ -89,7 +89,7 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 16;
+        public const int Protocol = 17;   // s18: ground-palette option swatches (roles field/border/focal/path/inlay)
 
         // ───────────── state ─────────────
 
