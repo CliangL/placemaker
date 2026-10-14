@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
+using Placemaker.Core.Layers.Common.Shore;
 using Unity.Mathematics;
 using Random = Unity.Mathematics.Random;
 
@@ -35,7 +36,7 @@ namespace Placemaker.Core.Layers.Plaza
         {
             get
             {
-                var tags = new List<string> { RegionTags.Paved, RegionTags.Core, RegionTags.Edge, StreetFrontage.ShopsTag };
+                var tags = new List<string> { RegionTags.Paved, RegionTags.Core, RegionTags.Edge, StreetFrontage.ShopsTag, ShoreKit.Place };
                 tags.AddRange(Amenities.PlaceTags(Hosted));
                 return tags.ToArray();
             }
@@ -61,6 +62,8 @@ namespace Placemaker.Core.Layers.Plaza
             StreetShopsFeature("Plaza"),
             new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Park.ParkLayer.Bag(("theme", "cracks"), ("ground", "paved"), ("density", 0.8)) },
             new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.flatten", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Park.ParkLayer.Bag(("shape", "flatten")) },
+            // g2: on by default, idle unless the square is partly in (or along) water: a harbour quay.
+            ShoreKit.Feature(("style", "wharf"), ("wharfShare", 100.0), ("bandWidth", 8.0), ("railings", false)),
         });
 
         private static FeatureInfo[] WithAmenities(FeatureInfo[] own)
@@ -250,6 +253,7 @@ namespace Placemaker.Core.Layers.Plaza
 
         protected override void PlanCore(LayerContext ctx)
         {
+            ShoreKit.CarveShore(ctx, 8f);   // g2: the wet part + a quay band go to the "Shore" feature
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             // Inside a place (a park's plaza) people arrive along the parent's paths: access where they end.

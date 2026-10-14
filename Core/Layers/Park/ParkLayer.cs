@@ -18,6 +18,7 @@ using System.Collections.Generic;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
+using Placemaker.Core.Layers.Common.Shore;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Park
@@ -41,7 +42,7 @@ namespace Placemaker.Core.Layers.Park
         {
             get
             {
-                var tags = new List<string> { RegionTags.Green, RegionTags.Core, RegionTags.Edge, PlazaPlace, PondPlace, StreetFrontage.ShopsTag };
+                var tags = new List<string> { RegionTags.Green, RegionTags.Core, RegionTags.Edge, PlazaPlace, PondPlace, StreetFrontage.ShopsTag, ShoreKit.Place };
                 tags.AddRange(Amenities.PlaceTags());
                 return tags.ToArray();
             }
@@ -76,6 +77,8 @@ namespace Placemaker.Core.Layers.Park
             new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
             new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Bag(("theme", "leaves"), ("density", 1.5)) },
             new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.terrain", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Bag(("shape", "mounds"), ("height", 2.0)) },
+            // g2: on by default, idle unless the area is partly in (or along) water.
+            ShoreKit.Feature(("style", "auto")),
         });
 
         /// <summary>The park's own features followed by every amenity (each with position + "Path to it").</summary>
@@ -207,6 +210,7 @@ namespace Placemaker.Core.Layers.Park
 
         protected override void PlanCore(LayerContext ctx)
         {
+            ShoreKit.CarveShore(ctx);   // g2: the wet part + a shore band go to the "Shore" feature
             var region = ctx.LayerRegion;
             var style = ParkStyle.Get(ctx.S("style"));
             string pathMode = ctx.S("paths");
