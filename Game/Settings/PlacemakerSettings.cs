@@ -214,6 +214,9 @@ namespace Placemaker.Game.Settings
         public bool ClearExistingTreesAndProps { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
+        public bool KeepZonedBuildingsOff { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
         public bool RecoverRejectedPieces { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
@@ -231,6 +234,14 @@ namespace Placemaker.Game.Settings
 
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool SelectAsOneThing { get; set; }
+
+        /// <summary>(s17) Park attractiveness of builds counts for the city's tourism (owner lot AttractivenessProvider).</summary>
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool ApplyParkStats { get; set; }
+
+        /// <summary>(s17) A hidden companion park building carries every park stat (leisure, coverage, upkeep…).</summary>
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool RealParkStats { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool ConfirmBulldoze { get; set; }
@@ -275,10 +286,13 @@ namespace Placemaker.Game.Settings
             {
                 global::Placemaker.Game.Build.BuildService.AutoExcludeCollisions = AutoExcludeCollisions;
                 global::Placemaker.Game.Build.BuildService.ClearExistingObjects = ClearExistingTreesAndProps;
+                global::Placemaker.Game.Build.BuildService.BlockZoning = KeepZonedBuildingsOff;
                 global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;
                 global::Placemaker.Game.Build.BuildService.OverlayPavedSurfaces = OverlayPavedSurfaces;
                 global::Placemaker.Game.Build.BuildService.SinkDecals = DecalsNeverCollide;
                 global::Placemaker.Game.Build.BuildService.ChargeNetConstruction = ChargeNetConstruction;
+                global::Placemaker.Game.Build.BuildService.ApplyParkStats = ApplyParkStats;
+                global::Placemaker.Game.Economy.ParkCompanionSystem.Enabled = RealParkStats;
                 global::Placemaker.Game.Groups.OwnerAreaPrefabSystem.FeatureEnabled = SelectAsOneThing;
                 global::Placemaker.Game.Groups.Patches.RaycastLiftPatch.Enabled = SelectAsOneThing;
                 global::Placemaker.Game.Groups.Patches.BulldozeConfirmationPatch.Enabled = ConfirmBulldoze;
@@ -321,11 +335,14 @@ namespace Placemaker.Game.Settings
             PanelCollapsed = false;
             AutoExcludeCollisions = true;
             ClearExistingTreesAndProps = true;
+            KeepZonedBuildingsOff = true;
             RecoverRejectedPieces = true;
             OverlayPavedSurfaces = true;
             DecalsNeverCollide = true;
             ChargeNetConstruction = true;
             SelectAsOneThing = true;
+            ApplyParkStats = true;
+            RealParkStats = true;
             ConfirmBulldoze = true;
             SurfaceClones = true;
             TexturedPreviewSurfaces = false;

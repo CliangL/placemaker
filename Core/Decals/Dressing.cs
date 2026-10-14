@@ -80,6 +80,11 @@ namespace Placemaker.Core.Decals
                 report.Removed += ThinLayerDecals(l, s.Master);
             }
 
+            if (!DecalPools.PacksAvailable())
+            {
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = DecalPools.NoPacksKey });
+                return report;
+            }
             var world = new DressingWorld(plan, area, site);
             if (world.Root == null) return report;
             float ha = world.Root.Area / 10000f;

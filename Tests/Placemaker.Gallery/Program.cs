@@ -24,6 +24,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Placemaker.Core;
 using Placemaker.Core.Build;
+using Placemaker.Core.Layers.Roads;
 using Placemaker.Core.Tool;
 using Unity.Mathematics;
 
@@ -33,7 +34,7 @@ namespace Placemaker.Gallery
     {
         public static int Main(string[] args)
         {
-            string outDir = "docs/gallery", repo = null, fixture = null;
+            string outDir = "docs/gallery", repo = null, fixture = null, dump = null;
             HashSet<string> only = null;
             for (int i = 0; i < args.Length; i++)
             {
@@ -50,12 +51,22 @@ namespace Placemaker.Gallery
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
+                    case "--shapes": Variants.Shapes = next.Split(','); i++; break;
+                    case "--palettes": Variants.Palettes = true; break;
+                    case "--presets": Variants.PresetFilter = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
+                    case "--no-features": Variants.NoFeatureVariants = true; break;
+                    case "--no-shops": Variants.NoShops = true; break;
+                    case "--dump": dump = next; i++; break;
                 }
             }
             repo ??= FindRepo();
             if (!Path.IsPathRooted(outDir)) outDir = Path.GetFullPath(Path.Combine(repo, outDir));
             fixture ??= Path.Combine(repo, "Tests", "Placemaker.Tests", "Fixtures", "catalog-bounds.json");
             var catalog = Catalog.Load(fixture);
+            // s18: the player's full catalog dump (when present) decides which explicit ids exist, so designed
+            // palettes resolve to the modded surfaces the player has instead of their vanilla fallbacks.
+            dump ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow", "Colossal Order", "Cities Skylines II", "ModsData", "Placemaker", "catalog-dump.json");
+            if (File.Exists(dump)) catalog.LoadDumpIds(dump);
             Directory.CreateDirectory(outDir);
 
             var jobs = Variants.All(repo, only);
@@ -98,6 +109,20 @@ namespace Placemaker.Gallery
         public Dictionary<string, Dictionary<string, List<string>>> Palettes = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.Ordinal);
         public Dictionary<string, AssetInfo> Items = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
         public List<string> PaletteNames = new List<string>();
+        /// <summary>Every prefab id of the player's catalog dump (s18), empty without one.</summary>
+        public HashSet<string> DumpIds = new HashSet<string>(StringComparer.Ordinal);
+
+        public void LoadDumpIds(string path)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(path));
+                foreach (var cat in doc.RootElement.GetProperty("categories").EnumerateObject())
+                    foreach (var it in cat.Value.EnumerateArray())
+                        if (it.TryGetProperty("id", out var id) && id.GetString() is string s) DumpIds.Add(s);
+            }
+            catch (Exception e) { Console.WriteLine("catalog dump: " + e.Message); }
+        }
 
         public static Catalog Load(string path)
         {
@@ -143,7 +168,7 @@ namespace Placemaker.Gallery
         public AutoAssetSource Source() => new AutoAssetSource
         {
             Pool = Pool,
-            Exists = id => Items.ContainsKey(id) || Pools.Values.Any(l => l.Contains(id)),
+            Exists = id => Items.ContainsKey(id) || DumpIds.Contains(id) || Pools.Values.Any(l => l.Contains(id)),
             Palettes = PaletteNames,
             PaletteItems = (p, cat) => p != null && cat != null && Palettes.TryGetValue(p, out var m) && m.TryGetValue(cat, out var l) ? l : (IReadOnlyList<string>)Array.Empty<string>(),
         };
@@ -156,12 +181,24 @@ namespace Placemaker.Gallery
         public string Type, Variant, Title;
         public Recipe Recipe;
         public float TargetArea;
+        /// <summary>Site shape (--shapes): "" = the default irregular site, else triangle, sliver, square, L.</summary>
+        public string Shape = "";
     }
 
     public static class Variants
     {
         /// <summary>--areas 1,3,6: render every job at each of these sizes (hectares) instead of the default size.</summary>
         public static float[] Areas;
+        /// <summary>--shapes triangle,sliver,square,L: render every job on each of these site shapes (s18).</summary>
+        public static string[] Shapes;
+        /// <summary>--palettes: one image per ground palette for every type with a "palette" control (s18).</summary>
+        public static bool Palettes;
+        /// <summary>--presets a,b: only these preset variants (plus default) — keeps size/shape sweeps small.</summary>
+        public static HashSet<string> PresetFilter;
+        /// <summary>--no-features: skip the all/none feature variants.</summary>
+        public static bool NoFeatureVariants;
+        /// <summary>--no-shops: street shops off everywhere (judge a type's own layout on a site with streets all round).</summary>
+        public static bool NoShops;
         /// <summary>--shops: one image per street-shop layout/amount (s12) for every type that hosts street shops.</summary>
         public static bool ShopVariants;
         /// <summary>--decals: Decals amount at 300 % and 0 % for every type with decal dressing (s21).</summary>
@@ -208,6 +245,9 @@ namespace Placemaker.Gallery
                     uint n = 0;
                     editor.AddDefaultFeatures(r, () => ++n);
                     edit?.Invoke(r);
+                    if (NoShops)
+                        foreach (var f in Features.Of(gen))
+                            if (f.Target == Placemaker.Core.Layers.Common.StreetFrontage.ShopsTag) editor.SetFeature(r, RecipePaths.Root, f.Layer, false, 0);
                     uint k = 0;
                     foreach (var kv in RecipePaths.Walk(r)) kv.Value.Seed = 1000u + (++k);
                     return new Job { Type = id, Variant = variant, Title = title, Recipe = r, TargetArea = area };
@@ -218,6 +258,7 @@ namespace Placemaker.Gallery
                 foreach (var p in presets)
                 {
                     if (p == null || string.IsNullOrEmpty(p.Id)) continue;
+                    if (PresetFilter != null && !PresetFilter.Contains(p.Id)) continue;
                     jobs.Add(Make("preset-" + Safe(p.Id), "Preset " + p.Id, r => editor.ApplyPreset(r, RecipePaths.Root, p.Id)));
                 }
                 if (DecalVariants && gen.Controls.Any(c => c.Id == Placemaker.Core.Decals.DressingControls.AmountId))
@@ -226,6 +267,23 @@ namespace Placemaker.Gallery
                     jobs.Add(Make("decals-gritty", "Decals gritty", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.StyleId] = "gritty"));
                     jobs.Add(Make("decals-off", "Decals 0 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 0.0));
                 }
+                var paletteControl = (gen.Controls ?? Array.Empty<ControlSchema>()).FirstOrDefault(c => c.Id == "palette" && c.Kind == ControlKind.Choice);
+                if (Palettes && paletteControl != null)
+                    foreach (var o in paletteControl.Options.Where(o => o.Value != "auto" && o.Value != "custom"))
+                    {
+                        string pv = o.Value;
+                        jobs.Add(Make("palette-" + Safe(pv), "Palette " + pv, r => editor.SetValue(r, RecipePaths.Root, "palette", pv, true)));
+                    }
+                // s16: every road mix on a grid with an avenue column + row (so avenues and a roundabout show up).
+                if (gen is ILinkedControls && gen.Controls.Any(c => c.Id == RoadsIds.RoadMix))
+                    foreach (var mix in RoadMixes.All)
+                        jobs.Add(Make("mix-" + Safe(mix.Id), "Road mix " + mix.Id, r =>
+                        {
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.Pattern, "grid", true);
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.AvenueColumn, true, true);
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.AvenueRow, true, true);
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.RoadMix, mix.Id, true);
+                        }));
                 var features = Features.Of(gen);
                 if (ShopVariants && features.Any(f => f.Layer == "edgeZoning" && f.Target == "shops"))
                     foreach (var (layout, amount) in ShopCombos)
@@ -235,7 +293,7 @@ namespace Placemaker.Gallery
                             r.Root.Settings.Values["shopLayout"] = layout;
                             r.Root.Settings.Values["shopAmount"] = amount;
                         }));
-                if (features.Count > 0 && !Renderer.Showcase)
+                if (features.Count > 0 && !Renderer.Showcase && !NoFeatureVariants)
                 {
                     jobs.Add(Make("features-all", "All features on", r =>
                     {
@@ -252,7 +310,15 @@ namespace Placemaker.Gallery
                 var expanded = new List<Job>();
                 foreach (var j in jobs)
                     foreach (var ha in Areas)
-                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "-" + ha.ToString("0.#", CultureInfo.InvariantCulture) + "ha", Title = j.Title + " " + ha + " ha", Recipe = j.Recipe.Clone(), TargetArea = ha * 10000f });
+                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "-" + ha.ToString("0.###", CultureInfo.InvariantCulture) + "ha", Title = j.Title + " " + ha + " ha", Recipe = j.Recipe.Clone(), TargetArea = ha * 10000f });
+                jobs = expanded;
+            }
+            if (Shapes != null && Shapes.Length > 0)
+            {
+                var expanded = new List<Job>();
+                foreach (var j in jobs)
+                    foreach (var sh in Shapes)
+                        expanded.Add(new Job { Type = j.Type, Variant = sh + "-" + j.Variant, Title = sh + " " + j.Title, Recipe = j.Recipe.Clone(), TargetArea = j.TargetArea, Shape = sh });
                 jobs = expanded;
             }
             return jobs;
@@ -284,6 +350,8 @@ namespace Placemaker.Gallery
         public Dictionary<string, int> ByCategory = new Dictionary<string, int>();
         public List<string> IssueKeys = new List<string>();
         public string Failure;
+        /// <summary>s16: the plan's roads by role (same legend as the panel).</summary>
+        public List<RoadRoles.LegendEntry> RoadLegend = new List<RoadRoles.LegendEntry>();
     }
 
     public static class Renderer
@@ -317,6 +385,24 @@ namespace Placemaker.Gallery
         [ThreadStatic] private static float _waterZ;
         [ThreadStatic] private static List<NearbyNet> _roads;
         [ThreadStatic] private static List<EdgeMarker> _markers;
+
+        /// <summary>(s18) Odd sites: a triangle, a long thin trapezoid, a square, an L (CCW in x/z, scaled to the area).</summary>
+        public static float3[] Shaped(string shape, float targetArea)
+        {
+            float2[] b;
+            switch ((shape ?? "").ToLowerInvariant())
+            {
+                case "triangle": b = new[] { new float2(0, 0), new float2(100, 0), new float2(28, 72) }; break;
+                case "sliver": b = new[] { new float2(0, 0), new float2(120, 0), new float2(104, 26), new float2(14, 26) }; break;
+                case "square": return Square(targetArea);
+                case "l": b = new[] { new float2(0, 0), new float2(60, 0), new float2(60, 26), new float2(26, 26), new float2(26, 60), new float2(0, 60) }; break;
+                default: return Site(targetArea);
+            }
+            double a = 0;
+            for (int i = 0, j = b.Length - 1; i < b.Length; j = i++) a += b[j].x * b[i].y - b[i].x * b[j].y;
+            float s = (float)math.sqrt(targetArea / math.abs(a * 0.5));
+            return b.Select(p => new float3(p.x * s, 0, p.y * s)).ToArray();
+        }
 
         public static float3[] Square(float targetArea)
         {
@@ -357,10 +443,11 @@ namespace Placemaker.Gallery
         public static Result Run(Job job, Catalog catalog, string outDir)
         {
             var res = new Result();
-            var ring = Showcase ? Square(job.TargetArea) : Site(job.TargetArea);
+            bool shaped = !string.IsNullOrEmpty(job.Shape);
+            var ring = shaped ? Shaped(job.Shape, job.TargetArea) : Showcase ? Square(job.TargetArea) : Site(job.TargetArea);
             var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
             var site = new SiteContext { Assets = catalog.Items, LayoutScale = LayoutScale };
-            if (Showcase) site.NearbyNets = RoadsAround(ring);
+            if (Showcase || shaped) site.NearbyNets = RoadsAround(ring);
             _waterZ = float.NaN;
             if (WaterTypes != null && (WaterTypes.Contains(job.Type) || WaterTypes.Contains(job.Type + "/" + job.Variant)))
             {
@@ -376,7 +463,7 @@ namespace Placemaker.Gallery
             var sw = Stopwatch.StartNew();
             try
             {
-                if (Showcase) ApplySuggestedMarkers(job.Recipe, ring, site);
+                if (Showcase || shaped) ApplySuggestedMarkers(job.Recipe, ring, site);
                 AddMarkersIfNeeded(job.Recipe, ring);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 plan = Composer.Compose(job.Recipe, shape, site, cts.Token);
@@ -489,6 +576,9 @@ namespace Placemaker.Gallery
         /// </summary>
         private static Rgba SurfaceColor(PlannedSurface s, Dictionary<string, int> tones)
         {
+            // s18: a known paving asset draws in its real tone (icon mean, lifted so objects on top stay visible).
+            if (IsPaved(s) && Placemaker.Core.Layers.Common.GroundSurfaces.Tone(s.Asset.Id) is string tone)
+                return Lift(Rgba.Hex(tone));
             if (tones != null && IsPaved(s))
             {
                 var key = SurfaceKey(s);
@@ -505,6 +595,8 @@ namespace Placemaker.Gallery
             }
             return SurfaceColor(s);
         }
+
+        private static Rgba Lift(Rgba c) => new Rgba(c.R + (1f - c.R) * 0.3f, c.G + (1f - c.G) * 0.3f, c.B + (1f - c.B) * 0.3f, 1f);
 
         private static Rgba SurfaceColor(PlannedSurface s)
         {
@@ -697,8 +789,21 @@ namespace Placemaker.Gallery
                 cv.StrokePolyline(pts, hw * 2f, fill);
             }
             foreach (var (n, pts, hw) in polylines)
-                if (n.Role != NetRole.Fence && hw * 2f * cv.PixelsPerMetre > 8f)
+            {
+                if (n.Role == NetRole.Fence) continue;
+                // s16: roads of the roads layer carry their role colour as a centre band (same colours as the
+                // in-game preview and the panel legend); other nets keep the thin dashed centre line.
+                string role = RoadRoles.Of(n.Role);
+                bool roadPlan = role != null && (role != RoadRoles.CarFree || n.Control == RoadsIds.PathAsset);
+                if (roadPlan)
+                {
+                    var rc = RoadRoles.Rgb(role);
+                    cv.StrokePolyline(pts, math.max(cv.Px(3f), hw * 0.55f), new Rgba(rc.x, rc.y, rc.z, 1f));
+                }
+                else if (hw * 2f * cv.PixelsPerMetre > 8f)
                     cv.DashedPolyline(pts, cv.Px(0.8f), 2f, 2f, NetColors(n).edge.WithA(0.5f));
+            }
+            res.RoadLegend = RoadRoles.Legend(nets.Where(n => n.Role != NetRole.Pathway || n.Control == RoadsIds.PathAsset));
 
             // Area outline on top of surfaces.
             cv.StrokePolyline(ring2, cv.Px(2f), Rgba.Hex("#33415c"), closed: true);
@@ -1007,7 +1112,13 @@ namespace Placemaker.Gallery
                 ("#f4e7c6", "footpath (real width)"),
                 ("#e6b3a8", "bike path"),
                 ("#d9c39a", "trail"),
-                ("#8d8d93", "road / track"),
+                ("#8d8d93", "road / track (asphalt at real width)"),
+                (RoadRoles.Color(RoadRoles.Street), "road role: street (centre band)"),
+                (RoadRoles.Color(RoadRoles.Avenue), "road role: avenue"),
+                (RoadRoles.Color(RoadRoles.Local), "road role: local / cul-de-sac"),
+                (RoadRoles.Color(RoadRoles.Roundabout), "road role: roundabout ring"),
+                (RoadRoles.Color(RoadRoles.Perimeter), "road role: perimeter road"),
+                (RoadRoles.Color(RoadRoles.CarFree), "road role: car-free street"),
                 ("#a3adc4", "parking aisle"),
                 ("#7a5a3c", "fence"),
                 ("#9a9aa0", "surrounding street"),
@@ -1050,6 +1161,8 @@ namespace Placemaker.Gallery
                     {
                         sb.Append($"{r.Objects} objects · {r.Nets} nets / {r.PathMetres:0} m · {r.Surfaces} surfaces · {r.Ms:0} ms<br>");
                         sb.Append(string.Join(", ", r.ByRole.OrderByDescending(k => k.Value).Select(k => $"{k.Key} {k.Value}")) + "<br>");
+                        foreach (var e in r.RoadLegend)
+                            sb.Append($"<span><i class=\"sw\" style=\"background:{RoadRoles.Color(e.Role)}\"></i>{e.Role} · {Esc(RoadRoles.NameOf(e.AssetId))} · {(e.LengthM >= 1000 ? (e.LengthM / 1000).ToString("0.0", CultureInfo.InvariantCulture) + " km" : e.LengthM.ToString("0", CultureInfo.InvariantCulture) + " m")} ({e.Count})</span><br>");
                         var flags = new List<string>();
                         if (r.BenchesOffPath > 0) flags.Add($"{r.BenchesOffPath} benches off-path");
                         if (r.Overlaps > 0) flags.Add($"{r.Overlaps} overlapping objects");
@@ -1065,6 +1178,7 @@ namespace Placemaker.Gallery
                         type = j.Type, variant = j.Variant, file = r.File, ms = Math.Round(r.Ms), failure = r.Failure, objects = r.Objects, nets = r.Nets,
                         pathMetres = Math.Round(r.PathMetres), surfaces = r.Surfaces, errors = r.Errors, warnings = r.Warnings,
                         benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, edgeSpikes = r.EdgeSpikes, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(),
+                        roads = r.RoadLegend.Select(e => new { role = e.Role, asset = e.AssetId, lengthM = e.LengthM, count = e.Count }).ToList(),
                     });
                 }
                 sb.Append("</div>");

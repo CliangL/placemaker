@@ -337,6 +337,23 @@ namespace Placemaker.Tests
             foreach (var o in d) Assert.True(site.WaterDepthAt(o.Position.xz) <= 0f);
         }
 
+        [Fact]
+        public void WithoutDecalPacksDesignSaysSoAndNothingDecorativeIsPlaced()
+        {
+            var none = new Dictionary<string, int> { [AssetCategories.Tree] = 5 };   // a known catalog without any decal
+            using (AssetAvailability.Scope(none))
+            {
+                Assert.False(DecalPools.PacksAvailable());
+                var r = Recipe("park");
+                var p = Compose(r, Site);
+                Assert.DoesNotContain(Decals(p), o => DecalPools.IsDressingPool(o.Category));   // the pass placed nothing
+                Assert.Contains(p.Issues, i => i.Key == DecalPools.NoPacksKey && i.Severity == IssueSeverity.Info);
+                var why = Availability.For(r, new AreaShape { Ring = Site }, new SiteContext(), GeneratorRegistry.Get);
+                Assert.Equal(DecalPools.NoPacksKey, why[RecipePaths.Root][DressingControls.AmountId].Key);
+            }
+            Assert.True(DecalPools.PacksAvailable());   // no snapshot: assume packs
+        }
+
         // ───────────────────────── controls ─────────────────────────
 
         [Fact]

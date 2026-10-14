@@ -100,6 +100,14 @@ namespace Placemaker.Core.Layers.Common
             public void Dispose() => _scoped = _previous;
         }
 
+        /// <summary>(s21) Items of a category in the snapshot: -1 = no snapshot (tests, before the first scan), 0 = none.</summary>
+        public static int CountOf(string category)
+        {
+            var snap = _scoped ?? Volatile.Read(ref _counts);
+            if (snap == null || string.IsNullOrEmpty(category)) return -1;
+            return snap.TryGetValue(category, out var n) ? n : 0;
+        }
+
         public static bool Has(string category)
         {
             var snap = _scoped ?? Volatile.Read(ref _counts);

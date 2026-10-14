@@ -13,7 +13,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Roads
 {
     [AreaGenerator(400, Group = "roads", Loose = true)]
-    public sealed class RoadsLayer : IAreaGenerator, IHasFeatures
+    public sealed class RoadsLayer : IAreaGenerator, IHasFeatures, ILinkedControls, IAutoAssetHints
     {
         public const string LayerId = "roads";
 
@@ -48,6 +48,38 @@ namespace Placemaker.Core.Layers.Roads
         public IReadOnlyList<ControlSchema> Controls => _controls;
         public IReadOnlyList<PresetInfo> Presets => _presets;
         public SettingsBag Defaults() => RoadsSchema.Defaults(_controls);
+
+        /// <summary>(s16) Picking a road mix writes every road-type pick and upgrade toggle.</summary>
+        public string[] OnValueSet(SettingsBag settings, string controlId) =>
+            controlId == RoadsIds.RoadMix ? RoadMixes.Apply(settings, settings?.S(RoadsIds.RoadMix, RoadMixes.Automatic)) : Array.Empty<string>();
+
+        /// <summary>(s16) What Automatic would place for a road role the current layout does not use.</summary>
+        public string[] AutoCandidates(string controlId, SettingsBag settings)
+        {
+            settings = settings ?? Defaults();
+            NetRole role;
+            switch (controlId)
+            {
+                case RoadsIds.StreetAsset: role = NetRole.Street; break;
+                case RoadsIds.AvenueAsset: role = NetRole.Avenue; break;
+                case RoadsIds.LocalAsset: role = NetRole.CulDeSac; break;
+                case RoadsIds.RoundaboutAsset: role = NetRole.Roundabout; break;
+                case RoadsIds.PerimeterAsset: role = NetRole.PerimeterRoad; break;
+                case RoadsIds.PathAsset: return new[] { RoadRoles.PavementPath };
+                default: return Array.Empty<string>();
+            }
+            var a = RoadsPlanner.AssetFor(role, settings, settings.S(RoadsIds.StreetAsset, ""));
+            var r = new List<string>();
+            if (!string.IsNullOrEmpty(a.Id)) r.Add(a.Id);
+            foreach (var f in a.Fallbacks ?? Array.Empty<string>()) if (!string.IsNullOrEmpty(f) && !r.Contains(f)) r.Add(f);
+            return r.ToArray();
+        }
+
+        /// <summary>(s16) The mix always reads what the picks are: a matching mix, else "custom".</summary>
+        public void Derive(SettingsBag settings)
+        {
+            if (settings != null) settings.Values[RoadsIds.RoadMix] = RoadMixes.Match(settings);
+        }
 
         /// <summary>A few city blocks at least; GRG refused free areas under 2000 m².</summary>
         public float MinArea => 2000f;
@@ -114,6 +146,7 @@ namespace Placemaker.Core.Layers.Roads
             {
                 var b = Defaults();
                 foreach (var (k, v) in values) b.Values[k] = v;
+                Derive(b);   // the mix reads what the preset picks (no false "modified")
                 return new PresetInfo { Id = id, LabelKey = "Placemaker.Roads.Preset." + id, Values = b };
             }
             return new List<PresetInfo>

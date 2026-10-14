@@ -53,21 +53,55 @@ namespace Placemaker.Core.Layers.AddOns
             int sizeIndex = Math.Max(0, Array.IndexOf(Sizes, ctx.S("size")));
             int benches = ctx.I("benches");
             bool lamps = ctx.B("lamps"), planters = ctx.B("planters");
-            // Try the requested size, then smaller ones: a smaller fountain beats none.
-            for (int si = sizeIndex; si >= 0; si--)
-            {
-                // Automatic: a vanilla fountain of the requested size (the centrepiece pool also holds clock hands).
-                var kit = si == 0 ? AddOnAssets.SmallFountains : si == 1 ? MediumFountains : AddOnAssets.LargeFountains;
-                if (string.IsNullOrEmpty(ctx.S("asset"))) asset = AssetMix.One("", kit);
-                float basin = math.max(BasinRadius(Sizes[si]), string.IsNullOrEmpty(ctx.S("asset")) ? AddOnAssets.Radius(ctx.Site, "", kit, 0f) * 0.75f : AssetMix.FootprintRadius(ctx.Site, asset, 0f));
-                bool seating = benches > 0 || lamps || planters;
-                float apron = basin + (seating ? 4.5f : 2f);
-                if (!Spots.Find(occ, apron, Spots.Preference.Centre, ctx.Seed, out var spot)) continue;
-                if (si != sizeIndex) ctx.Issue(IssueSeverity.Info, "Placemaker.AddOn.Fountain.Issue.Smaller");
-                Build(ctx, occ, spot, basin, apron, asset, benches, lamps, planters);
-                return;
-            }
+            // s18: the place's focal point first (LeisureKit.FocalPoint — where a plaza lays its rondel), at the
+            // requested size, then smaller: a smaller fountain on the focal point beats a big one beside it
+            // (playtest: a fountain tower half over the edge of the square's circle). Then anywhere central.
+            var focal = LeisureKit.FocalPoint(ctx.LayerRegion, ctx.Input.Reserved, out _);
+            // Pass 0: focal point with its seating; 1: focal point, fountain alone (a small square's own benches
+            // and lamps stand round it); 2: the most central free spot with seating.
+            for (int pass = 0; pass < 3; pass++)
+                // Try the requested size, then smaller ones: a smaller fountain beats none.
+                for (int si = sizeIndex; si >= 0; si--)
+                {
+                    // Automatic: a vanilla fountain of the requested size (the centrepiece pool also holds clock hands).
+                    var kit = si == 0 ? AddOnAssets.SmallFountains : si == 1 ? MediumFountains : AddOnAssets.LargeFountains;
+                    if (string.IsNullOrEmpty(ctx.S("asset"))) asset = AssetMix.One("", kit);
+                    float basin = math.max(BasinRadius(Sizes[si]), string.IsNullOrEmpty(ctx.S("asset")) ? AddOnAssets.Radius(ctx.Site, "", kit, 0f) * 0.75f : AssetMix.FootprintRadius(ctx.Site, asset, 0f));
+                    bool alone = pass == 1;
+                    bool seating = !alone && (benches > 0 || lamps || planters);
+                    float apron = basin + (seating ? 4.5f : 2f);
+                    float2 spot = focal;
+                    if (pass < 2)
+                    {
+                        if (!ctx.LayerRegion.ContainsDisc(focal, apron + 0.5f) || occ.Clearance(focal, apron * 2f + 5f) < apron) continue;
+                    }
+                    else if (!Spots.Find(occ, apron, Spots.Preference.Centre, ctx.Seed, out spot)) continue;
+                    if (si != sizeIndex) ctx.Issue(IssueSeverity.Info, "Placemaker.AddOn.Fountain.Issue.Smaller");
+                    Build(ctx, occ, spot, basin, apron, asset, alone ? 0 : benches, !alone && lamps, !alone && planters);
+                    return;
+                }
             NoSpace(ctx, "Placemaker.AddOn.Fountain.Name");
+        }
+
+        /// <summary>
+        /// (s18) What <see cref="PlanCore"/> will build on a focal point with <paramref name="room"/> metres of free
+        /// radius, for an automatic asset: the apron radius (0 = no fountain fits there), the basin radius, and whether
+        /// it stands alone (no seating ring). Lets a small plaza lay its focal pad to the fountain's real size.
+        /// </summary>
+        public static float PredictApron(SiteContext site, float room, string size, bool seating, out float basin, out bool alone)
+        {
+            int sizeIndex = Math.Max(0, Array.IndexOf(Sizes, size));
+            for (int pass = 0; pass < 2; pass++)
+                for (int si = sizeIndex; si >= 0; si--)
+                {
+                    var kit = si == 0 ? AddOnAssets.SmallFountains : si == 1 ? MediumFountains : AddOnAssets.LargeFountains;
+                    basin = math.max(BasinRadius(Sizes[si]), AddOnAssets.Radius(site, "", kit, 0f) * 0.75f);
+                    alone = pass == 1;
+                    float apron = basin + (seating && !alone ? 4.5f : 2f);
+                    if (apron + 0.5f <= room) return apron;
+                }
+            basin = 0f; alone = true;
+            return 0f;
         }
 
         private static void Build(LayerContext ctx, Occupancy occ, float2 c, float basin, float apron, AssetRef asset,

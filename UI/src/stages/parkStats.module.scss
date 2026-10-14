@@ -1,0 +1,144 @@
+@use "../styles/tokens" as *;
+
+// s17 Park stats section (Review). Flex only, one-line texts with ellipsis (wrapped lines overlapped in Gameface).
+
+.shimmer {
+    opacity: 0.6;
+}
+
+.topRow {
+    @include row;
+    min-width: 0;
+    margin-bottom: 4rem;
+}
+
+.keep {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.kind {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 8rem;
+    font-size: $fs-s;
+    color: $c-text-faint;
+    text-align: right;
+    @include ellipsis;
+}
+
+.warn {
+    @include row;
+    min-width: 0;
+    margin-bottom: 4rem;
+    padding: 3rem 6rem;
+    border-radius: $radius;
+    background-color: rgba(255, 181, 71, 0.1);
+}
+
+.warnText {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 5rem;
+    font-size: $fs-s;
+    color: #ffd59a;
+    @include ellipsis;
+}
+
+.stat {
+    @include col;
+    min-width: 0;
+    margin-bottom: 5rem;
+    padding: 4rem 6rem 2rem 6rem;
+    border-radius: $radius;
+    background-color: $c-surface;
+}
+
+.head {
+    @include row;
+    min-width: 0;
+    height: 20rem;
+}
+
+.label {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: $fs;
+    font-weight: bold;
+    @include ellipsis;
+}
+
+.tag {
+    flex-shrink: 0;
+    margin-left: 6rem;
+    padding: 0 5rem;
+    height: 15rem;
+    line-height: 15rem;
+    border-radius: $radius-s;
+    font-size: 10rem;
+    color: $c-text-faint;
+    background-color: $c-surface;
+    white-space: nowrap;
+}
+
+.tagOn {
+    color: #0d1a12;
+    background-color: $c-ok;
+}
+
+.flex {
+    flex: 1 1 auto;
+}
+
+.value {
+    flex-shrink: 0;
+    margin-left: 6rem;
+    font-size: $fs;
+    font-weight: bold;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.valueSet {
+    color: var(--accentColorNormal);
+}
+
+.valueOut {
+    color: $c-warning;
+}
+
+.reset {
+    width: 18rem;
+    height: 18rem;
+    margin-left: 3rem;
+    flex-shrink: 0;
+}
+
+.meaning {
+    min-width: 0;
+    margin-bottom: 2rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    @include ellipsis;
+}
+
+.formula {
+    margin-bottom: 3rem;
+    font-size: $fs-s;
+    color: var(--menuText1Normal);
+    line-height: 1.3;
+}
+
+.similar {
+    margin-bottom: 3rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    line-height: 1.3;
+}
+
+.note {
+    margin-top: 2rem;
+    font-size: $fs-s;
+    color: $c-text-faint;
+    line-height: 1.3;
+}

@@ -242,9 +242,10 @@ namespace Placemaker.Core.Build
         private static int Set(ref AssetRef asset, string id, Func<string, bool> exists)
         {
             // An automatic ref with explicit fallbacks keeps the catalog order: first existing fallback wins.
-            if (exists != null && asset.Fallbacks != null)
+            // (s16) Exists == null means "everything exists" (pure tests): the first fallback wins then too.
+            if (asset.Fallbacks != null)
                 foreach (var f in asset.Fallbacks)
-                    if (!string.IsNullOrEmpty(f) && exists(f)) { id = f; break; }
+                    if (!string.IsNullOrEmpty(f) && (exists == null || exists(f))) { id = f; break; }
             if (string.IsNullOrEmpty(id)) return 0;
             // Keep the original fallbacks: they still apply if the chosen asset disappears later.
             asset = new AssetRef(id, asset.Fallbacks ?? Array.Empty<string>());

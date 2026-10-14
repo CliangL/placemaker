@@ -152,6 +152,35 @@ namespace Placemaker.Core.Decals
             return true;
         }
 
+        /// <summary>
+        /// (s21) False when the catalog is known and has no decorative decal at all (vanilla has none: every leaf, crack or
+        /// stain decal comes from asset packs). True when unknown (no snapshot) or any dressing/theme pool has items.
+        /// </summary>
+        public static bool PacksAvailable()
+        {
+            bool known = false;
+            foreach (var c in DecorativeCategories)
+            {
+                int n = Layers.Common.AssetAvailability.CountOf(c);
+                if (n < 0) return true;
+                known = true;
+                if (n > 0) return true;
+            }
+            return !known;
+        }
+
+        private static IEnumerable<string> DecorativeCategories
+        {
+            get
+            {
+                foreach (var c in Specs.Keys) yield return c;
+                yield return AssetCategories.DecalLeaves; yield return AssetCategories.DecalDirt; yield return AssetCategories.DecalCracks;
+                yield return AssetCategories.DecalPuddles; yield return AssetCategories.DecalLitter; yield return AssetCategories.DecalGraffiti;
+            }
+        }
+
+        public const string NoPacksKey = "Placemaker.Dress.NoPacks";
+
         private static bool _registered;
         private static readonly object Gate = new object();
 

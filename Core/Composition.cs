@@ -64,8 +64,14 @@ namespace Placemaker.Core
         public string Icon = "";
         public int FormatVersion = 1;
         public RecipeStep Root = new RecipeStep();
+        /// <summary>
+        /// (s17) The player's park-stats choices for this build (overrides + "keep within vanilla range"). Null =
+        /// suggested values. Per build: saved in the receipt (ReceiptCodec v2), not in recipe JSON or presets, and
+        /// not part of the "modified" fingerprint.
+        /// </summary>
+        public Build.ParkStatsSettings ParkStats;
 
-        public Recipe Clone() => new Recipe { Id = Id, NameKey = NameKey, Name = Name, Icon = Icon, FormatVersion = FormatVersion, Root = Root.Clone() };
+        public Recipe Clone() => new Recipe { Id = Id, NameKey = NameKey, Name = Name, Icon = Icon, FormatVersion = FormatVersion, Root = Root.Clone(), ParkStats = ParkStats?.Clone() };
 
         /// <summary>The simplest recipe: one layer with its defaults.</summary>
         public static Recipe Single(IAreaGenerator g, uint seed) => new Recipe
@@ -90,6 +96,15 @@ namespace Placemaker.Core
         /// Compose from the site; Declutter re-checks objects against it after nudging them.
         /// </summary>
         public List<float2[]> Protected = new List<float2[]>();
+        /// <summary>
+        /// (s19) Land the build occupies as one place (CCW rings): the region of every top-most non-loose fill/split
+        /// step. Road grids (loose) have none. Build/ZoneGuard blocks the road zone cells on it outside the zoning.
+        /// </summary>
+        public List<float2[]> Footprints = new List<float2[]>();
+        /// <summary>(s19) Rings of the zone-blocking lots (physical lot areas, see Build/ZoneGuard). Set by Compose.</summary>
+        public List<float2[]> ZoneBlockers = new List<float2[]>();
+        /// <summary>(s19) Zone cells of existing roads the build zones or blocks (preview). Set by Compose.</summary>
+        public List<Build.ZoneCellMark> ZoneCells = new List<Build.ZoneCellMark>();
 
         public bool HasErrors
         {
@@ -141,7 +156,7 @@ namespace Placemaker.Core
             var reserved = new ReservedSpace();
             int budget = MaxSteps;
             var dress = new Dictionary<AreaPlan, Decals.DressSettings>();
-            Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, null, "0", 0, result, ref budget, cancel, null, dress);
+            Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, null, "0", 0, result, ref budget, cancel, false, null, dress);
             // CS2 joins paths only at identical nodes: split a path where a spur (often a feature's
             // "path to it") ends on it (g5).
             Layers.Common.PathJoins.JoinAll(result);
@@ -152,11 +167,13 @@ namespace Placemaker.Core
             Layers.Common.Cutouts.Enforce(result);
             // (s15) Never build on existing buildings: drop / cut whatever would touch a building lot.
             Build.SiteSafety.Apply(result, area, site);
+            // (s19) Road zone cells under the build are blocked outside the zoning; the zoning snaps to the cells.
+            Build.ZoneGuard.Apply(result, site);
             return result;
         }
 
         private static void Run(RecipeStep step, AreaShape shape, string[] tags, string regionKey, SiteContext site,
-            ReservedSpace reserved, List<float2[]> ownPlaces, string path, int depth, ComposedPlan result, ref int budget, CancellationToken cancel,
+            ReservedSpace reserved, List<float2[]> ownPlaces, string path, int depth, ComposedPlan result, ref int budget, CancellationToken cancel, bool covered,
             Decals.DressSettings parentDress = null, Dictionary<AreaPlan, Decals.DressSettings> dress = null)
         {
             cancel.ThrowIfCancellationRequested();
@@ -209,6 +226,12 @@ namespace Placemaker.Core
             plan.StepPath = path + "@" + regionKey;
             plan.Seed = input.Seed;
             result.Layers.Add(plan);
+            // (s19) The land this build occupies as one place: the region of the top-most non-loose fill/split.
+            if (!covered && gen.Kind != LayerKind.AddOn && !GeneratorRegistry.IsLoose(gen.Id) && shape?.Ring != null && shape.Ring.Length >= 3)
+            {
+                result.Footprints.Add(Geometry.Poly.EnsureCcw(Geometry.Poly.To2D(shape.Ring)));
+                covered = true;
+            }
             // Dressing settings: a fill step with decal controls owns its own; features and children share their parent's.
             var ownDress = Decals.DressingControls.Read(gen, step.Settings);
             if (ownDress != null) ownDress.Ring = shape.Ring2D();
@@ -225,7 +248,7 @@ namespace Placemaker.Core
                 string childPath = path + "/" + ci;
                 if (string.IsNullOrEmpty(child.Target))
                 {
-                    Run(child, shape, tags, regionKey, childSite, reserved, ownPlaces, childPath, depth + 1, result, ref budget, cancel, stepDress, dress);
+                    Run(child, shape, tags, regionKey, childSite, reserved, ownPlaces, childPath, depth + 1, result, ref budget, cancel, covered, stepDress, dress);
                     continue;
                 }
                 foreach (var region in plan.Regions)
@@ -235,7 +258,7 @@ namespace Placemaker.Core
                     var sub = new AreaShape { Ring = region.Ring, Source = shape.Source, Attachments = AttachmentsOn(shape.Attachments, region.Ring) };
                     var inside = ownPlaces;
                     if (places.TryGetValue(region, out var own)) inside = new List<float2[]>(ownPlaces ?? new List<float2[]>()) { own };
-                    Run(effective, sub, region.Tags, region.Key, childSite, reserved, inside, childPath, depth + 1, result, ref budget, cancel, stepDress, dress);
+                    Run(effective, sub, region.Tags, region.Key, childSite, reserved, inside, childPath, depth + 1, result, ref budget, cancel, covered, stepDress, dress);
                 }
             }
         }

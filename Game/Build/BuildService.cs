@@ -67,7 +67,7 @@ namespace Placemaker.Game.Build
         private enum Step
         {
             Idle, Prepare, WaitReplaced, ActivateTool, Terraform, Paint, EmitNets, EmitRest, WaitTemps, Validate,
-            ResetForRetry, OwnerLot, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
+            ResetForRetry, OwnerLot, Apply, Settle, ZoneBlock, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
         }
 
         private ToolSystem _toolSystem;
@@ -307,6 +307,7 @@ namespace Placemaker.Game.Build
                     case Step.OwnerLot: DoOwnerLot(frame); break;
                     case Step.Apply: DoApply(); break;
                     case Step.Settle: DoSettle(frame); break;
+                    case Step.ZoneBlock: DoZoneBlock(frame); break;
                     case Step.ZoningWait: if (frame - _stepFrame >= ZoningWaitFrames) Go(Step.ZoningEmit); break;
                     case Step.ZoningEmit: DoZoningEmit(); break;
                     case Step.ZoningApply: DoZoningApply(frame); break;
@@ -431,7 +432,7 @@ namespace Placemaker.Game.Build
                     // Terraform/zoning-only plan: nothing to adopt, nothing to apply.
                     _applied = true;
                     AfterApply();
-                    Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
+                    GoAfterApply();
                     return;
                 }
                 Go(Step.WaitTemps);
@@ -574,7 +575,7 @@ namespace Placemaker.Game.Build
             ChargeNets();
             AfterApply();
             SetProgress(0.85f);
-            Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
+            GoAfterApply();
         }
 
         private void DoFinish()
@@ -719,6 +720,7 @@ namespace Placemaker.Game.Build
             ResetTerraform();
             ResetOwner();
             ResetProtect();
+            ResetZoneBlock();
             _ownerSuppressed = false;
             _skipped.Clear();
             _notedRings.Clear();

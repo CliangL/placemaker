@@ -238,6 +238,19 @@ namespace Placemaker.Core.Tool
             bool changed = !step.Settings.Values.TryGetValue(controlId, out var old) || !ValueEquals(old, v);
             if (changed) step.Settings.Values[controlId] = v;
             bool lockChanged = lockIt && step.Locked.Add(controlId);
+            // (s16) Linked controls: a road mix writes the road-type picks; derived values (the mix) follow the picks.
+            if (gen is ILinkedControls linked)
+            {
+                try
+                {
+                    var before = step.Settings.Clone();
+                    var driven = linked.OnValueSet(step.Settings, controlId) ?? Array.Empty<string>();
+                    if (lockIt) foreach (var id in driven) lockChanged |= step.Locked.Add(id);
+                    linked.Derive(step.Settings);
+                    changed |= !before.ContentEquals(step.Settings);
+                }
+                catch (Exception) { }
+            }
             return changed || lockChanged;
         }
 
@@ -284,6 +297,10 @@ namespace Placemaker.Core.Tool
                     changed = true;
                 }
                 changed |= step.Locked.Add(kv.Key);
+            }
+            if (gen is ILinkedControls linked)
+            {
+                try { linked.Derive(step.Settings); } catch (Exception) { }
             }
             // The preset's own features (PresetInfo.Features): "x" on, "-x" off; other features stay as they are.
             uint fs = recipe.Root?.Seed ?? 0u;

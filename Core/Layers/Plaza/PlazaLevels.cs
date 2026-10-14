@@ -28,7 +28,7 @@ namespace Placemaker.Core.Layers.Plaza
         public static bool Handles(string mode) => Array.IndexOf(Modes, mode) >= 0;
 
         /// <summary>Shapes the plaza and adds stairs and step planters. Rectangles in <paramref name="keepLevel"/> (amenities) sit on one level.</summary>
-        public static int Shape(LayerContext ctx, Occupancy occ, LayerRegion region, string mode, IReadOnlyList<float2[]> keepLevel)
+        public static int Shape(LayerContext ctx, Occupancy occ, LayerRegion region, string mode, IReadOnlyList<float2[]> keepLevel, NetRole flight = NetRole.PathwayWide)
         {
             // Art pass a2: the square's own edge axis (a square's principal axes are diagonal), so steps run with the paving.
             LeisureKit.Frame(region, out var centre, out _, out _, out _, out _);
@@ -124,7 +124,8 @@ namespace Placemaker.Core.Layers.Plaza
                     if (region.ContainsDisc(p0, 2f) && region.ContainsDisc(p1, 2f)) flights.Add((p0, p1));
                 }
             }
-            foreach (var (a, b) in flights) LeisureKit.Path(ctx, occ, a, b, NetRole.PathwayWide, ramp);
+            foreach (var (a, b) in flights)
+                if (!LeisureKit.Crosses(occ, a, b, Composer.DefaultHalfWidth(flight))) LeisureKit.Path(ctx, occ, a, b, flight, ramp);   // s18: never through the focal pad   // s18: small squares use narrow flights
             ctx.Plan.Facts["levelFlights"] = flights.Count;
             ctx.Plan.Facts["levelSteps"] = steps.Count;
 

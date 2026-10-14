@@ -424,7 +424,8 @@ function drawLayer(g: CanvasRenderingContext2D, l: PlanLayer, alpha: number, px:
     }
     g.lineCap = "round";
     for (const n of l.nets) {
-        const st = netStyle(n.role);
+        // s16: roads of the roads layer in their role colour (white street, cyan avenue, green local, violet ring, orange perimeter).
+        const st = n.roleColor ? { color: "#5a6168", edge: n.roleColor, centre: n.roleColor } : netStyle(n.role);
         const [a, b1, c1, d] = n.pts;
         const path = () => {
             g.beginPath();
@@ -443,7 +444,7 @@ function drawLayer(g: CanvasRenderingContext2D, l: PlanLayer, alpha: number, px:
         g.stroke();
         if (st.centre) {
             g.strokeStyle = st.centre;
-            g.lineWidth = 0.5;
+            g.lineWidth = n.roleColor ? Math.max(1.5, n.width * 0.25) : 0.5;
             g.setLineDash([3, 4]);
             path();
             g.stroke();

@@ -10,6 +10,13 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Tool
 {
+    /// <summary>(s16) Display name and thumbnail of a prefab (from the game catalog).</summary>
+    public sealed class AssetLabel
+    {
+        public string Name = "";
+        public string Icon = "";
+    }
+
     public sealed class HintInfo
     {
         public LocText Text;
@@ -73,6 +80,13 @@ namespace Placemaker.Core.Tool
         public bool PermanentAcknowledged;
         /// <summary>Extra issues from the tool itself (build failure, timeout…).</summary>
         public List<PlanIssue> ExtraIssues = new List<PlanIssue>();
+        /// <summary>(s17) Selected area in m² (park stats scale with it). 0 = the plan's outline is unknown: no park stats.</summary>
+        public double AreaM2;
+        /// <summary>(s17) Setting "Real park stats (companion building)".</summary>
+        public bool ParkCompanion;
+        /// <summary>(s17) Outline (XZ) and the nets around it, to find the companion's road frontage. Null = none.</summary>
+        public IReadOnlyList<float2> Outline;
+        public IReadOnlyList<NearbyNet> Roads;
     }
 
     public static class UiModels
@@ -82,7 +96,7 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 15;
+        public const int Protocol = 18;   // s17: park stats (summary.parkStats, setParkStat…, companion)
 
         // ───────────── state ─────────────
 
@@ -267,6 +281,7 @@ namespace Placemaker.Core.Tool
                 .Set("group", c.Group ?? "")
                 .Set("label", c.LabelKey ?? "");
             if (!string.IsNullOrEmpty(c.TooltipKey)) o.Set("tooltip", c.TooltipKey);
+            if (!string.IsNullOrEmpty(c.DescriptionKey)) o.Set("description", c.DescriptionKey);
             if (!string.IsNullOrEmpty(c.Icon)) o.Set("icon", IconPath(c.Icon));
             if (c.Kind == ControlKind.Slider)
             {
@@ -282,6 +297,20 @@ namespace Placemaker.Core.Tool
                     var oo = JsonValue.Obj().Set("value", op.Value ?? "").Set("label", op.LabelKey ?? "");
                     if (!string.IsNullOrEmpty(op.Icon)) oo.Set("icon", IconPath(op.Icon));
                     if (!string.IsNullOrEmpty(op.TooltipKey)) oo.Set("tooltip", op.TooltipKey);
+                    if (!string.IsNullOrEmpty(op.DetailKey)) oo.Set("detail", op.DetailKey);
+                    if (op.Swatch != null && op.Swatch.Count > 0)
+                    {
+                        var sw = JsonValue.Arr();
+                        foreach (var st in op.Swatch)
+                        {
+                            if (st == null) continue;
+                            var so = JsonValue.Obj().Set("role", st.Role ?? "").Set("color", st.Color ?? "").Set("width", Round(st.Width, 1));
+                            if (st.Green) so.Set("green", true);
+                            if (st.Bike) so.Set("bike", true);
+                            sw.Add(so);
+                        }
+                        oo.Set("swatch", sw);
+                    }
                     opts.Add(oo);
                 }
                 o.Set("options", opts);
@@ -311,8 +340,9 @@ namespace Placemaker.Core.Tool
         public static JsonValue Design(Recipe recipe, string recipeId, bool modified, string focus,
             IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, Func<string, IAreaGenerator> generators = null,
             ActivePresetInfo activePreset = null, string presetsFile = null, bool planStale = false,
-            IReadOnlyDictionary<string, Dictionary<string, LocText>> unavailable = null)
+            IReadOnlyDictionary<string, Dictionary<string, LocText>> unavailable = null, Func<string, string, AssetLabel> assetLabel = null)
         {
+            _assetLabel = assetLabel;
             var o = JsonValue.Obj().Set("recipeId", recipeId ?? "").Set("modified", modified);
             if (activePreset != null) o.Set("activePreset", ActivePreset(activePreset));
             if (!string.IsNullOrEmpty(presetsFile)) o.Set("presetsFile", presetsFile);
@@ -320,6 +350,9 @@ namespace Placemaker.Core.Tool
             o.Set("focus", focus ?? RecipePaths.Root);
             return o;
         }
+
+        /// <summary>Display name / thumbnail of a prefab id (game catalog), for resolved automatic picks. Set per Design call.</summary>
+        [ThreadStatic] private static Func<string, string, AssetLabel> _assetLabel;
 
         private static JsonValue Step(Recipe recipe, RecipeStep s, string path, IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, bool stale, int depth,
             Func<string, IAreaGenerator> generators, IReadOnlyDictionary<string, Dictionary<string, LocText>> unavailable = null)
@@ -332,7 +365,18 @@ namespace Placemaker.Core.Tool
             var values = JsonValue.Obj();
             var keys = new List<string>(s.Settings.Values.Keys);
             keys.Sort(StringComparer.Ordinal);
-            foreach (var k in keys) values.Set(k, DesignEditor.ToJson(s.Settings.Values[k]));
+            IAreaGenerator lg = null;
+            try { lg = generators?.Invoke(s.Layer); } catch (Exception) { lg = null; }
+            var shown = s.Settings;
+            if (lg is ILinkedControls linked)
+            {
+                // Derived controls (the road mix) always show what the picks are, also for old saves.
+                shown = s.Settings.Clone();
+                try { linked.Derive(shown); } catch (Exception) { shown = s.Settings; }
+                keys = new List<string>(shown.Values.Keys);
+                keys.Sort(StringComparer.Ordinal);
+            }
+            foreach (var k in keys) values.Set(k, DesignEditor.ToJson(shown.Values[k]));
             o.Set("values", values);
             var locked = new List<string>(s.Locked);
             locked.Sort(StringComparer.Ordinal);
@@ -393,8 +437,34 @@ namespace Placemaker.Core.Tool
             }
             o.Set("overrides", overrides);
             o.Set("regions", Regions(plan, path));
+            // (s16) What Automatic became, and the roads of the plan by role. A stale plan still answers
+            // (best guess while the new one runs); the next push replaces it.
+            var resolved = ResolvedAssets(plan, path, lg, _assetLabel, s.Settings);
+            if (resolved.Count > 0) o.Set("resolvedAssets", resolved);
+            // A control this layout does not use (no avenues in a plain grid) is shown greyed out with s15's
+            // disabled-with-reason, still naming what Automatic would place there. An explicit pick never is.
+            var notUsed = new List<string>();
+            foreach (var kv in resolved.Properties)
+                if (kv.Value["unused"].AsBool() && (s.Settings == null || string.IsNullOrEmpty(s.Settings.S(kv.Key, "")))) notUsed.Add(kv.Key);
+            if (notUsed.Count > 0)
+            {
+                var dis = JsonValue.Obj();
+                if (why != null)
+                {
+                    var wids = new List<string>(why.Keys);
+                    wids.Sort(StringComparer.Ordinal);
+                    foreach (var id in wids) if (!id.StartsWith(Unavailable.FeaturePrefix, StringComparison.Ordinal)) dis.Set(id, why[id].ToJson());
+                }
+                foreach (var id in notUsed) if (!dis.Has(id)) dis.Set(id, new LocText(NotInLayoutKey).ToJson());
+                o.Set("disabled", dis);
+            }
+            var legend = NetLegend(plan, path, _assetLabel);
+            if (legend.Count > 0) o.Set("netLegend", legend);
             return o;
         }
+
+        /// <summary>(s16) Reason for an asset control the current layout does not use (StepView.disabled).</summary>
+        public const string NotInLayoutKey = "Placemaker.UI.Why.NotInLayout";
 
         /// <summary>Built-in features of a step (mirrors UI FeatureView): toggle state, child path and the parent options shown under it.</summary>
         public static JsonValue FeatureViews(RecipeStep s, string path, IAreaGenerator gen, Func<string, IAreaGenerator> generators,
@@ -515,6 +585,134 @@ namespace Placemaker.Core.Tool
             return arr;
         }
 
+        /// <summary>Layer plans a step produced (all its region runs; an override exactly its own run).</summary>
+        public static IEnumerable<AreaPlan> StepLayers(ComposedPlan plan, string stepPath)
+        {
+            if (plan?.Layers == null || stepPath == null) yield break;
+            int slash = stepPath.LastIndexOf('/');
+            bool isOverride = stepPath.IndexOf('@', slash + 1) >= 0;
+            string prefix = PlanPathOf(stepPath) + "@";
+            foreach (var l in plan.Layers)
+            {
+                if (l?.StepPath == null) continue;
+                if (isOverride ? l.StepPath != stepPath : !l.StepPath.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                yield return l;
+            }
+        }
+
+        /// <summary>
+        /// (s16) contract.ts StepView.resolvedAssets: per asset control, the prefab the latest plan really uses
+        /// (what "Automatic" became, or the fallback of a pick this playset lacks). Elements tagged with the
+        /// control (PlannedNet/Object/Surface/Area.Control) decide; untagged layers fall back to the first
+        /// element of the control's category. The most used prefab wins (ties: first seen).
+        /// </summary>
+        public static JsonValue ResolvedAssets(ComposedPlan plan, string stepPath, IAreaGenerator gen, Func<string, string, AssetLabel> label = null,
+            SettingsBag settings = null)
+        {
+            var o = JsonValue.Obj();
+            IReadOnlyList<ControlSchema> controls = null;
+            try { controls = gen?.Controls; } catch (Exception) { controls = null; }
+            if (plan == null || controls == null) return o;
+            var tagged = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
+            var byCat = new Dictionary<string, string>(StringComparer.Ordinal);
+            var order = new List<string>();
+            void Add(string control, string category, AssetRef a)
+            {
+                string id = a.Id;
+                if (string.IsNullOrEmpty(id)) return;
+                if (!string.IsNullOrEmpty(control))
+                {
+                    if (!tagged.TryGetValue(control, out var m)) tagged[control] = m = new Dictionary<string, int>(StringComparer.Ordinal);
+                    m.TryGetValue(id, out int n);
+                    if (n == 0) order.Add(control + "|" + id);
+                    m[id] = n + 1;
+                }
+                if (!string.IsNullOrEmpty(category) && !byCat.ContainsKey(category)) byCat[category] = id;
+            }
+            foreach (var l in StepLayers(plan, stepPath))
+            {
+                foreach (var n in l.Nets) if (n != null) Add(n.Control, Build.RoleCategories.ForNet(n), n.Asset);
+                foreach (var ob in l.Objects) if (ob != null) Add(ob.Control, Build.RoleCategories.ForObject(ob), ob.Asset);
+                foreach (var sf in l.Surfaces) if (sf != null) Add(sf.Control, Build.RoleCategories.ForSurface(sf), sf.Asset);
+                foreach (var a in l.Areas) if (a != null) Add(a.Control, Build.RoleCategories.ForArea(a.Role), a.Asset);
+            }
+            bool anyTagged = tagged.Count > 0;
+            foreach (var c in controls)
+            {
+                if (c == null || c.Kind != ControlKind.Asset) continue;
+                string id = null;
+                if (tagged.TryGetValue(c.Id, out var m))
+                {
+                    int best = -1;
+                    foreach (var key in order)
+                    {
+                        if (!key.StartsWith(c.Id + "|", StringComparison.Ordinal)) continue;
+                        string cand = key.Substring(c.Id.Length + 1);
+                        if (m[cand] > best) { best = m[cand]; id = cand; }
+                    }
+                }
+                // A layer that tags its elements answers only for tagged controls (two road controls share a category).
+                else if (!anyTagged && !string.IsNullOrEmpty(c.AssetCategory)) byCat.TryGetValue(c.AssetCategory, out id);
+                AssetLabel al = null;
+                bool unused = false;
+                if (string.IsNullOrEmpty(id) && gen is IAutoAssetHints hints && (settings == null || string.IsNullOrEmpty(settings.S(c.Id, ""))))
+                {
+                    // Not in this plan: what Automatic would place (the first candidate the catalog knows).
+                    string[] cands = null;
+                    try { cands = hints.AutoCandidates(c.Id, settings); } catch (Exception) { cands = null; }
+                    foreach (var cand in cands ?? Array.Empty<string>())
+                    {
+                        if (string.IsNullOrEmpty(cand)) continue;
+                        AssetLabel cl = null;
+                        try { cl = label?.Invoke(c.AssetCategory ?? "", cand); } catch (Exception) { cl = null; }
+                        if (label != null && cl == null) continue;   // the game catalog lacks it
+                        id = cand; al = cl; unused = true;
+                        break;
+                    }
+                }
+                if (string.IsNullOrEmpty(id)) continue;
+                var ro = JsonValue.Obj().Set("id", id);
+                if (unused) ro.Set("unused", true);
+                else
+                    try { al = label?.Invoke(c.AssetCategory ?? "", id); } catch (Exception) { al = null; }
+                if (!string.IsNullOrEmpty(al?.Name)) ro.Set("name", al.Name);
+                if (!string.IsNullOrEmpty(al?.Icon)) ro.Set("icon", al.Icon);
+                o.Set(c.Id, ro);
+            }
+            return o;
+        }
+
+        /// <summary>
+        /// (s16) contract.ts StepView.netLegend: the roads of a step's plan by role (street, avenue, local,
+        /// roundabout, perimeter, car-free) with colour, segment count, length and main prefab — the panel's
+        /// map legend. Empty when the step placed no roads.
+        /// </summary>
+        public static JsonValue NetLegend(ComposedPlan plan, string stepPath, Func<string, string, AssetLabel> label = null)
+        {
+            var arr = JsonValue.Arr();
+            var nets = new List<PlannedNet>();
+            foreach (var l in StepLayers(plan, stepPath)) nets.AddRange(l.Nets);
+            foreach (var e in Layers.Roads.RoadRoles.Legend(nets))
+            {
+                var eo = JsonValue.Obj()
+                    .Set("role", e.Role)
+                    .Set("label", Layers.Roads.RoadRoles.LabelKey(e.Role))
+                    .Set("color", Layers.Roads.RoadRoles.Color(e.Role))
+                    .Set("count", e.Count)
+                    .Set("lengthM", e.LengthM);
+                if (!string.IsNullOrEmpty(e.Control)) eo.Set("control", e.Control);
+                if (!string.IsNullOrEmpty(e.AssetId))
+                {
+                    eo.Set("assetId", e.AssetId);
+                    AssetLabel al = null;
+                    try { al = label?.Invoke(e.Role == Layers.Roads.RoadRoles.CarFree ? AssetCategories.Pathway : AssetCategories.Road, e.AssetId); } catch (Exception) { al = null; }
+                    if (!string.IsNullOrEmpty(al?.Name)) eo.Set("assetName", al.Name);
+                }
+                arr.Add(eo);
+            }
+            return arr;
+        }
+
         /// <summary>UI path → composer path prefix ("0/1@block:3" → "0/1"; overrides run under the child's path).</summary>
         public static string PlanPathOf(string stepPath)
         {
@@ -579,6 +777,68 @@ namespace Placemaker.Core.Tool
             o.Set("permanent", permanent);
             // Extension (docs/proposals/gametool.md): whether acknowledgePermanent(true) covers the current effects.
             o.Set("permanentAcknowledged", effects.Count == 0 || s.PermanentAcknowledged);
+            // Extension (docs/proposals/s17.md): park stats of the planned build.
+            if (s.AreaM2 > 0 && s.Recipe != null)
+            {
+                Placemaker.Core.Build.ParkStatsResult stats = null;
+                try { stats = Placemaker.Core.Build.ParkStatsEstimator.Estimate(Placemaker.Core.Build.ParkStatsInput.From(plan, s.AreaM2, s.Recipe), s.Recipe.ParkStats); }
+                catch (Exception) { stats = null; }
+                if (stats != null && stats.Applicable)
+                {
+                    var site = new Placemaker.Core.Build.ParkCompanionSite { ReasonKey = Placemaker.Core.Build.ParkCompanionPlanner.NoRoadKey };
+                    if (s.ParkCompanion)
+                        try
+                        {
+                            var objs = new List<float2>();
+                            var paths = new List<(float2, float2, float)>();
+                            Placemaker.Core.Build.ParkCompanionPlanner.Obstacles(plan, objs, paths);
+                            site = Placemaker.Core.Build.ParkCompanionPlanner.Find(s.Outline, s.Roads, objs, paths);
+                        }
+                        catch (Exception) { }
+                    Placemaker.Core.Build.ParkStatsEstimator.WithCompanion(stats, s.ParkCompanion, site);
+                    o.Set("parkStats", ParkStats(stats));
+                }
+            }
+            return o;
+        }
+
+        /// <summary>(s17) contract.ts ParkStatsView.</summary>
+        public static JsonValue ParkStats(Placemaker.Core.Build.ParkStatsResult r)
+        {
+            var o = JsonValue.Obj()
+                .Set("kind", r.Kind.ToString().ToLowerInvariant())
+                .Set("leisureType", r.LeisureType == Placemaker.Core.Build.LeisureKind.CityBeach ? "beach" : "park")
+                .Set("keepVanilla", r.KeepVanilla)
+                .Set("companion", r.Companion == Placemaker.Core.Build.ParkCompanionState.Yes ? "yes"
+                    : r.Companion == Placemaker.Core.Build.ParkCompanionState.NoRoad ? "noRoad" : "off")
+                .Set("quality", Math.Round(r.Quality, 2));
+            var arr = JsonValue.Arr();
+            foreach (var st in r.Stats)
+            {
+                var so = JsonValue.Obj()
+                    .Set("id", st.Id)
+                    .Set("value", st.Value)
+                    .Set("suggested", st.Suggested)
+                    .Set("bandMin", st.BandMin)
+                    .Set("bandMax", st.BandMax)
+                    .Set("min", st.Min)
+                    .Set("max", st.Max)
+                    .Set("step", st.Step)
+                    .Set("unit", st.Unit)
+                    .Set("applied", st.Applied)
+                    .Set("overridden", st.Overridden)
+                    .Set("clamped", st.Clamped);
+                var f = JsonValue.Arr();
+                foreach (var line in st.Formula) f.Add(line.ToJson());
+                so.Set("formula", f);
+                var sim = JsonValue.Arr();
+                foreach (var kv in st.Similar)
+                    sim.Add(JsonValue.Obj().Set("id", kv.Key.Id).Set("name", kv.Key.Name).Set("nameKey", kv.Key.NameKey)
+                        .Set("areaM2", kv.Key.AreaM2).Set("value", kv.Value));
+                so.Set("similar", sim);
+                arr.Add(so);
+            }
+            o.Set("stats", arr);
             return o;
         }
 

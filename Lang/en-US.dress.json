@@ -1,4 +1,5 @@
 {
+  "Placemaker.Dress.NoPacks": "Decorative decals need decal asset packs; none found.",
   "Placemaker.Dress.dressAmount": "Decals",
   "Placemaker.Dress.dressAmount.Tooltip": "How much wear, litter and stains dress what you build; 0 removes every decorative decal.",
   "Placemaker.Dress.dressStyle": "Decal style",
