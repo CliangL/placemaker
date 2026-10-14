@@ -34,12 +34,15 @@ namespace Placemaker.Core.Layers.AddOns
             var tableIds = ctx.L("tableAssets");
             if (!AssetAvailability.Require(ctx.Plan, AssetCategories.Picnic, tableIds, Keys.Category(AssetCategories.Picnic))) return;
             var occ = Occupancy(ctx);
-            float tableRadius = AssetMix.MaxFootprint(ctx.Site, tableIds, 1.6f);
+            bool chosenTables = tableIds != null && System.Array.Exists(tableIds, id => !string.IsNullOrEmpty(id));
+            float tableRadius = chosenTables ? AssetMix.MaxFootprint(ctx.Site, tableIds, 1.6f) : AddOnAssets.Radius(ctx.Site, "", AddOnAssets.PicnicTables, 1.5f);
             bool shelter = ctx.B("shelter") && AssetAvailability.Require(ctx.Plan, AssetCategories.Shelter, new[] { ctx.S("shelterAsset") }, Keys.Category(AssetCategories.Shelter));
-            var shelterAsset = AssetMix.One(ctx.S("shelterAsset"));
-            float shelterRadius = shelter ? AssetMix.FootprintRadius(ctx.Site, shelterAsset, 4f) : 0f;
+            var shelterAsset = AddOnAssets.Or(ctx.S("shelterAsset"), PicnicShelters);
+            float shelterRadius = shelter ? AddOnAssets.Radius(ctx.Site, ctx.S("shelterAsset"), PicnicShelters, 4f) : 0f;
             int tables = ctx.I("tables");
-            float ring = shelter ? shelterRadius + tableRadius + 1.2f : (tables > 1 ? tableRadius * 2.2f : 0f);
+            // Without a shelter the tables stand in one straight, evenly spaced row (2026-10-13: a ring
+            // with a random phase read as tables dropped at random angles).
+            float ring = shelter ? shelterRadius + tableRadius + 1.2f : (tables > 1 ? (tables - 1) * (tableRadius * 2f + 1.4f) * 0.5f : 0f);
             float groupRadius = ring + tableRadius + (ctx.B("shadeTrees") ? 4f : 1f);
             var spots = Spread(occ, groupRadius, ctx.I("groups"), Spots.Preference.Open, ctx.Seed, groupRadius * 2.5f);
             bool compact = false;
@@ -47,7 +50,7 @@ namespace Placemaker.Core.Layers.AddOns
             {
                 // No room for a full group: one compact group of tables, no shelter or shade trees, beats "no space".
                 shelter = false; compact = true;
-                ring = tables > 1 ? tableRadius * 2.2f : 0f;
+                ring = tables > 1 ? (tables - 1) * (tableRadius * 2f + 1.4f) * 0.5f : 0f;
                 groupRadius = ring + tableRadius + 1f;
                 spots = Spread(occ, groupRadius, 1, Spots.Preference.Open, ctx.Seed, groupRadius * 2.5f);
             }
@@ -64,16 +67,40 @@ namespace Placemaker.Core.Layers.AddOns
                     ctx.Object(c, phase, ObjectRole.Furniture, shelterAsset, gs, -1, AssetCategories.Shelter);
                     occ.Take(c, shelterRadius, 0);
                 }
-                var positions = tables == 1 || ring <= 0f ? new List<float2> { c } : RingPoints(c, ring, tables, phase);
+                // Row direction: along the nearest path (tables parallel to the walk), else the group's phase.
+                var rowDir = new float2(math.cos(phase), math.sin(phase));
+                if (occ.Paths.Count > 0 && occ.Paths.Nearest(c, 60f, out var onPath) >= 0)
+                {
+                    var away = math.normalizesafe(c - onPath, rowDir);
+                    rowDir = new float2(-away.y, away.x);
+                }
+                List<float2> positions;
+                if (tables == 1 || ring <= 0f) positions = new List<float2> { c };
+                else if (shelter) positions = RingPoints(c, ring, tables, math.atan2(rowDir.y, rowDir.x) + math.PI / tables);
+                else
+                {
+                    positions = new List<float2>();
+                    for (int t = 0; t < tables; t++) positions.Add(c + rowDir * (t / (float)(tables - 1) * 2f - 1f) * ring);
+                }
+                float rowYaw = math.atan2(rowDir.x, rowDir.y) + math.PI * 0.5f;
                 for (int t = 0; t < positions.Count; t++)
                 {
                     var p = positions[t];
                     if (!occ.Free(p, tableRadius, 0.5f, 0.4f)) continue;
                     uint v = Hashing.Mix(gs, (uint)t);
-                    // Tables tangential to the ring read as arranged around the shelter.
-                    ctx.Object(p, Facing(p, c) + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.Pick(tableIds, v), v, -1, AssetCategories.Picnic);
+                    // Round a shelter: tangential; in a row: all parallel, benches to the walk.
+                    float yaw = shelter ? Facing(p, c) + math.PI * 0.5f : rowYaw;
+                    ctx.Object(p, yaw, ObjectRole.Furniture, AddOnAssets.PickOr(tableIds, AddOnAssets.PicnicTables, chosenTables ? v : gs), v, -1, AssetCategories.Picnic);
                     occ.Take(p, tableRadius, 1);
                     placedTables++;
+                }
+                // A barbecue grill at the downwind end of the group and a bin beside it.
+                if (placedTables > 0)
+                {
+                    float reach = (shelter ? ring : math.max(ring, 0f)) + tableRadius + 1.8f;
+                    var gp = c + (shelter ? new float2(-rowDir.y, rowDir.x) : rowDir) * reach;
+                    if (LeisureKit.Put(ctx, occ, gp, Facing(gp, c), ObjectRole.Furniture, AssetMix.One("", AddOnAssets.Grills), AssetCategories.Picnic, 0.8f, Hashing.Mix(gs, 0x6E1u), 0.4f, 0.3f))
+                        LeisureKit.Put(ctx, occ, gp + math.normalizesafe(gp - c) * 1.3f, 0f, ObjectRole.Bin, AssetMix.One("", AddOnAssets.Bin), null, 0.4f, Hashing.Mix(gs, 0xB1u), 0.2f, 0.1f);
                 }
                 if (!trees) continue;
                 // Two or three trees on one side of the ring: a shaded edge, while the rest stays open lawn.
@@ -93,5 +120,8 @@ namespace Placemaker.Core.Layers.AddOns
             ctx.Stat(Keys.StatPicnicTables, placedTables, Keys.UnitCount);
             ctx.Stat(Keys.StatTrees, placedTrees, Keys.UnitCount);
         }
+
+        /// <summary>Open timber picnic shelters (campground shelters, then a pergola).</summary>
+        private static readonly string[] PicnicShelters = { "CampgroundShelter02", "CampgroundShelter01", "Pergola02" };
     }
 }

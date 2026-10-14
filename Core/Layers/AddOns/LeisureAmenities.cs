@@ -131,39 +131,67 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void Build(LayerContext ctx, Occupancy occ, OrientedRect site, float2 toward)
         {
-            string jetCat = LeisureKit.Category(ctx, ctx.S("jetAsset"), AssetCategories.WaterJets, AssetCategories.CenterpieceFountain);
-            if (jetCat == null) return;
+            // Real jets only when the player picked a jet prop: the catalog has none for parks (the
+            // automatic water.jets match is a farm irrigation rig, 2026-10-13 playtest). By default the
+            // pad is a pale deck round a low ground-level fountain, wet splashes scattered on the deck.
+            bool jets = !string.IsNullOrEmpty(ctx.S("jetAsset"));
             int si = math.max(0, Array.IndexOf(Sizes, ctx.S("size")));
             bool benches = ctx.B("benches");
             float room = math.min(site.HalfLength, site.HalfWidth) - (benches ? 2.6f : 0.8f);
             float r = math.min(si == 0 ? 4f : si == 1 ? 5.5f : 7f, room);
             if (r < 2.5f) { NoSpace(ctx, NameKey); return; }
-            ctx.Surface(Disc(site.Center, r), SurfaceRole.Decorative, AssetMix.One(ctx.S("padAsset")), AssetCategories.SurfacePaving);
-            // Jets in a sunflower pattern: even coverage, a dense middle, nothing on the rim (splash zone).
-            int wanted = ctx.I("jets");
-            var asset = AssetMix.One(ctx.S("jetAsset"));
+            var deck = AddOnAssets.Or(ctx.S("padAsset"), AddOnAssets.SplashDeck);
+            ctx.Surface(Disc(site.Center, r), SurfaceRole.Decorative, deck, AssetCategories.SurfacePaving);
+            AddOnKit.Link(ctx, Monuments.MonumentKit.Entry(occ, site, toward), site.Center, r, 1.2f, deck, AssetCategories.SurfacePaving, 20f);
             int placed = 0;
-            float inner = r - 0.9f;
-            float spacing = math.max(1.1f, inner / math.sqrt(math.max(1, wanted)) * 1.6f);
-            const float golden = 2.39996323f;
-            for (int i = 0; i < wanted * 3 && placed < wanted; i++)
+            if (jets)
             {
-                float rr = spacing * 0.55f * math.sqrt(i + 0.5f);
-                if (rr > inner) break;
-                var p = site.Center + new float2(math.cos(i * golden), math.sin(i * golden)) * rr;
-                if (Put(ctx, occ, p, 0f, ObjectRole.Furniture, asset, jetCat, 0.35f, Hashing.Mix(ctx.Seed, (uint)i + 11u))) placed++;
+                // Jets in a sunflower pattern: even coverage, a dense middle, nothing on the rim (splash zone).
+                int wanted = ctx.I("jets");
+                var asset = AssetMix.One(ctx.S("jetAsset"));
+                float inner = r - 0.9f;
+                float spacing = math.max(1.1f, inner / math.sqrt(math.max(1, wanted)) * 1.6f);
+                const float golden = 2.39996323f;
+                for (int i = 0; i < wanted * 3 && placed < wanted; i++)
+                {
+                    float rr = spacing * 0.55f * math.sqrt(i + 0.5f);
+                    if (rr > inner) break;
+                    var p = site.Center + new float2(math.cos(i * golden), math.sin(i * golden)) * rr;
+                    if (Put(ctx, occ, p, 0f, ObjectRole.Furniture, asset, AssetCategories.WaterJets, 0.35f, Hashing.Mix(ctx.Seed, (uint)i + 11u))) placed++;
+                }
+            }
+            else
+            {
+                // The low basin fountain (LargeFountain01 is 0.8 m tall, 9 m across) on a large pad, the
+                // small one elsewhere; it sits in the middle and takes its own disc.
+                var fountain = AssetMix.One("", r >= 6.5f ? AddOnAssets.SplashFountain : new[] { "SmallFountain03", "SmallFountain02" });
+                float fr = r >= 6.5f ? 4.7f : 2.1f;
+                if (Put(ctx, occ, site.Center, Hashing.Unit(ctx.Seed) * 6.283f, ObjectRole.Centerpiece, fountain, AssetCategories.CenterpieceFountain, fr, Hashing.Mix(ctx.Seed, 0xF0u))) placed++;
+                // A sprinkle of wet splashes on the deck round it (flat decals; never reserve space).
+                if (AssetAvailability.Has(AssetCategories.DecalPuddles))
+                {
+                    int n = math.clamp((int)(r * 1.2f), 4, 9);
+                    float band = (fr + r) * 0.5f;
+                    for (int i = 0; i < n; i++)
+                    {
+                        float a = (i + Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)i + 0x5Bu)) * 0.5f) * 2f * math.PI / n;
+                        var p = site.Center + new float2(math.cos(a), math.sin(a)) * band;
+                        uint v = Hashing.Mix(ctx.Seed, (uint)i + 0x5B0u);
+                        ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Decal, AssetMix.Pick(SplashDecals, v), v, -1, AssetCategories.DecalPuddles);
+                    }
+                }
             }
             int seats = 0;
             if (benches)
             {
                 // Parents' benches round the rim, leaving the side people arrive from open.
-                var bench = AssetMix.One(ctx.S("benchAsset"));
+                var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
                 float br = r + 1.5f;
                 int n = math.clamp((int)math.floor(2f * math.PI * br / 5.5f), 3, 10);
                 float gapAngle = math.atan2(toward.y - site.Center.y, toward.x - site.Center.x);
                 for (int i = 0; i < n; i++)
                 {
-                    float a = gapAngle + (i + 0.5f) * 2f * math.PI / (n + 1) + math.PI * 2f / (n + 1) * 0.5f;
+                    float a = gapAngle + (i + 1) * 2f * math.PI / (n + 1);
                     var p = site.Center + new float2(math.cos(a), math.sin(a)) * br;
                     if (Put(ctx, occ, p, LeisureKit.Yaw(p, site.Center), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0xBE0u + (uint)i))) seats++;
                 }
@@ -174,10 +202,18 @@ namespace Placemaker.Core.Layers.AddOns
                     float side = -SideSign(site, toward);
                     Put(ctx, occ, site.Local(k * (site.HalfLength - 2.5f), side * (site.HalfWidth - 2.5f)), 0f, ObjectRole.Tree, new AssetRef(""), null, 2.4f, Hashing.Mix(ctx.Seed, 0x7E0u + (uint)(k + 1)));
                 }
-            ctx.Stat("Placemaker.Stat.Jets", placed, Keys.UnitCount);
+            ctx.Stat("Placemaker.Stat.Jets", jets ? placed : 0, Keys.UnitCount);
             ctx.Stat(Keys.StatBenches, seats, Keys.UnitCount);
             ctx.Plan.Facts["padRadius"] = r;
         }
+
+        /// <summary>Water-splash decals (G87 wet pack); the puddle pool otherwise.</summary>
+        private static readonly string[] SplashDecals =
+        {
+            "G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 81 A M Decal",
+            "G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 84 B M Decal",
+            "G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 87 C M Decal",
+        };
     }
 
     [AreaGenerator(167)]

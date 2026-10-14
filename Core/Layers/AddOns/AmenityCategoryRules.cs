@@ -21,6 +21,10 @@ namespace Placemaker.Core.Layers.AddOns
 
         private static readonly string[] AdvertNames = { "advert", "billboard", "logo", "screen", "poster", "banner", "neon" };
 
+        // Farm irrigation (AgricultureSprinklerSystem, tractor sprayers) matches "sprinkler"/"spray" but is
+        // a 16 m machine: never an automatic splash-pad jet (art pass a6; no farm machinery in parks).
+        private static readonly string[] FarmNames = { "agricultur", "farm", "tractor", "irrigation", "crop", "harvest", "fertiliz" };
+
         public bool Classify(string lower, AssetTraits traits, List<string> categories)
         {
             if (string.IsNullOrEmpty(lower)) return false;
@@ -46,6 +50,7 @@ namespace Placemaker.Core.Layers.AddOns
             switch (category)
             {
                 case AssetCategories.SignNoticeboard: return Has(lower, BoardNames) && !Has(lower, AdvertNames);
+                case AssetCategories.WaterJets: return Has(lower, FarmNames) ? false : (bool?)null;
                 case AssetCategories.SportsVolleyball:
                 case AssetCategories.SportsTableTennis:
                 case AssetCategories.GamesChess:

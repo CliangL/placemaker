@@ -4,6 +4,7 @@
 //     so the parent's path network and its prefab stay untouched).
 //   • Arrival: where people come from (the park's spur end at the place, else the nearest path point).
 
+using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
 
@@ -34,7 +35,21 @@ namespace Placemaker.Core.Layers.AddOns
             var a = from - dir * 0.5f;
             var b = centre - dir * math.max(0f, radius - 1f);
             var mid = (a + b) * 0.5f;
-            return ctx.Surface(LayerRegion.Rect(mid, dir, math.distance(a, b) * 0.5f, halfWidth), SurfaceRole.Paving, asset, category);
+            return Pave(ctx, LayerRegion.Rect(mid, dir, math.distance(a, b) * 0.5f, halfWidth), SurfaceRole.Paving, asset, category);
+        }
+
+        /// <summary>A surface clipped to the layer's region (pads near the outline never spill onto the street).</summary>
+        public static bool Pave(LayerContext ctx, float2[] ring, SurfaceRole role, AssetRef asset, string category)
+        {
+            var region = ctx.LayerRegion.Ring;
+            bool inside = true;
+            foreach (var p in ring) if (!Poly.Contains(region, p)) { inside = false; break; }
+            if (inside) return ctx.Surface(ring, role, asset, category);
+            bool any = false;
+            foreach (var piece in Poly.Intersection(ring, region))
+                if (piece.Outer.Length >= 3 && math.abs(Poly.SignedArea(piece.Outer)) > 2f)
+                    any |= ctx.Surface(piece.Outer, role, asset, category);
+            return any;
         }
 
         /// <summary>Link to the nearest path (if any within reach).</summary>

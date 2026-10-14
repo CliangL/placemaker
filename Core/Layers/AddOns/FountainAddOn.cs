@@ -56,7 +56,10 @@ namespace Placemaker.Core.Layers.AddOns
             // Try the requested size, then smaller ones: a smaller fountain beats none.
             for (int si = sizeIndex; si >= 0; si--)
             {
-                float basin = math.max(BasinRadius(Sizes[si]), AssetMix.FootprintRadius(ctx.Site, asset, 0f));
+                // Automatic: a vanilla fountain of the requested size (the centrepiece pool also holds clock hands).
+                var kit = si == 0 ? AddOnAssets.SmallFountains : si == 1 ? MediumFountains : AddOnAssets.LargeFountains;
+                if (string.IsNullOrEmpty(ctx.S("asset"))) asset = AssetMix.One("", kit);
+                float basin = math.max(BasinRadius(Sizes[si]), string.IsNullOrEmpty(ctx.S("asset")) ? AddOnAssets.Radius(ctx.Site, "", kit, 0f) * 0.75f : AssetMix.FootprintRadius(ctx.Site, asset, 0f));
                 bool seating = benches > 0 || lamps || planters;
                 float apron = basin + (seating ? 4.5f : 2f);
                 if (!Spots.Find(occ, apron, Spots.Preference.Centre, ctx.Seed, out var spot)) continue;
@@ -72,11 +75,16 @@ namespace Placemaker.Core.Layers.AddOns
         {
             ctx.Object(c, Hashing.Unit(ctx.Seed) * 2f * math.PI, ObjectRole.Centerpiece, asset, Hashing.Mix(ctx.Seed, 0xF0u));
             occ.Take(c, basin, 0);
-            if (ctx.B("apron")) ctx.Surface(LayerRegion.Circle(c, apron, 32), SurfaceRole.Paving, AssetMix.One(ctx.S("apronSurface")));
+            if (ctx.B("apron"))
+            {
+                var paving = AddOnAssets.Or(ctx.S("apronSurface"), AddOnAssets.Paving);
+                ctx.Surface(LayerRegion.Circle(c, apron, 32), SurfaceRole.Paving, paving);
+                AddOnKit.LinkToPath(ctx, occ, c, apron, 1.5f, paving, null, 14f);
+            }
 
             float seatRing = apron - 1.6f;
             float phase = Hashing.Unit(Hashing.Mix(ctx.Seed, 0x5Eu)) * 2f * math.PI;
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
             int placedBenches = 0;
             if (benches > 0)
                 foreach (var p in RingPoints(c, seatRing, benches, phase))
@@ -115,5 +123,7 @@ namespace Placemaker.Core.Layers.AddOns
             ctx.Stat(Keys.StatBenches, placedBenches, Keys.UnitCount);
             ctx.Plan.Facts["fountainRadius"] = basin;
         }
+
+        private static readonly string[] MediumFountains = { "LargeFountain01", "SmallFountain01" };
     }
 }
