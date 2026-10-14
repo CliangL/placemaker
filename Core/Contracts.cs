@@ -83,6 +83,18 @@ namespace Placemaker.Core
     public enum ObstacleKind { Building = 0, Water = 1, Utility = 2, Other = 3 }
 
     /// <summary>
+    /// (s19) An existing zone block of a road (Game.Zones.Block, XZ only): <see cref="Size"/>.x cells along the
+    /// road, .y cells deep (≤ 6), 8 m cells, centred on <see cref="Position"/>; <see cref="Direction"/> points
+    /// from the block towards its road. Cell geometry: Core/Build/ZoneGuard (mirrors ZoneUtils.GetCellPosition).
+    /// </summary>
+    public struct ZoneGrid
+    {
+        public float2 Position;
+        public float2 Direction;
+        public int2 Size;
+    }
+
+    /// <summary>
     /// Thread-safe snapshot of the world around the area, captured on the main thread before
     /// planning. Generators may run on a worker thread; they must only read this.
     /// </summary>
@@ -94,6 +106,8 @@ namespace Placemaker.Core
         public Func<float2, float> WaterDepthAt = _ => 0f;
         public List<NearbyNet> NearbyNets = new List<NearbyNet>();
         public List<Obstacle> Obstacles = new List<Obstacle>();
+        /// <summary>(s19) Zone blocks of existing roads near the area: ZoneGuard snaps the zoning and the blocking to their cells.</summary>
+        public List<ZoneGrid> ZoneGrids = new List<ZoneGrid>();
         public bool LeftHandTraffic;
         /// <summary>Asset metadata the generator may need for footprints/spacing (keyed by AssetRef.Id).</summary>
         public Dictionary<string, AssetInfo> Assets = new Dictionary<string, AssetInfo>();
@@ -132,7 +146,7 @@ namespace Placemaker.Core
         /// </summary>
         public SiteContext WithHeight(Func<float2, float> heightAt) => new SiteContext
         {
-            HeightAt = heightAt ?? HeightAt, WaterDepthAt = WaterDepthAt, NearbyNets = NearbyNets, Obstacles = Obstacles,
+            HeightAt = heightAt ?? HeightAt, WaterDepthAt = WaterDepthAt, NearbyNets = NearbyNets, Obstacles = Obstacles, ZoneGrids = ZoneGrids,
             LeftHandTraffic = LeftHandTraffic, Assets = Assets, LayoutScale = LayoutScale, EdgeMargin = EdgeMargin,
         };
     }

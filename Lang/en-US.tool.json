@@ -197,6 +197,8 @@
   "Placemaker.Settings.ResetBrushRules.Desc": "Puts every Block paint brush rule back to its default.",
   "Placemaker.Settings.ClearExistingTreesAndProps": "Clear existing trees and props",
   "Placemaker.Settings.ClearExistingTreesAndProps.Desc": "Removes trees, plants, props and decals inside the area when it is built, so nothing old pokes through. Buildings, utilities and roads are never touched.",
+  "Placemaker.Settings.KeepZonedBuildingsOff": "Keep zoned buildings off builds",
+  "Placemaker.Settings.KeepZonedBuildingsOff.Desc": "Blocks the roads' zone cells under a park, plaza or other build (except its zoning cutouts), so the city cannot grow houses or shops on it. Removing the build unblocks them again. Off: the land under a build stays zonable.",
   "Placemaker.Settings.RecoverRejectedPieces": "Fix or skip rejected pieces",
   "Placemaker.Settings.RecoverRejectedPieces.Desc": "If the game refuses some pieces, repair or leave out just those and build the rest. Placemaker tells you what was skipped.",
   "Placemaker.Settings.OverlayPavedSurfaces": "Paving drawn above grass",

@@ -407,6 +407,7 @@ namespace Placemaker.Game.Overlay
                 _surfaceGroups.Clear();
                 _areaGroups.Clear();
                 BuildPaintPreview(plan);
+                BuildZoneCellPreview(plan);
                 foreach (var l in plan.Layers)
                 {
                     if (l == null) continue;
@@ -440,6 +441,7 @@ namespace Placemaker.Game.Overlay
                 if (content)
                     foreach (var r in kv.Value) Ring(buffer, r, WithAlpha(AreaColor((AreaRole)kv.Key), 0.45f * alpha), w * 0.4f, dashed: true);
             }
+            DrawZoneCells(buffer, w, alpha);
 
             // Objects (playtest 4b #9): every feature object — playground, picnic, restrooms, kiosks, field
             // props, centerpieces, trees, furniture, of every layer incl. feature children — always gets a
@@ -491,6 +493,85 @@ namespace Placemaker.Game.Overlay
                 if (issue?.At == null) continue;
                 buffer.DrawCircle(issue.Severity == IssueSeverity.Error ? Error : Warning, new Color(1f, 0f, 0f, 0.15f), w, 0, new float2(0, 1), issue.At.Value, w * 14f);
             }
+        }
+
+        // ───────────── zone cells (s19) ─────────────
+
+        /// <summary>Zoned cells per zone colour (0 commercial, 1 residential, 2 office, 3 industrial), 8 blocked, 9 kept.</summary>
+        private readonly Dictionary<int, List<float3[]>> _zoneCellGroups = new Dictionary<int, List<float3[]>>();
+        private readonly List<float3[]> _zoneBlockerRings = new List<float3[]>();
+        private const int BlockedCells = 8, KeptCells = 9;
+
+        private void BuildZoneCellPreview(ComposedPlan plan)
+        {
+            _zoneCellGroups.Clear();
+            _zoneBlockerRings.Clear();
+            if (plan.ZoneCells != null)
+                foreach (var c in plan.ZoneCells)
+                {
+                    int key = c.State == ZoneCellState.Blocked ? BlockedCells : c.State == ZoneCellState.Kept ? KeptCells : ZoneColorKey(c.ZoneId);
+                    float y = c.Height;
+                    Group(_zoneCellGroups, key).Add(new[] { new float3(c.A.x, y, c.A.y), new float3(c.B.x, y, c.B.y), new float3(c.C.x, y, c.C.y), new float3(c.D.x, y, c.D.y) });
+                }
+            // Without captured road blocks (roads this build adds) the blocking is shown as its outline.
+            if ((plan.ZoneCells == null || plan.ZoneCells.Count == 0) && plan.ZoneBlockers != null)
+            {
+                float y = 0f;
+                if (_tool.Shape?.Ring != null && _tool.Shape.Ring.Length > 0) y = _tool.Shape.Ring[0].y;
+                foreach (var r in plan.ZoneBlockers)
+                {
+                    var r3 = new float3[r.Length];
+                    for (int i = 0; i < r.Length; i++) r3[i] = new float3(r[i].x, y, r[i].y);
+                    _zoneBlockerRings.Add(r3);
+                }
+            }
+        }
+
+        private static int ZoneColorKey(string zoneId)
+        {
+            var id = zoneId ?? "";
+            if (id.IndexOf("Residential", StringComparison.OrdinalIgnoreCase) >= 0) return 1;
+            if (id.IndexOf("Office", StringComparison.OrdinalIgnoreCase) >= 0) return 2;
+            if (id.IndexOf("Industrial", StringComparison.OrdinalIgnoreCase) >= 0) return 3;
+            return 0;
+        }
+
+        private static Color ZoneCellColor(int key)
+        {
+            switch (key)
+            {
+                case 1: return new Color(0.35f, 0.85f, 0.35f, 1f);   // residential green
+                case 2: return new Color(0.70f, 0.50f, 1f, 1f);      // office purple
+                case 3: return new Color(1f, 0.80f, 0.20f, 1f);      // industrial yellow
+                case BlockedCells: return new Color(0.85f, 0.22f, 0.20f, 1f);
+                case KeptCells: return new Color(1f, 1f, 1f, 1f);
+                default: return new Color(0.25f, 0.55f, 1f, 1f);     // commercial blue
+            }
+        }
+
+        /// <summary>
+        /// The zoning cutouts as the game's zone colour per cell, the park's blocked cells as a red hatch, so the
+        /// player sees where buildings may grow (shown even while the ghost hides the sketch: zoning has no ghost).
+        /// </summary>
+        private void DrawZoneCells(OverlayRenderSystem.Buffer buffer, float w, float alpha)
+        {
+            foreach (var kv in _zoneCellGroups)
+            {
+                var col = ZoneCellColor(kv.Key);
+                bool blocked = kv.Key == BlockedCells, kept = kv.Key == KeptCells;
+                float fill = blocked ? 0.12f : kept ? 0f : 0.34f;
+                _fill.SetLayer("zoneCells:" + kv.Key, kv.Value, WithAlpha(col, fill * alpha), blocked ? -92.6f : -92.5f, FilledPreviewSystem.Signature(kv.Value));
+                foreach (var r in kv.Value)
+                {
+                    if (blocked)
+                    {
+                        Ring(buffer, r, WithAlpha(col, 0.35f * alpha), w * 0.25f, dashed: true);
+                        buffer.DrawLine(WithAlpha(col, 0.30f * alpha), new Line3.Segment(r[0], r[2]), w * 0.25f);
+                    }
+                    else Ring(buffer, r, WithAlpha(col, (kept ? 0.4f : 0.85f) * alpha), w * 0.35f);
+                }
+            }
+            foreach (var r in _zoneBlockerRings) Ring(buffer, r, WithAlpha(ZoneCellColor(BlockedCells), 0.5f * alpha), w * 0.35f, dashed: true);
         }
 
         /// <summary>

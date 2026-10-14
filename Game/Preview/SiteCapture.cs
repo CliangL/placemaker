@@ -31,12 +31,14 @@ namespace Placemaker.Game.Preview
         private const int MaxGrid = 256;
         private const int MaxNets = 600;
         private const int MaxObstacles = 6000;   // s15: every building near the area must be protected
+        private const int MaxZoneBlocks = 4000;
 
         private readonly EntityManager _em;
         private readonly TerrainSystem _terrain;
         private readonly WaterSystem _water;
         private readonly global::Game.Net.SearchSystem _netSearch;
         private readonly global::Game.Objects.SearchSystem _objectSearch;
+        private readonly global::Game.Zones.SearchSystem _zoneSearch;
         private readonly CityConfigurationSystem _cityConfig;
 
         private Dictionary<string, AssetInfo> _assets = new Dictionary<string, AssetInfo>();
@@ -50,6 +52,7 @@ namespace Placemaker.Game.Preview
             _water = world.GetOrCreateSystemManaged<WaterSystem>();
             _netSearch = world.GetOrCreateSystemManaged<global::Game.Net.SearchSystem>();
             _objectSearch = world.GetOrCreateSystemManaged<global::Game.Objects.SearchSystem>();
+            _zoneSearch = world.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>();
             _cityConfig = world.GetOrCreateSystemManaged<CityConfigurationSystem>();
         }
 
@@ -96,6 +99,7 @@ namespace Placemaker.Game.Preview
             site.WaterDepthAt = WaterGrid(min, max);
             CaptureNets(min, max, site.NearbyNets);
             CaptureObstacles(min, max, site.Obstacles);
+            CaptureZoneBlocks(min, max, site.ZoneGrids);
             try { site.LeftHandTraffic = _cityConfig != null && _cityConfig.leftHandTraffic; } catch (Exception) { }
             // Copy: the worker must not see the catalog's dictionary mutate under it.
             site.Assets = new Dictionary<string, AssetInfo>(Assets());
@@ -267,6 +271,48 @@ namespace Placemaker.Game.Preview
                     return true;
             }
             return false;
+        }
+
+        private struct BlockIterator : INativeQuadTreeIterator<Entity, Bounds2>
+        {
+            public Bounds2 Bounds;
+            public NativeList<Entity> Results;
+            public bool Intersect(Bounds2 bounds) => MathUtils.Intersect(bounds, Bounds);
+            public void Iterate(Bounds2 bounds, Entity e)
+            {
+                if (MathUtils.Intersect(bounds, Bounds)) Results.Add(e);
+            }
+        }
+
+        /// <summary>
+        /// (s19) Zone blocks of existing roads around the area (Game.Zones.Block): ZoneGuard snaps the build's zoning
+        /// to their cells and blocks the others under the build. Geometry only (cells are 8 m, see Core ZoneGuard).
+        /// </summary>
+        private void CaptureZoneBlocks(float2 min, float2 max, List<ZoneGrid> into)
+        {
+            if (_zoneSearch == null) return;
+            var tree = _zoneSearch.GetSearchTree(true, out var deps);
+            deps.Complete();
+            var results = new NativeList<Entity>(64, Allocator.Temp);
+            try
+            {
+                var it = new BlockIterator { Bounds = new Bounds2(min, max), Results = results };
+                tree.Iterate(ref it);
+                var seen = new HashSet<Entity>();
+                for (int i = 0; i < results.Length && into.Count < MaxZoneBlocks; i++)
+                {
+                    var e = results[i];
+                    if (!seen.Add(e) || !_em.HasComponent<global::Game.Zones.Block>(e)) continue;
+                    if (_em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) continue;
+                    var b = _em.GetComponentData<global::Game.Zones.Block>(e);
+                    into.Add(new ZoneGrid { Position = b.m_Position.xz, Direction = b.m_Direction, Size = b.m_Size });
+                }
+            }
+            catch (Exception ex)
+            {
+                Mod.Log.Warn("Placemaker: zone block capture failed: " + ex.Message);
+            }
+            finally { results.Dispose(); }
         }
 
         private void CaptureObstacles(float2 min, float2 max, List<Obstacle> into)
