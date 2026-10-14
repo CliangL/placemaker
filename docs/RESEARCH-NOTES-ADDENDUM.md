@@ -139,3 +139,56 @@ call `AreaRings.IsValid(ring, AreaRings.SurfaceMinNodeDistance + AreaRings.Margi
     `BuildService.Paint.cs`. Whether the material TerraformingPrefabs are loaded in game mode (not only the
     editor) must be confirmed in-game: the build logs "terrain paint layers available: …" or warns
     `Placemaker.Build.PaintUnavailable`. Painting is permanent (not undone when the group is removed).
+
+## Object collisions — what makes CS2 reject a placed object (FEEDBACK-4, decompiled 1.6.2f1)
+
+Sources: `Game.Objects.ValidationHelpers` (ObjectIterator / NetIterator / AreaIterator, ValidateObject),
+`Game.Tools.ValidationSystem` (ProcessError, CancelOptional), `Game.Prefabs.ObjectInitializeSystem`
+(geometry flags and bounds), `Game.Objects.ObjectUtils.GetCollisionMask`, `Game.Net.NetUtils`,
+`Game.Objects.OverrideSystem`.
+
+47. **Collision box = `ObjectGeometryData.m_Bounds`** (what the catalog stores as `AssetInfo.BoundsMin/Max`
+    and dumps as `bounds`). Rotated with the object (`ObjectUtils.CalculateBounds`). Refinements:
+    `Circular` → cylinder, `Standing` legs → leg cylinders/boxes + the body above the legs,
+    `IgnoreBottomCollision` → box clipped at y ≥ 0. Our Declutter uses the oriented box (a superset).
+48. **Plants are shrunk.** For `PlantData` prefabs the XZ bounds come from the *child-stage* meshes and are
+    then reduced: `size.xz -= size.xz · min(0.5, 1 − potCoverage)` (height likewise, capped). A tree's
+    collision core is ~half its young trunk/canopy width (AppleTree01 2.7 m, Alder 3.3 m) — bushes under a
+    mature canopy are legal as long as the cores do not meet. The catalog bounds already are the core.
+49. **Collision masks.** Every non-marker object collides `OnGround | Overground` (+`ExclusiveGround` with
+    `ExclusiveGround`/`BaseCollision`, i.e. buildings/pillars). `Marker` objects never collide in game mode.
+    Two objects are tested only if their masks share a bit and their 3D bounds intersect — so props on the
+    ground always meet in height; only e.g. a hanging object above a bench passes on height alone.
+50. **Who is overridable.** Every static prop/plant/decal that is not a building, net object, utility object
+    or pillar gets `Overridable | Brushable` (trees, bushes, benches, lamps, bins, fountains, decals, hedge
+    pieces). Decal-only meshes are additionally `WalkThrough` (not `Physical`) but still collide: a leaves
+    decal's box is 6×1×6 m (y −0.5…0.5) and meets every ground object it covers.
+51. **Object ↔ object.** Overlap → `OverlapExisting`. Severity for a new overridable temp
+    (`m_CanOverride` = Overridable && !Essential): **Override** (no icon, not an Error). For a temp with
+    `TempFlags.Optional` (our ghost: `CreationFlags.Optional`): `CancelOptional` cancels it
+    (`TempFlags.Hidden|Cancel`) — and when the other party is an optional temp too, **both** are cancelled.
+    Temps are also checked against each other (`objectList` sweep), so two overlapping planned objects
+    vanish together in the ghost (playtest: 480/553 and 3200/3238 "optional objects dropped").
+52. **After Apply** (`OverrideSystem`): an overridable object that collides with a non-overridable thing
+    (net, building, physical area) gets `Overridden` — hidden, removed from the search tree mask, restored if
+    the obstacle goes. Overridable ↔ overridable pairs are resolved by priority: one of each pair is hidden.
+    So a real build "succeeds" but silently hides overlapping props — now counted as
+    `Placemaker.Build.Hidden.Object` (temps carrying `Game.Tools.Override` at tag time).
+53. **Object ↔ net.** Ground nets with a surface collide `OnGround|ExclusiveGround|Overground`; against an
+    `Overground` object their height range is extended 10 km downwards, so the object's XZ box must stay off
+    the whole net geometry (road incl. sidewalks, path width). Overridable objects → Override (→ hidden after
+    Apply; cancelled in the ghost). Exempt: the net the object is attached to (`Attached.m_Parent`, its
+    nodes) and nets owned by the same top-level owner. `NoSubCollisions` compositions (markers) never collide.
+54. **Object ↔ area.** Only areas with `PhysicalGeometry` or `ProtectedArea` count. **Surfaces are not
+    physical** → objects on surfaces are always fine; lots with `m_AllowOverlap` are not physical either.
+    MapTile → `ExceedsCityLimits`. Physical overlap of an overridable object → Override.
+55. **Other object errors**: `PlacementFlags.Unique` → AlreadyExists; shoreline/water rules (`InWater`,
+    `NoWater`, `NotOnShoreline`) for `Standing`/shoreline objects; world bounds → ExceedsCityLimits.
+56. **Placemaker consequences.** (a) `Core/Build/Declutter` runs once per plan inside
+    `AssetCatalogSystem.ResolveAutomatic` (tool preview/price, ghost and build all call it): rows of
+    hedge/fence pieces are re-spaced without overlap, then objects are accepted by role priority
+    (centerpiece > furniture > trees > bushes/planters > decals), nudged ≤ 2 m or dropped, and drops are
+    PlanIssues per role. (b) Prop-fence pieces on fence nets use `Fences.SpacedPieceCount` (no overlap) and
+    run along the prefab's longer axis (vanilla hedge pieces are long in Z). (c) Whatever the game still
+    rejects is counted: ghost cancellations → `Placemaker.Issue.GhostObjectsDropped` in Review; build
+    Override temps → `Placemaker.Build.Hidden.Object`; missing parts → `PartsDropped`; Errors → `Skipped.*`.
