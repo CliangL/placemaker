@@ -113,6 +113,8 @@ namespace Placemaker.Core.Build
         public string GeneratorId;
         /// <summary>Representative XZ position for error mapping.</summary>
         public float2 Anchor;
+        /// <summary>From a [AreaGenerator(Loose = true)] layer: built as ordinary city content (no group, no tag).</summary>
+        public bool Loose;
     }
 
     public sealed class BuildWork
@@ -125,6 +127,12 @@ namespace Placemaker.Core.Build
         public readonly List<WorkItem> Zoning = new List<WorkItem>();
         public bool HasPermanentTerrain;
         public bool HasParking;
+        /// <summary>
+        /// True when anything comes from a grouped (non-loose) layer. False = a loose build (e.g. a road grid):
+        /// no owner lot, no record, no member tags.
+        /// </summary>
+        public bool AnyGrouped;
+        public bool AllLoose => !AnyGrouped;
 
         public int DefinitionCount => Nets.Count + Surfaces.Count + Areas.Count + Objects.Count;
 
@@ -217,15 +225,31 @@ namespace Placemaker.Core.Build
                     });
                 }
             }
+            w.AnyGrouped = AnyGroupedLayer(plan);
             return w;
         }
 
         /// <summary>Stable key of a work item (layer, kind, index) for exclusion sets across re-materialisations.</summary>
+        /// <summary>True when a layer with buildable content comes from a grouped (non-loose) generator.</summary>
+        public static bool AnyGroupedLayer(ComposedPlan plan)
+        {
+            if (plan?.Layers == null) return false;
+            foreach (var l in plan.Layers)
+            {
+                if (l == null) continue;
+                bool content = l.Nets.Count + l.Objects.Count + l.Surfaces.Count + l.Areas.Count + l.Terraform.Count + l.Zoning.Count > 0
+                    || (l.Paint != null && l.Paint.Count > 0);
+                if (content && !GeneratorRegistry.IsLoose(l.GeneratorId)) return true;
+            }
+            return false;
+        }
+
         public static long Key(WorkItem w) => ((long)w.Layer << 40) | ((long)w.Kind << 32) | (uint)w.Index;
 
         private static void Add(List<WorkItem> list, ICollection<long> excluded, WorkItem item)
         {
             if (excluded != null && excluded.Contains(Key(item))) return;
+            item.Loose = GeneratorRegistry.IsLoose(item.GeneratorId);
             list.Add(item);
         }
 

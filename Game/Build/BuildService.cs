@@ -67,7 +67,7 @@ namespace Placemaker.Game.Build
         private enum Step
         {
             Idle, Prepare, WaitReplaced, ActivateTool, Terraform, Paint, EmitNets, EmitRest, WaitTemps, Validate,
-            ResetForRetry, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
+            ResetForRetry, OwnerLot, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
         }
 
         private ToolSystem _toolSystem;
@@ -303,6 +303,7 @@ namespace Placemaker.Game.Build
                     case Step.WaitTemps: DoWaitTemps(frame); break;
                     case Step.Validate: DoValidate(frame); break;
                     case Step.ResetForRetry: DoResetForRetry(frame); break;
+                    case Step.OwnerLot: DoOwnerLot(frame); break;
                     case Step.Apply: DoApply(); break;
                     case Step.Settle: DoSettle(frame); break;
                     case Step.ZoningWait: if (frame - _stepFrame >= ZoningWaitFrames) Go(Step.ZoningEmit); break;
@@ -373,8 +374,7 @@ namespace Placemaker.Game.Build
             {
                 // Instant build: the ghost's temporaries ARE the build — no Clear, no re-emission.
                 if (frame - _stepFrame < ToolSwitchFrames + 1) return;
-                CreateRecord();
-                EmitOwnerArea();
+                CreateRecord();   // the owner lot follows after validation (Step.OwnerLot)
                 _status.Phase = BuildPhase.Materializing;
                 SetProgress(0.4f);
                 _lastMatched = -1;
@@ -408,9 +408,8 @@ namespace Placemaker.Game.Build
             int total = _work.Surfaces.Count + _work.Areas.Count + _work.Objects.Count;
             if (_emitCursor == 0)
             {
-                // Same transaction as the build: the owner lot appears and old trees/props vanish on
-                // the one Apply, or not at all.
-                EmitOwnerArea();
+                // Same transaction as the build: old trees/props vanish on the one Apply, or not at all.
+                // The owner lot is emitted after validation (Step.OwnerLot) so its overlaps never reject the plan.
                 EmitClearDefinitions();
             }
             int end = math.min(total, _emitCursor + DefinitionsPerFrame);
@@ -517,7 +516,7 @@ namespace Placemaker.Game.Build
             _status.ErrorPositions.Clear();   // transient errors seen while settling are not real
             _status.Phase = BuildPhase.Applying;
             SetProgress(0.65f);
-            Go(Step.Apply);
+            Go(Step.OwnerLot);
         }
 
         private void DoResetForRetry(int frame)
@@ -559,7 +558,8 @@ namespace Placemaker.Game.Build
             if (stillTemp > 0) Mod.Log.Warn($"Placemaker: {stillTemp} parts stayed temporary after Apply; they are discarded.");
             AdoptStrays();
             _registry.MarkDirty();
-            int members = _registry.CountMembers(_groupId, false);
+            // Loose builds (road grids) have no group: count what this build claimed and Apply kept.
+            int members = LooseBuild ? CountAppliedClaimed() : _registry.CountMembers(_groupId, false);
             if (members == 0)
             {
                 CollectErrors();
@@ -582,7 +582,8 @@ namespace Placemaker.Game.Build
                 BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Duplicated");
                 return;
             }
-            FinishRecord();
+            if (LooseBuild) Mod.Log.Info($"Placemaker loose build: {CountAppliedClaimed()} parts are ordinary city content (no group).");
+            else FinishRecord();
             RestoreTool();
             var groupId = _groupId;
             int dropped = _dropped;
@@ -701,6 +702,7 @@ namespace Placemaker.Game.Build
             _itemPrefab.Clear();
             _itemByKey.Clear();
             _tagged.Clear();
+            _claimed.Clear();
             _usedPrefabNames.Clear();
             _usedPrefabs.Clear();
             _preexisting.Clear();

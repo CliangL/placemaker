@@ -12,7 +12,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Roads
 {
-    [AreaGenerator(400, Group = "roads")]
+    [AreaGenerator(400, Group = "roads", Loose = true)]
     public sealed class RoadsLayer : IAreaGenerator, IHasFeatures
     {
         public const string LayerId = "roads";

@@ -19,6 +19,31 @@ namespace Placemaker.Tests
 
 
         [Fact]
+        public void BridgeKeepsPlannedDeckAndIsNeverPinnedToTheBed()
+        {
+            // Arched footbridge 50 m over a dry basin 4 m deep (water comes after the build).
+            System.Func<float2, float> basin = p => p.x > 5f && p.x < 45f ? -4f : 0f;
+            var deck = new Cubic(new float3(0, 0, 0), new float3(16.7f, 1.6f, 0), new float3(33.3f, 1.6f, 0), new float3(50, 0, 0));
+            var s = CourseFitSettings.Default; s.FollowTerrain = false; s.MaxLength = 200f;
+            var one = CourseFitting.Fit(deck, basin, s);
+            Assert.Single(one);   // never split for terrain, never pinned
+            Assert.Equal(deck.Position(0.5f).y, one[0].Position(0.5f).y, 4);
+            var pieces = CourseFitting.FitElevated(deck, 12f);
+            Assert.True(pieces.Count >= 5);
+            AssertContinuous(pieces, deck);
+            float t = 0f;
+            foreach (var piece in pieces)
+            {
+                Assert.True(piece.Length() <= 12.5f);
+                // Every node lies on the planned deck, well above the bed.
+                Assert.True(piece.D.y > -0.01f);
+                Assert.True(CourseFitting.TerrainDeviation(piece, p => deck.Position(math.saturate(p.x / 50f)).y, out _) < 0.1f);
+                t += piece.Length();
+            }
+            Assert.Equal(deck.Length(), t, 0);
+        }
+
+        [Fact]
         public void InnerProfileFollowsGroundEvenWhenPlanHeightsAreStale()
         {
             // Plan heights from the ground BEFORE terraform (flat 0); the real ground is a bowl.

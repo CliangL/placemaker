@@ -261,6 +261,30 @@ namespace Placemaker.Game.Groups
             return false;
         }
 
+        /// <summary>
+        /// Fallback when a group has no owner lot (the game rejected it): a tagged top-level object/area of
+        /// a live, finished group without a live owner. Bulldozing it removes the whole group (playtest:
+        /// "deleting something does not delete the whole thing").
+        /// </summary>
+        private bool BulldozerActive()
+        {
+            var tools = World.GetExistingSystemManaged<global::Game.Tools.ToolSystem>();
+            return tools != null && tools.activeTool is global::Game.Tools.BulldozeToolSystem;
+        }
+
+        internal bool IsOwnerlessGroupPart(Entity entity, out int groupId)
+        {
+            groupId = 0;
+            if (entity == Entity.Null || !EntityManager.Exists(entity) || !EntityManager.HasComponent<PlacemakerMember>(entity)) return false;
+            var tag = EntityManager.GetComponentData<PlacemakerMember>(entity);
+            if (tag.Role == MemberRole.OwnerArea || tag.Kind == MemberKind.Edge || tag.Kind == MemberKind.Node || tag.Kind == MemberKind.Auxiliary) return false;
+            if (!TryGetRecordEntity(tag.GroupId, out var rec) || EntityManager.HasComponent<PlacemakerRemoval>(rec)
+                || EntityManager.HasComponent<PlacemakerUnderConstruction>(rec)) return false;
+            if (OwnerAreaOf(tag.GroupId) != Entity.Null) return false;
+            groupId = tag.GroupId;
+            return true;
+        }
+
         /// <summary>True when <paramref name="entity"/> is the owner lot of a Placemaker group.</summary>
         internal bool IsOwnerArea(Entity entity) =>
             entity != Entity.Null && EntityManager.Exists(entity) && EntityManager.HasComponent<PlacemakerMember>(entity)
@@ -432,6 +456,14 @@ namespace Placemaker.Game.Groups
                         Mod.Log.Info($"Placemaker: owner area of group {tag.GroupId} was bulldozed; removing the whole group.");
                         RemoveInternal(tag.GroupId);
                     }
+                    continue;
+                }
+                if (IsOwnerlessGroupPart(e, out int ownerless) && BulldozerActive())
+                {
+                    // No owner lot to bulldoze: the player bulldozed a part instead (confirmed by the
+                    // bulldoze confirmation patch). Remove the whole group, phase-correct, next PreTool.
+                    Mod.Log.Info($"Placemaker: a part of group {ownerless} (no owner lot) was bulldozed; removing the whole group.");
+                    RemoveInternal(ownerless);
                     continue;
                 }
                 if (tag.Kind != MemberKind.Edge) continue;

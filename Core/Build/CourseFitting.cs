@@ -137,6 +137,23 @@ namespace Placemaker.Core.Build
             FitRecursive(right, heightAt, s, depth + 1, output);
         }
 
+        /// <summary>
+        /// Bridges, piers, boardwalks (PlannedNet.FollowTerrain == false): pieces of at most
+        /// <paramref name="maxPiece"/> metres that keep the PLANNED heights exactly (never pinned to
+        /// the ground). Why pieces: CS2's CourseSplitSystem re-derives a top-level course's heights as
+        /// terrain + a LINEAR blend of the two end elevations (decompiled CourseHeightData), so one long
+        /// course over a lake basin that has no water yet sinks to the bed between its raised ends. Each
+        /// node carries its own elevation (planned y − ground), so short pieces follow the planned deck.
+        /// </summary>
+        public static List<Cubic> FitElevated(Cubic curve, float maxPiece)
+        {
+            var result = new List<Cubic>();
+            if (!IsFinite(curve)) return result;
+            if (!(maxPiece > 1f)) { result.Add(curve); return result; }
+            SplitByLength(curve, maxPiece, null, false, result);
+            return result;
+        }
+
         /// <summary>Largest vertical gap between the curve and the terrain, sampled at 15 interior points.</summary>
         public static float TerrainDeviation(Cubic c, Func<float2, float> heightAt, out float worstT)
         {
