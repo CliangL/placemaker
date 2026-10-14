@@ -96,12 +96,6 @@
   "Placemaker.Beach.treeSpecies": "Tree species",
   "Placemaker.Beach.grassSpecies": "Grass species",
   "Placemaker.Beach.entrances": "Entrances",
-  "Placemaker.Beach.shopLayout": "Shop layout",
-  "Placemaker.Beach.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.Beach.shopLayout.band": "Band",
-  "Placemaker.Beach.shopLayout.pads": "Pads",
-  "Placemaker.Beach.shopDepth": "Shop depth",
-  "Placemaker.Beach.shopDepth.Tooltip": "How deep the zoned band reaches into the area (whole 8 m cells).",
 
   "Placemaker.Beach.Preset.sandy": "Sandy beach",
   "Placemaker.Beach.Preset.resort": "Resort lido",

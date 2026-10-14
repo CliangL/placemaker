@@ -90,12 +90,6 @@
   "Placemaker.Amphitheatre.lampAsset": "Lamp",
   "Placemaker.Amphitheatre.seatSurface": "Row surface",
   "Placemaker.Amphitheatre.entrances": "Entrances",
-  "Placemaker.Amphitheatre.shopLayout": "Shop layout",
-  "Placemaker.Amphitheatre.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.Amphitheatre.shopLayout.band": "Band",
-  "Placemaker.Amphitheatre.shopLayout.pads": "Pads",
-  "Placemaker.Amphitheatre.shopDepth": "Shop depth",
-  "Placemaker.Amphitheatre.shopDepth.Tooltip": "How deep the zoned band reaches into the area (whole 8 m cells).",
 
   "Placemaker.Amphitheatre.Issue.NoRoom": "No room for even one row of seating — a stage on a lawn instead.",
   "Placemaker.Amphitheatre.Issue.FewerRows": "Room for {0} of {1} rows.",

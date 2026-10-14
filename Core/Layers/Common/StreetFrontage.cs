@@ -1,8 +1,8 @@
 // Street frontage of a region: the parts of its outline that face a road (existing nets near the
 // area, or roads an earlier layer of the recipe planned). Shared by
-//   * "Shops along the street" (parks, plazas, campgrounds, leisure types): the host carves a band of
-//     whole 8 m zone cells along the frontage out of its own region before planning, and hands the
-//     band to the edgeZoning feature as "shops" regions (entrances keep a clear gap);
+//   * "Shops along the street" (parks, plazas, campgrounds, leisure types): StreetShops lays out shop
+//     regions of whole 8 m zone cells (row, speckled, clusters, facing in, alley) on this frontage and
+//     hands them to the edgeZoning feature as "shops" regions (entrances keep a clear gap);
 //   * the terrain feature's berms along roads;
 //   * plaza bollards at road edges.
 // The frontage test is the one EdgeZoningAddOn uses (adapted from Grid Road Generator, Ti4goc).
@@ -97,103 +97,6 @@ namespace Placemaker.Core.Layers.Common
                 }
             }
             return result;
-        }
-
-        /// <summary>
-        /// Shop band quads along the frontage: whole cells deep (≤ <paramref name="depth"/>), inside the
-        /// outline, with a gap at each entrance point. Pads mode keeps only short patches
-        /// (<paramref name="padLength"/>) spaced along the frontage.
-        /// </summary>
-        public static List<float2[]> Bands(LayerRegion region, List<RoadLine> roads, float depth, IReadOnlyList<float2> gates,
-            bool pads, float padLength = 24f, float padSpacing = 48f)
-        {
-            var quads = new List<float2[]>();
-            depth = math.clamp(math.floor(depth / Cell) * Cell, Cell, 6 * Cell);
-            foreach (var (a, b) in Edges(region.Ring, roads, 2 * Cell))
-            {
-                float len = math.distance(a, b);
-                var dir = (b - a) / len;
-                var inward = new float2(-dir.y, dir.x);
-                // Free intervals along the edge (entrance gaps cut out).
-                var free = new List<float2> { new float2(0f, len) };
-                if (gates != null)
-                    foreach (var g in gates)
-                    {
-                        float off = math.abs(math.dot(g - a, inward));
-                        if (off > 2f) continue;
-                        float s = math.dot(g - a, dir);
-                        Cut(free, s - GapHalfWidth, s + GapHalfWidth);
-                    }
-                foreach (var iv in free)
-                {
-                    float from = iv.x, to = iv.y;
-                    if (to - from < 2 * Cell) continue;
-                    if (pads)
-                    {
-                        for (float s = from + (to - from - padLength) % padSpacing * 0.5f; s + padLength <= to + 0.01f; s += padSpacing)
-                            AddQuad(region, quads, a + dir * s, a + dir * (s + padLength), inward, depth);
-                    }
-                    else
-                    {
-                        int pieces = math.max(1, (int)math.ceil((to - from) / (3 * Cell)));
-                        for (int k = 0; k < pieces; k++)
-                            AddQuad(region, quads, a + dir * math.lerp(from, to, (float)k / pieces), a + dir * math.lerp(from, to, (float)(k + 1) / pieces), inward, depth);
-                    }
-                }
-            }
-            return quads;
-        }
-
-        private static void Cut(List<float2> free, float c0, float c1)
-        {
-            for (int i = free.Count - 1; i >= 0; i--)
-            {
-                var iv = free[i];
-                if (c1 <= iv.x || c0 >= iv.y) continue;
-                free.RemoveAt(i);
-                if (iv.x < c0) free.Insert(i, new float2(iv.x, c0));
-                if (c1 < iv.y) free.Insert(i + (iv.x < c0 ? 1 : 0), new float2(c1, iv.y));
-            }
-        }
-
-        private static void AddQuad(LayerRegion region, List<float2[]> into, float2 p0, float2 p1, float2 inward, float depth)
-        {
-            for (float d = depth; d >= Cell - 0.01f; d -= Cell)
-            {
-                var c0 = p0 + inward * d; var c1 = p1 + inward * d;
-                if (!region.Contains(c0) || !region.Contains(c1) || !region.Contains(0.5f * (c0 + c1))) continue;
-                if (region.CrossesBoundary(math.lerp(p0, c0, 0.05f), c0, false) || region.CrossesBoundary(math.lerp(p1, c1, 0.05f), c1, false)
-                    || region.CrossesBoundary(c0, c1, false)) continue;
-                into.Add(new[] { p0, p1, c1, c0 });
-                return;
-            }
-        }
-
-        /// <summary>
-        /// The host's working outline after carving the shop bands: the largest piece of (outline − bands).
-        /// Returns null when nothing sensible is left (the host then keeps its full outline).
-        /// </summary>
-        public static float2[] Carve(LayerRegion region, List<float2[]> bands, float minArea)
-        {
-            if (bands.Count == 0) return null;
-            // Bands are shrunk a hair along their road edge so the difference stays one clean ring.
-            var clip = new List<IReadOnlyList<float2>>();
-            foreach (var q in bands)
-            {
-                var inward = math.normalizesafe(q[3] - q[0]);
-                clip.Add(new[] { q[0] - inward * 1f, q[1] - inward * 1f, q[2], q[3] });
-            }
-            List<Region> pieces;
-            try { pieces = Poly.Boolean(new[] { (IReadOnlyList<float2>)region.Ring }, clip, BoolOp.Difference); }
-            catch (Exception) { return null; }
-            float2[] best = null; float bestArea = minArea;
-            foreach (var r in pieces)
-            {
-                if (r?.Outer == null || r.Outer.Length < 3) continue;
-                float a = Poly.Area(r.Outer);
-                if (a > bestArea) { bestArea = a; best = r.Outer; }
-            }
-            return best == null ? null : Poly.EnsureCcw(Poly.Clean(best, 0.05f));
         }
     }
 }

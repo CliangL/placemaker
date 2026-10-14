@@ -65,7 +65,11 @@ namespace Placemaker.Core.Layers.Leisure
         {
             var on = DefaultFeatures;
             foreach (var f in list)
+            {
                 if (f != null && System.Array.IndexOf(on, f.Layer) >= 0) f.DefaultOn = true;
+                // s12: street shops on by default where the type is an urban, people-facing place (StreetShops.Defaults).
+                if (f != null && f.Layer == StreetShopsLayer && f.Target == StreetFrontage.ShopsTag && HostsStreetShops && StreetShops.DefaultFor(Id).on) f.DefaultOn = true;
+            }
             return list;
         }
 

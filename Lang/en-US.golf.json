@@ -69,12 +69,6 @@
   "Placemaker.Golf.flagAsset": "Flag",
   "Placemaker.Golf.netAsset": "Fence / netting",
   "Placemaker.Golf.entrances": "Entrances",
-  "Placemaker.Golf.shopLayout": "Shop layout",
-  "Placemaker.Golf.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.Golf.shopLayout.band": "Band",
-  "Placemaker.Golf.shopLayout.pads": "Pads",
-  "Placemaker.Golf.shopDepth": "Shop depth",
-  "Placemaker.Golf.shopDepth.Tooltip": "Depth of the commercial band (one zone cell is 8 m).",
 
   "Placemaker.Golf.Preset.parkland": "Parkland course",
   "Placemaker.Golf.Preset.links": "Links course",

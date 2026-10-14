@@ -98,12 +98,6 @@
   "Placemaker.UrbanFarm.fieldSurface": "Field surface",
   "Placemaker.UrbanFarm.benchAsset": "Bench",
   "Placemaker.UrbanFarm.entrances": "Entrances",
-  "Placemaker.UrbanFarm.shopLayout": "Shop layout",
-  "Placemaker.UrbanFarm.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.UrbanFarm.shopLayout.band": "Band",
-  "Placemaker.UrbanFarm.shopLayout.pads": "Pads",
-  "Placemaker.UrbanFarm.shopDepth": "Shop depth",
-  "Placemaker.UrbanFarm.shopDepth.Tooltip": "How deep the zoned band reaches into the area (whole 8 m cells).",
 
   "Placemaker.AddOn.HoneyHives.Name": "Beehives",
   "Placemaker.AddOn.HoneyHives.count": "Hives",
