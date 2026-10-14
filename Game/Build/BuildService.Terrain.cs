@@ -25,25 +25,38 @@ namespace Placemaker.Game.Build
     {
         private const float BrushRadius = 12f;
         private const float LevelTolerance = 0.3f;
-        private const float BrushTime = 0.1f;
+        private const float BrushTime = 0.3f;
+        // Frame budget: at most this many level brushes per frame (round-robin over the spots), so a big
+        // area never stalls the game (playtest: ~960 brushes/frame dropped it to 2 FPS).
+        private const int MaxBrushesPerFrame = 48;
+        // Real-time limit, independent of frame rate.
+        private const double TerraformTimeoutSeconds = 75.0;
         private const int TerraformSettleFrames = 10;
 
         private struct Dab { public float2 P; public float Target; }
 
         private readonly List<Dab> _dabs = new List<Dab>();
         private readonly List<Entity> _brushDefinitions = new List<Entity>();
+        private int _dabCursor;
+        private DateTime _terraformStart;
         private Entity _levelTool, _brushPrefab;
         private EntityQuery _allPrefabs;
 
         private void ResetTerraform()
         {
+            // Cancel/cleanup must also delete any brush definitions still alive (else they keep shaping).
+            DiscardTerraformBrushes();
             _dabs.Clear();
-            _brushDefinitions.Clear();
+            _paintDabs.Clear();
+            _paintCursor = 0;
+            _dabCursor = 0;
         }
 
         private void BeginTerraform()
         {
             _dabs.Clear();
+            _dabCursor = 0;
+            _terraformStart = DateTime.UtcNow;
             if (!ResolveTerraformTools())
             {
                 _warnings.Add("Placemaker.Build.TerraformUnavailable");
@@ -70,17 +83,21 @@ namespace Placemaker.Game.Build
             DiscardTerraformBrushes();
             _heightsValid = false;
             int elapsed = frame - _stepFrame;
-            int pending = 0;
-            foreach (var d in _dabs)
+            int pending = 0, emitted = 0, n = _dabs.Count;
+            for (int k = 0; k < n; k++)
             {
+                var d = _dabs[(_dabCursor + k) % n];
                 float h = Height(d.P);
                 if (math.abs(h - d.Target) <= LevelTolerance) continue;
                 pending++;
-                EmitBrush(new float3(d.P.x, h, d.P.y), d.Target);
+                if (emitted < MaxBrushesPerFrame) { EmitBrush(new float3(d.P.x, h, d.P.y), d.Target); emitted++; }
             }
+            if (n > 0) _dabCursor = (_dabCursor + MaxBrushesPerFrame) % n;
             _status.Progress = 0.1f + 0.1f * (_dabs.Count == 0 ? 1f : 1f - pending / (float)_dabs.Count);
             bool done = pending == 0 && elapsed > TerraformSettleFrames;
-            if (done || elapsed > TerraformTimeoutFrames)
+            bool timedOut = elapsed > TerraformTimeoutFrames * math.max(1, (n + MaxBrushesPerFrame - 1) / MaxBrushesPerFrame) / 4
+                || (DateTime.UtcNow - _terraformStart).TotalSeconds > TerraformTimeoutSeconds;
+            if (done || timedOut)
             {
                 DiscardTerraformBrushes();
                 if (!done)

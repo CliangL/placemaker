@@ -41,12 +41,20 @@ namespace Placemaker.Game.Build
 
         private Step AfterTerraform() => HasPaint() ? Step.Paint : Step.EmitNets;
 
-        /// <summary>Frame 0: emit every paint dab and request Apply. Frame 2: drop the brushes, go on.</summary>
+        private struct PaintDab { public Entity Tool; public float3 At; public float Strength; }
+        private readonly List<PaintDab> _paintDabs = new List<PaintDab>();
+        private int _paintCursor;
+        // Frame budget for texture painting (a big area can need thousands of dabs).
+        private const int MaxPaintDabsPerFrame = 96;
+
+        /// <summary>Collect every paint dab once, then emit them in frame-budgeted waves (apply each wave).</summary>
         private void DoPaint(int frame)
         {
             if (frame == _stepFrame)
             {
                 DiscardTerraformBrushes();
+                _paintDabs.Clear();
+                _paintCursor = 0;
                 if (!ResolveTerraformTools() || !ResolvePaintTools())
                 {
                     _warnings.Add("Placemaker.Build.PaintUnavailable");
@@ -55,7 +63,6 @@ namespace Placemaker.Game.Build
                     return;
                 }
                 _heightsValid = false;
-                int dabs = 0;
                 foreach (var l in _request.Plan.Layers)
                 {
                     if (l?.Paint == null) continue;
@@ -65,23 +72,27 @@ namespace Placemaker.Game.Build
                         if (!_paintTools.TryGetValue(math.clamp(paint.Layer, 0, 4), out var tool)) continue;
                         var ring = new float2[paint.Ring.Length];
                         for (int i = 0; i < ring.Length; i++) ring[i] = paint.Ring[i].xz;
-                        foreach (var p in TerraformDabs.Dabs(ring, PaintBrushRadius))
-                        {
-                            var at = new float3(p.x, Height(p), p.y);
-                            EmitPaintBrush(tool, at, math.saturate(paint.Strength));
-                            dabs++;
-                        }
+                        foreach (var q in TerraformDabs.Dabs(ring, PaintBrushRadius))
+                            _paintDabs.Add(new PaintDab { Tool = tool, At = new float3(q.x, Height(q), q.y), Strength = math.saturate(paint.Strength) });
                     }
                 }
-                if (dabs == 0) { Go(Step.EmitNets); return; }
-                _tool.Requested = ApplyMode.Apply;
-                _status.Progress = 0.18f;
-                Mod.Log.Info($"Placemaker paints the terrain with {dabs} brush dabs.");
+                if (_paintDabs.Count == 0) { Go(Step.EmitNets); return; }
+                Mod.Log.Info($"Placemaker paints the terrain with {_paintDabs.Count} brush dabs.");
+            }
+            // One wave per two frames: emit + apply, then discard on the next frame.
+            if (((frame - _stepFrame) & 1) == 1) { DiscardTerraformBrushes(); return; }
+            if (_paintCursor >= _paintDabs.Count)
+            {
+                DiscardTerraformBrushes();
+                _paintDabs.Clear();
+                Go(Step.EmitNets);
                 return;
             }
-            if (frame - _stepFrame < 2) return;
-            DiscardTerraformBrushes();
-            Go(Step.EmitNets);
+            int end = Math.Min(_paintDabs.Count, _paintCursor + MaxPaintDabsPerFrame);
+            for (int i = _paintCursor; i < end; i++) EmitPaintBrush(_paintDabs[i].Tool, _paintDabs[i].At, _paintDabs[i].Strength);
+            _paintCursor = end;
+            _tool.Requested = ApplyMode.Apply;
+            _status.Progress = 0.18f + 0.02f * (_paintCursor / (float)_paintDabs.Count);
         }
 
         private void EmitPaintBrush(Entity tool, float3 position, float strength)
