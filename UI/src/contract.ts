@@ -98,7 +98,7 @@ export interface LayerType {
   accepts: string[];        // region tags it can run in ([] = any)
   emits: string[];          // region tags it produces
   controls: Control[];
-  presets: { id: string; name: string; icon?: string }[];
+  presets: PresetView[];
   /** Not offered as its own card in the Make row (split, pond): used by recipes / features only. */
   hidden?: boolean;
 }
@@ -167,7 +167,35 @@ export interface StepView {
 }
 
 /** design — the recipe being edited. */
+/** A preset (subtype) of a type: built-in, a player's override of a built-in, or a player's own. */
+export interface PresetView {
+  id: string;
+  /** Localisation key for built-ins; literal text when custom. */
+  name: string;
+  icon?: string;
+  /** Player-made preset (★). */
+  custom?: boolean;
+  /** Built-in preset the player saved over ("Reset to default" available). */
+  overridden?: boolean;
+  /** For custom presets: the built-in it was derived from (display only). */
+  basedOn?: string;
+}
+
+/** The preset currently applied to the focused fill step. */
+export interface ActivePreset {
+  id: string;               // "" = none (manual settings)
+  layer: string;
+  /** Current settings/features differ from the preset as saved. */
+  modified: boolean;
+  /** Save (overwrite) allowed: custom presets and built-ins (creates an override). */
+  canSave: boolean;
+}
+
 export interface DesignState {
+  /** Active preset of the root fill step (drives Save / Save as / Reset in the browser). */
+  activePreset?: ActivePreset;
+  /** Absolute path of ModsData/Placemaker/presets.json (shown after export). */
+  presetsFile?: string;
   recipeId: string;         // which Make entry is selected
   modified: boolean;        // differs from the recipe's shipped/saved version
   root: StepView | null;
@@ -278,6 +306,12 @@ export const Triggers = {
   removeMarker: "removeMarker",             // (path: string, index: number)
   setFeature: "setFeature",                 // (path: string, featureLayerId: string, enabled: boolean)
   setPreviewMode: "setPreviewMode",         // (mode: "sketch" | "ghost")
+  selectPreset: "selectPreset",             // (layerId: string, presetId: string) — select type (single-layer recipe) + apply preset; undoable
+  savePreset: "savePreset",                 // (path: string, presetId: string) — overwrite custom preset, or override a built-in, with the step's current settings+features
+  savePresetAs: "savePresetAs",             // (path: string, name: string) — new custom preset from the step's current settings+features; becomes active
+  renamePreset: "renamePreset",             // (layerId: string, presetId: string, name: string) — custom only
+  deletePreset: "deletePreset",             // (layerId: string, presetId: string) — custom: delete; overridden built-in: reset to default
+  exportPresets: "exportPresets",           // () — (re)write presets.json, sets design.presetsFile
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────
