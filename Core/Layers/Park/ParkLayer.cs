@@ -61,22 +61,22 @@ namespace Placemaker.Core.Layers.Park
                 Preset = Bag(("centerMode", "single"), ("arrangementMode", "center"), ("furniture", 6.0), ("fence", false),
                     ("pattern", "border"), ("planters", 6.0), ("treeLayout", "edge"), ("beds", 2.0), ("centerKind", "fountain")),
             },
-            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Park.Feature.playground", Options = new[] { "playgroundPath" } },
+            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Park.Feature.playground", Options = new[] { "playgroundPath" }, DefaultOn = true },
             new FeatureInfo
             {
                 Layer = "pond", Target = PondPlace, LabelKey = "Placemaker.Park.Feature.pond",
                 TooltipKey = "Placemaker.Park.Feature.pond.Tooltip", Options = new[] { "lakeSize" },
             },
-            new FeatureInfo { Layer = "picnic", LabelKey = "Placemaker.Park.Feature.picnic", Preset = Bag(("groups", 2.0)), Options = new[] { "picnicPath" } },
-            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Park.Feature.restrooms", Options = new[] { "restroomsPath" } },
+            new FeatureInfo { Layer = "picnic", LabelKey = "Placemaker.Park.Feature.picnic", Preset = Bag(("groups", 2.0)), Options = new[] { "picnicPath" }, DefaultOn = true },
+            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Park.Feature.restrooms", Options = new[] { "restroomsPath" }, DefaultOn = true },
             new FeatureInfo { Layer = "fountain", LabelKey = "Placemaker.Park.Feature.fountain", Preset = Bag(("size", "medium")), Options = new[] { "fountainPath" } },
             new FeatureInfo { Layer = "bigtrees", LabelKey = "Placemaker.Park.Feature.bigtrees", DefaultOn = true },
-            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Park.Feature.flowerbeds" },
+            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Park.Feature.flowerbeds", DefaultOn = true },
             new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = Bag(("count", 2.0), ("where", "entrances")) },
             StreetShopsFeature("Park"),
             new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
             new FeatureInfo { Layer = "ground", LabelKey = "Placemaker.Feature.ground", TooltipKey = "Placemaker.Feature.ground.Tooltip" },
-            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Bag(("theme", "leaves"), ("density", 1.5)) },
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Bag(("theme", "leaves"), ("density", 1.5)), DefaultOn = true },
             new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.terrain", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Bag(("shape", "mounds"), ("height", 2.0)) },
             // g2: on by default, idle unless the area is partly in (or along) water.
             ShoreKit.Feature(("style", "auto")),
@@ -107,10 +107,11 @@ namespace Placemaker.Core.Layers.Park
         {
             // Essentials first (DESIGN.md §2: style, paths, planting, furniture).
             c.Choice("style", "natural", ControlTier.Essential, "layout", ParkStyle.Ids).Tip();
-            c.Choice("pathWidth", "mixed", ControlTier.Essential, "layout", "narrow", "mixed", "wide").Tip();
+            // Playtest 4b: thin paths by default; a main entrance still gets a wide walk.
+            c.Choice("pathWidth", "narrow", ControlTier.Essential, "layout", "narrow", "mixed", "wide").Tip();
             c.Choice("pathStyle", "auto", ControlTier.Essential, "layout", ParkPathStyles.Styles).Tip();
             c.Slider("treeDensity", 26, 0, 150, 1, "perHa", ControlTier.Essential, "planting").Tip();
-            c.Slider("furniture", 3, 0, 10, 0.5, "per100m", ControlTier.Essential, "furniture").Tip();
+            c.Slider("furniture", 4, 0, 10, 0.5, "per100m", ControlTier.Essential, "furniture").Tip();
             c.Asset("surface", AssetCategories.SurfaceGrass, ControlTier.Essential, "ground");
             c.RandomRange("treeDensity", 10, 60);
             c.RandomRange("furniture", 1.5, 5);
@@ -131,7 +132,7 @@ namespace Placemaker.Core.Layers.Park
             c.Slider("desireCount", 3, 1, 8, 1, "count", ControlTier.More, "paths");
             c.Slider("desireLayer", 1, 1, 4, 1, "count", ControlTier.More, "paths").When("desireLines=worn").Tip();
             EntranceKinds.WithOptions(c.Markers("entrances", ControlTier.More, EntranceKinds.Park), EntranceKinds.Park).Tip();
-            c.Slider("bushDensity", 43, 0, 250, 1, "perHa", ControlTier.More, "planting");
+            c.Slider("bushDensity", 60, 0, 250, 1, "perHa", ControlTier.More, "planting");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.AssetMulti("bushSpecies", AssetCategories.Bush, ControlTier.More, "planting");
             c.Toggle("belt", true, ControlTier.More, "planting").Tip();
@@ -182,7 +183,7 @@ namespace Placemaker.Core.Layers.Park
 
         protected override void DefinePresets()
         {
-            Preset("natural", ("style", "natural"), ("treeDensity", 26.0), ("bushDensity", 43.0), ("furniture", 3.0), ("pathStyle", "curvy"), ("desireLines", "worn"));
+            Preset("natural", ("style", "natural"), ("treeDensity", 26.0), ("bushDensity", 65.0), ("furniture", 4.0), ("pathStyle", "curvy"), ("desireLines", "worn"));
             Preset("formal", ("style", "formal"), ("pathWidth", "wide"), ("curvedPaths", false), ("treeDensity", 30.0),
                 ("bushDensity", 60.0), ("furniture", 4.5), ("paths", "network"), ("pathStyle", "formal"));
             Preset("garden", ("style", "natural"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 70.0),
@@ -190,25 +191,38 @@ namespace Placemaker.Core.Layers.Park
             Preset("woodland", ("style", "woodland"), ("pathWidth", "narrow"), ("treeDensity", 80.0), ("bushDensity", 90.0),
                 ("furniture", 1.5), ("animals", true), ("lamps", false), ("pathStyle", "garden"), ("naturalGround", true), ("trails", 3.0));
             Preset("meadow", ("style", "meadow"), ("pathWidth", "narrow"), ("treeDensity", 8.0), ("bushDensity", 20.0),
-                ("furniture", 2.0), ("paths", "minimal"), ("pathStyle", "scenic"));
+                ("furniture", 3.0), ("paths", "minimal"), ("pathStyle", "scenic"));
             Preset("pocket", ("style", "pocket"), ("treeDensity", 40.0), ("bushDensity", 60.0), ("furniture", 6.0),
                 ("paths", "minimal"));
             // Round 5: six park idioms, each a different path figure + planting rule (not density tweaks).
             Preset("victorian", ("style", "victorian"), ("pathStyle", "figureEight"), ("pathWidth", "mixed"), ("treeDensity", 30.0),
                 ("bushDensity", 75.0), ("furniture", 5.0), ("fence", true), ("lamps", true), ("bins", true), ("curvedPaths", true));
             Preset("landscape", ("style", "landscape"), ("pathStyle", "circuit"), ("pathWidth", "narrow"), ("treeDensity", 34.0),
-                ("bushDensity", 30.0), ("furniture", 2.0), ("belt", true), ("lamps", false), ("curvedPaths", true), ("trails", 2.0), ("smallPaths", 1.0));
+                ("bushDensity", 45.0), ("furniture", 3.0), ("belt", true), ("lamps", false), ("curvedPaths", true), ("trails", 2.0), ("smallPaths", 1.0));
             Preset("modern", ("style", "modern"), ("pathStyle", "promenade"), ("pathWidth", "mixed"), ("curvedPaths", false),
-                ("treeDensity", 40.0), ("bushDensity", 25.0), ("furniture", 5.0), ("belt", true), ("lamps", true));
+                ("treeDensity", 40.0), ("bushDensity", 45.0), ("furniture", 5.0), ("belt", true), ("lamps", true));
             Preset("wildflower", ("style", "wildflower"), ("pathStyle", "woodlandTrail"), ("pathWidth", "narrow"), ("treeDensity", 6.0),
-                ("bushDensity", 30.0), ("furniture", 1.5), ("lamps", false), ("bins", false), ("naturalGround", true), ("animals", true));
+                ("bushDensity", 45.0), ("furniture", 2.5), ("lamps", false), ("bins", false), ("naturalGround", true), ("animals", true));
             Preset("urban", ("style", "urban"), ("pathStyle", "spokeRing"), ("pathWidth", "wide"), ("treeDensity", 45.0),
                 ("bushDensity", 50.0), ("furniture", 7.0), ("lamps", true), ("bins", true), ("belt", true));
-            Preset("riverside", ("style", "riverside"), ("pathStyle", "riverside"), ("pathWidth", "mixed"), ("treeDensity", 30.0),
-                ("bushDensity", 40.0), ("furniture", 3.5), ("naturalGround", true), ("animals", true), ("curvedPaths", true), ("bikePath", true));
+            Preset("riverside", ("style", "riverside"), ("pathStyle", "riverside"), ("pathWidth", "narrow"), ("treeDensity", 30.0),
+                ("bushDensity", 60.0), ("furniture", 4.0), ("naturalGround", true), ("animals", true), ("curvedPaths", true), ("bikePath", true));
             // Grand park wave (g3): the full hierarchy — bike through-route, main walk, small paths, trails, worn shortcuts.
-            Preset("greenway", ("style", "natural"), ("pathStyle", "curvy"), ("pathWidth", "mixed"), ("treeDensity", 28.0), ("bushDensity", 45.0),
+            Preset("greenway", ("style", "natural"), ("pathStyle", "curvy"), ("pathWidth", "mixed"), ("treeDensity", 28.0), ("bushDensity", 60.0),
                 ("furniture", 3.5), ("bikePath", true), ("smallPaths", 2.0), ("trails", 1.0), ("desireLines", "worn"), ("curvedPaths", true));
+
+            // Playtest 4b: presets look complete. On top of the DefaultOn features (playground, picnic,
+            // restrooms, big trees, flowerbeds, decals, shore) each idiom turns on what belongs to it.
+            PresetFeatures("formal", "plaza");   // the park plaza has a fountain centre
+            PresetFeatures("garden", "fountain");
+            PresetFeatures("woodland", "-flowerbeds", "-playground");
+            PresetFeatures("meadow", "-flowerbeds");
+            PresetFeatures("pocket", "fountain", "-picnic", "-restrooms");
+            PresetFeatures("victorian", "plaza");
+            PresetFeatures("landscape", "-flowerbeds");
+            PresetFeatures("modern", "plaza");
+            PresetFeatures("wildflower", "-flowerbeds", "-playground");
+            PresetFeatures("urban", "plaza", "shops");
         }
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)

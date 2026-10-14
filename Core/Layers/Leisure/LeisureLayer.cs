@@ -22,7 +22,51 @@ namespace Placemaker.Core.Layers.Leisure
         protected override bool HostsStreetShops => true;
 
         private IReadOnlyList<FeatureInfo> _features;
-        public IReadOnlyList<FeatureInfo> Features => _features ?? (_features = BuildFeatures().AsReadOnly());
+        public IReadOnlyList<FeatureInfo> Features => _features ?? (_features = WithDefaults(BuildFeatures()).AsReadOnly());
+
+        /// <summary>
+        /// Playtest 4b ("a lot more things should be on by default"): the fitting, cheap features each
+        /// park-like type starts with. Terrain shaping, rocks and shops stay opt-in (slow or situational).
+        /// </summary>
+        private static readonly Dictionary<string, string[]> DefaultOnByType = new Dictionary<string, string[]>
+        {
+            { "botanicalGarden", new[] { "fountain", "restrooms", "decals" } },
+            { "communityGarden", new[] { "decals" } },
+            { "dogPark", new[] { "decals" } },
+            { "formalGarden", new[] { "decals" } },
+            { "natureReserve", new[] { "picnic", "decals" } },
+            { "picnicGrounds", new[] { "playground", "decals" } },
+            { "sportsPark", new[] { "restrooms", "playground", "decals" } },
+            { "skatePark", new[] { "decals" } },
+            { "cemeteryGrounds", new[] { "decals" } },
+            { "greenwayPark", new[] { "decals" } },
+            { "adventurePlayground", new[] { "picnic", "restrooms", "decals" } },
+            { "amphitheatre", new[] { "restrooms", "flowerbeds", "decals" } },
+            { "animalPark", new[] { "playground", "picnic", "restrooms", "decals" } },
+            { "beach", new[] { "restrooms", "picnic", "decals" } },
+            { "fairground", new[] { "restrooms", "picnic", "decals" } },
+            { "golf", new[] { "restrooms", "decals" } },
+            { "hikingTrail", new[] { "picnic", "decals" } },
+            { "lookoutHill", new[] { "picnic", "decals" } },
+            { "memorialPark", new[] { "bigtrees", "flowerbeds", "decals" } },
+            { "orchardPark", new[] { "picnic", "decals" } },
+            { "urbanFarm", new[] { "picnic", "decals" } },
+            { "urbanRuins", new[] { "bigtrees", "decals" } },
+            { "waterfront", new[] { "flowerbeds", "bigtrees", "picnic", "decals" } },
+            { "wetland", new[] { "picnic", "decals" } },
+            { "zenGarden", new[] { "decals" } },
+        };
+
+        /// <summary>Feature layers this type has on by default (besides features declared DefaultOn).</summary>
+        protected virtual string[] DefaultFeatures => DefaultOnByType.TryGetValue(Id, out var on) ? on : System.Array.Empty<string>();
+
+        private List<FeatureInfo> WithDefaults(List<FeatureInfo> list)
+        {
+            var on = DefaultFeatures;
+            foreach (var f in list)
+                if (f != null && System.Array.IndexOf(on, f.Layer) >= 0) f.DefaultOn = true;
+            return list;
+        }
 
         /// <summary>The type's features; essentials first. Default: restrooms, shops, street shops, decals, terrain.</summary>
         protected virtual List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>

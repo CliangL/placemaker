@@ -325,6 +325,19 @@ namespace Placemaker.Core
         public string LabelKey = "";
         public string Icon = "";
         public SettingsBag Values = new SettingsBag();
+        /// <summary>
+        /// Feature layers this preset turns on besides the type's DefaultOn features; "-layer" turns a
+        /// DefaultOn feature off (playtest 4b: presets should look complete).
+        /// </summary>
+        public string[] Features = Array.Empty<string>();
+
+        /// <summary>Whether the preset has feature <paramref name="f"/> on.</summary>
+        public bool FeatureOn(FeatureInfo f)
+        {
+            if (f == null) return false;
+            if (Array.IndexOf(Features, "-" + f.Layer) >= 0) return false;
+            return f.DefaultOn || Array.IndexOf(Features, f.Layer) >= 0;
+        }
     }
 
     /// <summary>

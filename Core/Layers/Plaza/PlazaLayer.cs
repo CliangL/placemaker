@@ -50,15 +50,15 @@ namespace Placemaker.Core.Layers.Plaza
 
         private static readonly FeatureInfo[] FeatureList = WithAmenities(new[]
         {
-            new FeatureInfo { Layer = "plazatrees", LabelKey = "Placemaker.Plaza.Feature.trees", TooltipKey = "Placemaker.Plaza.Feature.trees.Tooltip" },
+            new FeatureInfo { Layer = "plazatrees", LabelKey = "Placemaker.Plaza.Feature.trees", TooltipKey = "Placemaker.Plaza.Feature.trees.Tooltip", DefaultOn = true },
             new FeatureInfo { Layer = "playground", LabelKey = "Placemaker.Plaza.Feature.playground", Preset = Park.ParkLayer.Bag(("size", "small"), ("fence", true)) },
             new FeatureInfo
             {
                 Layer = "fountain", LabelKey = "Placemaker.Plaza.Feature.fountain", TooltipKey = "Placemaker.Plaza.Feature.fountain.Tooltip",
-                Preset = Park.ParkLayer.Bag(("size", "large"), ("benches", 8.0), ("planters", true)),
+                Preset = Park.ParkLayer.Bag(("size", "large"), ("benches", 8.0), ("planters", true)), DefaultOn = true,
             },
             new FeatureInfo { Layer = "kiosk", LabelKey = "Placemaker.Plaza.Feature.kiosk" },
-            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Plaza.Feature.flowerbeds", Preset = Park.ParkLayer.Bag(("density", 30.0), ("nearPaths", false)) },
+            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Plaza.Feature.flowerbeds", Preset = Park.ParkLayer.Bag(("density", 30.0), ("nearPaths", false)), DefaultOn = true },
             new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = Park.ParkLayer.Bag(("count", 3.0), ("where", "edges")) },
             StreetShopsFeature("Plaza"),
             new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Park.ParkLayer.Bag(("theme", "cracks"), ("ground", "paved"), ("density", 0.8)) },
@@ -211,6 +211,15 @@ namespace Placemaker.Core.Layers.Plaza
                 ("pattern", "grid"), ("cafe", 4.0), ("bollards", true), ("lighting", "feature"), ("treeLayout", "none"), ("planters", 0.0));
             Preset("green", ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 10.0), ("lawns", 35.0), ("beds", 6.0),
                 ("treeLayout", "groves"), ("border", "grass"), ("arrangement", new[] { "bench", "tree", "bench" }), ("arrangementMode", "edges"));
+
+            // Playtest 4b: presets look complete. On top of the DefaultOn features (trees, fountain, flowerbeds)
+            // each square turns on what belongs to it; statue squares keep their statue (no fountain feature).
+            PresetFeatures("civic", "-fountain");
+            PresetFeatures("podium", "-fountain");
+            PresetFeatures("green", "-fountain", "playground");
+            PresetFeatures("market", "kiosk");
+            PresetFeatures("cafe", "kiosk");
+            PresetFeatures("piazza", "kiosk", "-plazatrees");
         }
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
