@@ -138,6 +138,11 @@ namespace Placemaker.Core.Build
                 r.Add(AssetCategories.Decal);
                 var theme = DecalTheme(name);
                 if (theme != null) r.Add(theme);
+                // Type rules may add their own decal pools (sports field lines); additive, "decal.*" only.
+                var decalExtra = new List<string>(2);
+                CategoryRules.Classify(lower, t, decalExtra);
+                foreach (var c in decalExtra)
+                    if (c != null && c.StartsWith("decal.", StringComparison.Ordinal) && !r.Contains(c)) r.Add(c);
                 return r;
             }
 
@@ -269,7 +274,11 @@ namespace Placemaker.Core.Build
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
             // Decals: curated themes (AssetCuration) — natural park looks, never letters or road markings.
             if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
+            {
+                var decalRuled = CategoryRules.AutoEligible(category, lower, t);
+                if (decalRuled.HasValue) return decalRuled.Value;
                 return AssetCuration.DecalAutoEligible(category, name);
+            }
             // Built-in prop names are CamelCase without spaces; "HighSchool03 Rooftop Garden" or
             // "TrainStation02 Ticket Machines" are building extensions that only look like props (4b).
             if ((t & AssetTraits.Vanilla) != 0 && name.IndexOf(' ') >= 0) return false;

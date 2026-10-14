@@ -83,17 +83,20 @@ namespace Placemaker.Core.Layers.AddOns
         protected static bool Put(LayerContext ctx, Occupancy occ, float2 p, float yaw, ObjectRole role, AssetRef asset, string category, float radius, uint v) =>
             LeisureKit.Put(ctx, occ, p, yaw, role, asset, category, radius, v, 0.2f, 0.2f);
 
-        /// <summary>Flat marking decals (never reserve space). Silent when no marking decals are installed.</summary>
+        /// <summary>
+        /// Painted court lines: the court's outline in thin white line decals, plus a line across the court
+        /// through each local point given (centre line, free-throw line…). Silent when no line decals are installed.
+        /// </summary>
         protected static int Markings(LayerContext ctx, OrientedRect court, IEnumerable<float2> local, uint seed)
         {
-            if (!AssetAvailability.Has(AssetCategories.DecalMarkings)) return 0;
-            int n = 0;
+            if (!AssetAvailability.Has(AssetCategories.DecalFieldLine)) return 0;
+            var f = new Fields.Frame(court.Center, court.Axis);
+            var lines = new Fields.LinePainter();
+            float a = court.HalfLength, b = court.HalfWidth;
+            lines.Box(f, -a, -b, a, b);
             foreach (var l in local)
-            {
-                ctx.Object(court.Local(l.x, l.y), court.Yaw, ObjectRole.Decal, new AssetRef(""), Hashing.Mix(seed, (uint)n + 0xDECu), -1, AssetCategories.DecalMarkings);
-                n++;
-            }
-            return n;
+                if (math.abs(l.x) < a - 0.3f) lines.Seg(f, l.x, -b, l.x, b);
+            return lines.Emit(ctx, 1f, seed);
         }
 
         /// <summary>

@@ -50,7 +50,7 @@ namespace Placemaker.Core.Layers.AddOns
             // The net spans the court's width at the centre line: the asset faces along the court axis.
             if (netCat != null && Put(ctx, occ, site.Center, site.Yaw, ObjectRole.Furniture, AssetMix.One(ctx.S("net")), netCat, 0.6f, Hashing.Mix(ctx.Seed, 1u))) nets++;
             if (ctx.B("lines"))
-                Markings(ctx, court, new[] { new float2(-court.HalfLength + 0.5f, 0f), new float2(court.HalfLength - 0.5f, 0f) }, ctx.Seed);
+                Markings(ctx, court, new[] { float2.zero }, ctx.Seed);
             float side = SideSign(site, toward);
             int benches = ctx.B("benches") ? BenchRow(ctx, occ, site, side, site.HalfWidth - 1.3f, court.HalfLength, 2, ctx.Seed) : 0;
             if (ctx.B("lights"))

@@ -115,7 +115,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         /// </summary>
         public int Emit(LayerContext ctx, float spacing, uint seed, int max = 1800)
         {
-            if (!AssetAvailability.Has(AssetCategories.DecalMarkings)) return 0;
+            if (!AssetAvailability.Has(AssetCategories.DecalFieldLine)) return 0;
             float total = Length();
             spacing = math.max(0.4f, spacing);
             if (total / spacing + _spots.Count > max) spacing = total / math.max(1, max - _spots.Count);
@@ -134,7 +134,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                     float t = carry;
                     for (; t <= len + 1e-3f; t += spacing)
                     {
-                        ctx.Object(a + d * math.min(t, len), yaw, ObjectRole.Decal, new AssetRef(""), variation, -1, AssetCategories.DecalMarkings);
+                        ctx.Object(a + d * math.min(t, len), yaw, ObjectRole.Decal, new AssetRef(""), variation, -1, AssetCategories.DecalFieldLine);
                         n++;
                     }
                     carry = t - len;
@@ -142,7 +142,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             }
             foreach (var (p, yaw) in _spots)
             {
-                ctx.Object(p, yaw, ObjectRole.Decal, new AssetRef(""), variation, -1, AssetCategories.DecalMarkings);
+                ctx.Object(p, yaw, ObjectRole.Decal, new AssetRef(""), variation, -1, AssetCategories.DecalFieldLine);
                 n++;
             }
             return n;
