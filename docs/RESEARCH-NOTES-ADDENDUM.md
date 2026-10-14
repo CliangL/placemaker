@@ -322,3 +322,72 @@ removing it.
   the end elevations, and the lake has no water yet at build time. Non-terrain nets are now ≤ 12 m pieces
   at the planned heights. Every node carries `m_Elevation` = planned − terrain, plus
   ForceElevatedNode/ForceElevatedEdge where the deck is > 0.75 m above the ground.
+
+## Terrain texture painting (s13, decompiled 1.6.2f1)
+
+Sources: `Game.Rendering.TerrainMaterialSystem` (ApplyBrush / ApplyToSplatmap / Serialize), `Game.Tools.TerrainToolSystem`,
+`Game.Tools.ApplyBrushesSystem`, `Game.Prefabs.TerrainMaterialType` / `TerrainMaterialProperties`, the game's `Locale.cok`
+(prefab names) and `Content/Game/UI/Media/Game/Icons/Terraforming/*.svg`.
+
+57. **The vanilla "Paint texture" tool** is `TerrainToolSystem` with a `TerraformingPrefab` whose `m_Target =
+    TerraformingTarget.Material` (actions "Paint Material" / "Erase Material"). Prefabs and vanilla names:
+
+    | prefab | TerrainMaterialType | channel | vanilla name (icon) | Placemaker layer |
+    |---|---|---|---|---|
+    | Terrain Material Extra 1 | Extra1 (4) | x | Material Dry (TextureDry) | `TerrainMaterials.Dry` = 1 |
+    | Terrain Material Extra 2 | Extra2 (5) | y | Material Lush (TextureLush) | `Lush` = 2 |
+    | Terrain Material Extra 3 | Extra3 (6) | z | Material Dirt (TextureDirt) | `Dirt` = 3 |
+    | Terrain Material Extra 4 | Extra4 (7) | w | Material Sand (TextureSand) | `Sand` = 4 |
+    | Terrain Material Clear | None (0) | all, erase kernel | Texture Eraser | `Erase` = 0 |
+
+    The textures come from the map's `TerrainRenderSettingsPrefab` (`m_Extra1..4Diffuse/Normal`, per-layer DirtOverride,
+    BlurDepth, SplatRange, HeightOffset), so custom maps may put other textures in the slots. **There is no rock material**:
+    base grass/dirt/rock are procedural (`_SplatRockLimit`, `_SplatGrassLimit`, height variance) — rocky looks come from
+    slope, Dirt and props. All five tools exist in game mode (log: "terrain paint layers available: 4, 0, 1, 2, 3").
+58. **Stroke application.** `TerrainMaterialSystem.ApplyBrush(Brush, Entity brushPrefab)` (public) blits
+    `PrefabSystem.GetPrefab<BrushPrefab>(brushPrefab).m_Texture` into both user splatmaps: `m_UserSplatmap` 4096² R8G8 over
+    the playable area (**3.5 m per texel** on a 14.336 km map) and `m_UserSplatmapWorld` 1024² over the world. Compute
+    shader `PaintSplatmap`, kernels `PaintDither` (strength > 0) / `EraseDither` (Clear tool, strength forced 0), params
+    `_BrushTexture`, `_BrushChannels` (the material's channel), `_BrushOpacity` = `brush.m_Strength`, `_CenterSizeRotation`
+    = (centre uv, `m_Size`/max(area)/2, `m_Angle`), `_Range` = texel rect of `ToolUtils.GetBounds(brush)` (floor/ceil,
+    inclusive). The command buffer executes inside the call; it also calls `TerrainSystem.OnAreaChanged`. No delta time,
+    no brush entity needed. The kernel is *dithered*: per-texel weight = brush texture × opacity, written stochastically,
+    then blurred by the terrain shader (BlurDepth/SplatRange) — that is the noisy feathered edge of the vanilla tool.
+    The kernel source is not in C#, so whether the dither threshold is fixed per texel or random per call is unknown:
+    painting the same texels twice may thicken them. Placemaker therefore paints every texel at most once per build.
+59. **Strength / falloff / brush.** The vanilla tool's strength slider is `brush.m_Strength` (passed through unchanged by
+    `GenerateBrushesSystem` for Material); falloff is the BrushPrefab texture (soft round brushes); size = `m_Size`; the
+    tool re-applies every frame while the mouse is held (so held strokes accumulate). Any `Texture` works as the brush:
+    a generated mask carries an arbitrary per-point strength (gradients, feathers, noise) in ONE call per square stamp.
+60. **Saved, undo, removal.** Both splatmaps are serialized with the city (`TerrainMaterialSystem : ISerializable`,
+    `FormatTags.TerrainUserSplatmap`). There is no undo in game mode; the only way back is the Texture Eraser (Clear),
+    which restores the procedural base — and would also wipe the player's own earlier paint under it. So Placemaker paint
+    stays permanent (warned, listed as "Paint" in the permanent-changes summary, not undone on removal).
+61. **Performance (estimated, not measured in game).** One `ApplyBrush` = two compute dispatches over the stamp's texel rect (≤ 256² texels for a 512-cell, 896 m stamp
+    on the 4096² map) plus our texture upload (RGBA32, ≤ 512² = 1 MB). Both should be well under a
+    frame. The previous FPS stalls came from hundreds of Temp `Brush` entities per frame (old dab path), not from the
+    material blit.
+62. **Why our paint looked wrong before.** (a) The layer numbers were treated as arbitrary "map textures": most layers
+    defaulted to 1 = *Dry grass* (pale/greyish), the beach to 2 = *Lush grass* — so "sand" and "mud" painted grass. (b) The
+    purple blobs were the Temp brush overlays of the old dab path (fixed in s4). (c) Patches were two flat polygons
+    (outline at half strength + core) with a fixed 3 m edge, so they read as stepped discs.
+
+**Verdict: yes, per-point strength from code works.** Granularity = one splatmap texel (3.5 m on vanilla maps; the shader's
+dither + blur smooths below that), strength 8-bit per texel. Limits: square stamps (we tile), one material per call,
+the four map-defined textures only (no rock), permanent, dither semantics on repeated paint unknown (we never repaint a
+texel within a build; repainting the same area in a later build may thicken partial strengths a little).
+
+What Placemaker does now (`Core/Build/PaintRaster.cs`, `Game/Build/BuildService.Paint.cs`):
+- `PlannedPaint` is a field: ring + `Strength` × edge(`Feather`, `Noise`) × gradient(`GradientFrom` polyline, `GradientFull`,
+  `GradientFade`, `GradientMin`). Defaults keep the round-4 behaviour (±1.5 m edge on the ring).
+- `PaintRaster.Build` (pure, worker thread) rasterises per material layer on a grid aligned to the splatmap texel (cells
+  half a texel), merges paints of a layer by max, cuts square stamps ≤ 512 cells, drops empty ones, and doubles the cell
+  when > 48 stamps or > 4 M cells. Order: erase first, then layers by first appearance (later wins on overlap).
+- The build applies **one stamp per frame** (cursor advanced before the call: a stamp is never applied twice), waits two
+  frames, frees the textures. The Paint step is entered only after terraform and never on retries; `_paintStarted`
+  guards re-entry. Raster failure → the old dab path; raster > 15 s or no material tools → `Placemaker.Build.PaintUnavailable`.
+- Preview: the overlay shows the paint as tinted strength bands (4 levels, material colour) from a coarse raster; the ghost
+  never paints. Gallery: `DrawPaint` renders the real stamps with alpha = strength.
+- Unverified in game: the stamp texture orientation (we reuse the terraform calibration, default identity: u = +x,
+  v = +z — an asymmetric gradient would show on the wrong side if this is mirrored), the channel the kernel samples
+  (all four set equal), and whether `m_Strength = 1` with a mask equals the vanilla look at the same strength.

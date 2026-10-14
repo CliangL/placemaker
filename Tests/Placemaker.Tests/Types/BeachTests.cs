@@ -28,7 +28,7 @@ namespace Placemaker.Tests.Types
         {
             var g = TestKit.Gen("beach");
             Assert.InRange(g.Presets.Count, 4, 6);
-            Assert.InRange(g.Controls.Count, 15, 42);
+            Assert.InRange(g.Controls.Count, 15, 48);   // s13: sand blend, sand to water, landings, lifeguard/landing assets
             Assert.InRange(g.Controls.Select(c => c.Group).Distinct().Count(), 4, 10);
             Assert.Equal("water", GeneratorGroups.Of(g));
             Assert.Contains(g.Controls, c => c.Id == "style" && c.Kind == ControlKind.Choice);
@@ -183,6 +183,45 @@ namespace Placemaker.Tests.Types
             var sandy = P("sandy");
             Assert.Contains(sandy.Nets, n => n.Role == NetRole.Fence);   // sand fences on the dunes
             Assert.True(sandy.Objects.Count(o => o.Role == ObjectRole.Bush) > 50, "dune grass");
+        }
+
+        [Fact]
+        public void SandIsPaintedToTheWaterAndBlendsInland()
+        {
+            // The outline stops 8 m short of the sea (a grassy bank): the sand must still reach the water.
+            var site = new SiteContext { WaterDepthAt = p => p.y < -8f ? 2f : 0f, HeightAt = p => p.y < -8f ? -1.5f : 0.06f * p.y };
+            var plan = PlanPreset("beach", Preset("sandy"), FiveHa, site);
+            Assert.True(plan.Facts["foreshore"] >= 1);
+            var sand = plan.Paint.Where(p => p.Layer == TerrainMaterials.Sand && p.GradientFrom != null && p.Strength > 0.99f).ToList();   // the beach field (dunes have their own, lighter one)
+            Assert.NotEmpty(sand);
+            float At(float2 q) => sand.Max(p => Placemaker.Core.Build.PaintField.StrengthAt(p, q));
+            Assert.True(At(new float2(125, -8.5f)) > 0.9f, "sand at the waterline " + At(new float2(125, -8.5f)));
+            Assert.True(At(new float2(125, 20)) > 0.9f, "sand on the beach");
+            float blend = (float)plan.Facts["sandBlend"], depth = (float)plan.Facts["beachDepth"];
+            float mid = At(new float2(125, depth + blend * 0.5f));
+            Assert.InRange(mid, 0.15f, 0.85f);                                   // the blend is a gradient, not an edge
+            Assert.True(At(new float2(125, depth + blend + 6f)) < 0.05f, "sand beyond the blend");
+            Assert.DoesNotContain(plan.Surfaces, s => s.Category == AssetCategories.SurfaceSand);   // no hard-edged sand quad by default
+            // The carve may follow the sand down into the water (lower only).
+            Assert.All(plan.Terraform.Where(t => Poly.Centroid(Poly.To2D(t.Ring)).y < 0f), t => Assert.Equal(TerraformKind.Lower, t.Kind));
+        }
+
+        [Fact]
+        public void AccessesEndOnLandingsAndSetsUseOneModel()
+        {
+            var plan = PlanPreset("beach", Preset("sandy"), FiveHa, SeaSouth(0.03f));
+            Assert.True(plan.Facts["accessPaths"] >= 2);
+            Assert.Equal(plan.Facts["accessPaths"], plan.Facts["landings"]);
+            var landings = plan.Surfaces.Where(s => s.Role == SurfaceRole.Paving).Select(s => Poly.Centroid(Poly.To2D(s.Ring))).ToList();
+            // Every access path ends at a landing (its seaward end touches one).
+            foreach (var n in plan.Nets.Where(n => n.Role == NetRole.Pathway && math.abs(n.A.x - n.D.x) < 0.5f && n.A.z > n.D.z + 3f))
+                Assert.Contains(landings, c => math.distance(c, n.D.xz) < 3f);
+            Assert.Single(plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella).Select(o => o.Asset.Id).Distinct());
+            Assert.Single(plan.Objects.Where(o => o.Category == AssetCategories.BeachLounger).Select(o => o.Asset.Id).Distinct());
+            // Lifeguard posts (vanilla: tall chair) behind the wet sand, facing the water.
+            var guards = plan.Objects.Where(o => o.Asset.Id == "TennisUmpireChair01").ToList();
+            Assert.Equal(2, guards.Count);
+            Assert.All(guards, o => Assert.True(math.cos(o.Yaw) < -0.9f));
         }
 
         [Fact]

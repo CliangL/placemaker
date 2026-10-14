@@ -68,6 +68,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             c.Toggle("moorings", false, ControlTier.More, "edge").Tip();
             c.Slider("mooringSpacing", 8, 4, 30, 1, "m", ControlTier.More, "edge").Layout(3).When("moorings=true");
             c.Toggle("riprap", false, ControlTier.More, "edge").Tip();
+            c.Choice("shoreTexture", "auto", ControlTier.More, "edge", "auto", "sand", "dirt", "none").Tip();
 
             c.Choice("steps", "spots", ControlTier.More, "steps", "none", "spots", "continuous").Tip();
             c.Slider("stepCount", 2, 1, 8, 1, "count", ControlTier.More, "steps").When("steps=spots");
@@ -250,6 +251,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
         private static void Ground(Work w)
         {
             var ctx = w.Ctx; var shore = w.Shore;
+            ShoreTexture(w);
             switch (ctx.S("surface"))
             {
                 case "paved":
@@ -266,6 +268,36 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             }
             if (ctx.S("backdrop") != "none")
                 foreach (var ring in shore.Band(w.P + 0.3f, shore.MaxDepth + 20f)) ctx.Surface(ring, SurfaceRole.Grass, AssetMix.One(""));
+        }
+
+        /// <summary>
+        /// (s13) A soft shore band in the terrain texture: sand (promenade, pier) or dirt (fishing bank) from the
+        /// water's edge, including the strip between the outline and the water, fading inland over a few metres with
+        /// a natural edge. Under the paving it is hidden; where the edge is open it replaces the raw grass bank.
+        /// </summary>
+        private static void ShoreTexture(Work w)
+        {
+            var ctx = w.Ctx; var shore = w.Shore;
+            string mode = ctx.S("shoreTexture");
+            if (mode == "auto")
+                switch (ctx.S("style"))
+                {
+                    case "fishing": mode = "dirt"; break;
+                    case "promenade": case "pier": mode = "sand"; break;
+                    default: mode = "none"; break;   // quays and ghats are stone to the water
+                }
+            if (mode != "sand" && mode != "dirt") return;
+            int layer = mode == "sand" ? TerrainMaterials.Sand : TerrainMaterials.Dirt;
+            float band = math.clamp(w.P * 0.5f, 3f, 8f);
+            var rings = new List<IReadOnlyList<float2>>();
+            foreach (var r in shore.Band(-3f, band + 4f)) rings.Add(r);
+            foreach (var r in shore.Foreshore(12f, 3f)) rings.Add(r);
+            if (rings.Count == 0) return;
+            List<Region> merged;
+            try { merged = Poly.UnionAll(rings); } catch (System.Exception) { return; }
+            foreach (var region in merged)
+                foreach (var piece in Poly.CutHoles(region, 0.5f))
+                    TerrainPaint.Field(ctx, piece, layer, mode == "sand" ? 0.9f : 0.8f, 2.5f, 1.2f, shore.Chain, 1.5f, band, 0f, 0x5E0Au);
         }
 
         private void Promenade(Work w, NetRole role)

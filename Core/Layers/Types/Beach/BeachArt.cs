@@ -15,6 +15,17 @@ namespace Placemaker.Core.Layers.Types.Beach
             "Sand Surface 01", "Sand Surface 02",
         };
 
+        /// <summary>
+        /// Landings at the end of the beach accesses (s13): a wooden deck from the EAI surface pack when installed, else
+        /// vanilla paving tiles. Small (5.5 × 4 m), so the access path ends ON something instead of in the sand.
+        /// </summary>
+        public static readonly string[] Landing = { "EAI - Surface Pack Wood Wood 002 Surface", "EAI - Surface Pack Wood Wood 001 Surface", "Tiles Surface 01", "Pavement Surface 01" };
+
+        /// <summary>Lifeguard post (s13): vanilla has no lifeguard tower; the tall tennis umpire chair (3.2 m) reads as one.</summary>
+        public const string LifeguardChair = "TennisUmpireChair01";
+        public const string Lifebuoy = "LifeBuoyStation01";
+        public const string Flag = "FlagPole01";
+
         public static readonly string[] Umbrellas = { "Parasol01", "Parasol02", "Parasol03" };
         public static readonly string[] Loungers = { "DeckChair02", "DeckChair03", "DeckChair01" };
         public static readonly string[] Kiosks = { "PierKiosk01", "PierKiosk02", "Kiosk01" };

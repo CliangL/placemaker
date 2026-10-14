@@ -69,6 +69,7 @@ namespace Placemaker.Game.Build
             _dabs.Clear();
             _paintDabs.Clear();
             _paintCursor = 0;
+            ResetPaint();
             _dabCursor = 0;
             _tfRaster = null;
             _tfVerified = false;
