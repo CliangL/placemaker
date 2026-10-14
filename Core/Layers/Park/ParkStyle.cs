@@ -20,6 +20,19 @@ namespace Placemaker.Core.Layers.Park
         public float ClearingFactor;
         /// <summary>Default for curved paths when the player has not set it.</summary>
         public bool Curved;
+        /// <summary>(round 5) Share of trees / bushes planted beside the paths (lined walks, shrubbery borders).</summary>
+        public float TreePathShare, BushPathShare;
+        /// <summary>(round 5) Modern planting: trees in a strict grid (bosque) on the lawns, bushes as clipped boundary rows.</summary>
+        public bool Grid;
+        /// <summary>(round 5) The tree belt as one regular row along the outline (street-tree style) instead of a natural band.</summary>
+        public bool RowBelt;
+        /// <summary>(round 5) Grove size multiplier and the flattest grove outline allowed (1 = circle).</summary>
+        public float GroveScale = 1f, GroveAspectMin = 0.55f;
+        /// <summary>(round 5) "Natural ground" patch multiplier (wildflower meadows paint much more of the lawn).</summary>
+        public float GroundPatches = 1f;
+
+        /// <summary>Every style id, in control order.</summary>
+        public static readonly string[] Ids = { "natural", "formal", "woodland", "meadow", "pocket", "victorian", "landscape", "modern", "wildflower", "urban", "riverside" };
 
         public static readonly ParkStyle Natural = new ParkStyle
         {
@@ -50,10 +63,59 @@ namespace Placemaker.Core.Layers.Park
             Id = "formal", Formal = true, ClearingFactor = 0.8f, Curved = false,
         };
 
+        // ───── round 5 (type wave, builder 11): six historic / contemporary park idioms ─────
+
+        /// <summary>Victorian: specimen trees, shrubbery borders along serpentine walks, an open lawn for the bandstand.</summary>
+        public static readonly ParkStyle Victorian = new ParkStyle
+        {
+            Id = "victorian", GroveCoverage = 0.14f, TreeGroveShare = 0.3f, TreeBeltShare = 0.3f, TreeSolitaireCap = 0.3f, TreePathShare = 0.25f,
+            BushGroveShare = 0.25f, BushBeltShare = 0.3f, BushPathShare = 0.4f, ClearingFactor = 0.75f, Curved = true,
+        };
+
+        /// <summary>English landscape (Brown/Repton): big round clumps on open rolling lawn, a deep perimeter belt.</summary>
+        public static readonly ParkStyle Landscape = new ParkStyle
+        {
+            Id = "landscape", GroveCoverage = 0.15f, GroveScale = 1.6f, GroveAspectMin = 0.8f, TreeGroveShare = 0.45f, TreeBeltShare = 0.45f,
+            TreeSolitaireCap = 0.1f, BushGroveShare = 0.4f, BushBeltShare = 0.55f, ClearingFactor = 0.95f, Curved = true,
+        };
+
+        /// <summary>Modern minimal: a strict tree grid (bosque) and clipped boundary rows; straight lines.</summary>
+        public static readonly ParkStyle Modern = new ParkStyle
+        {
+            Id = "modern", Grid = true, ClearingFactor = 0.8f, Curved = false,
+        };
+
+        /// <summary>Wildflower meadow: almost no trees, painted natural ground, a scrubby edge.</summary>
+        public static readonly ParkStyle Wildflower = new ParkStyle
+        {
+            Id = "wildflower", GroveCoverage = 0.04f, TreeGroveShare = 0.3f, TreeBeltShare = 0.3f, TreeSolitaireCap = 0.4f,
+            BushGroveShare = 0.3f, BushBeltShare = 0.6f, ClearingFactor = 0f, Curved = true, GroundPatches = 3f,
+        };
+
+        /// <summary>Urban pocket: street-tree rows along the edge, trees beside the walks, little else.</summary>
+        public static readonly ParkStyle Urban = new ParkStyle
+        {
+            Id = "urban", GroveCoverage = 0.06f, RowBelt = true, TreeGroveShare = 0.2f, TreeBeltShare = 0.5f, TreeSolitaireCap = 0.1f,
+            TreePathShare = 0.3f, BushGroveShare = 0.2f, BushBeltShare = 0.4f, BushPathShare = 0.4f, ClearingFactor = 0.6f, Curved = true,
+        };
+
+        /// <summary>Riverside: trees lining the walks (willow walk), loose groves, open views across the lawn.</summary>
+        public static readonly ParkStyle Riverside = new ParkStyle
+        {
+            Id = "riverside", GroveCoverage = 0.18f, TreeGroveShare = 0.35f, TreeBeltShare = 0.15f, TreeSolitaireCap = 0.15f, TreePathShare = 0.4f,
+            BushGroveShare = 0.4f, BushBeltShare = 0.3f, BushPathShare = 0.25f, ClearingFactor = 0.6f, Curved = true, GroundPatches = 1.5f,
+        };
+
         public static ParkStyle Get(string id)
         {
             switch (id)
             {
+                case "victorian": return Victorian;
+                case "landscape": return Landscape;
+                case "modern": return Modern;
+                case "wildflower": return Wildflower;
+                case "urban": return Urban;
+                case "riverside": return Riverside;
                 case "formal": return FormalStyle;
                 case "woodland": return Woodland;
                 case "meadow": return Meadow;
