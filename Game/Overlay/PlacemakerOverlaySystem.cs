@@ -1,7 +1,7 @@
 // Placemaker — everything the tool draws on the map: outline and handles (vanilla district-tool
 // look), snap feedback (PLT colour code), brush cursor, block hover, perimeter path, markers,
-// the composed plan (nets by role colour and width, objects as role-coloured discs, surfaces and
-// areas filled via FilledPreviewSystem), issues and build errors in red, and built groups in the
+// the composed plan (nets by role colour and width, objects as one clear symbol per role, surfaces as a faint tint + outline and
+// areas via FilledPreviewSystem), issues and build errors in red, and built groups in the
 // Manage stage.
 //
 // Scales by construction: only the selection, the plan and bounded queries are drawn — never a
@@ -15,6 +15,7 @@ using Game.Net;
 using Game.Rendering;
 using Game.Tools;
 using Placemaker.Core;
+using Placemaker.Core.Build;
 using Placemaker.Core.Tool;
 using Placemaker.Game.Selection;
 using Placemaker.Game.Settings;
@@ -32,7 +33,7 @@ namespace Placemaker.Game.Overlay
         // Vanilla-like selection palette (district/area tools: light blue outline, white handles).
         private static readonly Color Outline = new Color(0.80f, 0.92f, 1f, 0.95f);
         private static readonly Color OutlineBad = new Color(1f, 0.35f, 0.3f, 0.95f);
-        private static readonly Color Fill = new Color(0.30f, 0.62f, 1f, 0.16f);
+        private static readonly Color Fill = new Color(0.30f, 0.62f, 1f, 0.10f);
         private static readonly Color FillHover = new Color(1f, 1f, 1f, 0.10f);
         private static readonly Color FillUnderGhost = new Color(0.30f, 0.62f, 1f, 0.05f);   // barely tint the real surfaces
         private static readonly Color Handle = new Color(0.30f, 0.62f, 1f, 0.95f);
@@ -343,6 +344,7 @@ namespace Placemaker.Game.Overlay
             if (!ReferenceEquals(plan, _filledPlan))
             {
                 _filledPlan = plan;
+                _categoryInfo.Clear();
                 try { _assetInfo = Services.Assets?.InfoMap(); } catch (Exception) { _assetInfo = null; }
                 _surfaceGroups.Clear();
                 _areaGroups.Clear();
@@ -355,16 +357,37 @@ namespace Placemaker.Game.Overlay
                         if (a?.Ring != null && a.Ring.Length >= 3) Group(_areaGroups, (int)a.Role).Add(a.Ring);
                 }
             }
+            // FEEDBACK-4 #4: surfaces are a faint tint (≤ 15 %) — or outline only — with a crisp outline in the
+            // role's colour (dashed for paved roles), so paths and objects on top stay readable.
+            bool tint = ToolRegistration.Settings?.SketchSurfaceFill ?? true;
             foreach (var kv in _surfaceGroups)
-                _fill.SetLayer("surface:" + kv.Key, kv.Value, WithAlpha(SurfaceColor((SurfaceRole)kv.Key), 0.55f * fillAlpha), -93f + kv.Key * 0.01f, FilledPreviewSystem.Signature(kv.Value));
+            {
+                var role = (SurfaceRole)kv.Key;
+                _fill.SetLayer("surface:" + kv.Key, kv.Value, WithAlpha(SurfaceColor(role), (tint ? SurfaceTint(role) : 0f) * fillAlpha), -93f + kv.Key * 0.01f, FilledPreviewSystem.Signature(kv.Value));
+                if (!content) continue;
+                bool paved = role == SurfaceRole.Paving || role == SurfaceRole.Plaza || role == SurfaceRole.Asphalt;
+                var edge = WithAlpha(SurfaceColor(role), 0.8f * alpha);
+                foreach (var r in kv.Value) Ring(buffer, r, edge, w * (role == SurfaceRole.Water ? 0.8f : 0.5f), dashed: paved);
+            }
             foreach (var kv in _areaGroups)
-                _fill.SetLayer("area:" + kv.Key, kv.Value, WithAlpha(AreaColor((AreaRole)kv.Key), 0.3f * fillAlpha), -93.5f, FilledPreviewSystem.Signature(kv.Value));
+            {
+                _fill.SetLayer("area:" + kv.Key, kv.Value, WithAlpha(AreaColor((AreaRole)kv.Key), (tint ? 0.06f : 0f) * fillAlpha), -93.5f, FilledPreviewSystem.Signature(kv.Value));
+                if (content)
+                    foreach (var r in kv.Value) Ring(buffer, r, WithAlpha(AreaColor((AreaRole)kv.Key), 0.45f * alpha), w * 0.4f, dashed: true);
+            }
 
+            // Objects (playtest 4b #9): every feature object — playground, picnic, restrooms, kiosks, field
+            // props, centerpieces, trees, furniture, of every layer incl. feature children — always gets a
+            // symbol; only ground clutter (decals, bushes, planters) is thinned to the detail budget
+            // (Simple hides clutter only, it used to hide every object but one).
             int netBudget = detail == PreviewDetail.Detailed ? 20000 : 6000;
-            int objBudget = detail == PreviewDetail.Simple ? 0 : detail == PreviewDetail.Detailed ? 30000 : 8000;
-            int objCount = 0;
-            foreach (var l in plan.Layers) objCount += l?.Objects.Count ?? 0;
-            int stride = objBudget <= 0 ? int.MaxValue : math.max(1, (int)math.ceil(objCount / (float)objBudget));
+            int clutterBudget = detail == PreviewDetail.Simple ? 0 : detail == PreviewDetail.Detailed ? 30000 : 8000;
+            int mainBudget = detail == PreviewDetail.Detailed ? 30000 : 12000;
+            int clutterCount = 0;
+            foreach (var l in plan.Layers)
+                if (l != null)
+                    foreach (var o in l.Objects) if (o != null && IsClutter(o)) clutterCount++;
+            int stride = clutterBudget <= 0 ? int.MaxValue : math.max(1, (int)math.ceil(clutterCount / (float)clutterBudget));
             int k = 0;
             foreach (var l in plan.Layers)
             {
@@ -374,11 +397,25 @@ namespace Placemaker.Game.Overlay
                     if (n == null || !content || netBudget-- <= 0) break;
                     DrawNet(buffer, n, w, alpha);
                 }
-                foreach (var o in l.Objects)
+            }
+            // Clutter first, then features; trees last so crowns read as a canopy over the furniture.
+            for (int pass = 0; pass < 3 && content; pass++)
+                foreach (var l in plan.Layers)
                 {
-                    if (o == null || !content || (k++ % stride) != 0) continue;
-                    DrawObject(buffer, o, w, alpha);
+                    if (l == null) continue;
+                    foreach (var o in l.Objects)
+                    {
+                        if (o == null) continue;
+                        bool clutter = IsClutter(o);
+                        int p = clutter ? 0 : o.Role == ObjectRole.Tree ? 2 : 1;
+                        if (p != pass) continue;
+                        if (clutter ? (k++ % stride) != 0 : mainBudget-- <= 0) continue;
+                        DrawObject(buffer, o, w, alpha);
+                    }
                 }
+            foreach (var l in plan.Layers)
+            {
+                if (l == null) continue;
                 foreach (var t in l.Terraform)
                     if (t?.Ring != null) Ring(buffer, t.Ring, t.Permanent ? Warning : new Color(0.4f, 0.7f, 1f, 0.8f), w, dashed: true);
                 foreach (var z in l.Zoning)
@@ -421,7 +458,6 @@ namespace Placemaker.Game.Overlay
         // Grid Road Generator's sketch look: a thin dashed centre line in the role colour plus two faint
         // edge lines at the real width — readable over terrain and never hiding it. Line width and dash
         // length follow the camera height (w), so it stays crisp close up and visible from far away.
-        // Objects are small, subtle dots; trees are soft discs at crown size.
 
         private Dictionary<string, AssetInfo> _assetInfo;
 
@@ -462,31 +498,141 @@ namespace Placemaker.Game.Overlay
             return new Bezier4x3(c.a + n0, c.b + n0, c.c + n1, c.d + n1);
         }
 
+        // ───────────── objects: one clear symbol per role ─────────────
+        //
+        // FEEDBACK-4 #4 / 4b #9: tree = soft crown at real crown size with a darker centre; bush = small
+        // filled disc; hedge = short bar along the piece; bench = brown bar; lamp = yellow disc with a dark
+        // rim; bin = dark disc with a light rim; centerpiece = ring; amenities/furniture (playground, picnic,
+        // restroom, kiosk, field props…) = filled footprint in a category colour; parking bay = outline;
+        // decal = faint disc. Every symbol has a minimum size tied to the line width, so it stays legible.
+
+        private readonly Dictionary<string, AssetInfo> _categoryInfo = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
+
+        private static bool IsClutter(PlannedObject o) =>
+            o.Role == ObjectRole.Decal || o.Role == ObjectRole.Planter || (o.Role == ObjectRole.Bush && !IsHedge(o));
+
+        private static bool IsHedge(PlannedObject o)
+        {
+            var c = o.Category;
+            return !string.IsNullOrEmpty(c) && c.StartsWith(AssetCategories.Hedge, StringComparison.Ordinal);
+        }
+
+        /// <summary>Asset metadata of the object: its own (resolved) asset, else the category's automatic default (Design stage).</summary>
+        private bool TryInfo(PlannedObject o, out AssetInfo info)
+        {
+            info = default;
+            if (_assetInfo == null) return false;
+            if (!string.IsNullOrEmpty(o.Asset.Id) && _assetInfo.TryGetValue(o.Asset.Id, out info)) return true;
+            string cat = RoleCategories.ForObject(o) ?? "";
+            if (_categoryInfo.TryGetValue(cat, out info)) return info.Id != null;
+            info = default;
+            try
+            {
+                var pool = (Services.Assets as global::Placemaker.Game.Assets.AssetCatalogSystem)?.AutomaticPool(cat);
+                if (pool != null)
+                    foreach (var id in pool)
+                        if (id != null && _assetInfo.TryGetValue(id, out info)) break;
+            }
+            catch (Exception) { info = default; }
+            _categoryInfo[cat] = info;
+            return info.Id != null;
+        }
+
+        /// <summary>Footprint half-extents (local X, Z) and centre offset, scaled.</summary>
+        private (float2 half, float2 centre) Footprint(PlannedObject o, float scale)
+        {
+            if (TryInfo(o, out var info))
+            {
+                var size = (info.BoundsMax - info.BoundsMin).xz;
+                if (math.cmax(size) > 0.1f)
+                    return (size * 0.5f * scale, (info.BoundsMax + info.BoundsMin).xz * 0.5f * scale);
+            }
+            float r = Composer.DefaultRadius(o.Role) * scale;
+            return (new float2(r), float2.zero);
+        }
+
+        /// <summary>
+        /// Crown radius: CS2 tree bounds are close to the trunk/collision box, so the visible crown is
+        /// estimated from the height too (about 0.28 × height), never smaller than the bounds.
+        /// </summary>
+        internal static float CrownRadius(float3 boundsMin, float3 boundsMax, float scale)
+        {
+            float r = math.cmax((boundsMax - boundsMin).xz) * 0.5f;
+            float h = boundsMax.y - boundsMin.y;
+            return math.clamp(math.max(r, h * 0.28f), 1f, 7f) * scale;
+        }
+
         private void DrawObject(OverlayRenderSystem.Buffer buffer, PlannedObject o, float w, float alpha)
         {
-            var col = ObjectColor(o.Role);
             float scale = math.max(0.3f, o.Scale);
-            if (o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush)
+            string cat = RoleCategories.ForObject(o) ?? "";
+            var col = ObjectColor(o.Role, cat);
+            var p = o.Position;
+            var up = new float2(0, 1);
+            var none = new Color(0, 0, 0, 0);
+            switch (o.Role)
             {
-                float crown = Composer.DefaultRadius(o.Role);
-                if (_assetInfo != null && !string.IsNullOrEmpty(o.Asset.Id) && _assetInfo.TryGetValue(o.Asset.Id, out var info))
+                case ObjectRole.Tree:
                 {
-                    float r = math.cmax((info.BoundsMax - info.BoundsMin).xz) * 0.5f;
-                    if (r > 0.3f) crown = r;
+                    float crown = TryInfo(o, out var info) ? CrownRadius(info.BoundsMin, info.BoundsMax, scale) : Composer.DefaultRadius(o.Role) * scale;
+                    float dia = math.max(crown * 2f, w * 4f);
+                    buffer.DrawCircle(WithAlpha(col * 0.7f, 0.75f * alpha), WithAlpha(col, 0.22f * alpha), w * 0.35f, 0, up, p, dia);
+                    buffer.DrawCircle(WithAlpha(col * 0.55f, 0.9f * alpha), p, math.max(dia * 0.3f, w * 1.2f));
+                    return;
                 }
-                float dia = math.max(crown * 2f * scale, w * 2f);
-                buffer.DrawCircle(WithAlpha(col, 0.35f * alpha), WithAlpha(col, 0.16f * alpha), w * 0.3f, 0, new float2(0, 1), o.Position, dia);
-                return;
+                case ObjectRole.Centerpiece:
+                {
+                    var (half, _) = Footprint(o, scale);
+                    float dia = math.max(math.cmax(half) * 2f, w * 6f);
+                    buffer.DrawCircle(WithAlpha(col, 0.95f * alpha), WithAlpha(col, 0.12f * alpha), w * 0.8f, 0, up, p, dia);
+                    buffer.DrawCircle(WithAlpha(col, 0.95f * alpha), p, w * 1.2f);
+                    return;
+                }
+                case ObjectRole.Lamp:
+                    buffer.DrawCircle(WithAlpha(new Color(0.35f, 0.28f, 0f), 0.9f * alpha), WithAlpha(col, 0.95f * alpha), w * 0.4f, 0, up, p, math.max(w * 2.4f, 0.8f));
+                    return;
+                case ObjectRole.Bin:
+                    buffer.DrawCircle(WithAlpha(new Color(0.9f, 0.9f, 0.9f), 0.85f * alpha), WithAlpha(col, 0.95f * alpha), w * 0.35f, 0, up, p, math.max(w * 1.8f, 0.6f));
+                    return;
+                case ObjectRole.Decal:
+                {
+                    var (half, _) = Footprint(o, scale);
+                    buffer.DrawCircle(WithAlpha(col, 0.18f * alpha), p, math.max(math.cmin(half) * 2f, w * 1.5f));
+                    return;
+                }
+                case ObjectRole.Marker: case ObjectRole.AccessPoint: case ObjectRole.AnimalSpawner:
+                    buffer.DrawCircle(WithAlpha(col, 0.9f * alpha), none, w * 0.4f, 0, up, p, w * 2.5f);
+                    return;
+                case ObjectRole.Bush: case ObjectRole.Planter:
+                    if (!IsHedge(o))
+                    {
+                        var (half, _) = Footprint(o, scale);
+                        buffer.DrawCircle(WithAlpha(col * 0.7f, 0.85f * alpha), WithAlpha(col, 0.7f * alpha), w * 0.25f, 0, up, p, math.max(math.cmax(half) * 2f, w * 2f));
+                        return;
+                    }
+                    break;
             }
-            if (o.Role == ObjectRole.Centerpiece)
+            DrawFootprint(buffer, o, scale, col, w, alpha, outlineOnly: o.Role == ObjectRole.ParkingBay);
+        }
+
+        /// <summary>Rotated footprint: a bar along its long axis (DrawLine width = the short side), or its outline.</summary>
+        private void DrawFootprint(OverlayRenderSystem.Buffer buffer, PlannedObject o, float scale, Color col, float w, float alpha, bool outlineOnly)
+        {
+            var (half, centre) = Footprint(o, scale);
+            half = math.max(half, new float2(w * 0.9f));
+            float c = math.cos(o.Yaw), s = math.sin(o.Yaw);
+            var pos = o.Position;
+            float3 Rot(float2 v) => new float3(v.x * c + v.y * s, 0f, -v.x * s + v.y * c) + pos;
+            if (outlineOnly)
             {
-                float dia = Composer.DefaultRadius(o.Role) * 2f * scale;
-                buffer.DrawCircle(WithAlpha(col, 0.6f * alpha), WithAlpha(col, 0.12f * alpha), w * 0.4f, 0, new float2(0, 1), o.Position, dia);
+                var corners = new[] { Rot(centre - half), Rot(centre + new float2(half.x, -half.y)), Rot(centre + half), Rot(centre + new float2(-half.x, half.y)) };
+                Ring(buffer, corners, WithAlpha(col, 0.6f * alpha), w * 0.35f);
                 return;
             }
-            // Small furniture / bays: a subtle dot, a little larger than a line so it reads from afar.
-            float dot = math.clamp(w * 1.6f, 0.5f, Composer.DefaultRadius(o.Role) * 2f);
-            buffer.DrawCircle(WithAlpha(col, 0.7f * alpha), o.Position, dot);
+            bool alongX = half.x >= half.y;
+            float2 axis = alongX ? new float2(half.x, 0) : new float2(0, half.y);
+            float width = (alongX ? half.y : half.x) * 2f;
+            buffer.DrawLine(WithAlpha(col, 0.9f * alpha), new Line3.Segment(Rot(centre - axis), Rot(centre + axis)), width);
         }
 
         private static Color NetColor(NetRole r)
@@ -502,26 +648,46 @@ namespace Placemaker.Game.Overlay
             }
         }
 
-        private static Color ObjectColor(ObjectRole r)
+        private static Color ObjectColor(ObjectRole r, string cat)
         {
+            if (cat.StartsWith(AssetCategories.Hedge, StringComparison.Ordinal)) return new Color(0.2f, 0.5f, 0.2f);
+            if (cat.StartsWith(AssetCategories.Flowerbed, StringComparison.Ordinal)) return new Color(0.95f, 0.5f, 0.8f);
+            if (cat.StartsWith("play", StringComparison.Ordinal)) return new Color(1f, 0.55f, 0.2f);          // playground, play.*
+            if (cat.StartsWith(AssetCategories.Sports, StringComparison.Ordinal) || cat.StartsWith("dog.", StringComparison.Ordinal)) return new Color(1f, 0.4f, 0.4f);
+            if (cat.StartsWith(AssetCategories.Picnic, StringComparison.Ordinal) || cat.StartsWith(AssetCategories.CafeSeating, StringComparison.Ordinal)) return new Color(0.85f, 0.55f, 0.3f);
+            if (cat.StartsWith(AssetCategories.Kiosk, StringComparison.Ordinal) || cat.StartsWith(AssetCategories.Restroom, StringComparison.Ordinal)
+                || cat.StartsWith(AssetCategories.Shelter, StringComparison.Ordinal) || cat.StartsWith("camping", StringComparison.Ordinal)) return new Color(0.95f, 0.7f, 0.35f);
+            if (cat.StartsWith("memorial", StringComparison.Ordinal) || cat.StartsWith("monument", StringComparison.Ordinal) || cat.StartsWith("cemetery", StringComparison.Ordinal))
+                return new Color(0.7f, 0.65f, 1f);
+            if (cat.StartsWith(AssetCategories.Rock, StringComparison.Ordinal)) return new Color(0.7f, 0.7f, 0.7f);
             switch (r)
             {
-                case ObjectRole.Tree: return new Color(0.2f, 0.65f, 0.25f);
-                case ObjectRole.Bush: case ObjectRole.Planter: return new Color(0.45f, 0.8f, 0.35f);
-                case ObjectRole.Bench: case ObjectRole.Bin: case ObjectRole.Furniture: return new Color(0.85f, 0.65f, 0.4f);
-                case ObjectRole.Lamp: return new Color(1f, 0.95f, 0.6f);
+                case ObjectRole.Tree: return new Color(0.25f, 0.75f, 0.3f);
+                case ObjectRole.Bush: return new Color(0.5f, 0.85f, 0.35f);
+                case ObjectRole.Planter: return new Color(0.8f, 0.6f, 0.45f);
+                case ObjectRole.Bench: return new Color(0.75f, 0.45f, 0.2f);
+                case ObjectRole.Bin: return new Color(0.2f, 0.2f, 0.22f);
+                case ObjectRole.Lamp: return new Color(1f, 0.85f, 0.2f);
                 case ObjectRole.Centerpiece: return new Color(0.4f, 0.75f, 1f);
-                case ObjectRole.ParkingBay: case ObjectRole.Charger: case ObjectRole.Arrow: return new Color(0.85f, 0.85f, 0.95f);
-                default: return new Color(0.9f, 0.9f, 0.9f);
+                case ObjectRole.Decal: return new Color(0.75f, 0.65f, 0.5f);
+                case ObjectRole.ParkingBay: case ObjectRole.Arrow: return new Color(0.9f, 0.9f, 1f);
+                case ObjectRole.Charger: return new Color(0.3f, 0.9f, 0.5f);
+                case ObjectRole.Marker: case ObjectRole.AccessPoint: case ObjectRole.AnimalSpawner: return new Color(0.95f, 0.4f, 0.95f);
+                default: return new Color(0.75f, 0.7f, 1f);                                                   // other furniture: lilac
             }
         }
+
+        /// <summary>Fill alpha per surface role (at most 15 %): the tint only says "what", the outline says "where".</summary>
+        private static float SurfaceTint(SurfaceRole r) =>
+            r == SurfaceRole.Water ? 0.15f : r == SurfaceRole.Grass ? 0.08f : 0.11f;
 
         private static Color SurfaceColor(SurfaceRole r)
         {
             switch (r)
             {
                 case SurfaceRole.Grass: return new Color(0.35f, 0.75f, 0.3f);
-                case SurfaceRole.Paving: case SurfaceRole.Plaza: return new Color(0.85f, 0.8f, 0.7f);
+                case SurfaceRole.Paving: return new Color(0.85f, 0.8f, 0.7f);
+                case SurfaceRole.Plaza: return new Color(1f, 0.85f, 0.55f);
                 case SurfaceRole.Asphalt: return new Color(0.35f, 0.35f, 0.4f);
                 case SurfaceRole.Water: return new Color(0.25f, 0.5f, 0.95f);
                 case SurfaceRole.Decorative: return new Color(0.85f, 0.55f, 0.75f);

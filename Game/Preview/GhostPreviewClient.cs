@@ -30,6 +30,11 @@ namespace Placemaker.Game.Preview
         public int RequestedRevision;
         /// <summary>Localisation key when the ghost could not be built (Failed), else null.</summary>
         public string MessageKey;
+        /// <summary>
+        /// Objects of the shown ghost the game cancelled (they collide; optional temporaries vanish without an
+        /// icon). The tool lists the count in the Review summary — a ghost never hides parts silently.
+        /// </summary>
+        public int Dropped;
     }
 
     public interface IGhostPreview

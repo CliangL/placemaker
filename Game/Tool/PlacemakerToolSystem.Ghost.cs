@@ -33,6 +33,15 @@ namespace Placemaker.Game.Tool
         public SketchObjects SketchObjects => _preview.Objects;
         public bool GhostAvailable => _ghost.Available;
 
+        private int _ghostDropped;
+        /// <summary>Objects the game cancelled in the shown ghost (collisions); 0 when no ghost is shown.</summary>
+        public int GhostDropped => _ghostDropped;
+
+        /// <summary>Review note for objects the ghost could not place, or null (FEEDBACK-4: never silent).</summary>
+        public Placemaker.Core.PlanIssue GhostDroppedIssue => _ghostDropped > 0
+            ? new Placemaker.Core.PlanIssue { Severity = Placemaker.Core.IssueSeverity.Warning, Key = "Placemaker.Issue.GhostObjectsDropped", Args = new object[] { _ghostDropped } }
+            : null;
+
         /// <summary>UI: setPreviewMode("sketch" | "ghost") — for the current stage, sticks for the session.</summary>
         public void SetPreviewMode(string id)
         {
@@ -60,6 +69,8 @@ namespace Placemaker.Game.Tool
             try
             {
                 var status = _ghost.Status;
+                int dropped = status.Phase == GhostPhase.Shown ? status.Dropped : 0;
+                if (dropped != _ghostDropped) { _ghostDropped = dropped; Touch(); }
                 int rev = GhostRevision();
                 var input = new PreviewInput
                 {
