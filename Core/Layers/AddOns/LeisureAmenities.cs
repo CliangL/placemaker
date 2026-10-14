@@ -213,62 +213,87 @@ namespace Placemaker.Core.Layers.AddOns
                 ? LeisureKit.Category(ctx, ctx.S("asset"), AssetCategories.Shelter, AssetCategories.StageBandstand)
                 : LeisureKit.Category(ctx, ctx.S("asset"), AssetCategories.StageBandstand, AssetCategories.Stage, AssetCategories.Shelter);
             if (cat == null) return;
-            var asset = AssetMix.One(ctx.S("asset"));
-            float sr = math.clamp(AssetMix.FootprintRadius(ctx.Site, asset, 4f), 2.5f, 6f);
+            var asset = AddOnAssets.Or(ctx.S("asset"), gazebo ? AddOnAssets.Gazebo : AddOnAssets.Bandstand);
+            // Gazebos are round: the bounds' half-extent, not the diagonal, is how far the eaves reach.
+            float sr = math.clamp(AddOnAssets.Radius(ctx.Site, ctx.S("asset"), gazebo ? AddOnAssets.Gazebo : AddOnAssets.Bandstand, 4.5f) * 0.8f, 2.5f, 5.5f);
+            float room = math.min(site.HalfLength, site.HalfWidth) - 0.6f;
+            // In the round (2026-10-13 playtest: benches lay at random angles on the lawn): the stand sits
+            // in the middle of a round paved forecourt; the benches ring the paving in concentric rows,
+            // every one squarely facing the centre, with aisles towards the arrival side and the
+            // three other quarters. Flowerbeds frame the aisle mouths on the lawn, lamps light them.
+            const float firstGap = 2.6f, rowPitch = 2.5f, rim = 1.1f;
             int rows = ctx.I("rows");
-            // A bandstand plays to the lawn: it stands at the far end of the place, the audience in arcs
-            // towards the arrival side. A gazebo is the centre of its own little garden.
-            float2 focal; float2 facing;
-            if (gazebo || rows == 0) { focal = site.Center; facing = math.normalizesafe(toward - site.Center, site.Axis); }
-            else
-            {
-                float e = -EndSign(site, toward);
-                focal = site.Local(e * (site.HalfLength - sr - 1.5f), 0f);
-                facing = -e * site.Axis;
-            }
+            while (rows > 0 && sr + firstGap + (rows - 1) * rowPitch + rim > room) rows--;
+            float forecourt = rows > 0 ? sr + firstGap + (rows - 1) * rowPitch + rim : sr + 1.8f;
+            if (forecourt > room + 0.01f) { NoSpace(ctx, NameKey); return; }
+            var focal = site.Center;
+            var arrival = Monuments.MonumentKit.Entry(occ, site, toward);
+            var facing = math.normalizesafe(arrival - focal, site.Axis);
+            float open = math.atan2(facing.y, facing.x);
+            var paving = AddOnAssets.Or(ctx.S("pavingAsset"), AddOnAssets.GardenPaving);
             if (ctx.B("paving"))
-                ctx.Surface(Disc(focal, sr + 1.5f), SurfaceRole.Paving, AssetMix.One(ctx.S("pavingAsset")), AssetCategories.SurfacePaving);
+            {
+                ctx.Surface(Disc(focal, forecourt), SurfaceRole.Paving, paving, AssetCategories.SurfacePaving);
+                AddOnKit.Link(ctx, arrival, focal, forecourt, 1.4f, paving, AssetCategories.SurfacePaving, 30f);
+            }
             if (!Put(ctx, occ, focal, math.atan2(facing.x, facing.y), ObjectRole.Furniture, asset, cat, sr, Hashing.Mix(ctx.Seed, 0xBA0u)))
             { NoSpace(ctx, NameKey); return; }
-            int flowers = 0;
-            if (ctx.B("flowers") && AssetAvailability.Has(AssetCategories.Flowerbed))
-            {
-                // A ring of beds round the plinth, open towards the audience / the path.
-                float fr = sr + 2.6f;
-                int n = math.clamp((int)math.floor(2f * math.PI * fr / 3.2f), 4, 14);
-                float open = math.atan2(facing.y, facing.x);
-                for (int i = 0; i < n; i++)
-                {
-                    float a = open + (i + 1) * 2f * math.PI / (n + 1);
-                    var p = focal + new float2(math.cos(a), math.sin(a)) * fr;
-                    if (math.abs(math.dot(math.normalizesafe(p - focal), facing)) > 0.92f) continue;
-                    if (Put(ctx, occ, p, a, ObjectRole.Planter, new AssetRef(""), AssetCategories.Flowerbed, 1f, Hashing.Mix(ctx.Seed, 0xF10u + (uint)i))) flowers++;
-                }
-            }
+
+            int aisles = rows >= 2 ? 4 : 2;
+            float aisleHalf = 1.3f;   // metres either side of an aisle's centre line
             int benches = 0;
-            var bench = AssetMix.One(ctx.S("benchAsset"));
-            float baseAngle = math.atan2(facing.y, facing.x);
+            var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
             for (int row = 0; row < rows; row++)
             {
-                float r = sr + 5f + row * 3.2f;
-                float half = gazebo ? math.PI : 1.05f;   // ±60° in front of a bandstand, all round a gazebo
-                float step = 3.1f / r;
-                for (float a = -half + step * 0.5f; a <= half; a += step)
+                float r = sr + firstGap + row * rowPitch;
+                float gap = aisleHalf / r + 1.1f / r;           // half the aisle plus half a bench, in radians
+                float sector = 2f * math.PI / aisles;
+                float span = sector - 2f * gap;
+                int n = math.max(1, (int)math.floor(span * r / 2.9f) + 1);
+                for (int s = 0; s < aisles; s++)
+                    for (int i = 0; i < n; i++)
+                    {
+                        float a = open + s * sector + gap + (n == 1 ? span * 0.5f : span * i / (n - 1));
+                        var p = focal + new float2(math.cos(a), math.sin(a)) * r;
+                        if (Put(ctx, occ, p, LeisureKit.Yaw(p, focal), ObjectRole.Bench, bench, null, 1.1f, Hashing.Mix(ctx.Seed, (uint)(row * 64 + s * 16 + i) + 0xBE00u))) benches++;
+                    }
+            }
+
+            int flowers = 0, lamps = 0;
+            bool beds = ctx.B("flowers") && AssetAvailability.Has(AssetCategories.Flowerbed);
+            var bed = AssetMix.One("", AddOnAssets.Flowerbeds);
+            var lamp = new AssetRef("");
+            for (int s = 0; s < aisles; s++)
+            {
+                float a = open + s * 2f * math.PI / aisles;
+                var dir = new float2(math.cos(a), math.sin(a));
+                var side = new float2(-dir.y, dir.x);
+                for (int k = -1; k <= 1; k += 2)
                 {
-                    if (!gazebo && math.abs(a) < step * 0.6f) continue;   // central aisle
-                    var p = focal + new float2(math.cos(baseAngle + a), math.sin(baseAngle + a)) * r;
-                    if (Put(ctx, occ, p, LeisureKit.Yaw(p, focal), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, (uint)(row * 64 + benches) + 0xBE00u))) benches++;
+                    // Lamps flank each aisle mouth at the paving edge; beds frame it on the lawn.
+                    if (ctx.B("lamps") && rows > 0)
+                    {
+                        var lp = focal + dir * (forecourt + 0.5f) + side * k * (aisleHalf + 0.2f);
+                        if (Put(ctx, occ, lp, 0f, ObjectRole.Lamp, lamp, null, 0.4f, Hashing.Mix(ctx.Seed, 0x1A0u + (uint)(s * 2 + (k + 1) / 2)))) lamps++;
+                    }
+                    if (beds)
+                    {
+                        var fp = focal + dir * (forecourt + 1.6f) + side * k * (aisleHalf + 2.2f);
+                        if (Put(ctx, occ, fp, math.atan2(dir.x, dir.y), ObjectRole.Planter, bed, AssetCategories.Flowerbed, 1.2f, Hashing.Mix(ctx.Seed, 0xF10u + (uint)(s * 2 + (k + 1) / 2)))) flowers++;
+                    }
                 }
             }
-            if (ctx.B("lamps"))
+            if (gazebo && ctx.B("lamps"))
                 for (int k = -1; k <= 1; k += 2)
                 {
                     var side = new float2(-facing.y, facing.x);
-                    Put(ctx, occ, focal + side * k * (sr + 1.8f) + facing * 0.5f, 0f, ObjectRole.Lamp, new AssetRef(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x1A0u + (uint)(k + 1)));
+                    if (Put(ctx, occ, focal + facing * (forecourt - 0.5f) + side * k * 1.7f, 0f, ObjectRole.Lamp, lamp, null, 0.4f, Hashing.Mix(ctx.Seed, 0x1B0u + (uint)(k + 1)))) lamps++;
                 }
             ctx.Stat(Keys.StatBenches, benches, Keys.UnitCount);
             ctx.Stat(Keys.StatFlowerbeds, flowers, Keys.UnitCount);
             ctx.Plan.Facts["bandstand"] = 1;
+            ctx.Plan.Facts["bandstandRows"] = rows;
+            ctx.Plan.Facts["forecourtRadius"] = forecourt;
         }
     }
 
