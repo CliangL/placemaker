@@ -27,7 +27,7 @@ namespace Placemaker.Game.UI
         private int _designStamp = -1, _designPlanStamp = -1;
         private int _designPushFrame = -100;
         private string _summaryStamp;
-        private int _catalogStamp = -1, _catalogGenerators = -1;
+        private int _catalogStamp = -1, _catalogGenerators = -1, _catalogPresets = -1;
         private string _assetsStamp;
         private string _managedStamp;
         private int _frame;
@@ -72,6 +72,12 @@ namespace Placemaker.Game.UI
             Trigger("endPreview", () => _tool.EndPreview());
             Trigger<string>("resetStep", p => _tool.ResetStep(p));
             Trigger<string, string>("applyPreset", (p, preset) => _tool.ApplyPreset(p, preset));
+            Trigger<string, string>("selectPreset", (layer, preset) => _tool.SelectPreset(layer, preset));
+            Trigger<string, string>("savePreset", (p, preset) => _tool.SavePreset(p, preset));
+            Trigger<string, string>("savePresetAs", (p, name) => _tool.SavePresetAs(p, name));
+            Trigger<string, string, string>("renamePreset", (layer, preset, name) => _tool.RenamePreset(layer, preset, name));
+            Trigger<string, string>("deletePreset", (layer, preset) => _tool.DeletePreset(layer, preset));
+            Trigger("exportPresets", () => _tool.ExportPresets());
             Trigger<string>("randomize", p => _tool.Randomize(p));
             Trigger<string, string>("unlockValue", (p, id) => _tool.UnlockValue(p, id));
             Trigger<string, string>("startMarkers", (p, kind) => _tool.StartMarkers(p, kind));
@@ -155,7 +161,9 @@ namespace Placemaker.Game.UI
         {
             int generators = GeneratorRegistry.All.Count;
             int stamp = _tool.Recipes.Version;
-            if (stamp == _catalogStamp && generators == _catalogGenerators) return;
+            int presets = _tool.Presets?.Version ?? -1;
+            if (stamp == _catalogStamp && generators == _catalogGenerators && presets == _catalogPresets) return;
+            _catalogPresets = presets;
             _catalogStamp = stamp;
             _catalogGenerators = generators;
             var entries = new List<RecipeListEntry>();
@@ -172,7 +180,8 @@ namespace Placemaker.Game.UI
                     DescriptionKey = e.DescriptionKey,
                 });
             }
-            _catalog.Update(UiModels.Catalog(GeneratorRegistry.All, entries).ToString());
+            var store = _tool.Presets;
+            _catalog.Update(UiModels.Catalog(GeneratorRegistry.All, entries, store != null ? g => store.ViewsFor(g) : (Func<IAreaGenerator, IReadOnlyList<PresetView>>)null).ToString());
         }
 
         private void PushDesign()
@@ -184,7 +193,8 @@ namespace Placemaker.Game.UI
             _designPushFrame = _frame;
             _designStamp = _tool.DesignVersion;
             _designPlanStamp = _tool.PlanRevision;
-            _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan).ToString());
+            _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan,
+                null, _tool.ActivePreset, _tool.PresetsFile).ToString());
         }
 
         private void PushSummary()

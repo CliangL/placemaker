@@ -76,8 +76,17 @@ namespace Placemaker.Game.Tool
         {
             EndValuePreview(true);
             if (string.IsNullOrEmpty(id) || id == _recipeId && _recipe != null) return;
+            if (!SwitchRecipe(id)) return;
+            _presetLayer = ""; _presetId = "";
+            DesignChanged();
+            Commit("Placemaker.Undo.SelectRecipe");
+        }
+
+        /// <summary>Replaces the design with a fresh copy of recipe <paramref name="id"/> (area kept). No undo step.</summary>
+        private bool SwitchRecipe(string id)
+        {
             var r = _recipes.Instantiate(id, NewSeed());
-            if (r == null) { Flash(new LocText("Placemaker.Problem.UnknownRecipe")); return; }
+            if (r == null) { Flash(new LocText("Placemaker.Problem.UnknownRecipe")); return false; }
             _editor.AddDefaultFeatures(r, NewSeed);
             // Markers the player placed for the same root layer stay (switching park ↔ park+playground keeps entrances).
             bool sameRoot = _recipe != null && _recipe.Root.Layer == r.Root.Layer;
@@ -91,8 +100,7 @@ namespace Placemaker.Game.Tool
             _focus = RecipePaths.Root;
             ExitMarkerMode();
             if (_settings != null) { _settings.LastRecipe = id; _settings.ApplyAndSave(); }
-            DesignChanged();
-            Commit("Placemaker.Undo.SelectRecipe");
+            return true;
         }
 
         public void FocusStep(string path)
@@ -198,7 +206,6 @@ namespace Placemaker.Game.Tool
 
         public void ResetStep(string path) => Edit(r => _editor.ResetStep(r, path), "Placemaker.Undo.ResetLayer");
 
-        public void ApplyPreset(string path, string presetId) => Edit(r => _editor.ApplyPreset(r, path, presetId), "Placemaker.Undo.ApplyPreset");
 
         public void Randomize(string path) => Edit(r => _editor.Randomize(r, path ?? "", NewSeed()), "Placemaker.Undo.Randomize");
 

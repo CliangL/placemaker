@@ -135,13 +135,15 @@ namespace Placemaker.Core.Tool
 
         // ───────────── catalog ─────────────
 
-        public static JsonValue Catalog(IEnumerable<IAreaGenerator> generators, IEnumerable<RecipeListEntry> recipes)
+        /// <param name="presets">Preset list per type (PresetStore.ViewsFor: built-ins, overrides, customs); null = built-ins only.</param>
+        public static JsonValue Catalog(IEnumerable<IAreaGenerator> generators, IEnumerable<RecipeListEntry> recipes,
+            Func<IAreaGenerator, IReadOnlyList<PresetView>> presets = null)
         {
             var layers = JsonValue.Arr();
             foreach (var g in generators)
             {
                 if (g == null) continue;
-                try { layers.Add(Layer(g)); }
+                try { layers.Add(Layer(g, presets)); }
                 catch (Exception) { /* a broken generator must not hide the others */ }
             }
             var list = JsonValue.Arr();
@@ -156,7 +158,7 @@ namespace Placemaker.Core.Tool
             return JsonValue.Obj().Set("layers", layers).Set("recipes", list);
         }
 
-        public static JsonValue Layer(IAreaGenerator g)
+        public static JsonValue Layer(IAreaGenerator g, Func<IAreaGenerator, IReadOnlyList<PresetView>> presetViews = null)
         {
             var o = JsonValue.Obj()
                 .Set("id", g.Id ?? "")
@@ -172,16 +174,41 @@ namespace Placemaker.Core.Tool
             if (g.Controls != null) foreach (var c in g.Controls) if (c != null) controls.Add(Control(c));
             o.Set("controls", controls);
             var presets = JsonValue.Arr();
-            if (g.Presets != null)
+            IReadOnlyList<PresetView> views = null;
+            if (presetViews != null)
+            {
+                try { views = presetViews(g); } catch (Exception) { views = null; }
+            }
+            if (views != null)
+            {
+                foreach (var v in views) if (v != null) presets.Add(Preset(v));
+            }
+            else if (g.Presets != null)
                 foreach (var p in g.Presets)
                 {
                     if (p == null) continue;
-                    var po = JsonValue.Obj().Set("id", p.Id ?? "").Set("name", p.LabelKey ?? "");
-                    if (!string.IsNullOrEmpty(p.Icon)) po.Set("icon", IconPath(p.Icon));
-                    presets.Add(po);
+                    presets.Add(Preset(new PresetView { Id = p.Id ?? "", Name = p.LabelKey ?? "", Icon = p.Icon ?? "" }));
                 }
             o.Set("presets", presets);
             return o;
+        }
+
+        /// <summary>contract.ts PresetView.</summary>
+        public static JsonValue Preset(PresetView p)
+        {
+            var po = JsonValue.Obj().Set("id", p.Id ?? "").Set("name", p.Name ?? "");
+            if (!string.IsNullOrEmpty(p.Icon)) po.Set("icon", IconPath(p.Icon));
+            if (p.Custom) po.Set("custom", true);
+            if (p.Overridden) po.Set("overridden", true);
+            if (p.Custom && !string.IsNullOrEmpty(p.BasedOn)) po.Set("basedOn", p.BasedOn);
+            return po;
+        }
+
+        /// <summary>contract.ts ActivePreset.</summary>
+        public static JsonValue ActivePreset(ActivePresetInfo a)
+        {
+            a = a ?? new ActivePresetInfo();
+            return JsonValue.Obj().Set("id", a.Id ?? "").Set("layer", a.Layer ?? "").Set("modified", a.Modified).Set("canSave", a.CanSave);
         }
 
         public static string ControlKindId(ControlKind k)
@@ -245,9 +272,12 @@ namespace Placemaker.Core.Tool
         /// <param name="status">Readiness per step path (missing = ready).</param>
         /// <param name="plan">Latest finished plan (for the regions each step produced), may be null.</param>
         public static JsonValue Design(Recipe recipe, string recipeId, bool modified, string focus,
-            IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, Func<string, IAreaGenerator> generators = null)
+            IReadOnlyDictionary<string, StepStatus> status, ComposedPlan plan, Func<string, IAreaGenerator> generators = null,
+            ActivePresetInfo activePreset = null, string presetsFile = null)
         {
             var o = JsonValue.Obj().Set("recipeId", recipeId ?? "").Set("modified", modified);
+            if (activePreset != null) o.Set("activePreset", ActivePreset(activePreset));
+            if (!string.IsNullOrEmpty(presetsFile)) o.Set("presetsFile", presetsFile);
             o.Set("root", recipe?.Root != null ? Step(recipe, recipe.Root, RecipePaths.Root, status, plan, 0, generators ?? GeneratorRegistry.Get) : JsonValue.Null);
             o.Set("focus", focus ?? RecipePaths.Root);
             return o;
