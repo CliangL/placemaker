@@ -327,6 +327,9 @@ namespace Placemaker.Game.Overlay
         private ComposedPlan _filledPlan;
         private readonly Dictionary<int, List<float3[]>> _surfaceGroups = new Dictionary<int, List<float3[]>>();
         private readonly Dictionary<int, List<float3[]>> _areaGroups = new Dictionary<int, List<float3[]>>();
+        /// <summary>(s13) Texture paint preview: coarse strength bands per (material layer, level), from Core PaintRaster.</summary>
+        private readonly Dictionary<int, List<float3[]>> _paintGroups = new Dictionary<int, List<float3[]>>();
+        private const int PaintLevels = 4;
 
         private void DrawPlan(OverlayRenderSystem.Buffer buffer, float w, PreviewDetail detail)
         {
@@ -348,6 +351,7 @@ namespace Placemaker.Game.Overlay
                 try { _assetInfo = Services.Assets?.InfoMap(); } catch (Exception) { _assetInfo = null; }
                 _surfaceGroups.Clear();
                 _areaGroups.Clear();
+                BuildPaintPreview(plan);
                 foreach (var l in plan.Layers)
                 {
                     if (l == null) continue;
@@ -368,6 +372,12 @@ namespace Placemaker.Game.Overlay
                 bool paved = role == SurfaceRole.Paving || role == SurfaceRole.Plaza || role == SurfaceRole.Asphalt;
                 var edge = WithAlpha(SurfaceColor(role), 0.8f * alpha);
                 foreach (var r in kv.Value) Ring(buffer, r, edge, w * (role == SurfaceRole.Water ? 0.8f : 0.5f), dashed: paved);
+            }
+            // Texture paint: tinted strength bands (feather and gradients show as steps), no outline: it is a blend.
+            foreach (var kv in _paintGroups)
+            {
+                int layer = kv.Key / 16, level = kv.Key % 16;
+                _fill.SetLayer("paint:" + kv.Key, kv.Value, WithAlpha(PaintColor(layer), 0.32f * level / PaintLevels * fillAlpha), -93.2f, FilledPreviewSystem.Signature(kv.Value));
             }
             foreach (var kv in _areaGroups)
             {
@@ -425,6 +435,48 @@ namespace Placemaker.Game.Overlay
             {
                 if (issue?.At == null) continue;
                 buffer.DrawCircle(issue.Severity == IssueSeverity.Error ? Error : Warning, new Color(1f, 0f, 0f, 0.15f), w, 0, new float2(0, 1), issue.At.Value, w * 14f);
+            }
+        }
+
+        /// <summary>
+        /// Rasterises the plan's texture paints coarsely (4 m cells, bounded budget: this runs on the main thread once
+        /// per plan) and groups the cells into rectangles per material and strength level.
+        /// </summary>
+        private void BuildPaintPreview(ComposedPlan plan)
+        {
+            _paintGroups.Clear();
+            var paints = new List<PlannedPaint>();
+            foreach (var l in plan.Layers)
+                if (l?.Paint != null)
+                    foreach (var p in l.Paint) if (p?.Ring != null && p.Ring.Length >= 3) paints.Add(p);
+            if (paints.Count == 0) return;
+            try
+            {
+                var stamps = PaintRaster.Build(paints, new PaintRasterOptions { Cell = 2f, Align = 2f, TileCells = 256, MaxStamps = 64, MaxCells = 1 << 18, MaxCell = 16f });
+                foreach (var (layer, level, ring) in PaintRaster.PreviewRects(stamps, PaintLevels, 4f, 3000))
+                {
+                    var r3 = new float3[ring.Length];
+                    for (int i = 0; i < ring.Length; i++) r3[i] = new float3(ring[i].x, 0f, ring[i].y);
+                    Group(_paintGroups, layer * 16 + level).Add(r3);
+                }
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker paint preview failed: " + e.Message);
+                _paintGroups.Clear();
+            }
+        }
+
+        /// <summary>Preview tint of the vanilla terrain materials (TerrainMaterials: 1 Dry, 2 Lush, 3 Dirt, 4 Sand; 0 erase).</summary>
+        private static Color PaintColor(int layer)
+        {
+            switch (layer)
+            {
+                case 1: return new Color(0.80f, 0.74f, 0.50f, 1f);
+                case 2: return new Color(0.42f, 0.66f, 0.30f, 1f);
+                case 3: return new Color(0.55f, 0.40f, 0.27f, 1f);
+                case 4: return new Color(0.98f, 0.86f, 0.55f, 1f);
+                default: return new Color(0.70f, 0.80f, 0.60f, 1f);
             }
         }
 

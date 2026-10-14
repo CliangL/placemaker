@@ -90,6 +90,12 @@
   "Placemaker.Waterfront.shopLayout.pads": "Pads",
   "Placemaker.Waterfront.shopDepth": "Shop depth",
   "Placemaker.Waterfront.shopDepth.Tooltip": "How deep the zoned band reaches into the area (whole 8 m cells).",
+  "Placemaker.Waterfront.shoreTexture": "Shore texture",
+  "Placemaker.Waterfront.shoreTexture.Tooltip": "Paint a soft sand or dirt band into the terrain at the water’s edge (permanent). Automatic: sand for promenades and piers, dirt for fishing banks, none for quays.",
+  "Placemaker.Waterfront.shoreTexture.auto": "Automatic",
+  "Placemaker.Waterfront.shoreTexture.sand": "Sand",
+  "Placemaker.Waterfront.shoreTexture.dirt": "Dirt",
+  "Placemaker.Waterfront.shoreTexture.none": "None",
 
   "Placemaker.Waterfront.Preset.promenade": "Promenade",
   "Placemaker.Waterfront.Preset.pier": "Pier & boardwalk",

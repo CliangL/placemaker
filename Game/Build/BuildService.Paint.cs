@@ -1,19 +1,25 @@
 // Placemaker — terrain texture painting (PlannedPaint) (GPL-3.0).
 //
-// CS2 (decompiled 1.6.2f1): a TerraformingPrefab with m_Target = TerraformingTarget.Material and a
-// TerrainMaterialProperties component (m_Type = Extra1..Extra4, None = erase) is the terrain material
-// brush. A BrushDefinition with that tool → GenerateBrushesSystem → Temp Brush (for Material the
-// strength is passed through unchanged) → on Apply, ApplyBrushesSystem calls
-// TerrainMaterialSystem.ApplyBrush, which blits the BrushPrefab texture into the user splatmaps
-// (4096² playable + 1024² world, R8G8) that TerrainMaterialSystem serializes with the save. The four
-// extra layers are textured by the map's terrain material (colossal_TerrainExtra1..4Diffuse), so the
-// look per layer is map dependent; the base grass/dirt/rock stays procedural (height/slope).
+// CS2 (decompiled 1.6.2f1): the vanilla "Paint texture" tool is TerrainToolSystem with a TerraformingPrefab whose
+// m_Target = TerraformingTarget.Material and whose TerrainMaterialProperties.m_Type is Extra1..Extra4 (None =
+// "Texture Eraser"); prefabs "Terrain Material Extra 1..4" / "Terrain Material Clear", on vanilla maps Dry grass,
+// Lush grass, Dirt, Sand. On Apply, ApplyBrushesSystem calls the public TerrainMaterialSystem.ApplyBrush(Brush,
+// brushPrefab), which dispatches the PaintSplatmap compute shader ("PaintDither"/"EraseDither") on the user
+// splatmaps (4096² R8G8 over the playable area, 1024² over the world; both saved with the city) with
+// _BrushTexture = BrushPrefab.m_Texture mapped on the square brush.m_Position ± m_Size/2 and _BrushOpacity =
+// brush.m_Strength. So a per-texel strength field is ONE call per square stamp with a generated mask texture.
 //
-// The build paints in one Apply frame right after terraform (before nets), with the same invisible
-// build tool, so it never mixes with other temporaries. Painting is permanent (not undone on removal).
+// What the build does (s13): Core PaintRaster turns every PlannedPaint (ring + feather + noise + gradient) into
+// world-aligned square stamps (one grid per material layer, merged by max) on a worker thread; the build then
+// applies at most one stamp per frame (each ≤ 512² texels, a 1 MB RGBA32 upload) with the resolved brush prefab's
+// m_Texture swapped for the stamp mask during the call. Exactly once per build: the Paint step runs only from the
+// terraform step, never on retries (ResetForRetry → EmitNets), and _paintStarted guards re-entry. Painting is
+// permanent (not undone when the group is removed). If the raster fails, the old per-ring brush dabs run.
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Colossal.Mathematics;
 using Game.Common;
 using Game.Prefabs;
@@ -44,14 +50,58 @@ namespace Placemaker.Game.Build
         private struct PaintDab { public Entity Tool; public float3 At; public float Strength; }
         private readonly List<PaintDab> _paintDabs = new List<PaintDab>();
         private int _paintCursor;
-        // Frame budget for texture painting (a big area can need thousands of dabs).
+        // Frame budget for the fallback dabs (a big area can need thousands).
         private const int MaxPaintDabsPerFrame = 96;
 
-        /// <summary>Collect every paint dab once, then emit them in frame-budgeted waves (apply each wave).</summary>
+        // ── direct stamps ──
+        private const int PaintStampTexels = 512;            // stamp side cap: ≤ 1 MB upload per frame
+        private const int PaintMaxStamps = 48;
+        private const double PaintRasterTimeoutSeconds = 15.0;
+        private const int PaintSettleFrames = 2;              // GPU work done before the textures go
+        private Task<List<PaintStamp>> _paintJob;
+        private CancellationTokenSource _paintCancel;
+        private DateTime _paintJobStart;
+        private List<PaintStamp> _paintStamps;
+        private int _paintStampCursor, _paintLastApplyFrame;
+        private bool _paintStarted, _paintDabsMode;
+        private readonly List<UnityEngine.Texture2D> _paintTextures = new List<UnityEngine.Texture2D>();
+
+        /// <summary>Called from ResetTerraform (every transaction reset / cancel).</summary>
+        private void ResetPaint()
+        {
+            try { _paintCancel?.Cancel(); } catch (Exception) { }
+            _paintCancel?.Dispose();
+            _paintCancel = null;
+            _paintJob = null;
+            _paintStamps = null;
+            _paintStampCursor = 0;
+            _paintStarted = false;
+            _paintDabsMode = false;
+            DestroyPaintTextures();
+        }
+
+        private void DestroyPaintTextures()
+        {
+            foreach (var t in _paintTextures) if (t != null) UnityEngine.Object.Destroy(t);
+            _paintTextures.Clear();
+        }
+
+        private List<PlannedPaint> AllPaints()
+        {
+            var list = new List<PlannedPaint>();
+            foreach (var l in _request.Plan.Layers)
+                if (l?.Paint != null)
+                    foreach (var p in l.Paint) if (p?.Ring != null && p.Ring.Length >= 3) list.Add(p);
+            return list;
+        }
+
         private void DoPaint(int frame)
         {
             if (frame == _stepFrame)
             {
+                // Exactly once per build: a second entry (should never happen) must not paint (dither) again.
+                if (_paintStarted) { Go(Step.EmitNets); return; }
+                _paintStarted = true;
                 DiscardTerraformBrushes();
                 _paintDabs.Clear();
                 _paintCursor = 0;
@@ -62,34 +112,156 @@ namespace Placemaker.Game.Build
                     Go(Step.EmitNets);
                     return;
                 }
-                _paintDirect = false;
-                try { _paintDirect = PaintDirect(); }
-                catch (Exception e) { Mod.Log.Warn("Placemaker direct terrain painting failed, using brush dabs: " + e.Message); }
-                if (_paintDirect) return;
-                _heightsValid = false;
-                foreach (var l in _request.Plan.Layers)
-                {
-                    if (l?.Paint == null) continue;
-                    foreach (var paint in l.Paint)
-                    {
-                        if (paint?.Ring == null || paint.Ring.Length < 3) continue;
-                        if (!_paintTools.TryGetValue(math.clamp(paint.Layer, 0, 4), out var tool)) continue;
-                        var ring = new float2[paint.Ring.Length];
-                        for (int i = 0; i < ring.Length; i++) ring[i] = paint.Ring[i].xz;
-                        foreach (var q in TerraformDabs.Dabs(ring, PaintBrushRadius))
-                            _paintDabs.Add(new PaintDab { Tool = tool, At = new float3(q.x, Height(q), q.y), Strength = math.saturate(paint.Strength) });
-                    }
-                }
-                if (_paintDabs.Count == 0) { Go(Step.EmitNets); return; }
-                Mod.Log.Info($"Placemaker paints the terrain with {_paintDabs.Count} brush dabs.");
-            }
-            if (_paintDirect)
-            {
-                // Applied in the first frame; give the GPU a frame before the textures may go.
-                SetProgress(0.2f);
-                if (frame - _stepFrame >= 2) Go(Step.EmitNets);
+                var paints = AllPaints();
+                if (paints.Count == 0) { Go(Step.EmitNets); return; }
+                // One splatmap texel (14336 m / 4096 = 3.5 m on vanilla maps): grid aligned to it, cells half a texel.
+                float texel = 3.5f;
+                try { var area = _terrain.playableArea; if (area.x > 1f) texel = area.x / 4096f; } catch (Exception) { }
+                var opts = new PaintRasterOptions { Cell = texel * 0.5f, Align = texel, TileCells = PaintStampTexels, MaxStamps = PaintMaxStamps };
+                _paintCancel = new CancellationTokenSource();
+                opts.Cancel = _paintCancel.Token;
+                _paintJobStart = DateTime.UtcNow;
+                _paintJob = Task.Run(() => PaintRaster.Build(paints, opts));
                 return;
             }
+
+            if (_paintDabsMode) { PaintDabsFrame(frame); return; }
+
+            if (_paintStamps == null)
+            {
+                if (_paintJob == null) { Go(Step.EmitNets); return; }
+                if (!_paintJob.IsCompleted)
+                {
+                    SetProgress(0.18f);
+                    if ((DateTime.UtcNow - _paintJobStart).TotalSeconds > PaintRasterTimeoutSeconds)
+                    {
+                        _paintCancel?.Cancel();
+                        Mod.Log.Warn("Placemaker terrain paint raster timed out; texture painting skipped.");
+                        _warnings.Add("Placemaker.Build.PaintUnavailable");
+                        Go(Step.EmitNets);
+                    }
+                    return;
+                }
+                if (_paintJob.IsFaulted || _paintJob.IsCanceled)
+                {
+                    Mod.Log.Warn("Placemaker terrain paint raster failed, using brush dabs: " + _paintJob.Exception?.GetBaseException().Message);
+                    BeginPaintDabs();
+                    return;
+                }
+                _paintStamps = _paintJob.Result ?? new List<PaintStamp>();
+                _paintStampCursor = 0;
+                _paintLastApplyFrame = frame;
+                Mod.Log.Info($"Placemaker paints the terrain: {_paintStamps.Count} stamps, {PaintRaster.PaintedArea(_paintStamps):0} m² (orientation {(s_shiftOrientation >= 0 ? s_shiftOrientation : 0)}).");
+            }
+
+            if (_paintStampCursor < _paintStamps.Count)
+            {
+                // One stamp per frame: a stamp is ≤ 512² texels, so the upload + dispatch stays in the low milliseconds.
+                var stamp = _paintStamps[_paintStampCursor++];   // advanced first: a stamp that throws is never retried (no double dither)
+                try { ApplyStamp(stamp); }
+                catch (Exception e)
+                {
+                    Mod.Log.Warn("Placemaker direct terrain painting failed: " + e.Message);
+                    if (_paintStampCursor == 1) { BeginPaintDabs(); return; }   // nothing painted yet: the dabs can still do it
+                    _warnings.Add("Placemaker.Build.PaintUnavailable");
+                    _paintStampCursor = _paintStamps.Count;
+                }
+                _paintLastApplyFrame = frame;
+                SetProgress(0.18f + 0.02f * (_paintStampCursor / (float)math.max(1, _paintStamps.Count)));
+                return;
+            }
+            if (frame - _paintLastApplyFrame < PaintSettleFrames) return;
+            DestroyPaintTextures();
+            Go(Step.EmitNets);
+        }
+
+        /// <summary>
+        /// Blits one stamp: the brush prefab's texture is swapped for the stamp mask during the call (ApplyBrush reads
+        /// BrushPrefab.m_Texture and executes its command buffer inside the call). Strength lives in the mask.
+        /// </summary>
+        private void ApplyStamp(PaintStamp stamp)
+        {
+            if (!_paintTools.TryGetValue(math.clamp(stamp.Layer, 0, 4), out var tool)) return;
+            if (!_prefabs.TryGetPrefab<BrushPrefab>(_brushPrefab, out var brushPrefab) || brushPrefab == null)
+                throw new InvalidOperationException("brush prefab missing");
+            var materials = World.GetOrCreateSystemManaged<global::Game.Rendering.TerrainMaterialSystem>();
+            if (materials == null) throw new InvalidOperationException("TerrainMaterialSystem missing");
+            int orientation = s_shiftOrientation >= 0 ? s_shiftOrientation : 0;
+            var tex = StampTexture(stamp, (orientation & 1) != 0, (orientation & 2) != 0);
+            var c = stamp.Center;
+            float h = Height(c);
+            var brush = new Brush
+            {
+                m_Tool = tool,
+                m_Position = new float3(c.x, h, c.y),
+                m_Target = new float3(c.x, h, c.y),
+                m_Start = new float3(c.x, h, c.y),
+                m_Angle = 0f,
+                m_Size = stamp.Size,
+                m_Strength = 1f,
+                m_Opacity = 1f,
+            };
+            var original = brushPrefab.m_Texture;
+            try
+            {
+                brushPrefab.m_Texture = tex;
+                materials.ApplyBrush(brush, _brushPrefab);
+            }
+            finally
+            {
+                brushPrefab.m_Texture = original;
+            }
+        }
+
+        /// <summary>RGBA32 mask (all channels = strength), row 0 = min z; flips per the calibrated brush orientation.</summary>
+        private UnityEngine.Texture2D StampTexture(PaintStamp s, bool flipX, bool flipY)
+        {
+            int n = s.N;
+            var tex = new UnityEngine.Texture2D(n, n, UnityEngine.TextureFormat.RGBA32, false, true)
+            {
+                wrapMode = UnityEngine.TextureWrapMode.Clamp,
+                filterMode = UnityEngine.FilterMode.Bilinear,
+                name = "PlacemakerPaintMask",
+            };
+            var bytes = new byte[n * n * 4];
+            for (int y = 0; y < n; y++)
+            {
+                int ty = flipY ? n - 1 - y : y;
+                for (int x = 0; x < n; x++)
+                {
+                    byte v = (byte)math.clamp((int)math.round(s.Mask[y * n + x] * 255f), 0, 255);
+                    if (v == 0) continue;
+                    int o = (ty * n + (flipX ? n - 1 - x : x)) * 4;
+                    bytes[o] = bytes[o + 1] = bytes[o + 2] = bytes[o + 3] = v;
+                }
+            }
+            tex.LoadRawTextureData(bytes);
+            tex.Apply(false, false);
+            _paintTextures.Add(tex);
+            return tex;
+        }
+
+        // ───────────────────────── fallback: brush dabs ─────────────────────────
+
+        private void BeginPaintDabs()
+        {
+            _paintDabsMode = true;
+            _heightsValid = false;
+            _paintDabs.Clear();
+            _paintCursor = 0;
+            foreach (var paint in AllPaints())
+            {
+                if (!_paintTools.TryGetValue(math.clamp(paint.Layer, 0, 4), out var tool)) continue;
+                var ring = new float2[paint.Ring.Length];
+                for (int i = 0; i < ring.Length; i++) ring[i] = paint.Ring[i].xz;
+                foreach (var q in TerraformDabs.Dabs(ring, PaintBrushRadius))
+                    _paintDabs.Add(new PaintDab { Tool = tool, At = new float3(q.x, Height(q), q.y), Strength = math.saturate(paint.Strength) });
+            }
+            Mod.Log.Info($"Placemaker paints the terrain with {_paintDabs.Count} brush dabs (fallback).");
+        }
+
+        private void PaintDabsFrame(int frame)
+        {
             // One wave per two frames: emit + apply, then discard on the next frame.
             if (((frame - _stepFrame) & 1) == 1) { DiscardTerraformBrushes(); return; }
             if (_paintCursor >= _paintDabs.Count)
@@ -104,78 +276,6 @@ namespace Placemaker.Game.Build
             _paintCursor = end;
             _tool.Requested = ApplyMode.Apply;
             SetProgress(0.18f + 0.02f * (_paintCursor / (float)_paintDabs.Count));
-        }
-
-        private bool _paintDirect;
-        private const float PaintCell = 1.75f;
-        private const float PaintEdge = 3f;          // soft edge width (m)
-        private const int PaintMaxTexels = 1024;
-
-        /// <summary>
-        /// Paints every PlannedPaint with ONE TerrainMaterialSystem.ApplyBrush call: the material brush
-        /// blits BrushPrefab.m_Texture, so the resolved brush prefab's texture is swapped for a
-        /// generated soft-edged coverage mask of the polygon for the duration of the call (the command
-        /// buffer is executed inside the call). No brush entities, no previews, one frame.
-        /// </summary>
-        private bool PaintDirect()
-        {
-            if (!_prefabs.TryGetPrefab<BrushPrefab>(_brushPrefab, out var brushPrefab) || brushPrefab == null) return false;
-            var materials = World.GetOrCreateSystemManaged<global::Game.Rendering.TerrainMaterialSystem>();
-            if (materials == null) return false;
-            int orientation = s_shiftOrientation >= 0 ? s_shiftOrientation : 0;
-            bool flipX = (orientation & 1) != 0, flipY = (orientation & 2) != 0;
-            int painted = 0;
-            var original = brushPrefab.m_Texture;
-            try
-            {
-                foreach (var l in _request.Plan.Layers)
-                {
-                    if (l?.Paint == null) continue;
-                    foreach (var paint in l.Paint)
-                    {
-                        if (paint?.Ring == null || paint.Ring.Length < 3) continue;
-                        if (!_paintTools.TryGetValue(math.clamp(paint.Layer, 0, 4), out var tool)) continue;
-                        var ring = new float2[paint.Ring.Length];
-                        float2 min = float.MaxValue, max = float.MinValue;
-                        for (int i = 0; i < ring.Length; i++) { ring[i] = paint.Ring[i].xz; min = math.min(min, ring[i]); max = math.max(max, ring[i]); }
-                        float side = math.cmax(max - min) + PaintEdge * 2f + PaintCell * 2f;
-                        float cell = math.max(PaintCell, side / PaintMaxTexels);
-                        int n = math.max(4, (int)math.ceil(side / cell));
-                        side = n * cell;
-                        float2 center = (min + max) * 0.5f;
-                        float2 origin = center - side * 0.5f;
-                        var cover = TerraformRaster.Coverage(ring, origin, cell, n, n, PaintEdge);
-                        var mask = new float[n * n];
-                        for (int y = 0; y < n; y++)
-                            for (int x = 0; x < n; x++)
-                                mask[(flipY ? n - 1 - y : y) * n + (flipX ? n - 1 - x : x)] = cover[y * n + x];
-                        var tex = MaskTexture(mask, n, 1f);
-                        float h = Height(center);
-                        var brush = new Brush
-                        {
-                            m_Tool = tool,
-                            m_Position = new float3(center.x, h, center.y),
-                            m_Target = new float3(center.x, h, center.y),
-                            m_Start = new float3(center.x, h, center.y),
-                            m_Angle = 0f,
-                            m_Size = side,
-                            m_Strength = math.saturate(paint.Strength),
-                            m_Opacity = 1f,
-                        };
-                        brushPrefab.m_Texture = tex;
-                        materials.ApplyBrush(brush, _brushPrefab);
-                        brushPrefab.m_Texture = original;
-                        painted++;
-                    }
-                }
-            }
-            finally
-            {
-                brushPrefab.m_Texture = original;
-            }
-            if (painted == 0) return false;
-            Mod.Log.Info($"Placemaker painted {painted} terrain areas directly (orientation {orientation}).");
-            return true;
         }
 
         private void EmitPaintBrush(Entity tool, float3 position, float strength)
@@ -209,6 +309,7 @@ namespace Placemaker.Game.Build
             }
             if (_allPrefabs == default) _allPrefabs = GetEntityQuery(ComponentType.ReadOnly<PrefabData>());
             using var prefabs = _allPrefabs.ToEntityArray(Allocator.Temp);
+            var names = new List<string>();
             for (int i = 0; i < prefabs.Length; i++)
             {
                 if (!_prefabs.TryGetPrefab<PrefabBase>(prefabs[i], out var prefab) || !(prefab is TerraformingPrefab tf)) continue;
@@ -223,10 +324,10 @@ namespace Placemaker.Game.Build
                     case TerrainMaterialType.Extra4: layer = 4; break;
                     default: continue;
                 }
-                if (!_paintTools.ContainsKey(layer)) _paintTools[layer] = prefabs[i];
+                if (!_paintTools.ContainsKey(layer)) { _paintTools[layer] = prefabs[i]; names.Add(layer + "=" + tf.name); }
             }
             if (_paintTools.Count > 0)
-                Mod.Log.Info($"Placemaker terrain paint layers available: {string.Join(", ", _paintTools.Keys)}.");
+                Mod.Log.Info($"Placemaker terrain paint layers available: {string.Join(", ", names)}.");
             return _paintTools.Count > 0;
         }
     }

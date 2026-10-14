@@ -396,6 +396,40 @@ namespace Placemaker.Gallery
 
         // ─── palette ───
 
+        /// <summary>Vanilla terrain material colours (TerrainMaterials 1 Dry, 2 Lush, 3 Dirt, 4 Sand); 0 = erase.</summary>
+        private static Rgba PaintColor(int layer)
+        {
+            switch (layer)
+            {
+                case 1: return Rgba.Hex("#c8bd86");
+                case 2: return Rgba.Hex("#6f9e4f");
+                case 3: return Rgba.Hex("#8a6a4c");
+                case 4: return Rgba.Hex("#ecd9a6");
+                default: return Rgba.Hex("#b9c9a0");
+            }
+        }
+
+        private static void DrawPaint(Canvas cv, ComposedPlan plan, float2 min, float2 max)
+        {
+            var paints = plan.Layers.Where(l => l != null).SelectMany(l => l.Paint).Where(p => p?.Ring != null && p.Ring.Length >= 3).ToList();
+            if (paints.Count == 0) return;
+            var stamps = PaintRaster.Build(paints, new PaintRasterOptions { Cell = 1f, Align = 1f, TileCells = 2048 });
+            float wz = _waterZ;
+            foreach (var s in stamps)
+            {
+                var c = PaintColor(s.Layer);
+                var smin = s.Min; var smax = s.Min + s.Size;
+                cv.Shade(p =>
+                {
+                    float v = s.Sample(p);
+                    if (v < 0.02f) return default;
+                    float a = 0.92f * v;
+                    if (!float.IsNaN(wz) && p.y < wz) a *= 0.45f;
+                    return c.WithA(a);
+                }, math.max(min, smin), math.min(max, smax));
+            }
+        }
+
         private static readonly Rgba Ground = Rgba.Hex("#ece8dd");
         private static readonly Rgba Outside = Rgba.Hex("#d9d6ce");
 
@@ -578,6 +612,10 @@ namespace Placemaker.Gallery
                 }, min, max);
             }
 
+            // Terrain texture paint (s13): the real per-point strength field the game paints (PaintRaster stamps: feather,
+            // gradient, edge noise), in the vanilla material colours, alpha = strength; fainter under water.
+            DrawPaint(cv, plan, min, max);
+
             // Surfaces: translucent fill + crisp darker outline; paved surfaces one stone tone per paving asset.
             var tones = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var l in plan.Layers)
@@ -599,14 +637,8 @@ namespace Placemaker.Gallery
                 }
                 foreach (var t in l.Terraform)
                     if (t?.Ring != null && t.Ring.Length >= 3)
-                        cv.DashedPolyline(Close(t.Ring.Select(p => p.xz).ToArray()), cv.Px(1.2f), 3f, 2f, t.Permanent ? Rgba.Hex("#d08a00") : Rgba.Hex("#4f86c6"));
+                        cv.DashedPolyline(Close(t.Ring.Select(p => p.xz).ToArray()), cv.Px(1f), 3f, 2f, t.Permanent ? Rgba.Hex("#d08a00", 0.35f) : Rgba.Hex("#4f86c6", 0.5f));
             }
-
-            // Terrain paint (rocky outcrops, natural ground): grey-brown, alpha by brush strength.
-            foreach (var l in plan.Layers.Where(l => l != null))
-                foreach (var p in l.Paint)
-                    if (p?.Ring != null && p.Ring.Length >= 3)
-                        cv.FillPolygon(p.Ring.Select(v => v.xz).ToArray(), Rgba.Hex("#8a8172", 0.15f + 0.45f * p.Strength));
 
             // Nets: edges at real width first (so junctions merge), then fill, then a thin centre line.
             var nets = plan.Layers.Where(l => l != null).SelectMany(l => l.Nets).Where(n => n != null).ToList();

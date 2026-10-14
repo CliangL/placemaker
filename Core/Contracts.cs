@@ -596,18 +596,53 @@ namespace Placemaker.Core
 
     /// <summary>
     /// (gamebuild round 4, proposal) Terrain texture painting: CS2's terrain material brush paints one of the
-    /// map's four extra terrain layers (TerrainMaterialType Extra1..Extra4 — which texture each is depends on
-    /// the map's terrain material, typically e.g. dirt/sand/rock variants) into the user splatmap, which is
+    /// map's four extra terrain layers (TerrainMaterialType Extra1..Extra4 — on vanilla maps Dry grass, Lush
+    /// grass, Dirt, Sand; see <see cref="TerrainMaterials"/>) into the user splatmap, which is
     /// saved with the city. Layer 0 erases back to the procedural grass/dirt/rock. Permanent: removing the
     /// group does not unpaint (like terraform).
     /// </summary>
     public sealed class PlannedPaint
     {
         public float3[] Ring = Array.Empty<float3>();   // footprint
-        /// <summary>1..4 = Extra1..Extra4, 0 = erase.</summary>
+        /// <summary>1..4 = Extra1..Extra4, 0 = erase. Vanilla maps: see <see cref="TerrainMaterials"/> (1 Dry, 2 Lush, 3 Dirt, 4 Sand).</summary>
         public int Layer = 1;
         /// <summary>Brush strength 0..1 (1 = fully painted).</summary>
         public float Strength = 1f;
+
+        // ── s13: texture fields (all optional; defaults = the round-4 behaviour) ──
+        // The game paints a per-texel strength mask (Core/Build/PaintRaster), so a paint is a FIELD, not a flat
+        // polygon: strength(p) = Strength × edge(p) × gradient(p). See RESEARCH-NOTES-ADDENDUM "Terrain texture painting".
+
+        /// <summary>Soft edge inside the ring (m): 0 at the ring, full strength this far inside (smoothstep). 0 = legacy ±1.5 m edge on the ring.</summary>
+        public float Feather;
+        /// <summary>Edge noise (m): value noise pulls the feathered edge (and shifts the gradient) by up to 2× this, so edges read natural. Never paints outside the ring.</summary>
+        public float Noise;
+        /// <summary>Noise feature size (m); 0 = 8 m.</summary>
+        public float NoiseScale;
+        public uint Seed;
+        /// <summary>
+        /// Optional gradient source (xz polyline, e.g. the waterline): full strength within <see cref="GradientFull"/> m of it,
+        /// then fading over <see cref="GradientFade"/> m to <see cref="GradientMin"/> × Strength. Null = uniform.
+        /// </summary>
+        public float2[] GradientFrom;
+        public float GradientFull;
+        public float GradientFade;
+        public float GradientMin;
+    }
+
+    /// <summary>
+    /// The terrain texture layers of CS2's "Paint texture" tool (TerraformingPrefabs "Terrain Material Extra 1..4" and
+    /// "Terrain Material Clear"). The four textures come from the map's TerrainRenderSettingsPrefab; on vanilla maps they
+    /// are Dry grass, Lush grass, Dirt and Sand (localised tool names "Material Dry/Lush/Dirt/Sand"). There is no rock
+    /// material: rock is procedural (slope). Custom maps may ship other textures in the same slots.
+    /// </summary>
+    public static class TerrainMaterials
+    {
+        public const int Erase = 0;
+        public const int Dry = 1;
+        public const int Lush = 2;
+        public const int Dirt = 3;
+        public const int Sand = 4;
     }
 
     public sealed class PlannedZoning

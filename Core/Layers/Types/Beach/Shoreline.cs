@@ -61,6 +61,84 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         public bool IsWet(float2 p) => _depthAt(p) > WetDepth;
 
+        /// <summary>Signed distance from the shore polyline: negative on the water side of the land (foreshore).</summary>
+        public float SignedDepth(float2 p, float cap = 2000f)
+        {
+            float d = Depth(p, cap);
+            return Land.Contains(p) ? d : -d;
+        }
+
+        // ───────────── foreshore (s13) ─────────────
+
+        /// <summary>Probed water edge points (filled by <see cref="Foreshore"/>), in chain order.</summary>
+        public List<float2> Waterline = new List<float2>();
+
+        /// <summary>
+        /// The strip between the land's shore edge and the real water, outside the land, so sand can actually meet
+        /// the water: a player never draws exactly on the waterline, and the gap (often a steep grassy/rocky bank) is
+        /// what made the beach look unfinished. Every chain point probes seawards (1 m steps, up to
+        /// <paramref name="reach"/> m) for the first wet sample; the strip ends <paramref name="intoWater"/> m past
+        /// it. No water found (assumed shore) or farther than <paramref name="reach"/> → no strip there. Simple CCW
+        /// rings (overlapping the land by 0.3 m so no sliver gap remains); also fills <see cref="Waterline"/>.
+        /// </summary>
+        public List<float2[]> Foreshore(float reach, float intoWater)
+        {
+            var result = new List<float2[]>();
+            Waterline = new List<float2>();
+            if (Chain == null || Chain.Length < 2 || Mode == ShoreMode.Assumed) return result;
+            int n = Chain.Length;
+            var w = new float[n];
+            bool any = false;
+            for (int i = 0; i < n; i++)
+            {
+                var o = -Inward[i];
+                w[i] = -1f;
+                for (float r = 0.5f; r <= reach; r += 1f)
+                    if (IsWet(Chain[i] + o * r)) { w[i] = r; break; }
+                if (w[i] >= 0f) { any = true; Waterline.Add(Chain[i] + o * w[i]); }
+            }
+            if (!any) return result;
+            // Smooth the widths (only between found points) so the strip edge is calm.
+            for (int pass = 0; pass < 3; pass++)
+            {
+                var t = (float[])w.Clone();
+                for (int i = 0; i < n; i++)
+                {
+                    if (w[i] < 0f) continue;
+                    float s = w[i] * 2f, c = 2f;
+                    if (i > 0 && w[i - 1] >= 0f) { s += w[i - 1]; c += 1f; }
+                    if (i + 1 < n && w[i + 1] >= 0f) { s += w[i + 1]; c += 1f; }
+                    t[i] = s / c;
+                }
+                w = t;
+            }
+            int k = 0;
+            while (k < n)
+            {
+                if (w[k] < 0f) { k++; continue; }
+                int a = k;
+                while (k < n && w[k] >= 0f) k++;
+                int b = k - 1;
+                if (b - a < 1) continue;
+                var ring = new List<float2>();
+                for (int i = a; i <= b; i++) ring.Add(Chain[i] + Inward[i] * 0.3f);
+                for (int i = b; i >= a; i--) ring.Add(Chain[i] - Inward[i] * (w[i] + intoWater));
+                try
+                {
+                    var clean = Poly.Clean(ring, 0.3f);
+                    if (clean.Length < 3) continue;
+                    foreach (var r in Poly.UnionAll(new[] { (IReadOnlyList<float2>)clean }))
+                        foreach (var piece in Poly.CutHoles(r, 0.5f))
+                        {
+                            var c = Poly.Clean(piece, 0.3f);
+                            if (c.Length >= 3 && Poly.Area(c) > 4f) result.Add(c);
+                        }
+                }
+                catch (Exception) { }
+            }
+            return result;
+        }
+
         // ───────────── analysis ─────────────
 
         /// <summary>
