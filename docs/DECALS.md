@@ -173,14 +173,16 @@ Decals stay ON by default (Decals 100 %, the Decals feature as before); the art 
 ## s28: really see-through, fewer, no clashing colours
 
 - **Why s23's copies never got lighter** (RESEARCH-NOTES-ADDENDUM 85): the pack decals use the DefaultDecal shader graph,
-  which reads  as a vector (w = alpha) plus  / ; s23 scaled   and a  colour, which that material ignores.  now scales the vector's w and the normal
-  and metallic opacities, prewarms copies while the preview resolves, and logs  and, per build, .
+  which reads `_BaseColor` as a vector (w = alpha) plus `_NormalOpacity` / `_MetallicOpacity`; s23 scaled `_DecalBlend`
+  and a `_BaseColor` colour, which that material ignores. `DecalOpacitySystem` now scales the vector's w and the normal
+  and metallic opacities, prewarms copies while the preview resolves, and logs `decal opacity: made N see-through copies
+  (tiers …)` and, per build, `decal opacity: used N see-through decals, M at full strength (why)`.
 - **Tiers** 10/15/25/35/50/100 %. Most pools 10 %, wear, stones, glass and wrack 15 %, sand dust and wet sand 25 %; the
   Decals feature's themes 10–15 %. Parking oil rarer and fainter; leaf litter sparser, brown/green only.
 - **Colour** (screenshot 58: orange-brown discs at junctions and under lamps on a green lawn, a dark splotch on a light
   path). A soft filter, not a colour-matching engine (lead: hyper-transparent and fewer first): every pool has a host
-  ground (: lawn, paving, asphalt, sand, dirt) and an automatic pick must not clearly clash with it
-  (: the texture's measured mean colour, , 723 decals, against the host colour —
+  ground (`DecalPools.Spec.Host`: lawn, paving, asphalt, sand, dirt) and an automatic pick must not clearly clash with it
+  (`DecalColours.NoClash`: the texture's measured mean colour, `DecalColours.g.cs`, 723 decals, against the host colour —
   chroma distance ≤ 30, at most 60 darker (any darker on asphalt), at most 45 brighter; sparse specks under 10 % coverage
   and decals with no measurement pass). The Decals feature's leaves/dirt/cracks/puddles/litter themes use the same check.
   Lawn wear is grass-tone (moss, weeds, wet-grass effects), never the brown Ground Dirt discs; dressing pools no longer
