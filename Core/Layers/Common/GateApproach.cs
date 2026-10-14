@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using Placemaker.Core.Geometry;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Common
@@ -40,6 +41,28 @@ namespace Placemaker.Core.Layers.Common
             if (near <= 1f) return new List<float2> { gate };
 
             bool Ok(float2 p, float2 q) => !region.CrossesBoundary(p, q, true) && (clear == null || clear(p, q));
+            // A leg must not cross the network before its own end, nor run alongside a path (within 2.5 m)
+            // before its last few metres.
+            bool Free(float2 p, float2 q)
+            {
+                float len = math.distance(p, q);
+                if (len < 1.5f) return true;
+                var dir = (q - p) / len;
+                var s0 = p; var s1 = q - dir * 1.2f;
+                foreach (var (a, b) in spine)
+                {
+                    if (Poly.SegmentsIntersect(s0, s1, a, b)) return false;
+                    if (SegmentIndex.DistSq(a, s0, s1) < 0.09f || SegmentIndex.DistSq(b, s0, s1) < 0.09f) return false;
+                }
+                for (float s = 1f; s < len - 4f; s += 1f)
+                {
+                    var x = p + dir * s;
+                    foreach (var (a, b) in spine)
+                        if (SegmentIndex.DistSq(q, a, b) > 0.0025f && SegmentIndex.DistSq(x, a, b) < 6.25f) return false;   // the host itself is fine
+
+                }
+                return true;
+            }
 
             // 0. A network end straight in front of the gate (an axis aimed at it): extend that end to the gate.
             float bestEnd = float.MaxValue; float2 end = default;
@@ -48,7 +71,7 @@ namespace Placemaker.Core.Layers.Common
                 {
                     var v = e - gate;
                     float along = math.dot(v, n), lateral = math.abs(v.x * n.y - v.y * n.x);
-                    if (along > 0.5f && lateral < 1f && along < bestEnd && Ok(gate + n * 0.05f, e)) { bestEnd = along; end = e; }
+                    if (along > 0.5f && lateral < 1f && along < bestEnd && Ok(gate + n * 0.05f, e) && Free(gate, e)) { bestEnd = along; end = e; }
                 }
 
             // 1. Straight in along the normal: first crossing with the network.
@@ -59,16 +82,18 @@ namespace Placemaker.Core.Layers.Common
             if (bestT < float.MaxValue)
             {
                 var hit = gate + n * bestT;
-                if (Ok(gate + n * 0.05f, hit)) return new List<float2> { gate, hit };
+                if (Ok(gate + n * 0.05f, hit) && Free(gate, hit)) return new List<float2> { gate, hit };
             }
 
             // 2. Short straight approach, then the nearest network point within MaxTurn of the normal.
             float cos = math.cos(math.radians(MaxTurn));
-            foreach (float app in new[] { approach, approach * 2f })
+            // Last resort: a deeper approach (well clear of the edge band), then any leg that does not head back out.
+            foreach (var (app, limit) in new[] { (approach, cos), (approach * 0.5f, cos), (approach * 2f, cos), (approach * 2f, 0.05f), (approach * 3f, 0.05f) })
             {
                 var from = gate + n * app;
-                if (!region.Contains(from) || !Ok(gate + n * 0.05f, from)) continue;
-                float best = float.MaxValue; float2 foot = default;
+                if (app >= bestT - 1f || !region.Contains(from) || !Ok(gate + n * 0.05f, from) || !Free(gate, from)) continue;
+                // Candidates within MaxTurn of the normal, nearest first; the first clean leg wins.
+                var cands = new List<(float l, float2 q)>();
                 foreach (var (a, b) in spine)
                 {
                     float len = math.distance(a, b);
@@ -78,14 +103,17 @@ namespace Placemaker.Core.Layers.Common
                         var q = math.lerp(a, b, i / (float)steps);
                         var d = q - from;
                         float l = math.length(d);
-                        if (l < 0.5f) { best = 0f; foot = q; break; }
-                        if (math.dot(d / l, n) < cos || l >= best) continue;
-                        if (!Ok(from, q)) continue;
-                        best = l; foot = q;
+                        if (l < 0.5f) return new List<float2> { gate, q };
+                        if (math.dot(d / l, n) >= limit) cands.Add((l, q));
                     }
                 }
-                if (best < float.MaxValue)
-                    return best <= 0.5f ? new List<float2> { gate, foot } : new List<float2> { gate, from, foot };
+                cands.Sort((x, y) => x.l.CompareTo(y.l));
+                int tries = 0;
+                foreach (var (l, q) in cands)
+                {
+                    if (++tries > 400) break;
+                    if (Ok(from, q) && Free(from, q)) return new List<float2> { gate, from, q };
+                }
             }
             return null;
         }
