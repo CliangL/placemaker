@@ -16,6 +16,8 @@ import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Segmented, Switch } from "../components/common";
 import { AutoMosaic, autoPool, Thumb, useAssetList, useAssetName, usePicker } from "../components/picker";
 import { Slider } from "./Slider";
+import { useSections } from "../lib/collapse";
+import { pairHalves, usePanelLayout } from "../lib/layout";
 import s from "./controls.module.scss";
 
 type RowCtx = { step: StepView; layer: LayerType; state: ToolState };
@@ -23,7 +25,7 @@ type RowCtx = { step: StepView; layer: LayerType; state: ToolState };
 const label = (t: TFunc, c: ControlEx) => t(c.label, humanize(c.label || c.id));
 const optLabel = (t: TFunc, o: { value: string; label: string }) => t(o.label, humanize(o.label || o.value));
 
-export const ControlRow = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
+export const ControlRow = ({ c, ctx, className }: { c: ControlEx; ctx: RowCtx; className?: string }) => {
     const { t } = useT();
     const { step } = ctx;
     const value = valueOf(step, c);
@@ -69,7 +71,7 @@ export const ControlRow = ({ c, ctx }: { c: ControlEx; ctx: RowCtx }) => {
     );
 
     return (
-        <div className={classNames(s.row, { [s.rowStacked]: stacked, [s.rowAsset]: c.kind === "asset" })} data-testid={`control-${c.id}`} data-kind={c.kind}>
+        <div className={classNames(s.row, { [s.rowStacked]: stacked, [s.rowAsset]: c.kind === "asset" }, className)} data-testid={`control-${c.id}`} data-kind={c.kind}>
             <div className={s.rowHead}>
                 <Tip title={label(t, c)} description={tip || undefined}>
                     <div className={classNames(s.label, { [s.labelWide]: stacked || c.kind === "toggle" })}>
@@ -467,7 +469,24 @@ export const ControlList = ({
 }) => {
     const { t } = useT();
     const assetName = useAssetName();
+    const layout = usePanelLayout();
+    const isOpen = useSections();
     const ctx = { step, layer, state };
+    /**
+     * Wide panel: short rows (sliders, switches) pair up in two columns; lists, choices and assets keep
+     * the full width. Narrow: one column.
+     */
+    const rows = (list: ControlEx[]) => {
+        if (!layout.wide) return list.map((c) => <ControlRow key={c.id} c={c} ctx={ctx} />);
+        const half = pairHalves(list.map((c) => c.kind === "slider" || c.kind === "toggle"));
+        return (
+            <div className={s.grid} data-testid="control-grid">
+                {list.map((c, i) => (
+                    <ControlRow key={c.id} c={c} ctx={ctx} className={half[i] ? s.half : s.full} />
+                ))}
+            </div>
+        );
+    };
     const typedMarkers = !!(step.markerKinds && step.markerKinds.length);
     const values = withDefaults(layer, step);
     const visible = (layer.controls as ControlEx[]).filter(
@@ -483,34 +502,39 @@ export const ControlList = ({
     if (flat) {
         return (
             <div className={s.list} data-testid="control-list-flat">
-                {visible.map((c) => (
-                    <ControlRow key={c.id} c={c} ctx={ctx} />
-                ))}
+                {rows(visible)}
             </div>
         );
     }
     const groups = groupBy(visible);
     const key = scope ?? layer.id;
+    const defaultOpen = (i: number, list: ControlEx[]) => !allFolded && i === 0 && list.some((c) => c.tier !== "more");
+    // Wide panel: folded groups (a one-line header + summary) sit side by side, open ones span the row.
+    const half = layout.wide ? pairHalves(groups.map(([g, list], i) => !isOpen(key + ":" + (g || "basics"), defaultOpen(i, list)))) : groups.map(() => false);
     return (
-        <div className={s.list} data-testid="control-list">
+        <div className={classNames(s.list, { [s.grid]: layout.wide })} data-testid="control-list">
             {groups.map(([g, list], i) => {
                 const name = g || "basics";
                 const title = g ? t("Placemaker.UI.Group." + g, humanize(g)) : allFolded ? t("Placemaker.UI.Group.Options", "Options") : t("Placemaker.UI.Group.Basics", "Basics");
-                const essential = list.some((c) => c.tier !== "more");
-                return (
+                const fold = (
                     <Collapsible
                         key={name}
                         id={key + ":" + name}
                         testId={"group-" + name}
                         title={title}
                         summary={summarize(list, step, t, assetName)}
-                        defaultOpen={!allFolded && i === 0 && essential}
+                        defaultOpen={defaultOpen(i, list)}
                         nested={allFolded}
                     >
-                        {list.map((c) => (
-                            <ControlRow key={c.id} c={c} ctx={ctx} />
-                        ))}
+                        {rows(list)}
                     </Collapsible>
+                );
+                return layout.wide ? (
+                    <div key={name} className={half[i] ? s.half : s.full} data-testid={"groupcell-" + name} data-half={half[i] ? "true" : "false"}>
+                        {fold}
+                    </div>
+                ) : (
+                    fold
                 );
             })}
         </div>

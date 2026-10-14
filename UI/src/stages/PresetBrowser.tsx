@@ -1,21 +1,22 @@
-// One browser for "what to make": Category ▸ Type ▸ Preset, plus the active-preset bar (Save / Save as /
-// rename / delete / reset / export). Replaces the Make cards + preset chips (playtest 3: "categories of
-// main types, then each has its own subtypes; add your own and save it; a save button, I could name it").
-//   • Categories: the 12 groups types declare (RecipeInfo.group, else guessed from the id); collapsible,
-//     remembered (lib/collapse). Small catalogs start open, big ones open only the selected type's group.
-//   • Type row: icon + name. Click = selectRecipe (the type with its default settings). The selected type
-//     is expanded and lists its presets: "Default", built-ins ("edited" when saved over), player presets (★).
-//   • Preset row: click = selectPreset(layer, preset).
-//   • Search filters categories / types / presets by name; ↑/↓ move between rows, ←/→ fold categories,
-//     Enter in the search box picks the first match, Esc clears it.
+// One browser for "what to make", as grids (playtest: "more vertically space conscious … why does it not go
+// into a grid?"), plus the active-preset bar (Save / Save as / rename / delete / reset / export).
+//   • Categories: a wrapping chip strip ("All" + the groups types declare, RecipeInfo.group, else guessed
+//     from the id). Small catalogs start on "All"; the choice is kept for the session. A dot marks the
+//     category holding the selected type.
+//   • Types of the chosen category: a tile grid (icon + name, as many columns as fit, balanced rows).
+//     Click = selectRecipe (the type with its default settings).
+//   • Presets of the selected type: wrapping chips: "Default", built-ins ("edited" when saved over),
+//     player presets (★). Click = selectPreset(layer, preset).
+//   • Search filters categories / types / presets by name (preset hits of every type, with their type
+//     icon); arrow keys walk the grid, Enter in the search box picks the first match, Esc clears it.
 import React, { KeyboardEvent, useRef, useState } from "react";
 import classNames from "classnames";
 import { ActivePreset, Catalog, DesignState, LayerType, PresetView, RecipeInfo, StepView } from "../contract";
 import { act } from "../lib/bindings";
 import { entityIcon, layerColor } from "../lib/icons";
 import { humanize, TFunc, useT } from "../lib/l10n";
-import { useOpen } from "../lib/collapse";
 import { Tip } from "../lib/tips";
+import { BODY_PAD_REM, tileColumns, usePanelLayout } from "../lib/layout";
 import { Btn, Icon } from "../components/common";
 import { Confirm } from "../components/dialog";
 import s from "./browser.module.scss";
@@ -46,7 +47,9 @@ export function makeRecipes(catalog: Catalog): RecipeInfo[] {
     return singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
 }
 
+/** Category order of the strip and tiles: Roads first (playtest), Parking last before Other. */
 export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
+    { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
     { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
     { id: "gardens", key: "Placemaker.UI.MakeGroup.Gardens", en: "Gardens" },
     { id: "squares", key: "Placemaker.UI.MakeGroup.Squares", en: "Squares" },
@@ -58,7 +61,6 @@ export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
     { id: "industrial", key: "Placemaker.UI.MakeGroup.Industrial", en: "Industrial" },
     { id: "transport", key: "Placemaker.UI.MakeGroup.Transport", en: "Transport" },
     { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
-    { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
     { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
 ];
 
@@ -78,7 +80,7 @@ export function makeGroupOf(id: string): string {
     return "other";
 }
 
-/** Up to this many types: every category starts open. More: only the selected type's category. */
+/** Up to this many types: the browser starts on "All". More: on the selected type's category. */
 const SMALL_CATALOG = 8;
 
 function typeLayer(catalog: Catalog, r: RecipeInfo): LayerType | undefined {
@@ -100,7 +102,29 @@ export function makeSummary(t: TFunc, catalog: Catalog, design: DesignState): st
     return p ? recipeName(t, r) + " · " + presetName(t, p) : recipeName(t, r);
 }
 
-// ───────────── rows ─────────────
+// ───────────── grid browser ─────────────
+
+/** Category chosen in the strip ("all" = every type), remembered; none chosen yet → a default. */
+const CATEGORY_KEY = "placemaker.browserCategory.v1";
+const ALL = "all";
+
+function loadCategory(): string | null {
+    try {
+        return window.localStorage?.getItem(CATEGORY_KEY) || null;
+    } catch {
+        return null;
+    }
+}
+
+function saveCategory(c: string) {
+    try {
+        window.localStorage?.setItem(CATEGORY_KEY, c);
+    } catch {
+        /* not remembered */
+    }
+}
+/** Estimated tile width in rem for a name (icon, paddings, ~7.4rem per character at 13rem). */
+const tileRem = (name: string) => 40 + name.length * 7.4;
 
 /** Badges after a preset name: "edited" for saved-over built-ins, ★ for the player's own. */
 const PresetBadges = ({ p }: { p: PresetView }) => {
@@ -115,57 +139,64 @@ const PresetBadges = ({ p }: { p: PresetView }) => {
     return null;
 };
 
-const PresetRow = ({ layer, recipe, p, active, modified }: { layer: LayerType; recipe: RecipeInfo; p: PresetView | null; active: boolean; modified: boolean }) => {
+/** One preset as a chip: [name ★|edited •]. `typeIcon` marks whose preset it is in search results. */
+const PresetChip = ({
+    layer, recipe, p, active, modified, typeIcon,
+}: { layer: LayerType; recipe: RecipeInfo; p: PresetView | null; active: boolean; modified: boolean; typeIcon?: boolean }) => {
     const { t } = useT();
     const name = p ? presetName(t, p) : t("Placemaker.UI.Preset.Default", "Default");
     const id = p ? p.id : DEFAULT_ID;
+    const desc = p?.custom && p.basedOn ? t("Placemaker.UI.Preset.BasedOn", "Your preset, based on {0}", [humanize(p.basedOn)]) : undefined;
     return (
-        <button
-            type="button"
-            data-nav="preset"
-            data-testid={p ? `preset-${p.id}` : "preset-default"}
-            data-layer={layer.id}
-            aria-pressed={active ? "true" : "false"}
-            className={classNames(s.row, s.presetRow, { [s.rowOn]: active })}
-            onClick={(e) => {
-                e.stopPropagation();
-                if (active && !modified) return;
-                if (p) act.selectPreset(layer.id, id);
-                else act.selectRecipe(recipe.id);
-            }}
-        >
-            <div className={classNames(s.radio, { [s.radioOn]: active })} />
-            <Tip title={name} description={p?.custom && p.basedOn ? t("Placemaker.UI.Preset.BasedOn", "Your preset, based on {0}", [humanize(p.basedOn)]) : undefined}>
-                <div className={s.name} data-ellipsis>
+        <Tip title={typeIcon ? recipeName(t, recipe) + " · " + name : name} description={desc}>
+            <button
+                type="button"
+                data-nav="preset"
+                data-testid={p ? `preset-${p.id}` : "preset-default"}
+                data-layer={layer.id}
+                aria-pressed={active ? "true" : "false"}
+                className={classNames(s.chip, s.presetChip, { [s.chipOn]: active, [s.chipDefault]: !p })}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (active && !modified) return;
+                    if (p) act.selectPreset(layer.id, id);
+                    else act.selectRecipe(recipe.id);
+                }}
+            >
+                {typeIcon ? (
+                    <div className={s.chipType} style={{ backgroundColor: layerColor(recipe.id) }}>
+                        <Icon name={entityIcon(recipe.id, recipe.icon)} size={9} tint="dark" />
+                    </div>
+                ) : null}
+                <div className={s.chipName} data-ellipsis>
                     {name}
                 </div>
-            </Tip>
-            {p ? <PresetBadges p={p} /> : null}
-            {active && modified ? <div className={s.dot} /> : null}
-        </button>
+                {p ? <PresetBadges p={p} /> : null}
+                {active && modified ? <div className={s.dot} /> : null}
+            </button>
+        </Tip>
     );
 };
 
-const TypeBlock = ({
-    catalog, recipe, selected, presets, design,
-}: { catalog: Catalog; recipe: RecipeInfo; selected: boolean; presets: PresetView[] | null; design: DesignState }) => {
+/** A type tile: colour-coded icon + name. Click = selectRecipe (the type with its default settings). */
+const TypeTile = ({ catalog, recipe, selected, width }: { catalog: Catalog; recipe: RecipeInfo; selected: boolean; width: string | null }) => {
     const { t } = useT();
     const layer = typeLayer(catalog, recipe);
     const name = recipeName(t, recipe);
     const desc = recipe.description ? t(recipe.description, "") : "";
-    const ap = design.activePreset;
     const count = layer ? layer.presets.length : 0;
-    const activeId = selected && ap && layer && ap.layer.toLowerCase() === layer.id.toLowerCase() ? ap.id : null;
     return (
-        <div className={s.type} data-testid={`type-${recipe.id}`}>
-            <Tip title={name} description={desc || undefined}>
+        <div className={classNames(s.tileCell, { [s.tileGrow]: !width })} style={width ? { width } : undefined} data-testid={`type-${recipe.id}`}>
+            <Tip
+                title={name}
+                description={[desc, count ? t("Placemaker.UI.Browser.PresetCount", "{0} presets", [count]) : ""].filter((x) => x).join("\n") || undefined}
+            >
                 <button
                     type="button"
                     data-nav="type"
                     data-testid={`recipe-${recipe.id}`}
                     aria-pressed={selected ? "true" : "false"}
-                    aria-expanded={presets ? "true" : "false"}
-                    className={classNames(s.row, s.typeRow, { [s.rowOn]: selected })}
+                    className={classNames(s.tile, { [s.tileOn]: selected })}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (!selected) act.selectRecipe(recipe.id);
@@ -174,123 +205,110 @@ const TypeBlock = ({
                     <div className={s.typeIcon} style={{ backgroundColor: layerColor(recipe.id) }}>
                         <Icon name={entityIcon(recipe.id, recipe.icon)} size={11} tint="dark" />
                     </div>
-                    <div className={classNames(s.name, s.typeName)} data-ellipsis>
+                    <div className={s.tileName} data-ellipsis>
                         {name}
                     </div>
-                    {count && !presets ? <div className={s.count}>{count}</div> : null}
                 </button>
             </Tip>
-            {presets && layer ? (
-                <div className={s.presets} data-testid={`presets-${recipe.id}`}>
-                    {selected && presets === layer.presets ? (
-                        <PresetRow layer={layer} recipe={recipe} p={null} active={activeId === DEFAULT_ID} modified={!!ap?.modified} />
-                    ) : null}
-                    {presets.map((p) => (
-                        <PresetRow key={p.id} layer={layer} recipe={recipe} p={p} active={activeId === p.id} modified={!!ap?.modified} />
-                    ))}
-                </div>
-            ) : null}
         </div>
     );
 };
 
-type CatView = { id: string; title: string; items: { r: RecipeInfo; presets: PresetView[] | null }[]; selected?: RecipeInfo; total: number };
+type CatView = { id: string; title: string; types: RecipeInfo[]; hasSelected: boolean };
 
-const CategoryBlock = ({ c, catalog, design, searching, small }: { c: CatView; catalog: Catalog; design: DesignState; searching: boolean; small: boolean }) => {
-    const { t } = useT();
-    const [stored, setOpen] = useOpen("browser:" + c.id, small || !!c.selected);
-    const open = searching || stored;
-    return (
-        <div className={s.cat} data-testid={`make-group-${c.id}`} data-open={open ? "true" : "false"}>
-            <button
-                type="button"
-                data-nav="cat"
-                data-testid={`make-group-${c.id}-toggle`}
-                aria-expanded={open ? "true" : "false"}
-                className={classNames(s.row, s.catRow)}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    if (!searching) setOpen(!open);
-                }}
-                onKeyDown={(e) => {
-                    if (searching) return;
-                    if (e.key === "ArrowRight" && !open) setOpen(true);
-                    else if (e.key === "ArrowLeft" && open) setOpen(false);
-                    else return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                }}
-            >
-                <Icon name={open ? "chevronDown" : "chevronRight"} size={11} tint="dim" />
-                <div className={classNames(s.name, s.catName)}>{c.title}</div>
-                {!open && c.selected ? (
-                    <div className={s.catSel} data-ellipsis>
-                        {recipeName(t, c.selected)}
-                    </div>
-                ) : (
-                    <div className={s.count}>{searching ? c.items.length : c.total}</div>
-                )}
-            </button>
-            {open
-                ? c.items.map(({ r, presets }) => (
-                      <TypeBlock key={r.id} catalog={catalog} recipe={r} selected={r.id === design.recipeId} presets={presets} design={design} />
-                  ))
-                : null}
-        </div>
-    );
-};
-
+/**
+ * Category strip (chips, wrapping) ▸ type tiles of the chosen category (grid) ▸ preset chips of the
+ * selected type (wrapping). Search filters all three: matching categories / types as tiles, matching
+ * presets of any type as chips (with their type's icon).
+ */
 export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: DesignState }) => {
     const { t } = useT();
+    const layout = usePanelLayout();
     const [query, setQuery] = useState("");
-    const root = useRef<HTMLDivElement>(null);
-    const q = query.trim().toLowerCase();
     const list = makeRecipes(catalog);
     const small = list.length <= SMALL_CATALOG;
+    const selectedRecipe = list.find((r) => r.id === design.recipeId);
+    // Not chosen yet: small catalogs show everything, big ones the selected type's category.
+    const [chosen, setChosen] = useState<string | null>(loadCategory);
+    const category = chosen ?? (small || !selectedRecipe ? ALL : recipeGroup(selectedRecipe));
+    const setCategory = (c: string) => {
+        saveCategory(c);
+        setChosen(c);
+    };
+    const root = useRef<HTMLDivElement>(null);
+    const q = query.trim().toLowerCase();
     const has = (text: string) => text.toLowerCase().includes(q);
 
+    // categories → their types (search: the types that match by category, name or one of their presets)
     const cats: CatView[] = [];
-    let firstHit: { recipe: string; layer: string; preset?: string } | null = null;
+    const presetHits: { r: RecipeInfo; layer: LayerType; p: PresetView }[] = [];
     let firstType: { recipe: string; layer: string } | null = null;
     for (const g of MAKE_GROUPS) {
         const members = list.filter((r) => recipeGroup(r) === g.id);
         if (!members.length) continue;
         const title = t(g.key, g.en);
         const catHit = !q || has(title);
-        const items: CatView["items"] = [];
+        const types: RecipeInfo[] = [];
         for (const r of members) {
             const layer = typeLayer(catalog, r);
-            const all = layer?.presets ?? [];
-            const selected = r.id === design.recipeId;
-            if (!q) {
-                items.push({ r, presets: selected && layer ? all : null });
-                continue;
-            }
-            const hits = all.filter((p) => has(presetName(t, p)));
-            if (hits.length) {
-                items.push({ r, presets: hits.length === all.length ? all : hits });
-                if (!firstHit && layer) firstHit = { recipe: r.id, layer: layer.id, preset: hits[0].id };
-            } else if (catHit || has(recipeName(t, r))) {
-                items.push({ r, presets: selected && layer ? all : null });
-                if (!firstType) firstType = { recipe: r.id, layer: layer?.id ?? r.id };
+            const hits = q && layer ? layer.presets.filter((p) => has(presetName(t, p))) : [];
+            if (layer) for (const p of hits) presetHits.push({ r, layer, p });
+            if (catHit || has(recipeName(t, r)) || hits.length) {
+                types.push(r);
+                if (q && !firstType && (catHit || has(recipeName(t, r)))) firstType = { recipe: r.id, layer: layer?.id ?? r.id };
             }
         }
-        if (items.length) cats.push({ id: g.id, title, items, selected: members.find((r) => r.id === design.recipeId), total: members.length });
+        if (types.length) cats.push({ id: g.id, title, types, hasSelected: members.some((r) => r.id === design.recipeId) });
     }
+    // The chosen category, unless the search left it empty (then everything that matched).
+    const current = category !== ALL && cats.some((c) => c.id === category) ? category : ALL;
+    const tiles = current === ALL ? cats.flatMap((c) => c.types) : cats.find((c) => c.id === current)!.types;
+    const firstHit = presetHits.length ? { recipe: presetHits[0].r.id, layer: presetHits[0].layer.id, preset: presetHits[0].p.id } : firstType;
 
-    if (!firstHit) firstHit = firstType;
+    // Tiles: one row sharing the width when every name fits; else a grid of equal columns, as many as
+    // the longest name allows, balanced rows — names are never cut.
+    const inner = layout.width - BODY_PAD_REM - 4;
+    const widths = tiles.map((r) => tileRem(recipeName(t, r)) + 4);
+    const oneRow = tiles.length >= 3 && widths.reduce((n, w) => n + w, 0) <= inner;
+    // one or two tiles (a narrow category, a search hit) keep a third of the row each, not all of it
+    const cols = oneRow ? tiles.length : Math.max(tiles.length < 3 ? 3 : 1, tileColumns(tiles.length, inner, Math.max(96, ...widths), 6));
+    const tileWidth = oneRow ? null : 100 / cols + "%";
+
+    // presets: the selected type's (Default first), or the search hits of every type
+    const ap = design.activePreset;
+    const selLayer = selectedRecipe ? typeLayer(catalog, selectedRecipe) : undefined;
+    const activeId = selLayer && ap && ap.layer.toLowerCase() === selLayer.id.toLowerCase() ? ap.id : null;
+    const modified = !!ap?.modified;
 
     const rows = () => Array.from(root.current?.querySelectorAll<HTMLElement>("[data-nav]") ?? []);
+    /** Arrow keys walk the grid: ←/→ the previous / next item, ↑/↓ the nearest item in the row above / below. */
     const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
         const all = rows();
         const i = all.indexOf(document.activeElement as HTMLElement);
         let next: HTMLElement | undefined;
-        if (e.key === "ArrowDown") next = all[i < 0 ? 0 : Math.min(all.length - 1, i + 1)];
-        else if (e.key === "ArrowUp") next = i <= 0 ? root.current?.querySelector<HTMLElement>("input") ?? undefined : all[i - 1];
-        else if (e.key === "Home") next = all[0];
+        if (e.key === "ArrowRight") next = all[i < 0 ? 0 : Math.min(all.length - 1, i + 1)];
+        else if (e.key === "ArrowLeft") next = i <= 0 ? undefined : all[i - 1];
+        else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            const down = e.key === "ArrowDown";
+            if (i < 0) next = all[0];
+            else {
+                const r = all[i].getBoundingClientRect();
+                const cx = r.left + r.width / 2,
+                    cy = r.top + r.height / 2;
+                let best: { el: HTMLElement; dy: number; dx: number } | null = null;
+                for (const el of all) {
+                    const b = el.getBoundingClientRect();
+                    const dy = (b.top + b.height / 2 - cy) * (down ? 1 : -1);
+                    if (dy < 4) continue;
+                    const dx = Math.abs(b.left + b.width / 2 - cx);
+                    if (!best || dy < best.dy - 4 || (Math.abs(dy - best.dy) <= 4 && dx < best.dx)) best = { el, dy, dx };
+                }
+                next = best?.el ?? (down ? undefined : root.current?.querySelector<HTMLElement>("input") ?? undefined);
+            }
+        } else if (e.key === "Home") next = all[0];
         else if (e.key === "End") next = all[all.length - 1];
         else if (e.key === "Enter") {
-            // Enter activates the focused row (native click); keep it from reaching the tool's Enter = primary.
+            // Enter activates the focused item (native click); keep it from reaching the tool's Enter = primary.
             e.stopPropagation();
             return;
         } else return;
@@ -299,44 +317,100 @@ export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: Des
         next?.focus();
     };
 
+    const search = (
+        <div className={classNames(s.search, { [s.searchSide]: layout.wide })}>
+            <Icon name="search" size={12} tint="dim" />
+            <input
+                className={s.searchInput}
+                data-testid="browser-search"
+                value={query}
+                placeholder={layout.wide ? t("Placemaker.UI.Browser.SearchShort", "Search") : t("Placemaker.UI.Browser.Search", "Search types and presets")}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === "Escape" && query) {
+                        setQuery("");
+                        e.preventDefault();
+                    } else if (e.key === "Enter") {
+                        // first matching preset, else the first matching type
+                        if (firstHit && "preset" in firstHit && firstHit.preset) act.selectPreset(firstHit.layer, firstHit.preset);
+                        else if (firstHit && firstHit.recipe !== design.recipeId) act.selectRecipe(firstHit.recipe);
+                        e.preventDefault();
+                    } else if (e.key === "ArrowDown") {
+                        rows()[0]?.focus();
+                        e.preventDefault();
+                    }
+                    e.stopPropagation();
+                }}
+            />
+            {query ? <Btn icon="close" iconSize={11} className={s.clear} title={t("Placemaker.UI.Browser.Clear", "Clear")} onClick={() => setQuery("")} testId="browser-clear" /> : null}
+        </div>
+    );
+
+    const catChip = (id: string, title: string, count: number, hasSelected: boolean) => (
+        <button
+            key={id}
+            type="button"
+            data-nav="cat"
+            data-testid={`make-group-${id}`}
+            data-has-selected={hasSelected ? "true" : "false"}
+            aria-pressed={current === id ? "true" : "false"}
+            className={classNames(s.cat, { [s.catOn]: current === id })}
+            onClick={(e) => {
+                e.stopPropagation();
+                setCategory(id);
+            }}
+        >
+            <div className={s.catName}>{title}</div>
+            <div className={s.catCount}>{count}</div>
+            {hasSelected && current !== id && current !== ALL ? <div className={s.catMark} /> : null}
+        </button>
+    );
+
     return (
         <div className={s.browser} data-testid="type-browser" ref={root} onKeyDown={onKey}>
-            <div className={s.search}>
-                <Icon name="search" size={12} tint="dim" />
-                <input
-                    className={s.searchInput}
-                    data-testid="browser-search"
-                    value={query}
-                    placeholder={t("Placemaker.UI.Browser.Search", "Search types and presets")}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Escape" && query) {
-                            setQuery("");
-                            e.preventDefault();
-                        } else if (e.key === "Enter") {
-                            // first matching preset, else the first matching type
-                            if (firstHit?.preset) act.selectPreset(firstHit.layer, firstHit.preset);
-                            else if (firstHit && firstHit.recipe !== design.recipeId) act.selectRecipe(firstHit.recipe);
-                            e.preventDefault();
-                        } else if (e.key === "ArrowDown") {
-                            rows()[0]?.focus();
-                            e.preventDefault();
-                        }
-                        e.stopPropagation();
-                    }}
-                />
-                {query ? <Btn icon="close" iconSize={11} className={s.clear} title={t("Placemaker.UI.Browser.Clear", "Clear")} onClick={() => setQuery("")} testId="browser-clear" /> : null}
+            {layout.wide ? null : search}
+            <div className={s.head}>
+                <div className={s.cats} data-testid="make-groups">
+                    {cats.length > 1 || current !== ALL ? catChip(ALL, t("Placemaker.UI.Browser.All", "All"), cats.reduce((n, c) => n + c.types.length, 0), false) : null}
+                    {cats.map((c) => catChip(c.id, c.title, c.types.length, c.hasSelected))}
+                </div>
+                {layout.wide ? search : null}
             </div>
-            <div className={s.tree} data-testid="recipes" data-grouped="true">
-                {cats.map((c) => (
-                    <CategoryBlock key={c.id} c={c} catalog={catalog} design={design} searching={!!q} small={small} />
-                ))}
-                {!cats.length ? (
-                    <div className={s.empty} data-testid="browser-empty">
-                        {t("Placemaker.UI.Browser.None", "Nothing matches “{0}”", [query.trim()])}
+            {cats.length ? (
+                <div className={s.tiles} data-testid="recipes" data-grouped="true" data-cols={cols}>
+                    {tiles.map((r) => (
+                        <TypeTile key={r.id} catalog={catalog} recipe={r} selected={r.id === design.recipeId} width={tileWidth} />
+                    ))}
+                </div>
+            ) : (
+                <div className={s.empty} data-testid="browser-empty">
+                    {t("Placemaker.UI.Browser.None", "Nothing matches “{0}”", [query.trim()])}
+                </div>
+            )}
+            {q ? (
+                presetHits.length ? (
+                    <div className={s.presets} data-testid="preset-hits">
+                        {presetHits.map(({ r, layer, p }) => (
+                            <PresetChip
+                                key={layer.id + "/" + p.id}
+                                layer={layer}
+                                recipe={r}
+                                p={p}
+                                active={r.id === design.recipeId && activeId === p.id}
+                                modified={modified}
+                                typeIcon
+                            />
+                        ))}
                     </div>
-                ) : null}
-            </div>
+                ) : null
+            ) : selectedRecipe && selLayer && selLayer.presets.length ? (
+                <div className={s.presets} data-testid={`presets-${selectedRecipe.id}`}>
+                    <PresetChip layer={selLayer} recipe={selectedRecipe} p={null} active={activeId === DEFAULT_ID} modified={modified} />
+                    {selLayer.presets.map((p) => (
+                        <PresetChip key={p.id} layer={selLayer} recipe={selectedRecipe} p={p} active={activeId === p.id} modified={modified} />
+                    ))}
+                </div>
+            ) : null}
         </div>
     );
 };

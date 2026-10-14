@@ -12,19 +12,19 @@ async function toDesign(page: Page, recipe = "park") {
 
 const backend = (page: Page, fn: string) => page.evaluate((f) => new Function("b", "return " + f)((window as any).pm.backend), fn);
 
-test("browser: categories ▸ types ▸ presets; clicking a preset applies it; the selected type is expanded", async ({ page }) => {
+test("browser: categories ▸ types ▸ presets; clicking a preset applies it; the selected type lists its presets", async ({ page }) => {
     const errors = await open(page);
     await toDesign(page, "park");
-    const park = page.getByTestId("type-park");
+    const park = page.getByTestId("presets-park");
     // selected type expanded: Default + its built-ins; other types collapsed
     await expect(park.getByTestId("preset-default")).toHaveAttribute("aria-pressed", "true");
     for (const id of ["formal", "wild", "pond"]) await expect(park.getByTestId(`preset-${id}`)).toBeVisible();
     await expect(page.getByTestId("presets-plaza")).toHaveCount(0);
     await expect(page.getByTestId("preset-bar-name")).toHaveText("Default");
-    // compact rows
+    // compact chips and tiles
     const h = (await park.getByTestId("preset-formal").boundingBox())!.height;
     expect(h).toBeLessThanOrEqual(24);
-    expect((await page.getByTestId("recipe-park").boundingBox())!.height).toBeLessThanOrEqual(24);
+    expect((await page.getByTestId("recipe-park").boundingBox())!.height).toBeLessThanOrEqual(30);
 
     await park.getByTestId("preset-wild").click();
     await expect(park.getByTestId("preset-wild")).toHaveAttribute("aria-pressed", "true");
@@ -37,20 +37,19 @@ test("browser: categories ▸ types ▸ presets; clicking a preset applies it; t
     // another type: selected with its defaults, expanded instead
     await page.getByTestId("recipe-plaza").click();
     await expect(page.getByTestId("recipe-plaza")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("type-plaza").getByTestId("preset-civic")).toBeVisible();
+    await expect(page.getByTestId("presets-plaza").getByTestId("preset-civic")).toBeVisible();
     await expect(page.getByTestId("presets-park")).toHaveCount(0);
-    await page.getByTestId("type-plaza").getByTestId("preset-civic").click();
+    await page.getByTestId("presets-plaza").getByTestId("preset-civic").click();
     expect(await backend(page, "b.root.values.pattern")).toBe("radial");
     expect(await backend(page, "b.active.id")).toBe("civic");
     // undo goes back to the plain plaza
     await page.keyboard.press("Control+z");
-    await expect(page.getByTestId("type-plaza").getByTestId("preset-default")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("presets-plaza").getByTestId("preset-default")).toHaveAttribute("aria-pressed", "true");
 
-    // categories fold
-    await page.getByTestId("make-group-parks-toggle").click();
-    await expect(page.getByTestId("make-group-parks")).toHaveAttribute("data-open", "false");
+    // a category chip narrows the tiles; All shows every type again
+    await page.getByTestId("make-group-squares").click();
     await expect(page.getByTestId("recipe-park")).toHaveCount(0);
-    await page.getByTestId("make-group-parks-toggle").click();
+    await page.getByTestId("make-group-all").click();
     await expect(page.getByTestId("recipe-park")).toBeVisible();
     await noTextOverflow(page, "browser");
     await panelShot(page, "p-browser");
@@ -87,31 +86,31 @@ test("browser: search filters categories, types and presets; keyboard moves betw
     await page.getByTestId("browser-clear").click();
     await expect(search).toHaveValue("");
 
-    // ↓ from the search box walks the rows; Enter activates the focused row, not the tool's primary action
+    // ↓ from the search box enters the grid; arrows walk it; Enter activates the focused item, not the
+    // tool's primary action
     await search.focus();
-    await search.press("ArrowDown"); // Parks category
-    await expect(page.getByTestId("make-group-parks-toggle")).toBeFocused();
-    await page.keyboard.press("ArrowDown"); // Park
-    await page.keyboard.press("ArrowDown"); // Default
-    await page.keyboard.press("ArrowDown"); // Formal garden
+    await search.press("ArrowDown"); // first category chip
+    await expect(page.getByTestId("make-group-all")).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("make-group-roads")).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByTestId("make-group-all")).toBeFocused();
+    await page.keyboard.press("ArrowDown"); // the tile row below
+    await expect(page.locator('[data-testid="recipes"] [data-nav="type"]:focus')).toHaveCount(1);
+    await page.getByTestId("preset-default").focus();
+    await page.keyboard.press("ArrowRight"); // Formal garden
     await expect(page.getByTestId("preset-formal")).toBeFocused();
     await page.keyboard.press("Enter");
     await expect.poll(() => backend(page, "b.active.id")).toBe("formal");
     expect(await backend(page, "b.stage")).toBe("design");
-    // ← folds a category, → opens it
-    await page.getByTestId("make-group-squares-toggle").focus();
-    await page.keyboard.press("ArrowLeft");
-    await expect(page.getByTestId("make-group-squares")).toHaveAttribute("data-open", "false");
-    await page.keyboard.press("ArrowRight");
-    await expect(page.getByTestId("make-group-squares")).toHaveAttribute("data-open", "true");
-    await page.keyboard.press("ArrowUp");
-    await expect(page.getByTestId("make-group-squares-toggle")).not.toBeFocused();
+    await page.keyboard.press("ArrowUp"); // back up into the tiles
+    await expect(page.locator('[data-testid="recipes"] [data-nav="type"]:focus')).toHaveCount(1);
 });
 
 test("modify a built-in → modified → Save over it (edited) → Reset to default", async ({ page }) => {
     const errors = await open(page);
     await toDesign(page, "park");
-    const park = page.getByTestId("type-park");
+    const park = page.getByTestId("presets-park");
     await park.getByTestId("preset-formal").click();
     await expect(page.getByTestId("preset-bar")).toHaveAttribute("data-modified", "false");
     await page.getByTestId("feature-toggle-playground").click();
@@ -145,7 +144,7 @@ test("modify a built-in → modified → Save over it (edited) → Reset to defa
 test("Save as → own preset (★, active) → save changes → rename → delete; export shows the file", async ({ page }) => {
     const errors = await open(page);
     await toDesign(page, "park");
-    const park = page.getByTestId("type-park");
+    const park = page.getByTestId("presets-park");
     await park.getByTestId("preset-formal").click();
     await page.getByTestId("feature-toggle-playground").click();
     await page.getByTestId("preset-save-as").click();
@@ -217,12 +216,11 @@ test("long own preset names and many types never overflow", async ({ page }) => 
     await page.getByTestId("preset-save-as").click();
     await page.getByTestId("preset-name-input").fill("A really very long preset name for the big park");
     await page.getByTestId("preset-name-save").click();
-    await expect(page.getByTestId("type-park").locator('[data-testid^="preset-custom-"]')).toHaveCount(1);
-    for (const g of ["squares", "parking", "roads"]) {
-        const t = page.getByTestId(`make-group-${g}`);
-        if ((await t.getAttribute("data-open")) !== "true") await page.getByTestId(`make-group-${g}-toggle`).click();
+    await expect(page.getByTestId("presets-park").locator('[data-testid^="preset-custom-"]')).toHaveCount(1);
+    for (const g of ["squares", "parking", "roads", "all"]) {
+        await page.getByTestId(`make-group-${g}`).click();
+        await noTextOverflow(page, "long names " + g);
     }
-    await noTextOverflow(page, "long names");
     const panel = (await page.getByTestId("placemaker-panel").boundingBox())!;
     const bar = (await page.getByTestId("preset-bar").boundingBox())!;
     expect(bar.x + bar.width).toBeLessThanOrEqual(panel.x + panel.width + 1);

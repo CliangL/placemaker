@@ -227,6 +227,25 @@
     min-width: 0;
 }
 
+// Wide panel: features in a 2–3 column grid (cell widths inline), spaced by padding (no gap in Gameface).
+.featureGrid {
+    @include row(flex-start);
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-left: -4rem;
+    margin-right: -4rem;
+}
+
+.featureCell {
+    box-sizing: border-box;
+    padding-left: 4rem;
+    padding-right: 4rem;
+    // In a narrow cell the name keeps its width; the value summary is what gets shortened.
+    .featureFold .featureName {
+        flex-shrink: 0;
+    }
+}
+
 .featureHead {
     @include row;
     min-width: 0;
