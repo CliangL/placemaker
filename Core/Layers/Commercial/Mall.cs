@@ -56,6 +56,11 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>Extra outline points green pieces should open towards (lane dead ends of a shop layout).</summary>
         public readonly List<float2> Doors = new List<float2>();
         private readonly Dictionary<long, (Lane lane, int seg)> _synthetic = new Dictionary<long, (Lane, int)>();
+        private readonly List<(float2[] ring, Func<float2, float> height)> _lotGround = new List<(float2[], Func<float2, float>)>();
+        /// <summary>(s25) Off: the mall keeps the ground as it is (tests compare against the ungraded plan).</summary>
+        public bool Grading = true;
+        /// <summary>(s25) Planned ground height of every lane at its centre line (after grading); empty before Finish.</summary>
+        public readonly Dictionary<Lane, float[]> LaneProfiles = new Dictionary<Lane, float[]>();
 
         public Mall(LayerContext ctx)
         {
@@ -269,6 +274,8 @@ namespace Placemaker.Core.Layers.Commercial
             sub.Regions.Clear();
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error || i.Key == "Placemaker.Parking.Issue.NoEntrance");
             Merge(sub);
+            // (s25) The lot graded itself (level tiers on a slope): the rest of the mall plans on that ground.
+            if (sub.HeightAfter != null) _lotGround.Add((lot, sub.HeightAfter));
             Stalls += (int)cap; EvStalls += (int)ev;
             Lots.Add(lot);
             Taken.Add(lot);
@@ -519,6 +526,7 @@ namespace Placemaker.Core.Layers.Commercial
         public void Finish(string zoneId)
         {
             var plan = Ctx.Plan;
+            if (Grading) MallGrading.Grade(this, _lotGround);
             var zoning = new EdgeZoningAddOn();
             var reserved = new ReservedSpace();
             foreach (var lane in Lanes)

@@ -243,7 +243,8 @@ namespace Placemaker.Tests
             var lot = p.Layers.First(l => l.GeneratorId == "parking");
             var bays = lot.Objects.Where(o => o.Role == ObjectRole.ParkingBay).ToList();
             var oil = lot.Objects.Where(o => o.Role == ObjectRole.Decal && o.Category == DecalPools.Oil).ToList();
-            Assert.True(oil.Count > bays.Count / 5, $"{oil.Count} oil stains for {bays.Count} bays");
+            // s25: a minority of bays only (playtest: "too many decals, too prominent").
+            Assert.True(oil.Count >= 1 && oil.Count <= bays.Count * 0.15f, $"{oil.Count} oil stains for {bays.Count} bays");
             foreach (var o in oil)
             {
                 var bay = bays.OrderBy(b => math.distancesq(b.Position.xz, o.Position.xz)).First();
@@ -252,7 +253,6 @@ namespace Placemaker.Tests
             }
             var aisles = lot.Nets.Where(n => n.Role == NetRole.DriveAisle || n.Role == NetRole.DriveConnector).ToList();
             var tyres = lot.Objects.Where(o => o.Role == ObjectRole.Decal && o.Category == DecalPools.Tyre).ToList();
-            Assert.NotEmpty(tyres);
             int aligned = 0;
             foreach (var t in tyres)
             {

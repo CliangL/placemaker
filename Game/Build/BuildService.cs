@@ -699,6 +699,7 @@ namespace Placemaker.Game.Build
             _work = null;
             _excluded.Clear();
             _excludeAttempts = 0;
+            _keptFunctional = 0;
             _applied = false;
             _groupId = 0;
             _record = Entity.Null;

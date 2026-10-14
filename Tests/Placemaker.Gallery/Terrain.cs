@@ -91,6 +91,32 @@ namespace Placemaker.Gallery
         }
     }
 
+    /// <summary>
+    /// (s25) Sloped land sites for land types (commercial lots, parking): a tilted plane plus gentle noise. The commercial
+    /// playtest built on sloped ground and showed what flat renders never did (pits behind the lanes, cones at lot edges).
+    /// </summary>
+    public static class SlopeSites
+    {
+        public static readonly string[] Kinds = { "gentle", "cross", "steep", "hilly" };
+
+        public static Func<float2, float> Ground(float3[] ring, string kind)
+        {
+            float xMin = ring.Min(p => p.x), zMin = ring.Min(p => p.z);
+            switch (kind)
+            {
+                // 2.5 % along x, 1.5 % along z, ±0.3 m lumps.
+                case "gentle": return p => 0.025f * (p.x - xMin) + 0.015f * (p.y - zMin) + 0.6f * (ValueNoise.Clumps(p, 30f, 21u) - 0.5f);
+                // Rising 6 % away from the south street (the lot's frontage), ±0.4 m lumps.
+                case "cross": return p => 0.06f * (p.y - zMin) + 0.8f * (ValueNoise.Clumps(p, 26f, 23u) - 0.5f);
+                // 8 % diagonal.
+                case "steep": return p => 0.08f * ((p.x - xMin) * 0.6f + (p.y - zMin) * 0.8f) + 1f * (ValueNoise.Clumps(p, 32f, 25u) - 0.5f);
+                // Rolling ±2 m swells over a 3 % tilt.
+                case "hilly": return p => 0.03f * (p.x - xMin) + 2f * math.sin((p.x - xMin) / 23f) * math.cos((p.y - zMin) / 31f);
+                default: return _ => 0f;
+            }
+        }
+    }
+
     public static class TerrainView
     {
         /// <summary>The ground the build would leave: the plan's terraform through the real TerraformRaster (1.75 m, 4 m bank).</summary>

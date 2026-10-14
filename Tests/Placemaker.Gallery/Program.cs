@@ -50,6 +50,7 @@ namespace Placemaker.Gallery
                     case "--decals": Variants.DecalVariants = true; break;
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--shores": Renderer.Shores = next.Split(','); i++; break;
+                    case "--slopes": Renderer.Slopes = next.Split(','); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
                     case "--shapes": Variants.Shapes = next.Split(','); i++; break;
@@ -182,6 +183,8 @@ namespace Placemaker.Gallery
         public string Type, Variant, Title;
         /// <summary>(s20) Shore site kind for water renders (ShoreSites.Kinds), null = the old flat fixture.</summary>
         public string Shore;
+        /// <summary>(s25) Sloped land site kind (SlopeSites.Kinds), null = flat ground.</summary>
+        public string Slope;
         public Recipe Recipe;
         public float TargetArea;
         /// <summary>Site shape (--shapes): "" = the default irregular site, else triangle, sliver, square, L.</summary>
@@ -335,6 +338,17 @@ namespace Placemaker.Gallery
                 }
                 jobs = expanded;
             }
+            if (Renderer.Slopes != null && Renderer.Slopes.Length > 0)
+            {
+                var expanded = new List<Job>();
+                foreach (var j in jobs)
+                {
+                    if (j.Shore != null) { expanded.Add(j); continue; }
+                    foreach (var s in Renderer.Slopes)
+                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "~" + s, Title = j.Title + " (" + s + " slope)", Recipe = j.Recipe.Clone(), TargetArea = j.TargetArea, Shape = j.Shape, Slope = s });
+                }
+                jobs = expanded;
+            }
             return jobs;
         }
 
@@ -397,6 +411,9 @@ namespace Placemaker.Gallery
         public static HashSet<string> WaterTypes;
         /// <summary>(s20) --shores flat,bank,headland,cliff: every water job is rendered once per shore site (sloped ground, curved coast, 8 m water snapshot).</summary>
         public static string[] Shores;
+        /// <summary>(s25) --slopes gentle,cross,steep,hilly: every land job is rendered once per sloped site (final ground, 3D view, sections).</summary>
+        public static string[] Slopes;
+        [ThreadStatic] private static bool _sloped;
         [ThreadStatic] private static float _level;
         [ThreadStatic] private static Func<float2, float> _original;
         public const float WaterSurface = -0.6f;
@@ -483,6 +500,19 @@ namespace Placemaker.Gallery
                     site.WaterDepthAt = ShoreSites.Depth(ring, g);
                 }
             }
+            _sloped = job.Slope != null && float.IsNaN(_waterZ);
+            if (_sloped)
+            {
+                var g = SlopeSites.Ground(ring, job.Slope);
+                site.HeightAt = g;
+                if (site.NearbyNets != null)
+                    for (int k = 0; k < site.NearbyNets.Count; k++)
+                    {
+                        var n = site.NearbyNets[k];
+                        n.A.y = g(n.A.xz); n.B.y = g(n.B.xz); n.C.y = g(n.C.xz); n.D.y = g(n.D.xz);
+                        site.NearbyNets[k] = n;
+                    }
+            }
             _level = float.IsNaN(_waterZ) ? float.NaN : job.Shore != null ? ShoreSites.Level : WaterSurface;
             _original = site.HeightAt;
             _roads = site.NearbyNets;
@@ -512,6 +542,11 @@ namespace Placemaker.Gallery
             Draw(plan, ring, catalog, Path.Combine(dir, job.Variant + ".png"), res);
             if (res.Failure == null)
                 res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.EdgeSpikes} spikes, {res.Ms:0} ms";
+            if (res.Failure == null && job.Slope != null)
+            {
+                var gf = plan.Layers.Where(l => l != null).SelectMany(l => l.Facts).Where(kv => kv.Key.StartsWith("grade") || kv.Key.StartsWith("terrain")).Select(kv => kv.Key + "=" + kv.Value.ToString("0.##", CultureInfo.InvariantCulture));
+                res.Summary += " | " + string.Join(" ", gf) + " tf " + plan.Layers.Where(l => l != null).Sum(l => l.Terraform.Count);
+            }
             if (res.Failure == null && job.Shore != null && plan.Layers.Count > 0 && plan.Layers[0] != null)
             {
                 var fx = plan.Layers[0].Facts;
@@ -736,7 +771,7 @@ namespace Placemaker.Gallery
                 }
             cv.FillPolygon(ring2, Ground);
             Func<float2, float> final = null;
-            if (!float.IsNaN(_waterZ))
+            if (!float.IsNaN(_waterZ) || _sloped)
             {
                 // s20: the ground the build leaves (real raster over sloped patches), hillshaded, water where it is
                 // below the level, 1 m contours; paint goes under the water tint so sand visibly continues under it.

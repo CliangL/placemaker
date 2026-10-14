@@ -126,6 +126,7 @@ namespace Placemaker.Core.Layers.Parking
             l.Add(Slider(ParkingIds.CrossEvery, ControlTier.More, "layout", ParkingSettings.DefaultCrossEvery, 0, 30, 1, "count"));
             l.Add(Slider(ParkingIds.AisleWidth, ControlTier.More, "layout", ParkingSettings.DefaultAisle, 4, 10, 0.5, "m"));
             l.Add(Slider(ParkingIds.Setback, ControlTier.More, "layout", ParkingSettings.DefaultSetback, 0, 6, 0.5, "m"));
+            l.Add(C(ParkingIds.Grading, ControlKind.Toggle, ControlTier.More, "layout", true));
 
             // ── Spaces ──
             l.Add(Slider(ParkingIds.StallWidth, ControlTier.More, "spaces", ParkingSettings.DefaultStallWidth, 2.5, 4, 0.1, "m"));

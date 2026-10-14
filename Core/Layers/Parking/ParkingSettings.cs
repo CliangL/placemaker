@@ -42,6 +42,8 @@ namespace Placemaker.Core.Layers.Parking
         public const string Bushes = "bushes";
         public const string PlantingDensity = "plantingDensity";
         public const string Fee = "fee";
+        /// <summary>(s25) Grade the lot on sloped ground: level tiers, ramps ≤ 8 % between them.</summary>
+        public const string Grading = "grading";
 
         // Zoning (PLT Randzoning / Zoningflaeche, redesigned as frontage zoning — docs/proposals/parking.md)
         public const string EdgeZoning = "edgeZoning";             // "none" | "oneSide" | "all"
@@ -107,7 +109,7 @@ namespace Placemaker.Core.Layers.Parking
         public readonly Greenery Greenery;
         public readonly RowAngleMode AngleMode;
         public readonly double RowAngleDeg;
-        public readonly bool PerimeterRoad, RowEndPlanting, Alleys, Lanterns;
+        public readonly bool PerimeterRoad, RowEndPlanting, Alleys, Lanterns, Grading;
         public readonly int CrossEvery;
         public readonly double LanternSpacing, EvShare, AccessibleShare, Fee, PlantingDensity;
         public readonly string AsphaltAsset, GreenAsset, LanternAsset, ChargerAsset;
@@ -140,6 +142,7 @@ namespace Placemaker.Core.Layers.Parking
             RowAngleDeg = bag.Num(ParkingIds.RowAngle, 0);
             if (double.IsNaN(RowAngleDeg) || double.IsInfinity(RowAngleDeg)) RowAngleDeg = 0;
             PerimeterRoad = bag.B(ParkingIds.PerimeterRoad, true);
+            Grading = bag.B(ParkingIds.Grading, true);
             CrossEvery = (int)Math.Round(Clamp(bag.Num(ParkingIds.CrossEvery, DefaultCrossEvery), 0, 60));
             RowEndPlanting = bag.B(ParkingIds.RowEndPlanting, true) && Greenery != Greenery.None;
             Alleys = bag.S(ParkingIds.EntranceStyle, "connect") == "alley";

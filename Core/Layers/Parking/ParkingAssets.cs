@@ -37,7 +37,11 @@ namespace Placemaker.Core.Layers.Parking
         public const string Charger = "ParkingLotCharger01";
         // Art pass (2026-10-13): a real asphalt texture first (EAI surface pack, already cloned as an
         // overlay in the player's setup), the vanilla pavement PLT used as the fallback.
-        public const string Asphalt = "EAI - Surface Pack Concrete Asphalt 001 Surface";
+        // s25: the lot read as pale concrete in game (EAI "Concrete Asphalt" is a light grey slab under CS2's sun). The
+        // G87 vanilla-asphalt surface is the road asphalt as a surface (dark, fine grain); EAI and vanilla pavement stay
+        // as fallbacks for playsets without it.
+        public const string Asphalt = "G87 Vanilla Asphalt Pavement G87 VA Surface GND Surface";
+        public const string AsphaltEai = "EAI - Surface Pack Concrete Asphalt 001 Surface";
         public const string AsphaltVanilla = "Pavement Surface 01";
         public const string Grass = "Grass Surface 01";
         public const string LampSingle = "StreetlightSingle02";

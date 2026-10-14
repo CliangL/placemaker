@@ -150,6 +150,39 @@ namespace Placemaker.Core.Build
     public static class PlanWork
     {
         /// <summary>
+        /// (s25) Functional objects the ghost must never emit as optional: parking bays (the stall markings that spawn
+        /// the parking lanes), chargers and arrows. Neighbouring ParkingLotDecal01 boxes are 3.2 m wide on 3.0 m stalls;
+        /// an optional temporary that overlaps another optional one is cancelled TOGETHER with it (ValidationSystem
+        /// CancelOptional), and the instant build adopts the ghost as it is — so every row of stalls vanished in game
+        /// (log: "ghost 71: 1823/1823 parts, 0 rejected, 1095 optional objects dropped"; only the 5 m accessible and a
+        /// few EV decals survived). Built non-optional, as ParkingLotTool builds them, they stay.
+        /// </summary>
+        public static bool IsFunctional(ObjectRole role) => role == ObjectRole.ParkingBay || role == ObjectRole.Charger || role == ObjectRole.Arrow;
+
+        /// <summary>
+        /// (s25) May the build's collision retry leave this item out? Never a functional parking piece: the retry matches
+        /// errors to plan items by position (2 m), so an errored surface, island or lamp next to a row of stalls used to take
+        /// the stall markings with it. A marking that really collides is resolved by the game itself (hidden, never a stop).
+        /// </summary>
+        public static bool Excludable(ComposedPlan plan, WorkItem w)
+        {
+            if (w.Kind != WorkKind.Object || plan?.Layers == null || w.Layer < 0 || w.Layer >= plan.Layers.Count) return true;
+            var objects = plan.Layers[w.Layer]?.Objects;
+            if (objects == null || w.Index < 0 || w.Index >= objects.Count || objects[w.Index] == null) return true;
+            return !IsFunctional(objects[w.Index].Role);
+        }
+
+        /// <summary>(s25) Planned stall markings (ParkingBay objects with an asset) — the build logs how many it built.</summary>
+        public static int StallMarkings(ComposedPlan plan)
+        {
+            int n = 0;
+            if (plan?.Layers == null) return 0;
+            foreach (var l in plan.Layers)
+                if (l?.Objects != null) foreach (var o in l.Objects) if (o != null && o.Role == ObjectRole.ParkingBay) n++;
+            return n;
+        }
+
+        /// <summary>
         /// Flattens a composed plan. Items whose key is in <paramref name="excluded"/> are skipped
         /// (auto-exclusion of colliding pieces). Never throws for empty/odd plans.
         /// </summary>

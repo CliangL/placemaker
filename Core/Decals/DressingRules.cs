@@ -253,6 +253,8 @@ namespace Placemaker.Core.Decals
             {
                 var s = c.L.Surfaces[si];
                 if (s?.Ring == null || s.Ring.Length < 3 || DressingWorld.KindOf(s) != GroundKind.Paved) continue;
+                // (s25) Lot asphalt is dressed by the Parking family (bays, aisles) only — the paved scatter doubled it.
+                if (s.Role == SurfaceRole.Asphalt) continue;
                 var reg = LayerRegion.From(s.Ring);
                 if (reg == null || reg.Area < 20f) continue;
                 bool asphalt = s.Role == SurfaceRole.Asphalt || (s.Category ?? "").StartsWith("surface.asphalt", StringComparison.Ordinal);
@@ -360,6 +362,14 @@ namespace Placemaker.Core.Decals
 
         // ───────────────────────── Parking: bays, aisles, entrances ─────────────────────────
 
+        /// <summary>
+        /// (s25) Share of bays with an oil blot at the default amount. Playtest: "too many decals, non-transparent, too
+        /// prominent" — the s21 rates (42 % oil, a drip, tyre marks, stains every 7 m of aisle) covered the lot in opaque
+        /// blobs and hid the stall lines. A lot reads as clean asphalt with the odd faint mark; the amount sliders and the
+        /// gritty style still add more.
+        /// </summary>
+        public const float OilShare = 0.08f;
+
         private static void Parking(Ctx c)
         {
             float aOil = c.A(DressFamily.Parking, Kind.Oil), aTyre = c.A(DressFamily.Parking, Kind.Tyre), aCrack = c.A(DressFamily.Parking, Kind.Crack),
@@ -382,22 +392,22 @@ namespace Placemaker.Core.Decals
                 var p = o.Position.xz;
                 uint h = c.H(i, 81);
                 // Nose-in parking: the engine stands over the back third; drips run along the bay.
-                if (Ctx.Roll(h, 0.42f * aOil))
+                if (Ctx.Roll(h, OilShare * aOil))
                     c.Emit(p + axis * (len * (0.1f + 0.22f * Ctx.U(Ctx.H2(h, 1)))) + side * ((Ctx.U(Ctx.H2(h, 2)) - 0.5f) * wid * 0.35f),
                         o.Yaw + (Ctx.U(Ctx.H2(h, 3)) - 0.5f) * 0.35f, DecalPools.Oil, 3f, Ctx.H2(h, 4));
-                if (Ctx.Roll(Ctx.H2(h, 5), 0.12f * aOil))
+                if (Ctx.Roll(Ctx.H2(h, 5), 0.01f * aOil))
                     c.Emit(p - axis * (len * 0.12f) + side * ((Ctx.U(Ctx.H2(h, 6)) - 0.5f) * wid * 0.4f), o.Yaw, DecalPools.Oil, 2.4f, Ctx.H2(h, 7));
                 // Turning in: tyre marks at the stall mouth.
-                if (Ctx.Roll(Ctx.H2(h, 8), 0.08f * aTyre))
+                if (Ctx.Roll(Ctx.H2(h, 8), 0.015f * aTyre))
                     c.Emit(p - axis * (len * 0.42f) + side * ((Ctx.U(Ctx.H2(h, 9)) - 0.5f) * wid * 0.5f), o.Yaw, DecalPools.Tyre, 1.8f, Ctx.H2(h, 10));
-                if (Ctx.Roll(Ctx.H2(h, 11), 0.05f * aCrack))
+                if (Ctx.Roll(Ctx.H2(h, 11), 0.01f * aCrack))
                     c.Emit(p + Jitter(Ctx.H2(h, 12), wid * 0.4f), Ctx.RandomYaw(Ctx.H2(h, 13)), DecalPools.Patch, 1.3f, Ctx.H2(h, 14));
                 // Rows against the edge collect what blows and what gets thrown: litter and (gritty) glass at the back.
                 var back = p + axis * (len * 0.5f + 0.7f);
                 if (c.W.Root.BoundaryDistance(back, 4f) < 3.5f)
                 {
-                    if (Ctx.Roll(Ctx.H2(h, 15), 0.22f * aLitter)) c.Emit(back, Ctx.RandomYaw(Ctx.H2(h, 16)), AssetCategories.DecalLitter, 1.5f, Ctx.H2(h, 17));
-                    if (Ctx.Roll(Ctx.H2(h, 18), 0.18f * aGlass)) c.Emit(back + side * 0.8f, Ctx.RandomYaw(Ctx.H2(h, 19)), DecalPools.Glass, 1.5f, Ctx.H2(h, 20));
+                    if (Ctx.Roll(Ctx.H2(h, 15), 0.03f * aLitter)) c.Emit(back, Ctx.RandomYaw(Ctx.H2(h, 16)), AssetCategories.DecalLitter, 1.5f, Ctx.H2(h, 17));
+                    if (Ctx.Roll(Ctx.H2(h, 18), 0.02f * aGlass)) c.Emit(back + side * 0.8f, Ctx.RandomYaw(Ctx.H2(h, 19)), DecalPools.Glass, 1.5f, Ctx.H2(h, 20));
                 }
             }
             // Aisles: stains along the drive line, repairs, wheel lines; tyre marks at turns and entrances.
@@ -411,9 +421,9 @@ namespace Placemaker.Core.Decals
                 {
                     uint h = c.H(ni, 92, s++);
                     var nrm = Perp(t);
-                    if (Ctx.Roll(h, 0.14f * aStain)) c.Emit(p + nrm * (Ctx.U(Ctx.H2(h, 1)) - 0.5f) * 2f, Ctx.Yaw(t), DecalPools.Stain, 1.4f, Ctx.H2(h, 2));
-                    if (Ctx.Roll(Ctx.H2(h, 3), 0.07f * aCrack)) c.Emit(p + nrm * (Ctx.U(Ctx.H2(h, 4)) - 0.5f) * 2.5f, Ctx.RandomYaw(Ctx.H2(h, 5)), DecalPools.Patch, 1.3f, Ctx.H2(h, 6));
-                    if (Ctx.Roll(Ctx.H2(h, 7), 0.08f * aTyre)) c.Emit(p + nrm * (Ctx.U(Ctx.H2(h, 8)) < 0.5f ? -1.2f : 1.2f), Ctx.Yaw(t), DecalPools.Tyre, 1.4f, Ctx.H2(h, 9));
+                    if (Ctx.Roll(h, 0.025f * aStain)) c.Emit(p + nrm * (Ctx.U(Ctx.H2(h, 1)) - 0.5f) * 2f, Ctx.Yaw(t), DecalPools.Stain, 1.4f, Ctx.H2(h, 2));
+                    if (Ctx.Roll(Ctx.H2(h, 3), 0.01f * aCrack)) c.Emit(p + nrm * (Ctx.U(Ctx.H2(h, 4)) - 0.5f) * 2.5f, Ctx.RandomYaw(Ctx.H2(h, 5)), DecalPools.Patch, 1.3f, Ctx.H2(h, 6));
+                    if (Ctx.Roll(Ctx.H2(h, 7), 0.01f * aTyre)) c.Emit(p + nrm * (Ctx.U(Ctx.H2(h, 8)) < 0.5f ? -1.2f : 1.2f), Ctx.Yaw(t), DecalPools.Tyre, 1.4f, Ctx.H2(h, 9));
                 }
                 ends.Add((n.A.xz, math.normalizesafe(n.D.xz - n.A.xz), n.StartAttach >= 0));
                 ends.Add((n.D.xz, math.normalizesafe(n.A.xz - n.D.xz), n.EndAttach >= 0));
@@ -435,14 +445,14 @@ namespace Placemaker.Core.Decals
                         for (int b = a + 1; b < group.Count; b++)
                             if (math.abs(math.dot(ends[group[a]].dir, ends[group[b]].dir)) < 0.8f) { turn = true; break; }
                 if (!entrance && !turn) continue;
-                float scale = entrance ? 1f : 0.55f;
+                float scale = entrance ? 0.3f : 0.05f;
                 foreach (var g in group)
                 {
                     var d = ends[g].dir;
                     uint hg = Ctx.H2(h, g);
                     if (Ctx.Roll(hg, scale * aTyre)) c.Emit(J + d * 3f + Perp(d) * (Ctx.U(Ctx.H2(hg, 1)) - 0.5f) * 2f, Ctx.Yaw(d), DecalPools.Tyre, 2.5f, Ctx.H2(hg, 2));
                 }
-                if (Ctx.Roll(Ctx.H2(h, 9), 0.5f * aStain)) c.Emit(J, Ctx.RandomYaw(Ctx.H2(h, 10)), DecalPools.Stain, 2.2f, Ctx.H2(h, 11));
+                if (Ctx.Roll(Ctx.H2(h, 9), 0.08f * aStain)) c.Emit(J, Ctx.RandomYaw(Ctx.H2(h, 10)), DecalPools.Stain, 2.2f, Ctx.H2(h, 11));
             }
         }
 
