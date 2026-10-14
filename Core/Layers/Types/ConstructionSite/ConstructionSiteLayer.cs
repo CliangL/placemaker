@@ -100,7 +100,7 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
         {
             Preset("foundation", ("subtype", "foundation"), ("depth", 6.0), ("workSize", 55.0), ("crane", true), ("machines", 4.0));
             Preset("roadworks", ("subtype", "roadworks"), ("depth", 2.0), ("workSize", 60.0), ("crane", false), ("machines", 6.0),
-                ("coneSpacing", 4.0), ("groundCover", "none"), ("piles", 8.0), ("stacks", 6.0));
+                ("coneSpacing", 6.0), ("groundCover", "none"), ("piles", 8.0), ("stacks", 6.0));
             Preset("compound", ("subtype", "compound"), ("compound", "large"), ("cabins", 10.0), ("containers", 10.0), ("toilets", 4.0),
                 ("crane", false), ("stacks", 20.0), ("piles", 8.0), ("groundCover", "gravel"), ("machines", 6.0));
             Preset("demolition", ("subtype", "demolition"), ("depth", 3.0), ("workSize", 60.0), ("piles", 24.0), ("stacks", 4.0),
@@ -139,10 +139,16 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
         }
 
         /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
-        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = new Dictionary<string, GritAssets.Set>
+        {
+            // Site lighting is 10 m work-light poles, not 20 m industrial masts.
+            [AssetCategories.FloodLight] = new GritAssets.Set(true, "LightpoleCommercial01|LightpoleCommercial02|LightpoleIndustrial01", "LightpoleCommercial02|LightpoleCommercial01|LightpoleIndustrial01"),
+            // Welfare and office units are containers; a shed only when none are installed.
+            [AssetCategories.ConstructionCabin] = new GritAssets.Set(false, "ShippingContainer01|ToolShed03", "ShippingContainer02|ToolShed03", "ShippingContainer03|ToolShed03"),
+        }, ArtSurfaces = null;
 
         // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
-        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 120f); }
 
         private void PlanArt(LayerContext ctx)
         {
@@ -154,7 +160,8 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
                 Machines = ctx.L("machineAssets"), Materials = ctx.L("materialAssets"), Piles = ctx.L("pileAssets"),
                 Barriers = ctx.L("barrierAssets"), Cabins = ctx.L("cabinAssets"),
             };
-            LeisureKit.Frame(region, out s.Centre, out s.Axis, out s.Side, out s.Major, out s.Minor);
+            // Works follow the plot's dominant edges (a square plot used to get diagonal road strips).
+            YardKit.GridFrame(region, out s.Centre, out s.Axis, out s.Side, out s.Major, out s.Minor);
             var gates = Gates(ctx);
             if (gates.Count > 0) { s.Gate = gates[0].Position; s.Inward = region.InwardNormal(gates[0].Segment); s.HasGate = true; }
             else { s.Gate = region.PointAt(0f, out _, out s.Inward, out _); }
