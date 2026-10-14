@@ -17,6 +17,7 @@
 
 using System.Collections.Generic;
 using Placemaker.Core.Geometry;
+using Placemaker.Core.Layers.Types.Scrapyard;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
 using Unity.Mathematics;
@@ -135,7 +136,33 @@ namespace Placemaker.Core.Layers.Types.Logistics
             public const float DecalsPerHa = 110f, ItemsPerHa = 260f;
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        // Art pass (a4): curated, correctly sized goods for everything the player left automatic. The
+        // automatic pools drew 35 m log piles as "lumber", 190 m coal mountains and a 37 m pipe rack as
+        // "bulk", ship-deck container stacks, play cabins as offices and fire barrels as stock.
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = new Dictionary<string, GritAssets.Set>
+        {
+            // Timber bundles (3.5 × 4.7 m log stacks) and split firewood stacks.
+            [AssetCategories.LogisticsLumber] = new GritAssets.Set(false, "ForestForwarderTrailer01_LogPile01", "ForestForwarderTrailer01_LogPile02",
+                "ForestForwarderTrailer01_LogPile03", "ForestForwarderTrailer01_LogPile01-1|ForestForwarderTrailer01_LogPile01",
+                "ForestForwarderTrailer01_LogPile02-2|ForestForwarderTrailer01_LogPile02", "FirewoodPile03"),
+            // Bulk bays: truck-tipped heaps that fit an 8 m bay, and pipe stacks.
+            [AssetCategories.LogisticsBulk] = new GritAssets.Set(false, "OreMiningTruck01_OrePile02", "OreMiningTruck01_OrePile03",
+                "OreMiningTruck01_OrePile01", "OilPipe01|OreMiningTruck01_OrePile02"),
+            [AssetCategories.LogisticsContainer] = new GritAssets.Set(false, "ShippingContainer01", "ShippingContainer02", "ShippingContainer03"),
+            [AssetCategories.LogisticsPallet] = new GritAssets.Set(false, "Pallet01", "Pallet02", "Pallet03", "Pallet04", "CratePile01", "CratePile02", "GasBottlePallet01"),
+            [AssetCategories.LogisticsCrate] = new GritAssets.Set(false, "CratePile01", "CratePile02", "CratePile03", "Crate01", "Crate02", "CardboardBoxPile02"),
+            [AssetCategories.LogisticsBarrel] = new GritAssets.Set(false, "BarrelPile01", "BarrelPile02", "BarrelPile03", "Barrel01", "Barrel03", "GasBottleRack01|BarrelPile01"),
+            [AssetCategories.LogisticsTruck] = new GritAssets.Set(false, "Prop_TruckTrailer01|Prop_TruckTrailer03", "Prop_TruckTrailer03|Prop_TruckTrailer01",
+                "Prop_TruckTrailer04|Prop_TruckTrailer01", "Prop_TruckTrailer02|Prop_TruckTrailer01"),
+            [AssetCategories.LogisticsMachine] = new GritAssets.Set(false, "Prop_FrontendLoader01"),
+            [AssetCategories.LogisticsCabin] = new GritAssets.Set(true, "ParkingLotBooth01|ShippingContainer01|ToolShed03"),
+            [AssetCategories.LogisticsBarrier] = new GritAssets.Set(true, "ParkingLotGate01|ParkingLotGate02"),
+            [AssetCategories.FloodLight] = new GritAssets.Set(true, "LightpoleCommercial01|LightpoleCommercial02|LightpoleIndustrial01"),
+        };
+
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects); GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 110f); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
@@ -222,7 +249,8 @@ namespace Placemaker.Core.Layers.Types.Logistics
         /// <summary>Principal frame rotated by the angle control, origin shifted so an aisle crossing sits at the main gate.</summary>
         private static void Frame(Yard y, List<Gate> gates)
         {
-            LeisureKit.Frame(y.Inner, out var centre, out var axis, out _, out _, out _);
+            // Art pass: rows follow the plot's dominant edges (a square plot used to get diagonal blocks).
+            YardKit.GridFrame(y.Inner, out var centre, out var axis, out _, out _, out _);
             float ang = math.radians(y.Ctx.F("angle"));
             float cs = math.cos(ang), sn = math.sin(ang);
             y.A = math.normalizesafe(new float2(axis.x * cs - axis.y * sn, axis.x * sn + axis.y * cs), new float2(1, 0));
@@ -423,7 +451,8 @@ namespace Placemaker.Core.Layers.Types.Logistics
             switch (kind)
             {
                 case "containers": return new Slot { Length = 12.2f, Width = 2.45f, Kind = kind };
-                case "lumber": return new Slot { Length = 6f, Width = 1.6f, Kind = kind };
+                // A timber bundle (3.5 × 4.7 m); the old 6 × 1.6 m slot drew 35 m log piles.
+                case "lumber": return new Slot { Length = 5f, Width = 3.7f, Kind = kind };
                 case "bulk": return new Slot { Length = 8f, Width = 8f, Kind = kind };
                 case "barrels": return new Slot { Length = 1.6f, Width = 1.6f, Kind = kind };
                 case "crates": return new Slot { Length = 2.2f, Width = 2.2f, Kind = kind };
