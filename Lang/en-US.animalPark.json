@@ -88,11 +88,5 @@
   "Placemaker.AnimalPark.treeSpecies": "Tree species",
   "Placemaker.AnimalPark.pathAsset": "Path type",
   "Placemaker.AnimalPark.benchAsset": "Bench",
-  "Placemaker.AnimalPark.entrances": "Entrances",
-  "Placemaker.AnimalPark.shopLayout": "Shop layout",
-  "Placemaker.AnimalPark.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.AnimalPark.shopLayout.band": "Band",
-  "Placemaker.AnimalPark.shopLayout.pads": "Pads",
-  "Placemaker.AnimalPark.shopDepth": "Shop depth",
-  "Placemaker.AnimalPark.shopDepth.Tooltip": "How deep the zoned band reaches into the area (whole 8 m cells)."
+  "Placemaker.AnimalPark.entrances": "Entrances"
 }

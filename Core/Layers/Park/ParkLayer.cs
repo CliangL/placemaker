@@ -74,7 +74,7 @@ namespace Placemaker.Core.Layers.Park
             // Art pass (a1): real flowerbeds — on automatic the add-on's planter role resolved to planter boxes and pots.
             new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Park.Feature.flowerbeds", DefaultOn = true, Preset = Bag(("assets", (string[])ParkArt.Flowerbeds.Clone())) },
             new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = Bag(("count", 2.0), ("where", "entrances")) },
-            StreetShopsFeature("Park"),
+            StreetShopsFeature("Park", "park"),
             new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
             new FeatureInfo { Layer = "ground", LabelKey = "Placemaker.Feature.ground", TooltipKey = "Placemaker.Feature.ground.Tooltip" },
             new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Bag(("theme", "leaves"), ("density", 0.4)), DefaultOn = true },

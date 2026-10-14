@@ -44,6 +44,7 @@ namespace Placemaker.Gallery
                     case "--catalog": fixture = next; i++; break;
                     case "--only": only = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--showcase": Renderer.Showcase = true; break;
+                    case "--shops": Variants.ShopVariants = true; break;
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
@@ -159,6 +160,13 @@ namespace Placemaker.Gallery
     {
         /// <summary>--areas 1,3,6: render every job at each of these sizes (hectares) instead of the default size.</summary>
         public static float[] Areas;
+        /// <summary>--shops: one image per street-shop layout/amount (s12) for every type that hosts street shops.</summary>
+        public static bool ShopVariants;
+        private static readonly (string layout, string amount)[] ShopCombos =
+        {
+            ("band", "some"), ("band", "few"), ("pads", "some"), ("pads", "lots"), ("clusters", "some"), ("clusters", "lots"),
+            ("inward", "some"), ("inward", "lots"), ("lane", "some"), ("lane", "lots"),
+        };
 
         public static List<Job> All(string repo, HashSet<string> only)
         {
@@ -209,6 +217,14 @@ namespace Placemaker.Gallery
                     jobs.Add(Make("preset-" + Safe(p.Id), "Preset " + p.Id, r => editor.ApplyPreset(r, RecipePaths.Root, p.Id)));
                 }
                 var features = Features.Of(gen);
+                if (ShopVariants && features.Any(f => f.Layer == "edgeZoning" && f.Target == "shops"))
+                    foreach (var (layout, amount) in ShopCombos)
+                        jobs.Add(Make("shops-" + layout + "-" + amount, "Street shops " + layout + " / " + amount, r =>
+                        {
+                            editor.SetFeature(r, RecipePaths.Root, "edgeZoning", true, 91);
+                            r.Root.Settings.Values["shopLayout"] = layout;
+                            r.Root.Settings.Values["shopAmount"] = amount;
+                        }));
                 if (features.Count > 0 && !Renderer.Showcase)
                 {
                     jobs.Add(Make("features-all", "All features on", r =>
@@ -601,6 +617,19 @@ namespace Placemaker.Gallery
                     if (t?.Ring != null && t.Ring.Length >= 3)
                         cv.DashedPolyline(Close(t.Ring.Select(p => p.xz).ToArray()), cv.Px(1.2f), 3f, 2f, t.Permanent ? Rgba.Hex("#d08a00") : Rgba.Hex("#4f86c6"));
             }
+
+            // Zoning (street shops, edge zoning): commercial blue, the 8 m cells the game will zone.
+            foreach (var l in plan.Layers.Where(l => l != null))
+                foreach (var z in l.Zoning)
+                {
+                    var q = new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz };
+                    cv.FillPolygon(q, Rgba.Hex("#8fb4e8", 0.75f));
+                    cv.StrokePolyline(q, cv.Px(1f), Rgba.Hex("#3d6db5"), closed: true);
+                }
+            foreach (var l in plan.Layers.Where(l => l != null))
+                foreach (var g in l.Regions)
+                    if (g?.Ring != null && g.Tags != null && g.Tags.Contains("shops"))
+                        cv.StrokePolyline(g.Ring.Select(v => v.xz).ToArray(), cv.Px(1.4f), Rgba.Hex("#1f4f99"), closed: true);
 
             // Terrain paint (rocky outcrops, natural ground): grey-brown, alpha by brush strength.
             foreach (var l in plan.Layers.Where(l => l != null))

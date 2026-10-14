@@ -456,8 +456,9 @@ namespace Placemaker.Core.Layers.Common
             float unplacedInset;
             using (Common.Layout.Use(input.Site))
             {
-                if (HostsStreetShops && input.HasChild(StreetShopsLayer)) CarveStreetShops(ctx, input);
+                var shops = HostsStreetShops && input.HasChild(StreetShopsLayer) ? CarveStreetShops(ctx, input) : null;
                 PlanCore(ctx);
+                if (shops != null) FinishStreetShops(ctx, shops);
                 unplacedInset = Entrances.UnplacedInset;
             }
             // s8: ground before props — no plan may bury the site in thousands of props (ObjectBudget).
@@ -638,6 +639,7 @@ namespace Placemaker.Core.Layers.Common
         // ───────────── "Shops along the street" (edgeZoning feature on a "shops" target) ─────────────
 
         public const string StreetShopsLayer = "edgeZoning";
+        public const string ShopsPlace = Composer.PlacePrefix + StreetFrontage.ShopsTag;
 
         /// <summary>
         /// True for types that offer "Shops along the street": when the edgeZoning feature is on, the
@@ -647,40 +649,125 @@ namespace Placemaker.Core.Layers.Common
         protected virtual bool HostsStreetShops => false;
 
         /// <summary>The host controls shown under the feature toggle (FeatureInfo.Options = ShopOptions).</summary>
-        public static readonly string[] ShopOptions = { "shopLayout", "shopDepth" };
+        public static readonly string[] ShopOptions = { StreetShops.AmountId, StreetShops.LayoutId, StreetShops.DepthId };
 
-        protected static void DefineStreetShopControls(ControlSet c)
+        /// <summary>Shared label keys: the street-shop controls read the same on every host.</summary>
+        private const string ShopKey = "Placemaker.Shops.";
+
+        /// <summary>
+        /// The street-shop controls (amount, layout, depth) with this type's defaults (StreetShops.Defaults).
+        /// Ids are save format: "shopLayout" kept its old values "band" (Row) and "pads" (Speckled).
+        /// </summary>
+        protected void DefineStreetShopControls(ControlSet c)
         {
-            c.Choice("shopLayout", "band", ControlTier.More, "shops", "band", "pads").Tip();
-            c.Slider("shopDepth", 24, 8, 48, 8, "m", ControlTier.More, "shops").Tip();
-            c.Fixed("shopLayout");
-            c.Fixed("shopDepth");
+            var d = StreetShops.DefaultFor(Id);
+            Shared(c.Choice(StreetShops.AmountId, d.amount, ControlTier.More, "shops", StreetShops.Amounts), false);
+            Shared(c.Choice(StreetShops.LayoutId, d.layout, ControlTier.More, "shops", StreetShops.Layouts), true);
+            var depth = c.Slider(StreetShops.DepthId, 24, 8, 48, 8, "m", ControlTier.More, "shops");
+            depth.LabelKey = ShopKey + StreetShops.DepthId;
+            depth.TooltipKey = depth.LabelKey + ".Tooltip";
+            c.Fixed(StreetShops.AmountId);
+            c.Fixed(StreetShops.LayoutId);
+            c.Fixed(StreetShops.DepthId);
         }
 
-        /// <summary>FeatureInfo for "Shops along the street" on a host.</summary>
-        public static FeatureInfo StreetShopsFeature(string area) => new FeatureInfo
+        private static void Shared(ControlSchema c, bool optionTips)
+        {
+            c.LabelKey = ShopKey + c.Id;
+            c.TooltipKey = c.LabelKey + ".Tooltip";
+            foreach (var o in c.Options)
+            {
+                o.LabelKey = c.LabelKey + "." + o.Value;
+                if (optionTips) o.TooltipKey = o.LabelKey + ".Tooltip";
+            }
+        }
+
+        /// <summary>FeatureInfo for "Shops along the street" on a host; on by default where StreetShops.Defaults says so.</summary>
+        public static FeatureInfo StreetShopsFeature(string area, string layerId = null) => new FeatureInfo
         {
             Layer = StreetShopsLayer, Target = StreetFrontage.ShopsTag, LabelKey = "Placemaker.Feature.streetShops",
             TooltipKey = "Placemaker.Feature.streetShops.Tooltip", Options = ShopOptions,
             Preset = new SettingsBag { Values = { ["depth"] = 48.0 } },
+            DefaultOn = StreetShops.DefaultFor(layerId).on,
         };
 
-        private void CarveStreetShops(LayerContext ctx, AreaInput input)
+        /// <summary>Planned by CarveStreetShops, emitted after PlanCore (so the host never mistakes them for its own paths).</summary>
+        private sealed class ShopWork
+        {
+            public StreetShops.Result Layout;
+        }
+
+        private ShopWork CarveStreetShops(LayerContext ctx, AreaInput input)
         {
             var region = ctx.LayerRegion;
-            var roads = StreetFrontage.Roads(input);
+            if (ctx.S(StreetShops.AmountId) == StreetShops.None) return null;
             var gates = new List<float2>();
             foreach (var m in input.Markers) gates.Add(m.Position.xz);
             if (gates.Count == 0)
                 foreach (var m in SuggestMarkers(input)) gates.Add(m.Position.xz);
-            var bands = StreetFrontage.Bands(region, roads, ctx.F("shopDepth"), gates, ctx.S("shopLayout") == "pads");
-            if (bands.Count == 0) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.NoFrontage"); return; }
-            var carved = StreetFrontage.Carve(region, bands, MinArea);
+            var layout = StreetShops.Plan(region, input, gates, ctx.S(StreetShops.LayoutId), ctx.S(StreetShops.AmountId), ctx.F(StreetShops.DepthId),
+                Hashing.Mix(ctx.Seed, Seeds.Hash("streetShops")));
+            if (layout.Shops.Count == 0) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.NoFrontage"); return null; }
+            var carved = StreetShops.Carve(region, layout.Carve, MinArea);
             var rest = carved == null ? null : Common.LayerRegion.From(carved);
-            if (rest == null) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.TooSmall"); return; }
+            if (rest == null) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.TooSmall"); return null; }
+            if (layout.FellBack) ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.NoAlley");
             ctx.LayerRegion = rest;
-            for (int i = 0; i < bands.Count; i++) ctx.AddRegion(bands[i], StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag);
-            ctx.Plan.Facts["shopBands"] = bands.Count;
+            // "place:shops" makes the composer reserve the shop land for the host's other features (big trees,
+            // picnic…, which plan on the whole outline); the zoning feature filling a region still sees it free.
+            for (int i = 0; i < layout.Shops.Count; i++) ctx.AddRegion(layout.Shops[i], StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag, ShopsPlace);
+            ctx.Plan.Facts["shopBands"] = layout.Shops.Count;
+            ctx.Plan.Facts["shopAlleys"] = layout.Alleys.Count;
+            // A lane's dead end is where the park's paths should continue it: an extra entrance there (only
+            // once the player placed entrances — without any, the host keeps its paths internal anyway).
+            if (layout.Doors.Count > 0 && input.Markers.Count > 0)
+            {
+                string kind = input.Markers[0].Kind;
+                foreach (var m in input.Markers) if (m.Kind == EntranceKinds.Pedestrian) { kind = m.Kind; break; }
+                if (kind == EntranceKinds.Main || kind == EntranceKinds.Service) kind = EntranceKinds.Pedestrian;
+                var markers = new List<EdgeMarker>(input.Markers);
+                foreach (var p in layout.Doors)
+                {
+                    rest.ClosestOnBoundary(p, out int seg, out float t);
+                    markers.Add(new EdgeMarker { Kind = kind, RingSegment = seg, RingT = t, Position = new float3(p.x, ctx.H(p), p.y) });
+                }
+                ctx.Input = new AreaInput
+                {
+                    Shape = input.Shape, Site = input.Site, Markers = markers, Settings = input.Settings, Seed = input.Seed,
+                    RegionTags = input.RegionTags, Reserved = input.Reserved, ChildLayers = input.ChildLayers, ChildTargets = input.ChildTargets,
+                };
+            }
+            return new ShopWork { Layout = layout };
+        }
+
+        /// <summary>
+        /// After the host planned: its objects keep off the shop land (a crown reaching over a zone cell would
+        /// make the zoning feature drop that cell), path ends at a lane's dead end sit exactly on the alley's
+        /// end node (CS2 joins nets only at identical nodes), and the alleys are emitted.
+        /// </summary>
+        private static void FinishStreetShops(LayerContext ctx, ShopWork work)
+        {
+            var layout = work.Layout;
+            var plan = ctx.Plan;
+            plan.Objects.RemoveAll(o => o.Role != ObjectRole.Decal && StreetShops.Overlaps(layout.Shops, o.Position.xz, Composer.DefaultRadius(o.Role)));
+            foreach (var door in layout.Doors)
+                foreach (var n in plan.Nets)
+                {
+                    if (!PathJoins.IsPath(n)) continue;
+                    if (n.StartAttach < 0 && math.distancesq(n.A.xz, door) < 4f) { var d = ctx.P3(door) - n.A; n.A += d; n.B += d; }
+                    if (n.EndAttach < 0 && math.distancesq(n.D.xz, door) < 4f) { var d = ctx.P3(door) - n.D; n.D += d; n.C += d; }
+                }
+            var asset = new AssetRef(StreetShops.AlleyAsset, StreetShops.AlleyFallback);
+            foreach (var alley in layout.Alleys)
+            {
+                var pts = alley.Points;
+                for (int i = 0; i + 1 < pts.Count; i++)
+                {
+                    var net = ctx.StraightNet(pts[i], pts[i + 1], NetRole.Alley, asset);
+                    if (i == 0 && alley.StartAttach >= 0) { net.StartAttach = alley.StartAttach; net.StartAttachT = alley.StartT; }
+                    if (i + 2 == pts.Count && alley.EndAttach >= 0) { net.EndAttach = alley.EndAttach; net.EndAttachT = alley.EndT; }
+                }
+            }
         }
 
         protected abstract void PlanCore(LayerContext ctx);

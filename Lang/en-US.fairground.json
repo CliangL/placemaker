@@ -101,12 +101,6 @@
   "Placemaker.Fairground.benchAsset": "Bench",
   "Placemaker.Fairground.lampAsset": "Lamp",
   "Placemaker.Fairground.entrances": "Entrances",
-  "Placemaker.Fairground.shopLayout": "Shop layout",
-  "Placemaker.Fairground.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.Fairground.shopLayout.band": "Band",
-  "Placemaker.Fairground.shopLayout.pads": "Pads",
-  "Placemaker.Fairground.shopDepth": "Shop depth",
-  "Placemaker.Fairground.shopDepth.Tooltip": "How deep the zoned band reaches into the area (whole 8 m cells).",
 
   "Placemaker.Fairground.Issue.NoStage": "No room for the stage — planned without one.",
   "Placemaker.Fairground.Issue.SmallField": "No room for a crowd field in front of the stage.",

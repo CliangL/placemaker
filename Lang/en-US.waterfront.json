@@ -84,12 +84,6 @@
   "Placemaker.Waterfront.benchAsset": "Bench",
   "Placemaker.Waterfront.lampAsset": "Lamp",
   "Placemaker.Waterfront.entrances": "Entrances",
-  "Placemaker.Waterfront.shopLayout": "Shop layout",
-  "Placemaker.Waterfront.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.Waterfront.shopLayout.band": "Band",
-  "Placemaker.Waterfront.shopLayout.pads": "Pads",
-  "Placemaker.Waterfront.shopDepth": "Shop depth",
-  "Placemaker.Waterfront.shopDepth.Tooltip": "How deep the zoned band reaches into the area (whole 8 m cells).",
 
   "Placemaker.Waterfront.Preset.promenade": "Promenade",
   "Placemaker.Waterfront.Preset.pier": "Pier & boardwalk",

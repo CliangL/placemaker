@@ -166,8 +166,14 @@ namespace Placemaker.Core.Layers.AddOns
             {
                 if (Poly.Contains(quad, disc.Center)) return true;
                 for (int i = 0; i < 4; i++)
-                    if (Dist(disc.Center, quad[i], quad[(i + 1) % 4]) < disc.Radius) return true;
+                    // s12: a crown or bench clearance merely brushing the quad edge does not block the cells; reaching
+                    // more than half its radius into them does.
+                    if (Dist(disc.Center, quad[i], quad[(i + 1) % 4]) < disc.Radius * 0.5f) return true;
             }
+            // Claimed polygons (lots, places — s12: neighbouring shop regions) only block when they reach into
+            // the quad: test a slightly inset quad so a shared edge with the next shop region does not count.
+            var c4 = 0.25f * (quad[0] + quad[1] + quad[2] + quad[3]);
+            for (int i = 0; i < 4; i++) quad[i] += math.normalizesafe(c4 - quad[i]) * 0.3f;
             foreach (var poly in reserved.Polygons)
             {
                 if (poly == null || poly.Length < 3) continue;
@@ -242,7 +248,9 @@ namespace Placemaker.Core.Layers.AddOns
 
         private static bool IsRoadTag(string tag) =>
             tag == nameof(NetRole.Street) || tag == nameof(NetRole.Avenue) || tag == nameof(NetRole.CulDeSac)
-            || tag == nameof(NetRole.Roundabout) || tag == nameof(NetRole.PerimeterRoad);
+            || tag == nameof(NetRole.Roundabout) || tag == nameof(NetRole.PerimeterRoad)
+            // s12: alleys planned by a street-shop layout carry zone blocks (vanilla Alley); shops face them.
+            || tag == nameof(NetRole.Alley);
 
         private static bool Fronts(float2 p, List<RoadLine> roads)
         {

@@ -300,7 +300,11 @@ namespace Placemaker.Tests
         public void StreetShopsZoneTheFrontageAndTheParkKeepsOut()
         {
             var ring = TestKit.Rect(200, 150);
-            var plan = Compose(With("park", "edgeZoning"), ring, TestKit.RoadAlongBottom(200));
+            // s12: the park defaults to speckled shops; compare an explicit row with speckled at the same amount.
+            var row = With("park", "edgeZoning");
+            row.Root.Settings.Values["shopLayout"] = "band";
+            row.Root.Settings.Values["shopAmount"] = "some";
+            var plan = Compose(row, ring, TestKit.RoadAlongBottom(200));
             Assert.True(string.IsNullOrEmpty(Errors(plan)), Errors(plan));
             var park = plan.Layers.Single(l => l.GeneratorId == "park");
             var zoning = plan.Layers.Where(l => l.GeneratorId == "edgeZoning").SelectMany(l => l.Zoning).ToList();
@@ -315,7 +319,7 @@ namespace Placemaker.Tests
                 foreach (var n in park.Nets.Where(n => n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide))
                     Assert.False(Poly.Contains(quad, n.A.xz) && Poly.Contains(quad, n.D.xz));
             }
-            var pads = WithSettings("park", ("shopLayout", "pads"));
+            var pads = WithSettings("park", ("shopLayout", "pads"), ("shopAmount", "some"));
             Assert.True(Editor.SetFeature(pads, "0", "edgeZoning", true, 3));
             var padPlan = Compose(pads, ring, TestKit.RoadAlongBottom(200));
             double area(IEnumerable<PlannedZoning> zs) => zs.Sum(z => Pricing.PolygonArea(new[] { z.A, z.B, z.C, z.D }));

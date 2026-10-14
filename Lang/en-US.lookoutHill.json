@@ -78,12 +78,6 @@
   "Placemaker.LookoutHill.kites": "Kites",
   "Placemaker.LookoutHill.kites.Tooltip": "Kites and windsocks on the open upper slopes.",
   "Placemaker.LookoutHill.entrances": "Entrances",
-  "Placemaker.LookoutHill.shopLayout": "Shop layout",
-  "Placemaker.LookoutHill.shopLayout.Tooltip": "A continuous band along the street, or separate shop pads.",
-  "Placemaker.LookoutHill.shopLayout.band": "Band",
-  "Placemaker.LookoutHill.shopLayout.pads": "Pads",
-  "Placemaker.LookoutHill.shopDepth": "Shop depth",
-  "Placemaker.LookoutHill.shopDepth.Tooltip": "Depth of the commercial band (one zone cell is 8 m).",
 
   "Placemaker.LookoutHill.Preset.hilltop": "Hilltop lookout",
   "Placemaker.LookoutHill.Preset.sledding": "Sledding hill",
