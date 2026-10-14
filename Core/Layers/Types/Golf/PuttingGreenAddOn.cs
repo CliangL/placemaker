@@ -40,11 +40,10 @@ namespace Placemaker.Core.Layers.Types.Golf
             if (r > want) r = want;
             uint v = Hashing.Mix(ctx.Seed, 0x9073u);
             var ring = LeisureKit.Blob(c, r, v, 18, 0.2f);
-            ctx.Surface(ring, SurfaceRole.Grass, AssetMix.One(ctx.S("greenSurface")), AssetCategories.SurfaceGrass);
+            ctx.Surface(ring, SurfaceRole.Grass, GolfAssets.GreenRef(ctx.S("greenSurface")), AssetCategories.SurfaceGrass);
             occ.Take(c, r, 0);
             int cups = 0;
-            string flag = LeisureKit.Category(ctx, ctx.S("flagAsset"), AssetCategories.GolfFlag);
-            if (flag != null)
+            var (flagAsset, flag) = GolfAssets.FlagProp(ctx.S("flagAsset"), false);
             {
                 int n = ctx.I("cups");
                 float phase = Hashing.Unit(v) * 6.283f;
@@ -52,7 +51,7 @@ namespace Placemaker.Core.Layers.Types.Golf
                 {
                     float a = phase + i * 2.39996f;   // golden angle: cups spread over the green
                     float d = r * 0.65f * math.sqrt((i + 0.5f) / n);
-                    ctx.Object(c + new float2(math.cos(a), math.sin(a)) * d, 0f, ObjectRole.Furniture, AssetMix.One(ctx.S("flagAsset")), Hashing.Mix(v, (uint)i), -1, flag);
+                    ctx.Object(c + new float2(math.cos(a), math.sin(a)) * d, 0f, ObjectRole.Furniture, flagAsset, Hashing.Mix(v, (uint)i), -1, flag);
                     cups++;
                 }
             }
@@ -64,7 +63,7 @@ namespace Placemaker.Core.Layers.Types.Golf
                 if (occ.Free(bc, br, 0.5f, 0.2f))
                 {
                     var b = LeisureKit.Blob(bc, br, Hashing.Mix(v, 5u), 12, 0.25f);
-                    if (ctx.Surface(b, SurfaceRole.Decorative, AssetMix.One(""), AssetAvailability.Has(AssetCategories.SurfaceSand) ? AssetCategories.SurfaceSand : AssetCategories.SurfaceNatural))
+                    if (ctx.Surface(b, SurfaceRole.Decorative, GolfAssets.BunkerRef(""), AssetCategories.SurfaceSand))
                         occ.Take(bc, br, 0);
                 }
             }

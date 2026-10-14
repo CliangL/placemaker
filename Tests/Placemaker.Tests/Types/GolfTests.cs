@@ -53,7 +53,9 @@ namespace Placemaker.Tests.Types.T04
             Assert.Contains(plan.Terraform, t => !float.IsNaN(t.WaterLevel) && t.TargetHeight < t.WaterLevel);
             Assert.Contains(plan.Surfaces, s => s.Role == SurfaceRole.Water);
             // Cart paths and a clubhouse.
-            Assert.Contains(plan.Nets, n => n.Role == NetRole.PathwayWide);
+            // Art pass: cart paths are 3 m concrete paths, not the 8 m automatic promenade.
+            Assert.Contains(plan.Nets, n => n.Role == NetRole.Pathway && n.Asset.Id == "Pavement Path");
+            Assert.DoesNotContain(plan.Nets, n => n.Role == NetRole.PathwayWide);
             Assert.Contains(plan.Objects, o => o.Category == AssetCategories.GolfClubhouse);
             Assert.Contains(plan.Regions, r => r.Tags.Contains("practice"));
         }
@@ -149,7 +151,11 @@ namespace Placemaker.Tests.Types.T04
                     var plan = Compose(WithPreset(p.Id), FiveHa, TestKit.RoadAlongBottom(250));
                     Assert.True(string.IsNullOrEmpty(Errors(plan)), Errors(plan));
                     Assert.DoesNotContain(Layer(plan).Objects, o => none.ContainsKey(o.Category ?? ""));
-                    if (p.Id != "drivingRange") Assert.Contains(plan.AllIssues(), i => i.Key == Keys.NoAssetsIssue && i.Severity == IssueSeverity.Info);
+                    // Art pass: without golf props the course still gets vanilla stand-ins (corner flag pins,
+                    // dog-park poles as disc golf baskets) instead of an empty "nothing installed" note.
+                    string pin = p.Id == "discGolf" ? "DogParkPole01" : "SportParkFlag01";
+                    Assert.Contains(Layer(plan).Objects, o => o.Asset.Id == pin);
+                    Assert.DoesNotContain(Layer(plan).Objects, o => o.Role == ObjectRole.Decal);
                 }
         }
 
