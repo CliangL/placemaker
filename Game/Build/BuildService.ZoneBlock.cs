@@ -58,6 +58,22 @@ namespace Placemaker.Game.Build
             {
                 _blockerRings.Clear();
                 foreach (var r in _request.Plan.ZoneBlockers) if (r != null && r.Length >= 3) _blockerRings.Add(r);
+                // (s22) What the blocking keeps free, for the in-game check (cutout cells must never be under a blocker).
+                int zonedCells = 0, touched = 0;
+                double m2 = 0;
+                foreach (var r in _blockerRings) m2 += Poly.Area(r);
+                if (_request.Plan.ZoneCells != null)
+                    foreach (var c in _request.Plan.ZoneCells)
+                    {
+                        if (c.State != ZoneCellState.Zoned) continue;
+                        zonedCells++;
+                        var sq = new[] { c.A, c.B, c.C, c.D };
+                        var centre = 0.25f * (c.A + c.B + c.C + c.D);
+                        for (int i = 0; i < 4; i++) sq[i] += math.normalizesafe(centre - sq[i]) * 0.03f;
+                        foreach (var r in _blockerRings) if (ObstacleCut.Overlaps(sq, r)) { touched++; break; }
+                    }
+                Mod.Log.Info($"Placemaker zone blocking: {_blockerRings.Count} lot ring(s), {m2:F0} m², keeping {zonedCells} cutout cell(s) free"
+                    + (touched > 0 ? $" — {touched} of them touched by a blocker (bug)." : "."));
                 _blockerRound = 0;
                 _blockerPhase = 0;
                 Go(Step.ZoneBlock);

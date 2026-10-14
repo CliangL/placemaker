@@ -1,6 +1,7 @@
 // 2D map for the mock: fake city, the area being selected (draw / pick block / paint / road loop),
 // markers, and the REAL plan (from Core via the mock host, or the fake planner) drawn with the same
 // role colours as the in-game overlay.
+import { layerOfNet, layerOfObject, layerOfSurface } from "./backend/legend";
 import React, { useEffect, useRef } from "react";
 import { MockBackend } from "./backend/backend";
 import { BLOCKS, blockAt, CELL, GRID, NODES, WORLD } from "./backend/city";
@@ -137,7 +138,11 @@ export function MapView({ backend }: { backend: MockBackend }) {
                 g.fill();
                 g.restore();
             }
-            for (const l of b.plan.layers) drawLayer(g, l, alpha, px);
+            // s22: only the layers the legend shows (hover isolates one); the drawn set is kept for tests.
+            const drawn = new Set<string>();
+            const vis = b.stage === "area" ? undefined : (id: string) => b.layerVisible(id);
+            for (const l of b.plan.layers) drawLayer(g, l, alpha, px, vis, drawn);
+            b.drawnLayers = Array.from(drawn).sort();
             if (b.stage !== "area") {
                 g.font = `${12 * px}px Arial`;
                 g.textAlign = "center";
@@ -406,15 +411,22 @@ function line(g: CanvasRenderingContext2D, a: V2, b: V2) {
     g.stroke();
 }
 
-function drawLayer(g: CanvasRenderingContext2D, l: PlanLayer, alpha: number, px: number) {
+function drawLayer(g: CanvasRenderingContext2D, l: PlanLayer, alpha: number, px: number, vis?: (id: string) => boolean, drawn?: Set<string>) {
+    const show = (id: string) => {
+        if (vis && !vis(id)) return false;
+        drawn?.add(id);
+        return true;
+    };
     g.save();
     g.globalAlpha = alpha;
     for (const s of l.surfaces) {
+        if (!show(layerOfSurface(s))) continue;
         g.fillStyle = SURFACE[s.role] ?? "rgba(200,200,200,0.4)";
         poly(g, s.ring);
         g.fill();
     }
     for (const z of l.zoning ?? []) {
+        if (!show("cutouts")) continue;
         g.fillStyle = ZONE[z.zone] ?? "rgba(180, 140, 255, 0.4)";
         poly(g, z.quad);
         g.fill();
@@ -424,6 +436,7 @@ function drawLayer(g: CanvasRenderingContext2D, l: PlanLayer, alpha: number, px:
     }
     g.lineCap = "round";
     for (const n of l.nets) {
+        if (!show(layerOfNet(n, l))) continue;
         // s16: roads of the roads layer in their role colour (white street, cyan avenue, green local, violet ring, orange perimeter).
         const st = n.roleColor ? { color: "#5a6168", edge: n.roleColor, centre: n.roleColor } : netStyle(n.role);
         const [a, b1, c1, d] = n.pts;
@@ -452,6 +465,7 @@ function drawLayer(g: CanvasRenderingContext2D, l: PlanLayer, alpha: number, px:
         }
     }
     for (const o of l.objects) {
+        if (!show(layerOfObject(o))) continue;
         switch (o.role) {
             case "Tree":
                 g.fillStyle = "#2f7d32";

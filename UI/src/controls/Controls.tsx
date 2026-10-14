@@ -747,36 +747,3 @@ function groupBy(list: ControlEx[]): [string, ControlEx[]][] {
 export function formatLength(m: number): string {
     return m >= 1000 ? (m / 1000).toFixed(1) + " km" : Math.round(m) + " m";
 }
-
-/**
- * s16: the roads of the latest plan by role, in the in-game preview colours — only the roles present:
- * "■ Street · Two-Lane Road · 1.2 km". Answers "what are these roads being drawn on my screen?".
- */
-export const NetLegend = ({ step }: { step: StepView }) => {
-    const { t } = useT();
-    const assetName = useAssetName();
-    const entries = step.netLegend ?? [];
-    if (!entries.length) return null;
-    return (
-        <div className={s.legend} data-testid="net-legend">
-            <div className={s.legendTitle}>{t("Placemaker.UI.Legend.Title", "On the map")}</div>
-            {entries.map((e) => {
-                const road = e.assetName || (e.assetId ? assetName(e.role === "carFree" ? "net.pathway" : "net.road", e.assetId) : "");
-                return (
-                    <Tip
-                        key={e.role}
-                        title={t(e.label, humanize(e.role))}
-                        description={t("Placemaker.UI.Legend.Tip", "{0} segments, {1} in total", [e.count, formatLength(e.lengthM)])}
-                    >
-                        <div className={s.legendRow} data-testid={`legend-${e.role}`}>
-                            <div className={s.legendSwatch} style={{ backgroundColor: e.color }} />
-                            <div className={s.legendRole}>{t(e.label, humanize(e.role))}</div>
-                            <div className={s.legendText}>{road ? "· " + road : ""}</div>
-                            <div className={s.legendLen}>{formatLength(e.lengthM)}</div>
-                        </div>
-                    </Tip>
-                );
-            })}
-        </div>
-    );
-};

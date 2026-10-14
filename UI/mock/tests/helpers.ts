@@ -123,7 +123,7 @@ export async function noTextOverflow(page: Page, where: string) {
                 }
                 // the panel and the picker flyout beside it are the outermost boxes
                 const id = a.getAttribute("data-testid");
-                if (id === "placemaker-panel" || id === "picker-flyout") break;
+                if (id === "placemaker-panel" || id === "picker-flyout" || id === "legend-window") break;
             }
         }
         return out;

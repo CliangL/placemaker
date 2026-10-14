@@ -457,56 +457,6 @@
     background-color: #1e2a33;
 }
 
-// Road legend of the latest plan (s16): "■ Street · Two-Lane Road · 1.2 km".
-.legend {
-    @include col;
-    align-items: stretch;
-    margin: 2rem 0 6rem 0;
-    padding: 5rem 7rem;
-    border-radius: $radius;
-    background-color: $c-surface;
-}
-
-.legendTitle {
-    font-size: $fs-s;
-    color: $c-text-faint;
-    margin-bottom: 2rem;
-}
-
-.legendRow {
-    @include row;
-    min-width: 0;
-    height: 18rem;
-    font-size: $fs-s;
-    color: $c-text-dim;
-}
-
-.legendSwatch {
-    flex-shrink: 0;
-    width: 14rem;
-    height: 5rem;
-    margin-right: 6rem;
-    border-radius: 2rem;
-}
-
-.legendRole {
-    flex-shrink: 0;
-    color: #ffffff;
-}
-
-.legendText {
-    flex: 1 1 auto;
-    min-width: 0;
-    margin-left: 4rem;
-    @include ellipsis;
-}
-
-.legendLen {
-    flex-shrink: 0;
-    margin-left: 6rem;
-    color: $c-text-faint;
-}
-
 // s15 — disabled with reason: the control is shown (so the player knows it exists) but greyed out; the reason
 // is the label's tooltip. The editor takes no clicks.
 .rowDisabled {

@@ -127,6 +127,28 @@ namespace Placemaker.Game.Build
             }
         }
 
+        /// <summary>
+        /// (s22) Error types of our temporaries with counts ("OverlapExisting×180, SteepSlope×3"): the retry log used to
+        /// name only the first type found, so 188 colliding optional objects read as "188 parts (SteepSlope)".
+        /// </summary>
+        private string ErrorHistogram()
+        {
+            if (_iconQuery.IsEmptyIgnoreFilter) return "";
+            var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            using var icons = _iconQuery.ToEntityArray(Allocator.Temp);
+            for (int i = 0; i < icons.Length; i++)
+            {
+                var prefab = EntityManager.GetComponentData<PrefabRef>(icons[i]).m_Prefab;
+                if (!EntityManager.HasComponent<ToolErrorData>(prefab) || !BelongsToTemporary(icons[i])) continue;
+                string t = EntityManager.GetComponentData<ToolErrorData>(prefab).m_Error.ToString();
+                counts.TryGetValue(t, out int n);
+                counts[t] = n + 1;
+            }
+            var sb = new System.Text.StringBuilder();
+            foreach (var kv in counts) sb.Append(sb.Length > 0 ? ", " : "").Append(kv.Key).Append('×').Append(kv.Value);
+            return sb.ToString();
+        }
+
         private static bool ContainsNear(List<float3> list, float3 p)
         {
             foreach (var q in list) if (math.distancesq(q, p) < 1f) return true;
@@ -168,6 +190,7 @@ namespace Placemaker.Game.Build
         private int ExcludeErroneousItems()
         {
             int newly = 0;
+            _exNets = _exObjects = _exSurfaces = _exAreas = 0;
             using var errors = _errorQuery.ToEntityArray(Allocator.Temp);
             var probes = new List<float2>(3);
             for (int i = 0; i < errors.Length; i++)
@@ -213,9 +236,16 @@ namespace Placemaker.Game.Build
             return newly;
         }
 
+        /// <summary>(s22) What the last ExcludeErroneousItems left out, by kind (for the log).</summary>
+        private int _exNets, _exObjects, _exSurfaces, _exAreas;
+
         private int Exclude(WorkItem w)
         {
             if (!_excluded.Add(PlanWork.Key(w))) return 0;
+            if (w.Kind == WorkKind.Net) _exNets++;
+            else if (w.Kind == WorkKind.Surface) _exSurfaces++;
+            else if (w.Kind == WorkKind.Area) _exAreas++;
+            else _exObjects++;
             string what = w.Kind == WorkKind.Net ? "Net" : w.Kind == WorkKind.Surface ? "Surface" : w.Kind == WorkKind.Area ? "Area" : "Object";
             NoteSkip("Placemaker.Build.Skipped." + what, new float3(w.Anchor.x, Height(w.Anchor), w.Anchor.y));
             return 1;

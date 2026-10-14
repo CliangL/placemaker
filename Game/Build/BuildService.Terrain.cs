@@ -504,14 +504,23 @@ namespace Placemaker.Game.Build
 
         // ───────────────────────── zoning ─────────────────────────
 
+        private int _zoningEmitted;
+
         private void DoZoningEmit()
         {
-            int emitted = 0;
+            int emitted = 0, missing = 0;
+            var missingIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var w in _work.Zoning)
             {
-                var prefab = PrefabOf(w);
-                if (prefab == Entity.Null || !EntityManager.HasComponent<ZoneData>(prefab)) continue;
                 var z = _request.Plan.Layers[w.Layer].Zoning[w.Index];
+                var prefab = PrefabOf(w);
+                if (prefab == Entity.Null || !EntityManager.HasComponent<ZoneData>(prefab))
+                {
+                    // (s22) Was silent: a zone the playset does not have left the cutouts unzoned without a word.
+                    missing++;
+                    missingIds.Add(z.ZoneId ?? "");
+                    continue;
+                }
                 var def = NewDefinition();
                 EntityManager.AddComponentData(def, new CreationDefinition { m_Prefab = prefab });
                 EntityManager.AddComponentData(def, new Zoning
@@ -524,18 +533,99 @@ namespace Placemaker.Game.Build
                 NoteUsed(prefab);
                 emitted++;
             }
+            if (missing > 0)
+                Mod.Log.Warn($"Placemaker zoning: {missing} cutout quad(s) skipped, zone prefab not found: {string.Join(", ", missingIds)}.");
+            Mod.Log.Info($"Placemaker zoning: {emitted} zoning quad(s) emitted for group {_groupId} (Marquee, keeps existing zoning).");
+            _zoningEmitted = emitted;
             Go(emitted > 0 ? Step.ZoningApply : Step.Finish);
         }
+
+        /// <summary>Frames after the zoning Apply before the cells are checked (zoning and cell jobs run in between).</summary>
+        private const int ZoningVerifyFrames = 40;
 
         private void DoZoningApply(int frame)
         {
             int elapsed = frame - _stepFrame;
             if (elapsed == 2) _tool.Requested = ApplyMode.Apply;
-            else if (elapsed >= 4)
+            else if (elapsed == 4) DestroyOwnDefinitions();
+            else if (elapsed >= ZoningVerifyFrames)
             {
-                DestroyOwnDefinitions();
+                try { VerifyZoning(); }
+                catch (Exception e) { Mod.Log.Warn("Placemaker zoning check failed: " + e.Message); }
                 Go(Step.Finish);
             }
+        }
+
+        private struct ZoneBlockIterator : global::Colossal.Collections.INativeQuadTreeIterator<Entity, Bounds2>
+        {
+            public Bounds2 Bounds;
+            public NativeList<Entity> Results;
+            public bool Intersect(Bounds2 bounds) => MathUtils.Intersect(bounds, Bounds);
+            public void Iterate(Bounds2 bounds, Entity e)
+            {
+                if (MathUtils.Intersect(bounds, Bounds)) Results.Add(e);
+            }
+        }
+
+        /// <summary>
+        /// (s22) What the game made of the cutouts: for every cell ZoneGuard planned as zoned, the live cell at that
+        /// spot — zoned, empty, blocked or hidden. Playtest: after a build no cutout cell existed at all and the log
+        /// said nothing; this line says which step lost them.
+        /// </summary>
+        private void VerifyZoning()
+        {
+            var plan = _request?.Plan;
+            if (plan?.ZoneCells == null) return;
+            var planned = new List<float2>();
+            foreach (var c in plan.ZoneCells)
+                if (c.State == ZoneCellState.Zoned) planned.Add(0.25f * (c.A + c.B + c.C + c.D));
+            if (planned.Count == 0) return;
+            float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
+            foreach (var p in planned) { min = math.min(min, p); max = math.max(max, p); }
+            var search = World.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>();
+            var tree = search.GetSearchTree(true, out var deps);
+            deps.Complete();
+            var results = new NativeList<Entity>(64, Allocator.Temp);
+            int zoned = 0, empty = 0, blocked = 0, hidden = 0, found = 0;
+            try
+            {
+                var it = new ZoneBlockIterator { Bounds = new Bounds2(min - 60f, max + 60f), Results = results };
+                tree.Iterate(ref it);
+                var state = new int[planned.Count];   // 0 none, 1 hidden, 2 blocked, 3 empty, 4 zoned (best wins)
+                var seen = new HashSet<Entity>();
+                for (int i = 0; i < results.Length; i++)
+                {
+                    var e = results[i];
+                    if (!seen.Add(e) || !EntityManager.HasComponent<global::Game.Zones.Block>(e) || !EntityManager.HasBuffer<global::Game.Zones.Cell>(e)) continue;
+                    if (EntityManager.HasComponent<Temp>(e) || EntityManager.HasComponent<Deleted>(e)) continue;
+                    var block = EntityManager.GetComponentData<global::Game.Zones.Block>(e);
+                    var cells = EntityManager.GetBuffer<global::Game.Zones.Cell>(e, true);
+                    if (cells.Length < block.m_Size.x * block.m_Size.y) continue;
+                    for (int y = 0; y < block.m_Size.y; y++)
+                        for (int x = 0; x < block.m_Size.x; x++)
+                        {
+                            var at = global::Game.Zones.ZoneUtils.GetCellPosition(block, new int2(x, y)).xz;
+                            for (int k = 0; k < planned.Count; k++)
+                            {
+                                if (math.distancesq(at, planned[k]) > 4f) continue;
+                                var cell = cells[x + y * block.m_Size.x];
+                                int st = (cell.m_State & global::Game.Zones.CellFlags.Blocked) != 0 ? 2
+                                    : (cell.m_State & global::Game.Zones.CellFlags.Visible) == 0 ? 1
+                                    : cell.m_Zone.Equals(global::Game.Zones.ZoneType.None) ? 3 : 4;
+                                state[k] = math.max(state[k], st);
+                            }
+                        }
+                }
+                foreach (var st in state)
+                {
+                    if (st > 0) found++;
+                    if (st == 4) zoned++; else if (st == 3) empty++; else if (st == 2) blocked++; else if (st == 1) hidden++;
+                }
+            }
+            finally { results.Dispose(); }
+            string msg = $"Placemaker zoning: group {_groupId}: zoned {zoned} of {planned.Count} cutout cell(s) ({_zoningEmitted} quad(s)); "
+                + $"empty {empty}, blocked {blocked}, hidden {hidden}, not found {planned.Count - found}.";
+            if (zoned < planned.Count) Mod.Log.Warn(msg); else Mod.Log.Info(msg);
         }
     }
 }

@@ -357,6 +357,8 @@ namespace Placemaker.Game.Overlay
         {
             var recipe = _tool.CurrentRecipe;
             if (recipe == null || _tool.Shape == null) return;
+            // s22: entrances are a legend layer too (always shown while placing them).
+            if (_tool.MarkerKind == null && !Shows(PreviewLegend.Entrances)) return;
             float d = w * 7f;
             // Each kind has its own colour (MarkerKinds.ColorFor: two-way yellow, entry green, exit orange…);
             // markers of the step being edited are drawn larger with a white rim.
@@ -378,6 +380,12 @@ namespace Placemaker.Game.Overlay
         }
 
         // ───────────── plan ─────────────
+        //
+        // s22 visual hierarchy (playtest: "it's getting crazy; hard to even see what's happening"): the outline,
+        // paths / roads and the key features read first; trees, planting and furniture are small and soft; surfaces
+        // a faint tint; terraform a heat map (no dashed boxes); cutouts a calm blue fill with a thin outline; cells
+        // blocked for zoning and decals off unless the legend shows them. Every element belongs to one legend layer
+        // (Core Build/PreviewLegend) and is drawn only while that layer is visible (legend hover isolates one).
 
         private ComposedPlan _filledPlan;
         private readonly Dictionary<int, List<float3[]>> _surfaceGroups = new Dictionary<int, List<float3[]>>();
@@ -385,8 +393,10 @@ namespace Placemaker.Game.Overlay
         /// <summary>(s13) Texture paint preview: coarse strength bands per (material layer, level), from Core PaintRaster.</summary>
         private readonly Dictionary<int, List<float3[]>> _paintGroups = new Dictionary<int, List<float3[]>>();
         private const int PaintLevels = 4;
-        /// <summary>(s20) Outline of the sloped (sculpted) terraform cells: one boundary instead of a dashed grid.</summary>
-        private readonly List<(float3 a, float3 b)> _slopedEdges = new List<(float3 a, float3 b)>();
+        /// <summary>(s22) Terraform heat map: rings per band (−4…−1 cut, 1…4 fill), from Core TerrainHeat.</summary>
+        private readonly Dictionary<int, List<float3[]>> _heatGroups = new Dictionary<int, List<float3[]>>();
+
+        private bool Shows(string layer) => _tool.LayerVisible(layer);
 
         private void DrawPlan(OverlayRenderSystem.Buffer buffer, float w, PreviewDetail detail)
         {
@@ -400,6 +410,7 @@ namespace Placemaker.Game.Overlay
             if (objects == SketchObjects.Dimmed) alpha *= 0.3f;
             bool content = objects != SketchObjects.Hidden;
             float fillAlpha = content ? alpha : 0f;
+            bool isolating = !string.IsNullOrEmpty(_tool.LegendHover);
 
             if (!ReferenceEquals(plan, _filledPlan))
             {
@@ -409,11 +420,7 @@ namespace Placemaker.Game.Overlay
                 _surfaceGroups.Clear();
                 _areaGroups.Clear();
                 BuildPaintPreview(plan);
-                _slopedEdges.Clear();
-                var sloped = new List<PlannedTerraform>();
-                foreach (var l in plan.Layers)
-                    if (l?.Terraform != null) foreach (var t in l.Terraform) if (t != null && t.Sloped) sloped.Add(t);
-                if (sloped.Count > 0) _slopedEdges.AddRange(TerraformSurface.BoundaryEdges(sloped));
+                BuildHeatPreview(plan);
                 BuildZoneCellPreview(plan);
                 foreach (var l in plan.Layers)
                 {
@@ -424,43 +431,56 @@ namespace Placemaker.Game.Overlay
                         if (a?.Ring != null && a.Ring.Length >= 3) Group(_areaGroups, (int)a.Role).Add(a.Ring);
                 }
             }
-            // FEEDBACK-4 #4: surfaces are a faint tint (≤ 15 %) — or outline only — with a crisp outline in the
-            // role's colour (dashed for paved roles), so paths and objects on top stay readable.
+            // FEEDBACK-4 #4: surfaces are a faint tint (≤ 15 %) — or outline only — with a thin outline in the role's
+            // colour (dashed for paved roles), so paths and objects on top stay readable.
             bool tint = ToolRegistration.Settings?.SketchSurfaceFill ?? true;
+            bool surfaces = Shows(PreviewLegend.Surfaces), water = Shows(PreviewLegend.Water);
             foreach (var kv in _surfaceGroups)
             {
                 var role = (SurfaceRole)kv.Key;
-                _fill.SetLayer("surface:" + kv.Key, kv.Value, WithAlpha(SurfaceColor(role), (tint ? SurfaceTint(role) : 0f) * fillAlpha), -93f + kv.Key * 0.01f, FilledPreviewSystem.Signature(kv.Value));
-                if (!content) continue;
+                bool on = role == SurfaceRole.Water ? water : surfaces;
+                // Isolated: a little stronger, so a faint layer is findable on its own.
+                float boost = isolating && on ? 1.8f : 1f;
+                _fill.SetLayer("surface:" + kv.Key, kv.Value, WithAlpha(SurfaceColor(role), on ? (tint || isolating ? SurfaceTint(role) * boost : 0f) * fillAlpha : 0f), -93f + kv.Key * 0.01f, FilledPreviewSystem.Signature(kv.Value));
+                if (!content || !on) continue;
                 bool paved = role == SurfaceRole.Paving || role == SurfaceRole.Plaza || role == SurfaceRole.Asphalt;
-                var edge = WithAlpha(SurfaceColor(role), 0.8f * alpha);
-                foreach (var r in kv.Value) Ring(buffer, r, edge, w * (role == SurfaceRole.Water ? 0.8f : 0.5f), dashed: paved);
+                var edge = WithAlpha(SurfaceColor(role), (role == SurfaceRole.Water ? 0.75f : 0.5f) * alpha);
+                foreach (var r in kv.Value) Ring(buffer, r, edge, w * (role == SurfaceRole.Water ? 0.6f : 0.35f), dashed: paved);
             }
             // Texture paint: tinted strength bands (feather and gradients show as steps), no outline: it is a blend.
             foreach (var kv in _paintGroups)
             {
                 int layer = kv.Key / 16, level = kv.Key % 16;
-                _fill.SetLayer("paint:" + kv.Key, kv.Value, WithAlpha(PaintColor(layer), 0.32f * level / PaintLevels * fillAlpha), -93.2f, FilledPreviewSystem.Signature(kv.Value));
+                _fill.SetLayer("paint:" + kv.Key, kv.Value, WithAlpha(PaintColor(layer), surfaces ? 0.26f * level / PaintLevels * fillAlpha : 0f), -93.2f, FilledPreviewSystem.Signature(kv.Value));
             }
             foreach (var kv in _areaGroups)
             {
-                _fill.SetLayer("area:" + kv.Key, kv.Value, WithAlpha(AreaColor((AreaRole)kv.Key), (tint ? 0.06f : 0f) * fillAlpha), -93.5f, FilledPreviewSystem.Signature(kv.Value));
-                if (content)
-                    foreach (var r in kv.Value) Ring(buffer, r, WithAlpha(AreaColor((AreaRole)kv.Key), 0.45f * alpha), w * 0.4f, dashed: true);
+                _fill.SetLayer("area:" + kv.Key, kv.Value, WithAlpha(AreaColor((AreaRole)kv.Key), surfaces && tint ? 0.05f * fillAlpha : 0f), -93.5f, FilledPreviewSystem.Signature(kv.Value));
+                if (content && surfaces)
+                    foreach (var r in kv.Value) Ring(buffer, r, WithAlpha(AreaColor((AreaRole)kv.Key), 0.3f * alpha), w * 0.3f, dashed: true);
             }
-            DrawZoneCells(buffer, w, alpha);
+            // Terraform heat map (cut blue, fill orange → red, stronger = bigger change). Shown under the ghost too:
+            // the ghost does not show the ground change before the build.
+            bool terrain = Shows(PreviewLegend.Terrain);
+            float heatAlpha = stale ? 0.5f : 1f;
+            foreach (var kv in _heatGroups)
+            {
+                var (hex, a) = TerrainHeat.Style(kv.Key);
+                _fill.SetLayer("heat:" + kv.Key, kv.Value, WithAlpha(Hex(hex), terrain ? a * heatAlpha * (isolating ? 1.5f : 1f) : 0f), -92.8f + kv.Key * 0.001f, FilledPreviewSystem.Signature(kv.Value));
+            }
+            DrawZoneCells(buffer, w, alpha, isolating);
 
-            // Objects (playtest 4b #9): every feature object — playground, picnic, restrooms, kiosks, field
-            // props, centerpieces, trees, furniture, of every layer incl. feature children — always gets a
-            // symbol; only ground clutter (decals, bushes, planters) is thinned to the detail budget
-            // (Simple hides clutter only, it used to hide every object but one).
+            // Objects (playtest 4b #9): every feature object always gets a symbol; only ground clutter (decals,
+            // bushes, planters) is thinned to the detail budget (Simple hides clutter only).
             int netBudget = detail == PreviewDetail.Detailed ? 20000 : 6000;
             int clutterBudget = detail == PreviewDetail.Simple ? 0 : detail == PreviewDetail.Detailed ? 30000 : 8000;
             int mainBudget = detail == PreviewDetail.Detailed ? 30000 : 12000;
+            // Isolating clutter (planting, decals) shows all of it: that is what the player asked to see.
+            if (isolating) clutterBudget = 30000;
             int clutterCount = 0;
             foreach (var l in plan.Layers)
                 if (l != null)
-                    foreach (var o in l.Objects) if (o != null && IsClutter(o)) clutterCount++;
+                    foreach (var o in l.Objects) if (o != null && IsClutter(o) && Shows(PreviewLegend.Of(o))) clutterCount++;
             int stride = clutterBudget <= 0 ? int.MaxValue : math.max(1, (int)math.ceil(clutterCount / (float)clutterBudget));
             int k = 0;
             foreach (var l in plan.Layers)
@@ -468,7 +488,9 @@ namespace Placemaker.Game.Overlay
                 if (l == null) continue;
                 foreach (var n in l.Nets)
                 {
-                    if (n == null || !content || netBudget-- <= 0) break;
+                    if (n == null || !content) break;
+                    if (!Shows(PreviewLegend.Of(n, l.GeneratorId))) continue;
+                    if (netBudget-- <= 0) break;
                     DrawNet(buffer, n, w, alpha);
                 }
             }
@@ -483,20 +505,19 @@ namespace Placemaker.Game.Overlay
                         bool clutter = IsClutter(o);
                         int p = clutter ? 0 : o.Role == ObjectRole.Tree ? 2 : 1;
                         if (p != pass) continue;
+                        if (!Shows(PreviewLegend.Of(o))) continue;
                         if (clutter ? (k++ % stride) != 0 : mainBudget-- <= 0) continue;
                         DrawObject(buffer, o, w, alpha);
                     }
                 }
-            foreach (var l in plan.Layers)
-            {
-                if (l == null) continue;
-                foreach (var t in l.Terraform)
-                    if (t?.Ring != null && !t.Sloped) Ring(buffer, t.Ring, t.Permanent ? Warning : new Color(0.4f, 0.7f, 1f, 0.8f), w, dashed: true);
-                foreach (var z in l.Zoning)
-                    if (z != null) Ring(buffer, new[] { z.A, z.B, z.C, z.D }, new Color(0.5f, 1f, 0.5f, 0.6f * alpha), w * 0.6f);
-            }
-            foreach (var (a, b) in _slopedEdges)
-                buffer.DrawDashedLine(Warning, new Line3.Segment(a, b), w, w * 4f, w * 3f);
+            // Zoning quads the guard could not snap to captured cells (lanes this build adds): thin outline.
+            if (Shows(PreviewLegend.Cutouts))
+                foreach (var l in plan.Layers)
+                {
+                    if (l == null) continue;
+                    foreach (var z in l.Zoning)
+                        if (z != null && !_snappedZoning) Ring(buffer, new[] { z.A, z.B, z.C, z.D }, WithAlpha(ZoneCellColor(ZoneColorKey(z.ZoneId)), 0.7f * alpha), w * 0.35f);
+                }
             foreach (var issue in plan.AllIssues())
             {
                 if (issue?.At == null) continue;
@@ -504,23 +525,58 @@ namespace Placemaker.Game.Overlay
             }
         }
 
-        // ───────────── zone cells (s19) ─────────────
+        private static Color Hex(string hex)
+        {
+            var c = PreviewLegend.Hex(hex);
+            return new Color(c.x, c.y, c.z, 1f);
+        }
+
+        private static Color LayerColor(string layer)
+        {
+            var c = PreviewLegend.Rgb(layer);
+            return new Color(c.x, c.y, c.z, 1f);
+        }
+
+        private void BuildHeatPreview(ComposedPlan plan)
+        {
+            _heatGroups.Clear();
+            var heat = plan.TerrainHeat;
+            if (heat == null) return;
+            foreach (var (band, ring) in heat.Rings)
+            {
+                if (ring == null || ring.Length < 3) continue;
+                var r3 = new float3[ring.Length];
+                for (int i = 0; i < ring.Length; i++) r3[i] = new float3(ring[i].x, 0f, ring[i].y);
+                Group(_heatGroups, band).Add(r3);
+            }
+        }
+
+        // ───────────── zone cells (s19, calmer in s22) ─────────────
 
         /// <summary>Zoned cells per zone colour (0 commercial, 1 residential, 2 office, 3 industrial), 8 blocked, 9 kept.</summary>
         private readonly Dictionary<int, List<float3[]>> _zoneCellGroups = new Dictionary<int, List<float3[]>>();
         private readonly List<float3[]> _zoneBlockerRings = new List<float3[]>();
         private const int BlockedCells = 8, KeptCells = 9;
+        /// <summary>The plan's zoning was snapped to captured cells (the cells are drawn, not the quads).</summary>
+        private bool _snappedZoning;
 
         private void BuildZoneCellPreview(ComposedPlan plan)
         {
             _zoneCellGroups.Clear();
             _zoneBlockerRings.Clear();
+            _snappedZoning = plan.ZoneCells != null && plan.ZoneCells.Count > 0;
             if (plan.ZoneCells != null)
                 foreach (var c in plan.ZoneCells)
                 {
                     int key = c.State == ZoneCellState.Blocked ? BlockedCells : c.State == ZoneCellState.Kept ? KeptCells : ZoneColorKey(c.ZoneId);
                     float y = c.Height;
-                    Group(_zoneCellGroups, key).Add(new[] { new float3(c.A.x, y, c.A.y), new float3(c.B.x, y, c.B.y), new float3(c.C.x, y, c.C.y), new float3(c.D.x, y, c.D.y) });
+                    if (c.Clipped != null && c.Clipped.Length >= 3)
+                    {
+                        var r3 = new float3[c.Clipped.Length];
+                        for (int i = 0; i < r3.Length; i++) r3[i] = new float3(c.Clipped[i].x, y, c.Clipped[i].y);
+                        Group(_zoneCellGroups, key).Add(r3);
+                    }
+                    else Group(_zoneCellGroups, key).Add(new[] { new float3(c.A.x, y, c.A.y), new float3(c.B.x, y, c.B.y), new float3(c.C.x, y, c.C.y), new float3(c.D.x, y, c.D.y) });
                 }
             // Without captured road blocks (roads this build adds) the blocking is shown as its outline.
             if ((plan.ZoneCells == null || plan.ZoneCells.Count == 0) && plan.ZoneBlockers != null)
@@ -552,35 +608,32 @@ namespace Placemaker.Game.Overlay
                 case 1: return new Color(0.35f, 0.85f, 0.35f, 1f);   // residential green
                 case 2: return new Color(0.70f, 0.50f, 1f, 1f);      // office purple
                 case 3: return new Color(1f, 0.80f, 0.20f, 1f);      // industrial yellow
-                case BlockedCells: return new Color(0.85f, 0.22f, 0.20f, 1f);
+                case BlockedCells: return LayerColor(PreviewLegend.Blocked);
                 case KeptCells: return new Color(1f, 1f, 1f, 1f);
-                default: return new Color(0.25f, 0.55f, 1f, 1f);     // commercial blue
+                default: return LayerColor(PreviewLegend.Cutouts);   // commercial blue
             }
         }
 
         /// <summary>
-        /// The zoning cutouts as the game's zone colour per cell, the park's blocked cells as a red hatch, so the
-        /// player sees where buildings may grow (shown even while the ghost hides the sketch: zoning has no ghost).
+        /// Cutouts: the game's zone colour per cell as a calm fill with a thin outline. Cells blocked for zoning (off
+        /// by default): one faint tint clipped to the outline — no hatch, no outline. Shown also while the ghost
+        /// hides the sketch (zoning has no ghost).
         /// </summary>
-        private void DrawZoneCells(OverlayRenderSystem.Buffer buffer, float w, float alpha)
+        private void DrawZoneCells(OverlayRenderSystem.Buffer buffer, float w, float alpha, bool isolating)
         {
+            bool cutouts = Shows(PreviewLegend.Cutouts), blocked = Shows(PreviewLegend.Blocked);
             foreach (var kv in _zoneCellGroups)
             {
                 var col = ZoneCellColor(kv.Key);
-                bool blocked = kv.Key == BlockedCells, kept = kv.Key == KeptCells;
-                float fill = blocked ? 0.12f : kept ? 0f : 0.34f;
-                _fill.SetLayer("zoneCells:" + kv.Key, kv.Value, WithAlpha(col, fill * alpha), blocked ? -92.6f : -92.5f, FilledPreviewSystem.Signature(kv.Value));
-                foreach (var r in kv.Value)
-                {
-                    if (blocked)
-                    {
-                        Ring(buffer, r, WithAlpha(col, 0.35f * alpha), w * 0.25f, dashed: true);
-                        buffer.DrawLine(WithAlpha(col, 0.30f * alpha), new Line3.Segment(r[0], r[2]), w * 0.25f);
-                    }
-                    else Ring(buffer, r, WithAlpha(col, (kept ? 0.4f : 0.85f) * alpha), w * 0.35f);
-                }
+                bool isBlocked = kv.Key == BlockedCells, kept = kv.Key == KeptCells;
+                bool on = isBlocked ? blocked : cutouts;
+                float fill = isBlocked ? (isolating ? 0.16f : 0.09f) : kept ? 0f : 0.22f;
+                _fill.SetLayer("zoneCells:" + kv.Key, kv.Value, WithAlpha(col, on ? fill * alpha : 0f), isBlocked ? -92.6f : -92.5f, FilledPreviewSystem.Signature(kv.Value));
+                if (!on || isBlocked) continue;
+                foreach (var r in kv.Value) Ring(buffer, r, WithAlpha(col, (kept ? 0.35f : 0.6f) * alpha), w * 0.25f);
             }
-            foreach (var r in _zoneBlockerRings) Ring(buffer, r, WithAlpha(ZoneCellColor(BlockedCells), 0.5f * alpha), w * 0.35f, dashed: true);
+            if (blocked)
+                foreach (var r in _zoneBlockerRings) Ring(buffer, r, WithAlpha(ZoneCellColor(BlockedCells), 0.4f * alpha), w * 0.3f, dashed: true);
         }
 
         /// <summary>
@@ -762,8 +815,9 @@ namespace Placemaker.Game.Overlay
         private void DrawObject(OverlayRenderSystem.Buffer buffer, PlannedObject o, float w, float alpha)
         {
             float scale = math.max(0.3f, o.Scale);
-            string cat = RoleCategories.ForObject(o) ?? "";
-            var col = ObjectColor(o.Role, cat);
+            string layer = PreviewLegend.Of(o);
+            // s22: one colour per legend layer (what the legend swatch shows), softer and smaller symbols.
+            var col = layer == PreviewLegend.Objects || layer == PreviewLegend.Features ? LayerColor(layer) : ObjectColor(o.Role, RoleCategories.ForObject(o) ?? "");
             var p = o.Position;
             var up = new float2(0, 1);
             var none = new Color(0, 0, 0, 0);
@@ -771,45 +825,45 @@ namespace Placemaker.Game.Overlay
             {
                 case ObjectRole.Tree:
                 {
+                    // Soft crown at its real size: faint fill, thin rim, small trunk dot.
                     float crown = TryInfo(o, out var info) ? CrownRadius(info.BoundsMin, info.BoundsMax, scale) : Composer.DefaultRadius(o.Role) * scale;
                     float dia = math.max(crown * 2f, w * 4f);
-                    buffer.DrawCircle(WithAlpha(col * 0.7f, 0.75f * alpha), WithAlpha(col, 0.22f * alpha), w * 0.35f, 0, up, p, dia);
-                    buffer.DrawCircle(WithAlpha(col * 0.55f, 0.9f * alpha), p, math.max(dia * 0.3f, w * 1.2f));
+                    buffer.DrawCircle(WithAlpha(col * 0.8f, 0.45f * alpha), WithAlpha(col, 0.10f * alpha), w * 0.22f, 0, up, p, dia);
+                    buffer.DrawCircle(WithAlpha(col * 0.6f, 0.6f * alpha), p, math.max(dia * 0.16f, w * 0.9f));
                     return;
                 }
                 case ObjectRole.Centerpiece:
                 {
                     var (half, _) = Footprint(o, scale);
                     float dia = math.max(math.cmax(half) * 2f, w * 6f);
-                    buffer.DrawCircle(WithAlpha(col, 0.95f * alpha), WithAlpha(col, 0.12f * alpha), w * 0.8f, 0, up, p, dia);
-                    buffer.DrawCircle(WithAlpha(col, 0.95f * alpha), p, w * 1.2f);
+                    buffer.DrawCircle(WithAlpha(col, 0.85f * alpha), WithAlpha(col, 0.10f * alpha), w * 0.6f, 0, up, p, dia);
+                    buffer.DrawCircle(WithAlpha(col, 0.9f * alpha), p, w * 1.0f);
                     return;
                 }
                 case ObjectRole.Lamp:
-                    buffer.DrawCircle(WithAlpha(new Color(0.35f, 0.28f, 0f), 0.9f * alpha), WithAlpha(col, 0.95f * alpha), w * 0.4f, 0, up, p, math.max(w * 2.4f, 0.8f));
-                    return;
                 case ObjectRole.Bin:
-                    buffer.DrawCircle(WithAlpha(new Color(0.9f, 0.9f, 0.9f), 0.85f * alpha), WithAlpha(col, 0.95f * alpha), w * 0.35f, 0, up, p, math.max(w * 1.8f, 0.6f));
+                    // Small furniture: one small soft dot (they were the yellow and dark dots all over the park).
+                    buffer.DrawCircle(WithAlpha(col, 0.65f * alpha), p, math.max(w * (o.Role == ObjectRole.Lamp ? 1.4f : 1.1f), 0.5f));
                     return;
                 case ObjectRole.Decal:
                 {
                     var (half, _) = Footprint(o, scale);
-                    buffer.DrawCircle(WithAlpha(col, 0.18f * alpha), p, math.max(math.cmin(half) * 2f, w * 1.5f));
+                    buffer.DrawCircle(WithAlpha(col, 0.22f * alpha), p, math.max(math.cmin(half) * 2f, w * 1.2f));
                     return;
                 }
                 case ObjectRole.Marker: case ObjectRole.AccessPoint: case ObjectRole.AnimalSpawner:
-                    buffer.DrawCircle(WithAlpha(col, 0.9f * alpha), none, w * 0.4f, 0, up, p, w * 2.5f);
+                    buffer.DrawCircle(WithAlpha(col, 0.85f * alpha), none, w * 0.35f, 0, up, p, w * 2.2f);
                     return;
                 case ObjectRole.Bush: case ObjectRole.Planter:
                     if (!IsHedge(o))
                     {
                         var (half, _) = Footprint(o, scale);
-                        buffer.DrawCircle(WithAlpha(col * 0.7f, 0.85f * alpha), WithAlpha(col, 0.7f * alpha), w * 0.25f, 0, up, p, math.max(math.cmax(half) * 2f, w * 2f));
+                        buffer.DrawCircle(WithAlpha(col, 0.45f * alpha), p, math.max(math.cmax(half) * 1.6f, w * 1.4f));
                         return;
                     }
                     break;
             }
-            DrawFootprint(buffer, o, scale, col, w, alpha, outlineOnly: o.Role == ObjectRole.ParkingBay);
+            DrawFootprint(buffer, o, scale, col, w, layer == PreviewLegend.Features ? alpha : alpha * 0.75f, outlineOnly: o.Role == ObjectRole.ParkingBay);
         }
 
         /// <summary>Rotated footprint: a bar along its long axis (DrawLine width = the short side), or its outline.</summary>

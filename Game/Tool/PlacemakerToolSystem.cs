@@ -191,6 +191,7 @@ namespace Placemaker.Game.Tool
             CancelGesture();
             _markerPath = _markerKind = null;
             _hoverGroup = 0;
+            _legendHover = "";
             EndValuePreview(true);      // hovers revert, drags commit
             HideGhost();
             _closeAfterGhost = 0;
@@ -291,6 +292,7 @@ namespace Placemaker.Game.Tool
             if (s == _stage) return;
             if (_stage == ToolStage.Manage) { _hoverGroup = 0; }
             _stage = s;
+            _legendHover = "";   // s22: a hovered legend entry never outlives its stage
             // Red markers and the failure message describe the attempt the player just saw; moving on clears them (US8).
             ClearBuildFeedback(true);
             if (s != ToolStage.Design && s != ToolStage.Review) ExitMarkerMode();

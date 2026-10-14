@@ -7,6 +7,7 @@
 //   hints   — shortcut strip from state.hints
 // While drawing, C# may collapse it to a slim header + primary button (state.panelCollapsed); it then
 // shows an obvious "Show options" button.
+import { Legend } from "./Legend";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import classNames from "classnames";
 import { PROTOCOL, Stage, StepView, Summary, ToolState } from "../contract";
@@ -816,6 +817,11 @@ export const PlacemakerPanel = () => {
                                 )}
                             </div>
                         </div>
+                        {!picker && !collapsed ? (
+                            <ErrorBoundary name="legend">
+                                <Legend state={state} summary={summary} side={position.side === "left" ? "left" : "right"} />
+                            </ErrorBoundary>
+                        ) : null}
                         {picker ? (
                             <div className={classNames(s.flyout, position.side === "left" ? s.flyoutLeft : s.flyoutRight)} data-testid="picker-flyout">
                                 <ErrorBoundary name="picker">

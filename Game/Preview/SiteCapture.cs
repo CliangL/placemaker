@@ -306,7 +306,27 @@ namespace Placemaker.Game.Preview
                     if (!seen.Add(e) || !_em.HasComponent<global::Game.Zones.Block>(e)) continue;
                     if (_em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) continue;
                     var b = _em.GetComponentData<global::Game.Zones.Block>(e);
-                    into.Add(new ZoneGrid { Position = b.m_Position.xz, Direction = b.m_Direction, Size = b.m_Size });
+                    // (s22) Per-cell state: hidden cells (overlapping blocks on curves) and cells under roads must
+                    // never be zoned or drawn (they put a cutout across Juniper Street in playtest s22).
+                    byte[] cells = null;
+                    if (_em.HasBuffer<global::Game.Zones.Cell>(e))
+                    {
+                        var buf = _em.GetBuffer<global::Game.Zones.Cell>(e, true);
+                        int n = b.m_Size.x * b.m_Size.y;
+                        if (n > 0 && buf.Length >= n)
+                        {
+                            cells = new byte[n];
+                            for (int c = 0; c < n; c++)
+                            {
+                                var s = buf[c].m_State;
+                                byte f = 0;
+                                if ((s & global::Game.Zones.CellFlags.Visible) != 0) f |= ZoneGrid.CellVisible;
+                                if ((s & global::Game.Zones.CellFlags.Blocked) != 0) f |= ZoneGrid.CellBlocked;
+                                cells[c] = f;
+                            }
+                        }
+                    }
+                    into.Add(new ZoneGrid { Position = b.m_Position.xz, Direction = b.m_Direction, Size = b.m_Size, Cells = cells });
                 }
             }
             catch (Exception ex)

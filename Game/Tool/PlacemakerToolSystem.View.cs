@@ -141,6 +141,7 @@ namespace Placemaker.Game.Tool
                 PanelCollapsed = _panelCollapsed,
                 PreviewMode = PreviewModeSelected,
                 GhostPending = GhostPending,
+                LegendVisibility = LegendVisibility,
             };
             return s;
         }

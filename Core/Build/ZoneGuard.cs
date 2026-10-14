@@ -34,6 +34,11 @@ namespace Placemaker.Core.Build
         public float Height;
         /// <summary>Zone prefab of a zoned cell ("" otherwise).</summary>
         public string ZoneId;
+        /// <summary>
+        /// (s22) Blocked cells: the part of the cell inside the build's footprint (the preview never draws outside the
+        /// outline). Null for zoned / kept cells (drawn whole).
+        /// </summary>
+        public float2[] Clipped;
     }
 
     public static class ZoneGuard
@@ -145,7 +150,7 @@ namespace Placemaker.Core.Build
                 }
             }
             Result r;
-            try { r = Compute(plan.Footprints, quads, ids, plan.Protected, site?.ZoneGrids); }
+            try { r = Compute(plan.Footprints, quads, ids, plan.Protected, site?.ZoneGrids, site?.NearbyNets); }
             catch (Exception)
             {
                 // Never fail a plan over the guard: build as before (no blockers, quads unchanged).
@@ -202,7 +207,7 @@ namespace Placemaker.Core.Build
         /// the existing building lots, and the blocker rings that make the game block exactly the others.
         /// </summary>
         public static Result Compute(IReadOnlyList<float2[]> footprints, IReadOnlyList<float2[]> quads, IReadOnlyList<string> zoneIds,
-            IReadOnlyList<float2[]> protectedLots, IReadOnlyList<ZoneGrid> grids)
+            IReadOnlyList<float2[]> protectedLots, IReadOnlyList<ZoneGrid> grids, IReadOnlyList<NearbyNet> nets = null)
         {
             var result = new Result();
             quads = quads ?? Array.Empty<float2[]>();
@@ -230,6 +235,9 @@ namespace Placemaker.Core.Build
             var zoneQuad = new List<int[]>(gridList.Count);
             var kept = new List<bool[]>(gridList.Count);
             var quadHasCell = new bool[quads.Count];
+            var openList = new List<bool[]>(gridList.Count);
+            var columnSquares = new List<float2[]>();
+            var roads = RoadBands(nets, fmin, fmax);
             for (int gi = 0; gi < gridList.Count; gi++)
             {
                 var g = gridList[gi];
@@ -237,8 +245,19 @@ namespace Placemaker.Core.Build
                 var z = new bool[sx * sy];
                 var zq = new int[sx * sy];
                 var k = new bool[sx * sy];
+                var open = new bool[sx * sy];
                 for (int x = 0; x < sx; x++)
                 {
+                    // (s22) A column ends at its first closed cell - under a road (the game blocks it), hidden by an
+                    // overlapping block (curves), or a captured Blocked cell outside the build - and every cell behind
+                    // it is closed too (CleanBlockedCells). Playtest: a column of a neighbouring segment's block ran
+                    // across Juniper Street into a cutout and was zoned (and drawn) over the road.
+                    int reach = sy;
+                    for (int y = 0; y < sy; y++)
+                    {
+                        if (!CellOpen(g, x, y, feet, roads)) { reach = y; break; }
+                        open[y * sx + x] = true;
+                    }
                     var inQuad = new int[sy];
                     var inFoot = new bool[sy];
                     int first = -1, deepest = -1;
@@ -246,11 +265,12 @@ namespace Placemaker.Core.Build
                     {
                         var c = CellCentre(g, x, y);
                         inQuad[y] = -1;
-                        for (int q = 0; q < quads.Count; q++)
-                            if (quads[q] != null && quads[q].Length >= 3 && Poly.Contains(quads[q], c)) { inQuad[y] = q; break; }
                         inFoot[y] = InAny(feet, c);
                         var sq = CellSquare(g, x, y, -0.05f);
                         foreach (var lot in lots) if (ObstacleCut.Overlaps(sq, lot)) { k[y * sx + x] = true; break; }
+                        if (y >= reach) continue;
+                        for (int q = 0; q < quads.Count; q++)
+                            if (quads[q] != null && quads[q].Length >= 3 && Poly.Contains(quads[q], c)) { inQuad[y] = q; break; }
                         if (inQuad[y] >= 0)
                         {
                             if (first < 0) first = y;
@@ -258,9 +278,9 @@ namespace Placemaker.Core.Build
                         }
                     }
                     if (first < 0) continue;
-                    // Rows 0 … deepest, at least MinRows; the land in front of the first quad row must be outside the
+                    // Rows 0 ... deepest, at least MinRows; the land in front of the first quad row must be outside the
                     // footprint (the strip between the outline and the road), never park; a building lot ends the run.
-                    int last = math.min(sy - 1, math.max(deepest, MinRows - 1));
+                    int last = math.min(reach - 1, math.max(deepest, MinRows - 1));
                     int quad = inQuad[first];
                     int end = -1;
                     for (int y = 0; y <= last; y++)
@@ -270,13 +290,24 @@ namespace Placemaker.Core.Build
                         end = y;
                     }
                     if (end < math.min(MinRows - 1, sy - 1)) continue;
+                    // Blocks of neighbouring segments may overlap (inside of a curve, junction corners): a piece of
+                    // land is zoned once, by the first block that takes it.
+                    bool taken = false;
+                    for (int y = 0; y <= end && !taken; y++)
+                    {
+                        var c = CellCentre(g, x, y);
+                        foreach (var sq in columnSquares) if (Poly.Contains(sq, c)) { taken = true; break; }
+                    }
+                    if (taken) continue;
                     for (int y = 0; y <= end; y++)
                     {
                         z[y * sx + x] = true;
                         zq[y * sx + x] = inQuad[y] >= 0 ? inQuad[y] : quad;
+                        columnSquares.Add(CellSquare(g, x, y, -0.5f));
                     }
                     for (int y = 0; y < sy; y++) if (inQuad[y] >= 0 && y <= end) quadHasCell[inQuad[y]] = true;
                 }
+                openList.Add(open);
                 zoned.Add(z); zoneQuad.Add(zq); kept.Add(k);
             }
             for (int q = 0; q < quads.Count; q++) result.Snapped[q] = quadHasCell[q];
@@ -342,7 +373,7 @@ namespace Placemaker.Core.Build
             {
                 var g = gridList[gi];
                 int sx = g.Size.x, sy = g.Size.y;
-                var z = zoned[gi]; var zq = zoneQuad[gi]; var k = kept[gi];
+                var z = zoned[gi]; var zq = zoneQuad[gi]; var k = kept[gi]; var op = openList[gi];
                 for (int x = 0; x < sx; x++)
                 {
                     bool blocked = false;
@@ -355,21 +386,145 @@ namespace Placemaker.Core.Build
                     if (sy > 1 && col[1]) col[0] = true;   // … and row 0 when row 1 is
                     for (int y = 0; y < sy; y++)
                     {
+                        // (s22) Cells under a road or hidden by another block are not the build's business: never
+                        // listed, never drawn.
+                        if (!op[y * sx + x]) continue;
                         var sq = CellSquare(g, x, y);
                         ZoneCellState state;
                         if (col[y]) state = ZoneCellState.Blocked;
                         else if (z[y * sx + x]) state = ZoneCellState.Zoned;
                         else if (k[y * sx + x] && OverlapsAny(feet, sq)) state = ZoneCellState.Kept;
                         else continue;
+                        float2[] clipped = null;
+                        if (state == ZoneCellState.Blocked)
+                        {
+                            // The "blocked" preview stays inside the outline (the game blocks the whole cell, but the
+                            // part over the sidewalk is not the build's to show).
+                            clipped = ClipToFootprints(sq, feet);
+                            if (clipped == null) continue;
+                        }
                         result.Cells.Add(new ZoneCellMark
                         {
                             A = sq[0], B = sq[1], C = sq[2], D = sq[3], State = state,
                             ZoneId = state == ZoneCellState.Zoned ? ZoneOf(zoneIds, zq[y * sx + x]) : "",
+                            Clipped = clipped,
                         });
                     }
                 }
             }
             return result;
+        }
+
+        // ───────────────────────── s22: roads and clipping ─────────────────────────
+
+        /// <summary>A captured road as a polyline with its half width (the zone blocks start at its outer edge).</summary>
+        private struct RoadBand
+        {
+            public float2[] Line;
+            public float Half;
+            public float2 Min, Max;
+        }
+
+        /// <summary>
+        /// Cell centres closer than half width + this to a road's centre line count as on the road. Row 0 of a block
+        /// lies on the road edge with its centre 4 m out, so it is never caught; a cell overlapping the carriageway
+        /// or the sidewalk by more than half a metre is.
+        /// </summary>
+        public const float RoadCellReach = 3.5f;
+
+        private static List<RoadBand> RoadBands(IReadOnlyList<NearbyNet> nets, float2 min, float2 max)
+        {
+            var r = new List<RoadBand>();
+            if (nets == null) return r;
+            foreach (var n in nets)
+            {
+                // Roads and tracks only: pathways may be the edited build's own (they are replaced), and zone
+                // blocks belong to roads.
+                if (n.Category != NetCategory.Road && n.Category != NetCategory.Track) continue;
+                if (!(n.Width > 0.5f) || !math.all(math.isfinite(n.A)) || !math.all(math.isfinite(n.D))) continue;
+                var line = new float2[17];
+                float2 lo = new float2(float.MaxValue), hi = new float2(float.MinValue);
+                for (int i = 0; i <= 16; i++)
+                {
+                    float t = i / 16f, u = 1f - t;
+                    var p = (u * u * u * n.A + 3f * u * u * t * n.B + 3f * u * t * t * n.C + t * t * t * n.D).xz;
+                    line[i] = p;
+                    lo = math.min(lo, p); hi = math.max(hi, p);
+                }
+                float half = n.Width * 0.5f;
+                lo -= half + Cell; hi += half + Cell;
+                if (hi.x < min.x || hi.y < min.y || lo.x > max.x || lo.y > max.y) continue;
+                r.Add(new RoadBand { Line = line, Half = half, Min = lo, Max = hi });
+            }
+            return r;
+        }
+
+        /// <summary>True when the cell centre lies on a captured road (within its half width + <see cref="RoadCellReach"/>).</summary>
+        private static bool OnRoad(List<RoadBand> roads, float2 c)
+        {
+            foreach (var b in roads)
+            {
+                if (c.x < b.Min.x || c.y < b.Min.y || c.x > b.Max.x || c.y > b.Max.y) continue;
+                float lim = b.Half + RoadCellReach;
+                for (int i = 0; i + 1 < b.Line.Length; i++)
+                    if (SegmentDistance(c, b.Line[i], b.Line[i + 1]) < lim) return true;
+            }
+            return false;
+        }
+
+        private static float SegmentDistance(float2 p, float2 a, float2 b)
+        {
+            var ab = b - a;
+            float l2 = math.lengthsq(ab);
+            float t = l2 > 1e-8f ? math.saturate(math.dot(p - a, ab) / l2) : 0f;
+            return math.distance(p, a + ab * t);
+        }
+
+        /// <summary>
+        /// May the build use (zone, or block on purpose) this cell? Not when it lies on a road, is hidden by an
+        /// overlapping block, or the game already blocks it outside the build (a sidewalk, another lot). A blocked
+        /// cell inside the footprint stays usable: that is the build being edited (its blockers / paths go first).
+        /// </summary>
+        public static bool CellOpen(ZoneGrid g, int x, int y, IReadOnlyList<float2[]> feet, IReadOnlyList<NearbyNet> nets) =>
+            CellOpen(g, x, y, new List<float2[]>(feet ?? new float2[0][]), RoadBands(nets, new float2(float.MinValue), new float2(float.MaxValue)));
+
+        private static bool CellOpen(ZoneGrid g, int x, int y, List<float2[]> feet, List<RoadBand> roads)
+        {
+            var c = CellCentre(g, x, y);
+            if (OnRoad(roads, c)) return false;
+            var cells = g.Cells;
+            int i = x + y * g.Size.x;
+            if (cells == null || i < 0 || i >= cells.Length) return true;
+            byte f = cells[i];
+            bool visible = (f & ZoneGrid.CellVisible) != 0, blocked = (f & ZoneGrid.CellBlocked) != 0;
+            if (!blocked) return visible;
+            return InAny(feet, c);
+        }
+
+        /// <summary>The part of <paramref name="sq"/> inside the footprints (one ring): the square itself when wholly inside, null when (almost) outside.</summary>
+        public static float2[] ClipToFootprints(float2[] sq, IReadOnlyList<float2[]> feet)
+        {
+            foreach (var f in feet)
+            {
+                bool all = true;
+                foreach (var p in sq) if (!Poly.Contains(f, p)) { all = false; break; }
+                if (all) return sq;
+            }
+            float2[] best = null;
+            float bestArea = 0.5f;
+            foreach (var f in feet)
+            {
+                if (!ObstacleCut.Overlaps(sq, f)) continue;
+                List<Region> parts;
+                try { parts = Poly.Intersection(sq, f); } catch (Exception) { continue; }
+                foreach (var part in parts)
+                {
+                    if (part?.Outer == null || part.Outer.Length < 3) continue;
+                    float a = Poly.Area(part.Outer);
+                    if (a > bestArea) { bestArea = a; best = Poly.EnsureCcw(part.Outer); }
+                }
+            }
+            return best;
         }
 
         private static string ZoneOf(IReadOnlyList<string> zoneIds, int q) => zoneIds != null && q >= 0 && q < zoneIds.Count ? zoneIds[q] ?? "" : "";

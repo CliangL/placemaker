@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import { bindValue, trigger, useValue, ValueBinding } from "cs2/api";
 import {
     AssetLists, Catalog, DesignState, FeatureFit, GROUP, ManagedGroup, Stage, StepView, Summary, ToolState, Triggers, Values,
-    AreaMode, BrushShape, SettingValue, BrushRules, LocText, NetLegendEntry, ResolvedAsset,
+    AreaMode, BrushShape, SettingValue, BrushRules, LocText, NetLegendEntry, ResolvedAsset, LegendEntry,
 } from "../contract";
 
 const LOG = "[Placemaker]";
@@ -89,7 +89,41 @@ export function normalizeState(raw: unknown): ToolState {
                   .filter((m) => isObj(m) && typeof m.mode === "string")
                   .map((m) => ({ mode: m.mode, enabled: m.enabled !== false, reason: normalizeLoc(m.reason) }))
             : undefined,
+        legendVisibility: normalizeVisibility(v.legendVisibility),
     } as ToolState;
+}
+
+/** s22 additive: layer id → visible; non-boolean entries dropped, absent when empty. */
+function normalizeVisibility(v: unknown): Record<string, boolean> | undefined {
+    if (!isObj(v)) return undefined;
+    const out: Record<string, boolean> = {};
+    for (const k of Object.keys(v)) if (typeof v[k] === "boolean") out[k] = v[k];
+    return Object.keys(out).length ? out : undefined;
+}
+
+/** s22 additive: preview legend entries; malformed entries dropped, absent when empty. */
+export function normalizePreviewLegend(v: unknown): LegendEntry[] | undefined {
+    const num = (x: unknown) => (typeof x === "number" && isFinite(x) ? x : undefined);
+    const str = (x: unknown) => (typeof x === "string" && x ? x : undefined);
+    const out = arr<any>(v)
+        .filter((e) => isObj(e) && typeof e.id === "string" && e.id)
+        .map((e) => ({
+            id: String(e.id),
+            label: String(e.label ?? ""),
+            color: typeof e.color === "string" ? e.color : "#cccccc",
+            color2: str(e.color2),
+            count: Number(e.count) || 0,
+            lengthM: num(e.lengthM),
+            areaM2: num(e.areaM2),
+            minDelta: num(e.minDelta),
+            maxDelta: num(e.maxDelta),
+            defaultOff: e.defaultOff === true || undefined,
+            group: str(e.group),
+            assetId: str(e.assetId),
+            assetName: str(e.assetName),
+            control: str(e.control),
+        }));
+    return out.length ? out : undefined;
 }
 
 export const EMPTY_CATALOG: Catalog = { layers: [], recipes: [] };
@@ -227,6 +261,7 @@ export function normalizeSummary(raw: unknown): Summary {
         cost: Number(v.cost) || 0,
         upkeep: Number(v.upkeep) || 0,
         canAfford: v.canAfford !== false,
+        legend: normalizePreviewLegend(v.legend),
     } as Summary;
 }
 
@@ -340,6 +375,12 @@ export const act = {
     resetParkStat: (id: string) => fire(Triggers.resetParkStat, id),
     /** s17: clamp park stats to the range vanilla parks of this size use. */
     setParkStatsKeepVanilla: (keep: boolean) => fire(Triggers.setParkStatsKeepVanilla, keep),
+    /** s22: isolate one preview layer on the map while its legend entry is hovered ("" = none). */
+    hoverLegend: (layerId: string) => fire(Triggers.hoverLegend, layerId),
+    /** s22: show / hide a preview layer (kept for the game session). */
+    setLegendVisible: (layerId: string, visible: boolean) => fire(Triggers.setLegendVisible, layerId, visible),
+    /** s22: every preview layer back to its default. */
+    resetLegend: () => fire(Triggers.resetLegend),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */

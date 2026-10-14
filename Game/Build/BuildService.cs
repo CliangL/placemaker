@@ -483,11 +483,13 @@ namespace Placemaker.Game.Build
                 bool recover = (RecoverRejectedPieces || AutoExcludeCollisions) && !BuildErrorKeys.IsGlobal(_errorTypeName);
                 if (recover && _excludeAttempts < MaxAutoExcludeAttempts)
                 {
+                    string histogram = ErrorHistogram();
                     int newly = ExcludeErroneousItems();
                     if (newly > 0)
                     {
                         _excludeAttempts++;
-                        Mod.Log.Info($"Placemaker left out {newly} rejected parts ({_errorTypeName}, attempt {_excludeAttempts}); retrying.");
+                        Mod.Log.Info($"Placemaker left out {newly} rejected parts (nets {_exNets}, objects {_exObjects}, surfaces {_exSurfaces}, areas {_exAreas}; "
+                            + $"errors: {(histogram.Length > 0 ? histogram : _errorTypeName)}; attempt {_excludeAttempts}); retrying.");
                         Go(Step.ResetForRetry);
                         return;
                     }
