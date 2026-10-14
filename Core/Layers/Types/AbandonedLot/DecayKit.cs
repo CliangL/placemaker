@@ -95,12 +95,16 @@ namespace Placemaker.Core.Layers.Types.Ruins
             rect = default;
             if (halfLength <= 0.5f || halfWidth <= 0.5f) return false;
             const float golden = 2.39996323f;
-            float step = math.max(2f, math.min(halfWidth, 8f) * 0.6f);
+            // Fine spiral around the wish point first, then a coarse one reaching across the whole region.
+            float fine = math.max(2f, math.min(halfWidth, 8f) * 0.6f);
+            float coarse = math.max(fine, math.length(region.Max - region.Min) / math.sqrt(tries) * 0.7f);
             float phase = Hashing.Unit(seed) * 6.283f;
-            for (int pass = 0; pass < 2; pass++)
+            for (int pass = 0; pass < 4; pass++)
             {
-                var a = pass == 0 ? axis : new float2(-axis.y, axis.x);
-                for (int i = 0; i < tries; i++)
+                var a = (pass & 1) == 0 ? axis : new float2(-axis.y, axis.x);
+                float step = pass < 2 ? fine : coarse;
+                if (pass >= 2 && coarse <= fine * 1.01f) break;
+                for (int i = pass < 2 ? 0 : 1; i < tries; i++)
                 {
                     float r = step * math.sqrt(i);
                     var c = near + new float2(math.cos(phase + i * golden), math.sin(phase + i * golden)) * r;
@@ -253,10 +257,12 @@ namespace Placemaker.Core.Layers.Types.Ruins
             string dirt = AssetAvailability.Has(AssetCategories.DecalDirt) ? AssetCategories.DecalDirt : null;
             uint seed = Hashing.Mix(ctx.Seed, salt);
             float reach = radius * 1.25f;
-            float area = math.PI * reach * reach;
-            int max = math.clamp((int)(area / 4f), 50, 8000);
+            // Scatter only over the reach disc (clipped to the outline): candidates over the whole region
+            // would leave a small collapse point with almost nothing.
+            var disc = LeisureKit.Intersect(region, LayerRegion.Circle(focus, reach, 20)) ?? region;
+            int max = math.clamp((int)(disc.Area / 3f), 50, 9000);
             float pileR = 1.8f * pileScale;
-            foreach (var p in Scatter.Candidates(region, 1.8f, seed, max, ctx.Cancel))
+            foreach (var p in Scatter.Candidates(disc, 1.8f, seed, max, ctx.Cancel))
             {
                 if (res.Piles + res.Chunks >= maxItems) break;
                 float d = math.distance(p, focus);
@@ -265,7 +271,7 @@ namespace Placemaker.Core.Layers.Types.Ruins
                 float t = d / radius;
                 uint v = Hashing.Mix(seed, (int)(p.x * 7f), (int)(p.y * 11f));
                 float clump = Scatter.Clustering(p, 7f, Hashing.Mix(seed, 3u), 0.35f);
-                float chance = intensity * math.pow(math.saturate(1f - t), 1.6f) * clump * 0.55f;
+                float chance = intensity * math.pow(math.saturate(1f - t), 1.6f) * clump * 0.85f;
                 if (t < 1f && pileCategory != null && Hashing.Unit(v) < chance)
                 {
                     bool pile = t < 0.4f && Hashing.Unit(Hashing.Mix(v, 9u)) < 0.6f;

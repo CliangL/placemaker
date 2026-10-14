@@ -272,15 +272,21 @@ namespace Placemaker.Tests.Types
         [Fact]
         public void RubbleThinsOutFromTheCollapsePoint()
         {
-            var ring = RuinsChecks.L6;
-            var plan = RuinsChecks.PlanPreset(Id, "rubbleField", ring);
-            var rubble = plan.Objects.Where(o => o.Category == AssetCategories.RuinsRubble).ToList();
-            Assert.True(rubble.Count > 40);
-            // Big piles sit closer to their nearest neighbour cluster centre than chunks: compare mean scale near vs far from the densest point.
-            var centroid = new float2(rubble.Average(o => o.Position.x), rubble.Average(o => o.Position.z));
-            var near = rubble.Where(o => math.distance(o.Position.xz, centroid) < 30f).ToList();
-            var far = rubble.Where(o => math.distance(o.Position.xz, centroid) > 50f).ToList();
-            if (near.Count > 3 && far.Count > 3) Assert.True(near.Average(o => o.Scale) > far.Average(o => o.Scale));
+            var ring = RuinsChecks.FiveHa;
+            var gen = TestKit.Gen(Id);
+            var settings = gen.Presets.Single(p => p.Id == "overgrown").Values.Clone();
+            settings.Values["rubble"] = 80.0; settings.Values["focus"] = "centre"; settings.Values["foundations"] = 0.0;
+            var plan = gen.Plan(TestKit.Input(ring, settings, 5, null, RuinsChecks.Site()), CancellationToken.None);
+            var focus = LayerRegion.From(Poly.To2D(ring)).DeepestPoint(out _, null, 16);
+            var rubble = plan.Objects.Where(o => o.Category == AssetCategories.RuinsRubble).Select(o => (d: math.distance(o.Position.xz, focus), s: o.Scale)).ToList();
+            Assert.True(rubble.Count > 40, rubble.Count + " rubble items");
+            float R = rubble.Max(x => x.d);
+            // Density per m² in the inner third of the reach is far higher than in the outer third…
+            double inner = rubble.Count(x => x.d < R / 3f) / (math.PI * R * R / 9f);
+            double outer = rubble.Count(x => x.d > 2f * R / 3f) / (math.PI * R * R * 5f / 9f);
+            Assert.True(inner > 3 * outer, $"inner {inner:0.0000}/m², outer {outer:0.0000}/m²");
+            // …and the big piles are near the collapse point, small chunks further out.
+            Assert.True(rubble.Where(x => x.d < R / 3f).Average(x => x.s) > rubble.Where(x => x.d > R / 2f).Average(x => x.s));
         }
 
         [Fact]
