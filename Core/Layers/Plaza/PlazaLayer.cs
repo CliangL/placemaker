@@ -50,13 +50,15 @@ namespace Placemaker.Core.Layers.Plaza
 
         private static readonly FeatureInfo[] FeatureList = WithAmenities(new[]
         {
-            new FeatureInfo { Layer = "plazatrees", LabelKey = "Placemaker.Plaza.Feature.trees", TooltipKey = "Placemaker.Plaza.Feature.trees.Tooltip", DefaultOn = true },
             new FeatureInfo { Layer = "playground", LabelKey = "Placemaker.Plaza.Feature.playground", Preset = Park.ParkLayer.Bag(("size", "small"), ("fence", true)) },
+            // Fountain before the trees: children plan in list order and the fountain wants the middle.
             new FeatureInfo
             {
                 Layer = "fountain", LabelKey = "Placemaker.Plaza.Feature.fountain", TooltipKey = "Placemaker.Plaza.Feature.fountain.Tooltip",
                 Preset = Park.ParkLayer.Bag(("size", "large"), ("benches", 8.0), ("planters", true)), DefaultOn = true,
             },
+            new FeatureInfo { Layer = "plazatrees", LabelKey = "Placemaker.Plaza.Feature.trees", TooltipKey = "Placemaker.Plaza.Feature.trees.Tooltip", DefaultOn = true,
+                Preset = Park.ParkLayer.Bag(("layout", "islands"), ("spacing", 16.0)) },
             new FeatureInfo { Layer = "kiosk", LabelKey = "Placemaker.Plaza.Feature.kiosk" },
             new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Plaza.Feature.flowerbeds", Preset = Park.ParkLayer.Bag(("density", 30.0), ("nearPaths", false)), DefaultOn = true },
             new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = Park.ParkLayer.Bag(("count", 3.0), ("where", "edges")) },

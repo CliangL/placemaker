@@ -100,8 +100,8 @@ namespace Placemaker.Core.Layers.AddOns
                 {
                     // Leaves and dirt gather along path edges and round trees, benches and lamps; open lawn
                     // gets only a rare one (playtest 4b: no uniform carpets of decal squares).
-                    float near = math.min(occ.Corridors.Clearance(p, 4f), occ.Discs.Clearance(p, 4f));
-                    float gather = near < 4f ? 1f - math.max(0f, near) / 6f : 0.1f;
+                    float near = math.min(occ.Corridors.Clearance(p, 3f), occ.Discs.Clearance(p, 3f) + 0.8f);
+                    float gather = near < 2.5f ? 1f - math.max(0f, near) / 3f : 0.03f;
                     if (Hashing.Unit(Hashing.Mix(v, 0x6A7u)) > gather) continue;
                 }
                 // On a path/aisle: well inside it (the reserved corridors approximate curves by chords).

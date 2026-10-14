@@ -429,19 +429,23 @@ namespace Placemaker.Core.Layers.Common
             return result;
         }
 
-        /// <summary>The outline point on a quiet street farthest from the other entrances (at least 30 m away).</summary>
+        /// <summary>The outline point on a quiet street farthest from the other entrances (at least 30 m away), never in a corner.</summary>
         private static bool ServicePoint(AreaInput input, LayerRegion region, SegmentIndex nets, List<EdgeMarker> others, out EdgeMarker marker)
         {
             marker = default;
             int samples = math.clamp((int)(region.Perimeter / 6f), 16, 160);
             float best = 30f; bool found = false;
+            float clear = CornerClear(region);
+            var corners = Corners(region); corners.AddRange(Intersections(input));
             for (int i = 0; i < samples; i++)
             {
                 var p = region.PointAt(region.Perimeter * (i + 0.5f) / samples, out _, out _, out _);
                 float d = float.MaxValue;
                 foreach (var o in others) d = math.min(d, math.distance(o.Position.xz, p));
                 if (d <= best) continue;
-                if (FrontageAt(input, nets, p, out _) != Frontage.QuietStreet) continue;
+                bool cornered = false;
+                foreach (var c in corners) if (math.distancesq(c, p) < clear * clear) { cornered = true; break; }
+                if (cornered || FrontageAt(input, nets, p, out _) != Frontage.QuietStreet) continue;
                 best = d; found = true;
                 var q = region.ClosestOnBoundary(p, out int seg, out float t);
                 float y = input.Site?.HeightAt != null ? input.Site.HeightAt(q) : 0f;

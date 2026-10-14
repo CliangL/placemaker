@@ -26,34 +26,35 @@ namespace Placemaker.Core.Layers.Leisure
 
         /// <summary>
         /// Playtest 4b ("a lot more things should be on by default"): the fitting, cheap features each
-        /// park-like type starts with. Terrain shaping, rocks and shops stay opt-in (slow or situational).
+        /// park-like type starts with. Terrain shaping, rocks and shops stay opt-in (slow or situational);
+        /// picnic/playground/fountain only where the type leaves them room (the gallery showed NoSpace otherwise).
         /// </summary>
         private static readonly Dictionary<string, string[]> DefaultOnByType = new Dictionary<string, string[]>
         {
-            { "botanicalGarden", new[] { "fountain", "restrooms", "decals" } },
+            { "botanicalGarden", new[] { "restrooms", "decals" } },
             { "communityGarden", new[] { "decals" } },
             { "dogPark", new[] { "decals" } },
             { "formalGarden", new[] { "decals" } },
-            { "natureReserve", new[] { "picnic", "decals" } },
+            { "natureReserve", new[] { "decals" } },
             { "picnicGrounds", new[] { "playground", "decals" } },
-            { "sportsPark", new[] { "restrooms", "playground", "decals" } },
+            { "sportsPark", new[] { "restrooms", "decals" } },
             { "skatePark", new[] { "decals" } },
             { "cemeteryGrounds", new[] { "decals" } },
             { "greenwayPark", new[] { "decals" } },
-            { "adventurePlayground", new[] { "picnic", "restrooms", "decals" } },
+            { "adventurePlayground", new[] { "restrooms", "decals" } },
             { "amphitheatre", new[] { "restrooms", "flowerbeds", "decals" } },
-            { "animalPark", new[] { "playground", "picnic", "restrooms", "decals" } },
+            { "animalPark", new[] { "restrooms", "decals" } },
             { "beach", new[] { "restrooms", "picnic", "decals" } },
-            { "fairground", new[] { "restrooms", "picnic", "decals" } },
+            { "fairground", new[] { "restrooms", "decals" } },
             { "golf", new[] { "restrooms", "decals" } },
-            { "hikingTrail", new[] { "picnic", "decals" } },
-            { "lookoutHill", new[] { "picnic", "decals" } },
+            { "hikingTrail", new[] { "decals" } },
+            { "lookoutHill", new[] { "decals" } },
             { "memorialPark", new[] { "bigtrees", "flowerbeds", "decals" } },
-            { "orchardPark", new[] { "picnic", "decals" } },
-            { "urbanFarm", new[] { "picnic", "decals" } },
+            { "orchardPark", new[] { "decals" } },
+            { "urbanFarm", new[] { "decals" } },
             { "urbanRuins", new[] { "bigtrees", "decals" } },
             { "waterfront", new[] { "flowerbeds", "bigtrees", "picnic", "decals" } },
-            { "wetland", new[] { "picnic", "decals" } },
+            { "wetland", new[] { "decals" } },
             { "zenGarden", new[] { "decals" } },
         };
 
