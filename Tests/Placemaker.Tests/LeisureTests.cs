@@ -130,8 +130,11 @@ namespace Placemaker.Tests
             var plan = Compose(With(id, features), FiveHa, TestKit.RoadAlongBottom(250));
             Assert.True(string.IsNullOrEmpty(Errors(plan)), Errors(plan));
             foreach (var l in plan.Layers) AssertInside(l, FiveHa, 1.2f);   // zoning quads reach 1 m over the road edge; objects never
-            // Features run (at least one plan per feature).
-            foreach (var f in features) Assert.Contains(plan.Layers, l => l.GeneratorId == f);
+            // Features run (at least one plan per feature) — or, for a facility the host found no room for
+            // (every field of the sports park at once on 5 ha), the host says so.
+            foreach (var f in features)
+                Assert.True(plan.Layers.Any(l => l.GeneratorId == f)
+                    || plan.AllIssues().Any(i => i.Args != null && i.Args.Any(a => a as string == "Placemaker.Feature." + f)), f + " neither ran nor was reported");
         }
 
         [Theory]
@@ -169,9 +172,13 @@ namespace Placemaker.Tests
             };
             foreach (var kv in expect)
             {
-                var plan = Compose(With(kv.Key), FiveHa, TestKit.RoadAlongBottom(250)).Layers[0];
+                // s10: the sports park's facilities are its field features (they plan in their own layers).
+                var composed = kv.Key == "sportsPark"
+                    ? Compose(With(kv.Key, "pitch", "tennisCourts", "basketballCourt"), FiveHa, TestKit.RoadAlongBottom(250))
+                    : Compose(With(kv.Key), FiveHa, TestKit.RoadAlongBottom(250));
+                var objects = kv.Key == "sportsPark" ? composed.Layers.SelectMany(l => l.Objects).ToList() : composed.Layers[0].Objects;
                 foreach (var cat in kv.Value)
-                    Assert.True(plan.Objects.Any(o => o.Category == cat), kv.Key + " has no " + cat);
+                    Assert.True(objects.Any(o => o.Category == cat), kv.Key + " has no " + cat);
             }
             // The reserve is a forest: far denser planting than the picnic grounds.
             int Trees(string id) => Compose(With(id), FiveHa).Layers[0].Objects.Count(o => o.Role == ObjectRole.Tree);

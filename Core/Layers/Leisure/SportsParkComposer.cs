@@ -66,6 +66,7 @@ namespace Placemaker.Core.Layers.Leisure
         private readonly List<(float2 a, float2 b)> _loopSegs = new List<(float2, float2)>();
         private readonly List<(float2 a, float2 b)> _walks = new List<(float2, float2)>();
         private int _lotStalls;
+        private SubLot _lot;
 
         public SportsParkComposer(LayerContext ctx, List<Gate> gates)
         {
@@ -88,7 +89,18 @@ namespace Placemaker.Core.Layers.Leisure
             Parking();
             _region = ctx.LayerRegion;
             _occ = new Occupancy(_region, ctx.Input.Reserved, ctx.Site);
-            if (_lotStalls > 0) TransportKit.Occupy(_occ, ctx.Plan);
+            if (_lotStalls > 0)
+            {
+                TransportKit.Occupy(_occ, ctx.Plan);
+                // The lot's own footways are walks too (nothing of ours may stand on them).
+                foreach (var n in ctx.Plan.Nets)
+                    if (n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide)
+                    {
+                        float hw = Composer.DefaultHalfWidth(n.Role);
+                        _occ.TakeCorridor(n.A.xz, n.D.xz, hw, 100);
+                        _occ.Paths.Add(n.A.xz, n.D.xz, hw, 100);
+                    }
+            }
             ctx.Surface(_region.Ring, SurfaceRole.Grass, AssetMix.One(""));
             ctx.Check();
 
@@ -118,6 +130,7 @@ namespace Placemaker.Core.Layers.Leisure
             ctx.Check();
 
             Paths();
+            if (_lot != null) TransportKit.ClearPlantsFromPaths(ctx.Plan, _lot, _occ);
             ctx.Check();
             Dress();
             foreach (var it in _items) Amenities.Take(_occ, it.Rect, it == _terrace ? 0.3f : 0.6f, 102);
@@ -138,6 +151,7 @@ namespace Placemaker.Core.Layers.Leisure
             ctx.Plan.Facts["facilities"] = places;
             ctx.Plan.Facts["hero"] = _hero != null ? 1 : 0;
             ctx.Plan.Facts["terrace"] = _terrace != null ? 1 : 0;
+            if (_terrace != null) { ctx.Plan.Facts["terraceX"] = _terrace.Rect.Center.x; ctx.Plan.Facts["terraceZ"] = _terrace.Rect.Center.y; }
             ctx.Plan.Facts["loop"] = _loopSegs.Count > 0 ? 1 : 0;
         }
 
@@ -266,6 +280,7 @@ namespace Placemaker.Core.Layers.Leisure
             if (rest == null) return;
             ctx.LayerRegion = LayerRegion.From(rest);
             _lotStalls = lot.Stalls;
+            _lot = lot;
             // People walk from the lot into the park at the middle of its inner edge.
             var walkIn = ctx.LayerRegion.ClosestOnBoundary(at + inward * (depth + 2f), out int s2, out float t2);
             var lotGate = new Gate { Position = walkIn, Segment = s2, T = t2, Kind = EntranceKinds.Pedestrian, AttachId = -1 };
@@ -867,7 +882,7 @@ namespace Placemaker.Core.Layers.Leisure
                 int j = (i + 1) % n;
                 // Rounded corner at i, then the straight to the next corner.
                 var p = pts[i];
-                if (math.distance(cutIn[i], cutOut[i]) > 0.8f)
+                if (math.distance(cutIn[i], cutOut[i]) > 0.8f && !Blocked(cutIn[i], cutOut[i]))
                 {
                     var b = math.lerp(cutIn[i], p, 0.55f); var c = math.lerp(cutOut[i], p, 0.55f);
                     _ctx.CurvedNet(cutIn[i], b, c, cutOut[i], NetRole.Pathway, _path);
@@ -881,7 +896,7 @@ namespace Placemaker.Core.Layers.Leisure
                         prev = q;
                     }
                 }
-                if (math.distance(cutOut[i], cutIn[j]) > 0.8f)
+                if (math.distance(cutOut[i], cutIn[j]) > 0.8f && !Blocked(cutOut[i], cutIn[j]))
                 {
                     _ctx.StraightNet(cutOut[i], cutIn[j], NetRole.Pathway, _path);
                     Index(cutOut[i], cutIn[j], NetRole.Pathway);
@@ -981,9 +996,22 @@ namespace Placemaker.Core.Layers.Leisure
         {
             if (math.distance(a, b) < 0.5f) return true;
             if (_region.CrossesBoundary(a, b, true) || !_region.Contains(math.lerp(a, b, 0.5f))) return false;
+            if (Blocked(a, b)) return false;
             // The last metre may touch the target's own rectangle.
             var bb = endOnTarget ? math.lerp(a, b, math.max(0f, 1f - 1.2f / math.max(1f, math.distance(a, b)))) : b;
             return !HitsItems(a, bb, 0.6f);
+        }
+
+        /// <summary>True when a walk a→b would cross something reserved or standing (earlier layers, buildings).</summary>
+        private bool Blocked(float2 a, float2 b)
+        {
+            float len = math.distance(a, b);
+            for (float t = 0f; t <= len; t += 1.5f)
+            {
+                var p = math.lerp(a, b, len < 1e-3f ? 0f : t / len);
+                if (_occ.Discs.Overlaps(p, _hw, 0f) || _occ.HitsPolygon(p, _hw)) return true;
+            }
+            return false;
         }
 
         /// <summary>Connector from a facility's nearest side to the nearest walk, when it stays clear.</summary>

@@ -122,7 +122,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Slider("fitnessCount", 1, 1, 3, 1, "count", ControlTier.More, "facilities");
 
             // Clubhouse: changing pavilion with a spectator terrace beside the main field.
-            c.Toggle("changingHut", true, ControlTier.Essential, "clubhouse").Tip();
+            c.Toggle("changingHut", true, ControlTier.More, "clubhouse").Tip();
             c.Toggle("terrace", true, ControlTier.More, "clubhouse").Tip();
             c.Toggle("kiosk", true, ControlTier.More, "clubhouse").Tip();
 
@@ -144,7 +144,7 @@ namespace Placemaker.Core.Layers.Leisure
 
             // Parking: only a tidy lot on the street side of a large park.
             c.Choice("parking", "auto", ControlTier.More, "parking", "auto", "off", "on").Tip();
-            c.Slider("lotShare", 8, 3, 20, 1, "%", ControlTier.More, "parking").When("parking!=off").Tip();
+            c.Slider("lotShare", 8, 3, 20, 1, "%", ControlTier.More, "parking").Tip();
 
             EntranceMarkers(c);
             DefineStreetShopControls(c);

@@ -123,7 +123,7 @@ namespace Placemaker.Tests
             var decals = plan.Objects.Where(o => o.Role == ObjectRole.Decal).ToList();
             Assert.True(decals.Count > 150, "too few line decals: " + decals.Count);
             Assert.Single(decals.Select(d => d.Variation).Distinct());
-            Assert.All(decals, d => Assert.Equal(AssetCategories.DecalMarkings, d.Category));
+            Assert.All(decals, d => Assert.Equal(AssetCategories.DecalFieldLine, d.Category));
             // Lines off: no decals at all.
             var off = TestKit.Plan("pitch", TestKit.Input(TestKit.Rect(200, 150), Bag(("lines", false)), seed: 4));
             Assert.DoesNotContain(off.Objects, o => o.Role == ObjectRole.Decal);
@@ -293,7 +293,7 @@ namespace Placemaker.Tests
         {
             var none = new Dictionary<string, int>
             {
-                [AssetCategories.DecalMarkings] = 0, [AssetCategories.SportsGoal] = 0, [AssetCategories.FloodLight] = 0, [AssetCategories.Lamp] = 0,
+                [AssetCategories.DecalMarkings] = 0, [AssetCategories.DecalFieldLine] = 0, [AssetCategories.DecalCourtBasketball] = 0, [AssetCategories.SportsGoal] = 0, [AssetCategories.FloodLight] = 0, [AssetCategories.Lamp] = 0,
                 [AssetCategories.SportsStand] = 0, [AssetCategories.SportsTennis] = 0, [AssetCategories.SportsBasketball] = 0, [AssetCategories.SportsSkate] = 0,
                 [AssetCategories.SurfaceDirt] = 0,
             };
