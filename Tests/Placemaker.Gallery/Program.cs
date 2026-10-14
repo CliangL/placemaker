@@ -164,8 +164,8 @@ namespace Placemaker.Gallery
         public static bool ShopVariants;
         private static readonly (string layout, string amount)[] ShopCombos =
         {
-            ("band", "some"), ("band", "few"), ("pads", "some"), ("pads", "lots"), ("clusters", "some"), ("clusters", "lots"),
-            ("inward", "some"), ("inward", "lots"), ("lane", "some"), ("lane", "lots"),
+            // s14: the Zoning feature is plain cutouts (Row / Speckled); the elaborate layouts are the Commercial types.
+            ("band", "few"), ("band", "some"), ("band", "lots"), ("pads", "some"), ("pads", "lots"),
         };
 
         public static List<Job> All(string repo, HashSet<string> only)
@@ -219,7 +219,7 @@ namespace Placemaker.Gallery
                 var features = Features.Of(gen);
                 if (ShopVariants && features.Any(f => f.Layer == "edgeZoning" && f.Target == "shops"))
                     foreach (var (layout, amount) in ShopCombos)
-                        jobs.Add(Make("shops-" + layout + "-" + amount, "Street shops " + layout + " / " + amount, r =>
+                        jobs.Add(Make("shops-" + layout + "-" + amount, "Zoning " + layout + " / " + amount, r =>
                         {
                             editor.SetFeature(r, RecipePaths.Root, "edgeZoning", true, 91);
                             r.Root.Settings.Values["shopLayout"] = layout;

@@ -129,7 +129,7 @@ export interface RecipeInfo {
   custom: boolean;
   /** Short description key for the Make row tooltip. */
   description?: string;
-  /** Make-row group declared by the type ("parks", "gardens", "squares", "sports", "water", "nature", "farms", "events", "industrial", "transport", "parking", "roads"). */
+  /** Make-row group declared by the type ("parks", "gardens", "squares", "sports", "water", "nature", "farms", "events", "industrial", "transport", "parking", "commercial", "roads"). */
   group?: string;
 }
 

@@ -139,6 +139,8 @@ namespace Placemaker.Core
             // CS2 joins paths only at identical nodes: split a path where a spur (often a feature's
             // "path to it") ends on it (g5).
             Layers.Common.PathJoins.JoinAll(result);
+            // s14: zoning cutouts stay empty whatever a feature placed (Layers/Common/Cutouts.cs).
+            Layers.Common.Cutouts.Enforce(result);
             return result;
         }
 
