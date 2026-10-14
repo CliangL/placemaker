@@ -13,6 +13,9 @@ namespace Placemaker.Core.Layers.Leisure
     [AreaGenerator(57, Group = "squares")]
     public sealed class MarketSquareLayer : LeisureLayer
     {
+        /// <summary>A square with access points (not park entrances): never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public const string AccessKind = PlazaLayer.AccessKind;
 
         protected override string Area => "Market";

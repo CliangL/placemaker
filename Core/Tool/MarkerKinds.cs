@@ -53,6 +53,11 @@ namespace Placemaker.Core.Tool
                 case "footpath": return (0.95f, 0.85f, 0.55f);
                 case "access": return (0.4f, 0.75f, 1f);
                 case "split": return (1f, 0.4f, 0.8f);
+                // Park-family entrance kinds (Core/Layers/Common/Entrances.cs EntranceKinds).
+                case "pedestrian": return (0.95f, 0.85f, 0.55f);
+                case "bike": return (0.3f, 0.85f, 0.45f);
+                case "main": return (1f, 0.7f, 0.15f);
+                case "service": return (0.6f, 0.65f, 0.75f);
                 default: return (1f, 0.85f, 0.2f);
             }
         }
