@@ -378,7 +378,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                         {
                             float a = phase + s * 2f * math.PI / steps;
                             var p = hub + new float2(math.cos(a), math.sin(a)) * d;
-                            if (!occ.Free(p, r + 1f, 1.5f, 0.8f)) continue;
+                            if (!occ.Free(p, r + 1f, r + 2.5f, 0.8f)) continue;
                             bool clash = false;
                             foreach (var t in taken) if (math.distance(t.c, p) < t.r + r + 4f) { clash = true; break; }
                             if (clash) continue;
@@ -402,7 +402,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             }
         }
 
-        private (string cat, string[] ids) EquipmentFor(LayerContext ctx, CategoryChains chains, ZoneKind kind, int index, int count)
+        private (string cat, string[] ids) EquipmentFor(LayerContext ctx, CategoryChains chains, ZoneKind kind, int index, bool outer)
         {
             var any = ctx.L("equipmentAssets");
             var climb = ctx.L("climbAssets");
@@ -413,7 +413,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     return (chains.Get(tod.Length > 0, AssetCategories.PlayToddler, AssetCategories.Playground), tod.Length > 0 ? tod : null);
                 case ZoneKind.Junior:
                     // Swings on the outer ring (their swing arc needs the free rim), slides and frames inside.
-                    if (index >= count - math.max(1, count / 4)) return (chains.Get(any.Length > 0, AssetCategories.PlaySwing, AssetCategories.Playground), any);
+                    if (outer && (index & 1) == 0) return (chains.Get(any.Length > 0, AssetCategories.PlaySwing, AssetCategories.Playground), any);
                     if ((index & 1) == 0) return (chains.Get(any.Length > 0, AssetCategories.PlaySlide, AssetCategories.Playground), any);
                     return (chains.Get(climb.Length > 0, AssetCategories.PlayClimb, AssetCategories.Playground), climb.Length > 0 ? climb : any);
                 case ZoneKind.Teen:
@@ -463,7 +463,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             int start = 0;
             if (z.Kind == ZoneKind.Jungle)
             {
-                var (cat, ids) = EquipmentFor(ctx, chains, z.Kind, 0, z.Items);
+                var (cat, ids) = EquipmentFor(ctx, chains, z.Kind, 0, false);
                 if (cat != null)
                 {
                     uint v = Hashing.Mix(ctx.Seed, 0x7A3u);
@@ -480,9 +480,9 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                 float a = phase + i * golden;
                 var p = z.Centre + new float2(math.cos(a), math.sin(a)) * rr;
                 bool clash = false;
-                foreach (var q in placed) if (math.distance(q.p, p) < q.r + z.ItemRadius + ctx.F("clearance") * 0.5f) { clash = true; break; }
+                foreach (var q in placed) if (math.distance(q.p, p) < q.r + z.ItemRadius + ctx.F("clearance")) { clash = true; break; }
                 if (clash) continue;
-                var (cat, ids) = EquipmentFor(ctx, chains, z.Kind, n, z.Items);
+                var (cat, ids) = EquipmentFor(ctx, chains, z.Kind, n, rr > (z.Radius - z.ItemRadius) * 0.55f);
                 if (cat == null) break;
                 uint v = Hashing.Mix(ctx.Seed, 0xE90u + (uint)z.Kind * 1009u + (uint)n);
                 ctx.Object(p, LeisureKit.Yaw(z.Centre, p), ObjectRole.Furniture, AssetMix.Pick(ids, v), v, -1, cat);
@@ -528,7 +528,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     float r = 1.6f + 0.5f * Hashing.Unit(Hashing.Mix(ctx.Seed, 0x9007u + (uint)i));
                     var dir = math.normalizesafe(away + side * bend * (i + 1));
                     var c = prev + dir * (r + 1.6f);
-                    if (!occ.Free(c, r + 0.3f, 1f, 0.3f)) break;
+                    if (!occ.Free(c, r + 0.3f, r + 1.3f, 0.3f)) break;
                     ctx.Surface(LeisureKit.Blob(c, r, Hashing.Mix(ctx.Seed, 0x9100u + (uint)i), 12, 0.12f), SurfaceRole.Water, AssetMix.One(""), water);
                     occ.Take(c, r + 0.3f, 2);
                     if (rock != null)

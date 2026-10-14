@@ -121,6 +121,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         {
             public readonly List<float2> Nodes = new List<float2>();
             public NetRole Role;
+            public bool IsSpur;
 
             public float Distance(float2 p, out int seg, out float2 q)
             {
@@ -235,17 +236,21 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         }
 
         /// <summary>Spur from p to the nearest line (junction node inserted); false when it would leave the area.</summary>
-        private static bool Spur(State st, float2 p, NetRole role, float maxLength = 80f, bool onEdge = false)
+        private static bool Spur(State st, float2 p, NetRole role, float maxLength = 80f, bool onEdge = false, float2 outward = default)
         {
             Line best = null; float bestD = float.MaxValue;
+            bool directed = math.lengthsq(outward) > 0.5f;
             foreach (var l in st.Lines)
             {
+                if (l.IsSpur) continue;   // spurs join trunk paths only (never cut across a room)
                 float d = l.Distance(p, out _, out var q);
+                if (directed && d > 0.5f && math.dot(math.normalizesafe(q - p), outward) < 0.6f) continue;
                 if (d < bestD && d <= maxLength && !st.Region.CrossesBoundary(p, q, true)) { bestD = d; best = l; }
             }
             if (best == null || bestD < 1f) return best != null;
             var j = best.Junction(p);
             var spur = AddLine(st, role, onEdge, p, j);
+            if (spur != null) spur.IsSpur = true;
             return spur != null;
         }
 
@@ -272,12 +277,12 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             var mon = centreFocus ? math.lerp(start, far, 0.5f) : far - dir * (fr + 2f);
             // Pull the monument inwards until the forecourt fits the outline and the free space.
             float courtReach = squareCourt ? fr * 1.42f : fr;
-            for (int i = 0; i < 20 && !occ.Free(mon, courtReach, 1.5f, 0.2f); i++)
+            for (int i = 0; i < 20 && !occ.Free(mon, courtReach, courtReach + 1.5f, 0.2f); i++)
             {
                 if (i == 10) { fr *= 0.75f; courtReach = squareCourt ? fr * 1.42f : fr; }
                 mon -= dir * 2f;
             }
-            if (!occ.Free(mon, courtReach, 1f, 0.2f) || math.dot(mon - start, dir) < fr + 8f) return false;
+            if (!occ.Free(mon, courtReach, courtReach + 1f, 0.2f) || math.dot(mon - start, dir) < fr + 8f) return false;
             st.Monument = mon; st.Forecourt = fr;
 
             if (ctx.B("raised"))
@@ -332,7 +337,8 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 if (ctx.F("processionWidth") >= 4f)
                 {
                     var band = LayerRegion.Rect(start + dir * (axisLen * 0.5f), dir, axisLen * 0.5f, bandHalf);
-                    ctx.Surface(band, SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    var clipped = LeisureKit.Intersect(region, band);
+                    if (clipped != null) ctx.Surface(clipped.Ring, SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
                     occ.TakeCorridor(start, rimIn, bandHalf, 100);
                 }
             }
@@ -589,7 +595,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             var opening = r.Local(0f, towardAxis * r.HalfWidth);
             LeisureKit.TakeRect(st.Occ, r);
             // Spur from the opening out to the nearest path (junction node on that path).
-            Spur(st, opening + r.Side * towardAxis * 0.2f, NetRole.Pathway, 30f);
+            Spur(st, opening + r.Side * towardAxis * 0.2f, NetRole.Pathway, 30f, false, r.Side * towardAxis);
             uint v = Hashing.Mix(ctx.Seed, 0x500Au + (uint)index);
             string hedgeCat = st.Chains.Get(ctx.S("hedgeAsset").Length > 0, AssetCategories.Hedge, AssetCategories.Bush);
             if (hedgeCat != null)
@@ -737,11 +743,11 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 string hedgeCat = ctx.B("rooms") ? st.Chains.Get(ctx.S("hedgeAsset").Length > 0, AssetCategories.Hedge, AssetCategories.Bush) : null;
                 if (sc != null)
                 {
-                    var anchors = PathAnchors.Pick(PathAnchors.Beside(occ, 3.6f, 9f, 0.8f), want, 16f, false);
+                    var anchors = PathAnchors.Pick(PathAnchors.Beside(occ, 3.6f, 5f, 0.8f), want, 11f, false);
                     int i = 0;
                     foreach (var an in anchors)
                     {
-                        if (!occ.Free(an.Position, 3.6f, 1f, 0.3f)) continue;
+                        if (!occ.Free(an.Position, 3.6f, 4.2f, 0.3f)) continue;
                         uint v = Hashing.Mix(ctx.Seed, 0x5C00u + (uint)i++);
                         ctx.Surface(LayerRegion.Circle(an.Position, 2.2f, 14), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
                         ctx.Object(an.Position, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Centerpiece, AssetMix.Pick(ids, v), v, -1, sc);

@@ -28,8 +28,16 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         public bool Classify(string lower, AssetTraits traits, List<string> categories)
         {
             if ((traits & AssetTraits.Plant) != 0 || Has(lower, "advert", "billboard", "logo")) return false;
+            // Small specific things first ("MemorialPlaque" is a plaque, not a monument).
+            if (Has(lower, "plaque", "wreath", "eternalflame", "eternal flame"))
+            { categories.Add(AssetCategories.MemorialPlaque); return true; }
+            if (Has(lower, "flagpole", "flag pole", "flagmast", "flag mast", "flagstaff"))
+            { categories.Add(AssetCategories.MemorialFlag); return true; }
+            if (Has(lower, "bollardlight", "bollard light", "pathlight", "path light", "gardenlight", "garden light", "groundlight", "ground light",
+                "uplight", "spotlight", "lowlight", "low light"))
+            { categories.Add(AssetCategories.Lamp); categories.Add(AssetCategories.LampLow); return true; }
             bool standalone = (traits & AssetTraits.HasSubObjects) == 0 && (traits & AssetTraits.HasIcon) != 0;
-            if (standalone && !Has(lower, "fountain", "grave", "tomb", "headstone", "memorialstone", "memorial stone"))
+            if (standalone && !Has(lower, "fountain", "grave", "tomb", "headstone", "memorialstone", "memorial stone", "sign"))
             {
                 bool monument = Has(lower, "cenotaph", "obelisk", "monument", "memorial", "statue", "bust");
                 bool sculpture = Has(lower, "sculpture", "statue", "artwork", "art installation", "abstract");
@@ -42,13 +50,6 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                     return true;
                 }
             }
-            if (Has(lower, "plaque", "wreath", "eternalflame", "eternal flame"))
-            { categories.Add(AssetCategories.MemorialPlaque); return true; }
-            if (Has(lower, "flagpole", "flag pole", "flagmast", "flag mast", "flagstaff"))
-            { categories.Add(AssetCategories.MemorialFlag); return true; }
-            if (Has(lower, "bollardlight", "bollard light", "pathlight", "path light", "gardenlight", "garden light", "groundlight", "ground light",
-                "uplight", "spotlight", "lowlight", "low light"))
-            { categories.Add(AssetCategories.Lamp); categories.Add(AssetCategories.LampLow); return true; }
             return false;
         }
 
