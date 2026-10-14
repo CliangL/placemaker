@@ -78,6 +78,7 @@ namespace Placemaker.Game.Build
         private AssetCatalogSystem _catalog;
         private GroupRegistrySystem _registry;
         private SurfaceCloneSystem _clones;
+        private DecalOpacitySystem _decalClones;
 
         private EntityQuery _tempQuery;
         private EntityQuery _errorQuery;
@@ -139,6 +140,7 @@ namespace Placemaker.Game.Build
             _catalog = World.GetOrCreateSystemManaged<AssetCatalogSystem>();
             _registry = World.GetOrCreateSystemManaged<GroupRegistrySystem>();
             _clones = World.GetOrCreateSystemManaged<SurfaceCloneSystem>();
+            _decalClones = World.GetOrCreateSystemManaged<DecalOpacitySystem>();
             InitOwner();
             InitGhost();
             InitProtect();

@@ -509,7 +509,13 @@ namespace Placemaker.Game.Assets
             t |= AssetTraits.StaticObject;
             if (prefab is BuildingPrefab || EntityManager.HasComponent<BuildingData>(e)) t |= AssetTraits.Building;
             if (prefab is ObjectGeometryPrefab g && g.m_Meshes != null && g.m_Meshes.Length > 0) t |= AssetTraits.HasMesh;
-            if (IsDecalOnly(e)) t |= AssetTraits.DecalMesh;
+            if (IsDecalOnly(e))
+            {
+                t |= AssetTraits.DecalMesh;
+                // s23: a decal whose projection mask lacks Terrain (EAI sets DecalProperties.m_LayerMask from the pack's
+                // colossal_DecalLayerMask) never shows on the ground: building dressing, never an automatic ground decal.
+                if (!ProjectsOnTerrain(prefab)) t |= AssetTraits.WallOrHanging;
+            }
             if (EntityManager.HasComponent<PlantData>(e)) t |= AssetTraits.Plant;
             if (EntityManager.HasComponent<TreeData>(e)) t |= AssetTraits.Tree;
             if (EntityManager.HasComponent<StreetLightData>(e)) t |= AssetTraits.StreetLight;
@@ -566,6 +572,19 @@ namespace Placemaker.Game.Assets
         /// on a RenderPrefab's MeshData when the prefab has DecalProperties (decal material/projector), so
         /// this is the game's own signal, independent of names.
         /// </summary>
+        private static bool ProjectsOnTerrain(PrefabBase prefab)
+        {
+            if (!(prefab is ObjectGeometryPrefab g) || g.m_Meshes == null) return true;
+            foreach (var m in g.m_Meshes)
+            {
+                if (!(m?.m_Mesh is RenderPrefab r)) continue;
+                var dp = r.GetComponent<DecalProperties>();
+                if (dp != null && (dp.m_LayerMask & global::Game.Rendering.DecalLayers.Terrain) != 0) return true;
+                if (dp == null) return true;
+            }
+            return false;
+        }
+
         private bool IsDecalOnly(Entity e)
         {
             if (!EntityManager.HasBuffer<SubMesh>(e)) return false;

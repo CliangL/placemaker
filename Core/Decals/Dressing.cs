@@ -62,6 +62,20 @@ namespace Placemaker.Core.Decals
         internal static float Weight(DressStyle s, Kind k) => StyleWeights[(int)s, (int)k];
 
         /// <summary>
+        /// (s23, user: "poop all over the floor … you shouldn't consciously notice any single decal"). Clean and Lived-in dress
+        /// only with what genuinely blends: faint leaf litter under crowns, faint dirt dust where feet go, sand dust at sand
+        /// edges, wet sand at the waterline, faint oil in parking bays and faint stains by benches and bins. Cracks, repairs,
+        /// tyre marks, mud, puddles, moss, mulch, stones, litter, glass, wrack and graffiti are Gritty only (still placeable
+        /// by hand with the Decals feature).
+        /// </summary>
+        public static bool Allowed(string pool, DressStyle style)
+        {
+            if (style == DressStyle.Gritty) return pool != DecalPools.Footprints;
+            return pool == AssetCategories.DecalLeaves || pool == DecalPools.Wear || pool == DecalPools.Sand || pool == DecalPools.WetSand
+                || pool == DecalPools.Oil || pool == DecalPools.Stain;
+        }
+
+        /// <summary>
         /// Runs the pass over a composed plan. <paramref name="dress"/> maps each layer plan to the dressing settings
         /// of the fill step it belongs to (features share their parent's instance); layers without settings are not dressed.
         /// </summary>

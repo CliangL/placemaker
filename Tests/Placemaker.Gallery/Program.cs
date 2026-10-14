@@ -10,7 +10,7 @@
 // Writes <out>/<type>/<variant>.png, <out>/index.html and <out>/gallery.json (metrics per image).
 //
 //   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront] [--decals]
-//   --decals: also "decals-max" (Decals 300 %) and "decals-off" (0 %) per type; decals are drawn in category colours with a legend.
+//   --decals: also "decals-on" (100 %), "decals-max" (300 %) and "decals-gritty" per type (decals are off by default); decals are drawn in category colours with a legend.
 
 using System;
 using System.Collections.Generic;
@@ -267,8 +267,9 @@ namespace Placemaker.Gallery
                 if (DecalVariants && gen.Controls.Any(c => c.Id == Placemaker.Core.Decals.DressingControls.AmountId))
                 {
                     jobs.Add(Make("decals-max", "Decals 300 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 300.0));
-                    jobs.Add(Make("decals-gritty", "Decals gritty", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.StyleId] = "gritty"));
-                    jobs.Add(Make("decals-off", "Decals 0 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 0.0));
+                    // s23: decals are opt-in (default 0): "on" = what a player gets switching them on at 100 %.
+                    jobs.Add(Make("decals-on", "Decals 100 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 100.0));
+                    jobs.Add(Make("decals-gritty", "Decals gritty", r => { r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 100.0; r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.StyleId] = "gritty"; }));
                 }
                 var paletteControl = (gen.Controls ?? Array.Empty<ControlSchema>()).FirstOrDefault(c => c.Id == "palette" && c.Kind == ControlKind.Choice);
                 if (Palettes && paletteControl != null)
@@ -1068,9 +1069,11 @@ namespace Placemaker.Gallery
                 case ObjectRole.Decal:
                 {
                     // s21: faint fill + outline in the decal's category colour (legend top-left), so dressing reads by kind.
+                    // s23: drawn with the opacity the game builds them with (see-through clones per tier).
                     var dc = DecalColor(cat);
-                    cv.FillPolygon(poly, dc.WithA(0.30f));
-                    cv.StrokePolyline(poly, cv.Px(0.8f), dc.WithA(0.75f), closed: true);
+                    float op = Placemaker.Core.Decals.DecalLook.Tier(Placemaker.Core.Decals.DecalLook.OpacityOf(o)) / 100f;
+                    cv.FillPolygon(poly, dc.WithA(0.75f * op));
+                    cv.StrokePolyline(poly, cv.Px(0.6f), dc.WithA(0.5f * op), closed: true);
                     return;
                 }
                 case ObjectRole.ParkingBay:
