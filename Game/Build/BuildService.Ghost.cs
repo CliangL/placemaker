@@ -111,7 +111,7 @@ namespace Placemaker.Game.Build
                 var s = new GhostStatus { ShownRevision = _gShown, RequestedRevision = _gWanted ? _gRequested : -1 };
                 if (_gStep == GhostStep.Failed) { s.Phase = GhostPhase.Failed; s.MessageKey = _gMessage; }
                 else if (!_gWanted) s.Phase = GhostPhase.Hidden;
-                else if (_gStep == GhostStep.Shown && _gShown == _gRequested) s.Phase = GhostPhase.Shown;
+                else if (_gStep == GhostStep.Shown && _gShown == _gRequested) { s.Phase = GhostPhase.Shown; s.Dropped = _gDetails.Dropped; }
                 else s.Phase = GhostPhase.Pending;
                 return s;
             }

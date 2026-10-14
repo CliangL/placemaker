@@ -258,16 +258,18 @@ namespace Placemaker.Game.Build
             float piece = math.max(0.5f, math.max(size.x, size.z));
             var c = new Cubic(net.A, net.B, net.C, net.D);
             float len = c.LengthXZ();
-            // No gaps: the pieces reach both course ends (= the corners of the ring), overlapping a little.
-            int count = Placemaker.Core.Layers.Common.Fences.PieceCount(len, piece);
+            // FEEDBACK-4: never overlapping — the game cancels (ghost) or hides (build) one of every two
+            // overlapping props, which left every other hedge piece missing. Small even gaps instead.
+            int count = Placemaker.Core.Layers.Common.Fences.SpacedPieceCount(len, piece);
             int seed = AutoAssets.UniformSeed(w.Category, (uint)_groupId);   // one look for every piece
+            // Pieces run along their longer local axis (fences usually X; vanilla hedge pieces are long in Z).
+            bool alongZ = size.z > size.x;
             for (int i = 0; i < count; i++)
             {
                 float t = (i + 0.5f) / count;
                 var p = c.Position(t);
                 var tan = c.Tangent(t);
-                // Pieces are modelled along their local X axis.
-                float yaw = math.atan2(tan.x, tan.z) - math.PI * 0.5f;
+                float yaw = math.atan2(tan.x, tan.z) - (alongZ ? 0f : math.PI * 0.5f);
                 long key = _syntheticKey++;
                 _itemByKey[key] = w;
                 EmitObjectDefinition(prefab, p, yaw, 1f, -1, (uint)i, key, true, seed);
