@@ -55,7 +55,7 @@ namespace Placemaker.Tests
         [InlineData(AssetCategories.DecalDirt, "G87 Dirty Roads Stains G87 Dirt Road Transition 01 Decal", false)]
         [InlineData(AssetCategories.DecalDirt, "RealVision Decals Ground Texture - Dirt 01 Decal", false)]   // s23: RealVision textures are hard-edged tiles
         [InlineData(AssetCategories.DecalLeaves, "Sand Surfaces and Beach Decals Beach Palm-leaf-01 Decal", false)]
-        [InlineData(AssetCategories.DecalLeaves, "Fallen leaves decals Leaf Dead Leaves2 Yellow light Decal", true)]
+        [InlineData(AssetCategories.DecalLeaves, "Fallen leaves decals Leaf Dead Leaves8 Brown light Decal", true)]   // s28: brown/green light leaves only
         [InlineData(AssetCategories.DecalPuddles, "G87 Stains and Puddles Decals Wet Pack Puddles G87 Puddle Mirror 01 Curb Decal", false)]
         public void DecalPoolsAreNatural(string category, string name, bool eligible) =>
             Assert.Equal(eligible, AssetHeuristics.AutoEligible(category, name, Mod | AssetTraits.DecalMesh));

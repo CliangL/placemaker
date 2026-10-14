@@ -562,3 +562,11 @@ explicit-height courses exactly as with the hand tool, the boardwalk (LeisurePie
 84. **Pack projection masks are `DecalLayers`.** EAI sets `DecalProperties.m_LayerMask = (DecalLayers)colossal_DecalLayerMask`
     (decal.json). Mask 4/36 decals (84 + 22 RealVision items, incl. "foliage" and "dirt") project onto buildings only and
     never show on the ground; the catalog now marks decal objects without the Terrain bit `WallOrHanging` → never automatic.
+85. **(s28) Which property makes a pack decal transparent.** Pack decals use CS2's "DefaultDecal" material (HDRP decal
+    shader graph, not HDRP/Decal). A pack's exported decal.json (Ground Texture Decal Pack Dirt01) lists its whole
+    property set: `_BaseColor` is a VECTOR (stored in SurfaceAsset.vectors, w = alpha), `_NormalOpacity`,
+    `_MetallicOpacity`, `_NormalAlphaSource`/`_MetallicAlphaSource` = 0 (normal and mask/AO blending follow the base
+    alpha), `_AffectAlbedo/Normal/Metal/Smoothness`, no `_DecalBlend`. s23 scaled `_DecalBlend` and a `_BaseColor` COLOUR —
+    neither read — so its copies drew like the originals. s28 scales the vector's w plus both channel opacities.
+    The log now says "decal opacity: made N see-through copies (tiers …)" and, per build, "used N see-through decals, M at
+    full strength (why)"; copies are requested while the preview is shown so the build finds them ready.

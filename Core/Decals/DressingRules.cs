@@ -114,7 +114,7 @@ namespace Placemaker.Core.Decals
                 var p = o.Position.xz;
                 uint h = c.H(i, 11);
                 // A grown tree drops a litter bed about its crown; young ones and shrubs a little.
-                float expected = tree ? 2.1f * math.clamp(crown / 3.6f, 0.5f, 1.6f) : 0.3f;
+                float expected = tree ? 1.0f * math.clamp(crown / 3.6f, 0.5f, 1.4f) : 0.12f;   // s28: sparser
                 int n = Ctx.Count(h, expected * leaves);
                 for (int k = 0; k < n; k++)
                 {

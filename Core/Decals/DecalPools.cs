@@ -79,10 +79,11 @@ namespace Placemaker.Core.Decals
             void Look(string c, float opacity, params DecalEdge[] edges) { d[c].Opacity = opacity; d[c].Edges = edges; }
             const DecalEdge So = DecalEdge.Soft, It = DecalEdge.Item, Sh = DecalEdge.Shaped;
             // s23 second look (user: "poop all over the floor"): everything faint; sand dust only slightly stronger.
-            Look(LeavesEdge, 0.2f, Sh); Look(Mulch, 0.2f, So); Look(Moss, 0.2f, So); Look(Wear, 0.2f, So); Look(Mud, 0.2f, So);
-            Look(Sand, 0.35f, So); Look(WetSand, 0.35f, So, Sh); Look(Wet, 0.3f, So); Look(Rocks, 0.35f, So, It); Look(Stain, 0.2f, So);
-            Look(Oil, 0.2f, So, Sh); Look(Patch, 0.2f, Sh); Look(Tyre, 0.2f, Sh); Look(Glass, 0.2f, It); Look(Beach, 0.2f, It, Sh);
-            Look(Footprints, 0.2f, Sh);
+            // s28 (user: "much, much, much more transparent would solve everything"): 10–15 %, sand dust and wet sand 25 %.
+            Look(LeavesEdge, 0.1f, Sh); Look(Mulch, 0.1f, So); Look(Moss, 0.1f, So); Look(Wear, 0.15f, So); Look(Mud, 0.1f, So);
+            Look(Sand, 0.25f, So); Look(WetSand, 0.25f, So, Sh); Look(Wet, 0.1f, So); Look(Rocks, 0.15f, So, It); Look(Stain, 0.1f, So);
+            Look(Oil, 0.1f, So, Sh); Look(Patch, 0.1f, Sh); Look(Tyre, 0.1f, Sh); Look(Glass, 0.15f, It); Look(Beach, 0.15f, It, Sh);
+            Look(Footprints, 0.1f, Sh);
             d[Tyre].MinFootprint = 1.5f;
             d[Oil].MinFootprint = 0.8f;
             d[Wear].MinFootprint = 1.5f;
@@ -107,12 +108,12 @@ namespace Placemaker.Core.Decals
         /// <summary>(s23) Look of the older theme pools when dressing or the Decals feature uses them.</summary>
         private static readonly Dictionary<string, (float opacity, DecalEdge[] edges)> ThemeLook = new Dictionary<string, (float, DecalEdge[])>(StringComparer.Ordinal)
         {
-            [AssetCategories.DecalLeaves] = (0.2f, new[] { DecalEdge.Soft, DecalEdge.Item }),
-            [AssetCategories.DecalDirt] = (0.35f, new[] { DecalEdge.Soft }),
-            [AssetCategories.DecalCracks] = (0.2f, new[] { DecalEdge.Shaped }),
-            [AssetCategories.DecalPuddles] = (0.35f, new[] { DecalEdge.Shaped, DecalEdge.Soft }),
-            [AssetCategories.DecalLitter] = (0.3f, new[] { DecalEdge.Item }),
-            [AssetCategories.DecalGraffiti] = (0.35f, new[] { DecalEdge.Shaped }),
+            [AssetCategories.DecalLeaves] = (0.15f, new[] { DecalEdge.Soft, DecalEdge.Item }),
+            [AssetCategories.DecalDirt] = (0.15f, new[] { DecalEdge.Soft }),
+            [AssetCategories.DecalCracks] = (0.1f, new[] { DecalEdge.Shaped }),
+            [AssetCategories.DecalPuddles] = (0.15f, new[] { DecalEdge.Shaped, DecalEdge.Soft }),
+            [AssetCategories.DecalLitter] = (0.15f, new[] { DecalEdge.Item }),
+            [AssetCategories.DecalGraffiti] = (0.15f, new[] { DecalEdge.Shaped }),
         };
 
         /// <summary>(s23) Opacity a decorative decal of this category is drawn with; 1 for functional/unknown categories.</summary>
@@ -269,7 +270,7 @@ namespace Placemaker.Core.Decals
                 if (edges == null || string.IsNullOrEmpty(lower)) return null;
                 // s23: dressing leaf litter is the light/scattered kind in brown, yellow or green (dense "medium" piles and red
                 // read as dark clumps or orange confetti in game).
-                if (category == AssetCategories.DecalLeaves && AssetHeuristics.ContainsAny(lower, "medium", "lined", "red")) return false;
+                if (category == AssetCategories.DecalLeaves && AssetHeuristics.ContainsAny(lower, "medium", "lined", "red", "yellow")) return false;   // s28: brown/green only
                 return Array.IndexOf(edges, DecalCatalog.Describe(lower).Edge) >= 0 ? (bool?)null : false;
             }
             return DecalPools.Eligible(category, lower);

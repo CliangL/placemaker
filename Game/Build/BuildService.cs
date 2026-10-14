@@ -79,6 +79,9 @@ namespace Placemaker.Game.Build
         private GroupRegistrySystem _registry;
         private SurfaceCloneSystem _clones;
         private DecalOpacitySystem _decalClones;
+        // s28: per build, how many decorative decals were built see-through and why the others were not.
+        private int _decalsSeeThrough, _decalsFull;
+        private readonly Dictionary<string, int> _decalsFullWhy = new Dictionary<string, int>(StringComparer.Ordinal);
 
         private EntityQuery _tempQuery;
         private EntityQuery _errorQuery;
@@ -222,6 +225,7 @@ namespace Placemaker.Game.Build
             if (auto > 0) Mod.Log.Info($"Placemaker resolved {auto} automatic assets at build start (the tool should do this before preview/pricing).");
             Go(Step.Prepare);
             Mod.Log.Info($"Placemaker build started: {request.Plan.Layers.Count} layers, replace={request.ReplaceGroup}.");
+            _decalsSeeThrough = 0; _decalsFull = 0; _decalsFullWhy.Clear();
             return true;
         }
 
@@ -619,6 +623,13 @@ namespace Placemaker.Game.Build
             };
             Mod.Log.Info($"Placemaker build finished: group {groupId}, {_registry.CountMembers(groupId, true)} members, "
                 + $"{issues.Count} notes, {UnityEngine.Time.frameCount - _startFrame} frames.");
+            if (_decalsSeeThrough + _decalsFull > 0)
+            {
+                var whys = new List<string>();
+                foreach (var kv in _decalsFullWhy) whys.Add(kv.Value + " " + kv.Key);
+                Mod.Log.Info($"Placemaker decal opacity: used {_decalsSeeThrough} see-through decals, {_decalsFull} at full strength"
+                    + (whys.Count > 0 ? " (" + string.Join(", ", whys) + ")" : "") + ".");
+            }
         }
 
         // ───────────────────────── failure / cleanup ─────────────────────────

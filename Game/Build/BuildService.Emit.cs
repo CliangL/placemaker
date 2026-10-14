@@ -334,7 +334,13 @@ namespace Placemaker.Game.Build
             if (o.Role == ObjectRole.Decal && _decalClones != null)
             {
                 float opacity = Core.Decals.DecalLook.OpacityOf(o);
-                if (opacity < 0.995f) prefab = _decalClones.CloneFor(prefab, opacity);
+                if (opacity < 0.995f)
+                {
+                    var used = _decalClones.CloneFor(prefab, opacity, out string why);
+                    if (used != prefab) _decalsSeeThrough++;
+                    else { _decalsFull++; _decalsFullWhy[why] = (_decalsFullWhy.TryGetValue(why, out var nWhy) ? nWhy : 0) + 1; }
+                    prefab = used;
+                }
             }
             long key = PlanWork.Key(w);
             _itemByKey[key] = w;
