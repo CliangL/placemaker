@@ -198,7 +198,8 @@ namespace Placemaker.Core.Layers.Park
             Preset("victorian", ("style", "victorian"), ("pathStyle", "figureEight"), ("pathWidth", "narrow"), ("treeDensity", 30.0),
                 ("bushDensity", 75.0), ("furniture", 5.0), ("fence", true), ("lamps", true), ("bins", true), ("curvedPaths", true));
             Preset("landscape", ("style", "landscape"), ("pathStyle", "circuit"), ("pathWidth", "narrow"), ("treeDensity", 34.0),
-                ("bushDensity", 45.0), ("furniture", 3.0), ("belt", true), ("lamps", false), ("curvedPaths", true), ("trails", 2.0), ("smallPaths", 1.0));
+                ("bushDensity", 45.0), ("furniture", 3.0), ("belt", true), ("lamps", false), ("curvedPaths", true), ("trails", 2.0), ("smallPaths", 1.0),
+                ("lakeSize", 100.0));
             Preset("modern", ("style", "modern"), ("pathStyle", "promenade"), ("pathWidth", "narrow"), ("curvedPaths", false),
                 ("treeDensity", 40.0), ("bushDensity", 45.0), ("furniture", 5.0), ("belt", true), ("lamps", true));
             Preset("wildflower", ("style", "wildflower"), ("pathStyle", "woodlandTrail"), ("pathWidth", "narrow"), ("treeDensity", 6.0),
@@ -219,7 +220,7 @@ namespace Placemaker.Core.Layers.Park
             PresetFeatures("meadow", "-flowerbeds");
             PresetFeatures("pocket", "fountain", "-picnic", "-restrooms");
             PresetFeatures("victorian", "plaza");
-            PresetFeatures("landscape", "-flowerbeds");
+            PresetFeatures("landscape", "-flowerbeds", "pond");   // a landscape park is a lawn falling to a lake with a temple island
             PresetFeatures("modern", "plaza");
             PresetFeatures("wildflower", "-flowerbeds", "-playground");
             PresetFeatures("urban", "plaza", "shops");
