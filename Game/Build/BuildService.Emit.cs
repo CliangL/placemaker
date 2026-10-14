@@ -404,10 +404,10 @@ namespace Placemaker.Game.Build
             }
         }
 
-        private void EmitAreaDefinition(Entity prefab, float3[] ring, long key, WorkItem w)
+        private Entity EmitAreaDefinition(Entity prefab, float3[] ring, long key, WorkItem w)
         {
-            if (ring == null || ring.Length < 3) return;
-            if (!EntityManager.HasComponent<AreaData>(prefab) || !EntityManager.GetComponentData<AreaData>(prefab).m_Archetype.Valid) return;
+            if (ring == null || ring.Length < 3) return Entity.Null;
+            if (!EntityManager.HasComponent<AreaData>(prefab) || !EntityManager.GetComponentData<AreaData>(prefab).m_Archetype.Valid) return Entity.Null;
             _areaIndex = _areaIndex ?? new PlanIndex();
             var def = NewDefinition();
             EntityManager.AddComponentData(def, new CreationDefinition { m_Prefab = prefab });
@@ -425,6 +425,7 @@ namespace Placemaker.Game.Build
             _emittedAreas++;
             _itemByKey[key] = w;
             NoteUsed(prefab);
+            return def;
         }
     }
 
