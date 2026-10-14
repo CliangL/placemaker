@@ -14,6 +14,7 @@ using Xunit.Abstractions;
 
 namespace Placemaker.Tests.Types
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class HikingTrailTests
     {
         private const string Id = "hikingTrail";

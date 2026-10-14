@@ -204,6 +204,7 @@ namespace Placemaker.Tests.Types
         }
     }
 
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class AdventurePlaygroundTests
     {
         private const string Id = "adventurePlayground";

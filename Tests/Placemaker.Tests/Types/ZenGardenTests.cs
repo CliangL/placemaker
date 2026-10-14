@@ -16,6 +16,7 @@ using static Placemaker.Tests.Types.TypeWaveKit06;
 
 namespace Placemaker.Tests.Types
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class ZenGardenTests
     {
         private const string Id = "zenGarden";

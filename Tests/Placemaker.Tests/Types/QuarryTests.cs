@@ -16,6 +16,7 @@ using K = Placemaker.Tests.Types.WorkSiteTestKit;
 
 namespace Placemaker.Tests.Types
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class QuarryTests
     {
         private const string Id = "quarry";

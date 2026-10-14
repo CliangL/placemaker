@@ -217,6 +217,7 @@ namespace Placemaker.Tests.Types
         }
     }
 
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class RestAreaTests
     {
         private const string Id = "restArea";

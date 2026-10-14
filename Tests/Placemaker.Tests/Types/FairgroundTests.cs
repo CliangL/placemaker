@@ -192,6 +192,7 @@ namespace Placemaker.Tests.Types
         }
     }
 
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class FairgroundTests
     {
         private const string Id = "fairground";

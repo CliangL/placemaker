@@ -186,6 +186,7 @@ namespace Placemaker.Tests.Types
         public static int Count(AreaPlan plan, string category) => plan.Objects.Count(o => o.Category == category);
     }
 
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class ScrapyardTests
     {
         private readonly ITestOutputHelper _out;

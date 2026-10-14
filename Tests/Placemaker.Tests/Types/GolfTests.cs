@@ -13,6 +13,7 @@ using Xunit.Abstractions;
 
 namespace Placemaker.Tests.Types.T04
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class GolfTests : T04TypeTestBase
     {
         public GolfTests(ITestOutputHelper output) : base(output) { }

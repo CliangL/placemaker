@@ -14,6 +14,7 @@ using static Placemaker.Tests.Types.WaterTypesKit;
 
 namespace Placemaker.Tests.Types
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class BeachTests
     {
         private readonly ITestOutputHelper _out;

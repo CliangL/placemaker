@@ -12,6 +12,7 @@ using Xunit.Abstractions;
 
 namespace Placemaker.Tests.Types.T04
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class LookoutHillTests : T04TypeTestBase
     {
         public LookoutHillTests(ITestOutputHelper output) : base(output) { }

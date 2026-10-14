@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Placemaker.Tests
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class GeometryOffsetTests
     {
         private static void AssertOffsetDistance(IReadOnlyList<float2> original, IEnumerable<float2[]> rings, float d, float tol = 0.01f)

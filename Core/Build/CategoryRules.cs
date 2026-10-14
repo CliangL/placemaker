@@ -45,12 +45,18 @@ namespace Placemaker.Core.Build
 
         public static bool Classify(string lower, AssetTraits traits, List<string> categories)
         {
+            // Every rule runs: type rules are additive among themselves (a hay bale is both an
+            // animal-park and a lookout-hill prop). A rule returning true only stops the built-in
+            // general heuristics afterwards.
+            bool stop = false;
             foreach (var rule in All)
             {
-                try { if (rule.Classify(lower, traits, categories)) return true; }
+                try { if (rule.Classify(lower, traits, categories)) stop = true; }
                 catch (Exception) { /* a faulty rule must never break the catalog */ }
             }
-            return false;
+            // Type rules are additive only: the general heuristics always run too, so a barrier stays a
+            // fence for everyone even when a type also tags it as its own prop. (stop is kept for logging.)
+            return false && stop;
         }
 
         public static bool? AutoEligible(string category, string lower, AssetTraits traits)

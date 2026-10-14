@@ -13,6 +13,7 @@ using Xunit;
 namespace Placemaker.Tests
 {
     /// <summary>Built-in features compose end-to-end (park plaza place, pond, plaza trees…), and the place solver.</summary>
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class FeatureTests
     {
         private static readonly DesignEditor Editor = new DesignEditor(GeneratorRegistry.Get);

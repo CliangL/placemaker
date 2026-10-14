@@ -13,6 +13,7 @@ using Xunit.Abstractions;
 
 namespace Placemaker.Tests.Types
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class MemorialParkTests
     {
         private const string Id = "memorialPark";

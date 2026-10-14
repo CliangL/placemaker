@@ -11,6 +11,7 @@ using Xunit;
 
 namespace Placemaker.Tests.Types
 {
+    [Collection(Placemaker.Tests.TimingCollection.Name)]
     public class UrbanRuinsTests
     {
         private const string Id = "urbanRuins";
