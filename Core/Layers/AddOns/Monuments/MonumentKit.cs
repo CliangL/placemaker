@@ -128,6 +128,13 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             return r.Local(c.x, c.y);
         }
 
+        /// <summary>True when a disc of radius <paramref name="margin"/> at p lies inside the rectangle.</summary>
+        public static bool Inside(OrientedRect r, float2 p, float margin)
+        {
+            var l = LocalOf(r, p);
+            return math.abs(l.x) <= r.HalfLength - margin && math.abs(l.y) <= r.HalfWidth - margin;
+        }
+
         /// <summary>Yaw that faces direction <paramref name="dir"/> (0 = +Z).</summary>
         public static float Yaw(float2 dir) => math.lengthsq(dir) < 1e-8f ? 0f : math.atan2(dir.x, dir.y);
 
