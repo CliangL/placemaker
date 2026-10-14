@@ -27,6 +27,73 @@ export function isVisible(visibleWhen: string | undefined, values: Record<string
     });
 }
 
+/** The first clause of a condition that is false for these values, or null when it holds. */
+export function failingClause(cond: string | undefined, values: Record<string, SettingValue>): { id: string; neg: boolean; values: string[] } | null {
+    if (!cond) return null;
+    for (const clause of cond.split(/&&|&|,/).map((s) => s.trim()).filter(Boolean)) {
+        if (isVisible(clause, values)) continue;
+        const neg = clause.includes("!=");
+        const [id, rhs = "true"] = clause.split(neg ? "!=" : "=").map((s) => s.trim());
+        return { id, neg, values: rhs.split("|") };
+    }
+    return null;
+}
+
+/** (s15) How a control shows now: hidden (the documented exceptions), greyed out with a reason, or live. */
+export type ControlAvailability = { show: boolean; disabled: boolean; reason?: string };
+
+type Translate = (key: string, fallback?: string, args?: ReadonlyArray<string | number>) => string;
+
+/**
+ * Disable-with-reason (s15): a control that does not apply is SHOWN greyed out with a short reason instead of
+ * vanishing, so the player sees what exists and why it is off. Sources, first match wins:
+ *   visibleWhen false  → hidden only with hideWhenOff (Roads' per-pattern essentials), else greyed;
+ *   enabledWhen false  → greyed;
+ *   areaReason         → greyed with the area reason from C# (step.disabled: "Needs a street edge"…).
+ * The reason is disabledReason (a key) or worded from the condition: "Only when Fence is on",
+ * "Only when Layout is Alley".
+ */
+export function controlAvailability(
+    c: ControlEx,
+    values: Record<string, SettingValue>,
+    controls: ControlEx[],
+    t: Translate,
+    areaReason?: string,
+): ControlAvailability {
+    const applies = isVisible(c.visibleWhen, values);
+    if (!applies && c.hideWhenOff) return { show: false, disabled: true };
+    const cond = !applies ? c.visibleWhen : !isVisible(c.enabledWhen, values) ? c.enabledWhen : undefined;
+    if (cond) {
+        const worded = whyFrom(cond, values, controls, t);
+        return { show: true, disabled: true, reason: c.disabledReason ? t(c.disabledReason, worded) : worded };
+    }
+    if (areaReason) return { show: true, disabled: true, reason: areaReason };
+    return { show: true, disabled: false };
+}
+
+function whyFrom(cond: string, values: Record<string, SettingValue>, controls: ControlEx[], t: Translate): string {
+    const f = failingClause(cond, values);
+    const other = f ? controls.find((x) => x.id === f.id) : undefined;
+    if (!f || !other) return t("Placemaker.UI.Why.NotNow", "Not available with the current settings");
+    const name = t(other.label, humanizeId(other.label || other.id));
+    const onOff = f.values.length === 1 && (f.values[0] === "true" || f.values[0] === "false");
+    if (other.kind === "toggle" || onOff) {
+        const on = (f.values[0] !== "false") !== f.neg;
+        return on ? t("Placemaker.UI.Why.WhenOn", "Only when {0} is on", [name]) : t("Placemaker.UI.Why.WhenOff", "Only when {0} is off", [name]);
+    }
+    const opts = f.values.map((v) => {
+        const o = other.options?.find((x) => x.value === v);
+        return o ? t(o.label, humanizeId(o.label || o.value)) : v;
+    });
+    const list = opts.join(t("Placemaker.UI.Why.Or", " or "));
+    return f.neg ? t("Placemaker.UI.Why.WhenNot", "Not when {0} is {1}", [name, list]) : t("Placemaker.UI.Why.WhenIs", "Only when {0} is {1}", [name, list]);
+}
+
+function humanizeId(key: string): string {
+    const last = key.split(".").pop() || key;
+    return last.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (ch) => ch.toUpperCase());
+}
+
 export function valuesEqual(a: SettingValue | undefined, b: SettingValue | undefined): boolean {
     if (Array.isArray(a) || Array.isArray(b)) {
         if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;

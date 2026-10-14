@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import { bindValue, trigger, useValue, ValueBinding } from "cs2/api";
 import {
     AssetLists, Catalog, DesignState, FeatureFit, GROUP, ManagedGroup, Stage, StepView, Summary, ToolState, Triggers, Values,
-    AreaMode, BrushShape, SettingValue, BrushRules,
+    AreaMode, BrushShape, SettingValue, BrushRules, LocText,
 } from "../contract";
 
 const LOG = "[Placemaker]";
@@ -82,6 +82,13 @@ export function normalizeState(raw: unknown): ToolState {
         area: { ...DEFAULT_STATE.area, ...(isObj(v.area) ? v.area : {}) },
         primary: { ...DEFAULT_STATE.primary, ...(isObj(v.primary) ? v.primary : {}) },
         hints: arr(v.hints),
+        // s15 (additive): absent = a DLL older than s15.
+        protocol: typeof v.protocol === "number" ? v.protocol : undefined,
+        areaModes: Array.isArray(v.areaModes)
+            ? arr<any>(v.areaModes)
+                  .filter((m) => isObj(m) && typeof m.mode === "string")
+                  .map((m) => ({ mode: m.mode, enabled: m.enabled !== false, reason: normalizeLoc(m.reason) }))
+            : undefined,
     } as ToolState;
 }
 
@@ -119,6 +126,22 @@ export function normalizeDesign(raw: unknown): DesignState {
     } as DesignState;
 }
 
+/** A LocText (additive fields): dropped unless it has a key. */
+function normalizeLoc(v: unknown): LocText | undefined {
+    return isObj(v) && typeof v.key === "string" && v.key ? { key: v.key, args: arr<any>(v.args) } : undefined;
+}
+
+/** (s15) Control id → why it does not apply to this area. */
+function normalizeDisabled(v: unknown): Record<string, LocText> | undefined {
+    if (!isObj(v)) return undefined;
+    const out: Record<string, LocText> = {};
+    for (const k of Object.keys(v)) {
+        const l = normalizeLoc(v[k]);
+        if (l) out[k] = l;
+    }
+    return Object.keys(out).length ? out : undefined;
+}
+
 /** Feature fit status (additive field): dropped unless well-formed. */
 function normalizeFit(v: unknown): FeatureFit | undefined {
     if (!isObj(v) || (v.kind !== "ok" && v.kind !== "reduced" && v.kind !== "failed")) return undefined;
@@ -146,12 +169,13 @@ function normalizeStep(s: Record<string, any>): StepView {
         markersRequired: Number(s.markersRequired) || 0,
         features: arr<any>(s.features)
             .filter((f) => isObj(f) && typeof f.layer === "string" && f.layer)
-            .map((f) => ({ layer: String(f.layer), label: String(f.label ?? ""), icon: String(f.icon ?? ""), enabled: f.enabled === true, path: typeof f.path === "string" && f.path ? f.path : undefined, tooltip: typeof f.tooltip === "string" && f.tooltip ? f.tooltip : undefined, options: arr<any>(f.options).filter((o) => typeof o === "string"), defaultOn: f.defaultOn === true, status: normalizeFit(f.status) })),
+            .map((f) => ({ layer: String(f.layer), label: String(f.label ?? ""), icon: String(f.icon ?? ""), enabled: f.enabled === true, path: typeof f.path === "string" && f.path ? f.path : undefined, tooltip: typeof f.tooltip === "string" && f.tooltip ? f.tooltip : undefined, options: arr<any>(f.options).filter((o) => typeof o === "string"), defaultOn: f.defaultOn === true, status: normalizeFit(f.status), disabled: normalizeLoc(f.disabled) })),
         ready: s.ready !== false,
         nextStep: s.nextStep,
         children: arr<any>(s.children).filter(isObj).map(normalizeStep),
         overrides,
         regions: arr(s.regions),
+        disabled: normalizeDisabled(s.disabled),
     };
 }
 

@@ -167,7 +167,7 @@ namespace Placemaker.Core.Build
             }
             switch (group)
             {
-                case "industrial": case "parking": case "roads": return ParkStatsKind.NotApplicable;
+                case "industrial": case "parking": case "roads": case "commercial": case "zoning": return ParkStatsKind.NotApplicable;
                 case "squares": case "transport": return ParkStatsKind.Plaza;
                 case "sports": return ParkStatsKind.Sports;
                 case "nature": return ParkStatsKind.Nature;

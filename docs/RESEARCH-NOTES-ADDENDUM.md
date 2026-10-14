@@ -392,12 +392,42 @@ What Placemaker does now (`Core/Build/PaintRaster.cs`, `Game/Build/BuildService.
   v = +z — an asymmetric gradient would show on the wrong side if this is mirrored), the channel the kernel samples
   (all four set equal), and whether `m_Strength = 1` with a mask equals the vanilla look at the same strength.
 
+## Existing buildings — why builds destroyed them (s15, decompiled 1.6.2f1)
+
+Sources: `Game.Prefabs.BuildingInitializeSystem`, `Game.Net/Areas/Objects.ValidationHelpers`, `Game.Tools.ValidationSystem`,
+`Game.Zones.CellBlockJobs` (BlockCellsJob, CleanBlockedCells), `Game.Buildings.ZoneCheckSystem`.
+
+63. **Spawnable buildings are "delete when overridden".** `BuildingInitializeSystem` gives every building with
+    `SpawnableBuildingData` (zoned houses, shops, offices, industry; not signature/service buildings)
+    `GeometryFlags.Overridable | DeleteOverridden`; other buildings lose `Overridable` and get `OverrideZone`.
+64. **Who removes them.** A new **net** (Net.ValidationHelpers.CheckOverlap) or a **physical area**
+    (Areas.ValidationHelpers, `PhysicalGeometry`/`ProtectedArea` lots) overlapping such a building reports
+    `ErrorSeverity.Warning` with `m_PermanentEntity = building`; `ValidationSystem` adds `Game.Tools.Warning` to the
+    building and Apply deletes it (that is how vanilla roads demolish houses). A new **object** that is not overridable
+    itself (a building-like asset) does the same; overridable props (`m_CanOverride`, i.e. trees, benches, decals)
+    only get `Override` (hidden themselves). Non-spawnable buildings give an Error instead (our exclude-and-retry drops
+    the piece). Surfaces are not physical: they never remove anything. Our owner lot has `m_AllowOverlap` (not physical).
+65. **Condemned by zoning.** `BlockCellsJob` blocks zone cells under nets with `CompositionState.BlockZone` (ground roads
+    and paths) and under physical/protected areas; `CleanBlockedCells` also blocks every cell BEHIND a blocked one (deeper
+    from the road). `ZoneCheckSystem` marks a spawnable building `Condemned` (later demolished) when its lot cells are no
+    longer Visible with its zone type. So a path through a building's lot (or rezoning its cells) kills it even
+    without touching the model. Keeping off the whole LOT (BuildingData.m_LotSize × 8 m) avoids both mechanisms.
+66. **What Placemaker does** (`Core/Build/SiteSafety`, `Game/Build/BuildService.Protect`):
+    SiteCapture records lot quads (and collision footprints where they reach past the lot, and building extensions) as
+    `ObstacleKind.Building`; at the end of `Composer.Compose` nets touching a lot (centre ± half width + 0.5 m) are dropped
+    with their attached objects (indices remapped), objects touching one dropped (markers kept), surfaces / areas /
+    terraform / paint rings cut around lots (CS2-acceptable pieces, 1 m corridors instead of holes), zoning quads touching
+    one dropped; Declutter re-checks objects after nudging. Review shows "N buildings are in the way. They are kept".
+    Before Apply the build queries live buildings carrying `Warning` (a second line of defence: a building grown since the
+    capture, or outside its margin); the work items touching them are excluded and the build retries; if none can be
+    identified the build stops (`Placemaker.Build.WouldDemolish`). Clearing trees/props skips objects on building lots.
+
 ## Park stats (s17, decompiled 1.6.2f1) — details in docs/PARK-STATS.md
 
-63. Park effects live on the park BUILDING prefab (Attraction, LeisureProvider, ServiceCoverage, Park, ServiceConsumption);
+67. Park effects live on the park BUILDING prefab (Attraction, LeisureProvider, ServiceCoverage, Park, ServiceConsumption);
     AttractionSystem, ServiceCoverageSystem and ParkAISystem read the *prefab* data, so per-instance values need per-instance prefabs.
-64. TourismSystem sums `AttractivenessProvider` of ANY non-temp entity (Σ a²/10000 → sigmoid): a lot can carry one.
+68. TourismSystem sums `AttractivenessProvider` of ANY non-temp entity (Σ a²/10000 → sigmoid): a lot can carry one.
     AttractionSystem only rewrites entities with an `UpdateFrame` (buildings), so a value on a lot stays.
-65. Leisure, park coverage (wellbeing up to +20), land value from attractiveness and tourist destinations all need a
+69. Leisure, park coverage (wellbeing up to +20), land value from attractiveness and tourist destinations all need a
     pathfinding source/target: a Building with a road connection. A lot has none (targets = 0, silently ignored).
-66. Vanilla park upkeep = price / 5 per month; attractiveness ≈ 1.9 × (area/1000 m²)^0.85 for ordinary parks.
+70. Vanilla park upkeep = price / 5 per month; attractiveness ≈ 1.9 × (area/1000 m²)^0.85 for ordinary parks.

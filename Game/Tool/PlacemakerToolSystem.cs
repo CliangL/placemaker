@@ -251,9 +251,9 @@ namespace Placemaker.Game.Tool
                     {
                         case SelectionMode.Draw: UpdateDraw(); break;
                         case SelectionMode.Block: UpdateBlock(); break;
-                        case SelectionMode.Paint: UpdatePaint(); break;
+                        case SelectionMode.Paint: if (BrushLive) UpdatePaint(); else _cursorValid = false; break;
                         case SelectionMode.Perimeter: UpdatePerimeter(); break;
-                        case SelectionMode.BlockPaint: UpdateBlockPaint(); break;
+                        case SelectionMode.BlockPaint: if (BrushLive) UpdateBlockPaint(); else { _cursorValid = false; _hoverFace = null; } break;
                     }
                 }
                 FinishFrame();

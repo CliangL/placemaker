@@ -353,13 +353,27 @@ namespace Placemaker.Core.Layers.Common
         {
             var b = Defaults();
             if (values == null) return b;
-            foreach (var kv in values.Values)
+            foreach (var kv0 in values.Values)
             {
+                var kv = new KeyValuePair<string, object>(kv0.Key, MigrateValue(kv0.Key, kv0.Value));
                 var c = Control(kv.Key);
                 if (c == null) { b.Values[kv.Key] = kv.Value; continue; }
                 if (TypeMatches(c, kv.Value)) b.Values[kv.Key] = kv.Value is string[] a ? (string[])a.Clone() : kv.Value;
             }
             return b;
+        }
+
+        /// <summary>
+        /// Saved values whose option was retired map to their successor (settings stability: ids never change, old
+        /// saves load). s14: the Zoning feature's "shopLayout" kept only Row/Speckled; s12's clusters, facing in and
+        /// alley values plan as Row.
+        /// </summary>
+        public object Migrate(string id, object value) => MigrateValue(id, value);
+
+        protected virtual object MigrateValue(string id, object value)
+        {
+            if (HostsStreetShops && id == StreetShops.LayoutId && value is string s) return StreetShops.FeatureLayout(s);
+            return value;
         }
 
         private static bool TypeMatches(ControlSchema c, object v)
@@ -662,7 +676,7 @@ namespace Placemaker.Core.Layers.Common
         {
             var d = StreetShops.DefaultFor(Id);
             Shared(c.Choice(StreetShops.AmountId, d.amount, ControlTier.More, "shops", StreetShops.Amounts), false);
-            Shared(c.Choice(StreetShops.LayoutId, d.layout, ControlTier.More, "shops", StreetShops.Layouts), true);
+            Shared(c.Choice(StreetShops.LayoutId, StreetShops.FeatureLayout(d.layout), ControlTier.More, "shops", StreetShops.FeatureLayouts), true);
             var depth = c.Slider(StreetShops.DepthId, 24, 8, 48, 8, "m", ControlTier.More, "shops");
             depth.LabelKey = ShopKey + StreetShops.DepthId;
             depth.TooltipKey = depth.LabelKey + ".Tooltip";
@@ -687,7 +701,7 @@ namespace Placemaker.Core.Layers.Common
         {
             Layer = StreetShopsLayer, Target = StreetFrontage.ShopsTag, LabelKey = "Placemaker.Feature.streetShops",
             TooltipKey = "Placemaker.Feature.streetShops.Tooltip", Options = ShopOptions,
-            Preset = new SettingsBag { Values = { ["depth"] = 48.0 } },
+            Preset = new SettingsBag { Values = { ["depth"] = 48.0, [AddOns.EdgeZoningAddOn.CutoutSetting] = true } },
             DefaultOn = StreetShops.DefaultFor(layerId).on,
         };
 
@@ -705,13 +719,12 @@ namespace Placemaker.Core.Layers.Common
             foreach (var m in input.Markers) gates.Add(m.Position.xz);
             if (gates.Count == 0)
                 foreach (var m in SuggestMarkers(input)) gates.Add(m.Position.xz);
-            var layout = StreetShops.Plan(region, input, gates, ctx.S(StreetShops.LayoutId), ctx.S(StreetShops.AmountId), ctx.F(StreetShops.DepthId),
+            var layout = StreetShops.Plan(region, input, gates, StreetShops.FeatureLayout(ctx.S(StreetShops.LayoutId)), ctx.S(StreetShops.AmountId), ctx.F(StreetShops.DepthId),
                 Hashing.Mix(ctx.Seed, Seeds.Hash("streetShops")));
             if (layout.Shops.Count == 0) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.NoFrontage"); return null; }
             var carved = StreetShops.Carve(region, layout.Carve, MinArea);
             var rest = carved == null ? null : Common.LayerRegion.From(carved);
             if (rest == null) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.TooSmall"); return null; }
-            if (layout.FellBack) ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.NoAlley");
             ctx.LayerRegion = rest;
             // "place:shops" makes the composer reserve the shop land for the host's other features (big trees,
             // picnic…, which plan on the whole outline); the zoning feature filling a region still sees it free.

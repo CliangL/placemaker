@@ -155,7 +155,7 @@ Not in the table (same values as a row above, or not standalone): Bicycle Park =
 
 Input (`ParkStatsInput.From(plan, area, recipe)`): area m²; kind from the first fill layer (plaza, squares,
 transport → **Plaza**; sports → **Sports**; adventure playground → **Playground**; nature, campground → **Nature**;
-other leisure types → **Park**; industrial, parking, roads and loose builds → *not a park: no stats*); trees,
+other leisure types → **Park**; industrial, commercial, zoning, parking, roads and loose builds → *not a park: no stats*); trees,
 greenery, benches/picnic/cafe seating, centerpieces (fountains, statues, lookouts, water jets), amenities (restrooms,
 kiosks, shelters, stages, camping), play and sports items; water m² (water surfaces + lakes) and paved m².
 

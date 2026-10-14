@@ -11,7 +11,7 @@ import { LayerType, SettingValue, StepView, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { formatValue } from "../lib/format";
 import { humanize, TFunc, useT } from "../lib/l10n";
-import { ControlEx, defaultFor, isVisible, valueOf, valuesEqual } from "../lib/schema";
+import { ControlAvailability, controlAvailability, ControlEx, defaultFor, isVisible, valueOf, valuesEqual } from "../lib/schema";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Segmented, Switch } from "../components/common";
 import { AutoMosaic, autoPool, Thumb, useAssetList, useAssetName, usePicker } from "../components/picker";
@@ -25,21 +25,26 @@ type RowCtx = { step: StepView; layer: LayerType; state: ToolState };
 const label = (t: TFunc, c: ControlEx) => t(c.label, humanize(c.label || c.id));
 const optLabel = (t: TFunc, o: { value: string; label: string }) => t(o.label, humanize(o.label || o.value));
 
-export const ControlRow = ({ c, ctx, className }: { c: ControlEx; ctx: RowCtx; className?: string }) => {
+export const ControlRow = ({ c, ctx, className, avail }: { c: ControlEx; ctx: RowCtx; className?: string; avail?: ControlAvailability }) => {
     const { t } = useT();
     const { step } = ctx;
     const value = valueOf(step, c);
     const locked = step.locked.includes(c.id);
     const def = c.default !== undefined && c.default !== null ? c.default : undefined;
-    const changed = def !== undefined && !valuesEqual(value, def);
-    const commit = (v: SettingValue) => act.setValue(step.path, c.id, v);
-    const tip = c.tooltip ? t(c.tooltip, "") : c.kind === "arrangement" ? t("Placemaker.UI.Arrangement.Hint", "Repeats in this order along the edges") : "";
+    // s15: a control that does not apply now is shown greyed out with the reason (never silently hidden).
+    const off = !!avail?.disabled;
+    const changed = !off && def !== undefined && !valuesEqual(value, def);
+    const commit = (v: SettingValue) => {
+        if (!off) act.setValue(step.path, c.id, v);
+    };
+    const help = c.tooltip ? t(c.tooltip, "") : c.kind === "arrangement" ? t("Placemaker.UI.Arrangement.Hint", "Repeats in this order along the edges") : "";
+    const tip = off && avail?.reason ? avail.reason + (help ? " — " + help : "") : help;
     // Wide editors get their own line under the label: lists, and choices whose labels wouldn't fit beside it.
     const stacked = c.kind === "arrangement" || c.kind === "assetMulti" || (c.kind === "choice" && choiceLayout(c, t) !== "inline");
 
     const affordances = (
         <div className={s.affordances}>
-            {locked ? (
+            {locked && !off ? (
                 <Btn
                     icon="lock"
                     iconSize={11}
@@ -71,17 +76,25 @@ export const ControlRow = ({ c, ctx, className }: { c: ControlEx; ctx: RowCtx; c
     );
 
     return (
-        <div className={classNames(s.row, { [s.rowStacked]: stacked, [s.rowAsset]: c.kind === "asset" }, className)} data-testid={`control-${c.id}`} data-kind={c.kind}>
+        <div
+            className={classNames(s.row, { [s.rowStacked]: stacked, [s.rowAsset]: c.kind === "asset", [s.rowDisabled]: off }, className)}
+            data-testid={`control-${c.id}`}
+            data-kind={c.kind}
+            data-disabled={off ? "true" : undefined}
+            data-reason={off ? avail?.reason : undefined}
+        >
             <div className={s.rowHead}>
                 <Tip title={label(t, c)} description={tip || undefined}>
                     <div className={classNames(s.label, { [s.labelWide]: stacked || c.kind === "toggle" })}>
                         <div className={s.labelText}>{label(t, c)}</div>
                     </div>
                 </Tip>
-                {stacked ? null : <div className={classNames(s.editor, { [s.editorTight]: c.kind === "toggle" })}>{renderEditor(c, value, commit, ctx, t)}</div>}
+                {stacked ? null : (
+                    <div className={classNames(s.editor, { [s.editorTight]: c.kind === "toggle", [s.editorOff]: off })}>{renderEditor(c, value, commit, ctx, t)}</div>
+                )}
                 {affordances}
             </div>
-            {stacked ? <div className={s.stackedBody}>{renderEditor(c, value, commit, ctx, t)}</div> : null}
+            {stacked ? <div className={classNames(s.stackedBody, { [s.editorOff]: off })}>{renderEditor(c, value, commit, ctx, t)}</div> : null}
         </div>
     );
 };
@@ -471,27 +484,39 @@ export const ControlList = ({
     const assetName = useAssetName();
     const layout = usePanelLayout();
     const isOpen = useSections();
+    const { tl } = useT();
     const ctx = { step, layer, state };
     /**
      * Wide panel: short rows (sliders, switches) pair up in two columns; lists, choices and assets keep
      * the full width. Narrow: one column.
      */
     const rows = (list: ControlEx[]) => {
-        if (!layout.wide) return list.map((c) => <ControlRow key={c.id} c={c} ctx={ctx} />);
+        if (!layout.wide) return list.map((c) => <ControlRow key={c.id} c={c} ctx={ctx} avail={avail(c)} />);
         const half = pairHalves(list.map((c) => c.kind === "slider" || c.kind === "toggle"));
         return (
             <div className={s.grid} data-testid="control-grid">
                 {list.map((c, i) => (
-                    <ControlRow key={c.id} c={c} ctx={ctx} className={half[i] ? s.half : s.full} />
+                    <ControlRow key={c.id} c={c} ctx={ctx} className={half[i] ? s.half : s.full} avail={avail(c)} />
                 ))}
             </div>
         );
     };
     const typedMarkers = !!(step.markerKinds && step.markerKinds.length);
     const values = withDefaults(layer, step);
+    // s15: greyed out instead of hidden (lib/schema controlAvailability); only hideWhenOff controls vanish.
+    const availability = new Map<string, ControlAvailability>();
+    const avail = (c: ControlEx) => {
+        let a = availability.get(c.id);
+        if (!a) {
+            const area = step.disabled?.[c.id];
+            a = controlAvailability(c, values, layer.controls as ControlEx[], t, area ? tl(area) : undefined);
+            availability.set(c.id, a);
+        }
+        return a;
+    };
     const visible = (layer.controls as ControlEx[]).filter(
         (c) =>
-            isVisible(c.visibleWhen, values) &&
+            avail(c).show &&
             !(typedMarkers && c.kind === "markers") &&
             (!only || only.includes(c.id)) &&
             !(exclude && exclude.has(c.id)),

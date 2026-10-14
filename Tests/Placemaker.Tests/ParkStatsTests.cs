@@ -184,6 +184,9 @@ namespace Placemaker.Tests
             Assert.Equal(ParkStatsKind.NotApplicable, ParkStatsInput.KindOf(Recipe.Single(GeneratorRegistry.Get("parking"), 1), out _));
             Assert.Equal(ParkStatsKind.NotApplicable, ParkStatsInput.KindOf(Recipe.Single(GeneratorRegistry.Get("roads"), 1), out _));
             Assert.Equal(ParkStatsKind.NotApplicable, ParkStatsInput.KindOf(null, out _));
+            foreach (var g in GeneratorRegistry.All)
+                if (GeneratorGroups.Of(g) == "commercial" || GeneratorGroups.Of(g) == "industrial")
+                    Assert.Equal(ParkStatsKind.NotApplicable, ParkStatsInput.KindOf(Recipe.Single(g, 1), out _));
         }
 
         [Fact]
