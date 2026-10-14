@@ -38,8 +38,11 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature(SpoilHeapsAddOn.LayerId), Feature(WorkLightsAddOn.LayerId), Feature("decals", ("theme", "dirt"), ("density", 3.0)),
-            Feature("kiosk"), Feature("restrooms"),
+            Named(Feature("kiosk"), "Placemaker.AddOn.Kiosk.Name"), Feature("restrooms"),
         };
+
+        /// <summary>A feature labelled with another key (e.g. the add-on's own name).</summary>
+        public static FeatureInfo Named(FeatureInfo f, string labelKey) { f.LabelKey = labelKey; return f; }
 
         protected override void DefineControls(ControlSet c)
         {
@@ -597,6 +600,7 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
             var cutC = c + s.Axis * sideSign * s.Major * 0.18f;
             float cutR = math.min(math.sqrt(s.Region.Area * size * 0.5f / math.PI), s.Region.BoundaryDistance(cutC) - s.Depth / (MaxSlopePct / 100f) - 4f);
             cutR = math.min(cutR, s.Occ.Clearance(cutC, 200f) - 2f);
+            cutR = math.min(cutR, math.max(s.Major * 0.24f, s.Minor * 0.3f));
             if (cutR < 10f) { ctx.Issue(IssueSeverity.Info, "Placemaker.ConstructionSite.Issue.NoRoomForWorks"); return w; }
             var cut = LeisureKit.Intersect(s.Region, LeisureKit.Blob(cutC, cutR, Hashing.Mix(ctx.Seed, 0xC07u), 16, 0.15f));
             if (cut == null) return w;
@@ -607,10 +611,10 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
             float depth = s.Depth;
             // Spoil mounds on the other side.
             var heaps = new List<(float2 c, float r, float h)>();
-            var fillC = c - s.Axis * sideSign * s.Major * 0.2f;
+            var fillC = c - s.Axis * sideSign * s.Major * 0.24f;
             var rng = Hashing.Rng(ctx.Seed, 0xF111u);
             int heapCount = math.clamp((int)(s.Ha * 2f), 1, 5);
-            for (int i = 0; i < heapCount * 4 && heaps.Count < heapCount; i++)
+            for (int i = 0; i < heapCount * 10 && heaps.Count < heapCount; i++)
             {
                 var p = fillC + new float2(rng.NextFloat(-1f, 1f), rng.NextFloat(-1f, 1f)) * s.Minor * 0.3f;
                 float hr = rng.NextFloat(9f, 16f);

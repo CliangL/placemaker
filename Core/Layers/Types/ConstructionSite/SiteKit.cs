@@ -16,6 +16,8 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
     {
         public int Cells;
         public float MaxCut, MaxFill;
+        /// <summary>Side of the square terraform cells (a cell changes ground up to half a diagonal from its centre).</summary>
+        public float CellSize;
         public Func<float2, float> HeightAfter;
     }
 
@@ -72,6 +74,7 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
         {
             var result = new SculptResult { HeightAfter = ctx.H };
             float cell = math.max(minCell, math.sqrt(region.Area / MaxCells));
+            result.CellSize = cell;
             int nx = math.max(1, (int)math.ceil((region.Max.x - region.Min.x) / cell));
             int ny = math.max(1, (int)math.ceil((region.Max.y - region.Min.y) / cell));
             var offset = new float[nx * ny];
@@ -135,7 +138,8 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
         /// <summary>Smooth 0..1 step.</summary>
         public static float Smooth(float e0, float e1, float x)
         {
-            if (e1 <= e0) return x >= e0 ? 1f : 0f;
+            if (e1 < e0) return 1f - Smooth(e1, e0, x);   // reversed edges: falls from 1 to 0
+            if (e1 == e0) return x >= e0 ? 1f : 0f;
             float t = math.saturate((x - e0) / (e1 - e0));
             return t * t * (3f - 2f * t);
         }

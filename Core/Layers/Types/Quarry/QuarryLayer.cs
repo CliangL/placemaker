@@ -42,7 +42,7 @@ namespace Placemaker.Core.Layers.Types.Quarry
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature(SpoilHeapsAddOn.LayerId, ("material", "gravel")), Feature(WorkLightsAddOn.LayerId), Feature("rocks", ("size", "large")),
-            Feature("bigtrees"), Feature("decals", ("theme", "dirt"), ("density", 2.0)),
+            ConstructionSiteLayer.Named(Feature("bigtrees"), "Placemaker.AddOn.BigTrees.Name"), Feature("decals", ("theme", "dirt"), ("density", 2.0)),
         };
 
         protected override void DefineControls(ControlSet c)
@@ -131,6 +131,7 @@ namespace Placemaker.Core.Layers.Types.Quarry
             public readonly List<float> RoadH = new List<float>();      // NaN = on the rim (no terraform)
             public float RoadHalf;
             public Func<float2, float> After;
+            public float Cell = 8f;
             public int Machines, Heaps, Rocks;
 
             public float PitDepthAt(float2 p) => Pit == null || !Pit.Contains(p) ? 0f : BenchH * math.min(Levels, math.floor(Pit.BoundaryDistance(p, Levels * BenchW + BenchW) / BenchW) + 1f);
@@ -161,6 +162,7 @@ namespace Placemaker.Core.Layers.Types.Quarry
             {
                 var res = SiteKit.Sculpt(ctx, region, (p, h0) => Target(q, p), ctx.F("maxSlope"));
                 q.After = res.HeightAfter;
+                q.Cell = res.CellSize;
             }
             else q.After = ctx.H;
             ctx.Check();
@@ -377,11 +379,13 @@ namespace Placemaker.Core.Layers.Types.Quarry
             float depth = q.Levels * q.BenchH;
             float w = floor + math.saturate(ctx.F("waterFill") / 100f) * depth;
             int dry = math.clamp((int)math.floor((q.Ref - w) / q.BenchH), 0, q.Levels - 1);
-            w = math.min(w, q.Ref - dry * q.BenchH - 0.5f);
+            w = math.min(w, q.Ref - dry * q.BenchH - (dry == 0 ? 0.5f : 0.8f));
             var footprint = dry == 0 ? q.Pit.Ring : SiteKit.Inset(q.Pit.Ring, dry * q.BenchW);
             if (footprint == null) { ctx.Issue(IssueSeverity.Info, "Placemaker.Quarry.Issue.NoWater"); return; }
-            // The wall that holds the water: the dry bench just outside the footprint (or the rim).
-            var wall = dry == 0 ? SiteKit.Inset(q.Pit.Ring, -2.5f) : SiteKit.Inset(q.Pit.Ring, (dry - 0.5f) * q.BenchW);
+            // The wall that holds the water: the dry bench just outside the footprint, or the untouched
+            // ground beyond the outermost terraform cells (a square cell reaches half a diagonal past
+            // its centre, so sample beyond that).
+            var wall = dry == 0 ? SiteKit.Inset(q.Pit.Ring, -(q.Cell * 0.75f + 1f)) : SiteKit.Inset(q.Pit.Ring, (dry - 0.5f) * q.BenchW);
             if (wall != null)
             {
                 float lowest = float.MaxValue;
