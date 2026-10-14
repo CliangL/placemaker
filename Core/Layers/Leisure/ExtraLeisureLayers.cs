@@ -11,7 +11,8 @@ namespace Placemaker.Core.Layers.Leisure
     /// Skate park: a paved bowl area with a cluster of ramps/rails in the middle (sports.skate),
     /// spectator benches round it, graffiti decals at the edges, lamps and a few trees outside.
     /// </summary>
-    [AreaGenerator(58, Group = "sports")]
+    // Retired from the Make list (playtest: broken, and the game already ships a skate park). Kept loadable for old builds.
+    [AreaGenerator(58, Group = "sports", Hidden = true)]
     public sealed class SkateParkLayer : LeisureLayer
     {
         protected override string Area => "Skate";
