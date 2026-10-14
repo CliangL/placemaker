@@ -370,6 +370,21 @@ namespace Placemaker.Gallery
         private static Rgba SurfaceColor(PlannedSurface s)
         {
             string cat = s.Category ?? "";
+            if (cat.StartsWith("surface.crop"))
+            {
+                switch (cat)
+                {
+                    case "surface.crop.soil": return Rgba.Hex("#8d6c4c");
+                    case "surface.crop.plowed": return Rgba.Hex("#76573b");
+                    case "surface.crop.rows": return Rgba.Hex("#7d8a4e");
+                    case "surface.crop.green": return Rgba.Hex("#86b856");
+                    case "surface.crop.straw": return Rgba.Hex("#dcc276");
+                    case "surface.crop.lavender": return Rgba.Hex("#9a86c8");
+                    case "surface.crop.yellow": return Rgba.Hex("#e3d24e");
+                    case "surface.crop.flower": return Rgba.Hex("#d39cc0");
+                    default: return Rgba.Hex("#a99063");
+                }
+            }
             if (cat.StartsWith("surface.sand")) return Rgba.Hex("#ead9a2");
             if (cat.StartsWith("surface.gravel")) return Rgba.Hex("#c9c2b2");
             if (cat.StartsWith("surface.dirt")) return Rgba.Hex("#b9976a");

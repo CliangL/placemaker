@@ -214,7 +214,13 @@ namespace Placemaker.Core.Layers.Common
             if (category == null || budget <= 0 || maxPerField <= 0) return 0;
             int n = 0, row = 0;
             everyNth = math.max(1, everyNth);
-            foreach (var (a, b) in RowLines(field, dir, rowGap, 0.6f))
+            var lines = RowLines(field, dir, rowGap, 0.6f);
+            // Spread the accents over the whole headland: widen the row stride when the cap would run out
+            // halfway (otherwise one corner of the field gets every plant).
+            int perHead = math.max(1, (int)math.floor(depth / math.max(0.1f, step)) + 1);
+            int wanted = (lines.Count + everyNth - 1) / everyNth * perHead * (bothEnds ? 2 : 1);
+            if (wanted > maxPerField) everyNth = math.max(everyNth, (int)math.ceil(lines.Count * perHead * (bothEnds ? 2f : 1f) / maxPerField));
+            foreach (var (a, b) in lines)
             {
                 if (row++ % everyNth != 0) continue;
                 float len = math.distance(a, b);

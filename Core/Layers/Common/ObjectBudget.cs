@@ -2,12 +2,13 @@
 // plant every metre, a hedge piece every 50 cm, a pallet per square metre) produces thousands of
 // objects: slow to build, heavy in game, and it hides that the ground should have been a surface
 // (GroundCover). LayerBase runs this after every PlanCore:
-//   cap = max(MinCap, perHectare × area ha). Above the cap the plan is THINNED, lowest-priority
-//   roles first (decals → bushes → planters → bulk furniture → trees), and only "bulk" groups
-//   (a category with ≥ BulkGroup objects in this plan) — a barn, a fountain, benches, lamps, bins,
-//   fence pieces and functional objects (parking bays, markers…) are never touched. Thinning keeps an
-//   even stride in plan order (rows stay rows, just sparser) and never removes more than
-//   MaxThin of a group. The Review panel gets a Warning with the numbers.
+//   cap = max(MinCap, perHectare × area ha). Above the cap the plan is THINNED — the biggest
+//   repetitive groups first (water-filling: every "bulk" group, i.e. a category with ≥ BulkGroup
+//   objects of a thinnable role, is cut down to one common level), never below (1 − MaxThin) of a
+//   group. Thinnable roles: decals, bushes, planters, furniture, trees. Never touched: benches,
+//   lamps, bins, centerpieces, fence pieces, hedges / fences (rows must stay closed), functional
+//   objects (parking bays, markers…) and small groups (a barn, a fountain). Thinning keeps an even
+//   stride in plan order (rows stay rows, just sparser). The Review panel gets a Warning.
 
 using System.Collections.Generic;
 using Unity.Mathematics;
@@ -23,11 +24,20 @@ namespace Placemaker.Core.Layers.Common
         public const float MaxThin = 0.75f;
         public const string IssueKey = "Placemaker.Common.Issue.ObjectBudget";
 
-        private static readonly ObjectRole[] ThinOrder =
-            { ObjectRole.Decal, ObjectRole.Bush, ObjectRole.Planter, ObjectRole.Furniture, ObjectRole.Tree };
-
         public static int Cap(float areaM2, float perHectare) =>
             perHectare <= 0f ? int.MaxValue : math.max(MinCap, (int)math.round(areaM2 / 10000f * perHectare));
+
+        private static bool Thinnable(PlannedObject o)
+        {
+            if (o == null) return false;
+            switch (o.Role)
+            {
+                case ObjectRole.Decal: case ObjectRole.Bush: case ObjectRole.Planter: case ObjectRole.Furniture: case ObjectRole.Tree: break;
+                default: return false;
+            }
+            var c = o.Category ?? "";
+            return c != AssetCategories.Hedge && c != AssetCategories.Fence;
+        }
 
         /// <summary>Thins the plan's objects down to the cap. Returns the number removed.</summary>
         public static int Enforce(AreaPlan plan, float areaM2, float perHectare)
@@ -37,37 +47,47 @@ namespace Placemaker.Core.Layers.Common
             int before = plan.Objects.Count;
             if (before <= cap) return 0;
             int excess = before - cap;
-            var drop = new HashSet<PlannedObject>();
-            foreach (var role in ThinOrder)
+
+            var groups = new Dictionary<string, List<PlannedObject>>(System.StringComparer.Ordinal);
+            foreach (var o in plan.Objects)
             {
-                if (excess <= 0) break;
-                // Bulk groups of this role, by category.
-                var groups = new Dictionary<string, List<PlannedObject>>(System.StringComparer.Ordinal);
-                foreach (var o in plan.Objects)
-                {
-                    if (o == null || o.Role != role) continue;
-                    var key = o.Category ?? "";
-                    if (!groups.TryGetValue(key, out var l)) groups[key] = l = new List<PlannedObject>();
-                    l.Add(o);
-                }
-                int thinnable = 0;
-                foreach (var g in groups.Values) if (g.Count >= BulkGroup) thinnable += g.Count;
-                if (thinnable == 0) continue;
-                int take = math.min(excess, (int)math.floor(thinnable * MaxThin));
-                if (take <= 0) continue;
-                float keep = 1f - (float)take / thinnable;
-                int removed = 0;
-                var keys = new List<string>(groups.Keys);
-                keys.Sort(System.StringComparer.Ordinal);
-                foreach (var k in keys)
-                {
-                    var g = groups[k];
-                    if (g.Count < BulkGroup) continue;
-                    // Even stride: keep element i when the running quota crosses an integer.
-                    for (int i = 0; i < g.Count; i++)
-                        if ((int)math.floor((i + 1) * keep) == (int)math.floor(i * keep)) { drop.Add(g[i]); removed++; }
-                }
-                excess -= removed;
+                if (!Thinnable(o)) continue;
+                var key = (int)o.Role + "|" + (o.Category ?? "");
+                if (!groups.TryGetValue(key, out var l)) groups[key] = l = new List<PlannedObject>();
+                l.Add(o);
+            }
+            var bulk = new List<List<PlannedObject>>();
+            var keys = new List<string>(groups.Keys);
+            keys.Sort(System.StringComparer.Ordinal);
+            foreach (var k in keys) if (groups[k].Count >= BulkGroup) bulk.Add(groups[k]);
+            if (bulk.Count == 0) return 0;
+
+            // Water level L: every group keeps max(L, floor) objects; the total removed covers the excess.
+            int Floor(int n) => (int)math.ceil(n * (1f - MaxThin));
+            int Removed(int level)
+            {
+                int r = 0;
+                foreach (var g in bulk) r += math.max(0, g.Count - math.max(level, Floor(g.Count)));
+                return r;
+            }
+            int lo = 0, hi = 0;
+            foreach (var g in bulk) hi = math.max(hi, g.Count);
+            while (lo < hi)
+            {
+                int mid = (lo + hi + 1) / 2;
+                if (Removed(mid) >= excess) lo = mid; else hi = mid - 1;
+            }
+            int levelKeep = lo;
+
+            var drop = new HashSet<PlannedObject>();
+            foreach (var g in bulk)
+            {
+                int keepN = math.min(g.Count, math.max(levelKeep, Floor(g.Count)));
+                if (keepN >= g.Count) continue;
+                float keep = (float)keepN / g.Count;
+                // Even stride: keep element i when the running quota crosses an integer.
+                for (int i = 0; i < g.Count; i++)
+                    if ((int)math.floor((i + 1) * keep) == (int)math.floor(i * keep)) drop.Add(g[i]);
             }
             if (drop.Count == 0) return 0;
             plan.Objects.RemoveAll(o => drop.Contains(o));

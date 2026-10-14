@@ -31,8 +31,11 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, StreetFrontage.ShopsTag, FieldTag };
         protected override int WantedEntrances(LayerRegion region) => region.Area > 25000f ? 2 : 1;
 
-        /// <summary>Object budget for row crops over the whole farm (big farms widen the spacing instead).</summary>
-        public const int MaxCropItems = 6000;
+        /// <summary>Most crop accents (row-head plants, trellis ends) over the whole farm: fields are surfaces (GroundCover).</summary>
+        public const int MaxCropItems = 600;
+        /// <summary>Crop accents per hectare at 100 % density.</summary>
+        public const float AccentsPerHa = 200f;
+        private static readonly string[] MarketGround = { GroundCover.Rows, GroundCover.Rows, GroundCover.Soil, GroundCover.Green, GroundCover.Plowed };
         private const int MaxFields = 120;
         private static readonly string[] MixCycle = { "market", "lavender", "vines", "glass" };
 
@@ -44,7 +47,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
             Feature("restrooms"),
             Feature("shops", ("count", 1.0), ("where", "entrances")),
             StreetShopsFeature(Area),
-            Feature("decals", ("theme", "dirt"), ("density", 1.5)),
+            Feature("decals", ("theme", "dirt"), ("density", 0.6)),
         };
 
         protected override void DefineControls(ControlSet c)
@@ -249,12 +252,18 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
             Scarecrows(ctx, occ, region, fields);
             ctx.Check();
 
-            // 7. Crops, field by field.
+            // 7. Crops, field by field — ground before props (GroundCover): every field is ONE crop
+            // surface (rows / soil / green / lavender…), the plants are accents on the row heads along
+            // the tracks, plus wheel ruts along the rows where a farm decal set is installed.
             float density = math.clamp(ctx.F("density") / 100f, 0.5f, 1.5f);
-            float scale = BudgetScale(fields, density);
-            int budget = MaxCropItems, glasshouses = 0, beds = 0, soil = 0;
+            int budget = GroundCover.AccentBudget(region.Area, AccentsPerHa * density, 40, MaxCropItems), glasshouses = 0, beds = 0, soil = 0;
+            int startBudget = budget, tracksBudget = 40;
+            int rowFields = 0;
+            foreach (var f in fields) if (f.Kind != "glass" && f.Kind != "beds") rowFields++;
+            int perField = math.max(6, budget / math.max(1, rowFields));
             bool paint = ctx.B("soilPaint");
             int soilLayer = math.clamp(ctx.I("soilLayer"), 1, 4);
+            string chosenGround = ctx.S("fieldSurface");
             for (int i = 0; i < fields.Count; i++)
             {
                 if ((i & 7) == 0) ctx.Check();
@@ -264,25 +273,45 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                 {
                     case "market":
                     {
-                        FieldSurface(ctx, f.Ring, AssetCategories.SurfaceDirt);
+                        // Patchwork: neighbouring fields alternate vegetable rows, bare soil and leafy green.
+                        GroundCover.Field(ctx, f.Ring, MarketGround[(int)(salt % (uint)MarketGround.Length)], chosenGround);
                         if (paint && soil < 80) { TerrainPaint.Patch(ctx, f.Ring, soilLayer, 0.85f, 1.5f); soil++; }
                         string cat = LeisureKit.Category(ctx, ctx.L("cropAssets").Length > 0 ? "x" : "", AssetCategories.GardenCrop, AssetCategories.Bush);
-                        RowCrops(ctx, occ, f.Ring, rowDir, 1.4f / density * scale, 1.1f / density * scale, ctx.L("cropAssets"), cat, ref budget, salt, true, null);
+                        GroundCover.RowHeads(ctx, occ, f.Ring, rowDir, 1.4f / density, 1.0f, 2.2f, 2, FarmKit.RoleFor(cat ?? AssetCategories.Bush), cat,
+                            ctx.L("cropAssets"), perField, ref budget, salt);
+                        GroundCover.RowTracks(ctx, f.Ring, rowDir, ref tracksBudget, salt, 3);
                         break;
                     }
                     case "lavender":
                     {
-                        FieldSurface(ctx, f.Ring, AssetCategories.SurfaceDirt);
+                        GroundCover.Field(ctx, f.Ring, GroundCover.Lavender, chosenGround);
                         if (paint && soil < 80) { TerrainPaint.Patch(ctx, f.Ring, soilLayer, 0.6f, 1.5f); soil++; }
                         string cat = LeisureKit.Category(ctx, ctx.S("lavenderAsset"), AssetCategories.CityFarmLavender, AssetCategories.Flowerbed, AssetCategories.Bush);
-                        RowCrops(ctx, occ, f.Ring, rowDir, 1.8f / density * scale, 1.0f / density * scale, new[] { ctx.S("lavenderAsset") }, cat, ref budget, salt, false, null);
+                        GroundCover.RowHeads(ctx, occ, f.Ring, rowDir, 1.8f / density, 1.0f, 3.2f, 1, FarmKit.RoleFor(cat ?? AssetCategories.Bush), cat,
+                            new[] { ctx.S("lavenderAsset") }, perField, ref budget, salt);
+                        GroundCover.RowTracks(ctx, f.Ring, rowDir, ref tracksBudget, salt, 3);
                         break;
                     }
                     case "vines":
                     {
+                        GroundCover.Field(ctx, f.Ring, GroundCover.Green, chosenGround);
                         string cat = LeisureKit.Category(ctx, ctx.S("vineAsset"), AssetCategories.CityFarmVine, AssetCategories.Hedge, AssetCategories.Bush);
                         string post = AssetAvailability.Has(AssetCategories.CityFarmTrellis) ? AssetCategories.CityFarmTrellis : null;
-                        RowCrops(ctx, occ, f.Ring, rowDir, 2.6f / density * scale, 1.6f / density * scale, new[] { ctx.S("vineAsset") }, cat, ref budget, salt, false, post);
+                        float gap = 2.6f / density;
+                        int n = GroundCover.RowHeads(ctx, occ, f.Ring, rowDir, gap, 1.6f, 4.0f, 1, FarmKit.RoleFor(cat ?? AssetCategories.Bush), cat,
+                            new[] { ctx.S("vineAsset") }, post != null ? perField * 2 / 3 : perField, ref budget, salt);
+                        // Trellis end posts on the row heads that carry vines.
+                        if (post != null && n > 0)
+                        {
+                            int posts = 0;
+                            foreach (var (a, b) in GroundCover.RowLines(f.Ring, rowDir, gap, 0.2f))
+                            {
+                                if (posts >= perField / 3 || budget <= 0) break;
+                                var t = math.normalizesafe(b - a);
+                                foreach (var end in new[] { a, b })
+                                    if (occ.Free(end, 0.3f, 0f, 0.05f)) { ctx.Object(end, FarmKit.Yaw(t), ObjectRole.Furniture, AssetMix.One(""), salt, -1, post); occ.Take(end, 0.25f, 1); posts++; budget--; }
+                            }
+                        }
                         break;
                     }
                     case "glass":
@@ -290,10 +319,11 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                         int houses = Glasshouses(ctx, occ, f.Ring, rowDir, density, salt);
                         glasshouses += houses;
                         if (houses > 0) { FieldSurface(ctx, f.Ring, AssetCategories.SurfaceNatural); break; }
-                        // Too small for a glasshouse: a cold-frame bed of row crops instead of bare gravel.
-                        FieldSurface(ctx, f.Ring, AssetCategories.SurfaceDirt);
+                        // Too small for a glasshouse: a cold-frame bed of vegetable rows instead of bare gravel.
+                        GroundCover.Field(ctx, f.Ring, GroundCover.Rows, chosenGround);
                         string cat = LeisureKit.Category(ctx, ctx.L("cropAssets").Length > 0 ? "x" : "", AssetCategories.GardenCrop, AssetCategories.Bush);
-                        RowCrops(ctx, occ, f.Ring, rowDir, 1.4f / density * scale, 1.1f / density * scale, ctx.L("cropAssets"), cat, ref budget, salt, true, null);
+                        GroundCover.RowHeads(ctx, occ, f.Ring, rowDir, 1.4f / density, 1.0f, 2.2f, 2, FarmKit.RoleFor(cat ?? AssetCategories.Bush), cat,
+                            ctx.L("cropAssets"), perField, ref budget, salt);
                         break;
                     }
                     case "beds":
@@ -308,7 +338,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
             CommonStats(ctx);
             ctx.Stat("Placemaker.Stat.Fields", fields.Count, Keys.UnitCount);
             ctx.Stat("Placemaker.Stat.Glasshouses", glasshouses, Keys.UnitCount);
-            ctx.Plan.Facts["cropItems"] = MaxCropItems - budget;
+            ctx.Plan.Facts["cropItems"] = startBudget - budget;
             ctx.Plan.Facts["raisedBeds"] = beds;
         }
 
@@ -408,55 +438,6 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                 : category;
             if (!AssetAvailability.Has(cat) && string.IsNullOrEmpty(chosen)) return;
             ctx.Surface(ring, SurfaceRole.Decorative, AssetMix.One(category == AssetCategories.SurfaceDirt ? chosen : ""), cat);
-        }
-
-        /// <summary>Spacing factor so the row crops of all fields stay inside the object budget.</summary>
-        private static float BudgetScale(List<FieldPlan> fields, float density)
-        {
-            double est = 0;
-            foreach (var f in fields)
-            {
-                float a = Poly.Area(f.Ring);
-                switch (f.Kind)
-                {
-                    case "market": est += a / (1.4 * 1.1) * density * density; break;
-                    case "lavender": est += a / (1.8 * 1.0) * density * density; break;
-                    case "vines": est += a / (2.6 * 1.6) * density * density; break;
-                }
-            }
-            return est > MaxCropItems ? (float)Math.Sqrt(est / MaxCropItems) : 1f;
-        }
-
-        private static int RowCrops(LayerContext ctx, Occupancy occ, float2[] field, float2 dir, float rowGap, float step, string[] ids, string cat,
-            ref int budget, uint salt, bool patchwork, string postCat)
-        {
-            if (cat == null) return 0;
-            var role = FarmKit.RoleFor(cat);
-            const float radius = 0.45f;
-            int n = 0, row = 0;
-            foreach (var (a, b) in FarmKit.Rows(field, dir, rowGap, 0.7f))
-            {
-                row++;
-                float len = math.distance(a, b);
-                var t = (b - a) / math.max(1e-3f, len);
-                float yaw = FarmKit.Yaw(t);
-                // Market gardens: one crop per bed of two rows (patchwork); fields: one crop throughout.
-                uint rv = Hashing.Mix(salt, (uint)(patchwork ? (row + 1) / 2 : 0));
-                var asset = AssetMix.Pick(ids, rv);
-                if (postCat != null)
-                    foreach (var end in new[] { a - t * 0.4f, b + t * 0.4f })
-                        if (occ.Free(end, 0.45f, 0f, 0.1f)) { ctx.Object(end, yaw, ObjectRole.Furniture, AssetMix.One(""), rv, -1, postCat); occ.Take(end, 0.25f, 1); }
-                for (float s = math.min(step * 0.5f, len * 0.5f); s <= len; s += step)
-                {
-                    if (budget <= 0) return n;
-                    var p = a + t * s;
-                    if (!occ.Free(p, radius, 0f, 0.1f)) continue;
-                    // One variation per row (pair): crops are a variety category (g5), so automatic picks vary by row, not by plant.
-                    ctx.Object(p, yaw, role, asset, rv, -1, cat);
-                    n++; budget--;
-                }
-            }
-            return n;
         }
 
         private static int Glasshouses(LayerContext ctx, Occupancy occ, float2[] field, float2 dir, float density, uint salt)
