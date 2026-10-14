@@ -89,6 +89,7 @@ namespace Placemaker.Game.Tool
                 s = null;
             }
             s = KeepOffRoads(s);
+            s = KeepOffBuilds(s);
             var old = _shape;
             _shape = s;
             _shapeVersion++;
@@ -110,7 +111,7 @@ namespace Placemaker.Game.Tool
 
         private AreaShape KeepOffRoads(AreaShape s)
         {
-            _keepOffApplied = _settings == null || _settings.KeepOffExistingRoads;
+            _keepOffApplied = KeepOffRoadsWanted();
             _clip = null;
             if (s == null || !_keepOffApplied || !AreaClip.ClipsSource(s.Source)) return s;
             try
@@ -127,9 +128,17 @@ namespace Placemaker.Game.Tool
         }
 
         /// <summary>Re-checks the setting (toggled in the options while the tool is open).</summary>
+        /// <summary>
+        /// (s27) The brushes follow the shared brush rules ("Roads" stop, "Paint over anything"); Draw keeps the
+        /// "Keep off existing roads" option.
+        /// </summary>
+        private bool KeepOffRoadsWanted() => _mode == SelectionMode.Paint || _mode == SelectionMode.BlockPaint
+            ? BrushRules.Stops(BrushObstacleKind.Road)
+            : _settings == null || _settings.KeepOffExistingRoads;
+
         private void CheckKeepOffSetting()
         {
-            bool want = _settings == null || _settings.KeepOffExistingRoads;
+            bool want = KeepOffRoadsWanted();
             if (want != _keepOffApplied && _shape != null && !_shapeDirty) { _keepOffApplied = want; ShapeChanged(); }
         }
 
@@ -279,6 +288,7 @@ namespace Placemaker.Game.Tool
             }
             if (_shape == null)
             {
+                if (_clipCoveredAll) return new LocText("Placemaker.Problem.OnOtherBuild");
                 if (_mode == SelectionMode.Paint && !_paint.IsEmpty) return new LocText("Placemaker.Problem.PaintTooSmall");
                 if (_mode == SelectionMode.BlockPaint && !_bpMask.IsEmpty) return new LocText("Placemaker.Problem.PaintTooSmall");
                 return null;

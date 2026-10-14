@@ -31,8 +31,20 @@ namespace Placemaker.Game.Tool
         /// </summary>
         public bool BrushLive => BrushCursor.Live(IsActive, _stage, _mode, _markerKind != null, _in.OverWorld, Painting);
 
-        /// <summary>Plain Paint cuts building lots out of its outline (Options, default on).</summary>
-        public bool PaintAvoidsBuildings => _settings == null || _settings.PaintAvoidBuildings;
+        /// <summary>
+        /// (s27) Plain Paint honours the shared brush rules: it cuts what the polygon stops name (buildings, other
+        /// Placemaker builds, lots, zoning) out of its outline and drops cells under water; roads are its keep-off-roads
+        /// clip. "Paint over anything" = the old Paint. (s15's "Paint: keep off buildings" option is superseded.)
+        /// </summary>
+        public bool PaintAvoidsBuildings
+        {
+            get
+            {
+                var r = BrushRules;
+                return r.WaterOn || r.Stops(BrushObstacleKind.Building) || r.Stops(BrushObstacleKind.PlacemakerBuild) || r.Stops(BrushObstacleKind.Lot)
+                    || r.Stops(BrushObstacleKind.ZonedCell) || r.Stops(BrushObstacleKind.EmptyZoneCell);
+            }
+        }
 
         private void UpdatePaint()
         {
@@ -91,6 +103,8 @@ namespace Placemaker.Game.Tool
 
         /// <summary>Building lots/footprints around the paint (gathered per stroke, not per frame).</summary>
         private List<float2[]> _paintBuildings = new List<float2[]>();
+        private System.Func<float2, bool> _paintWater;
+        private BrushRules _paintRules;
         private float2 _paintBuildingsMin, _paintBuildingsMax;
         private float _paintBuildingsAt = -100f;
         private int _paintBuildingsVersion;
@@ -120,7 +134,10 @@ namespace Placemaker.Game.Tool
         private void ReadPaintBuildings(float2 min, float2 max)
         {
             _bpObstacles ??= new BlockObstacles(EntityManager, World);
-            _paintBuildings = _bpObstacles.BuildingsIn(min, max, _editingGroup);
+            var rules = BrushRules;
+            _paintBuildings = rules.Active(_bpObstacles.Gather(min, max, _editingGroup), k => k != BrushObstacleKind.Road);
+            _paintWater = rules.WaterOn ? _bpObstacles.Water(min, max, _paint.CellSize) : null;
+            _paintRules = rules;
             _paintBuildingsMin = min;
             _paintBuildingsMax = max;
             _paintBuildingsAt = UnityEngine.Time.realtimeSinceStartup;
@@ -131,15 +148,28 @@ namespace Placemaker.Game.Tool
         {
             _paintOnlyBuildings = false;
             if (_paint.IsEmpty) return null;
+            bool stops = PaintAvoidsBuildings;
+            // Obstacles gathered under other rules (changed in the panel since): read them again.
+            if (stops && (_paintRules == null || !_paintRules.Equals(BrushRules))) _paintBuildingsMin = new float2(float.MaxValue);
             var outline = _paint.Outline();
             if (outline.Count < 3) return null;
             var ring2 = new float2[outline.Count];
             for (int i = 0; i < ring2.Length; i++) ring2[i] = outline[i].xz;
-            if (PaintAvoidsBuildings)
+            if (stops)
             {
                 // The gathered box must cover the whole outline (undo/redo restores paint without a stroke).
                 Poly.Bounds(ring2, out var mn, out var mx);
                 if (math.any(mn < _paintBuildingsMin) || math.any(mx > _paintBuildingsMax)) ReadPaintBuildings(mn - 10f, mx + 10f);
+                if (_paintWater != null)
+                {
+                    // Cells under water are left out before the outline is traced (the same cells Block paint never paints).
+                    var dry = BrushMask.FromSnapshot(_paint.Save());
+                    dry.EraseWhere(_paintWater);
+                    var o2 = dry.IsEmpty ? new List<float3>() : dry.Outline();
+                    if (o2.Count < 3) { _paintOnlyBuildings = true; return null; }
+                    ring2 = new float2[o2.Count];
+                    for (int i = 0; i < ring2.Length; i++) ring2[i] = o2[i].xz;
+                }
                 var cut = ObstacleCut.Subtract(ring2, ObstacleCut.Grow(_paintBuildings, Placemaker.Core.Build.SiteSafety.Margin), out int touched, 100f);
                 if (cut == null) { _paintOnlyBuildings = touched > 0; return null; }
                 ring2 = cut;

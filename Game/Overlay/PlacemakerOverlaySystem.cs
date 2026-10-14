@@ -160,6 +160,9 @@ namespace Placemaker.Game.Overlay
             if (_paintNear.Count > 0) _fill.SetLayer("paintBuildings", _paintNear, KeptBuilding, -93.8f, _paintNearSig);
         }
 
+        private int _buildsSigVersion = -1;
+        private long _buildsSig;
+
         private void DrawSelection(OverlayRenderSystem.Buffer buffer, float w)
         {
             var shape = _tool.Shape;
@@ -175,6 +178,19 @@ namespace Placemaker.Game.Overlay
             // Keep off existing roads: the parts on roads are left out — shaded grey, the outline used is drawn solid.
             var away = _tool.ClippedAway;
             bool clipped = away != null && away.Count > 0 && shape != null && !stroke;
+            bool cutBack = false;
+            // s27: other Placemaker builds (and, with "clip to free land", the other stops) the outline was cut against.
+            var builds = _tool.ClippedObstacles;
+            if (builds.Count > 0 && !stroke && _tool.Stage != ToolStage.Building)
+            {
+                if (_buildsSigVersion != _tool.ClippedObstaclesVersion)
+                {
+                    _buildsSigVersion = _tool.ClippedObstaclesVersion;
+                    _buildsSig = FilledPreviewSystem.Signature(builds);
+                }
+                _fill.SetLayer("clippedBuilds", builds, KeptBuilding, -93.75f, _buildsSig);
+                cutBack = shape != null;
+            }
             if (clipped)
             {
                 var list = new List<float3[]>(away);
@@ -195,13 +211,13 @@ namespace Placemaker.Game.Overlay
 
             switch (_tool.Mode)
             {
-                case SelectionMode.Draw: DrawDrawMode(buffer, w, bad, clipped); break;
+                case SelectionMode.Draw: DrawDrawMode(buffer, w, bad, clipped || cutBack); break;
                 case SelectionMode.Block: DrawBlockMode(buffer, w, shape); break;
                 case SelectionMode.Perimeter: DrawPerimeterMode(buffer, w, shape); break;
                 case SelectionMode.Paint: DrawPaintMode(buffer, w, shape); break;
                 case SelectionMode.BlockPaint: DrawBlockPaintMode(buffer, w, shape); break;
             }
-            if (clipped && _tool.Mode == SelectionMode.Draw) Ring(buffer, shape.Ring, Outline, w);
+            if ((clipped || cutBack) && shape != null && _tool.Mode == SelectionMode.Draw) Ring(buffer, shape.Ring, Outline, w);
         }
 
         private void Ring(OverlayRenderSystem.Buffer buffer, float3[] ring, Color c, float w, bool dashed = false)

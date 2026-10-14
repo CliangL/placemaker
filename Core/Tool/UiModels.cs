@@ -100,7 +100,7 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 19;   // s22: preview legend (summary.legend, state.legendVisibility, hoverLegend…)
+        public const int Protocol = 20;   // s27: brush rules builds / anything / drawClip (shared by every paint tool)
 
         // ───────────── state ─────────────
 
@@ -997,6 +997,7 @@ namespace Placemaker.Core.Tool
         public static JsonValue BrushRulesJson(Placemaker.Core.Geometry.BrushRules r) => JsonValue.Obj()
             .Set("roads", r.Roads).Set("buildings", r.Buildings).Set("lots", r.Lots).Set("zoned", r.Zoned)
             .Set("emptyZones", r.EmptyZones).Set("water", r.Water).Set("stayInBlock", r.StayInBlock)
+            .Set("builds", r.Builds).Set("anything", r.Anything).Set("drawClip", r.DrawClip)
             .Set("snap", Round(r.Snap, 1)).Set("smoothing", r.Smoothing);
 
         /// <summary>UI "setBrushRules": fields present in the JSON override <paramref name="current"/>; the result is clamped.</summary>
@@ -1013,6 +1014,9 @@ namespace Placemaker.Core.Tool
             r.EmptyZones = v["emptyZones"].AsBool(r.EmptyZones);
             r.Water = v["water"].AsBool(r.Water);
             r.StayInBlock = v["stayInBlock"].AsBool(r.StayInBlock);
+            r.Builds = v["builds"].AsBool(r.Builds);
+            r.Anything = v["anything"].AsBool(r.Anything);
+            r.DrawClip = v["drawClip"].AsBool(r.DrawClip);
             r.Snap = (float)v["snap"].AsNumber(r.Snap);
             r.Smoothing = (int)Math.Round(v["smoothing"].AsNumber(r.Smoothing));
             return r.Normalized();

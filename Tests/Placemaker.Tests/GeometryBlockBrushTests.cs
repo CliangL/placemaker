@@ -508,7 +508,7 @@ namespace Placemaker.Tests
         [Fact]
         public void Rules_AllOff_IsPlainPaint()
         {
-            var rules = new BrushRules { Roads = false, Buildings = false, Lots = false, Zoned = false, EmptyZones = false, Water = false, StayInBlock = false, Smoothing = 6 };
+            var rules = new BrushRules { Roads = false, Buildings = false, Builds = false, Lots = false, Zoned = false, EmptyZones = false, Water = false, StayInBlock = false, Smoothing = 6 };
             Assert.True(rules.AllOff);
             var road = Footprints(Road(new float2(-400, 0), new float2(400, 0))).Select(r => new BrushObstacle(BrushObstacleKind.Road, r.ToArray()));
             var bb = rules.Build(new float2(10, 30), Block, Kinded().Concat(road), p => true);
@@ -541,6 +541,121 @@ namespace Placemaker.Tests
             Assert.Equal(cur, Placemaker.Core.Tool.UiModels.ParseBrushRules("not json", cur));
             var json = Placemaker.Core.Tool.UiModels.BrushRulesJson(r).ToString();
             Assert.Equal(r, Placemaker.Core.Tool.UiModels.ParseBrushRules(json, BrushRules.Defaults()));
+        }
+
+        // ───────────── s27: other Placemaker builds, "Paint over anything", rules for Paint / Draw ─────────────
+
+        private static readonly float2[] OtherBuild = Rect(120, 0, 200, 120);   // a park built earlier, right part of the block
+
+        [Fact]
+        public void Rules_OtherBuildsStopTheBlockPaintBrush()
+        {
+            var obstacles = new[] { new BrushObstacle(BrushObstacleKind.PlacemakerBuild, OtherBuild) };
+            foreach (bool on in new[] { true, false })
+            {
+                var bb = new BrushRules { Builds = on }.Build(new float2(60, 60), Block, obstacles);
+                var m = Paint(bb);
+                m.Stamp(new float2(100, 60), 60f, false);
+                Assert.Equal(!on, m.IsPaintedAt(new float2(150, 60)));
+                var o = bb.Outline(m);
+                Assert.NotNull(o);
+                Assert.Equal(!on, Poly.Contains(o.Ring, new float2(150, 60)));
+                if (on)
+                {
+                    Assert.True(OverlapArea(o.Ring, OtherBuild) < 0.5f);
+                    // The edge snaps onto the other build's outline (x = 120), like onto a curb.
+                    Assert.True(o.Ring.Count(p => math.abs(p.x - 120f) < 0.01f) >= 2, G.Dump(o.Ring));
+                }
+            }
+        }
+
+        [Fact]
+        public void Rules_OtherBuildsAreIndependentOfLots()
+        {
+            var obstacles = new[] { new BrushObstacle(BrushObstacleKind.PlacemakerBuild, OtherBuild), new BrushObstacle(BrushObstacleKind.Lot, Rect(20, 20, 40, 40)) };
+            var bb = new BrushRules { Lots = false }.Build(new float2(60, 60), Block, obstacles);
+            var m = Paint(bb);
+            m.Stamp(new float2(100, 60), 90f, false);
+            Assert.True(m.IsPaintedAt(new float2(30, 30)));
+            Assert.False(m.IsPaintedAt(new float2(150, 60)));
+            Assert.True(BrushRules.Defaults().Builds);
+            Assert.True(BrushRules.Defaults().Stops(BrushObstacleKind.PlacemakerBuild));
+        }
+
+        [Fact]
+        public void Rules_PaintOverAnything_TurnsEveryStopOff()
+        {
+            var r = new BrushRules { Anything = true };   // every individual toggle still at its default (on)
+            foreach (BrushObstacleKind k in Enum.GetValues(typeof(BrushObstacleKind))) Assert.False(r.Stops(k));
+            Assert.False(r.WaterOn);
+            Assert.False(r.LockOn);
+            Assert.True(r.AllOff);
+
+            var obstacles = Kinded().Concat(new[] { new BrushObstacle(BrushObstacleKind.PlacemakerBuild, OtherBuild) });
+            var bb = r.Build(new float2(10, 30), Block, obstacles, p => true);
+            Assert.True(bb.Unconstrained);
+            var m = Paint(bb);
+            m.Stamp(new float2(150, 60), 30f, false);
+            m.Stamp(new float2(250, 60), 30f, false);   // outside the block too
+            Assert.True(m.IsPaintedAt(new float2(150, 60)));
+            Assert.True(m.IsPaintedAt(new float2(250, 60)));
+
+            var ring = Rect(0, 0, 200, 120);
+            Assert.Same(ring, r.Cut(ring, obstacles, out int touched));
+            Assert.Equal(0, touched);
+        }
+
+        [Fact]
+        public void Rules_Cut_PlainPaintKeepsOffWhatTheRulesName()
+        {
+            var painted = Rect(0, 0, 200, 120);
+            var obstacles = new[]
+            {
+                new BrushObstacle(BrushObstacleKind.PlacemakerBuild, OtherBuild),
+                new BrushObstacle(BrushObstacleKind.ZonedCell, Rect(0, 0, 40, 16)),
+            };
+            var cut = BrushRules.Defaults().Cut(painted, obstacles, out int touched);
+            Assert.NotNull(cut);
+            Assert.Equal(2, touched);
+            G.AssertSimpleCcw(cut);
+            Assert.True(OverlapArea(cut, OtherBuild) < 0.5f);
+            Assert.True(OverlapArea(cut, Rect(0, 0, 40, 16)) < 0.5f);
+
+            var noBuilds = new BrushRules { Builds = false }.Cut(painted, obstacles, out _);
+            Assert.True(OverlapArea(noBuilds, OtherBuild) > 9000f);
+            Assert.True(OverlapArea(noBuilds, Rect(0, 0, 40, 16)) < 0.5f);
+        }
+
+        [Fact]
+        public void Rules_Cut_DrawDefaultOnlyKeepsOffOtherBuilds()
+        {
+            var drawn = Rect(0, 0, 200, 120);
+            var obstacles = new[]
+            {
+                new BrushObstacle(BrushObstacleKind.PlacemakerBuild, OtherBuild),
+                new BrushObstacle(BrushObstacleKind.ZonedCell, Rect(0, 0, 40, 16)),
+            };
+            // What the tool passes for Draw / Roads / Block without "clip to free land".
+            Func<BrushObstacleKind, bool> buildsOnly = k => k == BrushObstacleKind.PlacemakerBuild;
+            var cut = BrushRules.Defaults().Cut(drawn, obstacles, out _, 0.5f, 100f, buildsOnly);
+            Assert.True(OverlapArea(cut, OtherBuild) < 0.5f);
+            Assert.True(OverlapArea(cut, Rect(0, 0, 40, 16)) > 600f);
+
+            // Entirely on another build: nothing left, touched says why.
+            Assert.Null(BrushRules.Defaults().Cut(Rect(130, 10, 190, 110), obstacles, out int touched, 0.5f, 100f, buildsOnly));
+            Assert.True(touched > 0);
+        }
+
+        [Fact]
+        public void Rules_JsonCarriesTheS27Fields()
+        {
+            var r = Placemaker.Core.Tool.UiModels.ParseBrushRules("{\"builds\":false,\"anything\":true,\"drawClip\":true}", BrushRules.Defaults());
+            Assert.False(r.Builds);
+            Assert.True(r.Anything);
+            Assert.True(r.DrawClip);
+            var back = Placemaker.Core.Tool.UiModels.ParseBrushRules(Placemaker.Core.Tool.UiModels.BrushRulesJson(r).ToString(), BrushRules.Defaults());
+            Assert.Equal(r, back);
+            Assert.NotEqual(BrushRules.Defaults(), back);
         }
 
         [Fact]

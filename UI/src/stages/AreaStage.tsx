@@ -54,28 +54,36 @@ export function modeOptions(t: TFunc) {
     ];
 }
 
-type StopKey = "roads" | "buildings" | "lots" | "zoned" | "emptyZones" | "water" | "stayInBlock";
+type StopKey = "roads" | "buildings" | "builds" | "lots" | "zoned" | "emptyZones" | "water" | "stayInBlock";
 
-/** Block paint "Rules": what the brush stops at (icon toggles), snap and smoothing. Mirrors Options → Block paint brush. */
-const BrushRulesRow = ({ rules }: { rules: BrushRules }) => {
+/**
+ * Brush rules (s11; s27: shared by Paint and Block paint): "Paint over anything" master toggle, what the brush
+ * stops at (icon toggles), snap and smoothing. Mirrors Options → Brush rules. In plain Paint the block lock,
+ * snap and smoothing do not apply (greyed with the reason).
+ */
+const BrushRulesRow = ({ rules, paint }: { rules: BrushRules; paint?: boolean }) => {
     const { t } = useT();
-    const stops: { key: StopKey; icon: string; title: string; tip: string }[] = [
+    const any = !!rules.anything;
+    const stops: { key: StopKey; icon: string; title: string; tip: string; blockOnly?: boolean }[] = [
         { key: "roads", icon: "roads", title: t("Placemaker.UI.Rules.Roads", "Roads"), tip: t("Placemaker.UI.Rules.RoadsTip", "Stop at the curb and never paint across a road.") },
         { key: "buildings", icon: "building", title: t("Placemaker.UI.Rules.Buildings", "Buildings"), tip: t("Placemaker.UI.Rules.BuildingsTip", "Keep off building lots.") },
-        { key: "lots", icon: "area", title: t("Placemaker.UI.Rules.Lots", "Areas"), tip: t("Placemaker.UI.Rules.LotsTip", "Keep off parks, other Placemaker areas and lots.") },
+        { key: "builds", icon: "otherBuilds", title: t("Placemaker.UI.Rules.Builds", "Other builds"), tip: t("Placemaker.UI.Rules.BuildsTip", "Keep off parks, plazas and lots built with Placemaker.") },
+        { key: "lots", icon: "area", title: t("Placemaker.UI.Rules.Lots", "Areas"), tip: t("Placemaker.UI.Rules.LotsTip2", "Keep off other lots and lot areas (other mods, extractors).") },
         { key: "zoned", icon: "edgeZoning", title: t("Placemaker.UI.Rules.Zoned", "Zoned"), tip: t("Placemaker.UI.Rules.ZonedTip", "Keep off zoned cells.") },
         { key: "emptyZones", icon: "zoneEmpty", title: t("Placemaker.UI.Rules.EmptyZones", "Empty zones"), tip: t("Placemaker.UI.Rules.EmptyZonesTip", "Also keep the empty zone grid free.") },
         { key: "water", icon: "water", title: t("Placemaker.UI.Rules.Water", "Water"), tip: t("Placemaker.UI.Rules.WaterTip", "Keep off deep water.") },
-        { key: "stayInBlock", icon: "lock", title: t("Placemaker.UI.Rules.Block", "One block"), tip: t("Placemaker.UI.Rules.BlockTip", "Keep a stroke inside the block where it started.") },
+        { key: "stayInBlock", icon: "lock", title: t("Placemaker.UI.Rules.Block", "One block"), tip: t("Placemaker.UI.Rules.BlockTip", "Keep a stroke inside the block where it started."), blockOnly: true },
     ];
-    const on = stops.filter((x) => rules[x.key]).length;
+    const on = any ? 0 : stops.filter((x) => rules[x.key] !== false && !(paint && x.blockOnly)).length;
+    const blockOnlyWhy = t("Placemaker.UI.Why.BlockPaintOnlyRule", "Only for Block paint.");
+    const offWhy = t("Placemaker.UI.Why.PaintOverAnything", "Off while Paint over anything is on.");
     return (
         <Collapsible
             id="brushRules"
             testId="brush-rules"
             icon="layers"
             title={t("Placemaker.UI.Rules.Title", "Rules")}
-            summary={t("Placemaker.UI.Rules.Summary", "{0} of {1} on", [on, stops.length])}
+            summary={any ? t("Placemaker.UI.Rules.SummaryAny", "Paints over anything") : t("Placemaker.UI.Rules.Summary", "{0} of {1} on", [on, paint ? stops.length - 1 : stops.length])}
             right={
                 <Btn
                     icon="reset"
@@ -88,24 +96,43 @@ const BrushRulesRow = ({ rules }: { rules: BrushRules }) => {
             }
         >
             <div className={s.brushRow}>
-                <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Stops", "Stops at")}</div>
-                <div className={s.ruleIcons} data-testid="brush-rules-stops">
-                    {stops.map((x) => (
-                        <Btn
-                            key={x.key}
-                            icon={x.icon}
-                            iconSize={14}
-                            selected={rules[x.key]}
-                            title={x.title}
-                            description={x.tip}
-                            onClick={() => act.setBrushRules({ [x.key]: !rules[x.key] })}
-                            testId={`brush-rule-${x.key}`}
-                        />
-                    ))}
-                </div>
+                <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Any", "Over all")}</div>
+                <Btn
+                    icon="paintAny"
+                    iconSize={14}
+                    selected={any}
+                    label={any ? t("Placemaker.UI.Rules.AnyOn", "On") : t("Placemaker.UI.Rules.AnyOff", "Off")}
+                    title={t("Placemaker.UI.Rules.AnyTitle", "Paint over anything")}
+                    description={t("Placemaker.UI.Rules.AnyTip", "Turn every stop off and paint over roads, buildings and other builds like the old Paint.")}
+                    onClick={() => act.setBrushRules({ anything: !any })}
+                    testId="brush-rule-anything"
+                />
             </div>
             <div className={s.brushRow}>
-                <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Snap", "Snap")}</div>
+                <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Stops", "Stops at")}</div>
+                <div className={s.ruleIcons} data-testid="brush-rules-stops">
+                    {stops.map((x) => {
+                        const disabled = any || (paint && x.blockOnly);
+                        return (
+                            <Btn
+                                key={x.key}
+                                icon={x.icon}
+                                iconSize={14}
+                                selected={!disabled && rules[x.key] !== false}
+                                disabled={disabled}
+                                title={x.title}
+                                description={disabled ? (any ? offWhy : blockOnlyWhy) : x.tip}
+                                onClick={() => act.setBrushRules({ [x.key]: !(rules[x.key] !== false) })}
+                                testId={`brush-rule-${x.key}`}
+                            />
+                        );
+                    })}
+                </div>
+            </div>
+            <div className={classNames(s.brushRow, { [s.rowOff]: paint })} data-disabled={paint ? "true" : undefined}>
+                <Tip title={t("Placemaker.UI.Rules.Snap", "Snap")} description={paint ? blockOnlyWhy : t("Placemaker.UI.Rules.SnapTip", "Pull painted edges this close to a curb or obstacle onto it.")}>
+                    <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Snap", "Snap")}</div>
+                </Tip>
                 <Slider
                     testId="brush-rule-snap"
                     value={rules.snap}
@@ -114,11 +141,13 @@ const BrushRulesRow = ({ rules }: { rules: BrushRules }) => {
                     step={1}
                     unit="m"
                     onPreview={() => undefined}
-                    onCommit={(v) => act.setBrushRules({ snap: v })}
+                    onCommit={(v) => !paint && act.setBrushRules({ snap: v })}
                 />
             </div>
-            <div className={s.brushRow}>
-                <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Smooth", "Smooth")}</div>
+            <div className={classNames(s.brushRow, { [s.rowOff]: paint })} data-disabled={paint ? "true" : undefined}>
+                <Tip title={t("Placemaker.UI.Rules.Smooth", "Smooth")} description={paint ? blockOnlyWhy : t("Placemaker.UI.Rules.SmoothTip", "How much the painted edge is smoothed.")}>
+                    <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Smooth", "Smooth")}</div>
+                </Tip>
                 <Slider
                     testId="brush-rule-smoothing"
                     value={rules.smoothing}
@@ -126,10 +155,48 @@ const BrushRulesRow = ({ rules }: { rules: BrushRules }) => {
                     max={6}
                     step={1}
                     onPreview={() => undefined}
-                    onCommit={(v) => act.setBrushRules({ smoothing: v })}
+                    onCommit={(v) => !paint && act.setBrushRules({ smoothing: v })}
                 />
             </div>
         </Collapsible>
+    );
+};
+
+/** (s27) Draw / Roads / Block: keep the outline off other Placemaker builds, optionally off everything the brush rules stop at. */
+const KeepOffRow = ({ rules }: { rules: BrushRules }) => {
+    const { t } = useT();
+    const any = !!rules.anything;
+    const builds = !any && rules.builds !== false;
+    const clip = !any && !!rules.drawClip;
+    const offWhy = t("Placemaker.UI.Why.PaintOverAnything", "Off while Paint over anything is on.");
+    return (
+        <div className={s.brushRow} data-testid="keep-off">
+            <div className={s.brushLabel}>{t("Placemaker.UI.Rules.KeepOff", "Keep off")}</div>
+            <div className={s.ruleIcons}>
+                <Btn
+                    icon="otherBuilds"
+                    iconSize={14}
+                    selected={builds}
+                    disabled={any}
+                    label={t("Placemaker.UI.Rules.Builds", "Other builds")}
+                    title={t("Placemaker.UI.Rules.Builds", "Other builds")}
+                    description={any ? offWhy : t("Placemaker.UI.Rules.BuildsCutTip", "Cut the outline back where it covers something built with Placemaker.")}
+                    onClick={() => act.setBrushRules({ builds: !builds })}
+                    testId="keep-off-builds"
+                />
+                <Btn
+                    icon="area"
+                    iconSize={14}
+                    selected={clip}
+                    disabled={any}
+                    label={t("Placemaker.UI.Rules.FreeLand", "Free land")}
+                    title={t("Placemaker.UI.Rules.FreeLand", "Free land")}
+                    description={any ? offWhy : t("Placemaker.UI.Rules.FreeLandTip", "Also cut the outline back from what the brush rules stop at.")}
+                    onClick={() => act.setBrushRules({ drawClip: !clip })}
+                    testId="keep-off-free-land"
+                />
+            </div>
+        </div>
     );
 };
 
@@ -278,19 +345,12 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                         </div>
                     </Tip>
                     {state.areaMode === "blockPaint" && b.rules ? <BrushRulesRow rules={b.rules} /> : null}
-                    {state.areaMode === "paint" && b.rules ? (
-                        // s15: the rules exist for Block paint only — shown greyed in Paint so their absence is explained.
-                        <Tip
-                            title={t("Placemaker.UI.Rules.Title", "Rules")}
-                            description={t("Placemaker.UI.Why.BlockPaintOnly", "Only for Block paint. Paint keeps off buildings (Options).")}
-                        >
-                            <div className={s.rowOff} data-testid="brush-rules-off" data-disabled="true">
-                                <div className={s.offInner}>
-                                    <BrushRulesRow rules={b.rules} />
-                                </div>
-                            </div>
-                        </Tip>
-                    ) : null}
+                    {state.areaMode === "paint" && b.rules ? <BrushRulesRow rules={b.rules} paint /> : null}
+                </Section>
+            ) : null}
+            {b.rules && (state.areaMode === "draw" || state.areaMode === "block" || state.areaMode === "perimeter") ? (
+                <Section title={t("Placemaker.UI.Rules.Title", "Rules")} testId="outline-rules">
+                    <KeepOffRow rules={b.rules} />
                 </Section>
             ) : null}
             <Section

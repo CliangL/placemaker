@@ -1,7 +1,7 @@
 // s15 — "When I can't see options, I should see them greyed out": controls, features and area modes that do not
 // apply are SHOWN greyed out with a short reason; a UI newer than the DLL says "Restart the game".
 import { expect, test } from "@playwright/test";
-import { drawPolygon, FIELD, open, panelShot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned } from "./helpers";
 
 async function design(page: import("@playwright/test").Page, recipe: string) {
     await drawPolygon(page, FIELD);
@@ -86,15 +86,36 @@ test("UI newer than the DLL: restart notice, and modes it cannot know are greyed
     expect(errors).toEqual([]);
 });
 
-test("brush: the angle is greyed for a round brush, the Block paint rules are greyed in Paint", async ({ page }) => {
+test("brush: the angle is greyed for a round brush; Paint shares the brush rules (block lock greyed)", async ({ page }) => {
     const errors = await open(page);
     await page.getByTestId("area-mode-paint").click();
     await expect(page.getByTestId("brush-angle-row")).toHaveAttribute("data-disabled", "true");
-    await expect(page.getByTestId("brush-rules-off")).toBeVisible();
+    await expect(page.getByTestId("brush-rules")).toBeVisible();
     await page.getByTestId("brush-shape").getByText("Square").click();
     await expect(page.getByTestId("brush-angle-row")).not.toHaveAttribute("data-disabled", "true");
+    if ((await page.getByTestId("brush-rules").getAttribute("data-open")) !== "true") await page.getByTestId("brush-rules-toggle").click();
+    await expect(page.getByTestId("brush-rule-stayInBlock")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("brush-rule-builds")).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("area-mode-blockPaint").click();
-    await expect(page.getByTestId("brush-rules-off")).toHaveCount(0);
-    await expect(page.getByTestId("brush-rules")).toBeVisible();
+    await expect(page.getByTestId("brush-rule-stayInBlock")).not.toHaveAttribute("aria-disabled", "true");
+    expect(errors).toEqual([]);
+});
+
+test("s27: Paint over anything turns every stop off; Draw keeps off other builds", async ({ page }) => {
+    const errors = await open(page);
+    await page.getByTestId("area-mode-blockPaint").click();
+    if ((await page.getByTestId("brush-rules").getAttribute("data-open")) !== "true") await page.getByTestId("brush-rules-toggle").click();
+    await page.getByTestId("brush-rule-anything").click();
+    await expect(page.getByTestId("brush-rule-anything")).toHaveAttribute("aria-pressed", "true");
+    for (const k of ["roads", "buildings", "builds", "lots", "zoned", "water", "stayInBlock"])
+        await expect(page.getByTestId(`brush-rule-${k}`)).toHaveAttribute("aria-disabled", "true");
+    await page.getByTestId("area-mode-draw").click();
+    await expect(page.getByTestId("keep-off-builds")).toHaveAttribute("aria-disabled", "true");
+    await page.getByTestId("area-mode-blockPaint").click();
+    await page.getByTestId("brush-rules-reset").click();
+    await page.getByTestId("area-mode-draw").click();
+    await expect(page.getByTestId("keep-off-builds")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("keep-off-free-land")).toHaveAttribute("aria-pressed", "false");
+    await noTextOverflow(page, "s27 keep off row");
     expect(errors).toEqual([]);
 });

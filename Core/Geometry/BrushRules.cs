@@ -2,8 +2,11 @@
 //
 // Each obstacle kind can be switched off, the block lock too, and the curb snap distance and edge
 // smoothing are sliders. With every stop and the block lock off the brush is plain Paint (no fence,
-// Paint's outline pipeline), so the old behaviour is always one click away. Plain Paint mode itself
-// never reads these rules.
+// Paint's outline pipeline), so the old behaviour is always one click away.
+// s27: the rules are shared by every paint tool: plain Paint cuts the active obstacles out of its outline
+// (Cut), Draw / Roads / Block always keep off other Placemaker builds and, with DrawClip, off everything
+// the polygon stops name (water is brush-only). New stop: other Placemaker builds (their owner lot + zone
+// blocks). New master toggle "Paint over anything" (Anything) switches every stop and the block lock off.
 
 using System;
 using System.Collections.Generic;
@@ -11,7 +14,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Geometry
 {
-    public enum BrushObstacleKind { Road = 0, Building = 1, Lot = 2, ZonedCell = 3, EmptyZoneCell = 4 }
+    public enum BrushObstacleKind { Road = 0, Building = 1, Lot = 2, ZonedCell = 3, EmptyZoneCell = 4, PlacemakerBuild = 5 }
 
     /// <summary>A polygon the brush may stop at, tagged with what it is (rules decide whether it counts).</summary>
     public struct BrushObstacle
@@ -28,6 +31,12 @@ namespace Placemaker.Core.Geometry
         public const int MaxSmoothing = 6;
 
         public bool Roads = true, Buildings = true, Lots = true, Zoned = true, EmptyZones = false, Water = true;
+        /// <summary>(s27) Other Placemaker builds: their owner lot outline and zone-block lots (never the group being edited).</summary>
+        public bool Builds = true;
+        /// <summary>(s27) "Paint over anything": every stop and the block lock off, whatever the other toggles say.</summary>
+        public bool Anything;
+        /// <summary>(s27) Draw / Roads / Block: also clip the outline to free land (the active polygon stops, not just other builds).</summary>
+        public bool DrawClip;
         /// <summary>Lock a stroke to the closed block it starts in (off: only the obstacles limit it).</summary>
         public bool StayInBlock = true;
         /// <summary>Gap (m) closed by pulling an edge onto the curb / an obstacle; 0 = off.</summary>
@@ -50,6 +59,7 @@ namespace Placemaker.Core.Geometry
 
         public bool Stops(BrushObstacleKind k)
         {
+            if (Anything) return false;
             switch (k)
             {
                 case BrushObstacleKind.Road: return Roads;
@@ -57,18 +67,48 @@ namespace Placemaker.Core.Geometry
                 case BrushObstacleKind.Lot: return Lots;
                 case BrushObstacleKind.ZonedCell: return Zoned;
                 case BrushObstacleKind.EmptyZoneCell: return EmptyZones;
+                case BrushObstacleKind.PlacemakerBuild: return Builds;
                 default: return true;
             }
         }
 
         /// <summary>Nothing to stop at and no block lock: the brush is plain Paint.</summary>
-        public bool AllOff => !Roads && !Buildings && !Lots && !Zoned && !EmptyZones && !Water && !StayInBlock;
+        public bool AllOff => Anything || (!Roads && !Buildings && !Builds && !Lots && !Zoned && !EmptyZones && !Water && !StayInBlock);
+        /// <summary>Water counts (brush tools).</summary>
+        public bool WaterOn => !Anything && Water;
+        /// <summary>The block lock counts (Block paint).</summary>
+        public bool LockOn => !Anything && StayInBlock;
+
+        /// <summary>The obstacle rings the rules count (optionally only some kinds).</summary>
+        public List<float2[]> Active(IEnumerable<BrushObstacle> obstacles, Func<BrushObstacleKind, bool> only = null)
+        {
+            var list = new List<float2[]>();
+            if (obstacles == null) return list;
+            foreach (var o in obstacles)
+                if (o.Ring != null && o.Ring.Length >= 3 && Stops(o.Kind) && (only == null || only(o.Kind))) list.Add(o.Ring);
+            return list;
+        }
+
+        /// <summary>
+        /// Plain Paint / Draw: cuts the counted obstacles (grown by <paramref name="margin"/>) out of an outline; an
+        /// enclosed one is opened with a 1 m corridor (CS2 areas have no holes). Returns the ring unchanged when nothing
+        /// counts or touches it, null when nothing usable is left (touched > 0 then means "only obstacles here").
+        /// </summary>
+        public float2[] Cut(float2[] ring, IEnumerable<BrushObstacle> obstacles, out int touched, float margin = 0.5f,
+            float minArea = 100f, Func<BrushObstacleKind, bool> only = null)
+        {
+            touched = 0;
+            if (ring == null || ring.Length < 3) return ring;
+            var active = Active(obstacles, only);
+            if (active.Count == 0) return ring;
+            return ObstacleCut.Subtract(ring, ObstacleCut.Grow(active, margin), out touched, minArea);
+        }
 
         public bool Equals(BrushRules o) => o != null && Roads == o.Roads && Buildings == o.Buildings && Lots == o.Lots && Zoned == o.Zoned
-            && EmptyZones == o.EmptyZones && Water == o.Water && StayInBlock == o.StayInBlock && Snap == o.Snap && Smoothing == o.Smoothing;
+            && EmptyZones == o.EmptyZones && Water == o.Water && StayInBlock == o.StayInBlock && Builds == o.Builds && Anything == o.Anything && DrawClip == o.DrawClip && Snap == o.Snap && Smoothing == o.Smoothing;
         public override bool Equals(object obj) => Equals(obj as BrushRules);
         public override int GetHashCode() => (Roads ? 1 : 0) | (Buildings ? 2 : 0) | (Lots ? 4 : 0) | (Zoned ? 8 : 0) | (EmptyZones ? 16 : 0)
-            | (Water ? 32 : 0) | (StayInBlock ? 64 : 0) | (Smoothing << 7) ^ Snap.GetHashCode();
+            | (Water ? 32 : 0) | (StayInBlock ? 64 : 0) | (Builds ? 1024 : 0) | (Anything ? 2048 : 0) | (DrawClip ? 4096 : 0) | (Smoothing << 7) ^ Snap.GetHashCode();
 
         /// <summary>
         /// The brush for a stroke starting at <paramref name="start"/>: fenced to <paramref name="block"/>
@@ -85,11 +125,11 @@ namespace Placemaker.Core.Geometry
             if (obstacles != null)
                 foreach (var o in obstacles)
                     if (o.Ring != null && r.Stops(o.Kind)) rings.Add(o.Ring);
-            var water = r.Water ? underWater : null;
+            var water = r.WaterOn ? underWater : null;
             BlockBrush brush;
-            if (r.StayInBlock && block != null && block.Count >= 3) brush = new BlockBrush(block, rings, cellSize, water);
+            if (r.LockOn && block != null && block.Count >= 3) brush = new BlockBrush(block, rings, cellSize, water);
             else if (rings.Count == 0 && water == null) brush = BlockBrush.Free(start, cellSize);
-            else brush = BlockBrush.Open(start, rings, cellSize, water, BlockBrush.OpenHalfSize, keepSide: r.Roads);
+            else brush = BlockBrush.Open(start, rings, cellSize, water, BlockBrush.OpenHalfSize, keepSide: r.Stops(BrushObstacleKind.Road));
             brush.SnapDistance = r.Snap;
             brush.Smoothing = r.Smoothing;
             return brush;
