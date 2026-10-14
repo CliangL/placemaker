@@ -231,6 +231,7 @@ namespace Placemaker.Game.Build
         private int TagTemporaries()
         {
             _tagged.Clear();
+            int unmatched = 0, unmatchedEdges = 0;
             var nodeRefs = new Dictionary<Entity, int2>();   // x = all temp edges, y = our edges
             bool carrier = _carrier != Entity.Null && EntityManager.Exists(_carrier);
             using var temps = _tempQuery.ToEntityArray(Allocator.Temp);
@@ -248,7 +249,17 @@ namespace Placemaker.Game.Build
                     CountNode(nodeRefs, edge.m_End, matched);
                 }
                 if (matched && key == OwnerKey) { AdoptOwnerTemp(e); continue; }
-                if (!matched || !_itemByKey.TryGetValue(key, out var w)) continue;
+                if (!matched || !_itemByKey.TryGetValue(key, out var w))
+                {
+                    // Playtest 4b: an object/area of ours the plan index could not place (random
+                    // variant prefab, moved by the game, matched elsewhere) was applied UNTAGGED and
+                    // survived removal. While our tool is active every top-level temporary without an
+                    // original is created from our definitions, so it is ours. Edges stay match-only:
+                    // pieces of an existing road split by our junctions are the city's.
+                    if (own && !isEdge && IsAdoptable(e, out var adoptKind)) { Tag(e, adoptKind, MemberRole.Generic); unmatched++; }
+                    else if (own && isEdge) unmatchedEdges++;
+                    continue;
+                }
                 var role = RoleFor(w);
                 var memberKind = kind == WorkKind.Net ? MemberKind.Edge : kind == WorkKind.Area ? MemberKind.Area : MemberKind.Object;
                 Tag(e, memberKind, role);
@@ -270,8 +281,143 @@ namespace Placemaker.Game.Build
                 if (!EntityManager.Exists(node) || !EntityManager.HasComponent<Temp>(node) || !IsOwnCandidate(node, out _)) continue;
                 Tag(node, MemberKind.Node, MemberRole.Generic);
             }
-            Mod.Log.Info($"Placemaker tagged {_tagged.Count} temporary parts for group {_groupId}.");
+            Mod.Log.Info($"Placemaker tagged {_tagged.Count} temporary parts for group {_groupId}"
+                + (unmatched > 0 ? $" ({unmatched} objects/areas adopted without a plan match)" : "")
+                + (unmatchedEdges > 0 ? $"; {unmatchedEdges} unmatched new edges left to the city" : "") + ".");
             return _tagged.Count;
+        }
+
+        /// <summary>Top-level object or area (sub-elements go with their owner; nodes are decided by their edges).</summary>
+        private bool IsAdoptable(Entity e, out MemberKind kind)
+        {
+            kind = MemberKind.Object;
+            if (!EntityManager.HasComponent<PrefabRef>(e) || EntityManager.HasComponent<Owner>(e)) return false;
+            if (EntityManager.HasComponent<Edge>(e) || EntityManager.HasComponent<global::Game.Net.Node>(e)) return false;
+            if (EntityManager.HasComponent<global::Game.Objects.Object>(e) && EntityManager.HasComponent<global::Game.Objects.Transform>(e)) return true;
+            if (EntityManager.HasComponent<global::Game.Areas.Area>(e)) { kind = MemberKind.Area; return true; }
+            return false;
+        }
+
+        /// <summary>
+        /// Apply frame: tags temporaries that appeared or changed after validation (an optional
+        /// object whose collision cleared, a late CourseSplit piece) so nothing is applied untagged.
+        /// </summary>
+        private int TagLateTemporaries()
+        {
+            int late = 0;
+            using var temps = _tempQuery.ToEntityArray(Allocator.Temp);
+            for (int i = 0; i < temps.Length; i++)
+            {
+                var e = temps[i];
+                if (EntityManager.HasComponent<PlacemakerMember>(e) || !IsOwnCandidate(e, out _)) continue;
+                if (EntityManager.HasComponent<Edge>(e))
+                {
+                    if (TryMatch(e, out long key, out _) && key != OwnerKey && _itemByKey.ContainsKey(key)) { Tag(e, MemberKind.Edge, MemberRole.Generic); late++; }
+                    continue;
+                }
+                if (IsAdoptable(e, out var kind)) { Tag(e, kind, MemberRole.Generic); late++; }
+            }
+            if (late > 0) Mod.Log.Info($"Placemaker tagged {late} late temporary parts on the Apply frame.");
+            return late;
+        }
+
+        // ───────────────────────── strays and verification ─────────────────────────
+
+        private readonly HashSet<Entity> _preexisting = new HashSet<Entity>();
+        private EntityQuery _strayQuery;
+        private float2[] _strayOutline;
+
+        private EntityQuery StrayQuery()
+        {
+            if (_strayQuery == default)
+                _strayQuery = GetEntityQuery(new EntityQueryDesc
+                {
+                    All = new[] { ComponentType.ReadOnly<global::Game.Objects.Object>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(), ComponentType.ReadOnly<PrefabRef>() },
+                    None = new[] { ComponentType.ReadOnly<Owner>(), ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
+                });
+            return _strayQuery;
+        }
+
+        /// <summary>Remembers every top-level object inside the outline before the build touches anything.</summary>
+        private void SnapshotPreexisting()
+        {
+            _preexisting.Clear();
+            _strayOutline = BuildOutline();
+            if (_strayOutline == null) return;
+            ForObjectsInOutline((e, _) => _preexisting.Add(e));
+        }
+
+        private void ForObjectsInOutline(Action<Entity, Entity> visit)
+        {
+            var outline = _strayOutline;
+            if (outline == null) return;
+            float2 min = outline[0], max = outline[0];
+            foreach (var p in outline) { min = math.min(min, p); max = math.max(max, p); }
+            min -= 2f; max += 2f;
+            var q = StrayQuery();
+            using var entities = q.ToEntityArray(Allocator.Temp);
+            using var transforms = q.ToComponentDataArray<global::Game.Objects.Transform>(Allocator.Temp);
+            using var prefabs = q.ToComponentDataArray<PrefabRef>(Allocator.Temp);
+            for (int i = 0; i < entities.Length; i++)
+            {
+                var p = transforms[i].m_Position.xz;
+                if (p.x < min.x || p.y < min.y || p.x > max.x || p.y > max.y) continue;
+                if (!ReservedSpace.PointInPolygon(p, outline) && TerraformDabs.DistanceToBoundary(outline, p) > 2f) continue;
+                visit(entities[i], prefabs[i].m_Prefab);
+            }
+        }
+
+        /// <summary>
+        /// After Apply: a permanent, untagged, top-level object inside the outline that did not exist
+        /// before the build and uses one of the prefabs this build placed was created by this build
+        /// (e.g. a temporary the game replaced on Apply). Adopt it so removal deletes it too.
+        /// </summary>
+        private int AdoptStrays()
+        {
+            if (_strayOutline == null || _usedPrefabs.Count == 0) return 0;
+            var strays = new List<Entity>();
+            ForObjectsInOutline((e, prefab) =>
+            {
+                if (_preexisting.Contains(e) || !_usedPrefabs.Contains(prefab) || EntityManager.HasComponent<PlacemakerMember>(e)) return;
+                strays.Add(e);
+            });
+            foreach (var e in strays) Tag(e, MemberKind.Object, MemberRole.Generic);
+            if (strays.Count > 0) Mod.Log.Warn($"Placemaker adopted {strays.Count} untagged objects this build created (tag lost on Apply).");
+            return strays.Count;
+        }
+
+        /// <summary>Counts permanent members per kind and logs mismatches against the plan.</summary>
+        private void VerifyMembers()
+        {
+            try
+            {
+                var counts = new MemberCounts();
+                var members = new List<Entity>();
+                _registry.GetMembers(_groupId, members);
+                int ownerAreas = 0;
+                foreach (var e in members)
+                {
+                    if (!EntityManager.Exists(e) || EntityManager.HasComponent<Deleted>(e) || EntityManager.HasComponent<Temp>(e)) continue;
+                    var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
+                    if (tag.GroupId != _groupId) continue;
+                    if (tag.Role == MemberRole.OwnerArea) { ownerAreas++; continue; }
+                    var kind = tag.Kind;
+                    if (EntityManager.HasComponent<Edge>(e)) kind = MemberKind.Edge;
+                    else if (EntityManager.HasComponent<global::Game.Net.Node>(e)) kind = MemberKind.Node;
+                    counts.Add(kind);
+                }
+                var planned = new PlannedCounts
+                {
+                    Objects = _emittedObjects,
+                    OptionalDropped = _dropped,
+                    Areas = _emittedAreas,
+                    NetPieces = _work?.Nets.Count ?? 0,
+                };
+                var issues = BuildVerification.Compare(planned, counts);
+                if (issues.Count == 0) Mod.Log.Info($"Placemaker verified group {_groupId}: {counts}.");
+                else Mod.Log.Warn($"Placemaker group {_groupId} member check ({counts}): {string.Join("; ", issues)}.");
+            }
+            catch (Exception e) { Mod.Log.Warn("Placemaker member verification failed: " + e.Message); }
         }
 
         private static void CountNode(Dictionary<Entity, int2> refs, Entity node, bool own)
@@ -319,6 +465,7 @@ namespace Placemaker.Game.Build
 
         private void CreateRecord()
         {
+            SnapshotPreexisting();
             _groupId = _registry.AllocateId();
             var rec = new GroupRecord
             {
@@ -389,7 +536,7 @@ namespace Placemaker.Game.Build
             rec.Upkeep = estimate.Upkeep;
             rec.PrefabNames = new List<string>(_usedPrefabNames);
             rec.PrefabNames.Sort(StringComparer.Ordinal);
-            if (_work.HasPermanentTerrain) rec.Flags |= GroupFlags.PermanentTerrain;
+            if (_work.HasPermanentTerrain || HasPaint()) rec.Flags |= GroupFlags.PermanentTerrain;   // terraform and paint are never undone
             if (_work.HasParking && _carrier != Entity.Null) rec.Flags |= GroupFlags.ParkingEconomy;
             if (_request.Recipe != null) rec.Recipe = _request.Recipe.Clone();
             if (_request.Area != null)

@@ -526,6 +526,7 @@ namespace Placemaker.Game.Build
 
         private void DoApply()
         {
+            TagLateTemporaries();
             _tool.Requested = ApplyMode.Apply;
             _applied = true;   // from here on, failures roll back through group removal
             SetProgress(0.75f);
@@ -540,6 +541,7 @@ namespace Placemaker.Game.Build
             int stillTemp = CountTaggedTemporaries();
             if (stillTemp > 0 && frame - _stepFrame < ApplyTimeoutFrames) return;
             if (stillTemp > 0) Mod.Log.Warn($"Placemaker: {stillTemp} parts stayed temporary after Apply; they are discarded.");
+            AdoptStrays();
             _registry.MarkDirty();
             int members = _registry.CountMembers(_groupId, false);
             if (members == 0)
@@ -556,6 +558,8 @@ namespace Placemaker.Game.Build
 
         private void DoFinish()
         {
+            _registry.MarkDirty();
+            VerifyMembers();
             FinishRecord();
             RestoreTool();
             var groupId = _groupId;
@@ -676,6 +680,8 @@ namespace Placemaker.Game.Build
             _itemByKey.Clear();
             _tagged.Clear();
             _usedPrefabNames.Clear();
+            _usedPrefabs.Clear();
+            _preexisting.Clear();
             ResetIndexes();
             _errorKey = BuildErrorKeys.Other;
             _errorArgs = Array.Empty<object>();
