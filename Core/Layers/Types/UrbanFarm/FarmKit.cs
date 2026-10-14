@@ -245,27 +245,45 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
         public static int BesidePaths(LayerContext ctx, Occupancy occ, float spacing, ObjectRole role, AssetRef asset, float radius, uint salt, int max = 400)
         {
             if (spacing <= 0.5f) return 0;
-            int n = 0, k = 0;
-            var segs = new List<SegmentIndex.Seg>(occ.Paths.Segments);
-            foreach (var s in segs)
+            int n = 0;
+            foreach (var w in Walk(occ, spacing, 0.5f))
+            {
+                if (n >= max) break;
+                float sideSign = (w.index & 1) == 0 ? 1f : -1f;
+                var nrm = Perp(w.tangent);
+                float off = w.halfWidth + radius + 0.35f;
+                var p = w.onPath + nrm * sideSign * off;
+                if (!occ.Free(p, radius, 0.3f, 0.15f)) { p = w.onPath - nrm * sideSign * off; if (!occ.Free(p, radius, 0.3f, 0.15f)) continue; }
+                ctx.Object(p, role == ObjectRole.Bench ? LeisureKit.Yaw(p, w.onPath) : 0f, role, asset, Hashing.Mix(ctx.Seed, salt + (uint)w.index));
+                occ.Take(p, radius, 1);
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Points every <paramref name="spacing"/> m along this layer's own paths, measured cumulatively over
+        /// consecutive segments (curved paths are indexed as many short pieces), starting at phase·spacing.
+        /// </summary>
+        public static List<(float2 onPath, float2 tangent, float halfWidth, int index)> Walk(Occupancy occ, float spacing, float phase)
+        {
+            var r = new List<(float2, float2, float, int)>();
+            if (spacing <= 0.1f) return r;
+            float acc = 0f, next = spacing * phase;
+            foreach (var s in occ.Paths.Segments)
             {
                 if (s.Kind == Occupancy.KindReserved) continue;
                 float len = math.distance(s.A, s.B);
-                if (len < spacing * 0.5f) continue;
+                if (len < 1e-3f) continue;
                 var t = (s.B - s.A) / len;
-                var nrm = Perp(t);
-                for (float along = spacing * 0.5f; along < len && n < max; along += spacing, k++)
+                while (next <= acc + len && r.Count < 5000)
                 {
-                    float sideSign = (k & 1) == 0 ? 1f : -1f;
-                    var onPath = s.A + t * along;
-                    var p = onPath + nrm * sideSign * (s.HalfWidth + radius + 0.35f);
-                    if (!occ.Free(p, radius, 0.3f, 0.15f)) { p = onPath - nrm * sideSign * (s.HalfWidth + radius + 0.35f); if (!occ.Free(p, radius, 0.3f, 0.15f)) continue; }
-                    ctx.Object(p, role == ObjectRole.Bench ? LeisureKit.Yaw(p, onPath) : 0f, role, asset, Hashing.Mix(ctx.Seed, salt + (uint)k));
-                    occ.Take(p, radius, 1);
-                    n++;
+                    r.Add((s.A + t * (next - acc), t, s.HalfWidth, r.Count));
+                    next += spacing;
                 }
+                acc += len;
             }
-            return n;
+            return r;
         }
 
         /// <summary>Role that matches an asset category (so automatic resolution and footprints agree).</summary>
