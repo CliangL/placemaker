@@ -51,7 +51,7 @@ namespace Placemaker.Tests
                     foreach (var kv in f.Preset.Values) Assert.Contains(fg.Controls, c => c.Id == kv.Key);
                     if (f.Target.Length > 0) Assert.Contains(f.Target, g.Emits);
                 }
-            Assert.Equal(new[] { "plaza", "playground", "pond", "picnic", "restrooms", "fountain", "bigtrees", "flowerbeds", "shops", "edgeZoning", "rocks", "ground", "decals", "terrain",
+            Assert.Equal(new[] { "plaza", "playground", "pond", "picnic", "restrooms", "fountain", "bigtrees", "flowerbeds", "shops", "edgeZoning", "rocks", "ground", "decals", "terrain", "shore",
                     "runningTrack", "cricketGround", "pitch", "baseballDiamond", "tennisCourts", "basketballCourt", "skateBowl",
                     "volleyball", "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "dogRun", "noticeboard",
                     "bigStatue", "folly", "obelisk", "triumphalArch", "sculptureWalk", "terraceGarden" },
@@ -215,7 +215,9 @@ namespace Placemaker.Tests
             Assert.Empty(park.Terraform);
             var basin = Ring2(park.Regions.Single(x => x.Key == ParkLayer.PondPlace).Ring);
             var pond = plan.Layers.Single(l => l.GeneratorId == "pond");
-            var t = Assert.Single(pond.Terraform);
+            var t = pond.Terraform[0];   // the basin (islands, g2, are raised after it)
+            Assert.Equal(TerraformKind.Lower, t.Kind);
+            Assert.All(pond.Terraform, x => Assert.True(x.Permanent));
             Assert.True(t.Permanent);
             Assert.Contains(pond.Issues, i => i.Key == "Placemaker.Park.Issue.LakePermanent");
             foreach (var o in park.Objects) Assert.False(Poly.Contains(basin, o.Position.xz), o.Role + " in the pond");
