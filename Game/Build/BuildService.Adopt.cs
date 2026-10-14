@@ -230,6 +230,7 @@ namespace Placemaker.Game.Build
         /// </summary>
         private int TagTemporaries()
         {
+            _claimed.Clear();
             _tagged.Clear();
             int unmatched = 0, unmatchedEdges = 0;
             _taggedCounts = default;
@@ -245,9 +246,11 @@ namespace Placemaker.Game.Build
                 bool matched = own && TryMatch(e, out key, out kind);
                 if (isEdge)
                 {
+                    // Nodes are grouped only when every edge on them is a GROUPED edge of ours (loose road edges are city roads).
+                    bool grouped = matched && _itemByKey.TryGetValue(key, out var ew) && !ew.Loose;
                     var edge = EntityManager.GetComponentData<Edge>(e);
-                    CountNode(nodeRefs, edge.m_Start, matched);
-                    CountNode(nodeRefs, edge.m_End, matched);
+                    CountNode(nodeRefs, edge.m_Start, grouped);
+                    CountNode(nodeRefs, edge.m_End, grouped);
                 }
                 if (matched && key == OwnerKey) { AdoptOwnerTemp(e); continue; }
                 if (!matched || !_itemByKey.TryGetValue(key, out var w))
@@ -257,13 +260,13 @@ namespace Placemaker.Game.Build
                     // survived removal. While our tool is active every top-level temporary without an
                     // original is created from our definitions, so it is ours. Edges stay match-only:
                     // pieces of an existing road split by our junctions are the city's.
-                    if (own && !isEdge && IsAdoptable(e, out var adoptKind)) { Tag(e, adoptKind, MemberRole.Generic); unmatched++; }
+                    if (own && !isEdge && IsAdoptable(e, out var adoptKind)) { Tag(e, adoptKind, MemberRole.Generic, LooseBuild); unmatched++; }
                     else if (own && isEdge) unmatchedEdges++;
                     continue;
                 }
                 var role = RoleFor(w);
                 var memberKind = kind == WorkKind.Net ? MemberKind.Edge : kind == WorkKind.Area ? MemberKind.Area : MemberKind.Object;
-                Tag(e, memberKind, role);
+                Tag(e, memberKind, role, w.Loose);
                 // FEEDBACK-4: an overridable object (prop, plant, decal) that still overlaps something gets
                 // Override instead of Error; after Apply the game's OverrideSystem hides it ("Overridden").
                 // Never silent: count it (docs/RESEARCH-NOTES-ADDENDUM.md, object collisions).
@@ -322,10 +325,10 @@ namespace Placemaker.Game.Build
                 if (EntityManager.HasComponent<PlacemakerMember>(e) || !IsOwnCandidate(e, out _)) continue;
                 if (EntityManager.HasComponent<Edge>(e))
                 {
-                    if (TryMatch(e, out long key, out _) && key != OwnerKey && _itemByKey.ContainsKey(key)) { Tag(e, MemberKind.Edge, MemberRole.Generic); late++; }
+                    if (TryMatch(e, out long key, out _) && key != OwnerKey && _itemByKey.TryGetValue(key, out var lw)) { Tag(e, MemberKind.Edge, MemberRole.Generic, lw.Loose); late++; }
                     continue;
                 }
-                if (IsAdoptable(e, out var kind)) { Tag(e, kind, MemberRole.Generic); late++; }
+                if (IsAdoptable(e, out var kind)) { Tag(e, kind, MemberRole.Generic, LooseBuild); late++; }
             }
             if (late > 0) Mod.Log.Info($"Placemaker tagged {late} late temporary parts on the Apply frame.");
             return late;
@@ -384,6 +387,7 @@ namespace Placemaker.Game.Build
         /// </summary>
         private int AdoptStrays()
         {
+            if (LooseBuild) return 0;
             if (_strayOutline == null || _usedPrefabs.Count == 0) return 0;
             var strays = new List<Entity>();
             ForObjectsInOutline((e, prefab) =>
@@ -421,27 +425,32 @@ namespace Placemaker.Game.Build
         {
             try
             {
+                // Everything this build claimed (grouped members AND loose city parts) that survived Apply.
                 var counts = new MemberCounts();
-                var members = new List<Entity>();
-                _registry.GetMembers(_groupId, members);
-                int ownerAreas = 0;
-                foreach (var e in members)
+                foreach (var e in _tagged)
                 {
                     if (!EntityManager.Exists(e) || EntityManager.HasComponent<Deleted>(e) || EntityManager.HasComponent<Temp>(e)) continue;
-                    var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
-                    if (tag.GroupId != _groupId) continue;
-                    if (tag.Role == MemberRole.OwnerArea) { ownerAreas++; continue; }
-                    var kind = tag.Kind;
+                    if (e == _ownerTemp) continue;
+                    MemberKind kind;
                     if (EntityManager.HasComponent<Edge>(e)) kind = MemberKind.Edge;
                     else if (EntityManager.HasComponent<global::Game.Net.Node>(e)) kind = MemberKind.Node;
+                    else if (EntityManager.HasComponent<global::Game.Areas.Area>(e)) kind = MemberKind.Area;
+                    else if (EntityManager.HasComponent<global::Game.Objects.Object>(e)) kind = MemberKind.Object;
+                    else kind = MemberKind.Auxiliary;
                     counts.Add(kind);
                 }
                 var planned = PlannedNow();
-                var issues = BuildVerification.Compare(planned, counts);
+                var issues = BuildVerification.Compare(planned, counts, looseNets: _work != null && !_work.AnyGrouped);
                 if (issues.Count == 0) Mod.Log.Info($"Placemaker verified group {_groupId}: {counts}.");
                 else Mod.Log.Warn($"Placemaker group {_groupId} member check ({counts}): {string.Join("; ", issues)}.");
                 if (BuildVerification.Duplicated(planned, counts, out var why))
                 {
+                    if (LooseBuild)
+                    {
+                        // Loose parts are city content without a group to roll back; the pre-Apply check is the guard.
+                        Mod.Log.Warn($"Placemaker loose build came out doubled ({why}); parts are ordinary city roads now.");
+                        return false;
+                    }
                     Mod.Log.Warn($"Placemaker group {_groupId} was built twice ({why}); rolling it back.");
                     return true;
                 }
@@ -475,13 +484,35 @@ namespace Placemaker.Game.Build
             }
         }
 
-        private void Tag(Entity e, MemberKind kind, MemberRole role)
+        /// <summary>True when the whole build is loose (only [AreaGenerator(Loose = true)] layers, e.g. a road grid).</summary>
+        private readonly HashSet<Entity> _claimed = new HashSet<Entity>();
+
+        private bool LooseBuild => _work != null && _work.AllLoose;
+
+        /// <summary>
+        /// Claims a temporary for this build: counted (exactly-once/duplicate checks, costs) and, unless it
+        /// comes from a loose layer, tagged as a group member. Loose parts become ordinary city content.
+        /// </summary>
+        private void Tag(Entity e, MemberKind kind, MemberRole role, bool loose = false)
         {
-            var tag = new PlacemakerMember { GroupId = _groupId, Kind = kind, Role = role };
-            if (EntityManager.HasComponent<PlacemakerMember>(e)) EntityManager.SetComponentData(e, tag);
-            else EntityManager.AddComponentData(e, tag);
+            if (!_claimed.Add(e)) return;   // exactly once per entity (late passes revisit untagged loose parts)
+            if (!loose && _groupId != 0)
+            {
+                var tag = new PlacemakerMember { GroupId = _groupId, Kind = kind, Role = role };
+                if (EntityManager.HasComponent<PlacemakerMember>(e)) EntityManager.SetComponentData(e, tag);
+                else EntityManager.AddComponentData(e, tag);
+            }
             _tagged.Add(e);
             _taggedCounts.Add(kind);
+        }
+
+        /// <summary>Claimed parts that Apply turned into permanent entities.</summary>
+        private int CountAppliedClaimed()
+        {
+            int n = 0;
+            foreach (var e in _tagged)
+                if (EntityManager.Exists(e) && !EntityManager.HasComponent<Temp>(e) && !EntityManager.HasComponent<Deleted>(e)) n++;
+            return n;
         }
 
         private int CountTaggedTemporaries()
@@ -496,6 +527,13 @@ namespace Placemaker.Game.Build
 
         private void CreateRecord()
         {
+            if (LooseBuild)
+            {
+                // A road grid is just roads: no record, no owner lot, no tags (user request).
+                _groupId = 0;
+                _record = Entity.Null;
+                return;
+            }
             SnapshotPreexisting();
             _groupId = _registry.AllocateId();
             var rec = new GroupRecord

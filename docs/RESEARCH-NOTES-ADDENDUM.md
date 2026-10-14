@@ -302,3 +302,23 @@ removing it.
   sideways. `ParkPlanting.PathSideYaw` now plans the facing direction (toward the path), which matches
   `PlannedObject.Yaw` (0 = facing +Z) and `quaternion.RotateY` at emission (`ObjectYawTests`). Other
   layers already used facing yaws.
+
+## Owner lot rejections, loose road builds, bridges (fix round s4c)
+
+- Owner lot "rejected" (groups 4–6): `Game.Areas.ValidationHelpers.AreaIterator` gives a TOP-LEVEL area an
+  OverlapExisting error for any overlap with an area of the same `AreaType`. So the owner Lot collided with a
+  neighbouring build's owner lot or with a planned Lot area, and the exclusion pass dropped it. The owner is
+  now emitted AFTER the plan validated (`Step.OwnerLot`), and its own errors are judged separately:
+  - Overlap is accepted. Apply is gated only by our tool; the Apply systems build errored temporaries anyway.
+  - Shape errors (InvalidShape/SmallArea/LongDistance) retry with simpler rings (`OwnerRings`: repaired →
+    simplified 3 m → convex hull → minimum-area rectangle).
+  - After the last ring the temporary is cancelled (`TempFlags.Cancel`).
+- No owner lot: bulldozing any object or area of the group asks for confirmation and then removes the whole
+  group (`IsOwnerlessGroupPart`, bulldoze confirmation patch, `HandleDeletedMembers`).
+- Loose builds: `[AreaGenerator(Loose = true)]` (roads, edgeZoning) build ordinary city content with no owner,
+  record or tags. Mixed plans tag only the non-loose parts. Claims are still counted for the exactly-once and
+  duplicate checks and for costs.
+- Bridges sank: `CourseSplitSystem` re-derives a top-level course's heights as terrain + a linear blend of
+  the end elevations, and the lake has no water yet at build time. Non-terrain nets are now ≤ 12 m pieces
+  at the planned heights. Every node carries `m_Elevation` = planned − terrain, plus
+  ForceElevatedNode/ForceElevatedEdge where the deck is > 0.75 m above the ground.

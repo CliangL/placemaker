@@ -13,7 +13,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.AddOns
 {
-    [AreaGenerator(900)]
+    [AreaGenerator(900, Loose = true)]
     public sealed class EdgeZoningAddOn : IAreaGenerator
     {
         public const string LayerId = "edgeZoning";

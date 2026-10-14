@@ -68,6 +68,8 @@ namespace Placemaker.Game.Build
         {
             _ownerPrefab = Entity.Null;
             _ownerTemp = Entity.Null;
+            _ownerLevel = 0;
+            _ownerDefinition = Entity.Null;
             _cleared = 0;
         }
 
@@ -89,27 +91,139 @@ namespace Placemaker.Game.Build
             return hull.Length >= 3 ? hull : null;
         }
 
-        /// <summary>Emits the owner lot definition (first EmitRest frame). No-op when unavailable.</summary>
-        private void EmitOwnerArea()
+        // Owner lot outside validation (playtest: "the game rejected the owner lot" → builds 4–6 could not
+        // be selected or bulldozed as one). A top-level Lot area errors on ANY overlap with another lot
+        // (Game.Areas.ValidationHelpers.AreaIterator: same AreaType, top-level → OverlapExisting), e.g. a
+        // neighbouring build's owner lot or a planned lot area of this build, and a validation error
+        // used to drop it. Now the plan is validated WITHOUT the owner; the owner definition is emitted
+        // after validation passed (Step.OwnerLot), its own errors are inspected separately: overlap is
+        // accepted (an invisible selection lot may overlap), a shape error retries with a simpler ring
+        // (OwnerRings levels), and only after the last level the build goes on without it (Temp Cancel).
+
+        private const int OwnerMaterializeFrames = 12;
+        private const int OwnerValidateFrames = 3;
+        private int _ownerLevel;
+        private Entity _ownerDefinition;
+        private int _ownerSince;
+
+        /// <summary>Emits the owner lot definition at the current ring level. False when there is nothing to emit.</summary>
+        private bool EmitOwnerArea()
         {
-            if (_ownerSuppressed || _ownerPrefabs == null) return;
+            if (LooseBuild) return false;   // roads are just roads: nothing to select as one thing
+            if (_ownerSuppressed || _ownerPrefabs == null) return false;
             _ownerPrefab = _ownerPrefabs.ReadyPrefab;
-            if (_ownerPrefab == Entity.Null) return;
+            if (_ownerPrefab == Entity.Null) return false;
             var outline = BuildOutline();
-            if (outline == null) return;
-            var ring = AreaRings.MakeValid(outline, AreaRings.LotMinNodeDistance);
+            if (outline == null) return false;
+            float2[] ring = null;
+            while (_ownerLevel < OwnerRings.Levels && ring == null)
+            {
+                ring = OwnerRings.Candidate(outline, _ownerLevel);
+                if (ring == null) _ownerLevel = OwnerRings.Levels;
+            }
             if (ring == null)
             {
-                Mod.Log.Warn("Placemaker: the build outline is not a valid lot shape; the build stays selectable per part.");
-                return;
+                Mod.Log.Warn("Placemaker: no valid lot shape for the owner lot; the build is selectable per part (bulldozing a part removes it all).");
+                return false;
             }
             var ring3 = new float3[ring.Length];
             for (int i = 0; i < ring.Length; i++) ring3[i] = new float3(ring[i].x, 0f, ring[i].y);
             var w = new WorkItem { Kind = WorkKind.Area, Layer = -1, Index = -1, Category = BuildCategories.AreaLot };
             int areas = _emittedAreas;
-            EmitAreaDefinition(_ownerPrefab, ring3, OwnerKey, w);
+            _ownerDefinition = EmitAreaDefinition(_ownerPrefab, ring3, OwnerKey, w);
             _emittedAreas = areas;   // the owner lot is not a planned area (verification)
-            _itemByKey.Remove(OwnerKey);   // never part of the census or exclusion: optional by design
+            _itemByKey.Remove(OwnerKey);   // never part of the census or exclusion
+            return _ownerDefinition != Entity.Null;
+        }
+
+        /// <summary>Owner temporary (matched by prefab + centroid), or Null.</summary>
+        private Entity FindOwnerTemp()
+        {
+            using var temps = _tempQuery.ToEntityArray(Allocator.Temp);
+            for (int i = 0; i < temps.Length; i++)
+            {
+                var e = temps[i];
+                if (!EntityManager.HasComponent<global::Game.Areas.Area>(e) || !IsOwnCandidate(e, out _)) continue;
+                if (TryMatch(e, out long key, out _) && key == OwnerKey) return e;
+            }
+            return Entity.Null;
+        }
+
+        /// <summary>Error type the game reports for <paramref name="e"/> (from its notification icon), "" if none.</summary>
+        private string ErrorTypeOf(Entity e)
+        {
+            if (_iconQuery.IsEmptyIgnoreFilter) return "";
+            using var icons = _iconQuery.ToEntityArray(Allocator.Temp);
+            for (int i = 0; i < icons.Length; i++)
+            {
+                if (!EntityManager.HasComponent<Owner>(icons[i]) || EntityManager.GetComponentData<Owner>(icons[i]).m_Owner != e) continue;
+                var prefab = EntityManager.GetComponentData<PrefabRef>(icons[i]).m_Prefab;
+                if (EntityManager.HasComponent<ToolErrorData>(prefab)) return EntityManager.GetComponentData<ToolErrorData>(prefab).m_Error.ToString();
+            }
+            return "Unknown";
+        }
+
+        private static bool IsShapeError(string type) =>
+            type == "InvalidShape" || type == "SmallArea" || type == "LongDistance" || type == "Unknown";
+
+        private void CancelOwnerTemp(Entity temp)
+        {
+            if (_ownerDefinition != Entity.Null && EntityManager.Exists(_ownerDefinition) && !EntityManager.HasComponent<Deleted>(_ownerDefinition))
+                EntityManager.AddComponent<Deleted>(_ownerDefinition);
+            _ownerDefinition = Entity.Null;
+            if (temp != Entity.Null && EntityManager.Exists(temp) && EntityManager.HasComponent<Temp>(temp))
+            {
+                var t = EntityManager.GetComponentData<Temp>(temp);
+                t.m_Flags |= TempFlags.Cancel;   // Apply deletes cancelled temporaries instead of building them
+                EntityManager.SetComponentData(temp, t);
+            }
+        }
+
+        /// <summary>Step.OwnerLot: emit → materialise → own validation → adopt, or retry simpler, or go without.</summary>
+        private void DoOwnerLot(int frame)
+        {
+            if (frame == _stepFrame)
+            {
+                _ownerSince = frame;
+                if (!EmitOwnerArea()) { Go(Step.Apply); }
+                return;
+            }
+            var temp = FindOwnerTemp();
+            if (temp == Entity.Null)
+            {
+                if (frame - _ownerSince < OwnerMaterializeFrames) return;
+                Mod.Log.Warn($"Placemaker: the owner lot (level {_ownerLevel}) did not materialise.");
+                NextOwnerLevel(frame, Entity.Null);
+                return;
+            }
+            if (frame - _ownerSince < OwnerValidateFrames + 2) return;
+            if (EntityManager.HasComponent<Error>(temp))
+            {
+                string type = ErrorTypeOf(temp);
+                if (IsShapeError(type))
+                {
+                    Mod.Log.Warn($"Placemaker: the game rejected the owner lot shape (level {_ownerLevel}: {type}); trying a simpler ring.");
+                    NextOwnerLevel(frame, temp);
+                    return;
+                }
+                // Overlap with another lot (a neighbouring build, a planned lot): harmless for an invisible
+                // selection lot. Apply builds temporaries regardless of errors (the tool gate is ours).
+                Mod.Log.Info($"Placemaker: owner lot overlaps existing lots ({type}); kept.");
+            }
+            AdoptOwnerTemp(temp);
+            Go(Step.Apply);
+        }
+
+        private void NextOwnerLevel(int frame, Entity temp)
+        {
+            CancelOwnerTemp(temp);
+            _ownerLevel++;
+            _ownerSince = frame;
+            if (_ownerLevel >= OwnerRings.Levels || !EmitOwnerArea())
+            {
+                Mod.Log.Warn("Placemaker: building without owner lot; the build is selectable per part and bulldozing a part removes it all.");
+                Go(Step.Apply);
+            }
         }
 
         /// <summary>Tags the materialised owner lot (called from TagTemporaries).</summary>
@@ -131,6 +245,7 @@ namespace Placemaker.Game.Build
         private void EmitClearDefinitions()
         {
             _cleared = 0;
+            if (LooseBuild) return;   // road grids keep the trees; the game clears what a road overlaps
             if (!ClearExistingObjects || _clearQuery == null || _clearQuery.IsEmptyIgnoreFilter) return;
             var outline = BuildOutline();
             if (outline == null) return;
