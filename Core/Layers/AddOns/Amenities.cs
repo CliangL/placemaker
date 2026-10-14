@@ -40,13 +40,16 @@ namespace Placemaker.Core.Layers.AddOns
         /// <summary>Default position: "centre", "edge", "entrance" or "corner".</summary>
         public string DefaultAt;
         public bool PathByDefault = true;
+        /// <summary>Smaller places (long × short) tried in order when this size fits nowhere (sports fields: "scaled to fit").</summary>
+        public float2[] Smaller = Array.Empty<float2>();
     }
 
     public static class Amenities
     {
         public static readonly string[] Positions = { "centre", "edge", "entrance", "corner" };
 
-        public static readonly AmenitySpec[] All =
+        /// <summary>Sports fields first (AddOns/Fields: the big places get the first pick of the ground), then the amenities.</summary>
+        public static readonly AmenitySpec[] All = Join(Fields.FieldSpecs.All, new[]
         {
             new AmenitySpec { Layer = "volleyball", Length = 22f, Width = 14f, DefaultAt = "edge" },
             new AmenitySpec { Layer = "basketball", Length = 19f, Width = 17f, DefaultAt = "corner" },
@@ -57,7 +60,15 @@ namespace Placemaker.Core.Layers.AddOns
             new AmenitySpec { Layer = "bandstand", Length = 26f, Width = 22f, DefaultAt = "centre" },
             new AmenitySpec { Layer = "dogRun", Length = 34f, Width = 24f, DefaultAt = "corner" },
             new AmenitySpec { Layer = "noticeboard", Length = 6f, Width = 4f, DefaultAt = "entrance" },
-        };
+        });
+
+        private static AmenitySpec[] Join(AmenitySpec[] a, AmenitySpec[] b)
+        {
+            var r = new AmenitySpec[a.Length + b.Length];
+            a.CopyTo(r, 0);
+            b.CopyTo(r, a.Length);
+            return r;
+        }
 
         public static AmenitySpec Spec(string layer)
         {
@@ -104,10 +115,32 @@ namespace Placemaker.Core.Layers.AddOns
         /// <paramref name="blocked"/> (lake, plaza…). Other anchors are tried when the wanted one has no room.
         /// </summary>
         public static bool TrySolve(LayerRegion region, Occupancy occ, float length, float width, string at, IReadOnlyList<float2> gates,
-            uint seed, Func<float2, bool> blocked, out OrientedRect rect, out bool moved, float margin = 1f)
+            uint seed, Func<float2, bool> blocked, out OrientedRect rect, out bool moved, float margin = 1f, bool shrink = true)
         {
             rect = default; moved = false;
             if (region == null) return false;
+            // Sports fields (AmenitySpec.Smaller): when the full size fits nowhere, the next smaller size is tried
+            // ("scaled to fit"); a cheap free-room probe skips sizes that cannot fit at all.
+            var ladder = shrink ? WithSmaller(length, width) : null;
+            if (ladder == null) return SolveOne(region, occ, length, width, at, gates, seed, blocked, out rect, out moved, margin);
+            float room = Fields.FieldKit.MaxClearance(region, occ, width * 0.5f + 4f);
+            if (Fields.FieldKit.MayFit(room, length, width) && SolveOne(region, occ, length, width, at, gates, seed, blocked, out rect, out moved, margin)) return true;
+            foreach (var s in ladder.Smaller)
+                if (Fields.FieldKit.MayFit(room, s.x, s.y) && SolveOne(region, occ, s.x, s.y, at, gates, seed, blocked, out rect, out moved, margin)) return true;
+            return false;
+        }
+
+        private static AmenitySpec WithSmaller(float length, float width)
+        {
+            foreach (var s in All)
+                if (s.Smaller != null && s.Smaller.Length > 0 && math.abs(s.Length - length) < 0.01f && math.abs(s.Width - width) < 0.01f) return s;
+            return null;
+        }
+
+        private static bool SolveOne(LayerRegion region, Occupancy occ, float length, float width, string at, IReadOnlyList<float2> gates,
+            uint seed, Func<float2, bool> blocked, out OrientedRect rect, out bool moved, float margin)
+        {
+            rect = default; moved = false;
             var order = new List<string> { at };
             foreach (var p in Positions) if (p != at) order.Add(p);
             for (int k = 0; k < order.Count; k++)
