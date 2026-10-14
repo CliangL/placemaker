@@ -207,10 +207,13 @@ namespace Placemaker.Core.Layers.Commercial
             if (outer > 0) mall.StreetRows(runs, outer, ctx.S("outerZone"), 3, 2);
 
             uint salt = 0xD10u;
-            foreach (var sq in squares)
+            // The four corners of a crossing: a diagonal pair of café squares (fountain, seating), the other pair garden squares.
+            for (int i = 0; i < squares.Count; i++)
             {
+                var sq = squares[i];
                 mall.Release(sq);
-                if (!mall.FillOpen(sq, "plaza", "cafe", mall.LaneDoors(sq, 6f), null, salt++, null, false)) mall.Green(sq, salt++);
+                string look = i % 4 == 0 || i % 4 == 3 ? "cafe" : "garden";
+                if (!mall.FillOpen(sq, "plaza", look, mall.LaneDoors(sq, 6f), null, salt++, null, false)) mall.Green(sq, salt++);
             }
             foreach (var p in paseos) mall.DressPaseo(p.rect, p.a, p.b, salt += 4);
         }

@@ -148,7 +148,8 @@ namespace Placemaker.Core.Layers.Commercial
                     mall.LaneRows(legs[1], innerCells, null, 1, mall.GateTrim(legs[1], true, t1), 0f, unit, math.min(innerCells, 2));
                 }
             }
-            else foreach (var lane in legs) mall.LaneRows(lane, cells, null, 0, 0f, 0f, unit, math.min(cells, 3));
+            // The horseshoe runs up the left leg, across and down: its left side (+1) is the outside all the way round.
+            else foreach (var lane in legs) mall.LaneRows(lane, cells, null, 1, 0f, 0f, unit, math.min(cells, 3));
             // Pads on the main street beside the horseshoe: small separate plots with planting between.
             if (ctx.B("pads"))
             {

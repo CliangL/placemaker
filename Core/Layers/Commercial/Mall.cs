@@ -437,7 +437,8 @@ namespace Placemaker.Core.Layers.Commercial
         /// Plans <paramref name="ring"/> with another type's planner (park, plaza, marketSquare…) and merges the result.
         /// <paramref name="doors"/>: outline points where the piece should open (a lane end, the lot) besides its own suggestions.
         /// </summary>
-        public bool Fill(float2[] ring, string layerId, string preset, IReadOnlyList<float2> doors, uint salt, bool suggested = true, Action<SettingsBag> edit = null, float doorSnap = 2.5f, Func<float2, bool> keepSuggested = null)
+        public bool Fill(float2[] ring, string layerId, string preset, IReadOnlyList<float2> doors, uint salt, bool suggested = true, Action<SettingsBag> edit = null, float doorSnap = 2.5f, Func<float2, bool> keepSuggested = null,
+            string[] childLayers = null, string[] childTargets = null, List<PlannedRegion> places = null)
         {
             var gen = GeneratorRegistry.Get(layerId) as LayerBase;
             var region = ring == null ? null : LayerRegion.From(ring);
@@ -452,6 +453,8 @@ namespace Placemaker.Core.Layers.Commercial
                 Shape = new AreaShape { Ring = Poly.To3D(ring, Ctx.G), Source = AreaSource.Drawn },
                 Site = Ctx.Site, Settings = settings, Seed = Hashing.Mix(Ctx.Seed, salt), RegionTags = new[] { RegionTags.Green },
                 Reserved = Ctx.Input.Reserved, Markers = new List<EdgeMarker>(),
+                // (s32) Features the caller will plan itself: the planner carves their places (playground clearing, plaza).
+                ChildLayers = childLayers ?? Array.Empty<string>(), ChildTargets = childTargets ?? Array.Empty<string>(),
             };
             string kind = null;
             if (suggested)
@@ -483,6 +486,7 @@ namespace Placemaker.Core.Layers.Commercial
             catch (Exception) { sub = null; }
             if (sub == null || sub.HasErrors) return false;
             // Its places / cores stay its own business: only plain green / paved tags are offered to the mall's features.
+            if (places != null) foreach (var g in sub.Regions) if (Composer.IsPlace(g)) places.Add(g);
             sub.Regions.RemoveAll(g => Composer.IsPlace(g) || Array.IndexOf(g.Tags, StreetFrontage.ShopsTag) >= 0);
             // CS2 joins nets only at identical nodes: a path ending at a door ends exactly on it (a lane's end node).
             if (doors != null)

@@ -131,16 +131,37 @@ namespace Placemaker.Core.Layers.Commercial
             if (outer > 0) mall.StreetRows(runs, outer, ctx.S("outerZone"), 3, 2);
             mall.Taken.Remove(park);
             ctx.Check();
+            // The park carves the places of its features as it would under the composer (a clearing for the playground
+            // beside a walk, a paved plaza on its axis) and they are planned into them.
+            var places = new List<PlannedRegion>();
+            var children = ctx.B("playground") ? new[] { "playground" } : new string[0];
+            var targets = ctx.B("fountain") ? new[] { Placemaker.Core.Layers.Park.ParkLayer.PlazaPlace } : new string[0];
             parked = mall.FillOpen(park, "park", ctx.S("parkStyle"), doors, null, 0x7A1u, b =>
             {
                 b.Values["fence"] = false;
                 b.Values["belt"] = false;
-            }, false);
+                // No permanent terrain paint inside a shopping block (the natural park paints its ground otherwise).
+                b.Values["naturalGround"] = false;
+                b.Values["plazaShape"] = "circle";
+                b.Values["plazaAt"] = "centre";
+            }, false, children, targets, places);
             if (!parked) parked = mall.FillOpen(park, "plaza", "green", doors, null, 0x7A2u, null, false);
             if (parked)
             {
-                if (ctx.B("fountain")) mall.AddOn(park, "fountain", 0x7A3u);
-                if (ctx.B("playground")) mall.AddOn(park, "playground", 0x7A4u);
+                uint salt = 0x7A3u;
+                foreach (var place in places)
+                {
+                    var ring = Placemaker.Core.Geometry.Poly.To2D(place.Ring);
+                    if (place.Key == Placemaker.Core.Layers.Park.ParkLayer.PlazaPlace)
+                    {
+                        ctx.Surface(ring, SurfaceRole.Plaza, new AssetRef(""), AssetCategories.SurfacePaving);
+                        mall.AddOn(ring, "fountain", salt++);
+                    }
+                    else if (place.Key.EndsWith("playground")) mall.AddOn(ring, "playground", salt++);
+                }
+                // No place carved (a small park): the features look for room themselves.
+                if (ctx.B("fountain") && !places.Exists(p => p.Key == Placemaker.Core.Layers.Park.ParkLayer.PlazaPlace)) mall.AddOn(park, "fountain", salt++);
+                if (ctx.B("playground") && !places.Exists(p => p.Key.EndsWith("playground"))) mall.AddOn(park, "playground", salt++, b => b.Values["size"] = "small");
             }
             else mall.Green(park, 0x7A5u);
         }

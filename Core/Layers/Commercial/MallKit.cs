@@ -525,7 +525,8 @@ namespace Placemaker.Core.Layers.Commercial
         /// closest point of that lane's centre line; a walk ending at the piece's edge in front of it is stretched onto
         /// it and the lane is split there (identical node), so people walk straight from the lane into the piece.
         /// </summary>
-        public bool FillOpen(float2[] ring, string layerId, string preset, IList<(Lane lane, float2 at)> laneDoors, IList<float2> doors, uint salt, Action<SettingsBag> edit = null, bool suggested = true)
+        public bool FillOpen(float2[] ring, string layerId, string preset, IList<(Lane lane, float2 at)> laneDoors, IList<float2> doors, uint salt, Action<SettingsBag> edit = null, bool suggested = true,
+            string[] childLayers = null, string[] childTargets = null, List<PlannedRegion> places = null)
         {
             var pts = new List<float2>();
             var map = new List<(Lane lane, float2 p)>();
@@ -541,7 +542,7 @@ namespace Placemaker.Core.Layers.Commercial
                 }
             if (doors != null) pts.AddRange(doors);
             int before = Ctx.Plan.Nets.Count;
-            if (!Fill(ring, layerId, preset, pts, salt, suggested, edit, snap, Arrival)) return false;
+            if (!Fill(ring, layerId, preset, pts, salt, suggested, edit, snap, Arrival, childLayers, childTargets, places)) return false;
             for (int k = before; k < Ctx.Plan.Nets.Count; k++)
             {
                 var n = Ctx.Plan.Nets[k];
