@@ -77,11 +77,12 @@ namespace Placemaker.Game.Tool
                     if (_brushSquare) h.Add(new HintInfo("Placemaker.Hint.PaintRotate", "Shift"));
                     break;
                 case SelectionMode.BlockPaint:
-                    h.Add(new HintInfo(!BlockPaintHasTarget ? "Placemaker.Hint.BlockPaintStart" : "Placemaker.Hint.BlockPaintPaint"));
+                    var rules = BrushRules;
+                    h.Add(new HintInfo(!rules.Roads ? "Placemaker.Hint.PaintPaint" : !BlockPaintHasTarget ? "Placemaker.Hint.BlockPaintStart" : "Placemaker.Hint.BlockPaintPaint"));
                     h.Add(new HintInfo("Placemaker.Hint.BlockPaintErase"));
                     if (_brushSquare) h.Add(new HintInfo("Placemaker.Hint.PaintRotate", "Shift"));
                     if (BlockPaintCurrent?.Obstacles.Count > 0) h.Add(new HintInfo("Placemaker.Hint.BlockPaintBlocked"));
-                    if (BlockPaintHasTarget) h.Add(new HintInfo("Placemaker.Hint.BlockPaintNewBlock"));
+                    if (BlockPaintHasTarget && rules.Roads) h.Add(new HintInfo("Placemaker.Hint.BlockPaintNewBlock"));
                     break;
             }
             if (_history.CanUndo) h.Add(new HintInfo("Placemaker.Hint.Undo", "Ctrl", "Z"));
@@ -112,6 +113,7 @@ namespace Placemaker.Game.Tool
                 BrushSquare = _brushSquare,
                 BrushSize = _brushSize,
                 BrushAngle = _brushAngle,
+                BrushRules = BrushRules,
                 AreaValid = _shape != null && facts.AreaProblem == null,
                 AreaClosed = AreaClosed,
                 PointCount = PointCount,

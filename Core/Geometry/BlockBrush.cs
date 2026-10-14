@@ -89,14 +89,28 @@ namespace Placemaker.Core.Geometry
         /// <summary>Open-land fallback (no closed block): Block is a square work box, roads are obstacles.</summary>
         public bool IsOpen { get; private set; }
         /// <summary>Nothing in this block can be painted (all zoned / built / under water, or no block).</summary>
-        public bool Full => Allowed.IsEmpty;
+        public bool Full => !Unconstrained && Allowed.IsEmpty;
         /// <summary>Gap (m) between paint and the curb/an obstacle that is closed by pulling the edge onto it.</summary>
-        public float SnapDistance => 1.5f * CellSize;
+        private float _snap = -1f;
+        /// <remarks>Default 1.5 cells (6 m); 0 = no snapping (paint edges are only clipped). Set before the first Outline.</remarks>
+        public float SnapDistance
+        {
+            get => _snap >= 0f ? _snap : 1.5f * CellSize;
+            set { _snap = float.IsNaN(value) ? -1f : math.clamp(value, 0f, 30f); _forbidden = null; }
+        }
+        /// <summary>Moving-average passes for the painted outline (0–6; Paint uses 6).</summary>
+        public int Smoothing { get; set; } = SmoothPasses;
+        /// <summary>Nothing to stop at (all brush rules off): behaves exactly like Paint — no fence, Paint's outline.</summary>
+        public bool Unconstrained { get; private set; }
 
         public bool Contains(float2 p) => Block.Length >= 3 && Poly.Contains(Block, p);
 
         /// <summary>Half side (m) of the open-land work box around the first stroke.</summary>
         public const float OpenHalfSize = 300f;
+
+        /// <summary>No rule left to stop at: an unfenced brush whose outline is exactly Paint's.</summary>
+        public static BlockBrush Free(float2 start, float cellSize = BrushMask.DefaultCellSize) =>
+            new BlockBrush(null, null, cellSize) { IsOpen = true, Unconstrained = true };
 
         /// <summary>
         /// Fallback where the cursor is not inside a closed block (open land, dead-end roads, unfinished
@@ -106,23 +120,23 @@ namespace Placemaker.Core.Geometry
         /// road never paints the far side. <see cref="Full"/> when the centre itself cannot be painted.
         /// </summary>
         public static BlockBrush Open(float2 centre, IEnumerable<IReadOnlyList<float2>> obstacles,
-            float cellSize = BrushMask.DefaultCellSize, Func<float2, bool> blockedAt = null, float halfSize = OpenHalfSize)
+            float cellSize = BrushMask.DefaultCellSize, Func<float2, bool> blockedAt = null, float halfSize = OpenHalfSize, bool keepSide = true)
         {
             halfSize = math.max(10f, halfSize);
             var box = new[] { centre + new float2(-halfSize, -halfSize), centre + new float2(halfSize, -halfSize),
                               centre + new float2(halfSize, halfSize), centre + new float2(-halfSize, halfSize) };
             var b = new BlockBrush(box, obstacles, cellSize, blockedAt) { IsOpen = true };
-            b.Allowed = b.Allowed.ConnectedComponent(centre);
+            if (keepSide) b.Allowed = b.Allowed.ConnectedComponent(centre);
             return b;
         }
 
         /// <summary>True if the cell under p may be painted.</summary>
-        public bool CanPaintAt(float2 p) => Allowed.IsPaintedAt(p);
+        public bool CanPaintAt(float2 p) => Unconstrained || Allowed.IsPaintedAt(p);
 
         /// <summary>Fences a paint mask to this block (painting outside the allowed cells does nothing).</summary>
         public void Attach(BrushMask paint)
         {
-            if (paint != null) paint.Limit = Allowed;
+            if (paint != null) paint.Limit = Unconstrained ? null : Allowed;
         }
 
         /// <summary>Removes painted cells outside the allowed cells (e.g. after the obstacles changed).</summary>
@@ -178,10 +192,17 @@ namespace Placemaker.Core.Geometry
         /// </summary>
         public BlockBrushOutline Outline(BrushMask paint, float minArea = 100f)
         {
-            if (paint == null || paint.IsEmpty || Block.Length < 3) return null;
+            if (paint == null || paint.IsEmpty) return null;
+            if (Unconstrained)
+            {
+                // Exactly Paint's outline (largest island, holes filled), with this brush's smoothing.
+                var free = paint.Outlines(keepIslands: false, keepHoles: false, minIslandArea: minArea, smoothPasses: Smoothing);
+                return free.Count == 0 ? null : new BlockBrushOutline { Ring = free[0].Outer };
+            }
+            if (Block.Length < 3) return null;
             // Light smoothing: Paint's 6 passes shrink a 30 m stroke by a third; the curb and obstacle
             // sides are made exact below anyway, so only the free edges need de-stairing.
-            var smooth = paint.Outlines(keepIslands: false, keepHoles: false, minIslandArea: minArea, smoothPasses: SmoothPasses);
+            var smooth = paint.Outlines(keepIslands: false, keepHoles: false, minIslandArea: minArea, smoothPasses: Smoothing);
             if (smooth.Count == 0) return null;
             var painted = smooth[0].Outer;
             var allowed = AllowedRegions;
@@ -196,13 +217,17 @@ namespace Placemaker.Core.Geometry
                 // corners). Limited to the paint's neighbourhood so narrow unpainted strips elsewhere
                 // (between two zoned rows, say) are not swept in. Then clip exactly to block − obstacles.
                 float r = 0.5f * SnapDistance;
-                var rings = new List<IReadOnlyList<float2>> { painted };
-                rings.AddRange(Forbidden());
-                var joined = Poly.Boolean(rings, null, BoolOp.Union, FillRule.Positive);
-                var closed = Poly.Offset(Poly.Offset(joined, -r, OffsetJoin.Round, 4f, 0.2f), r, OffsetJoin.Round, 4f, 0.2f);
-                var near = Poly.Offset(new Region(painted), -(SnapDistance + CellSize), OffsetJoin.Round, 4f, 0.5f);
-                var inside = Poly.Boolean(closed, allowed, BoolOp.Intersection);
-                pieces = near.Count > 0 ? Poly.Boolean(inside, near, BoolOp.Intersection) : inside;
+                if (r <= 0.01f) pieces = Poly.Boolean(new[] { new Region(painted) }, allowed, BoolOp.Intersection);   // snapping off
+                else
+                {
+                    var rings = new List<IReadOnlyList<float2>> { painted };
+                    rings.AddRange(Forbidden());
+                    var joined = Poly.Boolean(rings, null, BoolOp.Union, FillRule.Positive);
+                    var closed = Poly.Offset(Poly.Offset(joined, -r, OffsetJoin.Round, 4f, 0.2f), r, OffsetJoin.Round, 4f, 0.2f);
+                    var near = Poly.Offset(new Region(painted), -(SnapDistance + CellSize), OffsetJoin.Round, 4f, 0.5f);
+                    var inside = Poly.Boolean(closed, allowed, BoolOp.Intersection);
+                    pieces = near.Count > 0 ? Poly.Boolean(inside, near, BoolOp.Intersection) : inside;
+                }
             }
             catch (Exception)
             {

@@ -8,6 +8,8 @@ import {
     Issue, Summary, ToolState,
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
+
+const DEFAULT_BRUSH_RULES = { roads: true, buildings: true, lots: true, zoned: true, emptyZones: false, water: true, stayInBlock: true, snap: 6, smoothing: 1 };
 import { addStrings } from "../cs2/l10n";
 import { BLOCKS, blocksRing, Block, cellsOutline, NODES, paintCells } from "./city";
 import { FAKE_FEATURES, FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, FeatureDef, MockLayer, MockRecipe, MORE_TYPES, RecipeTemplate } from "./fakeCatalog";
@@ -81,6 +83,8 @@ export class MockBackend {
     stage: Stage = "area";
     mode: AreaMode = "draw";
     brush = { shape: "round" as BrushShape, size: 40, angle: 0 };
+    // Block paint brush rules (C# defaults); the mock has no obstacles, they are only shown and toggled.
+    brushRules = { ...DEFAULT_BRUSH_RULES };
     userCollapsed: boolean | null = null;
     anarchy = { available: true, enabled: false };
     money = 250000;
@@ -576,6 +580,12 @@ export class MockBackend {
                 break;
             case "setBrush":
                 this.brush = { shape: a[0], size: Number(a[1]), angle: Number(a[2]) };
+                break;
+            case "setBrushRules":
+                try { this.brushRules = { ...this.brushRules, ...JSON.parse(String(a[0])) }; } catch { /* ignore */ }
+                break;
+            case "resetBrushRules":
+                this.brushRules = { ...DEFAULT_BRUSH_RULES };
                 break;
             case "clearArea":
                 this.edit({ key: "Placemaker.Undo.ClearArea" }, () => {
@@ -1383,7 +1393,7 @@ export class MockBackend {
             stage: this.stage,
             reachable: this.reachable(),
             areaMode: this.mode,
-            brush: this.brush,
+            brush: { ...this.brush, rules: this.brushRules },
             area: {
                 valid: this.areaValid(),
                 closed: this.closed,

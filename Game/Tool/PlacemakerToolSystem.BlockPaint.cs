@@ -35,7 +35,7 @@ namespace Placemaker.Game.Tool
             public float3[] Block;
             public BlockBrush Brush;
             public List<float3[]> Obstacles = new List<float3[]>();
-            public bool EmptyZones;
+            public BrushRules Rules;
             public int IgnoreGroup;
             public float BuiltAt;
         }
@@ -58,7 +58,21 @@ namespace Placemaker.Game.Tool
         private bool IsCurrentTarget(BlockPaintContext c) =>
             _bpOpen ? c.Open && math.all(c.Seed == _bpSeed) : !c.Open && BlockPaintState.SameFace(c.Face, _bpFace);
 
-        private bool BlockPaintAvoidEmptyZones => _settings != null && _settings.BlockPaintAvoidEmptyZones;
+        /// <summary>The player's brush rules (Options / the panel's Rules row); plain Paint never reads them.</summary>
+        public BrushRules BrushRules => _settings != null ? _settings.GetBrushRules() : BrushRules.Defaults();
+
+        public void SetBrushRules(BrushRules rules)
+        {
+            if (rules == null) return;
+            rules = rules.Normalized();
+            if (rules.Equals(BrushRules)) return;
+            if (_settings != null) { _settings.SetBrushRules(rules); _settings.ApplyAndSave(); }
+            // The fence and the outline depend on the rules: rebuild them (not an undo step — it is a setting).
+            if (_mode == SelectionMode.BlockPaint && !_bpMask.IsEmpty) ShapeChanged();
+            Touch();
+        }
+
+        public void ResetBrushRules() => SetBrushRules(BrushRules.Defaults());
 
         /// <summary>A new stroke at p continues the current selection (same block / same side of the roads).</summary>
         private static bool Continues(BlockPaintContext c, float2 p) =>
@@ -92,7 +106,7 @@ namespace Placemaker.Game.Tool
             }
 
             // Hover: the block a new stroke would paint in (only looked up when the cursor leaves it).
-            if (_in.HasHit)
+            if (_in.HasHit && BrushRules.StayInBlock)
             {
                 bool inCurrent = Continues(BlockPaintCurrent, _in.Hit.xz);
                 bool inHover = _hoverFace?.Area != null && Poly.Contains(_hoverFace.Area.Ring2D(), _in.Hit.xz);
@@ -137,8 +151,10 @@ namespace Placemaker.Game.Tool
             var cur = EnsureBlockPaintContext(false);
             if (!Continues(cur, p))
             {
-                var face = _hoverFace != null && _hoverFace.Area != null && Poly.Contains(_hoverFace.Area.Ring2D(), p)
-                    ? _hoverFace : PickFace(p, out _hoverFaceProblem);
+                // "Stay in one block" off: never lock to a block, only the stops limit the brush.
+                var face = !BrushRules.StayInBlock ? null
+                    : _hoverFace != null && _hoverFace.Area != null && Poly.Contains(_hoverFace.Area.Ring2D(), p) ? _hoverFace
+                    : PickFace(p, out _hoverFaceProblem);
                 bool switched;
                 if (face != null)
                 {
@@ -180,17 +196,17 @@ namespace Placemaker.Game.Tool
         private BlockPaintContext EnsureBlockPaintContext(bool refresh)
         {
             if (!BlockPaintHasTarget) return null;
-            bool emptyZones = BlockPaintAvoidEmptyZones;
+            var rules = BrushRules;
             var c = _bpCtx;
-            if (!refresh && c != null && IsCurrentTarget(c) && c.EmptyZones == emptyZones && c.IgnoreGroup == _editingGroup)
+            if (!refresh && c != null && IsCurrentTarget(c) && rules.Equals(c.Rules) && c.IgnoreGroup == _editingGroup)
             {
                 if (_bpMask.Limit != c.Brush.Allowed) c.Brush.Attach(_bpMask);
                 return c;
             }
             _bpObstacles ??= new BlockObstacles(EntityManager, World);
-            c = _bpOpen ? BuildOpenContext(emptyZones) : BuildBlockContext(emptyZones);
+            c = _bpOpen ? BuildOpenContext(rules) : BuildBlockContext(rules);
             if (c == null) return null;
-            c.EmptyZones = emptyZones;
+            c.Rules = rules;
             c.IgnoreGroup = _editingGroup;
             c.BuiltAt = UnityEngine.Time.realtimeSinceStartup;
             _bpCtx = c;
@@ -198,7 +214,7 @@ namespace Placemaker.Game.Tool
             return c;
         }
 
-        private BlockPaintContext BuildBlockContext(bool emptyZones)
+        private BlockPaintContext BuildBlockContext(BrushRules rules)
         {
             AreaShape area;
             try { area = _roads.BuildArea(_bpFace, AreaSource.Painted); }
@@ -207,10 +223,13 @@ namespace Placemaker.Game.Tool
 
             var ring = area.Ring2D();
             Poly.Bounds(ring, out var min, out var max);
-            var obstacles = _bpObstacles.Gather(min - 1f, max + 1f, emptyZones, _editingGroup);
-            var water = _bpObstacles.Water(min, max, _bpMask.CellSize);
+            var obstacles = _bpObstacles.Gather(min - 1f, max + 1f, _editingGroup);
+            var water = rules.Water ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
+            // A block target was chosen with the lock on: keep it a block even if the lock is switched off since.
+            var blockRules = rules.Clone();
+            blockRules.StayInBlock = true;
             BlockBrush brush;
-            try { brush = new BlockBrush(ring, obstacles, _bpMask.CellSize, water); }
+            try { brush = blockRules.Build(Poly.Centroid(ring), ring, obstacles, water, _bpMask.CellSize); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint fence failed: " + e.Message); return null; }
 
             var c = new BlockPaintContext { Face = new List<HalfEdge>(_bpFace), Block = area.Ring, Brush = brush };
@@ -220,11 +239,11 @@ namespace Placemaker.Game.Tool
             return c;
         }
 
-        private BlockPaintContext BuildOpenContext(bool emptyZones)
+        private BlockPaintContext BuildOpenContext(BrushRules rules)
         {
             float h = BlockBrush.OpenHalfSize + 1f;
             float2 min = _bpSeed - h, max = _bpSeed + h;
-            var obstacles = _bpObstacles.Gather(min, max, emptyZones, _editingGroup);
+            var obstacles = _bpObstacles.Gather(min, max, _editingGroup);
             // Road footprints up to the curb: centre curve ± half the composition width (sidewalks included),
             // round caps over the nodes — the same corridors Keep-off-roads uses, without its extra margin.
             try
@@ -235,13 +254,13 @@ namespace Placemaker.Game.Tool
                 {
                     var ring = new float2[r.Count];
                     for (int i = 0; i < ring.Length; i++) ring[i] = r[i];
-                    obstacles.Add(ring);
+                    obstacles.Add(new BrushObstacle(BrushObstacleKind.Road, ring));
                 }
             }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read roads: " + e.Message); }
-            var water = _bpObstacles.Water(min, max, _bpMask.CellSize);
+            var water = rules.Water ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
             BlockBrush brush;
-            try { brush = BlockBrush.Open(_bpSeed, obstacles, _bpMask.CellSize, water); }
+            try { brush = rules.Build(_bpSeed, null, obstacles, water, _bpMask.CellSize); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint fence failed: " + e.Message); return null; }
 
             var c = new BlockPaintContext { Face = new List<HalfEdge>(), Open = true, Seed = _bpSeed, Block = null, Brush = brush };

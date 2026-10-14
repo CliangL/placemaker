@@ -15,6 +15,19 @@ export type Stage = "area" | "design" | "review" | "building" | "manage";
 export type AreaMode = "draw" | "block" | "paint" | "perimeter" | "blockPaint";
 export type BrushShape = "round" | "square";
 
+/** Block paint brush rules (s11; plain Paint ignores them). Persisted in the mod settings. */
+export interface BrushRules {
+  roads: boolean;        // stop at the curb, keep the stroke's side of a road
+  buildings: boolean;
+  lots: boolean;         // parks, other Placemaker areas, other lots
+  zoned: boolean;
+  emptyZones: boolean;   // the empty zone grid along roads
+  water: boolean;
+  stayInBlock: boolean;  // lock a stroke to the closed block it starts in
+  snap: number;          // m, 0 = off (default 6)
+  smoothing: number;     // 0–6 passes (default 1; Paint uses 6)
+}
+
 export interface LocText { key: string; args?: (string | number)[] }
 
 export interface PrimaryAction {
@@ -49,7 +62,8 @@ export interface ToolState {
   /** Stages the player may jump to right now (others are greyed). */
   reachable: Stage[];
   areaMode: AreaMode;
-  brush: { shape: BrushShape; size: number; angle: number };
+  /** rules: sent by s11+ C# (absent = older DLL). */
+  brush: { shape: BrushShape; size: number; angle: number; rules?: BrushRules };
   area: AreaInfo;
   primary: PrimaryAction;
   canUndo: boolean;
@@ -286,6 +300,8 @@ export const Triggers = {
 
   setAreaMode: "setAreaMode",               // (mode: AreaMode)
   setBrush: "setBrush",                     // (shape: BrushShape, size: number, angle: number)
+  setBrushRules: "setBrushRules",           // (json: Partial<BrushRules> as a JSON string) — s11
+  resetBrushRules: "resetBrushRules",       // () — s11
   clearArea: "clearArea",                   // ()
 
   selectRecipe: "selectRecipe",             // (recipeId: string)

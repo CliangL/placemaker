@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import { bindValue, trigger, useValue, ValueBinding } from "cs2/api";
 import {
     AssetLists, Catalog, DesignState, FeatureFit, GROUP, ManagedGroup, Stage, StepView, Summary, ToolState, Triggers, Values,
-    AreaMode, BrushShape, SettingValue,
+    AreaMode, BrushShape, SettingValue, BrushRules,
 } from "../contract";
 
 const LOG = "[Placemaker]";
@@ -228,6 +228,8 @@ export const act = {
     redo: () => fire(Triggers.redo),
     setAreaMode: (mode: AreaMode) => fire(Triggers.setAreaMode, mode),
     setBrush: (shape: BrushShape, size: number, angle: number) => fire(Triggers.setBrush, shape, size, angle),
+    setBrushRules: (rules: Partial<BrushRules>) => fire(Triggers.setBrushRules, JSON.stringify(rules)),
+    resetBrushRules: () => fire(Triggers.resetBrushRules),
     clearArea: () => fire(Triggers.clearArea),
     selectRecipe: (id: string) => fire(Triggers.selectRecipe, id),
     focusStep: (path: string) => fire(Triggers.focusStep, path),
