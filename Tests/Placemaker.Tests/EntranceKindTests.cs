@@ -174,7 +174,7 @@ namespace Placemaker.Tests
             On("park", "playground", "picnic", "restrooms", "bigtrees", "flowerbeds", "decals");
             On("plaza", "fountain");   // art pass a2: the square plants its own trees and beds
             On("campground", "restrooms", "decals");
-            On("sportsPark", "restrooms");
+            On("sportsPark", "pitch", "tennisCourts", "basketballCourt", "playground");   // s10: the clubhouse has the toilets
             On("waterfront", "flowerbeds", "bigtrees");
             // Slow or situational features stay opt-in.
             foreach (var type in new[] { "park", "plaza", "campground", "botanicalGarden" })

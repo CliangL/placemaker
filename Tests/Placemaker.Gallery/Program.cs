@@ -46,6 +46,7 @@ namespace Placemaker.Gallery
                     case "--showcase": Renderer.Showcase = true; break;
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
+                    case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
                 }
             }
             repo ??= FindRepo();
@@ -156,6 +157,9 @@ namespace Placemaker.Gallery
 
     public static class Variants
     {
+        /// <summary>--areas 1,3,6: render every job at each of these sizes (hectares) instead of the default size.</summary>
+        public static float[] Areas;
+
         public static List<Job> All(string repo, HashSet<string> only)
         {
             var editor = new DesignEditor(GeneratorRegistry.Get);
@@ -216,6 +220,14 @@ namespace Placemaker.Gallery
                         foreach (var f in features) editor.SetFeature(r, RecipePaths.Root, f.Layer, false, 0);
                     }));
                 }
+            }
+            if (Areas != null && Areas.Length > 0)
+            {
+                var expanded = new List<Job>();
+                foreach (var j in jobs)
+                    foreach (var ha in Areas)
+                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "-" + ha.ToString("0.#", CultureInfo.InvariantCulture) + "ha", Title = j.Title + " " + ha + " ha", Recipe = j.Recipe.Clone(), TargetArea = ha * 10000f });
+                jobs = expanded;
             }
             return jobs;
         }

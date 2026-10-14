@@ -60,7 +60,16 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             float runU = math.min(2f, place.HalfLength - a - 0.6f), runV = math.min(2f, place.HalfWidth - b - 0.6f);
             FieldKit.Surface(ctx, f.Box(-a - runU, -b - runV, a + runU, b + runV), SurfaceRole.Asphalt, ctx.S("surfaceAsset"), chain);
 
-            var l = j.Lines;
+            // A full court gets the game's own court decal (28 × 15 m) when installed: one clean stamp
+            // instead of hundreds of line pieces. Compact courts (26 × 14) keep painted lines.
+            bool stamp = !compact && ctx.B("lines") && AssetAvailability.Has(AssetCategories.DecalCourtBasketball);
+            if (stamp)
+            {
+                // The decal's long side is its local X: turn it a quarter so it runs along the court.
+                ctx.Object(f.O, f.Yaw + math.PI * 0.5f, ObjectRole.Decal, new AssetRef(""), j.V(0xC0u), -1, AssetCategories.DecalCourtBasketball);
+                ctx.Plan.Facts["courtDecal"] = 1;
+            }
+            var l = stamp ? new LinePainter() : j.Lines;
             l.Box(f, -a, -b, a, b);
             l.Seg(f, 0f, -b, 0f, b);
             l.Circle(f, float2.zero, 1.8f);
