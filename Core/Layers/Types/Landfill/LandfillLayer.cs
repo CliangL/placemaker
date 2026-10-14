@@ -139,6 +139,16 @@ namespace Placemaker.Core.Layers.Types.Landfill
         /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
         private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
 
+        /// <summary>Haul roads: compacted grey gravel (vanilla ore ground as the fallback), not mud.</summary>
+        private static AssetRef HaulGround => new AssetRef("Terrain Surfaces Pack Rock gaga TTP - Smaller Pebbles grey M Surface", "Ore Surface 01");
+        /// <summary>Tipped waste: the game's own landfill ground.</summary>
+        private static AssetRef WasteGround => new AssetRef("Landfill Surface 01", "Placemaker Overlay (Landfill Surface 01)", "Oil Surface 01");
+        /// <summary>Daily cover on the tip: brown soil.</summary>
+        private static AssetRef CoverGround => new AssetRef("Terrain Surfaces Pack Ground gaga TTP - Soil M Surface", "EAI - Surface Pack Ground Mud Surface", "Oil Surface 01");
+        /// <summary>Compost windrows: dark ploughed soil.</summary>
+        private static AssetRef CompostGround => new AssetRef("Farming Surfaces & Decals Ground Haristess - 1-2 - MudPlowed1 Surface", "Farming Surfaces & Decals Ground Haristess - 1-1 - MudSoil1 Brown Surface", "Forestry Surface 01");
+        private static readonly GritAssets.Set CompostPiles = new GritAssets.Set(false, "CoalTruck01_OrePile01", "Prop_CoalTruck01_CoalPile01_Partial2|CoalTruck01_CoalPile01", "CoalTruck01_OrePile01", "Prop_CoalTruck01_OrePile01_Full|CoalTruck01_OrePile01");
+
         // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
         protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
 
@@ -275,9 +285,15 @@ namespace Placemaker.Core.Layers.Types.Landfill
             var line = new List<float2> { s.Gates.Count > 0 ? s.Gates[0].Position + s.Region.InwardNormal(s.Gates[0].Segment) * 0.3f : s.Start };
             foreach (var p in YardKit.ArcAround(startOnToe, faceToe, m.Center, math.distance(startOnToe, m.Center))) line.Add(YardKit.Inside(s.Region, p, m.Center, 4f));
             if (face) line.Add(faceTop);
-            YardKit.Haul(ctx, s.Occ, line, 8f, SurfaceRole.Ground, AssetMix.One(""), haulCat);
+            YardKit.Haul(ctx, s.Occ, line, 8f, SurfaceRole.Ground, HaulGround, haulCat);
             foreach (var p in line) s.Wet.Add(p);
 
+            // Daily-cover soil over the whole tip (the mound read as bare grass before); the face goes on top.
+            {
+                var ring = new float2[28];
+                for (int i = 0; i < ring.Length; i++) ring[i] = m.At(Dir(i * math.PI * 2f / ring.Length), 0.97f);
+                YardKit.Patch(ctx, Poly.EnsureCcw(ring), SurfaceRole.Ground, CoverGround, haulCat);
+            }
             if (face)
             {
                 // Machines on the face.
@@ -292,13 +308,20 @@ namespace Placemaker.Core.Layers.Types.Landfill
                 }
                 // Raw garbage on the face, compactors working it.
                 var fan = Fan(m, a0, half, 0.3f, 0.95f);
-                YardKit.Patch(ctx, fan, SurfaceRole.Ground, AssetMix.One(""), haulCat);
+                YardKit.Patch(ctx, fan, SurfaceRole.Ground, WasteGround, haulCat);
+                // The focal point: a refuse truck tipping at the top of the face (when the playset has one).
+                if (ctx.L("machineAssets") == null || ctx.L("machineAssets").Length == 0)
+                {
+                    var tip = m.At(Dir(a0), 0.5f);
+                    LeisureKit.Put(ctx, s.Occ, tip, LeisureKit.Yaw(tip, m.Center), ObjectRole.Furniture,
+                        new AssetRef("Prop_EU_GarbageTruck01", "Prop_NA_GarbageTruck01", "Prop_CoalTruck01"), AssetCategories.ScrapMachine, 3f, s.Salt(0x7177u), 0.5f, 0.3f);
+                }
                 var fanRegion = LayerRegion.From(fan);
                 var ids = ctx.L("garbageAssets");
                 string cat = YardKit.Cat(ctx, ids, AssetCategories.LandfillGarbage, AssetCategories.ScrapHeap);
                 if (fanRegion != null && cat != null)
                 {
-                    int wanted = (int)(fanRegion.Area / 14f * s.Fill);
+                    int wanted = (int)(fanRegion.Area / 11f * s.Fill);
                     int i = 0;
                     foreach (var p in Scatter.Candidates(fanRegion, 2.2f, s.Salt(0x6A2Bu), wanted * 4 + 40, ctx.Cancel))
                     {
@@ -561,6 +584,16 @@ namespace Placemaker.Core.Layers.Types.Landfill
                         LeisureKit.Put(ctx, s.Occ, p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Bush, AssetMix.One(""), null, 1f, v, 0.6f, 0f);
                     }
             }
+            // A gravel lane from the gate straight through the pad: the turner and the trucks use it,
+            // the windrows break for it (art pass — the rows used to run solid across the way in).
+            if (s.Gates.Count > 0)
+            {
+                var g = s.Gates[0];
+                var inward = region.InwardNormal(g.Segment);
+                var a = g.Position + inward * 0.3f;
+                var b = YardKit.Inside(region, a + inward * math.max(s.Major, s.Minor), region.Centroid, s.EdgeInset + 4f);
+                if (!region.CrossesBoundary(a, b, true)) YardKit.Haul(ctx, s.Occ, new[] { a, b }, 6f, SurfaceRole.Ground, HaulGround, dirt);
+            }
             // Windrows: long parallel rows along the main axis.
             int want = ctx.I("windrows");
             const float rowWidth = 4f, aisle = 6.5f;
@@ -573,9 +606,9 @@ namespace Placemaker.Core.Layers.Types.Landfill
                 if (s.Windrows >= want) break;
                 if (pile == null) break;
                 if (math.distance(a, b) < 14f) continue;
-                if (s.Occ.Corridors.Overlaps(math.lerp(a, b, 0.5f), 2f)) continue;
-                YardKit.Strip(ctx, a, b, rowWidth * 0.5f, SurfaceRole.Decorative, AssetMix.One(""), dirt);
-                int n = YardKit.Row(ctx, s.Occ, a, b, 2.6f, ids, pile, 1.5f, s.Salt(0x31Du + (uint)s.Windrows), 0.6f);
+                YardKit.Strip(ctx, a, b, rowWidth * 0.5f, SurfaceRole.Decorative, CompostGround, dirt);
+                // Loads 5.8 m long every 4.4 m: one continuous windrow, half the old prop count.
+                int n = WindrowRow(s, a, b, ids, pile, s.Salt(0x31Du + (uint)s.Windrows));
                 if (n == 0) continue;
                 s.Windrows++;
                 s.Dirty.Add((math.lerp(a, b, 0.5f), 4f));
@@ -594,6 +627,32 @@ namespace Placemaker.Core.Layers.Types.Landfill
                         int got = YardKit.Heap(ctx, s.Occ, spot, 5f, 16, ids, pile, 1.8f, s.Salt(0xF2u + (uint)k));
                         if (got > 0) { s.Piles++; s.Dirty.Add((spot, 5f)); s.Shapes.Add(new Mound { Center = spot, Radius = 6f, Height = 1.5f, Flat = 0.3f }); }
                     }
+        }
+
+        private static int WindrowRow(Site s, float2 a, float2 b, string[] ids, string pile, uint salt)
+        {
+            if (ids != null && ids.Length > 0) return YardKit.Row(s.Ctx, s.Occ, a, b, 2.6f, ids, pile, 1.5f, salt, 0.6f);
+            int n = 0, i = 0;
+            float yaw = LeisureKit.Yaw(a, b);
+            foreach (var p in LeisureKit.Along(a, b, 4.4f))
+            {
+                uint v = Hashing.Mix(salt, (uint)i++);
+                if (!s.Occ.Free(p, 1.5f, 0.4f, -0.2f) || s.Occ.Corridors.Overlaps(p, 2.8f)) continue;
+                s.Ctx.Object(p, yaw + (Hashing.Unit(v) - 0.5f) * 0.12f, ObjectRole.Furniture, GritAssets.Ref(CompostPiles, v), v, -1, pile);
+                s.Occ.Take(p, 1.5f, YardKit.KindStuff);
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>Bays only along the back half of the outline (the gate side stays open for trucks).</summary>
+        private static System.Func<float2, bool> BackHalf(Site s)
+        {
+            if (s.Gates.Count == 0) return null;
+            var g = s.Gates[0].Position;
+            float far = 0f;
+            foreach (var v in s.Region.Ring) far = math.max(far, math.distance(v, g));
+            return c => math.distance(c, g) > far * 0.55f;
         }
 
         private static void Recycling(Site s)
@@ -642,11 +701,11 @@ namespace Placemaker.Core.Layers.Types.Landfill
                 }
             // Material bays round the fence: bales, scrap, glass, garbage, pallets.
             string[] cycle = { AssetCategories.LandfillBale, AssetCategories.ScrapHeap, AssetCategories.LandfillSkip, AssetCategories.LandfillGarbage, AssetCategories.ScrapPallet, AssetCategories.ScrapTire };
-            YardKit.Bays(ctx, s.Occ, s.EdgeInset, 9f, 9f, s.Gates, 14f, null, (i, c, inward, hl, hw) =>
+            YardKit.Bays(ctx, s.Occ, s.EdgeInset, 9f, 9f, s.Gates, 14f, BackHalf(s), (i, c, inward, hl, hw) =>
             {
                 string cat = YardKit.CatQuiet(cycle[i % cycle.Length], AssetCategories.LandfillBale, AssetCategories.ScrapHeap);
                 if (cat == null) return;
-                int got = YardKit.Heap(ctx, s.Occ, c - inward * hw * 0.15f, math.min(hl, hw) * 0.75f, 10, null, cat, 1.3f, s.Salt(0xBA0u + (uint)i));
+                int got = YardKit.Heap(ctx, s.Occ, c - inward * hw * 0.15f, math.min(hl, hw) * 0.75f, 7, null, cat, 1.6f, s.Salt(0xBA0u + (uint)i));
                 if (cat == AssetCategories.LandfillBale) s.Bales += got;
                 if (cat == AssetCategories.LandfillGarbage) s.Garbage += got;
                 s.Dirty.Add((c, hw));
@@ -751,7 +810,8 @@ namespace Placemaker.Core.Layers.Types.Landfill
         {
             if (per100 <= 0f) return;
             var ctx = s.Ctx;
-            int total = (int)(s.Region.Area / 100f * per100);
+            // Art pass: capped at ~110 decals per hectare (flytip used to stamp 280).
+            int total = (int)math.min(s.Region.Area / 100f * per100, s.Region.Area / 10000f * 110f);
             string dirt = YardKit.CatQuiet(AssetCategories.DecalLitter, AssetCategories.DecalDirt, AssetCategories.Decal);
             string puddle = YardKit.CatQuiet(AssetCategories.DecalPuddles, AssetCategories.DecalDirt);
             if (dirt == null && puddle == null) { AssetAvailability.Require(ctx.Plan, AssetCategories.DecalDirt, null, Keys.Category(AssetCategories.DecalDirt)); return; }
