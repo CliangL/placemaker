@@ -17,6 +17,8 @@ namespace Placemaker.Core.Layers.Roads
     {
         public const string Pattern = "pattern";
         public const string StreetAsset = "streetAsset";
+        /// <summary>(s16) Road mix: writes the road-type picks + upgrades; derived back from them (RoadMixes).</summary>
+        public const string RoadMix = "roadMix";
 
         // Grid
         public const string GridSpacing = "gridSpacing";
@@ -91,6 +93,8 @@ namespace Placemaker.Core.Layers.Roads
         public const string AvenueAsset = "avenueAsset";
         public const string RoundaboutAsset = "roundaboutAsset";
         public const string PathAsset = "pathAsset";
+        /// <summary>(s16) Road of the perimeter loop; "" = the street road.</summary>
+        public const string PerimeterAsset = "perimeterAsset";
         public const string EdgeDepth = "edgeDepth";
 
         // Upgrades
@@ -136,6 +140,15 @@ namespace Placemaker.Core.Layers.Roads
             // Pattern options are text choices: no "placemaker" coui host exists and vanilla has no
             // pattern icons. Bundled icons are requested in docs/proposals/roads.md.
             c.Add(pattern);
+            var mix = Choice(RoadsIds.RoadMix, ControlTier.Essential, "roadTypes", RoadMixes.Automatic, RoadMixes.Values());
+            foreach (var o in mix.Options)
+            {
+                var m = RoadMixes.Find(o.Value);
+                o.DetailKey = OptionLabel(RoadsIds.RoadMix, o.Value) + ".Detail";
+                if (m != null) o.Swatch = RoadMixes.Swatch(m);
+            }
+            mix.DescriptionKey = Description(RoadsIds.RoadMix);
+            c.Add(mix);
             c.Add(Asset(RoadsIds.StreetAsset, ControlTier.Essential, "roadTypes", AssetCategories.Road));
 
             c.Add(Slider(RoadsIds.GridSpacing, ControlTier.Essential, "layout", 60, 300, 10, "m", 100, "pattern=grid"));
@@ -206,6 +219,7 @@ namespace Placemaker.Core.Layers.Roads
             c.Add(Asset(RoadsIds.AvenueAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
             c.Add(Asset(RoadsIds.RoundaboutAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
             c.Add(Asset(RoadsIds.PathAsset, ControlTier.More, "roadTypes", AssetCategories.Pathway, "pattern=superblock"));
+            c.Add(Asset(RoadsIds.PerimeterAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
             c.Add(Choice(RoadsIds.CapStyle, ControlTier.More, "culDeSacs", "asphalt", new[] { "none", "asphalt", "grass", "trees" }));
             c.Add(Choice(RoadsIds.CapSize, ControlTier.More, "culDeSacs", "auto", new[] { "auto", "small", "medium", "large", "xl" }));
             c.Add(Slider(RoadsIds.EdgeDepth, ControlTier.More, "frontage", 16, 64, 8, "m", 48, ""));
@@ -224,7 +238,7 @@ namespace Placemaker.Core.Layers.Roads
             foreach (var ctl in c)
             {
                 // Pattern geometry needs a full re-plan; asset/upgrade/cap choices keep the layout.
-                ctl.Cheap = ctl.Kind == ControlKind.Asset || ctl.Group == "streetUpgrades"
+                ctl.Cheap = ctl.Kind == ControlKind.Asset || ctl.Group == "streetUpgrades" || ctl.Id == RoadsIds.RoadMix
                     || ctl.Id == RoadsIds.CapStyle || ctl.Id == RoadsIds.CapSize;
             }
             return c;
@@ -268,9 +282,13 @@ namespace Placemaker.Core.Layers.Roads
             return s;
         }
 
+        /// <summary>(s16) Visible one-line "what is this role" text under a control.</summary>
+        public static string Description(string id) => KeyPrefix + "Control." + id + ".Description";
+
         private static ControlSchema Asset(string id, ControlTier tier, string group, string category, string visibleWhen = "")
         {
             var s = Base(id, ControlKind.Asset, tier, group, visibleWhen, null);
+            s.DescriptionKey = Description(id);
             s.Default = "";
             s.AssetCategory = category;
             return s;

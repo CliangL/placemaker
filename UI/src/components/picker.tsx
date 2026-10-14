@@ -22,6 +22,8 @@ export interface PickerRequest {
     selected: string[];
     onPick: (ids: string[]) => void;
     allowAutomatic: boolean;
+    /** s16: what Automatic places right now (the latest plan's pick), shown on the Automatic tile. */
+    autoItem?: AssetItem;
     /** Live map preview of what the value would become if the hovered tile were clicked. */
     onPreview?: (ids: string[]) => void;
     /** Stop previewing: the value goes back to `committed` (what is actually chosen now). */
@@ -410,9 +412,13 @@ export const AssetPickerCard = ({ req, onClose }: { req: PickerRequest; onClose:
                                         pick("");
                                     }}
                                 >
-                                    <AutoMosaic items={pool} size={thumbSize} />
+                                    {req.autoItem ? <Thumb item={req.autoItem} size={thumbSize} /> : <AutoMosaic items={pool} size={thumbSize} />}
                                     <div className={s.tileName}>
-                                        {req.mode === "multi" ? t("Placemaker.UI.Picker.AutoMix", "Auto mix") : t("Placemaker.UI.Picker.Auto", "Automatic")}
+                                        {req.mode === "multi"
+                                            ? t("Placemaker.UI.Picker.AutoMix", "Auto mix")
+                                            : req.autoItem
+                                              ? t("Placemaker.UI.Picker.AutoIs", "Automatic · {0}", [req.autoItem.name || req.autoItem.id])
+                                              : t("Placemaker.UI.Picker.Auto", "Automatic")}
                                     </div>
                                 </button>
                             ) : null}

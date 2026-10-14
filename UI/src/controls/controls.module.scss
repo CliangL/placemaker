@@ -341,6 +341,167 @@
     width: auto;
 }
 
+// ── s16: control descriptions, option cards with generated swatches, resolved Automatic ──
+.description {
+    margin-top: -2rem;
+    margin-bottom: 3rem;
+    padding-right: 28rem;
+    font-size: $fs-s;
+    color: $c-text-faint;
+}
+
+.cards {
+    @include row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    min-width: 0;
+    justify-content: flex-start;
+}
+
+.card {
+    @include row;
+    @include button-reset;
+    width: 49%;
+    min-width: 0;
+    margin-right: 1%;
+    margin-bottom: 3rem;
+    padding: 3rem 5rem 3rem 3rem;
+    border-radius: $radius;
+    background-color: $c-surface;
+    @include border(1rem, rgba(255, 255, 255, 0));
+    color: $c-text-dim;
+    text-align: left;
+}
+
+.card:hover {
+    background-color: $c-surface-hover;
+}
+
+.cardOn {
+    background-color: rgba(255, 255, 255, 0.16);
+    @include border-color(rgba(143, 227, 255, 0.7));
+    color: #ffffff;
+}
+
+.cardText {
+    @include col;
+    align-items: flex-start;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 6rem;
+}
+
+.cardLabel {
+    font-size: $fs;
+    @include ellipsis;
+    max-width: 100%;
+}
+
+.cardDetail {
+    font-size: 11rem;
+    color: $c-text-faint;
+    max-width: 100%;
+}
+
+.swatch {
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: $radius-s;
+    background-color: #3b4148;
+}
+
+.swatchNone {
+    @include row;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 34rem;
+    height: 34rem;
+    border-radius: $radius-s;
+    background-color: $c-surface;
+}
+
+.swatchBar {
+    position: absolute;
+    @include border(1rem, rgba(0, 0, 0, 0.35));
+}
+
+.swatchBike {
+    position: absolute;
+    left: 30%;
+    top: 30%;
+    width: 40%;
+    height: 40%;
+    background-color: #3fa34d;
+}
+
+.autoThumb {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.autoBadge {
+    @include row;
+    justify-content: center;
+    position: absolute;
+    right: -3rem;
+    bottom: -3rem;
+    width: 13rem;
+    height: 13rem;
+    border-radius: 7rem;
+    background-color: #1e2a33;
+}
+
+// Road legend of the latest plan (s16): "■ Street · Two-Lane Road · 1.2 km".
+.legend {
+    @include col;
+    align-items: stretch;
+    margin: 2rem 0 6rem 0;
+    padding: 5rem 7rem;
+    border-radius: $radius;
+    background-color: $c-surface;
+}
+
+.legendTitle {
+    font-size: $fs-s;
+    color: $c-text-faint;
+    margin-bottom: 2rem;
+}
+
+.legendRow {
+    @include row;
+    min-width: 0;
+    height: 18rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+}
+
+.legendSwatch {
+    flex-shrink: 0;
+    width: 14rem;
+    height: 5rem;
+    margin-right: 6rem;
+    border-radius: 2rem;
+}
+
+.legendRole {
+    flex-shrink: 0;
+    color: #ffffff;
+}
+
+.legendText {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 4rem;
+    @include ellipsis;
+}
+
+.legendLen {
+    flex-shrink: 0;
+    margin-left: 6rem;
+    color: $c-text-faint;
+}
+
 // s15 — disabled with reason: the control is shown (so the player knows it exists) but greyed out; the reason
 // is the label's tooltip. The editor takes no clicks.
 .rowDisabled {

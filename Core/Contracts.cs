@@ -337,6 +337,25 @@ namespace Placemaker.Core
         public string LabelKey = "";
         public string Icon = "";      // coui:// path or "" for text only
         public string TooltipKey = "";
+        /// <summary>(s16) One visible line under the option label ("Streets: Two-Lane Road · Avenues: Four-Lane Road"); "" = none.</summary>
+        public string DetailKey = "";
+        /// <summary>(s16) Tiny generated picture of the option: stripes drawn by role in their colours and relative widths. Empty = none.</summary>
+        public List<OptionSwatch> Swatch = new List<OptionSwatch>();
+    }
+
+    /// <summary>(s16) One stripe of an option swatch (e.g. a road mix: the street, avenue and local road it places).</summary>
+    public sealed class OptionSwatch
+    {
+        /// <summary>Role id ("street", "avenue", "local", "roundabout", "perimeter", "carFree").</summary>
+        public string Role = "";
+        /// <summary>CSS hex colour, "#rrggbb".</summary>
+        public string Color = "";
+        /// <summary>Real width in metres (the UI scales stripes relative to each other).</summary>
+        public float Width;
+        /// <summary>Street trees / green verges on this road (drawn as a green edge).</summary>
+        public bool Green;
+        /// <summary>Bike lanes on this road.</summary>
+        public bool Bike;
     }
 
     /// <summary>Declarative description of one control. The UI renders controls purely from this.</summary>
@@ -348,6 +367,8 @@ namespace Placemaker.Core
         public string Group = "";        // section id within the tier, e.g. "layout", "planting"
         public string LabelKey = "";
         public string TooltipKey = "";
+        /// <summary>(s16) Plain one-line explanation shown under the label (what the control is FOR); "" = none.</summary>
+        public string DescriptionKey = "";
         public string Icon = "";
         public double Min, Max = 1, Step = 1;
         public string Unit = "";         // "m", "%", "deg", "count", "money"…
@@ -456,6 +477,32 @@ namespace Placemaker.Core
         public string TooltipKey = "";
     }
 
+    /// <summary>
+    /// (s16) Optional: a generator whose controls are linked — one control writes several others (a road
+    /// "mix" sets every road-type pick) and its own value is derived from them (any other combination
+    /// reads "custom"). DesignEditor calls it after every value change; UiModels derives before display.
+    /// </summary>
+    public interface ILinkedControls
+    {
+        /// <summary>
+        /// <paramref name="controlId"/> was just set in <paramref name="settings"/>: write the controls it
+        /// drives and return their ids (they get locked like the control itself). Empty = nothing linked.
+        /// </summary>
+        string[] OnValueSet(SettingsBag settings, string controlId);
+        /// <summary>Recomputes derived controls (e.g. the mix matching the current picks) in place.</summary>
+        void Derive(SettingsBag settings);
+    }
+
+    /// <summary>
+    /// (s16) Optional: what Automatic WOULD place for an asset control the current plan does not use (an
+    /// avenue road in a layout without avenues), best first. The panel shows it as "Automatic · Four-Lane
+    /// Road" marked "not in this layout", so the player knows what a pattern change will bring.
+    /// </summary>
+    public interface IAutoAssetHints
+    {
+        string[] AutoCandidates(string controlId, SettingsBag settings);
+    }
+
     /// <summary>(s15) Something the player can see but not use right now, and why (shown greyed with this reason).</summary>
     public sealed class Unavailable
     {
@@ -561,6 +608,8 @@ namespace Placemaker.Core
         public float3[] Ring = Array.Empty<float3>();
         public SurfaceRole Role;
         public AssetRef Asset;
+        /// <summary>(s16) Asset control (ControlSchema.Id) that chose this asset, or null: lets the panel say what "Automatic" became.</summary>
+        public string Control;
         /// <summary>Asset category for automatic resolution, or null/"" = the role's default (RoleCategories.ForSurface).</summary>
         public string Category;
     }
@@ -579,6 +628,8 @@ namespace Placemaker.Core
         public float3 A, B, C, D;
         public NetRole Role;
         public AssetRef Asset;
+        /// <summary>(s16) Asset control (ControlSchema.Id) that chose this asset, or null: lets the panel say what "Automatic" became.</summary>
+        public string Control;
         /// <summary>Connect this end to an existing net (BoundaryAttachment/NearbyNet ExternalId) instead of a free node.</summary>
         public long StartAttach = -1, EndAttach = -1;
         public float StartAttachT, EndAttachT;
@@ -610,6 +661,8 @@ namespace Placemaker.Core
         public float Yaw;
         public ObjectRole Role;
         public AssetRef Asset;
+        /// <summary>(s16) Asset control (ControlSchema.Id) that chose this asset, or null: lets the panel say what "Automatic" became.</summary>
+        public string Control;
         public float Scale = 1f;
         /// <summary>Tree growth stage 0..3 (young..old), -1 = n/a.</summary>
         public int Age = -1;
@@ -632,6 +685,8 @@ namespace Placemaker.Core
         public float3[] Ring = Array.Empty<float3>();
         public AreaRole Role;
         public AssetRef Asset;
+        /// <summary>(s16) Asset control (ControlSchema.Id) that chose this asset, or null: lets the panel say what "Automatic" became.</summary>
+        public string Control;
     }
 
     public enum TerraformKind { Level = 0, Lower = 1, Raise = 2 }
