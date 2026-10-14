@@ -160,7 +160,7 @@ namespace Placemaker.Tests
                 ["sportsPark"] = new[] { AssetCategories.SportsGoal, AssetCategories.SportsBasketball, AssetCategories.SportsTennis },
                 ["dogPark"] = new[] { AssetCategories.DogAgility },
                 ["picnicGrounds"] = new[] { AssetCategories.Picnic, AssetCategories.Shelter },
-                ["natureReserve"] = new[] { AssetCategories.Lookout },
+                ["natureReserve"] = new[] { AssetCategories.Shelter },   // automatic lookout = timber shelter (no vanilla tower)
                 ["formalGarden"] = new[] { AssetCategories.Hedge, AssetCategories.CenterpieceFountain },
                 ["communityGarden"] = new[] { AssetCategories.GardenCrop, AssetCategories.GardenShed },
                 ["marketSquare"] = new[] { AssetCategories.MarketStall },
@@ -343,6 +343,44 @@ namespace Placemaker.Tests
             foreach (var p in plan.Layers.SelectMany(l => l.Paint))
                 foreach (var v in p.Ring) Assert.True(Poly.Contains(ring, v.xz), "paint outside the area");
             Assert.Contains(plan.AllIssues(), i => i.Key == TerrainPaint.PermanentKey);
+        }
+
+        [Theory]
+        [InlineData("gazebo", 0)]
+        [InlineData("gazebo", 1)]
+        [InlineData("bandstand", 2)]
+        public void BandstandAndGazeboBenchesFaceTheFocusOnPaving(string kind, int rows)
+        {
+            // In-game finding: benches round a gazebo/bandstand were loose on the lawn. Now every bench sits on
+            // the paving, faces the structure (front = +Z of RotateY(yaw)), and a gazebo ring is evenly spaced.
+            var r = With("park", "bandstand");
+            var step = FindStep(r.Root, "bandstand");
+            step.Settings.Values["kind"] = kind;
+            step.Settings.Values["rows"] = (double)rows;
+            var plan = Compose(r, TestKit.Rect(220, 160));
+            var layer = plan.Layers.Single(l => l.GeneratorId == "bandstand");
+            var focus = layer.Objects.First(o => o.Role == ObjectRole.Furniture).Position.xz;
+            var benches = layer.Objects.Where(o => o.Role == ObjectRole.Bench).ToList();
+            Assert.True(benches.Count >= 3, kind + " has " + benches.Count + " benches");
+            var paving = layer.Surfaces.Select(s => Poly.To2D(s.Ring)).ToList();
+            foreach (var b in benches)
+            {
+                var fwd = math.mul(quaternion.RotateY(b.Yaw), new float3(0, 0, 1)).xz;
+                Assert.True(math.dot(fwd, math.normalize(focus - b.Position.xz)) > 0.98f, "bench not facing the " + kind);
+                Assert.True(paving.Any(p => Poly.Contains(p, b.Position.xz)), "bench off the paving");
+            }
+            if (kind == "gazebo" && rows == 0)
+            {
+                var d = benches.Select(b => math.distance(b.Position.xz, focus)).ToList();
+                Assert.True(d.Max() - d.Min() < 0.05f, "ring benches at one radius");
+            }
+        }
+
+        private static RecipeStep FindStep(RecipeStep s, string layer)
+        {
+            if (s.Layer == layer) return s;
+            foreach (var c in s.Children) { var f = FindStep(c, layer); if (f != null) return f; }
+            return null;
         }
 
         [Fact]

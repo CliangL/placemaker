@@ -23,14 +23,15 @@ test("Make: one browser of single types (category ▸ type rows), no mixes", asy
     const errors = await open(page);
     await toDesign(page, "park");
     const ids = await page.locator('[data-testid="recipes"] [data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    expect(ids).toEqual(["recipe-park", "recipe-campground", "recipe-plaza", "recipe-parking", "recipe-roads"]);
+    expect(ids).toEqual(["recipe-roads", "recipe-park", "recipe-campground", "recipe-plaza", "recipe-parking"]);
     await expect(page.getByTestId("mixes")).toHaveCount(0);
     // hidden layers (split, pond) never get a row
     await expect(page.getByTestId("placemaker-panel")).not.toContainText("Mixes");
-    // one compact row each: icon + name, stacked
+    // compact tiles: icon + name, side by side in a grid
     const boxes = await Promise.all(["park", "campground"].map((id) => page.getByTestId(`recipe-${id}`).boundingBox()));
-    expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + 10);
-    expect(boxes[0]!.height).toBeLessThanOrEqual(24);
+    expect(Math.abs(boxes[1]!.y - boxes[0]!.y)).toBeLessThan(2);
+    expect(boxes[1]!.x).toBeGreaterThan(boxes[0]!.x + 10);
+    expect(boxes[0]!.height).toBeLessThanOrEqual(30);
     for (const id of ["parking", "park"]) {
         const row = page.getByTestId(`recipe-${id}`);
         await expect(row.locator("img")).toHaveCount(1);

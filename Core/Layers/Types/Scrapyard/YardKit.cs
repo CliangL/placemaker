@@ -364,8 +364,17 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 // Heap items may touch each other (gap < 0): a pile, not a showroom.
                 // Never into a road or path though.
                 float pr = math.max(0.6f, propR * scale * 0.6f);
+                // Art pass: automatic heaps get their curated asset now, spaced by its real footprint —
+                // in game overlapping props are culled, so a "pile" of 5.8 m loads on 1.3 m discs lost
+                // half its items.
+                var asset = AssetMix.Pick(ids, v);
+                if (string.IsNullOrEmpty(asset.Id))
+                {
+                    asset = GritAssets.For(category, v, salt);
+                    pr = math.max(pr, AssetMix.FootprintRadius(ctx.Site, asset, 0f) * 0.7f);
+                }
                 if (!ctx.LayerRegion.ContainsDisc(p, pr) || occ.Discs.Overlaps(p, pr, -0.2f) || occ.Corridors.Overlaps(p, pr, 0.2f) || occ.HitsPolygon(p, pr)) continue;
-                var o = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 7u)) * 6.283f, ObjectRole.Furniture, AssetMix.Pick(ids, v), v, -1, category);
+                var o = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 7u)) * 6.283f, ObjectRole.Furniture, asset, v, -1, category);
                 o.Scale = scale;
                 occ.Take(p, pr, KindStuff);
                 placed++;

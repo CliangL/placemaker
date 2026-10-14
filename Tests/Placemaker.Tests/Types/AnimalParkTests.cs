@@ -79,7 +79,7 @@ namespace Placemaker.Tests.Types
         {
             var none = new Dictionary<string, int>
             {
-                [AssetCategories.AnimalParkAviary] = 0, [AssetCategories.AnimalParkJump] = 0, [AssetCategories.AnimalParkTrough] = 0,
+                [AssetCategories.AnimalParkAviary] = 0, [AssetCategories.AnimalParkJump] = 0, [AssetCategories.AnimalParkHay] = 0, [AssetCategories.AnimalParkTrough] = 0,
                 [AssetCategories.AnimalParkShelter] = 0, [AssetCategories.CityFarmBarn] = 0, [AssetCategories.GardenShed] = 0, [AssetCategories.Shelter] = 0,
             };
             using (AssetAvailability.Scope(none))
@@ -87,8 +87,13 @@ namespace Placemaker.Tests.Types
                 {
                     var plan = Preset(id);
                     Assert.False(plan.HasErrors);
-                    Assert.Contains(plan.Issues, i => i.Key == Keys.NoAssetsIssue && i.Severity == IssueSeverity.Info);
-                    Assert.DoesNotContain(plan.Objects, o => none.ContainsKey(o.Category ?? ""));
+                    // Art pass: no animal-park props installed → explicit vanilla stand-ins (never an automatic
+                    // pick from an empty category, never the 19 m barn or a 55 m tower).
+                    Assert.DoesNotContain(plan.Objects, o => (o.Category ?? "").StartsWith("animalpark.") && string.IsNullOrEmpty(o.Asset.Id));
+                    Assert.DoesNotContain(plan.Objects, o => none.ContainsKey(o.Category ?? "") && string.IsNullOrEmpty(o.Asset.Id));
+                    Assert.DoesNotContain(plan.Objects, o => o.Asset.Id == "Barn01" || o.Asset.Id == "WaterTower01 Viewing Deck");
+                    if (id == "horsePaddock") Assert.Contains(plan.Objects, o => o.Asset.Id == "DogParkJumpFence01");
+                    if (id == "aviaryGarden") Assert.Contains(plan.Objects, o => o.Asset.Id == "Gazebo01");
                     Assert.NotEmpty(Pens(plan));
                 }
         }

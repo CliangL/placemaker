@@ -34,7 +34,7 @@ namespace Placemaker.Core.Layers.Park
             new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = ParkLayer.Bag(("count", 1.0), ("where", "entrances")) },
             StreetShopsFeature("Campground"),
             new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
-            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = ParkLayer.Bag(("theme", "leaves"), ("density", 0.8)), DefaultOn = true },
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = ParkLayer.Bag(("theme", "leaves"), ("density", 0.4)), DefaultOn = true },
             new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.terrain", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = ParkLayer.Bag(("shape", "mounds"), ("height", 1.5)) },
         };
 
@@ -70,8 +70,11 @@ namespace Placemaker.Core.Layers.Park
         protected override void DefinePresets()
         {
             Preset("forest", ("treeDensity", 110.0), ("pitchSize", 9.0), ("pads", true));
-            Preset("meadow", ("treeDensity", 20.0), ("pitchSize", 12.0), ("tables", true));
-            Preset("caravan", ("treeDensity", 35.0), ("pitchSize", 14.0), ("pathWidth", "wide"), ("campfires", false));
+            // Art pass (a1): a meadow camp is open grass — tents straight on the lawn, no pads.
+            Preset("meadow", ("treeDensity", 20.0), ("pitchSize", 12.0), ("tables", true), ("pads", false));
+            // Caravans (travel trailers when the player has them; tents otherwise) on gravel hardstandings.
+            Preset("caravan", ("treeDensity", 35.0), ("pitchSize", 14.0), ("pathWidth", "wide"), ("campfires", false),
+                ("pitchAssets", new[] { "Prop_CamperTrailer01" }), ("padSurface", CampArt.Hardstanding));
             PresetFeatures("forest", "-playground");
         }
 
@@ -105,23 +108,29 @@ namespace Placemaker.Core.Layers.Park
             // Pitches along the paths.
             var pitchIds = ctx.L("pitchAssets");
             bool canPitch = AssetAvailability.Require(ctx.Plan, AssetCategories.Camping, pitchIds, Keys.Category(AssetCategories.Camping));
+            if (pitchIds.Length == 0) pitchIds = CampArt.Tents;
             float size = ctx.F("pitchSize");
             var pitches = new List<(float2 c, float2 t, float side)>();
             if (canPitch)
                 foreach (var cv in curves)
-                    for (float along = 4f + size * 0.5f; along < cv.Length - 4f - size * 0.5f; along += size + 2.5f)
-                    {
-                        var p = cv.At(along, out var t);
-                        var n = new float2(-t.y, t.x);
+                {
+                    // Art pass (a1): breathing room between pitches (trees grow in the gaps) and the two sides
+                    // staggered by half a step, so the loop reads as a campsite rather than a row of plots.
+                    float step = size + math.max(2.5f, size * 0.45f);
+                    for (float along = 4f + size * 0.5f; along < cv.Length - 4f - size * 0.5f; along += step)
                         for (int sideIndex = 0; sideIndex < 2; sideIndex++)
                         {
+                            float at = along + (sideIndex == 1 ? step * 0.5f : 0f);
+                            if (at > cv.Length - 4f - size * 0.5f) continue;
+                            var p = cv.At(at, out var t);
+                            var n = new float2(-t.y, t.x);
                             float side = sideIndex == 0 ? 1f : -1f;
                             var c = p + n * side * (cv.HalfWidth + 0.8f + size * 0.5f);
                             if (!PitchFits(region, occ, c, t, size, gatePoints)) continue;
                             pitches.Add((c, t, side));
                             occ.Take(c, size * 0.5f, 1);
                         }
-                    }
+                }
             ctx.Check();
 
             // Facilities: one restroom per 25 pitches near the paths, plus one near the entrance.
@@ -130,7 +139,7 @@ namespace Placemaker.Core.Layers.Park
             if (ctx.B("facilities") && !ctx.Input.HasChild("restrooms") && pitches.Count > 0 &&
                 AssetAvailability.Require(ctx.Plan, AssetCategories.Restroom, new[] { ctx.S("restroomAsset") }, Keys.Category(AssetCategories.Restroom)))
             {
-                var asset = AssetMix.One(ctx.S("restroomAsset"));
+                var asset = AssetMix.One(ctx.S("restroomAsset"), ParkArt.Toilets);
                 float r = AssetMix.FootprintRadius(ctx.Site, asset, 4f);
                 int wanted = math.max(1, (pitches.Count + 24) / 25);
                 for (int i = 0; i < wanted; i++)
@@ -144,15 +153,15 @@ namespace Placemaker.Core.Layers.Park
             }
 
             // Pitch contents.
-            var campfire = AssetMix.One(ctx.S("campfireAsset"));
-            var table = AssetMix.One(ctx.S("tableAsset"));
+            var campfire = AssetMix.One(ctx.S("campfireAsset"), CampArt.Fire);
+            var table = AssetMix.One(ctx.S("tableAsset"), CampArt.Tables);
             bool fires = ctx.B("campfires");
             bool tables = ctx.B("tables") && (ctx.S("tableAsset") != "" || AssetAvailability.Has(AssetCategories.Picnic));
             for (int i = 0; i < pitches.Count; i++)
             {
                 var (c, t, side) = pitches[i];
                 var toPath = new float2(t.y, -t.x) * side;   // unit vector from the pitch towards its path
-                if (ctx.B("pads")) ctx.Surface(LayerRegion.Rect(c, t, size * 0.5f, size * 0.5f), SurfaceRole.Decorative, AssetMix.One(ctx.S("padSurface")));
+                if (ctx.B("pads")) ctx.Surface(LayerRegion.Rect(c, t, size * 0.5f, size * 0.5f), SurfaceRole.Ground, AssetMix.One(ctx.S("padSurface"), CampArt.Pad), AssetCategories.SurfaceNatural);
                 uint v = Hashing.Mix(ctx.Seed, (uint)i + 7u);
                 var tent = c - toPath * size * 0.15f;
                 ctx.Object(tent, math.atan2(toPath.x, toPath.y), ObjectRole.Furniture, AssetMix.Pick(pitchIds, v), v, -1, AssetCategories.CampingPitch);
@@ -160,6 +169,27 @@ namespace Placemaker.Core.Layers.Park
                 if (tables) ctx.Object(c + toPath * size * 0.25f - t * size * 0.25f, math.atan2(t.x, t.y), ObjectRole.Furniture, table, Hashing.Mix(v, 2u), -1, AssetCategories.Picnic);
             }
             ctx.Check();
+
+            // Art pass (a1): a reception point — an info sign at the entrance and a camp shelter just inside.
+            if (gates.Count > 0)
+            {
+                var g = gates[0].Position;
+                region.ClosestOnBoundary(g, out int gs, out float gt);
+                region.PointAt(region.AlongOf(gs, gt), out var tan, out var inward, out _);
+                float hwGate = Composer.DefaultHalfWidth(ctx.S("pathWidth") == "wide" ? NetRole.PathwayWide : NetRole.Pathway);
+                var sign = g + inward * 2.5f + tan * (hwGate + 1.4f);
+                if (region.ContainsDisc(sign, 0.8f) && occ.Free(sign, 0.8f, 0.5f, 0.2f))
+                {
+                    ctx.Object(sign, math.atan2(-inward.x, -inward.y), ObjectRole.Furniture, AssetMix.One("", CampArt.Sign), Hashing.Mix(ctx.Seed, 0x5160u), -1, AssetCategories.TrailSign);
+                    occ.Take(sign, 0.8f, 2);
+                }
+                var hut = g + inward * 9f - tan * (hwGate + 4.5f);
+                if (region.ContainsDisc(hut, 3.5f) && occ.Free(hut, 3.2f, 1f, 0.3f))
+                {
+                    ctx.Object(hut, math.atan2(tan.x, tan.y), ObjectRole.Furniture, AssetMix.One("", CampArt.Shelter), Hashing.Mix(ctx.Seed, 0x5161u), -1, AssetCategories.Shelter);
+                    occ.Take(hut, 3.2f, 2);
+                }
+            }
 
             // Open ground between pitches (regions for children) and a clearing on the largest piece that
             // the woodland leaves free, so a picnic area or playground add-on has room in a dense forest camp.
@@ -174,6 +204,7 @@ namespace Placemaker.Core.Layers.Park
 
             // Woodland between the pitches.
             var treeIds = ctx.L("treeSpecies");
+            var plantIds = treeIds.Length > 0 ? treeIds : ctx.F("treeDensity") >= 80f ? CampArt.ForestTrees : CampArt.Trees;
             int trees = (int)math.round(region.Area / 10000f * ctx.F("treeDensity"));
             int placedTrees = 0;
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
@@ -187,7 +218,7 @@ namespace Placemaker.Core.Layers.Park
                     if (clearingRadius >= 6f && math.distance(p, clearing) < clearingRadius + 2.5f) continue;
                     if (!occ.Free(p, 2.5f, 3f, 1.5f)) continue;
                     uint v = Hashing.Mix(ctx.Seed, 0x7000u + (uint)placedTrees);
-                    ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(treeIds, v), v, 2 + (int)(v % 2u));
+                    ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(plantIds, v), v, 2 + (int)(v % 2u));
                     occ.Take(p, 2.5f, 3);
                     placedTrees++;
                 }

@@ -71,7 +71,8 @@ namespace Placemaker.Core.Layers.Park
             new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Park.Feature.restrooms", Options = new[] { "restroomsPath" }, DefaultOn = true },
             new FeatureInfo { Layer = "fountain", LabelKey = "Placemaker.Park.Feature.fountain", Preset = Bag(("size", "medium")), Options = new[] { "fountainPath" } },
             new FeatureInfo { Layer = "bigtrees", LabelKey = "Placemaker.Park.Feature.bigtrees", DefaultOn = true },
-            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Park.Feature.flowerbeds", DefaultOn = true },
+            // Art pass (a1): real flowerbeds — on automatic the add-on's planter role resolved to planter boxes and pots.
+            new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Park.Feature.flowerbeds", DefaultOn = true, Preset = Bag(("assets", (string[])ParkArt.Flowerbeds.Clone())) },
             new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = Bag(("count", 2.0), ("where", "entrances")) },
             StreetShopsFeature("Park"),
             new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
@@ -198,7 +199,8 @@ namespace Placemaker.Core.Layers.Park
             Preset("victorian", ("style", "victorian"), ("pathStyle", "figureEight"), ("pathWidth", "narrow"), ("treeDensity", 30.0),
                 ("bushDensity", 75.0), ("furniture", 5.0), ("fence", true), ("lamps", true), ("bins", true), ("curvedPaths", true));
             Preset("landscape", ("style", "landscape"), ("pathStyle", "circuit"), ("pathWidth", "narrow"), ("treeDensity", 34.0),
-                ("bushDensity", 45.0), ("furniture", 3.0), ("belt", true), ("lamps", false), ("curvedPaths", true), ("trails", 2.0), ("smallPaths", 1.0));
+                ("bushDensity", 45.0), ("furniture", 3.0), ("belt", true), ("lamps", false), ("curvedPaths", true), ("trails", 2.0), ("smallPaths", 1.0),
+                ("lakeSize", 100.0));
             Preset("modern", ("style", "modern"), ("pathStyle", "promenade"), ("pathWidth", "narrow"), ("curvedPaths", false),
                 ("treeDensity", 40.0), ("bushDensity", 45.0), ("furniture", 5.0), ("belt", true), ("lamps", true));
             Preset("wildflower", ("style", "wildflower"), ("pathStyle", "woodlandTrail"), ("pathWidth", "narrow"), ("treeDensity", 6.0),
@@ -219,7 +221,7 @@ namespace Placemaker.Core.Layers.Park
             PresetFeatures("meadow", "-flowerbeds");
             PresetFeatures("pocket", "fountain", "-picnic", "-restrooms");
             PresetFeatures("victorian", "plaza");
-            PresetFeatures("landscape", "-flowerbeds");
+            PresetFeatures("landscape", "-flowerbeds", "pond");   // a landscape park is a lawn falling to a lake with a temple island
             PresetFeatures("modern", "plaza");
             PresetFeatures("wildflower", "-flowerbeds", "-playground");
             PresetFeatures("urban", "plaza", "shops");
@@ -519,6 +521,10 @@ namespace Placemaker.Core.Layers.Park
                 foreach (var run in Fences.Runs(region, gates, 3.75f))
                     ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
             }
+            // Art pass (a1): on automatic, each idiom plants its own vanilla species (the shared tree pool mixes in
+            // apple trees and conifers, which read as an orchard or a forest, not a park).
+            if (treeIds.Length == 0) treeIds = StyleTrees(style.Id);
+            if (bushIds.Length == 0) bushIds = StyleBushes(style.Id);
             EmitItems(ctx, s, treeIds, bushIds);
             foreach (var g in gates)
                 if (g.Suggested) ctx.Plan.Facts["suggestedEntrances"] = (ctx.Plan.Facts.TryGetValue("suggestedEntrances", out var n) ? n : 0) + 1;
@@ -805,11 +811,36 @@ namespace Placemaker.Core.Layers.Park
             ctx.Stat(Keys.StatLakeArea, Math.Round(Poly.Area(lake)), Keys.UnitM2);
         }
 
+        internal static string[] StyleTrees(string style)
+        {
+            switch (style)
+            {
+                case "woodland": return ParkArt.WoodlandTrees;
+                case "formal": case "modern": case "urban": return ParkArt.AvenueTrees;
+                case "victorian": return new[] { "EU_ChestnutTree01", "NA_LondonPlaneTree01", "OakTree01", "NA_LindenTree01" };
+                case "landscape": return new[] { "OakTree01", "EU_ChestnutTree01", "NA_LindenTree01", "NA_HickoryTree01" };
+                case "meadow": case "wildflower": return new[] { "OakTree01", "BirchTree01", "NA_HickoryTree01" };
+                case "riverside": return new[] { "EU_AlderTree01", "EU_PoplarTree01", "BirchTree01", "OakTree01" };
+                case "pocket": return new[] { "NA_LindenTree01", "NA_LondonPlaneTree01", "BirchTree01" };
+                default: return ParkArt.ParkTrees;
+            }
+        }
+
+        internal static string[] StyleBushes(string style)
+        {
+            switch (style)
+            {
+                case "formal": case "modern": case "urban": case "woodland": return ParkArt.GreenShrubs;
+                case "meadow": case "wildflower": return ParkArt.FlowerShrubs;
+                default: return ParkArt.MixedShrubs;
+            }
+        }
+
         private static void EmitItems(LayerContext ctx, ParkSite s, string[] treeIds, string[] bushIds)
         {
-            var bench = AssetMix.One(ctx.S("benchAsset"));
-            var lamp = AssetMix.One(ctx.S("lampAsset"));
-            var bin = AssetMix.One(ctx.S("binAsset"));
+            var bench = AssetMix.One(ctx.S("benchAsset"), ParkArt.Benches);
+            var lamp = AssetMix.One(ctx.S("lampAsset"), ParkArt.ParkLamps);
+            var bin = AssetMix.One(ctx.S("binAsset"), ParkArt.Bins);
             foreach (var it in s.Items)
             {
                 switch (it.Kind)

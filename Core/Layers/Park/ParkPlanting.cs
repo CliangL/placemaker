@@ -463,12 +463,21 @@ namespace Placemaker.Core.Layers.Park
                     float side = ((i + ci + sidePhase) & 1) == 0 ? 1f : -1f;
                     var q = p + normal * (c.HalfWidth + footprint + 0.2f) * side;
                     if (!FurnitureFits(s, q, footprint, kind, kind == ParkItemKind.Bench ? Layout.M(14f, 4f) : kind == ParkItemKind.Lamp ? Layout.M(10f, 2f) : Layout.M(12f, 2f))) continue;
-                    // Yaw convention kept from ParkManager (verified in game): along the path, flipped on the left side.
-                    float yaw = math.atan2(tangent.x, tangent.y) + (side < 0f ? math.PI : 0f);
+                    // Facing the path (PlannedObject.Yaw: 0 = facing +Z, the front of CS2 benches/lamps).
+                    // ParkManager stored the tangent and added a quarter turn at emission; the port
+                    // lost that turn, so benches stood sideways/backwards (playtest 4b).
+                    float yaw = PathSideYaw(normal, side);
                     s.Add(new ParkItem { Kind = kind, Position = q, Radius = footprint, Yaw = Wrap(yaw), Variant = rng.NextUInt(), Age = -1 });
                     count++;
                 }
             }
+        }
+
+        /// <summary>Yaw of path furniture standing at p + normal·side: it faces back toward the path.</summary>
+        public static float PathSideYaw(float2 normal, float side)
+        {
+            var facing = -normal * (side < 0f ? -1f : 1f);
+            return Wrap(math.atan2(facing.x, facing.y));
         }
 
         private static bool FurnitureFits(ParkSite s, float2 p, float footprint, ParkItemKind kind, float sameKindSpacing)
@@ -513,7 +522,8 @@ namespace Placemaker.Core.Layers.Park
             {
                 var b = s.Items[i];
                 if (b.Kind != ParkItemKind.Bench) continue;
-                var tangent = new float2(math.sin(b.Yaw), math.cos(b.Yaw));
+                var facing = new float2(math.sin(b.Yaw), math.cos(b.Yaw));
+                var tangent = new float2(facing.y, -facing.x);   // along the path
                 float first = rng.NextBool() ? 1f : -1f;
                 for (int attempt = 0; attempt < 2; attempt++)
                 {

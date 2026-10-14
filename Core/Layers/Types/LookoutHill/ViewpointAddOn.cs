@@ -21,7 +21,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
         protected override void DefineControls(ControlSet c)
         {
             c.Slider("spots", 2, 1, 6, 1, "count", ControlTier.Essential, "summit");
-            c.Toggle("telescope", true, ControlTier.Essential, "summit").Tip();
+            c.Toggle("telescope", false, ControlTier.Essential, "summit").Tip();   // off: no vanilla telescope exists (art pass a3)
             c.Toggle("board", true, ControlTier.More, "summit").Tip();
             c.Asset("telescopeAsset", AssetCategories.HillTelescope, ControlTier.More, "summit").When("telescope=true");
             c.Asset("boardAsset", AssetCategories.HillBoard, ControlTier.More, "summit").When("board=true");
@@ -53,7 +53,10 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             var chosen = new List<float2>();
             float minGap = math.max(3f, region.Perimeter / math.max(1, wanted) * 0.5f);
             string scope = ctx.B("telescope") ? LeisureKit.Category(ctx, ctx.S("telescopeAsset"), AssetCategories.HillTelescope) : null;
-            string board = ctx.B("board") ? LeisureKit.Category(ctx, ctx.S("boardAsset"), AssetCategories.HillBoard) : null;
+            // No vanilla panorama board: the park information signs stand in while the board asset is automatic (art pass a3).
+            bool pickedBoard = !string.IsNullOrEmpty(ctx.S("boardAsset"));
+            string board = !ctx.B("board") ? null : pickedBoard ? AssetCategories.HillBoard : LeisureKit.Category(ctx, "", AssetCategories.TrailSign);
+            var boardAsset = pickedBoard ? AssetMix.One(ctx.S("boardAsset")) : new AssetRef("", "ParkInfosign02", "ParkInfosign03");
             int extras = 0;
             for (int i = 0; i < candidates.Count && chosen.Count < wanted; i++)
             {
@@ -64,12 +67,12 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 var outward = math.normalizesafe(p - centre, new float2(0, 1));
                 var side = new float2(-outward.y, outward.x);
                 uint v = Hashing.Mix(ctx.Seed, (uint)i + 0x71Eu);
-                ctx.Object(p, Facing(p, p + outward), ObjectRole.Bench, AssetMix.One(""), v);
+                ctx.Object(p, Facing(p, p + outward), ObjectRole.Bench, new AssetRef("", "Pack10-Bench01", "GardenBench01"), v);
                 occ.Take(p, 1f, 1);
                 chosen.Add(p);
                 if (scope != null && LeisureKit.Put(ctx, occ, p + side * 1.6f, Facing(p, p + outward), ObjectRole.Furniture, AssetMix.One(ctx.S("telescopeAsset")), scope, 0.4f,
                     Hashing.Mix(v, 1u), 0.3f, 0.2f)) extras++;
-                if (board != null && LeisureKit.Put(ctx, occ, p - outward * 1.8f - side * 0.8f, Facing(p, p + outward), ObjectRole.Furniture, AssetMix.One(ctx.S("boardAsset")), board, 0.5f,
+                if (board != null && LeisureKit.Put(ctx, occ, p - outward * 1.8f - side * 0.8f, Facing(p, p + outward), ObjectRole.Furniture, boardAsset, board, 0.5f,
                     Hashing.Mix(v, 2u), 0.3f, 0.2f)) extras++;
             }
             if (chosen.Count == 0) NoSpace(ctx, "Placemaker.AddOn.Viewpoint.Name");

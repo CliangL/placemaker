@@ -39,8 +39,9 @@ namespace Placemaker.Core.Layers.Types.Wetland
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
-            Feature(WildlifeHabitatAddOn.LayerId), Feature("picnic", ("groups", 2.0), ("tables", 2.0)), Feature("restrooms", ("byArea", true), ("haEach", 6.0)),
-            KioskFeature(), Feature("rocks", ("clusters", 3.0), ("size", "small")), Feature("decals", ("theme", "puddles"), ("density", 1.0)),
+            // Area-wide features on the dry ground ("core"), never in the ponds or a lake the area was drawn over.
+            Feature(WildlifeHabitatAddOn.LayerId), CoreFeature("picnic", ("groups", 2.0), ("tables", 2.0)), Feature("restrooms", ("byArea", true), ("haEach", 6.0)),
+            KioskFeature(), CoreFeature("rocks", ("clusters", 3.0), ("size", "small")), CoreFeature("decals", ("theme", "puddles"), ("density", 1.0)),
         };
 
         internal static FeatureInfo KioskFeature()
@@ -136,6 +137,8 @@ namespace Placemaker.Core.Layers.Types.Wetland
 
         protected override void PlanCore(LayerContext ctx)
         {
+            // Drawn across an existing lake: build on the dry part only (art pass a3).
+            ctx.LayerRegion = Beach.Shoreline.DryLand(ctx, ctx.LayerRegion);
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
@@ -192,13 +195,23 @@ namespace Placemaker.Core.Layers.Types.Wetland
                 for (int s = 2; s + 1 < line.Count && !clash; s++)
                     if (crossings.Count > 0 && crossings.Overlaps((line[s - 1] + line[s]) * 0.5f, 3f, 1f)) clash = true;
                 if (clash) continue;
+                // Art pass a3: a real boardwalk over open water instead of a causeway that cut the pond in
+                // pieces. Segments over water are FollowTerrain=false at a deck 0.6 m above the pond level
+                // (never below the lower bank end); land legs follow the ground, so both meet at the bank
+                // vertex at the same height and the walk stays one connected network.
+                float deck = pond.Level + 0.6f, bankLow = float.MaxValue;
+                foreach (var v in line) if (!water.InWater(v, 0.3f)) bankLow = math.min(bankLow, ctx.H(v));
+                if (bankLow < float.MaxValue) deck = math.max(deck, math.min(bankLow, pond.Level + 1.5f));
+                float Y(float2 v) => water.InWater(v, 0.3f) ? deck : ctx.H(v);
                 for (int s = 1; s < line.Count; s++)
                 {
-                    LeisureKit.Path(ctx, occ, line[s - 1], line[s], NetRole.Pathway, boardwalk);
-                    crossings.Add(line[s - 1], line[s], 1.5f);
-                    boardLength += math.distance(line[s - 1], line[s]);
+                    var a = line[s - 1]; var bb = line[s];
+                    bool overWater = water.InWater(a, 0.3f) || water.InWater(bb, 0.3f) || water.InWater((a + bb) * 0.5f, 0.3f);
+                    if (overWater) Boardwalk(ctx, occ, a, Y(a), bb, Y(bb), boardwalk);
+                    else LeisureKit.Path(ctx, occ, a, bb, NetRole.Pathway, boardwalk);
+                    crossings.Add(a, bb, 1.5f);
+                    boardLength += math.distance(a, bb);
                 }
-                water.KeepDry(line, Composer.DefaultHalfWidth(NetRole.Pathway) + 0.6f);
                 if (spur)
                 {
                     // The platform lies just beyond the end of the walk, so what stands on it is off the path.
@@ -228,7 +241,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
                 // Platforms without a hide get a bench looking out over the water.
                 var p = platforms[i];
                 var from = occ.Paths.Nearest(p, 50f, out var q) >= 0 ? q : p;
-                LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(from, p), ObjectRole.Bench, AssetMix.One(""), null, 1.3f, Hashing.Mix(ctx.Seed, 0xB1A7u + (uint)i), 0f, 0.3f);
+                LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(from, p), ObjectRole.Bench, AssetMix.Pick(WetlandArt.Benches, 0u), null, 1.3f, Hashing.Mix(ctx.Seed, 0xB1A7u + (uint)i), 0f, 0.3f);
             }
             if (ctx.B("lookout")) PlaceLookout(ctx, occ, water);
             if (ctx.B("terrace")) PlaceTerrace(ctx, occ, water);
@@ -284,12 +297,28 @@ namespace Placemaker.Core.Layers.Types.Wetland
 
         // ───────────────────────────── structures ─────────────────────────────
 
+        /// <summary>One boardwalk course over water: straight, level or ramping, not following the pond bed.</summary>
+        private static void Boardwalk(LayerContext ctx, Occupancy occ, float2 a, float ya, float2 b, float yb, AssetRef asset)
+        {
+            if (math.distance(a, b) < 1f) return;
+            float3 A = new float3(a.x, ya, a.y), D = new float3(b.x, yb, b.y);
+            ctx.Plan.Nets.Add(new PlannedNet
+            {
+                A = A, B = math.lerp(A, D, 1f / 3f), C = math.lerp(A, D, 2f / 3f), D = D,
+                Role = NetRole.Pathway, Asset = asset, FollowTerrain = false,
+            });
+            float hw = Composer.DefaultHalfWidth(NetRole.Pathway);
+            occ.TakeCorridor(a, b, hw, 100);
+            occ.Paths.Add(a, b, hw, 100);
+        }
+
         private static int PlaceHides(LayerContext ctx, Occupancy occ, WaterBodies water, List<float2> platforms, int wanted)
         {
             if (wanted <= 0) return 0;
-            string cat = LeisureKit.Category(ctx, ctx.S("hideAsset"), AssetCategories.WetlandHide, AssetCategories.Lookout, AssetCategories.Shelter);
+            // Never the lookout pool (32-56 m buildings): a timber shelter is the hide when none is installed.
+            string cat = LeisureKit.Category(ctx, ctx.S("hideAsset"), AssetCategories.WetlandHide, AssetCategories.Shelter);
             if (cat == null) return 0;
-            var asset = AssetMix.One(ctx.S("hideAsset"));
+            var asset = AssetMix.Pick(WetlandArt.Or(ctx.S("hideAsset"), WetlandArt.Hides), 0u);
             float r = math.min(3f, AssetMix.FootprintRadius(ctx.Site, asset, 2.2f));
             int placed = 0;
             var done = new List<float2>();
@@ -356,9 +385,11 @@ namespace Placemaker.Core.Layers.Types.Wetland
 
         private static void PlaceLookout(LayerContext ctx, Occupancy occ, WaterBodies water)
         {
-            string cat = LeisureKit.Category(ctx, ctx.S("lookoutAsset"), AssetCategories.Lookout, AssetCategories.Shelter);
+            // A picked lookout asset is honoured; automatic is an open gazebo by the water, never the lookout pool.
+            bool picked = !string.IsNullOrEmpty(ctx.S("lookoutAsset"));
+            string cat = picked ? AssetCategories.Lookout : LeisureKit.Category(ctx, "", AssetCategories.Shelter);
             if (cat == null) return;
-            var asset = AssetMix.One(ctx.S("lookoutAsset"));
+            var asset = AssetMix.Pick(WetlandArt.Or(ctx.S("lookoutAsset"), WetlandArt.Lookouts), 0u);
             float r = AssetMix.FootprintRadius(ctx.Site, asset, 4f);
             var anchors = PathAnchors.Beside(occ, r, 8f, 1.2f);
             int best = -1; float score = float.MaxValue;
@@ -426,7 +457,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
             // Prefer seats with a view over the water.
             anchors.Sort((a, b) => water.Distance(a.Position, 40f).CompareTo(water.Distance(b.Position, 40f)));
             int wanted = math.clamp((int)(total / interval), 0, 150), n = 0;
-            var bench = AssetMix.One("");
+            var bench = AssetMix.Pick(ctx.S("subtype") == "waterGarden" || ctx.S("subtype") == "rainGarden" ? WetlandArt.GardenBenches : WetlandArt.Benches, 0u);
             foreach (var a in PathAnchors.Pick(anchors, wanted, interval * 0.6f, false))
                 if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Bench, bench, null, 1.3f, Hashing.Mix(ctx.Seed, 0xBE20u + (uint)n))) n++;
         }
@@ -434,17 +465,26 @@ namespace Placemaker.Core.Layers.Types.Wetland
         private static void LampsBesidePaths(LayerContext ctx, Occupancy occ, WaterBodies water, float interval)
         {
             int n = 0;
-            var lamp = AssetMix.One("");
+            var lamp = AssetMix.Pick(WetlandArt.Lamps, 0u);
+            // Paths are indexed as short pieces (~2 m): spacing is measured across pieces and against the lamps
+            // already placed, otherwise every piece got its own lamp (a lamp every 2 m, art pass a3).
+            var placed = new List<float2>();
+            float carry = interval * 0.5f;
             foreach (var s in new List<SegmentIndex.Seg>(occ.Paths.Segments))
             {
                 var dir = math.normalizesafe(s.B - s.A);
                 var nrm = new float2(-dir.y, dir.x);
-                foreach (var p in LeisureKit.Along(s.A, s.B, interval))
+                float len = math.distance(s.A, s.B);
+                for (float t = interval - carry; t <= len; t += interval)
                 {
+                    var p = s.A + dir * t;
                     var q = p + nrm * ((n & 1) == 0 ? 1f : -1f) * (s.HalfWidth + 0.8f);
-                    if (water.InWater(q, 0.8f)) continue;
-                    if (LeisureKit.Put(ctx, occ, q, 0f, ObjectRole.Lamp, lamp, null, 0.5f, Hashing.Mix(ctx.Seed, 0x1A00u + (uint)n), 0.4f, 0.2f)) n++;
+                    bool near = false;
+                    foreach (var o in placed) if (math.distancesq(o, q) < interval * interval * 0.5f) { near = true; break; }
+                    if (near || water.InWater(q, 0.8f)) continue;
+                    if (LeisureKit.Put(ctx, occ, q, 0f, ObjectRole.Lamp, lamp, null, 0.5f, Hashing.Mix(ctx.Seed, 0x1A00u + (uint)n), 0.4f, 0.2f)) { n++; placed.Add(q); }
                 }
+                carry = (carry + len) % interval;
             }
         }
 
@@ -458,7 +498,8 @@ namespace Placemaker.Core.Layers.Types.Wetland
         {
             float density = ctx.F("reeds") / 100f;
             if (density <= 0f || water.Ponds.Count == 0) return 0;
-            var reedIds = ctx.L("reedSpecies"); var bushIds = ctx.L("bushSpecies");
+            var reedIds = WetlandArt.Or(ctx.L("reedSpecies"), WetlandArt.Reeds, AssetCategories.Bush);
+            var bushIds = WetlandArt.Or(ctx.L("bushSpecies"), WetlandArt.GardenShrubs, AssetCategories.Bush);
             string reedCat = LeisureKit.Category(ctx, reedIds.Length > 0 ? "x" : "", AssetCategories.WetlandReed, AssetCategories.Bush);
             string flowerCat = style.Flowers && AssetAvailability.Has(AssetCategories.Flowerbed) ? AssetCategories.Flowerbed : null;
             if (reedCat == null && flowerCat == null) return 0;
@@ -485,7 +526,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
                     uint v = Hashing.Mix(ctx.Seed, (uint)placed * 2654435761u + 0x4E1u);
                     bool flower = flowerCat != null && Hashing.Unit(Hashing.Mix(v, 9u)) < (style.GardenMargin ? 0.45f : 0.3f) && !water.InWater(p);
                     bool shrub = style.GardenMargin && (bushIds.Length > 0 || AssetAvailability.Has(AssetCategories.Bush)) && !flower && o > 1f && Hashing.Unit(Hashing.Mix(v, 11u)) < 0.4f;
-                    if (flower) ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Planter, AssetMix.One(""), v, -1, flowerCat);
+                    if (flower) ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Planter, AssetMix.Pick(WetlandArt.Flowers, v), v, -1, flowerCat);
                     else if (shrub) ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Bush, AssetMix.Pick(bushIds, v), v);
                     else if (reedCat != null) ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Bush, AssetMix.Pick(reedIds, v), v, -1, reedCat);
                     else continue;
@@ -500,7 +541,8 @@ namespace Placemaker.Core.Layers.Types.Wetland
         private static void PlantLand(LayerContext ctx, Occupancy occ, WaterBodies water, Style style, float ha)
         {
             var region = ctx.LayerRegion;
-            var treeIds = ctx.L("treeSpecies"); var bushIds = ctx.L("bushSpecies");
+            var treeIds = WetlandArt.Or(ctx.L("treeSpecies"), WetlandArt.Trees, AssetCategories.WetlandTree);
+            var bushIds = WetlandArt.Or(ctx.L("bushSpecies"), WetlandArt.Bushes, AssetCategories.Bush);
             string treeCat = LeisureKit.Category(ctx, treeIds.Length > 0 ? "x" : "", AssetCategories.WetlandTree, AssetCategories.Tree);
             uint salt = Hashing.Mix(ctx.Seed, 0x7EE5u);
             bool Reject(float2 p)

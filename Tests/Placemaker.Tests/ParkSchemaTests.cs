@@ -197,7 +197,7 @@ namespace Placemaker.Tests
         public static IEnumerable<object[]> RecipeFiles() =>
             new[] { "park.json", "plaza.json", "split-park-plaza.json", "park-with-playground.json", "campground.json",
                 "botanicalGarden.json", "sportsPark.json", "dogPark.json", "picnicGrounds.json", "natureReserve.json", "formalGarden.json",
-                "communityGarden.json", "marketSquare.json", "skatePark.json", "cemeteryGrounds.json", "greenwayPark.json" }.Select(f => new object[] { f });
+                "communityGarden.json", "marketSquare.json", "cemeteryGrounds.json", "greenwayPark.json" }.Select(f => new object[] { f });
 
         [Theory]
         [MemberData(nameof(RecipeFiles))]

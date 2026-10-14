@@ -35,13 +35,22 @@ namespace Placemaker.Core.Layers.Parking
         public const string DisabledDecal = "ParkingLotDisabledDecal01";
         public const string ElectricDecal = "ParkingLotElectricDecal01";
         public const string Charger = "ParkingLotCharger01";
-        public const string Asphalt = "Pavement Surface 01";
+        // Art pass (2026-10-13): a real asphalt texture first (EAI surface pack, already cloned as an
+        // overlay in the player's setup), the vanilla pavement PLT used as the fallback.
+        public const string Asphalt = "EAI - Surface Pack Concrete Asphalt 001 Surface";
+        public const string AsphaltVanilla = "Pavement Surface 01";
         public const string Grass = "Grass Surface 01";
         public const string LampSingle = "StreetlightSingle02";
         public const string LampDouble = "StreetlightDouble02";
         public static readonly string[] Arrows = { "RoadArrow Forward Placeholder", "NA RoadArrow Forward", "EU RoadArrow Forward" };
         public static readonly string[] Trees = { "EU_AlderTree01", "BirchTree01", "NA_LondonPlaneTree01", "NA_LindenTree01", "OakTree01" };
-        public static readonly string[] Bushes = { "GreenBush01", "FlowerBushWild01", "FlowerBushWild02" };
+        public static readonly string[] Bushes = { "GreenBushWild02", "FlowerBushWild01", "FlowerBushWild02", "GreenBushWild01" };
+        /// <summary>
+        /// Default planting when the player picked none (art pass): one shade tree species in formal rows
+        /// (London plane, the classic car park tree) and a green + a flowering shrub mixed in the medians.
+        /// </summary>
+        public const string DefaultTree = "NA_LondonPlaneTree01";
+        public static readonly string[] DefaultBushes = { "GreenBushWild02", "FlowerBushWild01" };
 
         /// <summary>
         /// The widest two-way path whose core fits the requested width; 3 m when nothing fits

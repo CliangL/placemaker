@@ -158,8 +158,8 @@ namespace Placemaker.Core.Layers.Parking
                     }
                     species.Add(new Species { Tree = tree, Spacing = spacing, Height = height });
                 }
-                if (s.Trees.Length == 0) Add("", true); else foreach (var t in s.Trees) Add(t, true);
-                if (s.Bushes.Length == 0) Add("", false); else foreach (var b in s.Bushes) Add(b, false);
+                if (s.Trees.Length == 0) Add(ParkingAssets.DefaultTree, true); else foreach (var t in s.Trees) Add(t, true);
+                if (s.Bushes.Length == 0) foreach (var b in ParkingAssets.DefaultBushes) Add(b, false); else foreach (var b in s.Bushes) Add(b, false);
                 layout.Plants = Vegetation.Plan(greens, species, (int)Math.Round(s.PlantingDensity), input.Seed, layout.Lanterns,
                     p =>
                     {
@@ -297,7 +297,7 @@ namespace Placemaker.Core.Layers.Parking
             }
 
             // ── surfaces & regions ──
-            var asphaltAsset = ParkingAssets.Pick(s.AsphaltAsset, ParkingAssets.Asphalt);
+            var asphaltAsset = ParkingAssets.Pick(s.AsphaltAsset, ParkingAssets.Asphalt, ParkingAssets.AsphaltVanilla);
             var greenAsset = ParkingAssets.Pick(s.GreenAsset, ParkingAssets.Grass);
             double covered = 0;
             int lotRegion = 0, greenRegion = 0;
@@ -528,8 +528,8 @@ namespace Placemaker.Core.Layers.Parking
         {
             // must mirror the species order built in Build()
             var r = new List<AssetRef>();
-            if (s.Trees.Length == 0) r.Add(new AssetRef("", ParkingAssets.Trees)); else foreach (var t in s.Trees) r.Add(new AssetRef(t));
-            if (s.Bushes.Length == 0) r.Add(new AssetRef("", ParkingAssets.Bushes)); else foreach (var b in s.Bushes) r.Add(new AssetRef(b));
+            if (s.Trees.Length == 0) r.Add(new AssetRef(ParkingAssets.DefaultTree, ParkingAssets.Trees)); else foreach (var t in s.Trees) r.Add(new AssetRef(t));
+            if (s.Bushes.Length == 0) foreach (var b in ParkingAssets.DefaultBushes) r.Add(new AssetRef(b, ParkingAssets.Bushes)); else foreach (var b in s.Bushes) r.Add(new AssetRef(b));
             return r;
         }
 

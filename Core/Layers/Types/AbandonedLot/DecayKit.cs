@@ -7,6 +7,7 @@
 // Everything here places through Occupancy (input.Reserved + what the layer placed), so the
 // shared invariants hold: inside the outline, clear of paths and of reserved space.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System;
 using System.Collections.Generic;
 using Placemaker.Core.Geometry;
@@ -249,6 +250,10 @@ namespace Placemaker.Core.Layers.Types.Ruins
         /// Rubble around a collapse point: big piles near it, smaller chunks further out, dirt decals at the
         /// fringe. Density falls off as (1-t)^1.6 with value-noise clumping, scaled by <paramref name="intensity"/>.
         /// </summary>
+        /// <summary>Small debris round rubble heaps: broken stone, flat gravel spills, rebar stumps.</summary>
+        public static readonly GritAssets.Set Chunks = new GritAssets.Set(false, "Rock01", "Rock03", "Rock06", "Rock08",
+            "Prop_CoalTruck01_StonePile01_Partial1|CoalTruck01_StonePile01", "CoalTruck01_StonePile01", "RubblePylonSmall04|Rock02", "Trashpile05|Rock05");
+
         public static RubbleResult RubbleField(LayerContext ctx, Occupancy occ, Occupancy guard, LayerRegion region, float2 focus, float radius, float intensity,
             string[] ids, string pileCategory, float pileScale, uint salt, Func<float2, bool> reject, int maxItems = 500)
         {
@@ -261,7 +266,10 @@ namespace Placemaker.Core.Layers.Types.Ruins
             // would leave a small collapse point with almost nothing.
             var disc = LeisureKit.Intersect(region, LayerRegion.Circle(focus, reach, 20)) ?? region;
             int max = math.clamp((int)(disc.Area / 3f), 50, 9000);
-            float pileR = 1.8f * pileScale;
+            // Art pass: automatic piles are the game's real rubble heaps (8–10 m) and chunks are small
+            // debris — the same 9 m heap as a "0.8 m chunk" stamped hundreds of overlapping mountains.
+            bool auto = ids == null || ids.Length == 0;
+            float pileR = auto ? 4.2f : 1.8f * pileScale;
             foreach (var p in Scatter.Candidates(disc, 1.8f, seed, max, ctx.Cancel))
             {
                 if (res.Piles + res.Chunks >= maxItems) break;
@@ -277,8 +285,11 @@ namespace Placemaker.Core.Layers.Types.Ruins
                     bool pile = t < 0.4f && Hashing.Unit(Hashing.Mix(v, 9u)) < 0.6f;
                     float r = pile ? pileR : 0.8f;
                     if (!occ.Free(p, r, r * 0.5f + 0.3f, 0.15f)) continue;
-                    var o = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 4u)) * 6.283f, ObjectRole.Furniture, AssetMix.Pick(ids, v), v, -1, pileCategory);
-                    o.Scale = pile ? pileScale * (0.9f + 0.6f * Hashing.Unit(Hashing.Mix(v, 5u))) : 0.45f + 0.4f * Hashing.Unit(Hashing.Mix(v, 5u));
+                    var asset = !auto ? AssetMix.Pick(ids, v) : pile ? GritAssets.For(pileCategory, v, seed) : GritAssets.Ref(Chunks, v);
+                    var o = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 4u)) * 6.283f, ObjectRole.Furniture, asset, v, -1, pileCategory);
+                    // Real assets carry the size now; scale only nudges (piles a touch larger than chunks).
+                    o.Scale = auto ? (pile ? 1f : 0.8f) + 0.15f * Hashing.Unit(Hashing.Mix(v, 5u))
+                        : pile ? pileScale * (0.9f + 0.6f * Hashing.Unit(Hashing.Mix(v, 5u))) : 0.45f + 0.4f * Hashing.Unit(Hashing.Mix(v, 5u));
                     occ.Take(p, r, 2);
                     if (pile) res.Piles++; else res.Chunks++;
                 }

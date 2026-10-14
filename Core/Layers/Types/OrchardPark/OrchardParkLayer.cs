@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
+using Placemaker.Core.Layers.Park;
 using Placemaker.Core.Layers.Types.Farmstead;
 using Unity.Mathematics;
 
@@ -67,7 +68,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             c.Choice("grid", "square", ControlTier.Essential, "layout", "square", "quincunx", "rows", "blocks").Tip();
             c.Slider("spacing", 7, 4, 14, 0.5, "m", ControlTier.Essential, "layout").Layout(5).Tip();
             c.Choice("rowAngle", "along", ControlTier.Essential, "layout", "along", "across", "diagonal").Tip();
-            c.Choice("paths", "grid", ControlTier.Essential, "layout", "cross", "grid", "loop", "avenue").Tip();
+            c.Choice("paths", "cross", ControlTier.Essential, "layout", "cross", "grid", "loop", "avenue").Tip();
             c.Slider("blockSize", 45, 20, 100, 5, "m", ControlTier.More, "layout").Layout(15).Tip();
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
 
@@ -102,9 +103,11 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             c.Fixed("aisleLayer");
         }
 
+        // Art pass (a1): the trees are the scenery — a cross of walks through the glade by default (a path grid every
+        // ~22 m at the default size gave as much path and aisle as orchard); the community orchard keeps bigger blocks.
         protected override void DefinePresets()
         {
-            Preset("apple", ("style", "apple"), ("grid", "square"), ("spacing", 7.0), ("paths", "grid"), ("meadow", 40.0), ("flowers", 30.0),
+            Preset("apple", ("style", "apple"), ("grid", "square"), ("spacing", 7.0), ("paths", "cross"), ("meadow", 40.0), ("flowers", 30.0),
                 ("picnicSpots", 4.0), ("glade", true), ("harvestProps", true), ("edge", "hedge"), ("treeAge", "mixed"), ("gaps", 5.0));
             Preset("cherryBlossom", ("style", "cherry"), ("grid", "quincunx"), ("spacing", 9.0), ("paths", "avenue"), ("meadow", 10.0),
                 ("lawn", true), ("mownAisles", false), ("picnicSpots", 12.0), ("benchEvery", 25.0), ("lamps", true), ("glade", true),
@@ -115,7 +118,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             Preset("citrus", ("style", "citrus"), ("grid", "rows"), ("spacing", 6.0), ("paths", "cross"), ("meadow", 0.0), ("flowers", 0.0),
                 ("mownAisles", true), ("aisleLayer", 3.0), ("picnicSpots", 4.0), ("glade", true), ("gladeSize", 12.0), ("lamps", true),
                 ("edge", "hedge"), ("harvestProps", true), ("treeAge", "young"), ("windbreak", true), ("gaps", 2.0));
-            Preset("community", ("style", "community"), ("grid", "blocks"), ("spacing", 6.0), ("paths", "grid"), ("blockSize", 30.0),
+            Preset("community", ("style", "community"), ("grid", "blocks"), ("spacing", 6.0), ("paths", "grid"), ("blockSize", 60.0),
                 ("meadow", 50.0), ("flowers", 60.0), ("picnicSpots", 8.0), ("glade", true), ("harvestProps", true), ("gaps", 15.0),
                 ("treeAge", "mixed"), ("edge", "fence"), ("benchEvery", 30.0));
         }
@@ -125,10 +128,13 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
         {
             switch (style)
             {
-                case "cherry": return new[] { "CherryTree01", "CherryBlossomTree01", "SakuraTree01" };
-                case "olive": return new[] { "OliveTree01", "OliveTree02" };
-                case "citrus": return new[] { "OrangeTree01", "LemonTree01", "CitrusTree01" };
-                default: return new[] { "AppleTree01", "AppleTree02", "PearTree01" };
+                // Art pass (a1): ids checked against the player's catalog. Vanilla has one fruit tree (AppleTree01); the
+                // VFP pack adds flowering and evergreen fruit trees that read as cherry / citrus. No olive exists: the
+                // grey-green laurel fig is the closest silhouette.
+                case "cherry": return new[] { "VFP CrapeMyrtleTree", "VFP JacarandaTree", "AppleTree01" };
+                case "olive": return new[] { "VFP LaurelFigTree", "AppleTree01" };
+                case "citrus": return new[] { "VFP EvergreenPearTree", "VFP LaurelFigTree", "AppleTree01" };
+                default: return new[] { "AppleTree01", "VFP EvergreenPearTree" };
             }
         }
 
@@ -137,12 +143,25 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
+            // Art pass (a1): an orchard is planted square to its street. On a near-square site the principal axes are
+            // ambiguous (often the diagonals: every row and path ran corner to corner), so square up with the longest edge.
+            if (minor > major * 0.85f)
+            {
+                float best = 0f;
+                for (int i = 0; i < region.Ring.Length; i++)
+                {
+                    var e = region.Ring[(i + 1) % region.Ring.Length] - region.Ring[i];
+                    float l = math.length(e);
+                    if (l > best) { best = l; axis = e / l; }
+                }
+                side = new float2(-axis.y, axis.x);
+            }
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
             string style = ctx.S("style");
             float spacing = ctx.F("spacing");
             string pathMode = ctx.S("paths");
-            if (ctx.B("lawn")) ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            if (ctx.B("lawn")) ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
 
             // Row frame.
             var rowDir = axis;
@@ -162,7 +181,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
                 if (placed.Ok)
                 {
                     glade = placed.Ring; gladeC = placed.Center; gladeR = placed.Size * 0.5f;
-                    if (!ctx.B("lawn")) ctx.Surface(glade, SurfaceRole.Grass, AssetMix.One(""));
+                    if (!ctx.B("lawn")) ctx.Surface(glade, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
                 }
                 else ctx.Issue(IssueSeverity.Info, "Placemaker.OrchardPark.Issue.NoGlade");
             }
@@ -221,15 +240,17 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
 
             // 3. Edge: hedge / fence, and a windbreak row of tall trees inside it.
             string edge = ctx.S("edge");
-            if (edge == "fence" || edge == "both") Fence(ctx, gates, AssetMix.One(ctx.S("fenceAsset")), 3.5f);
+            if (edge == "fence" || edge == "both") Fence(ctx, gates, AssetMix.One(ctx.S("fenceAsset"), OrchardArt.Fence), 3.5f);
             int hedge = 0, windbreak = 0;
             if (edge == "hedge" || edge == "both")
             {
                 string cat = LeisureKit.Category(ctx, "", AssetCategories.Hedge, AssetCategories.Bush);
-                if (cat != null) hedge = EdgeRow(ctx, occ, gates, 1.4f, 2.4f, ObjectRole.Bush, Array.Empty<string>(), cat == AssetCategories.Bush ? null : cat, 1f, 0xED6Eu);
+                // Hedge pieces are ~4.1 m long: one per 4 m keeps a closed, non-overlapping hedge line.
+                if (cat != null) hedge = EdgeRow(ctx, occ, gates, 1.4f, cat == AssetCategories.Hedge ? 4f : 2.4f, ObjectRole.Bush,
+                    cat == AssetCategories.Hedge ? ParkArt.LowHedge : ParkArt.GreenShrubs, cat == AssetCategories.Bush ? null : cat, 1f, 0xED6Eu);
             }
             if (ctx.B("windbreak"))
-                windbreak = EdgeRow(ctx, occ, gates, edge == "hedge" || edge == "both" ? 5.5f : 3f, 6f, ObjectRole.Tree, ctx.L("windbreakSpecies"), null, 2.4f, 0x3B1Du);
+                windbreak = EdgeRow(ctx, occ, gates, edge == "hedge" || edge == "both" ? 5.5f : 3f, 6f, ObjectRole.Tree, ctx.L("windbreakSpecies").Length > 0 ? ctx.L("windbreakSpecies") : OrchardArt.Windbreak, null, 2.4f, 0x3B1Du);
             ctx.Check();
 
             // 4. Avenue trees: exactly aligned pairs along the avenue.
@@ -304,7 +325,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
 
             // 6. Glade: veteran mother tree in the middle, benches round the edge facing in.
             int gladeBenches = 0;
-            var bench = AssetMix.One("");
+            var bench = AssetMix.One("", ParkArt.RusticBenches);
             if (glade != null)
             {
                 uint v = Hashing.Mix(ctx.Seed, 0x307Eu);
@@ -398,14 +419,14 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
                     foreach (var a in picks)
                     {
                         var role = cat == AssetCategories.Bench ? ObjectRole.Bench : ObjectRole.Furniture;
-                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward) + math.PI * 0.5f, role, AssetMix.One(""), cat, 1.8f,
+                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward) + math.PI * 0.5f, role, role == ObjectRole.Bench ? AssetMix.One("", ParkArt.RusticBenches) : AssetMix.One("", CampArt.Tables), cat, 1.8f,
                                 Hashing.Mix(ctx.Seed, 0x91C0u + (uint)tables)))
                             tables++;
                     }
                 }
             }
             int benches = PathBenches(ctx, occ, ctx.Raw("benchEvery"), bench, 0xBE70u) + gladeBenches;
-            int lamps = ctx.B("lamps") ? PathLamps(ctx, occ, 22f, AssetMix.One(""), 0x1A70u) : 0;
+            int lamps = ctx.B("lamps") ? PathLamps(ctx, occ, 22f, AssetMix.One("", ParkArt.ParkLamps), 0x1A70u) : 0;
 
             // 9. Harvest crates / ladders under some trees.
             int crates = 0;
@@ -426,11 +447,13 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             // 10. Regions: glade = core, the orchard blocks between the paths = green.
             var pieces = FreeSpace.Pieces(region, p => occ.Corridors.Overlaps(p, 0.75f) || occ.HitsPolygon(p, 0.5f) || (glade != null && Poly.Contains(glade, p)),
                 math.max(2.5f, math.sqrt(region.Area / 12000f)), 150f, ctx.Cancel);
-            if (glade != null) ctx.AddRegion(glade, "glade", RegionTags.Green, RegionTags.Core);
+            // Art pass (a1): the orchard blocks first, the glade last — an untargeted feature (bee hives, picnic) takes the
+            // first green region, and the beehives had landed in the picnic glade.
             if (pieces.Count == 0 && glade == null) ctx.AddRegion(region.Ring, "green:0", RegionTags.Green, RegionTags.Core);
             for (int i = 0; i < pieces.Count && i < 24; i++)
                 if (i == 0 && glade == null) ctx.AddRegion(pieces[i], "green:0", RegionTags.Green, RegionTags.Core);
                 else ctx.AddRegion(pieces[i], "green:" + i, RegionTags.Green);
+            if (glade != null) ctx.AddRegion(glade, "glade", RegionTags.Green, RegionTags.Core);
 
             CommonStats(ctx);
             ctx.Stat("Placemaker.Stat.FruitTrees", trees, Keys.UnitCount);
@@ -493,5 +516,14 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             }
             return n;
         }
+    }
+
+    /// <summary>Art pass (a1): orchard boundary and windbreak defaults.</summary>
+    public static class OrchardArt
+    {
+        /// <summary>A low picket-style fence: an orchard park is open, not a compound.</summary>
+        public static readonly string[] Fence = { "FenceResidentialLow01", "EU_FenceResidentialLow01" };
+        /// <summary>Lombardy-poplar style windbreak.</summary>
+        public static readonly string[] Windbreak = { "EU_PoplarTree01", "BirchTree01" };
     }
 }

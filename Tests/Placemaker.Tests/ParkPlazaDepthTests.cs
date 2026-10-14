@@ -467,8 +467,12 @@ namespace Placemaker.Tests
             Assert.Equal(5, dog.Nets.Count(n => n.Role == NetRole.Fence));
             var twoZones = Std("dogRun", ("smallDogs", true));
             Assert.Equal(7, twoZones.Nets.Count(n => n.Role == NetRole.Fence));
-            // Splash pad: jets all inside the pad.
-            var pad = Std("splashPad");
+            // Splash pad: by default a deck round a low fountain (no farm sprinklers); chosen jets all inside the pad.
+            var deckPad = Std("splashPad");
+            var fountain = deckPad.Objects.Single(o => o.Role == ObjectRole.Centerpiece);
+            Assert.DoesNotContain(deckPad.Objects, o => o.Category == AssetCategories.WaterJets);
+            Assert.True(math.distance(fountain.Position.xz, Poly.Centroid(Ring2(deckPad.Surfaces[0].Ring))) < 0.5f);
+            var pad = Std("splashPad", ("jetAsset", "SplashJet01"));
             float r = (float)pad.Facts["padRadius"];
             var jets = pad.Objects.Where(o => o.Category == AssetCategories.WaterJets).ToList();
             Assert.True(jets.Count >= 6);

@@ -460,6 +460,8 @@ namespace Placemaker.Core.Layers.Common
                 PlanCore(ctx);
                 unplacedInset = Entrances.UnplacedInset;
             }
+            // s8: ground before props — no plan may bury the site in thousands of props (ObjectBudget).
+            ObjectBudget.Enforce(plan, region.Area, ObjectsPerHectare);
             // Only the selected area itself: inside a parent, ends on the outline may meet the parent's paths.
             if (tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0)
             {
@@ -682,5 +684,8 @@ namespace Placemaker.Core.Layers.Common
         }
 
         protected abstract void PlanCore(LayerContext ctx);
+
+        /// <summary>Object cap per hectare for this layer's own plan (ObjectBudget); 0 = no cap.</summary>
+        protected virtual float ObjectsPerHectare => ObjectBudget.DefaultPerHectare;
     }
 }

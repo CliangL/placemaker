@@ -270,3 +270,55 @@ decals/bushes matched to nothing. Fixes:
 - Removal logs and releases anything still tagged after the record goes (`ReportLeftovers`).
 Known gap: when the player later splits one of our edges (a road built across a path), the game
 replaces the edge with untagged pieces. Propagating tags on splits is future work.
+
+## Doubled build and crash on bulldozing it (fix round s4b)
+
+Log: `left out 2 rejected parts (InvalidShape, attempt 1); retrying`, then `tagged 1340`, then
+`objects 1066 tagged, only 532 planned`. The user saw a double path, then got a native crash when
+removing it.
+
+- Root cause of the doubling: `Go(step)` stamped `_stepFrame` with the CURRENT frame, but steps start
+  on the NEXT `OnUpdate`. So every `if (frame == _stepFrame)` first-frame branch was dead code:
+  - ResetForRetry never destroyed the first attempt's definitions or requested Clear. The retry
+    re-emitted on top, and Apply applied both sets.
+  - Cleanup never cleared the temporaries or rolled back after Apply.
+  - Paint never collected its dabs, so painting was silently skipped.
+  Fix: `_stepFresh`. The first `OnUpdate` of a step sets `_stepFrame` to that frame. Before this fix
+  every auto-excluded retry built doubles, which also explains earlier "removal leaves things behind"
+  (the second set was partly untagged).
+- Hard invariant (`BuildVerification.Duplicated`): before Apply, if tagged objects or areas exceed the
+  emitted ones by more than max(4, 5 %) or max(2, 10 %), the build clears everything and re-emits
+  once, then fails with `Placemaker.Build.Duplicated`. After Apply, the same check rolls the group back.
+- Crash candidates hardened (no managed stack, so unconfirmed):
+  1. The bulldozer stays active after the owner lot is deleted, and its hover temporaries have
+     `Temp.m_Original` set to our members. Removal now waits until no temporary references a member.
+     After 30 frames it switches to the default tool once.
+  2. The `AreaBatchSystem` query widening for textured ghost surfaces (reflection) is now OFF by
+     default (setting "Textured surfaces in preview (experimental)").
+  3. Duplicate parallel networks: prevented by the invariant above.
+  4. Removal skips already-Deleted entities (idempotent) and stays at ≤ 32 per pass.
+- Bench rotation: CS2 benches and lamps face local +Z, and ParkManager added a quarter turn to its
+  tangent yaw at emission. Our port kept the tangent yaw but dropped the turn, so path benches stood
+  sideways. `ParkPlanting.PathSideYaw` now plans the facing direction (toward the path), which matches
+  `PlannedObject.Yaw` (0 = facing +Z) and `quaternion.RotateY` at emission (`ObjectYawTests`). Other
+  layers already used facing yaws.
+
+## Owner lot rejections, loose road builds, bridges (fix round s4c)
+
+- Owner lot "rejected" (groups 4–6): `Game.Areas.ValidationHelpers.AreaIterator` gives a TOP-LEVEL area an
+  OverlapExisting error for any overlap with an area of the same `AreaType`. So the owner Lot collided with a
+  neighbouring build's owner lot or with a planned Lot area, and the exclusion pass dropped it. The owner is
+  now emitted AFTER the plan validated (`Step.OwnerLot`), and its own errors are judged separately:
+  - Overlap is accepted. Apply is gated only by our tool; the Apply systems build errored temporaries anyway.
+  - Shape errors (InvalidShape/SmallArea/LongDistance) retry with simpler rings (`OwnerRings`: repaired →
+    simplified 3 m → convex hull → minimum-area rectangle).
+  - After the last ring the temporary is cancelled (`TempFlags.Cancel`).
+- No owner lot: bulldozing any object or area of the group asks for confirmation and then removes the whole
+  group (`IsOwnerlessGroupPart`, bulldoze confirmation patch, `HandleDeletedMembers`).
+- Loose builds: `[AreaGenerator(Loose = true)]` (roads, edgeZoning) build ordinary city content with no owner,
+  record or tags. Mixed plans tag only the non-loose parts. Claims are still counted for the exactly-once and
+  duplicate checks and for costs.
+- Bridges sank: `CourseSplitSystem` re-derives a top-level course's heights as terrain + a linear blend of
+  the end elevations, and the lake has no water yet at build time. Non-terrain nets are now ≤ 12 m pieces
+  at the planned heights. Every node carries `m_Elevation` = planned − terrain, plus
+  ForceElevatedNode/ForceElevatedEdge where the deck is > 0.75 m above the ground.

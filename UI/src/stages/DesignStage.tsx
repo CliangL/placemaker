@@ -16,6 +16,7 @@ import { entityIcon, layerColor } from "../lib/icons";
 import { humanize, TFunc, useT } from "../lib/l10n";
 import { findStep, isOverridePath, layerOf, parentOf, regionLabelArgs } from "../lib/schema";
 import { ErrorBoundary } from "../lib/errorBoundary";
+import { usePanelLayout } from "../lib/layout";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Section, Switch } from "../components/common";
 import { ControlList, controlsSummary } from "../controls/Controls";
@@ -279,7 +280,9 @@ const FitIcon = ({ t, fit, layer }: { t: TFunc; fit: FeatureFit; layer: string }
     );
 };
 
-const FeatureRow = ({ catalog, design, state, parent, f }: { catalog: Catalog; design: DesignState; state: ToolState; parent: StepView; f: FeatureView }) => {
+const FeatureRow = ({
+    catalog, design, state, parent, f, cols = 1,
+}: { catalog: Catalog; design: DesignState; state: ToolState; parent: StepView; f: FeatureView; cols?: number }) => {
     const { t } = useT();
     const assetName = useAssetName();
     const layer = layerOf(catalog, f.layer);
@@ -324,7 +327,9 @@ const FeatureRow = ({ catalog, design, state, parent, f }: { catalog: Catalog; d
     );
     return (
         <div
-            className={classNames(s.feature, { [s.featureOn]: f.enabled, [s.featureOpen]: shown })}
+            className={classNames(s.feature, { [s.featureOn]: f.enabled, [s.featureOpen]: shown, [s.featureCell]: cols > 1 })}
+            // Grid (wide panel): a cell per feature; one whose options are open spans the whole row.
+            style={cols > 1 ? { width: shown ? "100%" : 100 / cols + "%" } : undefined}
             data-testid={`feature-${f.layer}`}
             data-enabled={f.enabled ? "true" : "false"}
             data-open={shown ? "true" : "false"}
@@ -381,14 +386,21 @@ const FeatureRow = ({ catalog, design, state, parent, f }: { catalog: Catalog; d
 
 const Features = ({ catalog, design, state, step }: { catalog: Catalog; design: DesignState; state: ToolState; step: StepView }) => {
     const { t } = useT();
+    const layout = usePanelLayout();
     const list = step.features ?? [];
     if (!list.length) return null;
     const on = list.filter((f) => f.enabled).length;
+    const cols = Math.min(layout.featureCols, list.length);
+    const rows = list.map((f) => <FeatureRow key={f.layer} catalog={catalog} design={design} state={state} parent={step} f={f} cols={cols} />);
     return (
         <Section title={t("Placemaker.UI.Features", "Features")} count={on || undefined} testId="features" className={s.features}>
-            {list.map((f) => (
-                <FeatureRow key={f.layer} catalog={catalog} design={design} state={state} parent={step} f={f} />
-            ))}
+            {cols > 1 ? (
+                <div className={s.featureGrid} data-testid="feature-grid" data-cols={cols}>
+                    {rows}
+                </div>
+            ) : (
+                rows
+            )}
         </Section>
     );
 };

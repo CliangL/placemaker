@@ -2,6 +2,7 @@
 // open, each a small raised terrain mound (optional, permanent) dressed with pile props and mud
 // paint. Heaps keep far enough from the outline that the mound blends back to the original ground.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System.Collections.Generic;
 using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
@@ -32,7 +33,10 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
             c.Fixed("paintLayer");
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var occ = Occupancy(ctx);
             var region = ctx.LayerRegion;

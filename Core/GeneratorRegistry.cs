@@ -13,6 +13,11 @@ namespace Placemaker.Core
         public bool Hidden { get; set; }
         /// <summary>Make-row group: "parks", "gardens", "squares", "sports", "water", "industrial", "farms", "events", "transport", "parking", "roads", "nature".</summary>
         public string Group { get; set; } = "";
+        /// <summary>
+        /// Loose build (user: "a grid of roads is just roads"): what this layer builds becomes ordinary
+        /// city content — no owner lot, no group record, no member tags; bulldozed/upgraded per piece.
+        /// </summary>
+        public bool Loose { get; set; }
         public AreaGeneratorAttribute(int order) { Order = order; }
     }
 
@@ -46,6 +51,26 @@ namespace Placemaker.Core
             if (g == null) return true;
             var attr = (AreaGeneratorAttribute)Attribute.GetCustomAttribute(g.GetType(), typeof(AreaGeneratorAttribute));
             return attr != null && attr.Hidden;
+        }
+
+        private static Dictionary<string, bool> _loose;
+
+        /// <summary>True when the generator with this id is marked [AreaGenerator(Loose = true)]. Unknown ids are grouped.</summary>
+        public static bool IsLoose(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            var map = _loose;
+            if (map == null)
+            {
+                map = new Dictionary<string, bool>(StringComparer.Ordinal);
+                foreach (var g in All)
+                {
+                    var attr = (AreaGeneratorAttribute)Attribute.GetCustomAttribute(g.GetType(), typeof(AreaGeneratorAttribute));
+                    map[g.Id] = attr != null && attr.Loose;
+                }
+                _loose = map;
+            }
+            return map.TryGetValue(id, out bool loose) && loose;
         }
 
         public static IAreaGenerator Get(string id)

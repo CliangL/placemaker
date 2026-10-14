@@ -47,6 +47,17 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void DoubledBuildIsDetectedSmallAdoptionsAreNot()
+        {
+            var planned = new PlannedCounts { Objects = 532, Areas = 2, NetPieces = 60 };
+            Assert.True(BuildVerification.Duplicated(planned, Counts(1066, 4, 140, 128), out var why));
+            Assert.Contains("1066", why);
+            Assert.False(BuildVerification.Duplicated(planned, Counts(534, 2, 70, 60), out _));
+            Assert.True(BuildVerification.Duplicated(new PlannedCounts { Objects = 10, Areas = 2 }, Counts(10, 6, 0, 0), out _));
+            Assert.False(BuildVerification.Duplicated(new PlannedCounts { Objects = 0, Areas = 0 }, Counts(3, 1, 0, 0), out _));
+        }
+
+        [Fact]
         public void CountsAddByKind()
         {
             var c = new MemberCounts();

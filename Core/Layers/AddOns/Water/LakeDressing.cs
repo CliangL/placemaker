@@ -133,7 +133,7 @@ namespace Placemaker.Core.Layers.AddOns.Water
             {
                 bool paved = AssetAvailability.Has(AssetCategories.SurfacePaving);
                 foreach (var strip in outer.BoundaryStrips(o.PromWidth, math.clamp((int)math.round(outer.Perimeter / 60f), 3, 10), ctx.Cancel))
-                    if (paved) ctx.Surface(strip, SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    if (paved) ctx.Surface(strip, SurfaceRole.Paving, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
                 float walkD = hw + 0.6f;
                 var loop = Poly.Resample(outer.InsetVertices(walkD), 8f);
                 for (int i = 0; i < loop.Length; i++)
@@ -147,8 +147,8 @@ namespace Placemaker.Core.Layers.AddOns.Water
                 }
                 int benches = 0, lamps = 0;
                 float benchD = walkD + hw + 0.3f + 1.3f;
-                var bench = AssetMix.One("");
-                var lampAsset = AssetMix.One("");
+                var bench = AssetMix.One("", ParkArt.Benches);
+                var lampAsset = AssetMix.One("", ParkArt.ParkLamps);
                 float per = outer.Perimeter;
                 if (o.BenchSpacing > 0f && benchD + 1.3f <= o.PromWidth + 0.1f)
                     for (float s = o.BenchSpacing * 0.5f; s < per; s += o.BenchSpacing)
@@ -175,26 +175,69 @@ namespace Placemaker.Core.Layers.AddOns.Water
                 ctx.Plan.Facts["promenadeWidth"] = o.PromWidth;
             }
 
-            // 5. Bridges: island → nearest free shore (on the promenade walk when there is one), and between close islands.
+            // 5. Bridges (in-game bug, art pass a1: the bridge led nowhere). Each bridge lands where it can
+            //    join the park's walks (chosen by deck + link length, not just the nearest bank) and the
+            //    landing is linked to the nearest walk; the island gets a path loop the bridge head joins.
+            //    Decks never follow the terrain (they would dive into the basin) and arch to keep a rowing
+            //    boat's clearance over the water.
             int bridges = 0;
+            var bridged = new bool[islands.Count];
+            var loops = new float2[islands.Count][];
             if (o.Bridges)
             {
-                foreach (var isl in islands)
+                for (int k = 0; k < islands.Count; k++)
                 {
-                    if (Bridge(ctx, occ, reserved, outer, wr, isl, promenade ? walk : null, level, islandTop, walkAsset, links)) bridges++;
+                    loops[k] = IslandLoop(islands[k], hw, k == 0 && islands[k].R >= 8f);
+                    if (loops[k] != null)
+                        for (int i = 0; i < loops[k].Length; i++) occ.TakeCorridor(loops[k][i], loops[k][(i + 1) % loops[k].Length], hw + 0.3f, 9);
+                }
+                for (int k = 0; k < islands.Count; k++)
+                {
+                    if (!Bridge(ctx, occ, reserved, outer, water, islands[k], promenade ? walk : null, level, islandTop, walkAsset, links, out var head)) continue;
+                    bridges++; bridged[k] = true;
+                    IslandSpur(ctx, occ, islands[k], loops[k], head, islandTop, hw, walkAsset);
                 }
                 for (int i = 0; i < islands.Count; i++)
                     for (int j = i + 1; j < islands.Count; j++)
                     {
+                        if (!bridged[i] && !bridged[j]) continue;   // a bridge between two unreachable islands leads nowhere
                         var a = islands[i]; var b = islands[j];
-                        var dir = math.normalizesafe(b.C - a.C);
-                        var pa = a.C + dir * (a.R - 1f); var pb = b.C - dir * (b.R - 1f);
+                        var pa = IslandEdge(a, b.C); var pb = IslandEdge(b, a.C);
                         if (math.distance(pa, pb) > 35f || math.distance(pa, pb) < 3f) continue;
                         if (occ.Corridors.Overlaps((pa + pb) * 0.5f, 1.5f)) continue;
-                        ShoreKit.Net(ctx, pa, pb, islandTop, islandTop, NetRole.Pathway, walkAsset, false, 1.2f);
+                        float span = math.distance(pa, pb);
+                        ShoreKit.Net(ctx, pa, pb, islandTop, islandTop, NetRole.Pathway, walkAsset, false, Arch(span, islandTop, islandTop, level));
                         occ.TakeCorridor(pa, pb, hw + 0.3f, 9);
+                        IslandSpur(ctx, occ, a, loops[i], pa, islandTop, hw, walkAsset);
+                        IslandSpur(ctx, occ, b, loops[j], pb, islandTop, hw, walkAsset);
+                        bridged[i] = bridged[j] = true;
                         bridges++;
                     }
+                int islandPaths = 0;
+                for (int k = 0; k < islands.Count; k++)
+                {
+                    if (!bridged[k] || loops[k] == null) continue;
+                    var loop = loops[k];
+                    for (int i = 0; i < loop.Length; i++)
+                        ShoreKit.Net(ctx, loop[i], loop[(i + 1) % loop.Length], islandTop, islandTop, NetRole.Pathway, walkAsset, false);
+                    islandPaths++;
+                    // Two benches on the loop looking out over the water.
+                    var bench = AssetMix.One("", ParkArt.Benches);
+                    int placed = 0;
+                    for (int i = 0; i < loop.Length && placed < 2; i++)
+                    {
+                        int at = (i * 7 + loop.Length / 4) % loop.Length;
+                        var outDir = math.normalizesafe(loop[at] - islands[k].C);
+                        var p = loop[at] + outDir * (hw + 0.9f);
+                        if (!Poly.Contains(islands[k].Ring, p) || ParkSite.MinDistToRing(islands[k].Ring, p) < 0.9f) continue;
+                        if (occ.Corridors.Overlaps(p, 0.7f, 0.1f) || occ.Discs.Overlaps(p, 0.8f, 0.2f)) continue;
+                        var bo = ctx.Object(p, ShoreKit.Yaw(outDir), ObjectRole.Bench, bench, Hashing.Mix(ctx.Seed, 0x15BEu + (uint)(k * 8 + placed)));
+                        bo.Position.y = islandTop;
+                        occ.Take(p, 2.5f, 1);   // generous: the second bench sits elsewhere on the loop
+                        placed++;
+                    }
+                }
+                if (islandPaths > 0) ctx.Plan.Facts["islandPaths"] = islandPaths;
             }
             ctx.Check();
 
@@ -213,20 +256,20 @@ namespace Placemaker.Core.Layers.AddOns.Water
                     if (cat != null && iocc.Free(isl.C, 3f, 0.5f, 0.2f))
                     {
                         var g = ctx.Object(isl.C, Hashing.Unit(Hashing.Mix(ctx.Seed, 0x6A2Eu)) * 6.283f, cat == AssetCategories.Shelter ? ObjectRole.Furniture : ObjectRole.Centerpiece,
-                            AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x6A2Fu), -1, cat);
+                            cat == AssetCategories.Shelter ? AssetMix.One("", ParkArt.Gazebos) : AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x6A2Fu), -1, cat);
                         g.Position.y = islandTop;
                         iocc.Take(isl.C, 3f, 1);
                     }
                 }
                 if (!o.IslandTrees || !AssetAvailability.Has(AssetCategories.Tree)) continue;
                 int want = math.clamp((int)(Poly.Area(isl.Ring) / 55f), 1, 9);
-                for (int t = 0, tries = 0; t < want && tries < want * 12; tries++)
+                for (int t = 0, tries = 0; t < want && tries < want * 24; tries++)
                 {
                     uint v = Hashing.Mix(ctx.Seed, 0x7EE0u + (uint)(k * 211 + tries));
-                    float ang = Hashing.Unit(v) * 6.283f, rad = math.sqrt(Hashing.Unit(Hashing.Mix(v, 1u))) * isl.R * 0.75f;
+                    float ang = Hashing.Unit(v) * 6.283f, rad = math.sqrt(Hashing.Unit(Hashing.Mix(v, 1u))) * isl.R * 0.85f;
                     var p = isl.C + new float2(math.cos(ang), math.sin(ang)) * rad;
-                    if (!iocc.Free(p, 2.5f, 1f, 0.3f)) continue;
-                    var tree = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Tree, AssetMix.One(""), v, 1 + (int)(v % 3u));
+                    if (!iocc.Free(p, 1f, 0.6f, 0.2f)) continue;   // trunk clearance: canopies may overhang the island walk
+                    var tree = ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ParkArt.WaterTrees, v), v, 1 + (int)(v % 3u));
                     tree.Position.y = islandTop;
                     iocc.Take(p, 2.5f, 3);
                     occ.Take(p, 2.5f, 3);
@@ -238,12 +281,13 @@ namespace Placemaker.Core.Layers.AddOns.Water
             int jets = 0;
             if (o.Jets > 0)
             {
-                string cat = LeisureKit.Category(ctx, "", AssetCategories.CenterpieceFountain, AssetCategories.WaterJets, AssetCategories.Centerpiece);
+                // Art pass (a1): never "water.jets" here: in the vanilla catalog that is an agricultural sprinkler.
+                string cat = LeisureKit.Category(ctx, "", AssetCategories.CenterpieceFountain, AssetCategories.Centerpiece);
                 if (cat != null)
                     foreach (var p in JetSpots(wr, islands, anchor, o.Jets, o.JetLayout))
                     {
                         if (!wr.ContainsDisc(p, 4f) || occ.Discs.Overlaps(p, 1.5f, 0.5f) || occ.Corridors.Overlaps(p, 1.5f, 1f)) continue;
-                        var j = ctx.Object(p, 0f, ObjectRole.Centerpiece, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x7E70u + (uint)jets), -1, cat);
+                        var j = ctx.Object(p, 0f, ObjectRole.Centerpiece, AssetMix.One("", "SmallFountain02", "SmallFountain01"), Hashing.Mix(ctx.Seed, 0x7E70u + (uint)jets), -1, cat);
                         j.Position.y = level;
                         occ.Take(p, 1.5f, 9);
                         jets++;
@@ -301,47 +345,159 @@ namespace Placemaker.Core.Layers.AddOns.Water
             if (boats > 0) ctx.Stat("Placemaker.Stat.Boats", boats, Keys.UnitCount);
         }
 
-        private static bool Bridge(LayerContext ctx, Occupancy occ, ReservedSpace reserved, LayerRegion outer, LayerRegion wr, Island isl,
-            List<float2> walk, float level, float islandTop, AssetRef asset, List<float2> links)
+        /// <summary>Where the ray from the island centre towards <paramref name="toward"/> leaves the island, 1 m inside its shore.</summary>
+        private static float2 IslandEdge(Island isl, float2 toward)
         {
-            // Candidate landings: walk points (promenade) or just outside the basin, nearest first.
-            var cands = new List<(float d, float2 p)>();
-            if (walk != null) foreach (var p in walk) cands.Add((math.distance(p, isl.C), p));
+            var dir = math.normalizesafe(toward - isl.C, new float2(1, 0));
+            var far = isl.C + dir * (isl.R * 3f);
+            float best = isl.R;
+            for (int i = 0; i < isl.Ring.Length; i++)
+                if (Poly.SegmentIntersection(isl.C, far, isl.Ring[i], isl.Ring[(i + 1) % isl.Ring.Length], out var x, out _, out _))
+                    best = math.min(best, math.distance(isl.C, x));
+            return isl.C + dir * math.max(1f, best - 1f);
+        }
+
+        /// <summary>The island's path loop: its shore pulled in (organic, follows the island), or null when the island is too small.</summary>
+        private static float2[] IslandLoop(Island isl, float hw, bool centrepiece)
+        {
+            if (isl.R < 6f) return null;
+            var r = LayerRegion.From(isl.Ring);
+            if (r == null) return null;
+            float inset = math.clamp(isl.R * 0.25f, 2f, 4f);   // a shore walk; trees and the temple keep the middle
+            var loop = Poly.Clean(Poly.Resample(r.InsetVertices(inset), 4.5f), 0.3f);
+            if (loop.Length < 5 || !Poly.IsSimple(loop)) return null;
+            float minR = float.MaxValue;
+            foreach (var p in loop) minR = math.min(minR, math.distance(p, isl.C));
+            if (centrepiece && minR < 3f + hw + 0.4f) return null;   // keep the temple / statue clear
+            if (minR < hw + 1f) return null;
+            return Poly.EnsureCcw(loop);
+        }
+
+        /// <summary>A short flat walk from a bridge head on the island to its loop (or to a bench in the middle of a small island).</summary>
+        private static void IslandSpur(LayerContext ctx, Occupancy occ, Island isl, float2[] loop, float2 head, float y, float hw, AssetRef asset)
+        {
+            float2 to;
+            if (loop != null)
+            {
+                to = loop[0]; float best = float.MaxValue;
+                foreach (var p in loop) { float d = math.distance(p, head); if (d < best) { best = d; to = p; } }
+                if (best < 0.8f) return;
+            }
             else
             {
-                var pts = Poly.Resample(outer.Ring, 4f);
+                var dir = math.normalizesafe(isl.C - head, new float2(1, 0));
+                to = isl.C - dir * math.min(1.5f, isl.R * 0.3f);
+                if (math.distance(head, to) < 1f) return;
+                var bp = to + dir * (hw + 0.9f);
+                if (!occ.Discs.Overlaps(bp, 0.8f, 0.2f))
+                {
+                    var b = ctx.Object(bp, ShoreKit.Yaw(dir), ObjectRole.Bench, AssetMix.One("", ParkArt.Benches), Hashing.Mix(ctx.Seed, 0x15B1u + (uint)math.abs((int)(isl.C.x * 7f))));
+                    b.Position.y = y;
+                    occ.Take(bp, 0.8f, 1);
+                }
+            }
+            ShoreKit.Net(ctx, head, to, y, y, NetRole.Pathway, asset, false);
+            occ.TakeCorridor(head, to, hw + 0.3f, 9);
+        }
+
+        /// <summary>Arch of a footbridge deck: its middle clears the water by ~2 m (a rowing boat), never steeper than the span allows.</summary>
+        internal static float Arch(float span, float ya, float yb, float level)
+        {
+            float mid = (ya + yb) * 0.5f;
+            // A cubic with both inner controls raised by h peaks at 0.75 h.
+            float want = (level + 2.2f - mid) / 0.75f;
+            return math.clamp(want, 0.8f, math.max(0.8f, span * 0.16f));
+        }
+
+        private static bool LinkClearOf(ReservedSpace reserved, float2 a, float2 b, float r, bool overPlants)
+        {
+            if (reserved == null) return true;
+            float len = math.distance(a, b);
+            int n = math.max(2, (int)math.ceil(len / 1.5f));
+            for (int i = 1; i < n; i++)
+            {
+                var p = math.lerp(a, b, (float)i / n);
+                foreach (var d in reserved.Discs)
+                {
+                    // Planting yields to paths (Build/Declutter nudges or drops a tree a net runs through); furniture does not.
+                    if (overPlants && (d.Tag == nameof(ObjectRole.Tree) || d.Tag == nameof(ObjectRole.Bush))) continue;
+                    if (math.distancesq(p, d.Center) < (r + d.Radius) * (r + d.Radius)) return false;
+                }
+                foreach (var poly in reserved.Polygons)
+                    if (ReservedSpace.PointInPolygon(p, poly)) return false;
+            }
+            return true;
+        }
+
+        private static bool Bridge(LayerContext ctx, Occupancy occ, ReservedSpace reserved, LayerRegion outer, float2[] water, Island isl,
+            List<float2> walk, float level, float islandTop, AssetRef asset, List<float2> links, out float2 head)
+        {
+            head = isl.C;
+            float hw = Composer.DefaultHalfWidth(NetRole.Pathway);
+            // Candidate landings: walk points (promenade) or just outside the basin.
+            var cands = new List<float2>();
+            if (walk != null) cands.AddRange(walk);
+            else
+            {
+                var pts = Poly.Resample(outer.Ring, 3f);
                 for (int i = 0; i < pts.Length; i++)
                 {
                     var a = pts[i]; var b = pts[(i + 1) % pts.Length];
                     var dir = math.normalizesafe(b - a);
                     var outN = new float2(dir.y, -dir.x);
-                    var land = (a + b) * 0.5f + outN * 1.5f;
-                    cands.Add((math.distance(land, isl.C), land));
+                    cands.Add((a + b) * 0.5f + outN * 1.5f);
                 }
             }
-            cands.Sort((x, y) => x.d.CompareTo(y.d));
-            float hw = Composer.DefaultHalfWidth(NetRole.Pathway);
-            for (int k = 0; k < math.min(40, cands.Count); k++)
+            // Score = deck length + walk link length (+ a little when the link has to push through planting).
+            float bestCost = float.MaxValue; float2 bestLand = default, bestStart = default, bestQ = default; bool bestLinked = false;
+            foreach (var land in cands)
             {
-                var land = cands[k].p;
-                var dir = math.normalizesafe(land - isl.C);
-                var start = isl.C + dir * (isl.R - 1f);
-                if (math.distance(start, land) > 60f) break;
+                var start = IslandEdge(isl, land);
+                float span = math.distance(start, land);
+                if (span > 45f || span < 2f) continue;
                 if (walk == null && reserved != null && reserved.Blocks(land, 1.5f) && !ShoreKit.NearestReservedPath(reserved, land, 2f, out _)) continue;
                 bool clear = true;
-                for (int i = 1; i < 10 && clear; i++)
+                for (int i = 1; i < 12 && clear; i++)
                 {
-                    var p = math.lerp(start, land, i / 10f);
-                    if (math.distance(p, isl.C) > isl.R + hw + 1f && occ.Discs.Overlaps(p, hw, 0.2f)) clear = false;
+                    var p = math.lerp(start, land, i / 12f);
+                    if (math.distance(p, isl.C) > isl.R + hw + 1f && (occ.Discs.Overlaps(p, hw, 0.2f) || occ.Corridors.Overlaps(p, hw, 0.2f))) clear = false;
                 }
                 if (!clear) continue;
-                float landY = ctx.H(land);
-                ShoreKit.Net(ctx, start, land, islandTop, landY, NetRole.Pathway, asset, false, 1.2f);
-                occ.TakeCorridor(start, land, hw + 0.3f, 9);
-                if (walk == null) links.Add(land);
-                return true;
+                float cost = span; bool linked = false; float2 q = land;
+                if (walk == null)
+                {
+                    if (ShoreKit.NearestReservedPath(reserved, land, 40f, out q))
+                    {
+                        float l = math.distance(land, q);
+                        bool wet = false;
+                        for (int i = 1; i < 8 && !wet; i++) wet = Poly.Contains(water, math.lerp(land, q, i / 8f));
+                        if (!wet && l < 1.5f) linked = true;
+                        else if (!wet && LinkClearOf(reserved, land, q, 1.2f, false)) { linked = true; cost += l * 0.8f; }
+                        else if (!wet && LinkClearOf(reserved, land, q, 1.2f, true)) { linked = true; cost += l * 0.8f + 6f; }
+                    }
+                    if (!linked) cost += 200f;   // a bridge that leads nowhere only when nothing else is possible
+                }
+                else linked = true;
+                if (cost < bestCost) { bestCost = cost; bestLand = land; bestStart = start; bestQ = q; bestLinked = linked; }
             }
-            return false;
+            if (bestCost == float.MaxValue) return false;
+            float landY = ctx.H(bestLand);
+            float spanB = math.distance(bestStart, bestLand);
+            var deck = ShoreKit.Net(ctx, bestStart, bestLand, islandTop, landY, NetRole.Pathway, asset, false, Arch(spanB, islandTop, landY, level));
+            deck.FollowTerrain = false;
+            occ.TakeCorridor(bestStart, bestLand, hw + 0.3f, 9);
+            head = bestStart;
+            if (walk == null)
+            {
+                if (bestLinked && math.distance(bestLand, bestQ) >= 1.5f)
+                {
+                    ctx.StraightNet(bestLand, bestQ, NetRole.Pathway, asset);
+                    occ.TakeCorridor(bestLand, bestQ, hw + 0.3f, 9);
+                }
+                else if (!bestLinked) links.Add(bestLand);
+            }
+            ctx.Plan.Facts["bridgeLinked"] = bestLinked ? 1 : 0;
+            return true;
         }
 
         private static List<float2> JetSpots(LayerRegion wr, List<Island> islands, float2 anchor, int count, string layout)

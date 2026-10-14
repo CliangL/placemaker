@@ -133,7 +133,10 @@ namespace Placemaker.Tests.Types
             var plans = ZenGardenLayer.Styles.ToDictionary(s => s, s => PlanPreset(Id, s, SixHaL, TestKit.RoadAlongBottom(293)));
             Assert.Equal(plans.Count, plans.Values.Select(TestKit.Fingerprint).Distinct().Count());
             int Bamboo(AreaPlan p) => p.Objects.Count(o => o.Category == AssetCategories.ZenBamboo);
-            Assert.True(Bamboo(plans["bamboo"]) > 3 * Bamboo(plans["karesansui"]));
+            // The grove is massed with a leaf-litter floor surface plus clumps (ground before props), the screen is a border.
+            Assert.True(Bamboo(plans["bamboo"]) > Bamboo(plans["karesansui"]));
+            Assert.Contains(plans["bamboo"].Surfaces, s => s.Category == Placemaker.Core.Build.SurfaceCategories.Bark);
+            Assert.True(Bamboo(plans["bamboo"]) <= 300 * 6, "grove clumps " + Bamboo(plans["bamboo"]));
             Assert.True(plans["karesansui"].Facts["gravelArea"] > 3 * plans["stroll"].Facts["gravelArea"]);
             Assert.Equal(0, plans["bamboo"].Facts["waterArea"]);
             Assert.True(plans["moss"].Objects.Count(o => o.Role == ObjectRole.Tree) > plans["karesansui"].Objects.Count(o => o.Role == ObjectRole.Tree) * 2);

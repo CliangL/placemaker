@@ -19,6 +19,7 @@ export async function open(page: Page, opts: { width?: number; height?: number; 
     await page.evaluate(() => {
         try {
             localStorage.removeItem("placemaker.panelPos.v2");
+            localStorage.removeItem("placemaker.panelWidth.v1");
         } catch {
             /* ignore */
         }

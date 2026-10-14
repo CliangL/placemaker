@@ -102,6 +102,16 @@ namespace Placemaker.Core.Build
             { SurfaceCategories.Gravel, AssetCategories.SurfaceNatural },
             { SurfaceCategories.Rock, AssetCategories.SurfaceNatural },
             { AssetCategories.DecalLitter, AssetCategories.DecalDirt },
+            // Farm ground (s8, GroundCover): specific crop looks walk to any farmland, then to dirt.
+            { AssetCategories.SurfaceCropLavender, AssetCategories.SurfaceCropFlower },
+            { AssetCategories.SurfaceCropYellow, AssetCategories.SurfaceCropFlower },
+            { AssetCategories.SurfaceCropFlower, AssetCategories.SurfaceCropGreen },
+            { AssetCategories.SurfaceCropRows, AssetCategories.SurfaceCropSoil },
+            { AssetCategories.SurfaceCropPlowed, AssetCategories.SurfaceCropSoil },
+            { AssetCategories.SurfaceCropSoil, AssetCategories.SurfaceCrop },
+            { AssetCategories.SurfaceCropGreen, AssetCategories.SurfaceCrop },
+            { AssetCategories.SurfaceCropStraw, AssetCategories.SurfaceCrop },
+            { AssetCategories.SurfaceCrop, AssetCategories.SurfaceDirt },
             // Park path tiers (g3): custom bike / trail nets fall back to the footpath pool.
             { "net.bike", AssetCategories.Pathway },
             { "net.trail", AssetCategories.Pathway },

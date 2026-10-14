@@ -67,7 +67,7 @@ namespace Placemaker.Game.Build
         private enum Step
         {
             Idle, Prepare, WaitReplaced, ActivateTool, Terraform, Paint, EmitNets, EmitRest, WaitTemps, Validate,
-            ResetForRetry, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
+            ResetForRetry, OwnerLot, Apply, Settle, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
         }
 
         private ToolSystem _toolSystem;
@@ -87,6 +87,13 @@ namespace Placemaker.Game.Build
         private BuildStatus _status;
         private Step _step;
         private int _stepFrame;
+        /// <summary>
+        /// Set by Go: the next OnUpdate is the step's first frame (_stepFrame = that frame). Go is usually
+        /// called from inside the previous step, so without this "frame == _stepFrame" never held and the
+        /// first-frame work of ResetForRetry (destroy definitions + Clear), Paint and Cleanup was SKIPPED:
+        /// a retry kept the first attempt's temporaries and Apply built everything twice (playtest 4b).
+        /// </summary>
+        private bool _stepFresh;
         private int _startFrame;
         private BuildRequest _request;
         private BuildWork _work;
@@ -275,6 +282,7 @@ namespace Placemaker.Game.Build
             if (_step == Step.Idle) { GhostWatchdog(); return; }
             int frame = UnityEngine.Time.frameCount;
             _heightsValid = false;   // terrain data handles are only valid within the frame they were fetched
+            if (_stepFresh) { _stepFresh = false; _stepFrame = frame; }
             try
             {
                 if (_toolActivated && _step != Step.Cleanup && _toolSystem.activeTool != _tool)
@@ -295,6 +303,7 @@ namespace Placemaker.Game.Build
                     case Step.WaitTemps: DoWaitTemps(frame); break;
                     case Step.Validate: DoValidate(frame); break;
                     case Step.ResetForRetry: DoResetForRetry(frame); break;
+                    case Step.OwnerLot: DoOwnerLot(frame); break;
                     case Step.Apply: DoApply(); break;
                     case Step.Settle: DoSettle(frame); break;
                     case Step.ZoningWait: if (frame - _stepFrame >= ZoningWaitFrames) Go(Step.ZoningEmit); break;
@@ -316,6 +325,7 @@ namespace Placemaker.Game.Build
         {
             _step = step;
             _stepFrame = UnityEngine.Time.frameCount;
+            _stepFresh = true;
         }
 
         private void DoPrepare()
@@ -364,8 +374,7 @@ namespace Placemaker.Game.Build
             {
                 // Instant build: the ghost's temporaries ARE the build — no Clear, no re-emission.
                 if (frame - _stepFrame < ToolSwitchFrames + 1) return;
-                CreateRecord();
-                EmitOwnerArea();
+                CreateRecord();   // the owner lot follows after validation (Step.OwnerLot)
                 _status.Phase = BuildPhase.Materializing;
                 SetProgress(0.4f);
                 _lastMatched = -1;
@@ -399,9 +408,8 @@ namespace Placemaker.Game.Build
             int total = _work.Surfaces.Count + _work.Areas.Count + _work.Objects.Count;
             if (_emitCursor == 0)
             {
-                // Same transaction as the build: the owner lot appears and old trees/props vanish on
-                // the one Apply, or not at all.
-                EmitOwnerArea();
+                // Same transaction as the build: old trees/props vanish on the one Apply, or not at all.
+                // The owner lot is emitted after validation (Step.OwnerLot) so its overlaps never reject the plan.
                 EmitClearDefinitions();
             }
             int end = math.min(total, _emitCursor + DefinitionsPerFrame);
@@ -487,6 +495,13 @@ namespace Placemaker.Game.Build
                 return;
             }
             int tagged = TagTemporaries();
+            if (TemporariesDuplicated())
+            {
+                // Never apply a doubled set: clear everything and emit once more, then give up.
+                if (!_dupRetried) { _dupRetried = true; Go(Step.ResetForRetry); return; }
+                BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Duplicated");
+                return;
+            }
             if (tagged > 0 && !CanAffordNets(out int netCost))
             {
                 Mod.Log.Warn($"Placemaker: the roads/paths of this build cost {netCost}, more than the city has.");
@@ -501,7 +516,7 @@ namespace Placemaker.Game.Build
             _status.ErrorPositions.Clear();   // transient errors seen while settling are not real
             _status.Phase = BuildPhase.Applying;
             SetProgress(0.65f);
-            Go(Step.Apply);
+            Go(Step.OwnerLot);
         }
 
         private void DoResetForRetry(int frame)
@@ -543,7 +558,8 @@ namespace Placemaker.Game.Build
             if (stillTemp > 0) Mod.Log.Warn($"Placemaker: {stillTemp} parts stayed temporary after Apply; they are discarded.");
             AdoptStrays();
             _registry.MarkDirty();
-            int members = _registry.CountMembers(_groupId, false);
+            // Loose builds (road grids) have no group: count what this build claimed and Apply kept.
+            int members = LooseBuild ? CountAppliedClaimed() : _registry.CountMembers(_groupId, false);
             if (members == 0)
             {
                 CollectErrors();
@@ -559,8 +575,15 @@ namespace Placemaker.Game.Build
         private void DoFinish()
         {
             _registry.MarkDirty();
-            VerifyMembers();
-            FinishRecord();
+            if (VerifyMembers())
+            {
+                // Built twice despite the pre-Apply check: roll the whole group back (Cleanup after Apply
+                // removes it through the phase-correct removal system) and report.
+                BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Duplicated");
+                return;
+            }
+            if (LooseBuild) Mod.Log.Info($"Placemaker loose build: {CountAppliedClaimed()} parts are ordinary city content (no group).");
+            else FinishRecord();
             RestoreTool();
             var groupId = _groupId;
             int dropped = _dropped;
@@ -679,6 +702,7 @@ namespace Placemaker.Game.Build
             _itemPrefab.Clear();
             _itemByKey.Clear();
             _tagged.Clear();
+            _claimed.Clear();
             _usedPrefabNames.Clear();
             _usedPrefabs.Clear();
             _preexisting.Clear();
@@ -691,6 +715,7 @@ namespace Placemaker.Game.Build
             _ownerSuppressed = false;
             _skipped.Clear();
             _notedRings.Clear();
+            _dupRetried = false;
             _instant = false;
             if (_toolActivated) RestoreTool();
         }

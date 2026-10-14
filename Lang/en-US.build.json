@@ -11,6 +11,7 @@
   "Placemaker.Build.NothingMaterialized": "The game accepted none of the parts. Nothing was built.",
   "Placemaker.Build.EverythingCollides": "Every part collides with something. Nothing was built.",
   "Placemaker.Build.ApplyRejected": "The game rejected the build. Nothing was kept.",
+  "Placemaker.Build.Duplicated": "The build came out doubled (parts placed twice), so it was removed again. Nothing was kept. Please try again; details are in the log.",
   "Placemaker.Build.AssetsUnavailable": "None of the assets this design needs are available in this playset.",
   "Placemaker.Build.Done": "Built.",
   "Placemaker.Build.Skipped.Surface": "Built. {0} ground surfaces had a shape the game cannot use and were left out.",

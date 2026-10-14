@@ -23,8 +23,8 @@
 }
 
 // The moving element. Docked: right edge, from below the top bar (64rem) to above the bottom toolbar
-// (112rem). Width/insets mirror PANEL_REM / DOCK_TOP / DOCK_BOTTOM in Panel.tsx. When dragged, Panel.tsx
-// sets left/top/height inline.
+// (112rem). Insets mirror DOCK_TOP / DOCK_BOTTOM in Panel.tsx. Panel.tsx sets the width inline (resizable
+// by the left edge, remembered); when dragged it also sets left/top/height.
 .wrap {
     position: absolute;
     top: 64rem;
@@ -32,6 +32,28 @@
     bottom: 112rem;
     width: 400rem;
     pointer-events: none;
+}
+
+// Left-edge resize grip: a thin strip over the panel border; a faint accent line on hover / while dragging.
+.resize {
+    position: absolute;
+    top: 8rem;
+    bottom: 8rem;
+    left: -4rem;
+    width: 8rem;
+    z-index: 2;
+    pointer-events: auto;
+    cursor: ew-resize;
+    border-radius: 4rem;
+    transition-property: background-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: rgba(143, 209, 255, 0.35);
+    }
+}
+
+.resizeActive {
+    background-color: rgba(143, 209, 255, 0.55);
 }
 
 .wrapCollapsed {

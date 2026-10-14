@@ -9,13 +9,10 @@ async function realLayers(page: import("@playwright/test").Page) {
     return page.evaluate(() => Array.from((window as any).pm.backend.hostLayers as Set<string>));
 }
 
-/** The real catalog has many types: only the selected type's category starts open. */
+/** Shows every type in the grid browser (the "All" category chip). */
 async function openAllCategories(page: import("@playwright/test").Page) {
-    for (let i = 0; i < 20; i++) {
-        const closed = page.locator('[data-testid="type-browser"] [data-nav="cat"][aria-expanded="false"]');
-        if (!(await closed.count())) return;
-        await closed.first().click();
-    }
+    const all = page.getByTestId("make-group-all");
+    if (await all.count()) await all.click();
 }
 
 async function waitCore(page: import("@playwright/test").Page) {

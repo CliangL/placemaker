@@ -189,7 +189,8 @@ namespace Placemaker.Tests.Types
             Assert.Contains(plan.Objects, o => o.Category == AssetCategories.TrailSign);
             Assert.True(plan.Facts.TryGetValue("parkingStalls", out var stalls) && stalls >= 8, "no trailhead car park");
             Assert.Contains(plan.Surfaces, s => s.Category == AssetCategories.SurfaceNatural);
-            Assert.Contains(plan.Objects, o => o.Role == ObjectRole.Decal && o.Category == AssetCategories.DecalMarkings);
+            // A gravel trailhead has no painted bays (road markings never go into leisure places; art pass a3).
+            Assert.DoesNotContain(plan.Objects, o => o.Category == AssetCategories.DecalMarkings);
             Assert.True(TestKit.Stat(plan, "Placemaker.Stat.RestSpots") >= 1);
             Assert.True(TestKit.Stat(plan, "Placemaker.Stat.Viewpoints") >= 1);
             // The path starts at the entrance and attaches to the road.
@@ -207,10 +208,12 @@ namespace Placemaker.Tests.Types
             var ridge = B12Kit.Compose(B12Kit.With(Id, PresetValues("ridgeHike")), B12Kit.FiveHa, B12Kit.Hilly(250)).Layers[0];
             Assert.Contains(ridge.Terraform, t => t.Kind == TerraformKind.Raise);
             var summit = B12Kit.Compose(B12Kit.With(Id, PresetValues("summitClimb")), B12Kit.FiveHa, B12Kit.Hilly(250)).Layers[0];
-            Assert.Contains(summit.Objects, o => o.Category == AssetCategories.Lookout);
+            // No vanilla lookout tower: the summit gets an open timber shelter on its viewpoint.
+            Assert.Contains(summit.Objects, o => o.Category == AssetCategories.Shelter && (o.Asset.Id ?? "").StartsWith("CampgroundShelter"));
+            Assert.DoesNotContain(summit.Objects, o => o.Category == AssetCategories.Lookout);
             var meadow = B12Kit.Compose(B12Kit.With(Id, PresetValues("meadowWalk")), B12Kit.FiveHa, B12Kit.Hilly(250)).Layers[0];
             Assert.NotEmpty(meadow.Paint);
-            Assert.Contains(meadow.Nets, n => n.Role == NetRole.PathwayWide);
+            Assert.DoesNotContain(meadow.Nets, n => n.Role == NetRole.PathwayWide);   // trails are narrow (art pass a3)
         }
 
         [Fact]

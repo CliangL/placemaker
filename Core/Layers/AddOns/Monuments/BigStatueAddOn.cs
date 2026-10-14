@@ -60,6 +60,9 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             var asset = AssetMix.One(chosen);
             string kind = ctx.S("kind");
             float scale = ctx.F("size") / 100f * (kind == "colossus" ? 1.6f : 1f);
+            // A stand-in (sculpture or fountain when no figure is installed) stays near life size: a
+            // 4.5× fountain or bicycle sculpture is a landmark nobody asked for.
+            if (string.IsNullOrEmpty(chosen) && !MonumentKit.IsFigure(cat)) scale = math.min(scale, 1.25f);
             float hl = site.HalfLength, hw = site.HalfWidth;
 
             // Size the figure to the room: base radius ≈ 1.3 m per unit of scale, the plinth round it.
