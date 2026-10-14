@@ -100,6 +100,9 @@ namespace Placemaker.Core.Layers.AddOns
             Preset("full", ("court", "full"), ("fence", false), ("lights", true));
         }
 
+        /// <summary>A full court needs 28 × 15 m plus run-off when the court finds its own spot.</summary>
+        protected override float2 Footprint(LayerContext ctx) => ctx.S("court") == "full" ? new float2(31f, 18f) : base.Footprint(ctx);
+
         protected override void Build(LayerContext ctx, Occupancy occ, OrientedRect site, float2 toward)
         {
             bool full = ctx.S("court") == "full";

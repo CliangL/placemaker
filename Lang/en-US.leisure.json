@@ -269,7 +269,7 @@
   "Placemaker.Plaza.bollards.Tooltip": "A row of bollards along the edges that face a road.",
   "Placemaker.Plaza.bollardAsset": "Bollard",
   "Placemaker.Plaza.levels": "Levels",
-  "Placemaker.Plaza.levels.Tooltip": "Terraces following the outline, a sunken or a raised middle (permanent terrain change).",
+  "Placemaker.Plaza.levels.Tooltip": "Terraces following the outline, a sunken or raised middle, or architectural levels on the square's axes: split level, a cascade of steps, a central podium or a sunken court (permanent terrain change).",
   "Placemaker.Plaza.levels.flat": "Flat",
   "Placemaker.Plaza.levels.terracedUp": "Terraced up",
   "Placemaker.Plaza.levels.terracedDown": "Terraced down",

@@ -19,6 +19,9 @@ namespace Placemaker.Core.Layers.AddOns
         /// <summary>Lays the amenity out inside <paramref name="site"/>; <paramref name="toward"/> = where people arrive from.</summary>
         protected abstract void Build(LayerContext ctx, Occupancy occ, OrientedRect site, float2 toward);
 
+        /// <summary>Own-spot size (length, width) when there is no host place; a host place has the spec size.</summary>
+        protected virtual float2 Footprint(LayerContext ctx) => new float2(Spec.Length, Spec.Width);
+
         protected override void PlanCore(LayerContext ctx)
         {
             var occ = Occupancy(ctx);
@@ -29,7 +32,8 @@ namespace Placemaker.Core.Layers.AddOns
                 var spec = Spec;
                 var gates = new List<float2>();
                 foreach (var m in ctx.Input.Markers) gates.Add(m.Position.xz);
-                if (!Amenities.TrySolve(ctx.LayerRegion, occ, spec.Length, spec.Width, spec.DefaultAt, gates, ctx.Seed, null, out site, out _))
+                var size = Footprint(ctx);
+                if (!Amenities.TrySolve(ctx.LayerRegion, occ, size.x, size.y, spec.DefaultAt, gates, ctx.Seed, null, out site, out _))
                 {
                     NoSpace(ctx, NameKey);
                     return;

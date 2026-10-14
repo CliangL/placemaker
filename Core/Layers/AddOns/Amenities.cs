@@ -70,18 +70,19 @@ namespace Placemaker.Core.Layers.AddOns
         public static string PathControl(string layer) => layer + "Path";
 
         /// <summary>Region tags the hosts emit: one place per amenity.</summary>
-        public static string[] PlaceTags()
+        public static string[] PlaceTags(string[] only = null)
         {
-            var r = new string[All.Length];
-            for (int i = 0; i < All.Length; i++) r[i] = Place(All[i].Layer);
-            return r;
+            var r = new List<string>();
+            foreach (var s in All) if (only == null || Array.IndexOf(only, s.Layer) >= 0) r.Add(Place(s.Layer));
+            return r.ToArray();
         }
 
         /// <summary>Host controls for every amenity: position (+ "Path to it" when <paramref name="paths"/>), each in the amenity's group.</summary>
-        public static void DefineHostControls(ControlSet c, bool paths)
+        public static void DefineHostControls(ControlSet c, bool paths, string[] only = null)
         {
             foreach (var s in All)
             {
+                if (only != null && Array.IndexOf(only, s.Layer) < 0) continue;
                 c.Choice(AtControl(s.Layer), s.DefaultAt, ControlTier.More, s.Layer, Positions).Tip();
                 c.Fixed(AtControl(s.Layer));
                 if (!paths) continue;
@@ -111,12 +112,19 @@ namespace Placemaker.Core.Layers.AddOns
             foreach (var p in Positions) if (p != at) order.Add(p);
             for (int k = 0; k < order.Count; k++)
             {
+                // Every target of the anchor (each long edge, each corner, each entrance) is searched and the
+                // spot closest to its own target wins: "edge" means hugging an edge, not the first edge tried.
+                bool found = false; float best = float.MaxValue;
                 foreach (var (target, axis) in Targets(region, order[k], gates, length, width, margin, seed))
-                    if (Search(region, occ, target, axis, length, width, margin, blocked, out rect))
+                    if (Search(region, occ, target, axis, length, width, margin, blocked, out var r, best) && math.distance(r.Center, target) < best - 0.01f)
                     {
-                        moved = k > 0;
-                        return true;
+                        best = math.distance(r.Center, target);
+                        rect = r; found = true;
+                        if (best < 0.5f) break;
                     }
+                if (!found) continue;
+                moved = k > 0;
+                return true;
             }
             return false;
         }
@@ -190,7 +198,7 @@ namespace Placemaker.Core.Layers.AddOns
         }
 
         private static bool Search(LayerRegion region, Occupancy occ, float2 target, float2 axis, float length, float width, float margin,
-            Func<float2, bool> blocked, out OrientedRect rect)
+            Func<float2, bool> blocked, out OrientedRect rect, float limit = float.MaxValue)
         {
             rect = default;
             axis = math.normalizesafe(axis, new float2(1, 0));
@@ -199,7 +207,7 @@ namespace Placemaker.Core.Layers.AddOns
             const float step = 2f;
             int rings = (int)math.ceil(reach / step);
             int tests = 0;
-            for (int ring = 0; ring <= rings; ring++)
+            for (int ring = 0; ring <= rings && ring * step <= limit; ring++)
             {
                 // Square rings of candidates around the target, nearest first (deterministic order).
                 int side = ring * 2;

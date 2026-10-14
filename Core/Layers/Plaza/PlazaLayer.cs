@@ -5,10 +5,12 @@
 // The whole polygon is walkable: a pedestrian navigation area (vanilla "Pedestrian Area") plus
 // "Pedestrian Access Location" markers where people enter; no hidden path ring (ParkManager).
 //
-// Regions: paved (whole plaza), core (disc around the centre), edge:N (4 m frontage strips).
+// Regions: paved (whole plaza), core (disc around the centre), edge:N (4 m frontage strips),
+// place:<amenity> (round 5) the rectangle reserved for an amenity feature at its chosen position.
 
 using System;
 using System.Collections.Generic;
+using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
 using Random = Unity.Mathematics.Random;
@@ -29,11 +31,22 @@ namespace Placemaker.Core.Layers.Plaza
         public override string Id => LayerId;
         public override string Icon => "Media/Game/Icons/Pathways.svg";
         public override LayerKind Kind => LayerKind.Fill;
-        public override string[] Emits => new[] { RegionTags.Paved, RegionTags.Core, RegionTags.Edge, StreetFrontage.ShopsTag };
+        public override string[] Emits
+        {
+            get
+            {
+                var tags = new List<string> { RegionTags.Paved, RegionTags.Core, RegionTags.Edge, StreetFrontage.ShopsTag };
+                tags.AddRange(Amenities.PlaceTags(Hosted));
+                return tags.ToArray();
+            }
+        }
+
+        /// <summary>Amenities a plaza offers (round 5): the hard-surface ones — no dog run on a square.</summary>
+        public static readonly string[] Hosted = { "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "noticeboard", "volleyball" };
         protected override bool HostsStreetShops => true;
         public override float MinArea => 60f;
 
-        private static readonly FeatureInfo[] FeatureList =
+        private static readonly FeatureInfo[] FeatureList = WithAmenities(new[]
         {
             new FeatureInfo { Layer = "plazatrees", LabelKey = "Placemaker.Plaza.Feature.trees", TooltipKey = "Placemaker.Plaza.Feature.trees.Tooltip" },
             new FeatureInfo { Layer = "playground", LabelKey = "Placemaker.Plaza.Feature.playground", Preset = Park.ParkLayer.Bag(("size", "small"), ("fence", true)) },
@@ -48,9 +61,41 @@ namespace Placemaker.Core.Layers.Plaza
             StreetShopsFeature("Plaza"),
             new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Park.ParkLayer.Bag(("theme", "cracks"), ("ground", "paved"), ("density", 0.8)) },
             new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.flatten", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Park.ParkLayer.Bag(("shape", "flatten")) },
-        };
+        });
+
+        private static FeatureInfo[] WithAmenities(FeatureInfo[] own)
+        {
+            var list = new List<FeatureInfo>(own);
+            foreach (var id in Hosted) list.Add(Amenities.Feature("Plaza", id, false));
+            return list.ToArray();
+        }
 
         public IReadOnlyList<FeatureInfo> Features => FeatureList;
+
+        /// <summary>
+        /// Reserves the rectangle of each enabled amenity at its chosen position (before the big dressing,
+        /// which then works round it) and hands it to the amenity as its place. Returns what was placed.
+        /// </summary>
+        private static List<(string layer, OrientedRect rect)> PlaceAmenities(LayerContext ctx, Occupancy occ, LayerRegion region, List<float2> gates)
+        {
+            var result = new List<(string, OrientedRect)>();
+            foreach (var id in Hosted)
+            {
+                if (!ctx.Input.HasChildTarget(Amenities.Place(id))) continue;
+                var spec = Amenities.Spec(id);
+                if (!Amenities.TrySolve(region, occ, spec.Length, spec.Width, ctx.S(Amenities.AtControl(id)), gates, Hashing.Mix(ctx.Seed, Seeds.Hash(id)), null, out var rect, out bool moved, 0.5f))
+                {
+                    ctx.Issue(IssueSeverity.Warning, "Placemaker.Plaza.Issue.NoRoomForAmenity", "Placemaker.Feature." + id);
+                    continue;
+                }
+                if (moved) ctx.Issue(IssueSeverity.Info, "Placemaker.Plaza.Issue.AmenityMoved", "Placemaker.Feature." + id);
+                Amenities.Take(occ, rect, 0.5f, 6);
+                ctx.AddRegion(rect.Ring, Amenities.Place(id), Amenities.Place(id), RegionTags.Paved);
+                result.Add((id, rect));
+            }
+            if (result.Count > 0) ctx.Plan.Facts["amenities"] = result.Count;
+            return result;
+        }
 
         /// <summary>Clear radius the plaza keeps at its centre for a fountain feature (large fountain + seating ring).</summary>
         public const float FountainClearRadius = 12.5f;
@@ -92,7 +137,7 @@ namespace Placemaker.Core.Layers.Plaza
             c.Choice("lighting", "standard", ControlTier.More, "identity", "standard", "feature").Tip();
             c.Toggle("bollards", false, ControlTier.More, "identity").Tip();
             c.Asset("bollardAsset", AssetCategories.Bollard, ControlTier.More, "identity").When("bollards=true");
-            c.Choice("levels", "flat", ControlTier.More, "levels", "flat", "terracedUp", "terracedDown", "sunken", "raised").Tip();
+            c.Choice("levels", "flat", ControlTier.More, "levels", "flat", "terracedUp", "terracedDown", "sunken", "raised", "split", "cascade", "podium", "sunkenCourt").Tip();
             c.Slider("levelCount", 3, 2, 4, 1, "count", ControlTier.More, "levels");
             c.Slider("levelHeight", 1.5, 0.5, 4, 0.5, "m", ControlTier.More, "levels").Tip();
             c.Toggle("levelPlanters", true, ControlTier.More, "levels");
@@ -119,6 +164,7 @@ namespace Placemaker.Core.Layers.Plaza
             c.Toggle("games", false, ControlTier.More, "activity").Tip();
             c.Toggle("performance", false, ControlTier.More, "activity").Tip();
             DefineStreetShopControls(c);
+            Amenities.DefineHostControls(c, false, Hosted);
             foreach (var id in new[] { "levels", "levelCount", "levelHeight", "amphitheatre", "rows", "pool", "realWater", "jets", "stalls", "performance", "games", "bollards", "pattern", "lighting", "centerKind", "border", "treeLayout" })
                 c.Fixed(id);
             c.RandomRange("lawns", 0, 20);
@@ -148,6 +194,19 @@ namespace Placemaker.Core.Layers.Plaza
                 ("levelHeight", 2.5), ("beds", 4.0), ("treeLayout", "grid"), ("centerKind", "statue"));
             Preset("cafe", ("centerMode", "single"), ("centerSize", 3.0), ("furniture", 6.0), ("cafe", 5.0), ("shade", 3.0), ("planters", 12.0),
                 ("pattern", "scatter"), ("games", true), ("jets", false), ("treeLayout", "edge"));
+            // Round 5: architectural level variants (PlazaLevels) and two classic squares.
+            Preset("splitLevel", ("centerMode", "single"), ("centerSize", 3.0), ("furniture", 8.0), ("levels", "split"), ("levelHeight", 1.5),
+                ("levelPlanters", true), ("treeLayout", "edge"), ("pattern", "border"), ("beds", 2.0));
+            Preset("cascade", ("centerMode", "axis"), ("centerSize", 3.0), ("centerSpacing", 18.0), ("furniture", 10.0), ("levels", "cascade"),
+                ("levelCount", 4.0), ("levelHeight", 1.0), ("levelPlanters", true), ("beds", 4.0), ("treeLayout", "edge"), ("arrangementMode", "edges"));
+            Preset("podium", ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 8.0), ("levels", "podium"),
+                ("levelHeight", 1.5), ("levelPlanters", true), ("lighting", "feature"), ("bollards", true), ("pattern", "grid"));
+            Preset("sunkenCourt", ("centerMode", "single"), ("centerSize", 3.0), ("centerKind", "fountain"), ("furniture", 6.0), ("levels", "sunkenCourt"),
+                ("levelHeight", 2.0), ("levelPlanters", true), ("cafe", 4.0), ("shade", 2.0), ("treeLayout", "grid"));
+            Preset("piazza", ("centerMode", "single"), ("centerSize", 6.0), ("centerKind", "fountain"), ("furniture", 6.0), ("arrangementMode", "edges"),
+                ("pattern", "grid"), ("cafe", 4.0), ("bollards", true), ("lighting", "feature"), ("treeLayout", "none"), ("planters", 0.0));
+            Preset("green", ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 10.0), ("lawns", 35.0), ("beds", 6.0),
+                ("treeLayout", "groves"), ("border", "grass"), ("arrangement", new[] { "bench", "tree", "bench" }), ("arrangementMode", "edges"));
         }
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
@@ -207,7 +266,10 @@ namespace Placemaker.Core.Layers.Plaza
 
             // Big elements first (they claim space the furniture arrangement then works around).
             PlazaDressing.Border(ctx, region);
-            PlazaDressing.Levels(ctx, occ, region, gates);
+            var amenities = PlaceAmenities(ctx, occ, region, gatePoints);
+            var amenityRings = amenities.ConvertAll(a => a.rect.Ring);
+            if (PlazaLevels.Handles(ctx.S("levels"))) PlazaLevels.Shape(ctx, occ, region, ctx.S("levels"), amenityRings);
+            else PlazaDressing.Levels(ctx, occ, region, gates);
             PlazaDressing.Amphitheatre(ctx, occ, region, fountainChild || ctx.S("centerMode") != "none", math.max(FountainClearRadius, ctx.F("centerSize")) + 3f);
             PlazaDressing.Pool(ctx, occ, region, region.Centroid, fountainChild || ctx.S("centerMode") != "none" ? math.max(FountainClearRadius, ctx.F("centerSize")) : 0f);
             PlazaDressing.Stalls(ctx, occ, region);
