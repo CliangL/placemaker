@@ -97,6 +97,30 @@ namespace Placemaker.Tests
         public void OnlyOrdinaryParksArePalettes(string palette, bool general) =>
             Assert.Equal(general, AssetHeuristics.IsGeneralParkPalette(palette.Substring("palette:".Length)));
 
+        [Theory]
+        [InlineData(AssetCategories.WaterJets, "AgricultureSprinklerSystem", false)]   // in-game: a centre-pivot rig as splash pad
+        [InlineData(AssetCategories.WaterJets, "Prop_TractorSprayer01", false)]
+        [InlineData(AssetCategories.Playground, "Prop_CombineHarvester01", false)]
+        [InlineData(AssetCategories.Decoration, "SiloSculpture01", false)]
+        [InlineData(AssetCategories.WaterJets, "SplashPadJet01", true)]
+        public void LeisurePoolsNeverTakeMachinery(string category, string name, bool eligible)
+        {
+            var c = AssetHeuristics.Classify(name, Mod);
+            Assert.Equal(eligible, AssetHeuristics.AutoEligible(category, name, Mod));
+        }
+
+        [Fact]
+        public void GiantBoundsAreDroppedFromFurniturePools()
+        {
+            var pool = AutoPoolRanking.Build(AssetCategories.WaterJets, new[]
+            {
+                new PoolCandidate("BigRig", false, footprint: 16f), new PoolCandidate("Jet", false, footprint: 0.6f),
+            });
+            Assert.Equal(new[] { "Jet" }, pool);
+            Assert.False(AssetCuration.FitsSize(AssetCategories.Bench, 143f));
+            Assert.True(AssetCuration.FitsSize(AssetCategories.Fence, 500f));   // nets/fences: no cap
+        }
+
         // ───────────────────────── replay of a real catalog ─────────────────────────
 
         /// <summary>Categories the layers use for everyday dressing (the audit list of docs/ASSET-CURATION.md).</summary>
@@ -284,6 +308,18 @@ namespace Placemaker.Tests
             NoneContains(AssetCategories.Playground, "School");
             NoneContains(AssetCategories.CampingPitch, "DoNotEnter");
             NoneContains(AssetCategories.Bollard, "Mooring");
+            NoneContains(AssetCategories.WaterJets, "Agricultur", "Tractor", "Sprayer");
+            // Every leisure pool: no machinery, nothing bigger than the category's size cap.
+            foreach (var kv in r.Pools)
+            {
+                if (!AssetCuration.IsLeisureCategory(kv.Key)) continue;
+                foreach (var id in kv.Value)
+                {
+                    Assert.False(AssetCuration.IsMachineryForLeisure(kv.Key, id.ToLowerInvariant()), kv.Key + " pool has " + id);
+                    var s = r.Items[id].Size;
+                    if (s != null) Assert.True(AssetCuration.FitsSize(kv.Key, Math.Max(s[0], s[2])), kv.Key + " pool has a giant " + id);
+                }
+            }
             foreach (var c in new[] { AssetCategories.Decal, AssetCategories.DecalLeaves, AssetCategories.DecalDirt, AssetCategories.DecalCracks,
                          AssetCategories.DecalPuddles, AssetCategories.DecalPaving, AssetCategories.DecalMarkings })
                 NoneContains(c, "Alphabet", "Number", "Text ", "TextDecal", "RoadArrow", "Speed", "Roundabout", "Curb", "Grid", "PlaygroundDecal", "Chirper");
