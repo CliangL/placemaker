@@ -33,11 +33,12 @@ namespace Placemaker.Core.Layers.AddOns
             if (!AssetAvailability.Require(ctx.Plan, AssetCategories.Restroom, new[] { ctx.S("asset") }, Keys.Category(AssetCategories.Restroom)))
                 return;
             var occ = Occupancy(ctx);
-            var asset = AssetMix.One(ctx.S("asset"));
-            float radius = AssetMix.FootprintRadius(ctx.Site, asset, 4f);
+            var asset = AddOnAssets.Or(ctx.S("asset"), AddOnAssets.Restroom);
+            float radius = AddOnAssets.Radius(ctx.Site, ctx.S("asset"), AddOnAssets.Restroom, 2f);
             bool kiosk = ctx.B("kiosk") && AssetAvailability.Require(ctx.Plan, AssetCategories.Kiosk, new[] { ctx.S("kioskAsset") }, Keys.Category(AssetCategories.Kiosk));
-            var kioskAsset = AssetMix.One(ctx.S("kioskAsset"));
-            float kioskRadius = AssetMix.FootprintRadius(ctx.Site, kioskAsset, 2.5f);
+            var kioskAsset = AddOnAssets.Or(ctx.S("kioskAsset"), AddOnAssets.Kiosks);
+            float kioskRadius = AddOnAssets.Radius(ctx.Site, ctx.S("kioskAsset"), AddOnAssets.Kiosks, 2.5f);
+            var paving = AssetMix.One("", AddOnAssets.Paving);
             // One per N hectares (at least one), capped by the count — or exactly the count.
             int wanted = ctx.B("byArea")
                 ? math.clamp((int)math.ceil(ctx.LayerRegion.Area / (math.max(0.5f, ctx.F("haEach")) * 10000f) - 0.25f), 1, ctx.I("count"))
@@ -72,16 +73,28 @@ namespace Placemaker.Core.Layers.AddOns
                 ctx.Object(spot, yaw, ObjectRole.Furniture, asset, Hashing.Mix(ctx.Seed, (uint)placed), -1, AssetCategories.Restroom);
                 occ.Take(spot, radius, 0);
                 placed++;
-                if (!kiosk) continue;
-                var side = new float2(math.cos(yaw), -math.sin(yaw));   // perpendicular to the facing direction
-                foreach (float s in new[] { 1f, -1f })
-                {
-                    var k = spot + side * s * (radius + kioskRadius + 0.5f);
-                    if (!occ.Free(k, kioskRadius, 0.5f, 0.3f)) continue;
-                    ctx.Object(k, yaw, ObjectRole.Furniture, kioskAsset, Hashing.Mix(ctx.Seed, 0x4B00u + (uint)placed), -1, AssetCategories.Kiosk);
-                    occ.Take(k, kioskRadius, 1);
-                    break;
-                }
+                var fwd = math.normalizesafe(toward - spot, new float2(0, 1));
+                var side = new float2(fwd.y, -fwd.x);   // perpendicular to the facing direction
+                float kioskSide = 0f;
+                if (kiosk)
+                    foreach (float s in new[] { 1f, -1f })
+                    {
+                        var k = spot + side * s * (radius + kioskRadius + 0.5f);
+                        if (!occ.Free(k, kioskRadius, 0.5f, 0.3f)) continue;
+                        ctx.Object(k, yaw, ObjectRole.Furniture, kioskAsset, Hashing.Mix(ctx.Seed, 0x4B00u + (uint)placed), -1, AssetCategories.Kiosk);
+                        occ.Take(k, kioskRadius, 1);
+                        kioskSide = s;
+                        break;
+                    }
+                // A small paved forecourt under the block (and its kiosk) reaching the path, a bin by
+                // the door on the side away from the kiosk: a facility, not a shed on the grass.
+                float halfW = radius + 1.2f + (kioskSide != 0f ? kioskRadius + 0.5f : 0f);
+                var padCentre = spot + side * kioskSide * (kioskRadius + 0.5f) * 0.5f + fwd * 0.6f;
+                AddOnKit.Pave(ctx, LayerRegion.Rect(padCentre, side, halfW, radius + 1.6f), SurfaceRole.Paving, paving, AssetCategories.SurfacePaving);
+                if (occ.Paths.Count > 0) AddOnKit.Link(ctx, toward, spot, radius + 1.4f, 1.3f, paving, AssetCategories.SurfacePaving, 12f);
+                float binSide = kioskSide != 0f ? -kioskSide : 1f;
+                LeisureKit.Put(ctx, occ, spot + fwd * (radius + 0.9f) + side * binSide * (radius + 0.4f), yaw, ObjectRole.Bin, AssetMix.One("", AddOnAssets.Bin), null, 0.4f,
+                    Hashing.Mix(ctx.Seed, 0xB1Bu + (uint)placed), 0.2f, 0.1f);
             }
             if (placed == 0) NoSpace(ctx, "Placemaker.AddOn.Restrooms.Name");
             else if (placed < wanted) ctx.Issue(IssueSeverity.Info, "Placemaker.AddOn.Restrooms.Issue.Fewer", placed, wanted);

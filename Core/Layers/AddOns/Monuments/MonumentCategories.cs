@@ -31,6 +31,9 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
 
         public IEnumerable<string> VarietyCategories => new[] { AssetCategories.MonumentSculpture };
 
+        private static readonly string[] NetPillars =
+            { "pier", "subway", "train", "station", "elevated", "virtual", "vertical pillar", "horizontal pillar", "pillar top", "pedestrian", "bridge", "highway", "road" };
+
         public bool Classify(string lower, AssetTraits traits, List<string> categories)
         {
             if ((traits & (AssetTraits.Plant | AssetTraits.Building)) != 0 || Has(lower, Never)) return false;
@@ -60,6 +63,14 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             switch (category)
             {
                 case AssetCategories.MonumentColumn:
+                    // Art pass a6: every "pillar" in the vanilla catalog is a bridge / pier / subway support
+                    // (Pier01Pillar, SubwayStationElevated02Pillar, "Pillar Top 16"…): never a park column.
+                    if (Has(lower, NetPillars)) return false;
+                    return !Has(lower, "advert", "logo", "billboard", "screen", "placeholder", "random", "broken", "ruin", "damaged");
+                case AssetCategories.CenterpieceStatue:
+                case AssetCategories.Centerpiece:
+                    // Clock hands (NotreDameClockPointers, TrainStation01ClockPointers01) are building parts.
+                    return Has(lower, "pointer", "clockhand", "clock hand") ? false : (bool?)null;
                 case AssetCategories.MonumentArch:
                 case AssetCategories.MonumentObelisk:
                 case AssetCategories.MonumentSculpture:

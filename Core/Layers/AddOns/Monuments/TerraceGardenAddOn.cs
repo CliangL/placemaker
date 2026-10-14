@@ -215,7 +215,7 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
             {
                 float r = math.min(A, B) * g.Rho0 * 0.55f;
                 var o = ctx.Object(g.C, MonumentKit.Yaw(entry - g.C), ObjectRole.Centerpiece, AssetMix.One(chosen), Hashing.Mix(ctx.Seed, 0xCE0u), -1, cat);
-                o.Scale = centre == "fountain" ? math.min(scale, 2f) : scale;
+                o.Scale = centre == "fountain" ? math.min(scale, 2f) : string.IsNullOrEmpty(chosen) && !MonumentKit.IsFigure(cat) ? math.min(scale, 1.25f) : scale;
                 occ.Take(g.C, r, 0);
             }
 

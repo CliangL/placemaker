@@ -131,40 +131,69 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void Build(LayerContext ctx, Occupancy occ, OrientedRect site, float2 toward)
         {
-            string jetCat = LeisureKit.Category(ctx, ctx.S("jetAsset"), AssetCategories.WaterJets, AssetCategories.CenterpieceFountain);
-            if (jetCat == null) return;
+            // Real jets only when the player picked a jet prop: the catalog has none for parks (the
+            // automatic water.jets match is a farm irrigation rig, 2026-10-13 playtest). By default the
+            // pad is a pale deck round a low ground-level fountain, wet splashes scattered on the deck.
+            bool jets = !string.IsNullOrEmpty(ctx.S("jetAsset"));
             int si = math.max(0, Array.IndexOf(Sizes, ctx.S("size")));
             bool benches = ctx.B("benches");
             float room = math.min(site.HalfLength, site.HalfWidth) - (benches ? 2.6f : 0.8f);
             float r = math.min(si == 0 ? 4f : si == 1 ? 5.5f : 7f, room);
             if (r < 2.5f) { NoSpace(ctx, NameKey); return; }
-            // The pad also carries the parents' bench ring (r + 1.5), so seats stand on paving, not the lawn.
-            ctx.Surface(Disc(site.Center, benches ? r + 2.4f : r), SurfaceRole.Decorative, AssetMix.One(ctx.S("padAsset")), AssetCategories.SurfacePaving);
-            // Jets in a sunflower pattern: even coverage, a dense middle, nothing on the rim (splash zone).
-            int wanted = ctx.I("jets");
-            var asset = AssetMix.One(ctx.S("jetAsset"));
+            var deck = AddOnAssets.Or(ctx.S("padAsset"), AddOnAssets.SplashDeck);
+            // The deck also carries the parents' bench ring (r + 1.5), so seats stand on paving (s5).
+            ctx.Surface(Disc(site.Center, benches ? r + 2.4f : r), SurfaceRole.Decorative, deck, AssetCategories.SurfacePaving);
+            if (occ.Paths.Count > 0) AddOnKit.Link(ctx, Monuments.MonumentKit.Entry(occ, site, toward), site.Center, benches ? r + 2.4f : r, 1.2f, deck, AssetCategories.SurfacePaving, 20f);
             int placed = 0;
-            float inner = r - 0.9f;
-            float spacing = math.max(1.1f, inner / math.sqrt(math.max(1, wanted)) * 1.6f);
-            const float golden = 2.39996323f;
-            for (int i = 0; i < wanted * 3 && placed < wanted; i++)
+            if (jets)
             {
-                float rr = spacing * 0.55f * math.sqrt(i + 0.5f);
-                if (rr > inner) break;
-                var p = site.Center + new float2(math.cos(i * golden), math.sin(i * golden)) * rr;
-                if (Put(ctx, occ, p, 0f, ObjectRole.Furniture, asset, jetCat, 0.35f, Hashing.Mix(ctx.Seed, (uint)i + 11u))) placed++;
+                // Jets in a sunflower pattern: even coverage, a dense middle, nothing on the rim (splash zone).
+                int wanted = ctx.I("jets");
+                var asset = AssetMix.One(ctx.S("jetAsset"));
+                float inner = r - 0.9f;
+                float spacing = math.max(1.1f, inner / math.sqrt(math.max(1, wanted)) * 1.6f);
+                const float golden = 2.39996323f;
+                for (int i = 0; i < wanted * 3 && placed < wanted; i++)
+                {
+                    float rr = spacing * 0.55f * math.sqrt(i + 0.5f);
+                    if (rr > inner) break;
+                    var p = site.Center + new float2(math.cos(i * golden), math.sin(i * golden)) * rr;
+                    if (Put(ctx, occ, p, 0f, ObjectRole.Furniture, asset, AssetCategories.WaterJets, 0.35f, Hashing.Mix(ctx.Seed, (uint)i + 11u))) placed++;
+                }
+            }
+            else
+            {
+                // The low basin fountain (LargeFountain01 is 0.8 m tall, 9 m across) on a large pad, the
+                // small one elsewhere; it sits in the middle and takes its own disc.
+                var fountain = AssetMix.One("", r >= 6.5f ? AddOnAssets.SplashFountain : new[] { "SmallFountain03", "SmallFountain02" });
+                float fr = r >= 6.5f ? 4.7f : 2.1f;
+                if (AssetAvailability.Require(ctx.Plan, AssetCategories.CenterpieceFountain, null, Keys.Category(AssetCategories.CenterpieceFountain))
+                    && Put(ctx, occ, site.Center, Hashing.Unit(ctx.Seed) * 6.283f, ObjectRole.Centerpiece, fountain, AssetCategories.CenterpieceFountain, fr, Hashing.Mix(ctx.Seed, 0xF0u))) placed++;
+                // A sprinkle of wet splashes on the deck round it (flat decals; never reserve space).
+                if (AssetAvailability.Has(AssetCategories.DecalPuddles))
+                {
+                    int n = math.clamp((int)(r * 1.2f), 4, 9);
+                    float band = (fr + r) * 0.5f;
+                    for (int i = 0; i < n; i++)
+                    {
+                        float a = (i + Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)i + 0x5Bu)) * 0.5f) * 2f * math.PI / n;
+                        var p = site.Center + new float2(math.cos(a), math.sin(a)) * band;
+                        uint v = Hashing.Mix(ctx.Seed, (uint)i + 0x5B0u);
+                        ctx.Object(p, Hashing.Unit(v) * 6.283f, ObjectRole.Decal, AssetMix.Pick(SplashDecals, v), v, -1, AssetCategories.DecalPuddles);
+                    }
+                }
             }
             int seats = 0;
             if (benches)
             {
                 // Parents' benches round the rim, leaving the side people arrive from open.
-                var bench = AssetMix.One(ctx.S("benchAsset"));
+                var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
                 float br = r + 1.5f;
                 int n = math.clamp((int)math.floor(2f * math.PI * br / 5.5f), 3, 10);
                 float gapAngle = math.atan2(toward.y - site.Center.y, toward.x - site.Center.x);
                 for (int i = 0; i < n; i++)
                 {
-                    float a = gapAngle + (i + 0.5f) * 2f * math.PI / (n + 1) + math.PI * 2f / (n + 1) * 0.5f;
+                    float a = gapAngle + (i + 1) * 2f * math.PI / (n + 1);
                     var p = site.Center + new float2(math.cos(a), math.sin(a)) * br;
                     if (Put(ctx, occ, p, LeisureKit.Yaw(p, site.Center), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0xBE0u + (uint)i))) seats++;
                 }
@@ -175,10 +204,18 @@ namespace Placemaker.Core.Layers.AddOns
                     float side = -SideSign(site, toward);
                     Put(ctx, occ, site.Local(k * (site.HalfLength - 2.5f), side * (site.HalfWidth - 2.5f)), 0f, ObjectRole.Tree, new AssetRef(""), null, 2.4f, Hashing.Mix(ctx.Seed, 0x7E0u + (uint)(k + 1)));
                 }
-            ctx.Stat("Placemaker.Stat.Jets", placed, Keys.UnitCount);
+            ctx.Stat("Placemaker.Stat.Jets", jets ? placed : 0, Keys.UnitCount);
             ctx.Stat(Keys.StatBenches, seats, Keys.UnitCount);
             ctx.Plan.Facts["padRadius"] = r;
         }
+
+        /// <summary>Water-splash decals (G87 wet pack); the puddle pool otherwise.</summary>
+        private static readonly string[] SplashDecals =
+        {
+            "G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 81 A M Decal",
+            "G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 84 B M Decal",
+            "G87 Stains and Puddles Decals Wet Pack Puddles G87 Water Splash 87 C M Decal",
+        };
     }
 
     [AreaGenerator(167)]
@@ -214,105 +251,99 @@ namespace Placemaker.Core.Layers.AddOns
                 ? LeisureKit.Category(ctx, ctx.S("asset"), AssetCategories.Shelter, AssetCategories.StageBandstand)
                 : LeisureKit.Category(ctx, ctx.S("asset"), AssetCategories.StageBandstand, AssetCategories.Stage, AssetCategories.Shelter);
             if (cat == null) return;
-            var asset = AssetMix.One(ctx.S("asset"));
-            float sr = math.clamp(AssetMix.FootprintRadius(ctx.Site, asset, 4f), 2.5f, 6f);
+            var asset = AddOnAssets.Or(ctx.S("asset"), gazebo ? AddOnAssets.Gazebo : AddOnAssets.Bandstand);
+            // Gazebos are round: the bounds' half-extent, not the diagonal, is how far the eaves reach.
+            float sr = math.clamp(AddOnAssets.Radius(ctx.Site, ctx.S("asset"), gazebo ? AddOnAssets.Gazebo : AddOnAssets.Bandstand, 4.5f) * 0.8f, 2.5f, 5.5f);
+            float room = math.min(site.HalfLength, site.HalfWidth) - 0.6f;
+            // In the round (2026-10-13 playtest: benches lay at random angles on the lawn): the stand sits
+            // in the middle of a round paved forecourt; the benches ring the paving in concentric rows,
+            // every one squarely facing the centre, with aisles towards the arrival side and the
+            // three other quarters. Flowerbeds frame the aisle mouths on the lawn, lamps light them.
+            const float firstGap = 2.6f, rowPitch = 2.5f, rim = 1.1f;
             int rows = ctx.I("rows");
-            // A bandstand plays to the lawn: it stands at the far end of the place, the audience in arcs
-            // towards the arrival side. A gazebo is the centre of its own little garden.
-            float2 focal; float2 facing;
-            if (gazebo || rows == 0) { focal = site.Center; facing = math.normalizesafe(toward - site.Center, site.Axis); }
-            else
-            {
-                float e = -EndSign(site, toward);
-                focal = site.Local(e * (site.HalfLength - sr - 1.5f), 0f);
-                facing = -e * site.Axis;
-            }
-            // Seating sits ON paving, never loose on the lawn (playtest 4b): a gazebo gets a bench ring at the
-            // edge of its paved circle; a bandstand's audience rows stand on a paved fan in front of it.
+            while (rows > 0 && sr + firstGap + (rows - 1) * rowPitch + rim > room) rows--;
+            // No rows (a gazebo garden): one even ring of benches at the paving edge, arrival side open (s5).
             float ringR = sr + 2.2f;
-            float rowStart = gazebo ? ringR + 3.2f : sr + 5f;
-            float rowsOuter = rows > 0 ? rowStart + (rows - 1) * 3.2f + 1.4f : 0f;
+            float forecourt = rows > 0 ? sr + firstGap + (rows - 1) * rowPitch + rim : ringR + 1.2f;
+            if (forecourt > room + 0.01f) { NoSpace(ctx, NameKey); return; }
+            var focal = site.Center;
+            var arrival = Monuments.MonumentKit.Entry(occ, site, toward);
+            var facing = math.normalizesafe(arrival - focal, site.Axis);
+            float open = math.atan2(facing.y, facing.x);
+            var paving = AddOnAssets.Or(ctx.S("pavingAsset"), AddOnAssets.GardenPaving);
             if (ctx.B("paving"))
             {
-                var pave = AssetMix.One(ctx.S("pavingAsset"));
-                float discR = gazebo ? math.max(ringR + 1.2f, rowsOuter) : sr + 1.5f;
-                Pave(ctx, Disc(focal, discR), pave);
-                if (!gazebo && rows > 0) Pave(ctx, Fan(focal, math.atan2(facing.y, facing.x), 1.05f + 0.25f, sr + 0.5f, rowsOuter), pave);
+                ctx.Surface(Disc(focal, forecourt), SurfaceRole.Paving, paving, AssetCategories.SurfacePaving);
+                if (occ.Paths.Count > 0) AddOnKit.Link(ctx, arrival, focal, forecourt, 1.4f, paving, AssetCategories.SurfacePaving, 30f);
             }
             if (!Put(ctx, occ, focal, math.atan2(facing.x, facing.y), ObjectRole.Furniture, asset, cat, sr, Hashing.Mix(ctx.Seed, 0xBA0u)))
             { NoSpace(ctx, NameKey); return; }
-            int flowers = 0;
-            if (ctx.B("flowers") && AssetAvailability.Has(AssetCategories.Flowerbed))
-            {
-                // A ring of beds round the plinth, open towards the audience / the path.
-                float fr = gazebo ? (rows > 0 ? rowsOuter : ringR + 1.2f) + 1.4f : sr + 2.6f;
-                int n = math.clamp((int)math.floor(2f * math.PI * fr / 3.2f), 4, 14);
-                float open = math.atan2(facing.y, facing.x);
-                for (int i = 0; i < n; i++)
-                {
-                    float a = open + (i + 1) * 2f * math.PI / (n + 1);
-                    var p = focal + new float2(math.cos(a), math.sin(a)) * fr;
-                    if (math.abs(math.dot(math.normalizesafe(p - focal), facing)) > 0.92f) continue;
-                    if (Put(ctx, occ, p, a, ObjectRole.Planter, new AssetRef(""), AssetCategories.Flowerbed, 1f, Hashing.Mix(ctx.Seed, 0xF10u + (uint)i))) flowers++;
-                }
-            }
+
+            int aisles = rows >= 2 ? 4 : 2;
+            float aisleHalf = 1.3f;   // metres either side of an aisle's centre line
             int benches = 0;
-            var bench = AssetMix.One(ctx.S("benchAsset"));
-            float baseAngle = math.atan2(facing.y, facing.x);
-            if (gazebo)
+            var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
+            if (rows == 0)
             {
-                // Benches evenly round the paving edge, seats towards the gazebo, the arrival side left open.
                 int n = math.clamp((int)math.floor(2f * math.PI * ringR / 4.2f), 3, 8);
                 for (int i = 1; i <= n; i++)
                 {
-                    float a = baseAngle + i * 2f * math.PI / (n + 1);
+                    float a = open + i * 2f * math.PI / (n + 1);
                     var p = focal + new float2(math.cos(a), math.sin(a)) * ringR;
                     if (LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, focal), ObjectRole.Bench, bench, null, 1.1f, Hashing.Mix(ctx.Seed, 0xBE80u + (uint)i), 0.1f, 0.1f)) benches++;
                 }
             }
             for (int row = 0; row < rows; row++)
             {
-                float r = rowStart + row * 3.2f;
-                float half = gazebo ? math.PI : 1.05f;   // ±60° in front of a bandstand, all round a gazebo
-                float step = 3.1f / r;
-                for (float a = -half + step * 0.5f; a <= half; a += step)
+                float r = sr + firstGap + row * rowPitch;
+                float gap = aisleHalf / r + 1.1f / r;           // half the aisle plus half a bench, in radians
+                float sector = 2f * math.PI / aisles;
+                float span = sector - 2f * gap;
+                int n = math.max(1, (int)math.floor(span * r / 2.9f) + 1);
+                for (int s = 0; s < aisles; s++)
+                    for (int i = 0; i < n; i++)
+                    {
+                        float a = open + s * sector + gap + (n == 1 ? span * 0.5f : span * i / (n - 1));
+                        var p = focal + new float2(math.cos(a), math.sin(a)) * r;
+                        if (Put(ctx, occ, p, LeisureKit.Yaw(p, focal), ObjectRole.Bench, bench, null, 1.1f, Hashing.Mix(ctx.Seed, (uint)(row * 64 + s * 16 + i) + 0xBE00u))) benches++;
+                    }
+            }
+
+            int flowers = 0, lamps = 0;
+            bool beds = ctx.B("flowers") && AssetAvailability.Has(AssetCategories.Flowerbed);
+            var bed = AssetMix.One("", AddOnAssets.Flowerbeds);
+            var lamp = new AssetRef("");
+            for (int s = 0; s < aisles; s++)
+            {
+                float a = open + s * 2f * math.PI / aisles;
+                var dir = new float2(math.cos(a), math.sin(a));
+                var side = new float2(-dir.y, dir.x);
+                for (int k = -1; k <= 1; k += 2)
                 {
-                    if (!gazebo && math.abs(a) < step * 0.6f) continue;   // central aisle
-                    var p = focal + new float2(math.cos(baseAngle + a), math.sin(baseAngle + a)) * r;
-                    if (Put(ctx, occ, p, LeisureKit.Yaw(p, focal), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, (uint)(row * 64 + benches) + 0xBE00u))) benches++;
+                    // Lamps flank each aisle mouth at the paving edge; beds frame it on the lawn.
+                    if (ctx.B("lamps") && rows > 0)
+                    {
+                        var lp = focal + dir * (forecourt + 0.5f) + side * k * (aisleHalf + 0.2f);
+                        if (Put(ctx, occ, lp, 0f, ObjectRole.Lamp, lamp, null, 0.4f, Hashing.Mix(ctx.Seed, 0x1A0u + (uint)(s * 2 + (k + 1) / 2)))) lamps++;
+                    }
+                    if (beds)
+                    {
+                        var fp = focal + dir * (forecourt + 1.6f) + side * k * (aisleHalf + 2.2f);
+                        if (Put(ctx, occ, fp, math.atan2(dir.x, dir.y), ObjectRole.Planter, bed, AssetCategories.Flowerbed, 1.2f, Hashing.Mix(ctx.Seed, 0xF10u + (uint)(s * 2 + (k + 1) / 2)))) flowers++;
+                    }
                 }
             }
-            if (ctx.B("lamps"))
+            if (gazebo && ctx.B("lamps"))
                 for (int k = -1; k <= 1; k += 2)
                 {
                     var side = new float2(-facing.y, facing.x);
-                    Put(ctx, occ, focal + side * k * (sr + 1.8f) + facing * 0.5f, 0f, ObjectRole.Lamp, new AssetRef(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x1A0u + (uint)(k + 1)));
+                    if (Put(ctx, occ, focal + facing * (forecourt - 0.5f) + side * k * 1.7f, 0f, ObjectRole.Lamp, lamp, null, 0.4f, Hashing.Mix(ctx.Seed, 0x1B0u + (uint)(k + 1)))) lamps++;
                 }
             ctx.Stat(Keys.StatBenches, benches, Keys.UnitCount);
             ctx.Stat(Keys.StatFlowerbeds, flowers, Keys.UnitCount);
             ctx.Plan.Facts["bandstand"] = 1;
-        }
-
-        /// <summary>Paving clipped to the amenity's place (the audience fan may reach past it).</summary>
-        private static void Pave(LayerContext ctx, float2[] poly, AssetRef pave)
-        {
-            var clipped = LeisureKit.Intersect(ctx.LayerRegion, poly);
-            if (clipped != null && clipped.Area > 1f) ctx.Surface(clipped.Ring, SurfaceRole.Paving, pave, AssetCategories.SurfacePaving);
-        }
-
-        /// <summary>Annular sector (CCW) centred on <paramref name="dirAngle"/>, ±<paramref name="half"/> radians.</summary>
-        public static float2[] Fan(float2 c, float dirAngle, float half, float r0, float r1)
-        {
-            const int steps = 12;
-            var pts = new float2[2 * (steps + 1)];
-            for (int i = 0; i <= steps; i++)
-            {
-                float a = dirAngle - half + 2f * half * i / steps;
-                pts[i] = c + new float2(math.cos(a), math.sin(a)) * r1;
-                float b = dirAngle + half - 2f * half * i / steps;
-                pts[steps + 1 + i] = c + new float2(math.cos(b), math.sin(b)) * r0;
-            }
-            return pts;
+            ctx.Plan.Facts["bandstandRows"] = rows;
+            ctx.Plan.Facts["forecourtRadius"] = forecourt;
         }
     }
 
