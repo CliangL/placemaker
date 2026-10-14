@@ -9,6 +9,15 @@ async function realLayers(page: import("@playwright/test").Page) {
     return page.evaluate(() => Array.from((window as any).pm.backend.hostLayers as Set<string>));
 }
 
+/** The real catalog has many types: only the selected type's category starts open. */
+async function openAllCategories(page: import("@playwright/test").Page) {
+    for (let i = 0; i < 20; i++) {
+        const closed = page.locator('[data-testid="type-browser"] [data-nav="cat"][aria-expanded="false"]');
+        if (!(await closed.count())) return;
+        await closed.first().click();
+    }
+}
+
 async function waitCore(page: import("@playwright/test").Page) {
     await waitPlanned(page);
     await page.waitForFunction(() => (window as any).pm.backend.plan?.source === "core");
@@ -21,12 +30,17 @@ test("real Core: shipped recipes in the Make row, real plans on the map", async 
 
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
+    await openAllCategories(page);
     for (const id of ["park", "plaza", "campground"])
         if (await page.evaluate((r) => (window as any).pm.backend.recipes.some((x: any) => x.info.id === r), id))
             await expect(page.getByTestId(`recipe-${id}`)).toBeVisible();
 
     await page.getByTestId("recipe-park").click();
     await waitCore(page);
+    await page.getByTestId("browser-search").fill("garden");
+    await noTextOverflow(page, "real browser search");
+    await panelShot(page, "real-panel-browser-search");
+    await page.getByTestId("browser-clear").click();
     // Core features: the park offers a central plaza with its shape / position / size under the toggle
     if (await page.getByTestId("feature-toggle-plaza").count()) {
         await page.getByTestId("feature-toggle-plaza").click();
@@ -45,6 +59,7 @@ test("real Core: shipped recipes in the Make row, real plans on the map", async 
     await panelShot(page, "real-panel-review");
 
     await page.getByTestId("stagebar-design").click();
+    await openAllCategories(page);
     if (await page.getByTestId("recipe-split-park-plaza").count()) {
         await page.getByTestId("recipe-split-park-plaza").click();
         await waitCore(page);

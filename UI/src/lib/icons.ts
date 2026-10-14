@@ -26,7 +26,7 @@ const TINTED: Record<Tint, Record<string, string>> = {
     dark: load(require.context("../assets/icons?tint=dark", false, /\.svg$/)),
     dim: load(require.context("../assets/icons?tint=dim", false, /\.svg$/)),
     accent: load(require.context("../assets/icons?tint=accent", false, /(info|check|area|logo|marker|building|undo|edit|eye|entrance|twoWay|entry|exit|alley|footpath|plus|search|auto|grip)\.svg$/)),
-    warn: load(require.context("../assets/icons?tint=warn", false, /(warning|info|marker|cost|entrance|twoWay|entry|exit|alley|footpath)\.svg$/)),
+    warn: load(require.context("../assets/icons?tint=warn", false, /(warning|info|marker|cost|star|entrance|twoWay|entry|exit|alley|footpath)\.svg$/)),
     danger: load(require.context("../assets/icons?tint=danger", false, /(error|warning|cost|trash|close)\.svg$/)),
     ok: load(require.context("../assets/icons?tint=ok", false, /(check|info)\.svg$/)),
 };

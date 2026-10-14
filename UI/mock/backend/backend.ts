@@ -4,7 +4,7 @@
 // randomize (respecting locks), player recipes, built groups with manage/edit/remove.
 // It publishes exactly the six values of contract.ts and handles exactly its triggers.
 import {
-    AreaMode, BrushShape, Catalog, DesignState, GROUP, Hint, LocText, ManagedGroup, PrimaryAction, RecipeInfo, SettingValue, Stage, StepView,
+    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, RecipeInfo, SettingValue, Stage, StepView,
     Summary, ToolState,
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
@@ -44,7 +44,28 @@ interface Snapshot {
     root: StepModel | null;
     focus: string;
     modified: boolean;
+    active: ActiveModel | null;
 }
+
+/** What a preset stores: the step's values and its enabled features with their values (undefined = keep defaults). */
+export interface PresetData {
+    values: Record<string, SettingValue>;
+    features?: Record<string, Record<string, SettingValue>>;
+}
+
+/** The preset applied to the root step and the state it had right after applying/saving (modified = differs). */
+interface ActiveModel { id: string; layer: string; base: PresetData }
+
+interface CustomPreset { id: string; name: string; basedOn?: string; data: PresetData }
+
+/** JSON with sorted keys, for order-independent comparison. */
+function canon(v: unknown): string {
+    if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
+    if (v && typeof v === "object") return "{" + Object.keys(v as object).sort().map((k) => JSON.stringify(k) + ":" + canon((v as any)[k])).join(",") + "}";
+    return JSON.stringify(v);
+}
+
+export const PRESETS_FILE = "C:\\Users\\Player\\AppData\\LocalLow\\Colossal Order\\Cities Skylines II\\ModsData\\Placemaker\\presets.json";
 
 interface Entry {
     label: LocText;
@@ -94,6 +115,14 @@ export class MockBackend {
     root: StepModel | null = null;
     focus = "0";
     modified = false;
+    /** Preset applied to the root step (null = none yet). */
+    active: ActiveModel | null = null;
+    /** Player presets per layer id (in-memory; C# keeps them in ModsData/Placemaker/presets.json). */
+    customPresets: Record<string, CustomPreset[]> = {};
+    /** Saved-over built-ins, "layer|presetId" -> data. */
+    presetOverrides: Record<string, PresetData> = {};
+    presetsFile: string | undefined;
+    private presetSeq = 0;
     preview = new Map<string, SettingValue>();
     markerMode: { stepPath: string; kind: string } | null = null;
     ackPermanent = false;
@@ -142,6 +171,7 @@ export class MockBackend {
             if (group === GROUP) this.onTrigger(name, args);
         });
         this.root = this.instantiate(this.recipes.find((r) => r.info.id === this.recipeId)!.root);
+        this.resetActive();
         this.publishAll();
     }
 
@@ -180,6 +210,7 @@ export class MockBackend {
                 this.recipeId = cur.info.id;
                 this.root = this.instantiate(cur.root);
                 this.focus = "0";
+                this.resetActive();
             }
         } catch {
             this.hostUp = false;
@@ -285,12 +316,78 @@ export class MockBackend {
         return undefined;
     }
 
+    // ───────────── presets ─────────────
+
+    /** The step's values + enabled features (with their values), as a preset stores them. */
+    capture(step: StepModel): PresetData {
+        const features: Record<string, Record<string, SettingValue>> = {};
+        for (const c of step.children) if (c.feature && c.enabled) features[c.feature] = clone(c.values);
+        return { values: clone(step.values), features };
+    }
+
+    /** Stored data of a preset: own preset, saved-over built-in, or the shipped built-in (its values over the defaults, default features). */
+    presetData(layerId: string, id: string): PresetData | null {
+        const own = (this.customPresets[layerId] ?? []).find((p) => p.id === id);
+        if (own) return clone(own.data);
+        const ov = this.presetOverrides[layerId + "|" + id];
+        if (ov) return clone(ov);
+        const p = this.layer(layerId)?.presets.find((x) => x.id === id);
+        if (!p) return null;
+        return { values: { ...this.defaults(layerId), ...clone(p.values ?? {}) }, features: this.defaultData(layerId).features };
+    }
+
+    presetName(layerId: string, id: string): string {
+        const own = (this.customPresets[layerId] ?? []).find((p) => p.id === id);
+        if (own) return own.name;
+        const p = this.layer(layerId)?.presets.find((x) => x.id === id);
+        return p ? en(p.name, id) : id;
+    }
+
+    applyData(step: StepModel, data: PresetData) {
+        step.values = { ...this.defaults(step.layer), ...clone(data.values) };
+        step.locked = [];
+        step.seed = Math.floor(Math.random() * 1e9);
+        if (!data.features) return;
+        for (const f of this.featuresOf(step.layer)) {
+            const child = step.children.find((c) => c.feature === f.layer);
+            const v = data.features[f.layer];
+            if (v) {
+                const target = child ?? this.featureStep(f);
+                target.enabled = true;
+                target.values = { ...this.defaults(f.layer), ...clone(v) };
+                if (!child) step.children.push(target);
+            } else if (child) child.enabled = false;
+        }
+    }
+
+    /** No preset ("Default"): the type's fresh defaults are the baseline, so a loaded build can read "modified". */
+    resetActive() {
+        this.active = this.root ? { id: "", layer: this.root.layer, base: this.defaultData(this.root.layer) } : null;
+    }
+
+    defaultData(layerId: string): PresetData {
+        const r = this.recipes.find((x) => !x.info.custom && x.root.layer === layerId && !(x.root.children ?? []).length);
+        return this.capture(this.instantiate(r ? r.root : { layer: layerId }));
+    }
+
+    presetViews(l: MockLayer): PresetView[] {
+        const built: PresetView[] = l.presets.map((p) => ({ id: p.id, name: p.name, icon: p.icon, overridden: this.presetOverrides[l.id + "|" + p.id] ? true : undefined }));
+        const own: PresetView[] = (this.customPresets[l.id] ?? []).map((p) => ({ id: p.id, name: p.name, custom: true, basedOn: p.basedOn }));
+        return [...built, ...own];
+    }
+
+    activePreset(): ActivePreset | undefined {
+        if (!this.root || !this.active || this.active.layer !== this.root.layer) return undefined;
+        const { id, layer, base } = this.active;
+        return { id, layer, modified: canon(this.capture(this.root)) !== canon(base), canSave: !!id };
+    }
+
     // ───────────── history ─────────────
 
     snapshot(): Snapshot {
         return {
             ring: clone(this.ring), closed: this.closed, cells: Array.from(this.cells), picked: this.picked.slice(),
-            recipeId: this.recipeId, root: clone(this.root), focus: this.focus, modified: this.modified,
+            recipeId: this.recipeId, root: clone(this.root), focus: this.focus, modified: this.modified, active: clone(this.active),
         };
     }
 
@@ -303,6 +400,7 @@ export class MockBackend {
         this.root = clone(s.root);
         this.focus = s.focus;
         this.modified = s.modified;
+        this.active = clone(s.active);
         if (!this.areaValid() && (this.stage === "design" || this.stage === "review")) this.stage = "area";
     }
 
@@ -512,6 +610,7 @@ export class MockBackend {
                     this.root = this.instantiate(r.root);
                     this.focus = "0";
                     this.modified = false;
+                    this.resetActive();
                 });
                 return;
             }
@@ -650,16 +749,96 @@ export class MockBackend {
             }
             case "applyPreset": {
                 const step = this.get(a[0]);
-                const preset = step ? this.layer(step.layer)?.presets.find((p) => p.id === a[1]) : undefined;
-                if (!step || !preset) break;
-                this.edit({ key: "Placemaker.Undo.ResetLayer", args: [en(preset.name, preset.id)] }, () => {
-                    step.values = { ...this.defaults(step.layer), ...(preset.values ?? {}) };
-                    step.locked = [];
-                    step.seed = Math.floor(Math.random() * 1e9);
+                const data = step ? this.presetData(step.layer, String(a[1])) : null;
+                if (!step || !data) break;
+                this.edit({ key: "Placemaker.Undo.ResetLayer", args: [this.presetName(step.layer, String(a[1]))] }, () => {
+                    this.applyData(step, data);
+                    if (a[0] === "0") this.active = { id: String(a[1]), layer: step.layer, base: this.capture(step) };
                     this.modified = true;
                 });
                 return;
             }
+            case "selectPreset": {
+                const layerId = String(a[0]);
+                const id = String(a[1] ?? "");
+                const r =
+                    this.recipes.find((x) => !x.info.custom && x.root.layer === layerId && !(x.root.children ?? []).length) ??
+                    this.recipes.find((x) => x.info.id === layerId);
+                const data = id ? this.presetData(layerId, id) : null;
+                if (!r || (id && !data)) break;
+                this.edit({ key: "Placemaker.Undo.SelectRecipe", args: [id ? this.presetName(layerId, id) : this.layerName(layerId)] }, () => {
+                    this.recipeId = r.info.id;
+                    const root = this.instantiate(r.root);
+                    this.root = root;
+                    this.focus = "0";
+                    if (data) this.applyData(root, data);
+                    this.active = { id, layer: root.layer, base: this.capture(root) };
+                    this.modified = false;
+                });
+                return;
+            }
+            case "savePreset": {
+                const step = this.get(String(a[0]));
+                const id = String(a[1] ?? "");
+                if (!step || !id) break;
+                const data = this.capture(step);
+                const own = (this.customPresets[step.layer] ?? []).find((p) => p.id === id);
+                if (own) own.data = data;
+                else if (this.layer(step.layer)?.presets.some((p) => p.id === id)) this.presetOverrides[step.layer + "|" + id] = data;
+                else break;
+                if (a[0] === "0") this.active = { id, layer: step.layer, base: clone(data) };
+                this.toast = `Saved “${this.presetName(step.layer, id)}”`;
+                break;
+            }
+            case "savePresetAs": {
+                const step = this.get(String(a[0]));
+                const name = String(a[1] ?? "").trim();
+                if (!step || !name) break;
+                const id = "custom-" + Date.now().toString(36) + "-" + ++this.presetSeq;
+                const from = this.active && this.active.layer === step.layer ? this.active.id : "";
+                const basedOn = from && !from.startsWith("custom-") ? from : (this.customPresets[step.layer] ?? []).find((p) => p.id === from)?.basedOn;
+                const data = this.capture(step);
+                (this.customPresets[step.layer] ??= []).push({ id, name, basedOn, data });
+                if (a[0] === "0") this.active = { id, layer: step.layer, base: clone(data) };
+                this.toast = `Saved “${name}”`;
+                break;
+            }
+            case "renamePreset": {
+                const p = (this.customPresets[String(a[0])] ?? []).find((x) => x.id === a[1]);
+                const name = String(a[2] ?? "").trim();
+                if (!p || !name) break;
+                p.name = name;
+                break;
+            }
+            case "deletePreset": {
+                const layerId = String(a[0]);
+                const id = String(a[1]);
+                const list = this.customPresets[layerId] ?? [];
+                const isActive = !!this.active && this.active.layer === layerId && this.active.id === id;
+                if (list.some((p) => p.id === id)) {
+                    this.customPresets[layerId] = list.filter((p) => p.id !== id);
+                    if (isActive) this.active = { id: "", layer: layerId, base: this.defaultData(layerId) };
+                    break;
+                }
+                const key = layerId + "|" + id;
+                if (!this.presetOverrides[key]) break;
+                delete this.presetOverrides[key];
+                // Reset to default: the active step goes back to the shipped preset (undoable).
+                if (isActive && this.root) {
+                    const root = this.root;
+                    const data = this.presetData(layerId, id)!;
+                    this.edit({ key: "Placemaker.Undo.ResetLayer", args: [this.presetName(layerId, id)] }, () => {
+                        this.applyData(root, data);
+                        this.active = { id, layer: layerId, base: this.capture(root) };
+                    });
+                    return;
+                }
+                break;
+            }
+            case "exportPresets":
+                this.presetsFile = PRESETS_FILE;
+                this.toast = "Presets exported";
+                break;
             case "randomize":
                 void this.randomize(String(a[0] ?? ""));
                 return;
@@ -734,6 +913,7 @@ export class MockBackend {
                 this.root = clone(g.root);
                 this.recipeId = g.recipeId;
                 this.focus = "0";
+                this.resetActive();
                 this.editingGroup = g.id;
                 this.managedId = null;
                 this.stage = "design";
@@ -1251,7 +1431,7 @@ export class MockBackend {
 
     catalog(): Catalog {
         return {
-            layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, features, ...l }) => l) as any,
+            layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, features, ...l }) => ({ ...l, presets: this.presetViews(l as MockLayer) })) as any,
             recipes: this.recipes.map((r) => r.info),
         };
     }
@@ -1308,7 +1488,10 @@ export class MockBackend {
     }
 
     design(): DesignState {
-        return { recipeId: this.recipeId, modified: this.modified, root: this.root ? this.stepView(this.root, "0") : null, focus: this.focus };
+        return {
+            recipeId: this.recipeId, modified: this.modified, root: this.root ? this.stepView(this.root, "0") : null, focus: this.focus,
+            activePreset: this.activePreset(), presetsFile: this.presetsFile,
+        };
     }
 
     summary(): Summary {
