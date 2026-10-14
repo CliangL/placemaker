@@ -4,8 +4,8 @@
 // randomize (respecting locks), player recipes, built groups with manage/edit/remove.
 // It publishes exactly the six values of contract.ts and handles exactly its triggers.
 import {
-    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, RecipeInfo, SettingValue, Stage, StepView,
-    Summary, ToolState,
+    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, FeatureFit, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, RecipeInfo, SettingValue, Stage, StepView,
+    Issue, Summary, ToolState,
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
 import { addStrings } from "../cs2/l10n";
@@ -1436,6 +1436,41 @@ export class MockBackend {
         };
     }
 
+    /** Tests: force a feature's fit status by feature layer id (null = computed). */
+    fitOverride: Record<string, FeatureFit | null> = {};
+
+    /** Mirrors C# UiModels.FeatureFit: did the enabled feature at childPath fit in the latest plan? */
+    featureFit(parentPath: string, childPath: string, layer: string): FeatureFit | undefined {
+        const forced = this.fitOverride[layer];
+        if (forced) return forced;
+        const p = this.plan;
+        if (!p) return undefined;
+        let parentRan = false, runs = 0, failed = 0, reduced = 0;
+        let firstFail: Issue | undefined, firstReduced: Issue | undefined;
+        const rank = { info: 0, warning: 1, error: 2 } as const;
+        for (const l of p.layers) {
+            if (l.stepPath.startsWith(parentPath + "@")) { parentRan = true; continue; }
+            if (!l.stepPath.startsWith(childPath + "@") || l.layer !== layer) continue;
+            runs++;
+            let worst: Issue | undefined;
+            for (const i of l.issues) if (!i.text.key.includes("Permanent") && (!worst || rank[i.severity] > rank[worst.severity])) worst = i;
+            const placed = l.objects.length + l.nets.length + l.surfaces.length + l.areas.length + l.terraform.length + l.zoning.length + l.regions.length > 0;
+            if (!placed || worst?.severity === "error") {
+                failed++;
+                firstFail = firstFail ?? worst;
+            } else if (worst) {
+                reduced++;
+                firstReduced = firstReduced ?? worst;
+            }
+        }
+        const stale = this.stale || undefined;
+        if (!runs) return !parentRan || this.stale ? undefined : { kind: "failed", text: { key: "Placemaker.UI.Feature.NoRoom" } };
+        if (failed === runs) return { kind: "failed", text: firstFail?.text ?? { key: "Placemaker.UI.Feature.NoRoom" }, stale };
+        if (failed) return { kind: "reduced", text: { key: "Placemaker.UI.Feature.SomeMissing", args: [runs - failed, runs] }, stale };
+        if (reduced) return { kind: "reduced", text: firstReduced!.text, stale };
+        return { kind: "ok", stale };
+    }
+
     stepView(s: StepModel, path: string): StepView {
         const overrides: Record<string, StepView> = {};
         for (const k of Object.keys(s.overrides)) overrides[k] = this.stepView(s.overrides[k], path + "/" + this.overrideIndex(s, k) + "@" + k);
@@ -1465,6 +1500,7 @@ export class MockBackend {
             return {
                 layer: f.layer, label: f.labelKey ?? "", icon: this.layer(f.layer)?.icon ?? f.layer, enabled: on, path: on ? path + "/" + i : undefined,
                 tooltip: f.tooltip || undefined, options: f.options && f.options.length ? f.options : undefined, defaultOn: !!f.defaultOn,
+                status: on ? this.featureFit(path, path + "/" + i, f.layer) : undefined,
             };
         });
         return {

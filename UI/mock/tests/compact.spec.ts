@@ -70,7 +70,7 @@ test("groups are foldable: only the first essential group open, summaries when f
     await page.evaluate(() => localStorage.removeItem("placemaker.sections.v1"));
 });
 
-test("features: switch adds the feature, its options fold out indented (collapsed), switch off removes it from the plan", async ({ page }) => {
+test("features: switch adds the feature (row folded, one-line summary), its options fold out indented, switch off removes it from the plan", async ({ page }) => {
     const errors = await open(page);
     await page.evaluate(() => localStorage.removeItem("placemaker.sections.v1"));
     await toDesign(page, "park");
@@ -83,8 +83,14 @@ test("features: switch adds the feature, its options fold out indented (collapse
 
     await page.getByTestId("feature-toggle-playground").click();
     await expect(page.getByTestId("feature-playground")).toHaveAttribute("data-enabled", "true");
+    // FEEDBACK-4b #7: an enabled feature starts folded, with a one-line summary of its options
+    await expect(page.getByTestId("feature-playground")).toHaveAttribute("data-open", "false");
+    await expect(page.getByTestId("feature-options-playground")).toHaveCount(0);
+    await expect(page.getByTestId("feature-summary-playground")).toContainText("Medium");
+    await page.getByTestId("feature-fold-playground").click();
     const opts = page.getByTestId("feature-options-playground");
     await expect(opts).toBeVisible();
+    await expect(page.getByTestId("feature-summary-playground")).toHaveCount(0);
     // indented under the feature row, collapsed by default with a summary
     const rowBox = (await page.getByTestId("feature-playground").boundingBox())!;
     const optBox = (await opts.boundingBox())!;
@@ -103,6 +109,7 @@ test("features: switch adds the feature, its options fold out indented (collapse
     await expect(page.getByTestId("step-0").getByTestId("group-plaza")).toHaveCount(0);
     await expect(page.getByTestId("control-plazaShape")).toHaveCount(0);
     await page.getByTestId("feature-toggle-plaza").click();
+    await page.getByTestId("feature-fold-plaza").click();
     const plazaOpts = page.getByTestId("feature-options-plaza");
     for (const id of ["plazaShape", "plazaAt", "plazaSize"]) await expect(plazaOpts.getByTestId("control-" + id)).toBeVisible();
     await plazaOpts.getByTestId("choice-plazaAt-corner").click();
