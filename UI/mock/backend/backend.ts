@@ -3,6 +3,7 @@
 // stack for shape + design edits, previews while dragging, markers, per-region overrides, presets,
 // randomize (respecting locks), player recipes, built groups with manage/edit/remove.
 // It publishes exactly the six values of contract.ts and handles exactly its triggers.
+import { defaultVisible, fakeLegend } from "./legend";
 import {
     ActivePreset, AreaMode, BrushShape, Catalog, DesignState, FeatureFit, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, PROTOCOL, RecipeInfo, SettingValue, Stage, StepView,
     Issue, Summary, ToolState,
@@ -122,6 +123,18 @@ export class MockBackend {
     parkStats: { keepVanilla: boolean; overrides: Record<string, number> } = { keepVanilla: true, overrides: {} };
     /** Player's preview choice and the stage it was made on (a new stage starts from its default again). */
     previewChoice: { mode: "sketch" | "ghost"; stage: Stage } | null = null;
+    /** s22 legend: the hovered layer ("" = none) and the player's show / hide choices (like C# PlacemakerToolSystem.Legend). */
+    legendHover = "";
+    legendVisibility: Record<string, boolean> = {};
+    /** s22: layer ids the map drew in its last frame (tests check hover-isolate and toggles with it). */
+    drawnLayers: string[] = [];
+
+    /** Is a preview layer drawn now? (C# PreviewLegend.Visible) */
+    layerVisible(id: string): boolean {
+        if (this.legendHover) return id === this.legendHover;
+        const v = this.legendVisibility[id];
+        return v !== undefined ? v : defaultVisible(id);
+    }
     /** Real preview being rebuilt after a change (spinner on the toggle). */
     ghostPending = false;
     ghostMs = 450;
@@ -728,6 +741,21 @@ export class MockBackend {
                 this.changed(true);
                 return;
             }
+            case "hoverLegend":
+                this.legendHover = String(a[0] ?? "");
+                break;
+            case "setLegendVisible": {
+                const id = String(a[0] ?? "");
+                if (!id) break;
+                const on = !!a[1];
+                if (on === defaultVisible(id)) delete this.legendVisibility[id];
+                else this.legendVisibility[id] = on;
+                break;
+            }
+            case "resetLegend":
+                this.legendVisibility = {};
+                this.legendHover = "";
+                break;
             case "setPreviewMode":
                 if (a[0] === "sketch" || a[0] === "ghost") {
                     this.previewChoice = { mode: a[0], stage: this.stage };
@@ -1473,6 +1501,7 @@ export class MockBackend {
             ghostPending: this.previewMode() === "ghost" && this.ghostPending,
             protocol: this.protocol,
             areaModes: this.areaModes,
+            legendVisibility: Object.keys(this.legendVisibility).length ? { ...this.legendVisibility } : undefined,
         };
     }
 
@@ -1603,6 +1632,7 @@ export class MockBackend {
             issues,
             permanent: p.permanent,
             parkStats: p.parkStats ?? undefined,
+            legend: p.legend?.length ? p.legend : fakeLegend(p, this.root ? this.allSteps().reduce((n, st) => n + st.markers.length, 0) : 0),
         };
     }
 

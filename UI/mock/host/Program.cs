@@ -322,7 +322,7 @@ namespace Placemaker.MockHost
                     }).ToArray()),
                     ["surfaces"] = new JsonArray(l.Surfaces.Select(s => (JsonNode)new JsonObject
                     {
-                        ["role"] = s.Role.ToString(), ["ring"] = Ring2(s.Ring),
+                        ["role"] = s.Role.ToString(), ["ring"] = Ring2(s.Ring), ["lg"] = Placemaker.Core.Build.PreviewLegend.Of(s),
                     }).ToArray()),
                     ["areas"] = new JsonArray(l.Areas.Select(s => (JsonNode)new JsonObject
                     {
@@ -335,11 +335,13 @@ namespace Placemaker.MockHost
                         ["width"] = !string.IsNullOrEmpty(n.Asset.Id) && site.Assets.TryGetValue(n.Asset.Id, out var ai) && ai.NetWidth > 0.5f ? ai.NetWidth : Composer.DefaultHalfWidth(n.Role) * 2,
                         // s16: road role colour (same as the in-game preview and the panel legend); null for other nets.
                         ["roleColor"] = RoadRoles.Of(n.Role) != null && (n.Role != NetRole.Pathway || n.Control != null) ? RoadRoles.Color(RoadRoles.Of(n.Role)) : null,
+                        // s22: the preview legend layer (Core PreviewLegend), so the mock map isolates / hides exactly like the game.
+                        ["lg"] = Placemaker.Core.Build.PreviewLegend.Of(n, l.GeneratorId),
                     }).ToArray()),
                     ["objects"] = new JsonArray(l.Objects.Select(o => (JsonNode)new JsonObject
                     {
                         ["role"] = o.Role.ToString(), ["p"] = P(o.Position), ["yaw"] = o.Yaw,
-                        ["r"] = Composer.DefaultRadius(o.Role),
+                        ["r"] = Composer.DefaultRadius(o.Role), ["lg"] = Placemaker.Core.Build.PreviewLegend.Of(o),
                     }).ToArray()),
                     ["zoning"] = new JsonArray(l.Zoning.Select(z => (JsonNode)new JsonObject
                     {
@@ -404,6 +406,7 @@ namespace Placemaker.MockHost
                 ["cost"] = Math.Round(cost),
                 ["upkeep"] = Math.Round(upkeep),
                 ["permanent"] = permanent,
+                ["legend"] = JsonNode.Parse(Placemaker.Core.Tool.UiModels.Legend(plan, recipe, (cat, id) => new Placemaker.Core.Tool.AssetLabel { Name = RoadRoles.NameOf(id) }).ToString()),
                 ["ms"] = sw.Elapsed.TotalMilliseconds,
             };
         }

@@ -1,4 +1,4 @@
-import { Issue, LocText, NetLegendEntry, ResolvedAsset, SettingValue, Stat } from "../../src/contract";
+import { Issue, LegendEntry, LocText, NetLegendEntry, ResolvedAsset, SettingValue, Stat } from "../../src/contract";
 import { V2 } from "./geometry";
 
 /** A recipe step as the mock backend stores it (mirrors Core.RecipeStep). */
@@ -18,15 +18,16 @@ export interface StepModel {
 
 export interface PlanRegion { key: string; tags: string[]; ring: V2[]; areaM2: number }
 /** roleColor (s16): the road role colour for roads of the roads layer (same as the in-game preview). */
-export interface PlanNet { role: string; pts: V2[]; width: number; roleColor?: string | null }
-export interface PlanObject { role: string; p: V2; yaw: number; r: number }
+/** lg (s22): the preview legend layer of the element (host: Core PreviewLegend.Of; fake: mock/backend/legend.ts). */
+export interface PlanNet { role: string; pts: V2[]; width: number; roleColor?: string | null; lg?: string }
+export interface PlanObject { role: string; p: V2; yaw: number; r: number; lg?: string }
 
 /** One executed step × region; same JSON as the mock host's /api/compose. */
 export interface PlanLayer {
     layer: string;
     stepPath: string;
     regions: PlanRegion[];
-    surfaces: { role: string; ring: V2[] }[];
+    surfaces: { role: string; ring: V2[]; lg?: string }[];
     areas: { role: string; ring: V2[] }[];
     nets: PlanNet[];
     objects: PlanObject[];
@@ -50,4 +51,6 @@ export interface ComposeResult {
     steps?: Record<string, { resolvedAssets?: Record<string, ResolvedAsset>; netLegend?: NetLegendEntry[] }>;
     /** s17: park stats from the real Core estimator (host only). */
     parkStats?: import("../../src/contract").ParkStatsView | null;
+    /** s22: the preview legend (host: Core UiModels.Legend). */
+    legend?: LegendEntry[];
 }

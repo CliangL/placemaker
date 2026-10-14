@@ -58,6 +58,8 @@ namespace Placemaker.Core.Tool
         public bool GhostPending;
         /// <summary>(s15) Selection modes this DLL knows but cannot offer right now, with the reason (null = all available).</summary>
         public Dictionary<SelectionMode, LocText> ModeUnavailable;
+        /// <summary>(s22) contract: state.legendVisibility — preview layers the player showed/hid (id → visible); null/empty = defaults.</summary>
+        public IReadOnlyDictionary<string, bool> LegendVisibility;
     }
 
     public sealed class RecipeListEntry
@@ -87,6 +89,8 @@ namespace Placemaker.Core.Tool
         /// <summary>(s17) Outline (XZ) and the nets around it, to find the companion's road frontage. Null = none.</summary>
         public IReadOnlyList<float2> Outline;
         public IReadOnlyList<NearbyNet> Roads;
+        /// <summary>(s22) Prefab id → display name, for the road entries of the legend. Null = ids only.</summary>
+        public Func<string, string, AssetLabel> AssetLabel;
     }
 
     public static class UiModels
@@ -96,7 +100,7 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 18;   // s17: park stats (summary.parkStats, setParkStat…, companion)
+        public const int Protocol = 19;   // s22: preview legend (summary.legend, state.legendVisibility, hoverLegend…)
 
         // ───────────── state ─────────────
 
@@ -160,6 +164,15 @@ namespace Placemaker.Core.Tool
                 modes.Add(mo);
             }
             o.Set("areaModes", modes);
+            // s22: the preview layers the player showed / hid with the legend (absent = all at their defaults).
+            if (s.LegendVisibility != null && s.LegendVisibility.Count > 0)
+            {
+                var lv = JsonValue.Obj();
+                var keys = new List<string>(s.LegendVisibility.Keys);
+                keys.Sort(StringComparer.Ordinal);
+                foreach (var k in keys) lv.Set(k, s.LegendVisibility[k]);
+                o.Set("legendVisibility", lv);
+            }
             return o;
         }
 
@@ -799,7 +812,52 @@ namespace Placemaker.Core.Tool
                     o.Set("parkStats", ParkStats(stats));
                 }
             }
+            // s22: what the preview shows, by layer (the legend window).
+            var legend = Legend(plan, s.Recipe, s.AssetLabel);
+            if (legend.Count > 0) o.Set("legend", legend);
             return o;
+        }
+
+        /// <summary>
+        /// (s22) contract.ts Summary.legend: the preview layers present in the plan (Core/Build/PreviewLegend) with
+        /// swatch colours, counts, lengths, areas; roads by role with their main prefab (the s16 road legend).
+        /// </summary>
+        public static JsonValue Legend(ComposedPlan plan, Recipe recipe = null, Func<string, string, AssetLabel> label = null)
+        {
+            var arr = JsonValue.Arr();
+            if (plan == null) return arr;
+            int entrances = 0;
+            if (recipe != null)
+                try { foreach (var kv in RecipePaths.Walk(recipe)) if (kv.Value?.Markers != null) entrances += kv.Value.Markers.Count; }
+                catch (Exception) { entrances = 0; }
+            foreach (var e in Placemaker.Core.Build.PreviewLegend.Compute(plan, entrances))
+            {
+                var eo = JsonValue.Obj()
+                    .Set("id", e.Id)
+                    .Set("label", e.LabelKey)
+                    .Set("color", e.Color)
+                    .Set("count", e.Count);
+                if (!string.IsNullOrEmpty(e.Color2)) eo.Set("color2", e.Color2);
+                if (e.LengthM > 0) eo.Set("lengthM", e.LengthM);
+                if (e.AreaM2 > 0) eo.Set("areaM2", e.AreaM2);
+                if (e.MinDelta != 0 || e.MaxDelta != 0) eo.Set("minDelta", e.MinDelta).Set("maxDelta", e.MaxDelta);
+                if (!e.DefaultOn) eo.Set("defaultOff", true);
+                if (Placemaker.Core.Build.PreviewLegend.IsRoad(e.Id))
+                {
+                    eo.Set("group", "roads");
+                    if (!string.IsNullOrEmpty(e.Control)) eo.Set("control", e.Control);
+                    if (!string.IsNullOrEmpty(e.AssetId))
+                    {
+                        eo.Set("assetId", e.AssetId);
+                        AssetLabel al = null;
+                        bool carFree = e.Id == Placemaker.Core.Build.PreviewLegend.Road(Layers.Roads.RoadRoles.CarFree);
+                        try { al = label?.Invoke(carFree ? AssetCategories.Pathway : AssetCategories.Road, e.AssetId); } catch (Exception) { al = null; }
+                        if (!string.IsNullOrEmpty(al?.Name)) eo.Set("assetName", al.Name);
+                    }
+                }
+                arr.Add(eo);
+            }
+            return arr;
         }
 
         /// <summary>(s17) contract.ts ParkStatsView.</summary>

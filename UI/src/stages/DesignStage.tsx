@@ -19,7 +19,7 @@ import { ErrorBoundary } from "../lib/errorBoundary";
 import { usePanelLayout } from "../lib/layout";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Section, Switch } from "../components/common";
-import { ControlList, controlsSummary, NetLegend } from "../controls/Controls";
+import { ControlList, controlsSummary } from "../controls/Controls";
 import { useAssetName } from "../components/picker";
 import { makeSummary, PresetBar, TypeBrowser } from "./PresetBrowser";
 import s from "./design.module.scss";
@@ -513,7 +513,6 @@ const StepOptions = ({ catalog, design, state, step }: { catalog: Catalog; desig
                         </Tip>
                     ) : null}
                     {typed ? <Entrances step={step} layer={layer} state={state} /> : null}
-                    {step.netLegend && step.netLegend.length ? <NetLegend step={step} /> : null}
                     <ErrorBoundary name="controls">
                         <ControlList step={step} layer={layer} state={state} scope={scope} exclude={featureOptionIds(step)} />
                     </ErrorBoundary>

@@ -42,11 +42,11 @@ test("roads: Automatic names its road, legend by role, road mixes", async ({ pag
     await expect(step.getByTestId("control-streetAsset")).not.toHaveAttribute("data-disabled", "true");
     await expect(step.getByTestId("description-streetAsset")).toHaveText("The ordinary streets between blocks.");
 
-    // The legend lists only the roles of this plan.
-    const legend = step.getByTestId("net-legend");
+    // The legend window (s22; was the step's "On the map" list in s16) lists only the road roles of this plan.
+    const legend = page.getByTestId("legend-window");
     await expect(legend).toBeVisible();
-    await expect(legend.getByTestId("legend-street")).toContainText("Two-Lane Road");
-    await expect(legend.getByTestId("legend-roundabout")).toHaveCount(0);
+    await expect(legend.getByTestId("legend-row-road:street")).toContainText("Two-Lane Road");
+    await expect(legend.getByTestId("legend-row-road:roundabout")).toHaveCount(0);
     await noTextOverflow(page, "roads design");
     await panelShot(page, "s16-roads-auto");
     await step.getByTestId("control-roundaboutAsset").scrollIntoViewIfNeeded();
@@ -57,7 +57,7 @@ test("roads: Automatic names its road, legend by role, road mixes", async ({ pag
     await waitCore(page);
     await expect(step.getByTestId("choice-roadMix-downtown")).toHaveAttribute("aria-pressed", "true");
     await expect(step.getByTestId("asset-name-streetAsset")).not.toContainText("Automatic");
-    await expect(legend.getByTestId("legend-street")).toContainText("Four-Lane Road");
+    await expect(legend.getByTestId("legend-row-road:street")).toContainText("Four-Lane Road");
     await step.getByTestId("control-streetAsset").scrollIntoViewIfNeeded();
     await panelShot(page, "s16-roads-downtown");
     await shot(page, "s16-roads-map");

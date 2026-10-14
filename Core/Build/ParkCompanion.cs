@@ -229,7 +229,33 @@ namespace Placemaker.Core.Build
                     if (o != null && o.Role != ObjectRole.Decal && o.Role != ObjectRole.Marker) objects?.Add(o.Position.xz);
                 foreach (var n in l.Nets)
                     if (n != null && n.Role != NetRole.Fence) paths?.Add((n.A.xz, n.D.xz, Composer.DefaultHalfWidth(n.Role)));
+                // (s22) Zoning cutouts are empty land at the road edge — exactly where the companion liked to go (far
+                // from every object), and a building there takes the cutout's cells. Fill them (grown by a lot's half
+                // size, see CutoutPoints) with obstacle points so the companion keeps out.
+                if (objects != null)
+                    foreach (var z in l.Zoning)
+                        if (z != null) CutoutPoints(new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz }, objects);
             }
+        }
+
+        /// <summary>Obstacle points every 2 m over a zoning quad grown by 1 m (Find keeps the lot centre a half lot from every point).</summary>
+        public static void CutoutPoints(float2[] quad, List<float2> into)
+        {
+            float2[] grown;
+            try
+            {
+                var g = Geometry.Poly.Offset(Geometry.Poly.EnsureCcw(quad), -1f);
+                grown = g != null && g.Count > 0 ? g[0] : quad;
+            }
+            catch (System.Exception) { grown = quad; }
+            Geometry.Poly.Bounds(grown, out var min, out var max);
+            if (math.any(max - min > 400f)) return;
+            for (float x = min.x; x <= max.x; x += 2f)
+                for (float y = min.y; y <= max.y; y += 2f)
+                {
+                    var p = new float2(x, y);
+                    if (Geometry.Poly.Contains(grown, p)) into.Add(p);
+                }
         }
     }
 }

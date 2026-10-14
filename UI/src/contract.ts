@@ -12,7 +12,7 @@ export const GROUP = "Placemaker";
  * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
  * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
  */
-export const PROTOCOL = 18;
+export const PROTOCOL = 19;
 
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
@@ -99,6 +99,9 @@ export interface ToolState {
   areaModes?: { mode: AreaMode; enabled: boolean; reason?: LocText }[];
   /** Rough planning progress 0..1 while planning (updated ~10 Hz). */
   planningProgress?: number;
+  /** Additive (s22): preview layers the player showed / hid with the legend (layer id → visible). Absent = every
+   *  layer at its default (LegendEntry.defaultOff). Kept for the game session. */
+  legendVisibility?: Record<string, boolean>;
 }
 
 /** One control, mirrors Core.ControlSchema. */
@@ -169,6 +172,32 @@ export interface NetLegendEntry {
   assetId?: string;         // main prefab of the role
   assetName?: string;       // its localised display name
   control?: string;         // the asset control that picks this role's road
+}
+
+/**
+ * Additive (s22): one layer of the map preview (C# Core/Build/PreviewLegend). Every element the overlay draws belongs
+ * to exactly one layer. Ids: "paths", "road:<role>" (s16 roles), "features", "trees", "planting", "water",
+ * "surfaces", "objects", "parking", "entrances", "terrain", "cutouts", "blocked", "decals".
+ */
+export interface LegendEntry {
+  id: string;
+  label: string;            // localisation key ("Placemaker.Legend.trees", roads "Placemaker.Roads.Role.street")
+  color: string;            // "#rrggbb", the overlay colour of the layer
+  /** Second colour (terrain: cut; color = fill). */
+  color2?: string;
+  count: number;            // elements (segments, objects, cells, heat-map pieces…)
+  lengthM?: number;         // nets: total length
+  areaM2?: number;          // surfaces, water, terrain change, cells
+  /** Terrain: deepest cut / highest fill, metres. */
+  minDelta?: number;
+  maxDelta?: number;
+  /** Hidden unless the player shows it (blocked cells, decals). */
+  defaultOff?: boolean;
+  /** "roads" for the road roles (shown as one group). */
+  group?: string;
+  assetId?: string;         // roads: main prefab of the role
+  assetName?: string;       // its localised display name
+  control?: string;         // roads: the asset control that picks it
 }
 
 export interface LayerType {
@@ -326,6 +355,8 @@ export interface Summary {
   /** Additive (s17, docs/PARK-STATS.md): park stats of the planned build. Absent = not a park type (parking,
    *  roads, industrial) or no plan yet. */
   parkStats?: ParkStatsView;
+  /** Additive (s22): the preview layers of the plan, in display order (the legend window). Absent = no plan. */
+  legend?: LegendEntry[];
 }
 
 /** s17 park stat ids (save format, never renamed). */
@@ -466,6 +497,10 @@ export const Triggers = {
   setParkStat: "setParkStat",               // (id: ParkStatId, valueJson: string) — override one stat
   resetParkStat: "resetParkStat",           // (id: ParkStatId | "") — back to suggested; "" = all
   setParkStatsKeepVanilla: "setParkStatsKeepVanilla", // (keep: boolean) — clamp to the vanilla range
+  // s22 preview legend. Hover isolates one layer on the map; show / hide persists for the game session.
+  hoverLegend: "hoverLegend",               // (layerId: string) — "" = none
+  setLegendVisible: "setLegendVisible",     // (layerId: string, visible: boolean)
+  resetLegend: "resetLegend",               // () — every layer back to its default
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────

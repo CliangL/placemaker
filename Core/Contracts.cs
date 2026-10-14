@@ -92,6 +92,15 @@ namespace Placemaker.Core
         public float2 Position;
         public float2 Direction;
         public int2 Size;
+        /// <summary>
+        /// (s22, appended) The game's per-cell state (Game.Zones.Cell, index x + y·Size.x): <see cref="CellVisible"/>
+        /// and/or <see cref="CellBlocked"/>. Null = unknown (tests, older captures): every cell counts as open. On a
+        /// curved road the blocks of neighbouring segments overlap and the game hides the losing cells (not Visible);
+        /// cells under a road are Blocked. ZoneGuard never zones those.
+        /// </summary>
+        public byte[] Cells;
+
+        public const byte CellVisible = 1, CellBlocked = 2;
     }
 
     /// <summary>
