@@ -120,7 +120,12 @@ namespace Placemaker.Game.Build
                 var settings = CourseFitSettings.Default;
                 settings.FollowTerrain = net.FollowTerrain;
                 settings.MaxLength = _catalog.MaxEdgeLength(prefab);
-                var pieces = CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), GroundHeight, settings);
+                // Bridges/piers/boardwalks keep their planned deck: short pieces, each node with its own
+                // elevation and forced elevated (CourseFitting.FitElevated explains why not one course).
+                bool elevated = !net.FollowTerrain;
+                var pieces = elevated
+                    ? CourseFitting.FitElevated(new Cubic(net.A, net.B, net.C, net.D), settings.MaxLength > 1f ? math.min(ElevatedPieceLength, settings.MaxLength) : ElevatedPieceLength)
+                    : CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), GroundHeight, settings);
                 long key = PlanWork.Key(w);
                 bool any = false;
                 for (int p = 0; p < pieces.Count; p++)
@@ -129,6 +134,7 @@ namespace Placemaker.Game.Build
                     if (c.Length() < CourseFitting.MinCourseLength) continue;
                     var start = MakeCoursePos(c.A, c.Tangent(0), 0f, CoursePosFlags.IsFirst, p == 0 ? net.StartAttach : -1, prefab);
                     var end = MakeCoursePos(c.D, -c.Tangent(1), 1f, CoursePosFlags.IsLast, p == pieces.Count - 1 ? net.EndAttach : -1, prefab);
+                    if (elevated) Elevate(ref start, ref end, c, p > 0, p < pieces.Count - 1);
                     // Attached ends snap onto the existing net: rebuild the curve to the snapped points.
                     var curve = new Bezier4x3(c.A, c.B, c.C, c.D);
                     if (!start.m_Position.Equals(c.A) || !end.m_Position.Equals(c.D))
@@ -210,6 +216,30 @@ namespace Placemaker.Game.Build
                 pos.m_Position = node.m_Position;
             }
             return pos;
+        }
+
+        private const float ElevatedPieceLength = 12f;
+        private const float ElevatedMin = 0.75f;
+
+        /// <summary>
+        /// Elevation (planned height above the live terrain) on both course ends; interior nodes and
+        /// pieces whose deck is clearly above the ground are forced elevated, so CS2 builds a bridge at
+        /// the planned heights instead of re-deriving a ground course from the terrain/water bed.
+        /// </summary>
+        private void Elevate(ref CoursePos start, ref CoursePos end, Cubic c, bool startInterior, bool endInterior)
+        {
+            float ea = c.A.y - Height(c.A.xz), ed = c.D.y - Height(c.D.xz);
+            var mid = c.Position(0.5f);
+            float em = mid.y - Height(mid.xz);
+            start.m_Elevation = new float2(math.max(0f, ea));
+            end.m_Elevation = new float2(math.max(0f, ed));
+            if (startInterior && ea > ElevatedMin) start.m_Flags |= CoursePosFlags.ForceElevatedNode;
+            if (endInterior && ed > ElevatedMin) end.m_Flags |= CoursePosFlags.ForceElevatedNode;
+            if (em > ElevatedMin)
+            {
+                start.m_Flags |= CoursePosFlags.ForceElevatedEdge;
+                end.m_Flags |= CoursePosFlags.ForceElevatedEdge;
+            }
         }
 
         /// <summary>Attachments are stale after save/load (entity ids change); verify by geometry too.</summary>
