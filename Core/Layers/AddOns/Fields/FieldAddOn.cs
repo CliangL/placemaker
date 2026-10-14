@@ -85,12 +85,22 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         }
 
         public static readonly string[] Ids = { "pitch", "baseballDiamond", "runningTrack", "tennisCourts", "basketballCourt", "cricketGround", "skateBowl" };
+
+        /// <summary>
+        /// The fields as features of a host without places for them (sports park): each field finds its own
+        /// spot in what the host left free, at its own "Position", with its own "Path to it".
+        /// </summary>
+        public static List<FeatureInfo> WithFields(List<FeatureInfo> own)
+        {
+            foreach (var id in Ids)
+                own.Add(new FeatureInfo { Layer = id, LabelKey = "Placemaker.Feature." + id, TooltipKey = "Placemaker.Feature." + id + ".Tooltip" });
+            return own;
+        }
     }
 
     public abstract class FieldAddOn : AmenityAddOn
     {
         public override string Icon => "Media/Game/Icons/SportsParks.svg";
-        public override float MinArea => 300f;
 
         public const string SmallerKey = "Placemaker.Field.Issue.Smaller";
         public const string OrientationKey = "Placemaker.Field.Issue.Orientation";
@@ -265,6 +275,8 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             plan.Facts["fieldFormat"] = k;
             plan.Facts["fieldLength"] = place.HalfLength * 2f;
             plan.Facts["fieldWidth"] = place.HalfWidth * 2f;
+            plan.Facts["fieldAxisX"] = place.Axis.x;
+            plan.Facts["fieldAxisZ"] = place.Axis.y;
             plan.Facts["lineDecals"] = decals;
             plan.Facts["levelPieces"] = job.Ground.Pieces;
             plan.Facts["equipment"] = job.Equipment;

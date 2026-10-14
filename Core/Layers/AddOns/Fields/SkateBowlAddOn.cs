@@ -19,7 +19,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         public override string Id => "skateBowl";
 
         protected override FieldFormat[] Formats(LayerContext ctx) => FieldSpecs.Skate;
-        protected override float Apron(OrientedRect place) => 1.5f;
+        protected override float Apron(OrientedRect place) => 2.5f;
 
         protected override void DefineControls(ControlSet c)
         {

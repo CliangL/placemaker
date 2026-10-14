@@ -122,11 +122,13 @@ namespace Placemaker.Core.Layers.AddOns
             // Sports fields (AmenitySpec.Smaller): when the full size fits nowhere, the next smaller size is tried
             // ("scaled to fit"); a cheap free-room probe skips sizes that cannot fit at all.
             var ladder = shrink ? WithSmaller(length, width) : null;
-            if (ladder == null) return SolveOne(region, occ, length, width, at, gates, seed, blocked, out rect, out moved, margin);
-            float room = Fields.FieldKit.MaxClearance(region, occ, width * 0.5f + 4f);
-            if (Fields.FieldKit.MayFit(room, length, width) && SolveOne(region, occ, length, width, at, gates, seed, blocked, out rect, out moved, margin)) return true;
+            if (ladder == null && length < 40f) return SolveOne(region, occ, length, width, at, gates, seed, blocked, out rect, out moved, margin);
+            var grid = new Fields.FieldKit.ClearanceGrid(region, occ, width * 0.5f + 4f);
+            float room = grid.Max;
+            if (ladder == null) return Fields.FieldKit.MayFit(room, length, width) && SolveOne(region, occ, length, width, at, gates, seed, blocked, out rect, out moved, margin, grid);
+            if (Fields.FieldKit.MayFit(room, length, width) && SolveOne(region, occ, length, width, at, gates, seed, blocked, out rect, out moved, margin, grid)) return true;
             foreach (var s in ladder.Smaller)
-                if (Fields.FieldKit.MayFit(room, s.x, s.y) && SolveOne(region, occ, s.x, s.y, at, gates, seed, blocked, out rect, out moved, margin)) return true;
+                if (Fields.FieldKit.MayFit(room, s.x, s.y) && SolveOne(region, occ, s.x, s.y, at, gates, seed, blocked, out rect, out moved, margin, grid)) return true;
             return false;
         }
 
@@ -138,7 +140,7 @@ namespace Placemaker.Core.Layers.AddOns
         }
 
         private static bool SolveOne(LayerRegion region, Occupancy occ, float length, float width, string at, IReadOnlyList<float2> gates,
-            uint seed, Func<float2, bool> blocked, out OrientedRect rect, out bool moved, float margin)
+            uint seed, Func<float2, bool> blocked, out OrientedRect rect, out bool moved, float margin, Fields.FieldKit.ClearanceGrid grid = null)
         {
             rect = default; moved = false;
             var order = new List<string> { at };
@@ -149,7 +151,7 @@ namespace Placemaker.Core.Layers.AddOns
                 // spot closest to its own target wins: "edge" means hugging an edge, not the first edge tried.
                 bool found = false; float best = float.MaxValue;
                 foreach (var (target, axis) in Targets(region, order[k], gates, length, width, margin, seed))
-                    if (Search(region, occ, target, axis, length, width, margin, blocked, out var r, best) && math.distance(r.Center, target) < best - 0.01f)
+                    if (Search(region, occ, target, axis, length, width, margin, blocked, out var r, best, grid) && math.distance(r.Center, target) < best - 0.01f)
                     {
                         best = math.distance(r.Center, target);
                         rect = r; found = true;
@@ -231,13 +233,13 @@ namespace Placemaker.Core.Layers.AddOns
         }
 
         private static bool Search(LayerRegion region, Occupancy occ, float2 target, float2 axis, float length, float width, float margin,
-            Func<float2, bool> blocked, out OrientedRect rect, float limit = float.MaxValue)
+            Func<float2, bool> blocked, out OrientedRect rect, float limit = float.MaxValue, Fields.FieldKit.ClearanceGrid grid = null)
         {
             rect = default;
             axis = math.normalizesafe(axis, new float2(1, 0));
             float hl = length * 0.5f, hw = width * 0.5f;
             float reach = math.min(math.cmax(region.Max - region.Min), 60f + length);
-            const float step = 2f;
+            float step = math.max(2f, math.min(length, width) / 12f);   // 2 m for amenities, coarser for sports fields
             int rings = (int)math.ceil(reach / step);
             int tests = 0;
             for (int ring = 0; ring <= rings && ring * step <= limit; ring++)
@@ -261,6 +263,7 @@ namespace Placemaker.Core.Layers.AddOns
                         }
                     }
                     var c = target + new float2(ix, iy) * step;
+                    if (grid != null && grid.UpperBound(c) < math.min(hw, hl) * 0.9f) continue;   // sports fields: coarse bound first
                     if (!region.Contains(c)) continue;
                     if (occ.Clearance(c, hw) < math.min(hw, hl) * 0.9f) continue;
                     for (int turn = 0; turn < 2; turn++)
@@ -268,7 +271,8 @@ namespace Placemaker.Core.Layers.AddOns
                         var ax = turn == 0 ? axis : new float2(-axis.y, axis.x);
                         var r = new OrientedRect { Center = c, Axis = ax, HalfLength = hl, HalfWidth = hw };
                         if (blocked != null && Blocked(r, blocked)) continue;
-                        if (++tests > 900) return false;
+                        if (++tests > (length >= 40f ? 300 : 900)) return false;
+                        if (length >= 40f && !Fields.FieldKit.QuickFree(occ, r, margin)) continue;   // big places: cheap rejection first
                         if (!LeisureKit.RectFits(region, occ, r, margin)) continue;
                         rect = r;
                         return true;

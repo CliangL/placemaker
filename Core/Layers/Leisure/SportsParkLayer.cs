@@ -21,11 +21,11 @@ namespace Placemaker.Core.Layers.Leisure
         public override string Icon => "Media/Game/Icons/SportsParks.svg";
         public override float MinArea => 1200f;
 
-        protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
+        protected override List<FeatureInfo> BuildFeatures() => AddOns.Fields.FieldSpecs.WithFields(new List<FeatureInfo>
         {
             Feature("restrooms"), Feature("shops", ("count", 2.0), ("where", "entrances")), CoreFeature("playground", ("size", "small")),
             StreetShopsFeature(Area), Feature("decals", ("theme", "cracks"), ("ground", "auto")), Feature("terrain", ("shape", "flatten")),
-        };
+        });
 
         protected override void DefineControls(ControlSet c)
         {

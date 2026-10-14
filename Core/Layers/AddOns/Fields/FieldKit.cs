@@ -204,7 +204,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             g.Pieces++;
             // Apron: bands from the pad to the outer edge, each side cut into quads ~6 m long.
             float apron = math.min(g._ol - g._pl, g._ow - g._pw);
-            int bands = math.clamp((int)math.ceil(apron / 2.2f), 1, 4);
+            int bands = math.clamp((int)math.ceil(apron / 1.5f), 2, 5);
             var f = g._f;
             for (int k = 0; k < bands; k++)
             {
@@ -212,15 +212,17 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                 float il = math.lerp(g._pl, g._ol, t0), iw = math.lerp(g._pw, g._ow, t0);
                 float ol = math.lerp(g._pl, g._ol, t1), ow = math.lerp(g._pw, g._ow, t1);
                 float blend = Smooth((t0 + t1) * 0.5f);
-                // Long sides (cover the corners), then the short ends between them.
+                // Long sides between the band's corners, the corner squares, then the short ends.
                 for (int s = -1; s <= 1; s += 2)
                 {
-                    int segs = math.max(1, (int)math.ceil(2f * ol / 6f));
+                    int segs = math.max(1, (int)math.ceil(2f * il / 6f));
                     for (int q = 0; q < segs; q++)
                     {
-                        float u0 = -ol + 2f * ol * q / segs, u1 = -ol + 2f * ol * (q + 1) / segs;
+                        float u0 = -il + 2f * il * q / segs, u1 = -il + 2f * il * (q + 1) / segs;
                         g.Quad(ctx, f.Box(u0, s * iw, u1, s * ow), f.P((u0 + u1) * 0.5f, s * (iw + ow) * 0.5f), blend);
                     }
+                    for (int e = -1; e <= 1; e += 2)
+                        g.Quad(ctx, f.Box(e * il, s * iw, e * ol, s * ow), f.P(e * (il + ol) * 0.5f, s * (iw + ow) * 0.5f), blend);
                     int ends = math.max(1, (int)math.ceil(2f * iw / 6f));
                     for (int q = 0; q < ends; q++)
                     {
@@ -355,21 +357,86 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         }
 
         /// <summary>The largest free clearance on a coarse grid (a cheap "can anything of this size fit?" probe).</summary>
-        public static float MaxClearance(LayerRegion region, Occupancy occ, float cap, float step = 4f)
+        public static float MaxClearance(LayerRegion region, Occupancy occ, float cap, float step = 4f) =>
+            region == null ? 0f : new ClearanceGrid(region, occ, cap, step).Max;
+
+        /// <summary>
+        /// Free clearance sampled on a coarse grid once, so a big search does not measure it thousands of times.
+        /// Clearance is 1-Lipschitz, so the nearest node's value plus the distance to it is an upper bound:
+        /// a candidate rejected by the bound would have been rejected by the exact value too.
+        /// </summary>
+        public sealed class ClearanceGrid
         {
-            if (region == null) return 0f;
-            float best = 0f;
-            var size = region.Max - region.Min;
-            step = math.max(step, math.sqrt(size.x * size.y / 6000f));
-            for (float y = region.Min.y + step * 0.5f; y < region.Max.y; y += step)
-                for (float x = region.Min.x + step * 0.5f; x < region.Max.x; x += step)
+            private readonly float2 _min;
+            private readonly float _step;
+            private readonly int _nx, _ny;
+            private readonly float[] _v;
+            public readonly float Max;
+
+            public ClearanceGrid(LayerRegion region, Occupancy occ, float cap, float step = 4f)
+            {
+                var size = region.Max - region.Min;
+                _step = math.max(step, math.sqrt(size.x * size.y / 6000f));
+                _min = region.Min;
+                _nx = math.max(1, (int)math.ceil(size.x / _step) + 1);
+                _ny = math.max(1, (int)math.ceil(size.y / _step) + 1);
+                _v = new float[_nx * _ny];
+                for (int iy = 0; iy < _ny; iy++)
+                    for (int ix = 0; ix < _nx; ix++)
+                    {
+                        var p = _min + new float2(ix, iy) * _step;
+                        float c = region.Contains(p) ? math.max(0f, occ.Clearance(p, cap)) : 0f;
+                        _v[iy * _nx + ix] = c;
+                        if (c > Max) Max = c;
+                    }
+            }
+
+            public float UpperBound(float2 p)
+            {
+                // The tightest of the four surrounding nodes' bounds.
+                var g = (p - _min) / _step;
+                int x0 = math.clamp((int)math.floor(g.x), 0, _nx - 1), y0 = math.clamp((int)math.floor(g.y), 0, _ny - 1);
+                float best = float.MaxValue;
+                for (int dy = 0; dy <= 1; dy++)
+                    for (int dx = 0; dx <= 1; dx++)
+                    {
+                        int ix = math.min(x0 + dx, _nx - 1), iy = math.min(y0 + dy, _ny - 1);
+                        var node = _min + new float2(ix, iy) * _step;
+                        best = math.min(best, _v[iy * _nx + ix] + math.distance(node, p));
+                    }
+                return best + 0.01f;
+            }
+        }
+
+        /// <summary>
+        /// Cheap rejection for big rectangles before the exact LeisureKit.RectFits: false when a corridor (path)
+        /// ends inside or crosses the rectangle (plus margin), or a coarse probe grid hits a disc or polygon.
+        /// Only ever rejects what RectFits would reject too; true means "check exactly".
+        /// </summary>
+        public static bool QuickFree(Occupancy occ, OrientedRect r, float margin)
+        {
+            var side = r.Side;
+            float reach = r.HalfLength + r.HalfWidth + 2f;
+            foreach (var s in occ.Corridors.Segments)
+            {
+                // RectFits rejects a corridor within its half width + 0.35 m of the rectangle; test a slightly smaller grown box.
+                float e = s.HalfWidth + 0.3f;
+                if (SegmentIndex.DistSq(r.Center, s.A, s.B) > (reach + e) * (reach + e)) continue;
+                float hl = r.HalfLength + e, hw = r.HalfWidth + e;
+                bool Inside(float2 p) => math.abs(math.dot(p - r.Center, r.Axis)) <= hl && math.abs(math.dot(p - r.Center, side)) <= hw;
+                if (Inside(s.A) || Inside(s.B)) return false;
+                var ring = new OrientedRect { Center = r.Center, Axis = r.Axis, HalfLength = hl, HalfWidth = hw }.Ring;
+                for (int i = 0; i < 4; i++)
+                    if (Poly.SegmentsIntersect(s.A, s.B, ring[i], ring[(i + 1) % 4])) return false;
+            }
+            float step = math.max(3f, math.min(r.HalfLength, r.HalfWidth) / 6f), pr = step * 0.5f;
+            for (float u = -r.HalfLength + pr; u <= r.HalfLength - pr + 0.01f; u += step)
+                for (float v = -r.HalfWidth + pr; v <= r.HalfWidth - pr + 0.01f; v += step)
                 {
-                    var p = new float2(x, y);
-                    if (!region.Contains(p)) continue;
-                    float c = occ.Clearance(p, cap);
-                    if (c > best) { best = c; if (best >= cap) return best; }
+                    var p = r.Local(u, v);
+                    if (occ.Discs.Overlaps(p, pr * 0.9f) || occ.HitsPolygon(p, pr * 0.9f)) return false;
                 }
-            return best;
+            return true;
         }
 
         /// <summary>True when the probe says a rectangle of this size may fit (the grid underestimates by ≤ step·√2/2).</summary>

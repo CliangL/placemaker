@@ -17,7 +17,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         public override string Id => "basketballCourt";
 
         protected override FieldFormat[] Formats(LayerContext ctx) => FieldSpecs.Basketball;
-        protected override float Apron(OrientedRect place) => 1.5f;
+        protected override float Apron(OrientedRect place) => 2.5f;
 
         protected override void DefineControls(ControlSet c)
         {
