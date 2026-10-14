@@ -12,7 +12,7 @@ export const GROUP = "Placemaker";
  * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
  * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
  */
-export const PROTOCOL = 17;
+export const PROTOCOL = 18;
 
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
@@ -143,7 +143,7 @@ export interface ControlOptionView {
 
 /** One stripe of an option swatch (C# Core.OptionSwatch). */
 export interface SwatchStripe {
-  role: string;             // "street" | "avenue" | "local" | "roundabout" | "perimeter" | "carFree"
+  role: string;             // roads: "street" | "avenue" | "local" | "roundabout" | "perimeter" | "carFree"; (s18) ground palettes: "field" | "border" | "focal" | "path" | "inlay"
   color: string;            // "#rrggbb"
   width: number;            // real metres; draw relative to the other stripes
   green?: boolean;          // trees / grass verges

@@ -65,6 +65,10 @@ namespace Placemaker.Core.Layers.Plaza
             public float ArrangementGap;
             public int Groups;
             public List<ArrangementItem> Arrangement;
+            /// <summary>(s18) Centre to use when it has the clearance (the place focal point), before the centroid.</summary>
+            public float2? PreferredCenter;
+            /// <summary>(s18) Furniture keeps at least this far from the centre (a fountain feature with its seating ring).</summary>
+            public float KeepClear;
         }
 
         public static PlazaLayout Generate(LayerRegion region, Occupancy occ, IReadOnlyList<float2> entrances, Options o)
@@ -73,18 +77,19 @@ namespace Placemaker.Core.Layers.Plaza
             float spacing = math.clamp(o.CenterSpacing, 5f, 60f);
             float gap = math.clamp(o.ArrangementGap, 0f, 20f);
             float radius = o.CenterMode == CenterMode.None ? 0f : math.max(0f, o.CenterRadius);
-            if (!TryChooseCenter(region, occ, radius, out var center, out float clearance))
+            if (!TryChooseCenter(region, occ, radius, o.PreferredCenter, out var center, out float clearance))
             {
                 // The centerpiece is optional: keep the plaza buildable when it does not fit.
                 if (radius > 0f) layout.CenterpieceDropped = true;
                 radius = 0f;
-                TryChooseCenter(region, occ, 0f, out center, out clearance);
+                TryChooseCenter(region, occ, 0f, o.PreferredCenter, out center, out clearance);
             }
             layout.Center = center;
             layout.CenterClearance = clearance;
             // Without a centerpiece the middle stays open: furniture rings around a reserved core, which
             // the layer hands to children ("core" region) — e.g. a fountain add-on of any size.
             float protectedRadius = radius > 0f ? math.max(2f, radius) + CenterSafetyMargin : math.clamp(clearance * 0.35f, 0.75f, 14f);
+            protectedRadius = math.max(protectedRadius, o.KeepClear);
             layout.CoreRadius = radius > 0f ? math.min(clearance * 0.6f, 25f) : protectedRadius - 0.5f;
             var major = MajorAxis(region.Ring, center, out float majorSpan, out float minorSpan);
 
@@ -379,8 +384,14 @@ namespace Placemaker.Core.Layers.Plaza
         }
 
         /// <summary>Centroid when it has the clearance, else the most open interior point.</summary>
-        private static bool TryChooseCenter(LayerRegion region, Occupancy occ, float required, out float2 center, out float clearance)
+        private static bool TryChooseCenter(LayerRegion region, Occupancy occ, float required, float2? preferred, out float2 center, out float clearance)
         {
+            if (preferred.HasValue && region.Contains(preferred.Value))
+            {
+                center = preferred.Value;
+                clearance = occ.Clearance(center, math.cmax(region.Max - region.Min));
+                if (clearance >= required + CenterSafetyMargin) return true;
+            }
             center = region.Centroid;
             if (region.Contains(center))
             {

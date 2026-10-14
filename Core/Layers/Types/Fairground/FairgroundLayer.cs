@@ -23,8 +23,12 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Types.Events
 {
     [AreaGenerator(80, Group = "events")]
-    public sealed class FairgroundLayer : LeisureLayer
+    public sealed class FairgroundLayer : LeisureLayer, ILinkedControls
     {
+        /// <summary>(s18) Ground palette: picking one clears the per-role surface picks; a role pick reads Custom.</summary>
+        public string[] OnValueSet(SettingsBag settings, string controlId) => GroundPalettes.OnValueSet(settings, controlId, "pavingSurface");
+        public void Derive(SettingsBag settings) => GroundPalettes.Derive(settings, "pavingSurface");
+
         public const string FieldPlace = Composer.PlacePrefix + "field";
         private const string K = "Placemaker.Fairground.";
 
@@ -91,6 +95,9 @@ namespace Placemaker.Core.Layers.Types.Events
             c.Slider("treeDensity", 12, 0, 60, 2, "perHa", ControlTier.More, "fairSite").Tip();
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "fairSite");
 
+            // s18: hard pads and a paved site in a ground palette ("pavingSurface" = the paved site's main stone).
+            GroundPalettes.DefineControls(c, "fairSite", "pavingSurface");
+            c.Asset("pavingSurface", AssetCategories.SurfacePaving, ControlTier.More, "fairSite");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "assets");
@@ -144,8 +151,9 @@ namespace Placemaker.Core.Layers.Types.Events
         private static readonly AssetRef Toilet = new AssetRef("PortableToilet01");
         private static readonly string[] ShadeTrees = { "NA_LindenTree01", "EU_ChestnutTree01", "OakTree01" };
 
-        /// <summary>Paving of the site's hard pads (stage, court, rides, landmark): old-town setts at Christmas, warm sandstone elsewhere.</summary>
-        private static PavingPalette Palette(LayerContext ctx) => ctx.S("style") == "christmas" ? PavingPalettes.Cobble : PavingPalettes.Warm;
+        /// <summary>Paving of the site's hard pads (stage, court, rides, landmark): the ground palette; Automatic = old-town setts at Christmas, sandstone elsewhere.</summary>
+        private static PavingPalette Palette(LayerContext ctx) =>
+            GroundPalettes.Resolve(ctx.Settings, ctx.S("style") == "christmas" ? GroundPalettes.Cobble : GroundPalettes.Sandstone, "pavingSurface");
 
         /// <summary>
         /// A hard pad. On a paved site it joins the ground's tiling (one paved surface over another
@@ -282,7 +290,7 @@ namespace Placemaker.Core.Layers.Types.Events
             // A paved site: the hard pads, a dark frame along the outline and the field, as one tiling.
             if (pave != null)
             {
-                var pal = PavingPalettes.WithField(Palette(ctx), "");
+                var pal = Palette(ctx);
                 pave.Add(PavingShapes.Frame(region.Ring, PlazaDressing.FrameWidth(region)), SurfaceRole.Plaza, pal.Band, AssetCategories.SurfacePaving);
                 pave.Emit(ctx, region.Ring, SurfaceRole.Plaza, pal.Field, AssetCategories.SurfacePaving);
             }

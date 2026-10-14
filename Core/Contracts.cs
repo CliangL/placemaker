@@ -346,7 +346,7 @@ namespace Placemaker.Core
     /// <summary>(s16) One stripe of an option swatch (e.g. a road mix: the street, avenue and local road it places).</summary>
     public sealed class OptionSwatch
     {
-        /// <summary>Role id ("street", "avenue", "local", "roundabout", "perimeter", "carFree").</summary>
+        /// <summary>Role id: roads "street", "avenue", "local", "roundabout", "perimeter", "carFree"; (s18) ground palettes "field", "border", "focal", "path", "inlay".</summary>
         public string Role = "";
         /// <summary>CSS hex colour, "#rrggbb".</summary>
         public string Color = "";

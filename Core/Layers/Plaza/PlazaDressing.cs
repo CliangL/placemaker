@@ -78,20 +78,33 @@ namespace Placemaker.Core.Layers.Plaza
             }
         }
 
-        /// <summary>Palette from the "paveStyle" control; "auto" follows the square's character.</summary>
-        public static PavingPalette Palette(LayerContext ctx)
+        /// <summary>
+        /// (s18) The square's ground palette: the "palette" control, Automatic = <see cref="AutoPalette"/>, with the
+        /// player's per-role surface picks on top ("surface" = the field).
+        /// </summary>
+        public static PavingPalette Palette(LayerContext ctx) => GroundPalettes.Resolve(ctx.Settings, AutoPalette(ctx), "surface");
+
+        /// <summary>
+        /// What Automatic means for a square: a pre-s18 save's paving style (warm → terracotta, so it looks as it
+        /// did), else the square's character — calm stone by default, never the orange/ochre look.
+        /// </summary>
+        public static string AutoPalette(LayerContext ctx)
         {
-            string s = ctx.S("paveStyle");
-            if (string.IsNullOrEmpty(s) || s == "auto")
+            switch (ctx.S("paveStyle"))
             {
-                string levels = ctx.S("levels");
-                if (ctx.F("lawns") >= 15f) s = "garden";
-                else if (ctx.I("stalls") > 0) s = "cobble";
-                else if (ctx.I("cafe") > 0 || ctx.S("centerKind") == "fountain" || (ctx.Input?.HasChild("fountain") ?? false)) s = "warm";
-                else if (!string.IsNullOrEmpty(levels) && levels != "flat") s = "modern";
-                else s = "civic";
+                case "civic": return GroundPalettes.Classic;
+                case "warm": return GroundPalettes.Terracotta;
+                case "garden": return GroundPalettes.Garden;
+                case "modern": return GroundPalettes.Modern;
+                case "cobble": return GroundPalettes.Cobble;
             }
-            return PavingPalettes.WithField(PavingPalettes.Get(s), ctx.S("surface"));
+            string levels = ctx.S("levels");
+            if (ctx.F("lawns") >= 15f) return GroundPalettes.Garden;
+            if (ctx.I("stalls") > 0) return GroundPalettes.Cobble;
+            if (ctx.I("cafe") > 0) return GroundPalettes.BrickStone;
+            if (!string.IsNullOrEmpty(levels) && levels != "flat") return GroundPalettes.Modern;
+            if (ctx.S("centerKind") == "fountain") return GroundPalettes.Sandstone;
+            return GroundPalettes.Classic;
         }
 
         public static float FrameWidth(LayerRegion region)
@@ -112,16 +125,37 @@ namespace Placemaker.Core.Layers.Plaza
             float fw = FrameWidth(region);
             foreach (var t in pits)
                 pave.Add(LayerRegion.Rect(t, axis, 1.1f, 1.1f), SurfaceRole.Plaza, p.Inlay, AssetCategories.SurfacePaving);
+            // s18 fit rules: every ring round the focal point stays a clear metre inside the frame band and inside the
+            // border inlay line, so nothing cuts across anything (playtest: rings overlapping each other and the border).
+            float depth = region.Contains(centre) ? region.BoundaryDistance(centre) : 0f;
+            float lineInset = fw + 2.4f;
+            bool borderLine = ctx.S("pattern") == "border";
+            float outer = 0f, outerRingAt = 0f;
             if (rondel >= 2f)
             {
-                float phase = math.atan2(axis.y, axis.x);
-                pave.Add(PavingShapes.Polygon(centre, rondel, 40, phase), SurfaceRole.Plaza, p.Accent, AssetCategories.SurfacePaving);
-                pave.Add(PavingShapes.Annulus(centre, rondel, 1.2f), SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving);
-                if (rondel >= 6f) pave.Add(PavingShapes.Annulus(centre, rondel + 3.2f, 0.6f), SurfaceRole.Plaza, p.Inlay, AssetCategories.SurfacePaving);
+                float limit = depth - fw - 1f;
+                bool ring = rondel + 1.2f <= limit;
+                bool outerRing = ring && rondel >= 6f && rondel + 4.1f <= limit;
+                if (borderLine && outerRing && rondel + 4.1f > depth - lineInset - 0.8f - 1f) outerRing = false;
+                float pad = math.min(rondel, limit);
+                if (pad >= 2f)
+                {
+                    float phase = math.atan2(axis.y, axis.x);
+                    pave.Add(PavingShapes.Polygon(centre, pad, 40, phase), SurfaceRole.Plaza, p.Focal, AssetCategories.SurfacePaving);
+                    outer = pad;
+                    if (ring) { pave.Add(PavingShapes.Annulus(centre, pad, 1.2f), SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving); outer = pad + 1.2f; }
+                    if (outerRing) outerRingAt = pad + 3.2f;
+                }
             }
+            float walkEnd = outer;
+            if (outerRingAt > 0f) outer = outerRingAt + 0.9f;
+            // The border line only where the rondel leaves it whole.
+            if (borderLine && outer > 0f && outer + 1f > depth - lineInset - 0.8f) borderLine = false;
             if (axes && gates.Count > 0)
             {
+                // Walks from each entrance to the rondel's edge (laid before the outer ring, which they cut through).
                 float aw = math.clamp(fw * 1.4f, 2.6f, 4f);
+                bool kerbed = region.Area >= PlazaTiers.MediumArea;   // dark kerbs only on big squares: calmer below
                 var kerbs = new List<float2[]>();
                 var bands = new List<float2[]>();
                 foreach (var g in gates)
@@ -129,19 +163,23 @@ namespace Placemaker.Core.Layers.Plaza
                     var inward = region.InwardNormal(g.Segment);
                     var a = g.Position - inward * 1f;
                     var dir = math.normalizesafe(centre - a, inward);
-                    var b = rondel >= 2f ? centre - dir * (rondel * 0.5f) : centre;
+                    var b = walkEnd > 0f ? centre - dir * math.max(0f, walkEnd - 0.6f) : centre;
                     if (math.distance(a, b) < 4f) continue;
                     var side = new float2(-dir.y, dir.x);
-                    var k1 = PavingShapes.Band(a + side * (aw * 0.5f + 0.3f), b + side * (aw * 0.5f + 0.3f), 0.6f);
-                    var k2 = PavingShapes.Band(a - side * (aw * 0.5f + 0.3f), b - side * (aw * 0.5f + 0.3f), 0.6f);
-                    if (k1 != null) kerbs.Add(k1);
-                    if (k2 != null) kerbs.Add(k2);
+                    if (kerbed)
+                    {
+                        var k1 = PavingShapes.Band(a + side * (aw * 0.5f + 0.3f), b + side * (aw * 0.5f + 0.3f), 0.6f);
+                        var k2 = PavingShapes.Band(a - side * (aw * 0.5f + 0.3f), b - side * (aw * 0.5f + 0.3f), 0.6f);
+                        if (k1 != null) kerbs.Add(k1);
+                        if (k2 != null) kerbs.Add(k2);
+                    }
                     var band = PavingShapes.Band(a, b, aw);
                     if (band != null) bands.Add(band);
                 }
                 pave.Add(kerbs, SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving);
-                pave.Add(bands, SurfaceRole.Plaza, p.Accent, AssetCategories.SurfacePaving);
+                pave.Add(bands, SurfaceRole.Plaza, p.Path, AssetCategories.SurfacePaving);
             }
+            if (outerRingAt > 0f) pave.Add(PavingShapes.Annulus(centre, outerRingAt, 0.9f), SurfaceRole.Plaza, p.Inlay, AssetCategories.SurfacePaving);
             pave.Add(PavingShapes.Frame(region.Ring, fw), SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving);
 
             switch (ctx.S("pattern"))
@@ -151,7 +189,8 @@ namespace Placemaker.Core.Layers.Plaza
                     break;
                 case "border":
                 {
-                    var inner = PavingShapes.Inset(region.Ring, fw + 2.4f);
+                    if (!borderLine) break;
+                    var inner = PavingShapes.Inset(region.Ring, lineInset);
                     var line = new List<float2[]>();
                     foreach (var r in inner) line.AddRange(PavingShapes.Frame(r, 0.8f));
                     pave.Add(line, SurfaceRole.Plaza, p.Inlay, AssetCategories.SurfacePaving);
@@ -170,7 +209,7 @@ namespace Placemaker.Core.Layers.Plaza
                         {
                             if (((i + j) & 1) != 0) continue;
                             var c = centre + axis * (i * pitch) + side * (j * pitch);
-                            if (math.distance(c, centre) < rondel + pitch * 0.6f || !region.ContainsDisc(c, fw + pitch * 0.3f)) continue;
+                            if (math.distance(c, centre) < math.max(rondel, outer) + pitch * 0.32f + 1f || !region.ContainsDisc(c, fw + 1f + pitch * 0.32f)) continue;
                             tiles.Add(LayerRegion.Rect(c, axis, pitch * 0.22f, pitch * 0.22f));
                         }
                     pave.Add(tiles, SurfaceRole.Plaza, p.Accent, AssetCategories.SurfacePaving);
@@ -181,7 +220,7 @@ namespace Placemaker.Core.Layers.Plaza
 
         // ───────────── levels ─────────────
 
-        public static void Levels(LayerContext ctx, Occupancy occ, LayerRegion region, List<Gate> gates)
+        public static void Levels(LayerContext ctx, Occupancy occ, LayerRegion region, List<Gate> gates, NetRole ramps = NetRole.PathwayWide)
         {
             string mode = ctx.S("levels");
             if (mode == "flat" || string.IsNullOrEmpty(mode)) return;
@@ -204,7 +243,11 @@ namespace Placemaker.Core.Layers.Plaza
                 float len = math.min(inscribed * 0.7f, 28f);
                 var end = g.Position + inward * len;
                 if (!region.ContainsDisc(end, 1f)) continue;
-                LeisureKit.Path(ctx, occ, g.Position, end, NetRole.PathwayWide, ramp);
+                // s18: a ramp stops short of whatever stands in its way (a small square's focal pad).
+                float hw = Composer.DefaultHalfWidth(ramps);
+                while (len > 4f && LeisureKit.Crosses(occ, g.Position + inward * 1.5f, end, hw)) { len -= 2f; end = g.Position + inward * len; }
+                if (len <= 4f) continue;
+                LeisureKit.Path(ctx, occ, g.Position, end, ramps, ramp);
             }
             if (!ctx.B("levelPlanters")) return;
             // Low green bushes line each level edge (inset rings), leaving the ramps open: a soft balustrade.
@@ -426,12 +469,12 @@ namespace Placemaker.Core.Layers.Plaza
             foreach (float s in new[] { 1f, 0.85f, 0.72f, 0.6f })
             {
                 int fitsAll = 0;
-                for (int q = 0; q < 4; q++) if (LeisureKit.RectFits(region, occ, Quarter(q, s), 1f)) fitsAll++;
+                for (int q = 0; q < 4; q++) if (LeisureKit.RectFits(region, occ, Quarter(q, s), fw + 1f)) fitsAll++;
                 if (fitsAll > bestFits) { bestFits = fitsAll; scale = s; }
                 if (fitsAll == 4) break;
             }
             var fit = new bool[4];
-            for (int q = 0; q < 4 && scale > 0f; q++) fit[q] = LeisureKit.RectFits(region, occ, Quarter(q, scale), 1f);
+            for (int q = 0; q < 4 && scale > 0f; q++) fit[q] = LeisureKit.RectFits(region, occ, Quarter(q, scale), fw + 1f);
             for (int q = 0; q < 4 && scale > 0f; q++)
             {
                 var rect = Quarter(q, scale);

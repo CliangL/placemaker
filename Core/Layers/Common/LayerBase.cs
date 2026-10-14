@@ -470,7 +470,7 @@ namespace Placemaker.Core.Layers.Common
             float unplacedInset;
             using (Common.Layout.Use(input.Site))
             {
-                var shops = HostsStreetShops && input.HasChild(StreetShopsLayer) ? CarveStreetShops(ctx, input) : null;
+                var shops = HostsStreetShops && input.HasChild(StreetShopsLayer) && StreetShopsFit(ctx) ? CarveStreetShops(ctx, input) : null;
                 PlanCore(ctx);
                 if (shops != null) FinishStreetShops(ctx, shops);
                 unplacedInset = Entrances.UnplacedInset;
@@ -661,6 +661,12 @@ namespace Placemaker.Core.Layers.Common
         /// entrances) and hands each band piece to the feature as a "shops" region.
         /// </summary>
         protected virtual bool HostsStreetShops => false;
+
+        /// <summary>
+        /// (s18) Whether this area is big enough to give land to street shops at all (a small square would be eaten
+        /// by them). Hosts that say no add their own Info issue.
+        /// </summary>
+        protected virtual bool StreetShopsFit(LayerContext ctx) => true;
 
         /// <summary>The host controls shown under the feature toggle (FeatureInfo.Options = ShopOptions).</summary>
         public static readonly string[] ShopOptions = { StreetShops.AmountId, StreetShops.LayoutId, StreetShops.DepthId };
