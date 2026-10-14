@@ -52,9 +52,11 @@ namespace Placemaker.Core.Build
             // Shared props: add the farm category, let the general rules classify them too.
             if (Has(lower, "hay", "bale", "straw")) r.Add(AssetCategories.FarmHay);
             if (Has(lower, "trough", "feeder", "manger")) r.Add(AssetCategories.FarmTrough);
-            if (Has(lower, "fruitcrate", "fruit crate", "applecrate", "apple crate", "basket", "produce", "harvest", "ladder", "woodencrate", "wooden crate"))
+            // Not basketballs, bicycle baskets or roof ladders (catalog-dump: "Basketball01", "Bicycle02Basket01", "LadderRoof01").
+            if ((Has(lower, "fruitcrate", "fruit crate", "applecrate", "apple crate", "basket", "produce", "harvest", "ladder", "woodencrate", "wooden crate"))
+                && !Has(lower, "basketball", "bicycle", "bike", "roof", "pool", "harvester"))
                 r.Add(AssetCategories.FruitCrate);
-            if (Has(lower, "wheat", "maize", "corn", "sunflower", "cabbage", "lettuce", "pumpkin", "crop", "vegetable"))
+            if (Has(lower, "wheat", "maize", "sunflower", "cabbage", "lettuce", "pumpkin", "crop", "vegetable") || AssetCuration.HasWord(lower, "corn"))   // "OutdoorCornerSofa" is no corn
                 r.Add(AssetCategories.FieldCrop);
             return false;
         }

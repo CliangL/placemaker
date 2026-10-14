@@ -362,6 +362,8 @@ namespace Placemaker.Game.Assets
                         Prefab = entity,
                         Info = Info(entity, prefab.name),
                     };
+                    // The icon url names the prefab class for props made from vehicles ("coui://ail/CarPrefab.Tractor01.png").
+                    traits |= AssetHeuristics.TraitsFromIcon(item.Icon);
                     var t = new List<string>(categories);
                     t.Add(prefab.isBuiltin ? "source:vanilla" : "source:mod");
                     // Automatic eligibility per category ("auto" = eligible for at least one).
@@ -489,6 +491,9 @@ namespace Placemaker.Game.Assets
             if (prefab.TryGet<ObjectSubObjects>(out var subs) && subs?.m_SubObjects != null && subs.m_SubObjects.Length > 0) t |= AssetTraits.HasSubObjects;
 
             if (prefab.isBuiltin) t |= AssetTraits.Vanilla;
+            // Prefab kind (pool hygiene): building extensions / upgrades, vehicles, citizens' activity props.
+            for (var type = prefab.GetType(); type != null && type != typeof(PrefabBase); type = type.BaseType)
+                t |= AssetHeuristics.TraitsFromTypeName(type.Name);
             if (EntityManager.HasComponent<BrandObjectData>(e)) t |= AssetTraits.BrandObject;
             if (EntityManager.HasComponent<PlaceableObjectData>(e))
             {

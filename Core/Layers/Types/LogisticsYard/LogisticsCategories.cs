@@ -60,7 +60,8 @@ namespace Placemaker.Core.Layers.Types.Logistics
             if (Has(lower, "boom barrier", "boombarrier", "boomgate", "boom gate", "gate arm", "gatearm", "barrier gate", "barriergate", "parking barrier"))
             { categories.Add(AssetCategories.LogisticsBarrier); return false; }
             if (Has(lower, "portacabin", "porta cabin", "site office", "siteoffice", "office container", "officecontainer",
-                "guard booth", "guardbooth", "guardhouse", "guard house", "gatehouse", "gate house", "security booth", "cabin"))
+                "guard booth", "guardbooth", "guardhouse", "guard house", "gatehouse", "gate house", "security booth")
+                || (lower.Contains("cabin") && !Has(lower, "playcabin", "play cabin", "log cabin", "logcabin")))
             { categories.Add(AssetCategories.LogisticsCabin); return false; }
             if (Has(lower, "warehouse", "storage tent", "storagetent", "lean-to", "leanto", "lean to", "carport", "storage shed", "storageshed", "hangar", "silo"))
             { categories.Add(AssetCategories.LogisticsShed); return false; }

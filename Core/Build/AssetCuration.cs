@@ -56,10 +56,10 @@ namespace Placemaker.Core.Build
             [AssetCategories.CenterpieceFountain] = new[] { "SmallFountain0", "LargeFountain0" },
             [AssetCategories.Playground] = new[]
             {
-                "PlaygroundPlayset0", "ClimbingFrame0", "SwingSet0", "Slide0", "Seesaw0", "Sandbox0", "PlaygroundMountain0",
+                "PlaygroundPlayset0", "ClimbingFrame0", "SwingSet0", "Slide0", "Seesaw0", "Sandbox0", "PlaygroundMountain0", "PlayCabin0",
             },
-            // Picnic "tables": blankets (vanilla has no picnic table; grills are not tables).
-            [AssetCategories.Picnic] = new[] { "PicnicBlanket0" },
+            // Picnic tables: the campground table sets, then blankets (grills are not tables).
+            [AssetCategories.Picnic] = new[] { "CampgroundTableset0", "PicnicBlanket0" },
             [AssetCategories.Restroom] = new[] { "Outhouse0", "PortableToilet0" },
             // Park kiosks (never pier kiosks, ticket machines, vending machines or market billboards).
             [AssetCategories.Kiosk] = new[] { "Kiosk0", "FoodCart0", "FoodStall0" },
@@ -319,6 +319,121 @@ namespace Placemaker.Core.Build
             return s;
         }
 
+        // ───────────────────────── shared pool hygiene (art-pass follow-up) ─────────────────────────
+        //
+        // The art pass (docs/proposals/art-a2/a3/a6) found the SHARED automatic pools polluted and worked
+        // around it with explicit ids per type. These rules fix the pools for every type, present and
+        // future: whatever a type's name rules claim, these never go automatic (explicit picks still may).
+
+        /// <summary>Categories where hand-held activity props ARE the dressing (anglers' rods on a fishing spot).</summary>
+        private static readonly HashSet<string> ActivityPropCategories = new HashSet<string>(StringComparer.Ordinal) { "waterfront.fishing" };
+
+        /// <summary>Name words of building parts: upgrades, extensions, wings, clock pointers, cloth sub-meshes.</summary>
+        private static readonly HashSet<string> BuildingPartWords = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "upgrade", "upgrades", "extension", "extensions", "wing", "annex", "pointer", "pointers", "clockhand", "clockhands", "rooftop",
+        };
+
+        /// <summary>Advertising, branding and shop props (billboards in kiosk/stage/cafe pools, branded marquees, supermarkets).</summary>
+        private static readonly HashSet<string> CommercialWords = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "billboard", "billboards", "advert", "adverts", "advertising", "advertisement", "poster", "posters", "logo", "neon",
+            "adboard", "adstand", "supermarket", "hypermarket", "mall", "showroom", "dealership", "storefront", "shopfront",
+            "sign", "signs", "signage", "screen", "pylon",
+        };
+
+        /// <summary>Per-category name words that never fit that category's automatic pool.</summary>
+        private static readonly Dictionary<string, string[]> CategoryNeverWords = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            // Grave rows are headstones: mausoleums and crypts are buildings 3-7 m across.
+            ["cemetery.grave"] = new[] { "mausoleum", "crypt", "chapel" },
+            // A flowerbed is planted ground, not a container.
+            [AssetCategories.Flowerbed] = new[] { "planter", "planters", "box", "pot", "pots", "raised", "container", "city" },
+            // Statues and centrepieces stand alone: clocks on buildings, wall fountains and drinking taps do not.
+            [AssetCategories.CenterpieceStatue] = new[] { "clock", "wall", "drinking" },
+            [AssetCategories.Centerpiece] = new[] { "clock", "wall", "drinking" },
+            ["monument.column"] = new[] { "clock", "pier", "subway", "station", "bridge", "elevated", "highway" },
+            // Bike racks, not the parking hall around them.
+            [AssetCategories.BikeRack] = new[] { "hall", "maintenance", "entrance", "building" },
+            [AssetCategories.Lookout] = new[] { "fire", "station", "deck" },
+            [AssetCategories.WaterJets] = new[] { "agriculture", "agricultural", "irrigation", "farm", "system", "pivot" },
+            [AssetCategories.Stage] = new[] { "billboard", "screen", "speaker" },
+            ["events.tent"] = new[] { "camping", "makeshift" },
+            ["play.nature"] = new[] { "citizen", "logger", "chainsaw", "worker" },
+            [AssetCategories.Kiosk] = new[] { "pier", "ticket", "vending", "machine", "machines" },
+            ["kiosk.stall"] = new[] { "pier", "ticket", "vending", "machine", "machines" },
+            ["sports.basketball"] = new[] { "ball" },
+            ["farm.crate"] = new[] { "emergency", "escape", "fire", "roof", "wall", "pool" },
+            ["memorial.flag"] = new[] { "commercial" },   // company flags
+        };
+
+        private static bool AnyWord(List<string> words, ICollection<string> set)
+        {
+            foreach (var w in words) if (set.Contains(w)) return true;
+            return false;
+        }
+
+
+        /// <summary>
+        /// An advertising / shop prop. A word that names the category itself does not count: signage
+        /// categories keep their signs ("transport.sign", "trail.sign", "construction.sign"), the outdoor
+        /// cinema keeps its screen ("events.screen").
+        /// </summary>
+        private static bool IsCommercial(string category, List<string> words)
+        {
+            foreach (var w in words)
+            {
+                if (!CommercialWords.Contains(w)) continue;
+                if (category.IndexOf(w, StringComparison.Ordinal) >= 0) continue;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>"Prop01 - BrandName": a single-token prefab name with a brand suffix (the game's company variants).</summary>
+        public static bool IsBrandVariant(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            int dash = name.IndexOf(" - ", StringComparison.Ordinal);
+            return dash > 0 && name.IndexOf(' ') == dash;
+        }
+
+        /// <summary>Infrastructure supports: bridge, pier, subway and elevated-station pillars are never props.</summary>
+        public static bool IsInfrastructurePart(string lower) =>
+            AssetHeuristics.ContainsAny(lower, "pillar", "pylon", "abutment")
+            && AssetHeuristics.ContainsAny(lower, "bridge", "subway", "station", "elevated", "pier", "highway", "overpass", "viaduct", "monorail", "tram", "train");
+
+        /// <summary>
+        /// True when an OBJECT must never be an automatic pick of <paramref name="category"/>: building parts
+        /// (extensions/upgrades — fire-station watch towers as lookouts, school wings as benches, parking-hall
+        /// wings as bike racks), hand-held activity props (a chainsaw logger as a play log), vehicles in leisure
+        /// pools, advertising/shop props (billboards and supermarkets as kiosks, a branded marquee as a tent),
+        /// bridge/subway pillars, cloth sub-meshes ("…_Clt") and the per-category mismatches above.
+        /// </summary>
+        public static bool NeverAutomatic(string category, string name, AssetTraits t)
+        {
+            if (string.IsNullOrEmpty(category) || string.IsNullOrEmpty(name)) return false;
+            var lower = name.ToLowerInvariant();
+            if ((t & AssetTraits.BuildingPart) != 0) return true;
+            if (lower.EndsWith("_clt", StringComparison.Ordinal) || lower.Contains("_clt_")) return true;   // flag cloth without its pole
+            bool decal = category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal) || (t & AssetTraits.DecalMesh) != 0;
+            var words = AssetHeuristics.Words(name);
+            if (AnyWord(words, BuildingPartWords)) return true;
+            if ((t & AssetTraits.ActivityProp) != 0 || lower.StartsWith("citizen_", StringComparison.Ordinal))
+                return !ActivityPropCategories.Contains(category);
+            // Ruins may use a (small) broken bridge pillar: there the size cap drops the 15-90 m real ones.
+            if (IsInfrastructurePart(lower) && !category.StartsWith("ruins.", StringComparison.Ordinal)) return true;
+            bool leisure = IsLeisureCategory(category);
+            if (leisure && ((t & AssetTraits.Vehicle) != 0 || AssetHeuristics.IsVehicleName(name))) return true;
+            if (!decal && IsCommercial(category, words)) return true;
+            // Branded variants of ad props ("Stand01 - ShortMarket", "BillboardHuge01 - PeacentPlanks") and the bare
+            // advertising stands themselves ("Stand01", "AStand02"; not "BasketballHoopStand01").
+            if (!decal && IsBrandVariant(name)) return true;
+            if (lower.StartsWith("stand0", StringComparison.Ordinal) || lower.StartsWith("astand0", StringComparison.Ordinal)) return true;
+            if (CategoryNeverWords.TryGetValue(category, out var never) && AnyWord(words, never)) return true;
+            return false;
+        }
+
         // ───────────────────────── machinery & size sanity (in-game finding) ─────────────────────────
 
         /// <summary>
@@ -365,9 +480,26 @@ namespace Placemaker.Core.Build
             [AssetCategories.Stage] = 25f, [AssetCategories.Picnic] = 4f, [AssetCategories.Camping] = 9f,
             [AssetCategories.CampingPitch] = 9f, [AssetCategories.CampingFire] = 4f, [AssetCategories.Glasshouse] = 16f,
             [AssetCategories.GardenShed] = 8f, [AssetCategories.GardenCrop] = 8f,
+            // Art-pass follow-up: work and type pools too (70 m container piles, 90 m bridge pillars as ruins,
+            // 39 m crop heaps as field crops, 76 m ship decks as harbour cargo, 6.5 m mausoleums in grave rows).
+            ["cemetery.grave"] = 3f, ["memorial.flag"] = 3f, ["memorial.plaque"] = 3f, ["monument.column"] = 4f,
+            ["transport.bikeRack"] = 6f, ["transport.shelter"] = 12f, ["transport.vending"] = 3f, ["transport.sign"] = 4f,
+            ["trail.sign"] = 4f, ["sign.noticeboard"] = 4f, ["kiosk.stall"] = 8f, ["events.tent"] = 15f,
+            ["events.toilet"] = 4f, ["events.foodTruck"] = 10f, ["events.deckchair"] = 3f, ["events.christmas"] = 12f,
+            ["construction.container"] = 13f, ["industrial.container"] = 13f, ["logistics.container"] = 13f,
+            ["construction.material"] = 6f, ["construction.toilet"] = 4f, ["construction.cone"] = 1.5f, ["construction.barrier"] = 8f,
+            ["industrial.barrel"] = 4f, ["logistics.barrel"] = 4f, ["industrial.pallet"] = 4f, ["logistics.pallet"] = 4f,
+            ["logistics.crate"] = 4f, ["industrial.bale"] = 4f, ["shore.cargo"] = 16f, ["ruins.pillar"] = 6f, ["ruins.slab"] = 12f,
+            ["ruins.rubble"] = 12f, ["ruins.junk"] = 6f, ["ruins.wall"] = 8f, ["farm.crop"] = 10f, ["farm.crate"] = 4f, ["farm.hay"] = 4f,
+            ["waterfront.mooring"] = 3f, ["waterfront.nautical"] = 4f, ["waterfront.fishing"] = 5f, ["lamp.low"] = 1.5f,
+            ["monument.arch"] = 40f, ["golf.clubhouse"] = 40f,
         };
 
-        /// <summary>Size cap of a category: its own, else the nearest parent's ("play.slide" → "play"? none → "playground" for play.*).</summary>
+        /// <summary>
+        /// Size cap of a category: its own, else the nearest parent's, else a sanity default — 24 m for any
+        /// leisure/furniture category, 40 m for work sites (future types inherit a cap without listing one).
+        /// Nets, fences, surfaces, areas, zones, decals and functional road objects have no cap.
+        /// </summary>
         public static float MaxFootprint(string category)
         {
             if (string.IsNullOrEmpty(category)) return 0f;
@@ -375,8 +507,17 @@ namespace Placemaker.Core.Build
             if (category.StartsWith("play.", StringComparison.Ordinal)) return 10f;
             if (category.StartsWith("beach.", StringComparison.Ordinal)) return 10f;
             int dot = category.LastIndexOf('.');
-            return dot > 0 && MaxSize.TryGetValue(category.Substring(0, dot), out m) ? m : 0f;
+            if (dot > 0 && MaxSize.TryGetValue(category.Substring(0, dot), out m)) return m;
+            if (category == AssetCategories.Fence || category == AssetCategories.Pathway || category == AssetCategories.Road
+                || category == AssetCategories.InvisiblePath || category == AssetCategories.SurfaceAny || category == AssetCategories.Zone
+                || category == AssetCategories.Decal || category == AssetCategories.ParkingDecal || category == AssetCategories.Charger)
+                return 0f;
+            foreach (var p in NoCapPrefixes)
+                if (category.StartsWith(p, StringComparison.Ordinal)) return 0f;
+            return IsLeisureCategory(category) ? 24f : 40f;
         }
+
+        private static readonly string[] NoCapPrefixes = { "net.", "surface", "area.", "zone", "decal.", "object.", "parking." };
 
         /// <summary>False when a known footprint is implausibly big for the category (giant bounds, buildings).</summary>
         public static bool FitsSize(string category, float footprint)

@@ -38,6 +38,8 @@ namespace Placemaker.Core.Layers.Types.Landfill
         public bool Classify(string lower, AssetTraits traits, List<string> categories)
         {
             if ((traits & (AssetTraits.Plant | AssetTraits.Tree | AssetTraits.Building)) != 0) return false;
+            // "EU_Railing01ExtraShort" is no trash: drop the "extrashort" length suffix before word matching.
+            lower = lower.Replace("extrashort", "extra short");
 
             if (Has(lower, "dumpster", "skip container", "skipcontainer", "skip bin", "skipbin", "roll-off", "rolloff",
                     "garbagecontainer", "garbage container", "wastecontainer", "waste container", "trashcontainer", "trash container",

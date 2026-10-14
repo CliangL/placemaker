@@ -42,6 +42,10 @@ namespace Placemaker.Core.Build
         ExerciseActivity = 1 << 26,    // activity locations for push-ups, pull-ups…: outdoor gym
         Vanilla = 1 << 27,             // built-in content (prefab.isBuiltin)
         DecalMesh = 1 << 28,           // every mesh of the object is a decal (RenderPrefab with DecalProperties -> MeshFlags.Decal)
+        // Pool hygiene (art-pass follow-up): never automatic, whatever the name says.
+        BuildingPart = 1 << 29,        // BuildingExtensionPrefab / service upgrade: a piece of a building, not a prop
+        Vehicle = 1 << 30,             // a parked-vehicle prop ("Prop_Tractor01", CarPrefab/TrainCarPrefab… icons)
+        ActivityProp = 1 << 31,        // a citizen's hand-held activity prop (chainsaw, broom, ball, fishing rod)
     }
 
     public static class AssetHeuristics
@@ -123,6 +127,9 @@ namespace Placemaker.Core.Build
             if ((t & AssetTraits.ParkingLaneSubLane) != 0)
             {
                 r.Add(AssetCategories.ParkingDecal);
+                // Bicycle racks / stands / shelters spawn bike parking lanes: they are the real racks of
+                // "transport.bikeRack" (whose name pool only held parking-hall signs), never car stalls.
+                if (IsBikeName(lower)) r.Add(AssetCategories.BikeRack);
                 return r;
             }
             if ((t & AssetTraits.Charger) != 0 || (lower.Contains("charger") && lower.Contains("parking")))
@@ -182,7 +189,7 @@ namespace Placemaker.Core.Build
                 "garbagebin", "garbage bin", "litterbin", "litter bin", "recycling bin")) { r.Add(AssetCategories.Bin); return r; }
             if (ContainsAny(lower, PlanterNames)) { r.Add(AssetCategories.Planter); return r; }
             if (ContainsAny(lower, "flowerbed", "flower bed")) { r.Add(AssetCategories.Flowerbed); return r; }
-            if (ContainsAny(lower, "playground", "swing", "slide", "seesaw", "sandbox", "climbing", "carousel", "spring rider"))
+            if (ContainsAny(lower, "playground", "swing", "slide", "seesaw", "sandbox", "climbing", "carousel", "spring rider", "playcabin", "play cabin", "playhouse"))
             { r.Add(AssetCategories.Playground); return r; }
             if (ContainsAny(lower, "basketball", "tennis", "football", "soccer", "volleyball", "fitness", "goal", "court", "skate", "pingpong", "table tennis", "outdoor gym"))
             { r.Add(AssetCategories.Sports); return r; }
@@ -213,7 +220,7 @@ namespace Placemaker.Core.Build
         private static readonly string[] AutoExcludedNames =
         {
             "advert", "billboard", "poster", "banner", "sign", "board", "sandwich", "menu", "logo", "neon", "screen",
-            "stadium", "spectator", "bleacher", "grandstand", "tribune", "stand0", "standlarge", "standsmall",
+            "stadium", "spectator", "bleacher", "grandstand", "tribune", "standlarge", "standsmall",   // ad stands ("Stand01 - Brand"): AssetCuration.NeverAutomatic
             "construction", "roadwork", "road work", "traffic", "cone", "barricade", "scaffold", "excavat",
             "crate", "pallet", "cardboard", "pile", "debris", "rubble", "garbage bag", "trashbag", "dumpster",
             "vehicle", "truck", "trailer", "forklift", "boat", "atm", "mailbox", "phonebooth", "phone booth", "vending",
@@ -268,6 +275,10 @@ namespace Placemaker.Core.Build
             if (isArea) return true;
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
+            // Shared hygiene for every pool, present and future: building parts, hand-held activity props,
+            // vehicles in leisure pools, advertising/shop props, bridge pillars, per-category mismatches.
+            if (AssetCuration.NeverAutomatic(category, name, t)) return false;
+            if (category == AssetCategories.ParkingDecal && IsBikeName(lower)) return false;   // bike racks are not car stalls
             // Leisure pools never take machinery ("AgricultureSprinklerSystem" as splash-pad jets).
             if (AssetCuration.IsMachineryForLeisure(category, lower)) return false;
             // Decals: curated themes (AssetCuration) — natural park looks, never letters or road markings.
@@ -384,6 +395,61 @@ namespace Placemaker.Core.Build
         }
 
         public static bool IsBikeName(string lower) => ContainsAny(lower, "bike", "bicycle", "cycle");
+
+        // ───────────────────────── prefab-kind signals (pool hygiene) ─────────────────────────
+
+        /// <summary>Traits implied by a prefab class name (the game passes every class of the prefab's hierarchy).</summary>
+        public static AssetTraits TraitsFromTypeName(string typeName)
+        {
+            switch (typeName)
+            {
+                case "BuildingExtensionPrefab": return AssetTraits.BuildingPart;
+                case "ActivityPropPrefab": return AssetTraits.ActivityProp;
+                case "VehiclePrefab": case "CarPrefab": case "CarTrailerPrefab": case "CarTractorPrefab": case "TrainPrefab":
+                case "TrainCarPrefab": case "TrainEnginePrefab": case "AircraftPrefab": case "AirplanePrefab": case "HelicopterPrefab":
+                case "WatercraftPrefab": case "RocketPrefab": case "BicyclePrefab":
+                    return AssetTraits.Vehicle;
+                default: return AssetTraits.None;
+            }
+        }
+
+        /// <summary>
+        /// Traits implied by an icon url: Asset Icon Library and the thumbnail camera name the prefab class
+        /// ("coui://ail/CarPrefab.Tractor01.png", "thumbnail://ThumbnailCamera/BuildingExtensionPrefab/…"),
+        /// which also identifies static props made from vehicles ("Prop_Tractor01").
+        /// </summary>
+        public static AssetTraits TraitsFromIcon(string icon)
+        {
+            if (string.IsNullOrEmpty(icon)) return AssetTraits.None;
+            var t = AssetTraits.None;
+            int i = 0;
+            while ((i = icon.IndexOf("Prefab", i, StringComparison.Ordinal)) > 0)
+            {
+                int s = i;
+                while (s > 0 && char.IsLetter(icon[s - 1])) s--;
+                t |= TraitsFromTypeName(icon.Substring(s, i + 6 - s));
+                i += 6;
+            }
+            return t;
+        }
+
+        private static readonly string[] VehicleWords =
+        {
+            "truck", "trailer", "tractor", "harvester", "excavator", "loader", "vehicle", "rocket", "airplane", "aircraft", "helicopter",
+            "ship", "train", "snowplow", "sprayer", "spreader", "plough", "sowing", "forwarder", "engine", "bus", "van", "taxi", "car",
+            "forklift", "bulldozer", "crane", "boat", "tram", "motorcycle", "scooter",
+        };
+
+        /// <summary>A static prop made from a vehicle: "Prop_" + a vehicle word ("Prop_Trashbin01_Empty" is a bin).</summary>
+        public static bool IsVehicleName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || !name.StartsWith("Prop_", StringComparison.OrdinalIgnoreCase)) return false;
+            var words = Words(name);
+            // Loads of a vehicle ("Prop_CoalTruck01_CoalPile01_Full") are piles, not vehicles.
+            foreach (var w in words) if (w == "pile" || w == "props") return false;
+            foreach (var w in words) foreach (var v in VehicleWords) if (w == v) return true;
+            return false;
+        }
 
         public static bool IsBenchName(string lower)
         {

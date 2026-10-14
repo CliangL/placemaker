@@ -387,6 +387,52 @@ namespace Placemaker.Gallery
         private static readonly Rgba Ground = Rgba.Hex("#ece8dd");
         private static readonly Rgba Outside = Rgba.Hex("#d9d6ce");
 
+        /// <summary>
+        /// Distinct stone tones for paved surfaces: one per paving ASSET (art pass a2), so a plaza pattern of
+        /// several pavings reads as a pattern instead of one flat colour. Light enough for objects on top.
+        /// </summary>
+        private static readonly Rgba[] PavingTones =
+        {
+            Rgba.Hex("#d6cfbf"), Rgba.Hex("#c88a5e"), Rgba.Hex("#a9adb3"), Rgba.Hex("#d8c08a"), Rgba.Hex("#b07a63"), Rgba.Hex("#8f949b"),
+            Rgba.Hex("#e8dcc0"), Rgba.Hex("#9fae9a"), Rgba.Hex("#c6a6a0"), Rgba.Hex("#b9a58a"), Rgba.Hex("#7f7a72"), Rgba.Hex("#cdb4d6"),
+        };
+
+        private static bool IsPaved(PlannedSurface s)
+        {
+            string cat = s.Category ?? "";
+            if (cat.StartsWith("surface.paving") || cat.StartsWith("surface.clay") || cat.StartsWith("surface.gravel") || cat.StartsWith("surface.rock")) return true;
+            if (cat.StartsWith("surface.crop") || cat.StartsWith("surface.sand") || cat.StartsWith("surface.dirt") || cat.StartsWith("surface.water")
+                || cat.StartsWith("surface.grass") || cat.StartsWith("surface.bark")) return false;
+            return s.Role == SurfaceRole.Paving || s.Role == SurfaceRole.Plaza || s.Role == SurfaceRole.Decorative;
+        }
+
+        /// <summary>The surface's asset id (automatic surfaces: its category and role, one tone per automatic kind).</summary>
+        private static string SurfaceKey(PlannedSurface s) =>
+            !string.IsNullOrEmpty(s.Asset.Id) ? s.Asset.Id : "auto:" + (s.Category ?? "") + ":" + s.Role;
+
+        /// <summary>
+        /// Colour of a surface. Paved surfaces get a tone per asset: a stable hash picks the start tone, and
+        /// linear probing keeps every asset of one image distinct (up to the palette size).
+        /// </summary>
+        private static Rgba SurfaceColor(PlannedSurface s, Dictionary<string, int> tones)
+        {
+            if (tones != null && IsPaved(s))
+            {
+                var key = SurfaceKey(s);
+                if (!tones.TryGetValue(key, out int idx))
+                {
+                    uint h = 2166136261u;
+                    foreach (char ch in key) h = (h ^ ch) * 16777619u;
+                    idx = (int)(h % (uint)PavingTones.Length);
+                    var used = new HashSet<int>(tones.Values);
+                    for (int n = 0; n < PavingTones.Length && used.Contains(idx); n++) idx = (idx + 1) % PavingTones.Length;
+                    tones[key] = idx;
+                }
+                return PavingTones[idx];
+            }
+            return SurfaceColor(s);
+        }
+
         private static Rgba SurfaceColor(PlannedSurface s)
         {
             string cat = s.Category ?? "";
@@ -520,7 +566,8 @@ namespace Placemaker.Gallery
                 }, min, max);
             }
 
-            // Surfaces: grouped by colour; translucent fill + crisp darker outline.
+            // Surfaces: translucent fill + crisp darker outline; paved surfaces one stone tone per paving asset.
+            var tones = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var l in plan.Layers)
             {
                 if (l == null) continue;
@@ -528,7 +575,7 @@ namespace Placemaker.Gallery
                 {
                     if (s?.Ring == null || s.Ring.Length < 3) continue;
                     res.Surfaces++;
-                    var c = SurfaceColor(s);
+                    var c = SurfaceColor(s, tones);
                     var r2 = s.Ring.Select(p => p.xz).ToArray();
                     cv.FillPolygon(r2, c.WithA(0.85f));
                     cv.StrokePolyline(r2, cv.Px(1f), c.Darker(0.7f), closed: true);
@@ -797,7 +844,7 @@ namespace Placemaker.Gallery
             sb.Append($"<p class=\"m\">Generated {DateTime.Now:yyyy-MM-dd HH:mm} by Tests/Placemaker.Gallery from the real Core planners and catalog footprints. {jobs.Count} images. See <a href=\"REVIEW.md\">REVIEW.md</a>.</p>");
             var legend = new (string c, string t)[] {
                 ("#b5d99a", "grass"),
-                ("#d6cfbf", "paving"),
+                ("#d6cfbf", "paving: each paving asset its own stone tone (pale stone, terracotta, granite, ochre, brick…)"),
                 ("#e2d6bb", "plaza paving"),
                 ("#76767c", "asphalt"),
                 ("#7fb2e5", "water"),

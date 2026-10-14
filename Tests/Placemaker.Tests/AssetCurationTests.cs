@@ -119,6 +119,62 @@ namespace Placemaker.Tests
             Assert.Equal(new[] { "Jet" }, pool);
             Assert.False(AssetCuration.FitsSize(AssetCategories.Bench, 143f));
             Assert.True(AssetCuration.FitsSize(AssetCategories.Fence, 500f));   // nets/fences: no cap
+            // Every category has a sanity cap, even ones no rule lists (future types).
+            Assert.False(AssetCuration.FitsSize("someFutureType.prop", 56f));
+            Assert.False(AssetCuration.FitsSize("industrial.container", 70f));
+            Assert.False(AssetCuration.FitsSize("cemetery.grave", 6.5f));
+            Assert.True(AssetCuration.FitsSize(AssetCategories.SurfacePaving, 500f));
+        }
+
+        // Art-pass findings (proposals art-a2/a3/a6): the shared pools themselves stay clean for every type.
+        [Theory]
+        [InlineData(AssetCategories.Lookout, "RuralFireStation_WatchTowerUpgrade", AssetTraits.BuildingPart)]   // 56 m fire-station upgrade
+        [InlineData(AssetCategories.Lookout, "RuralFireStation_WatchTowerUpgrade", AssetTraits.None)]           // name alone
+        [InlineData(AssetCategories.BikeRack, "BicycleParkingHall01 Bicycle Maintenance", AssetTraits.BuildingPart)]
+        [InlineData(AssetCategories.BikeRack, "BicycleParkingHallSign01", AssetTraits.None)]
+        [InlineData(AssetCategories.CenterpieceStatue, "TrainStation01ClockPointers01", AssetTraits.None)]
+        [InlineData(AssetCategories.CenterpieceStatue, "NotreDameClockPointers", AssetTraits.None)]
+        [InlineData("monument.column", "SubwayStationElevated02Pillar", AssetTraits.None)]
+        [InlineData("monument.column", "2LaneSuspensionBridgePillar", AssetTraits.None)]
+        [InlineData(AssetCategories.WaterJets, "AgricultureSprinklerSystem", AssetTraits.None)]
+        [InlineData("play.nature", "Citizen_Logger_Chainsaw01", AssetTraits.ActivityProp)]
+        [InlineData("play.nature", "Citizen_Logger_Chainsaw01", AssetTraits.None)]
+        [InlineData(AssetCategories.Flowerbed, "Flowerbed Planter Box 01", AssetTraits.Plant)]
+        [InlineData("cemetery.grave", "OldCemeteryMausoleum01", AssetTraits.None)]
+        [InlineData(AssetCategories.Kiosk, "Stand01 - ShortMarket", AssetTraits.None)]
+        [InlineData(AssetCategories.Kiosk, "Billboard Supermarket Kiosk", AssetTraits.None)]
+        [InlineData("events.tent", "IKEA Marquee Sign", AssetTraits.None)]
+        [InlineData(AssetCategories.Stage, "Big Billboard Stage", AssetTraits.None)]
+        [InlineData(AssetCategories.CafeSeating, "Mall Food Court Table", AssetTraits.None)]
+        [InlineData(AssetCategories.Playground, "Prop_Tractor01", AssetTraits.Vehicle)]
+        [InlineData(AssetCategories.Decoration, "Prop_ParkMaintenanceVehicle01", AssetTraits.None)]
+        [InlineData("sports.basketball", "Basketball01", AssetTraits.ActivityProp)]
+        [InlineData("memorial.flag", "FlagPole01_Clt", AssetTraits.None)]
+        [InlineData(AssetCategories.ParkingDecal, "BikeRack01", AssetTraits.ParkingLaneSubLane)]
+        public void SharedPoolsRejectArtPassPollution(string category, string name, AssetTraits extra) =>
+            Assert.False(AssetHeuristics.AutoEligible(category, name, Mod | extra), category + " took " + name);
+
+        [Theory]
+        [InlineData("waterfront.fishing", "FishingRod01_withFish", AssetTraits.ActivityProp)]   // anglers' props stay
+        [InlineData("farm.machinery", "Prop_Tractor01", AssetTraits.Vehicle)]                   // work sites keep vehicles
+        [InlineData("transport.sign", "ParkSignpost01", AssetTraits.None)]                      // signage keeps signs
+        [InlineData("sports.basketball", "BasketballHoopStand01", AssetTraits.None)]            // not an ad stand
+        [InlineData("cemetery.grave", "OldCemeteryTombstone01", AssetTraits.None)]
+        public void SharedPoolsKeepTheRealThing(string category, string name, AssetTraits extra) =>
+            Assert.True(AssetHeuristics.AutoEligible(category, name, Mod | extra), category + " lost " + name);
+
+        [Fact]
+        public void PrefabKindsComeFromClassAndIconNames()
+        {
+            Assert.Equal(AssetTraits.BuildingPart, AssetHeuristics.TraitsFromIcon("thumbnail://ThumbnailCamera/BuildingExtensionPrefab/WaterTower01%20Viewing%20Deck?width=128"));
+            Assert.Equal(AssetTraits.Vehicle, AssetHeuristics.TraitsFromIcon("coui://ail/CarTrailerPrefab.TractorTrailer01.png"));
+            Assert.Equal(AssetTraits.ActivityProp, AssetHeuristics.TraitsFromIcon("coui://ail/ActivityPropPrefab.Citizen_Logger_Chainsaw01.png"));
+            Assert.Equal(AssetTraits.None, AssetHeuristics.TraitsFromIcon("coui://ail/StaticObjectPrefab.Bench01.png"));
+            Assert.True(AssetHeuristics.IsVehicleName("Prop_CombineHarvester01"));
+            Assert.False(AssetHeuristics.IsVehicleName("Prop_Trashbin01_Empty"));
+            Assert.False(AssetHeuristics.IsVehicleName("Prop_CoalTruck01_CoalPile01_Full"));
+            // Bike racks with bike parking lanes are bike racks, not car stalls.
+            Assert.Contains(AssetCategories.BikeRack, AssetHeuristics.Classify("BikeRack01", Vanilla | AssetTraits.HasSubLane | AssetTraits.ParkingLaneSubLane));
         }
 
         // ───────────────────────── replay of a real catalog ─────────────────────────
@@ -144,6 +200,7 @@ namespace Placemaker.Tests
             public HashSet<string> Palettes = new HashSet<string>(StringComparer.Ordinal);
             public bool AnyAuto;
             public float NetWidth;
+            public string Icon;
             public float[] Size;   // x, y, z
             public JsonNode Bounds;
         }
@@ -202,6 +259,7 @@ namespace Placemaker.Tests
                 return t;
             }
             t |= AssetTraits.StaticObject | AssetTraits.HasMesh | AssetTraits.HasIcon;
+            t |= AssetHeuristics.TraitsFromIcon(it.Icon);   // BuildingExtensionPrefab / CarPrefab / ActivityPropPrefab
             if (Any(AssetCategories.Decal)) t |= AssetTraits.DecalMesh;
             if (Any(AssetCategories.Tree)) t |= AssetTraits.Plant | AssetTraits.Tree;
             if (Has(AssetCategories.Bush) || Has(AssetCategories.Planter) || Has(AssetCategories.Flowerbed)) t |= AssetTraits.Plant;
@@ -234,6 +292,7 @@ namespace Placemaker.Tests
                     }
                     it.GameCategories.Add(kv.Key);
                     if (node["netWidth"] != null) it.NetWidth = (float)(double)node["netWidth"];
+                    if (it.Icon == null) it.Icon = (string)node["icon"];
                     var b = node["bounds"];
                     if (b != null && it.Bounds == null)
                     {
@@ -310,6 +369,27 @@ namespace Placemaker.Tests
             NoneContains(AssetCategories.CampingPitch, "DoNotEnter");
             NoneContains(AssetCategories.Bollard, "Mooring");
             NoneContains(AssetCategories.WaterJets, "Agricultur", "Tractor", "Sprayer");
+            // Art-pass findings, fixed in the shared pools (docs/proposals/art-a2/a3/a6).
+            NoneContains(AssetCategories.Lookout, "Upgrade", "Viewing Deck", "FireStation");
+            NoneContains(AssetCategories.BikeRack, "Hall", "Sign");
+            NoneContains(AssetCategories.CenterpieceStatue, "Clock", "Pointer");
+            NoneContains("monument.column", "Bridge", "Subway", "Pier");
+            NoneContains("ruins.pillar", "Bridge", "Subway");
+            NoneContains("play.nature", "Citizen", "Chainsaw");
+            NoneContains("cemetery.grave", "Mausoleum");
+            NoneContains(AssetCategories.Flowerbed, "Planter", "Box");
+            NoneContains("events.tent", "IKEA", "Sign");
+            NoneContains(AssetCategories.ParkingDecal, "Bicycle", "Bike");
+            foreach (var c in new[] { AssetCategories.Kiosk, "kiosk.stall", AssetCategories.Stage, AssetCategories.CafeSeating, AssetCategories.Bench })
+                NoneContains(c, "Billboard", "Supermarket", "Poster", "Stand01", "Stand02", " - ");
+            foreach (var kv in r.Pools)
+                foreach (var id in kv.Value)
+                {
+                    var t = TraitsOf(r.Items[id]);
+                    Assert.False((t & AssetTraits.BuildingPart) != 0, kv.Key + " pool has the building part " + id);
+                    if (kv.Key != "waterfront.fishing") Assert.False((t & AssetTraits.ActivityProp) != 0, kv.Key + " pool has the hand-held prop " + id);
+                    if (AssetCuration.IsLeisureCategory(kv.Key)) Assert.False((t & AssetTraits.Vehicle) != 0, kv.Key + " pool has the vehicle " + id);
+                }
             // Every leisure pool: no machinery, nothing bigger than the category's size cap.
             foreach (var kv in r.Pools)
             {
@@ -378,9 +458,16 @@ namespace Placemaker.Tests
             sb.AppendLine("park/features-all shows rocky outcrops as soft graded paint blobs with small odd rock huddles.");
             sb.AppendLine("Decal pools also rank by real footprint: sheets wider than 12 m go last (RealVision 30–60 m ground textures).");
             sb.AppendLine();
+            sb.AppendLine("Shared pool hygiene (art-pass follow-up, `AssetCuration.NeverAutomatic` + `MaxFootprint`), for every category and future");
+            sb.AppendLine("type: building extensions/upgrades (BuildingExtensionPrefab, \"…Upgrade\", wings, clock pointers), citizens' hand-held activity");
+            sb.AppendLine("props (except `waterfront.fishing`), vehicle props in leisure pools, advertising/shop props (billboards, ad stands and their");
+            sb.AppendLine("\"X - Brand\" variants, signs outside sign categories, supermarkets/malls), bridge/subway/pier pillars and cloth sub-meshes are");
+            sb.AppendLine("never automatic; per-category words drop mausoleums from grave rows, planter boxes from flowerbeds, farm sprinklers from jets.");
+            sb.AppendLine("Every object category has a footprint cap (its own, its parent's, else 24 m leisure / 40 m work). The table lists every pool.");
+            sb.AppendLine();
             sb.AppendLine("| category | before (game log) | after: first 10 automatic picks (footprint m × height m) |");
             sb.AppendLine("|---|---|---|");
-            foreach (var c in Audited)
+            foreach (var c in Audited.Concat(r.Pools.Keys.Where(k => !Audited.Contains(k)).OrderBy(k => k, StringComparer.Ordinal)))
             {
                 var before = r.OldPools.TryGetValue(c, out var o) ? string.Join(", ", o.Take(5)) + (o.Count > 5 ? "…" : "") : "—";
                 var after = Pool(r, c).Take(10).Select(id =>
