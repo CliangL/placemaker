@@ -95,7 +95,8 @@ namespace Placemaker.Core.Layers.AddOns
                     if (Hashing.Unit(Hashing.Mix(clump, (int)(p.x * 11f), (int)(p.y * 5f))) > chance) continue;
                 }
                 if (occ.Discs.Overlaps(p, 0.6f, 0.1f) || occ.HitsPolygon(p, 0.3f) || !region.ContainsDisc(p, 0.3f)) continue;
-                bool onCorridor = occ.Corridors.Clearance(p, 1f) < 0f;
+                // On a path/aisle: well inside it (the reserved corridors approximate curves by chords).
+                bool onCorridor = occ.Corridors.Clearance(p, 1f) < -0.6f;
                 bool paved = pavedRegion || onCorridor;
                 float edge = region.BoundaryDistance(p, 6f);
                 bool ok;

@@ -108,6 +108,10 @@ namespace Placemaker.Core.Build
                 case AssetCategories.FloodLight:
                     eligible = !Has(lower, "advert", "billboard", "logo", "banner", "sign", "screen", "placeholder");
                     return true;
+                case AssetCategories.Stage:
+                case AssetCategories.Lookout:
+                    eligible = !Has(lower, "advert", "billboard", "logo", "banner", "screen", "placeholder");
+                    return true;
                 case AssetCategories.CenterpieceFountain:
                 case AssetCategories.CenterpieceStatue:
                     eligible = !Has(lower, "drinking", "dog", "logo", "advert");

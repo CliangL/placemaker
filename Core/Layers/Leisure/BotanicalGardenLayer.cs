@@ -77,7 +77,7 @@ namespace Placemaker.Core.Layers.Leisure
                 {
                     var asset = AssetMix.One(ctx.S("glasshouseAsset"));
                     float r = AssetMix.FootprintRadius(ctx.Site, asset, 8f);
-                    if (Spots.Find(occ, r + 1f, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, 0x6145u), out var spot, null, 0f, 2f))
+                    if (Spots.Find(occ, r + 1f, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, 0x6145u), out var spot, null, 0f, 2f, budget: 1500))
                     {
                         var toward = occ.Paths.Nearest(spot, 300f, out var q) >= 0 ? q : region.Centroid;
                         LeisureKit.Put(ctx, occ, spot, LeisureKit.Yaw(spot, toward), ObjectRole.Furniture, asset, cat, r, Hashing.Mix(ctx.Seed, 0x6146u), 1f, 0.5f, 0);

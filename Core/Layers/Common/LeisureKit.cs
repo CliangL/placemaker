@@ -78,14 +78,19 @@ namespace Placemaker.Core.Layers.Common
             var ring = grown.Ring;
             for (int i = 0; i < 4; i++)
                 if (region.CrossesBoundary(ring[i], ring[(i + 1) % 4], false)) return false;
-            // Sample the rectangle with discs (spacing ≤ 2 m) against the occupancy.
-            float step = 2f;
+            // Sample the rectangle with small discs (spacing ≤ 1.5 m) against the occupancy.
+            const float step = 1.5f, probe = 0.8f;
             for (float u = -r.HalfLength; u <= r.HalfLength + 0.01f; u += math.min(step, math.max(0.5f, r.HalfLength)))
                 for (float v = -r.HalfWidth; v <= r.HalfWidth + 0.01f; v += math.min(step, math.max(0.5f, r.HalfWidth)))
                 {
                     var p = r.Local(u, v);
-                    if (occ.Discs.Overlaps(p, 1f, gap) || occ.Corridors.Overlaps(p, 1f, gap) || occ.HitsPolygon(p, 1f)) return false;
+                    if (occ.Discs.Overlaps(p, probe, gap) || occ.Corridors.Overlaps(p, 0.05f, gap) || occ.HitsPolygon(p, probe)) return false;
                 }
+            // Corridors also must not cross the rectangle between samples.
+            var rr = r.Ring;
+            foreach (var s in occ.Corridors.Segments)
+                for (int i = 0; i < 4; i++)
+                    if (Poly.SegmentsIntersect(s.A, s.B, rr[i], rr[(i + 1) % 4])) return false;
             return true;
         }
 

@@ -102,7 +102,7 @@ namespace Placemaker.Core.Layers.Leisure
                 int wanted = ctx.I("groups"), perGroup = ctx.I("tables");
                 for (int g = 0; g < wanted; g++)
                 {
-                    if (!Spots.Find(occ, 5.5f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x6400u + (uint)g), out var c, avoid, math.max(14f, open + 6f), 1.5f)) break;
+                    if (!Spots.Find(occ, 5.5f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x6400u + (uint)g), out var c, avoid, math.max(14f, open + 6f), 1.5f, budget: 1500)) break;
                     avoid.Add(c);
                     uint v = Hashing.Mix(ctx.Seed, 0x6500u + (uint)g);
                     float phase = Hashing.Unit(v) * 6.283f;

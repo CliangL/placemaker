@@ -17,7 +17,7 @@ namespace Placemaker.Core.Layers.AddOns
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("count", 1, 1, 6, 1, "count", ControlTier.Essential, "restrooms").Tip();
+            c.Slider("count", 3, 1, 6, 1, "count", ControlTier.Essential, "restrooms").Tip();
             c.Toggle("byArea", true, ControlTier.Essential, "restrooms").Tip();
             c.Slider("haEach", 3, 0.5, 10, 0.5, "ha", ControlTier.More, "restrooms").When("byArea=true").Tip();
             c.Asset("asset", AssetCategories.Restroom, ControlTier.Essential, "restrooms");

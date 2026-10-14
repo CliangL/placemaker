@@ -144,7 +144,7 @@ namespace Placemaker.Core.Layers.Plaza
         public static void PerformanceSpot(LayerContext ctx, Occupancy occ, LayerRegion region)
         {
             if (!ctx.B("performance")) return;
-            if (!Spots.Find(occ, 8f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x9E7Fu), out var c, null, 0f, 1f)) return;
+            if (!Spots.Find(occ, 8f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x9E7Fu), out var c, null, 0f, 1f, budget: 1500)) return;
             var b = region.ClosestOnBoundary(c, out _, out _);
             var toEdge = math.normalizesafe(b - c, new float2(0, 1));
             var stage = c + toEdge * 4f;
@@ -215,7 +215,7 @@ namespace Placemaker.Core.Layers.Plaza
         {
             if (!ctx.B("jets")) return;
             if (!AssetAvailability.Require(ctx.Plan, AssetCategories.WaterJets, new[] { ctx.S("jetAsset") }, Keys.Category(AssetCategories.WaterJets))) return;
-            if (!Spots.Find(occ, 6f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x5E75u), out var c, null, 0f, 1f)) return;
+            if (!Spots.Find(occ, 6f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x5E75u), out var c, null, 0f, 1f, budget: 1500)) return;
             var asset = AssetMix.One(ctx.S("jetAsset"));
             int n = 0;
             for (float y = -4.5f; y <= 4.5f; y += 1.8f)
@@ -241,11 +241,11 @@ namespace Placemaker.Core.Layers.Plaza
             while (made < target && i < 24)
             {
                 float r = math.clamp(math.sqrt((target - made) / math.PI), 4f, 11f);
-                if (!Spots.Find(occ, r + 1f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x1A00u + (uint)i), out var c, null, 0f, 2f))
+                if (!Spots.Find(occ, r + 1f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x1A00u + (uint)i), out var c, null, 0f, 2f, budget: 1500))
                 {
                     if (r <= 4.5f) break;
                     r = 4f;
-                    if (!Spots.Find(occ, r + 1f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x1A80u + (uint)i), out c, null, 0f, 2f)) break;
+                    if (!Spots.Find(occ, r + 1f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x1A80u + (uint)i), out c, null, 0f, 2f, budget: 1500)) break;
                 }
                 uint v = Hashing.Mix(ctx.Seed, 0x1B00u + (uint)i);
                 ctx.Surface(LeisureKit.Blob(c, r, v, 18, 0.12f), SurfaceRole.Grass, AssetMix.One(""), AssetCategories.SurfaceGrass);
@@ -273,7 +273,7 @@ namespace Placemaker.Core.Layers.Plaza
             var spots = new List<float2>();
             for (int i = 0; i < clusters; i++)
             {
-                if (!Spots.Find(occ, 3.2f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0xBED0u + (uint)i), out var c, spots, 9f, 1f)) break;
+                if (!Spots.Find(occ, 3.2f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0xBED0u + (uint)i), out var c, spots, 9f, 1f, budget: 1500)) break;
                 spots.Add(c);
                 for (int k = 0; k < 4; k++)
                 {
@@ -342,7 +342,7 @@ namespace Placemaker.Core.Layers.Plaza
                 default:   // groves
                     for (int g = 0; g < 4; g++)
                     {
-                        if (!Spots.Find(occ, 7f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x6200u + (uint)g), out var c, null, 0f, 1f)) break;
+                        if (!Spots.Find(occ, 7f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x6200u + (uint)g), out var c, null, 0f, 1f, budget: 1500)) break;
                         for (int k = 0; k < 5; k++)
                         {
                             float a = k * 1.2566f + g;
@@ -377,7 +377,7 @@ namespace Placemaker.Core.Layers.Plaza
             var spots = new List<float2>();
             for (int i = 0; i < n; i++)
             {
-                if (!Spots.Find(occ, r + 1f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x5AD0u + (uint)i), out var c, spots, r * 4f, 1f)) break;
+                if (!Spots.Find(occ, r + 1f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x5AD0u + (uint)i), out var c, spots, r * 4f, 1f, budget: 1500)) break;
                 spots.Add(c);
                 var b = occ.LayerRegion.ClosestOnBoundary(c, out _, out _);
                 LeisureKit.Put(ctx, occ, c, LeisureKit.Yaw(b, c), ObjectRole.Furniture, asset, cat, r, Hashing.Mix(ctx.Seed, 0x5A00u + (uint)i), 0.5f, 0.3f, 0);
@@ -394,7 +394,7 @@ namespace Placemaker.Core.Layers.Plaza
             var spots = new List<float2>();
             for (int i = 0; i < n; i++)
             {
-                if (!Spots.Find(occ, 4.5f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0xCAF0u + (uint)i), out var c, spots, 12f, 1f)) break;
+                if (!Spots.Find(occ, 4.5f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0xCAF0u + (uint)i), out var c, spots, 12f, 1f, budget: 1500)) break;
                 spots.Add(c);
                 for (int k = 0; k < 4; k++)
                 {
@@ -432,7 +432,7 @@ namespace Placemaker.Core.Layers.Plaza
             if (!ctx.B("games")) return;
             string cat = LeisureKit.Category(ctx, ctx.S("cafeAsset"), AssetCategories.CafeSeating, AssetCategories.Picnic);
             if (cat == null) return;
-            if (!Spots.Find(occ, 5f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x6A3Eu), out var c, null, 0f, 1f)) return;
+            if (!Spots.Find(occ, 5f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x6A3Eu), out var c, null, 0f, 1f, budget: 1500)) return;
             for (int k = 0; k < 4; k++)
             {
                 var p = c + new float2(k % 2 == 0 ? -2.3f : 2.3f, k < 2 ? -2.3f : 2.3f);

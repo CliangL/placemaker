@@ -89,7 +89,7 @@ namespace Placemaker.Core.Layers.Leisure
                 float r = 9f + 6f * Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)i + 0xC1Eu));
                 var avoid = new List<float2>();
                 foreach (var cl in clearings) avoid.Add(cl.c);
-                if (!Spots.Find(occ, r, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, 0xC1E0u + (uint)i), out var c, avoid, r * 3f, 2f)) break;
+                if (!Spots.Find(occ, r, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, 0xC1E0u + (uint)i), out var c, avoid, r * 3f, 2f, budget: 1500)) break;
                 clearings.Add((c, r));
                 var toPath = occ.Paths.Nearest(c, 300f, out var q) >= 0 ? q : region.Centroid;
                 var b = c + math.normalizesafe(toPath - c) * (r * 0.5f);
@@ -143,7 +143,7 @@ namespace Placemaker.Core.Layers.Leisure
             var r = new List<float2>();
             for (int i = 0; i < count; i++)
             {
-                if (!Spots.Find(occ, radius, Spots.Preference.Open, Hashing.Mix(seed, (uint)i), out var s, r, minDistance)) break;
+                if (!Spots.Find(occ, radius, Spots.Preference.Open, Hashing.Mix(seed, (uint)i), out var s, r, minDistance, budget: 1500)) break;
                 r.Add(s);
             }
             return r;

@@ -106,6 +106,7 @@ namespace Placemaker.Core.Layers.Common
             var offset = new float[nx * ny];
             var baseH = new float[nx * ny];
             var inside = new bool[nx * ny];
+            var dist = new float[nx * ny];
             float mean = MeanHeight(ctx, region);
             float falloff = math.max(cell, spec.Falloff);
             region.DeepestPoint(out float inscribed, null, 12);
@@ -124,6 +125,7 @@ namespace Placemaker.Core.Layers.Common
                     inside[i] = true;
                     float h0 = ctx.H(c);
                     float d = region.BoundaryDistance(c, inscribed + 1f);
+                    dist[i] = d;
                     float blend = Smooth(0f, falloff, d);
                     float target;   // absolute target before blending
                     switch (spec.Mode)
@@ -132,7 +134,7 @@ namespace Placemaker.Core.Layers.Common
                         {
                             float n = ValueNoise.Clumps(c, math.max(8f, spec.Scale), spec.Seed);
                             float hump = math.pow(math.saturate((n - 0.45f) / 0.55f), 1.5f);
-                            target = h0 + height * hump * 1.6f;
+                            target = h0 + height * math.saturate(hump * 1.6f);
                             break;
                         }
                         case TerrainMode.Hills:
@@ -181,9 +183,15 @@ namespace Placemaker.Core.Layers.Common
                 }
             }
 
-            // Slope limit: relax neighbours (offsets only — the ground's own slope is not ours to fix).
-            float maxStep = math.max(0.05f, spec.MaxSlopePct / 100f) * cell;
-            for (int pass = 0; pass < 6; pass++)
+            // Slope limit (offsets only — the ground's own slope is not ours to fix). First the outline:
+            // no cell may differ from the original ground by more than the max slope times its distance
+            // to the outline (no cliff at the border, ever). Then neighbours: where two cells differ by
+            // more than a slope step, the one changed more gives way (so the edge stays anchored).
+            float slope = math.max(0.05f, spec.MaxSlopePct / 100f);
+            float maxStep = slope * cell;
+            for (int i = 0; i < offset.Length; i++)
+                if (inside[i]) offset[i] = math.clamp(offset[i], -slope * dist[i], slope * dist[i]);
+            for (int pass = 0; pass < 8; pass++)
             {
                 bool changed = false;
                 for (int iy = 0; iy < ny; iy++)
@@ -197,9 +205,11 @@ namespace Placemaker.Core.Layers.Common
                             int jx = ix + (k == 0 ? 1 : k == 1 ? -1 : 0), jy = iy + (k == 2 ? 1 : k == 3 ? -1 : 0);
                             if (jx < 0 || jy < 0 || jx >= nx || jy >= ny) continue;
                             int j = jy * nx + jx;
-                            float tj = inside[j] ? baseH[j] + offset[j] : baseH[i];   // outside: the original ground
-                            if (t - tj > maxStep) { t = tj + maxStep; changed = true; }
-                            else if (tj - t > maxStep) { t = tj - maxStep; changed = true; }
+                            if (!inside[j]) continue;
+                            float tj = baseH[j] + offset[j];
+                            if (math.abs(t - tj) <= maxStep || math.abs(t - baseH[i]) <= math.abs(offset[j])) continue;
+                            t = tj + math.sign(t - tj) * maxStep;
+                            changed = true;
                         }
                         offset[i] = t - baseH[i];
                     }
