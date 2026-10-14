@@ -373,7 +373,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 {
                     // The quay: its centre half a deck inland of the waterline, smoothed, at most EdgeReach past the outline.
                     Func<float2, bool> edgeOk = p => !g.OnCliff(p) && (shore.Outline.Contains(p) || shore.Depth(p) <= EdgeReach);
-                    foreach (var line in SmoothFromWater(shore, w.EdgeHw - 0.4f, run, 9f, null, edgeOk, 30f))
+                    foreach (var line in Longest(SmoothFromWater(shore, w.EdgeHw - 0.4f, run, 9f, null, edgeOk, 30f)))
                     {
                         var edge = ShoreWalk.Of(line);
                         if (edge == null) continue;
@@ -388,7 +388,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                         float rise = rises.Count > 0 ? math.clamp(rises[rises.Count / 2], minRise, maxRise) : minRise;
                         float bankW = rise <= 0.05f ? 0f : math.max(6f, rise / LinkGrade);
                         float d = w.EdgeHw + 1f + bankW + sh + w.Ps;
-                        foreach (var piece in Cut(SmoothOffset(edge, d), onLand, 24f))
+                        foreach (var piece in Longest(Cut(ShoreWalk.TrimHooks(SmoothOffset(edge, d), ShoreWalk.MinCurveRadius), onLand, 24f)))
                         {
                             var walk = ShoreWalk.Of(piece);
                             if (walk == null) continue;
@@ -413,7 +413,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                     // behind rises higher, the hillside is cut (a graded bank or a retaining wall), the promenade does not climb.
                     float lo = w.Water ? w.Level + 0.8f : float.MinValue;
                     Func<float2, float> minDw = p => w.Ps + sh + 5f;
-                    foreach (var line in SmoothFromWater(shore, w.Ps + sh + 8f, run, 24f, w.Water ? minDw : null, onLand, 24f))
+                    foreach (var line in Longest(SmoothFromWater(shore, w.Ps + sh + 8f, run, 24f, w.Water ? minDw : null, onLand, 24f)))
                     {
                         var walk = ShoreWalk.Of(line);
                         if (walk == null) continue;
@@ -460,6 +460,14 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 foreach (var fr in w.Fronts) fr.Wall = true;
             }
             ctx.Plan.Facts["hillsideRise"] = wallMax;
+        }
+
+        /// <summary>ONE promenade (one edge) per stretch of shore: the longest piece; stubs cut off by the outline's corners are dropped.</summary>
+        private static List<float2[]> Longest(List<float2[]> pieces)
+        {
+            float2[] best = null;
+            foreach (var p in pieces) if (best == null || Shoreline.LengthOf(p) > Shoreline.LengthOf(best)) best = p;
+            return best == null ? new List<float2[]>() : new List<float2[]> { best };
         }
 
         private static float Room(float[] room, ShoreWalk walk, float s)
@@ -548,11 +556,12 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 }
                 float t = Target(w, fr, p, u, s, h0, sh);
                 if (!math.isfinite(t)) t = h0;   // the ground stays (also on a re-run of the field)
-                // Past the walk's ends the change dies out over ~20 m, and within ~12 m of arc length outside its stretch of shore
-                // (a cliff run beside it keeps its own ground and its own cliff-top walk); the outline cap does the rest.
-                float along = g.AlongOf(k), outside = float.MaxValue;
-                foreach (var r in w.Runs) outside = math.min(outside, math.max(0f, math.max(r.x - along, along - r.y)));
-                float fade = math.max(beyond / 20f, outside / 12f);
+                // Past the walk's ends the change dies out over ~20 m, and over the last ~12 m of arc length before a cliff stretch (the
+                // cliff keeps its own ground and its own cliff-top walk); the outline cap does the rest. (Not by distance outside the
+                // walk's own stretch: the shore's arc length jumps at the outline's corners, and the fade stepped there.)
+                float along = g.AlongOf(k), toCliff = 0f;
+                foreach (var r in w.CliffRuns) toCliff = math.max(toCliff, math.saturate((math.min(along - r.x, r.y - along) + 12f) / 12f));
+                float fade = math.max(beyond / 20f, toCliff);
                 if (fade > 0f) t = math.lerp(t, h0, Sculpt.Smooth01(fade));
                 sc.Target[k] = t;
             }
@@ -587,8 +596,8 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 if (ue <= landEdge) hard = math.lerp(w.Deck, math.min(h0, w.Deck), Sculpt.Smooth01((-ue + (w.EdgeHw - 2.5f)) / 2.5f));
                 // Between the quay's land edge and the walk's sea shoulder: one smooth bank, measured between the two curves.
                 else hard = math.lerp(w.Deck, H, Sculpt.Smooth01((ue - landEdge) / math.max(0.5f, (ue - landEdge) + a)));
-                // Past the quay's ends the soft bank takes over within 8 m (no deck fill without its quay wall).
-                return eb > 0f ? math.lerp(hard, soft, Sculpt.Smooth01(eb / 8f)) : hard;
+                // Past the quay's ends the soft bank takes over within 20 m (no deck fill without its quay wall).
+                return eb > 0f ? math.lerp(hard, soft, Sculpt.Smooth01(eb / 20f)) : hard;
             }
             return a >= sea ? float.NaN : soft;
         }

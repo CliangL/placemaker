@@ -330,6 +330,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             float bankW = math.clamp(rise / 0.2f, 10f, 50f);
             ctx.Plan.Facts["bankRise"] = rise;
             float duneStart = b.PathDw + b.Hw + 2.5f, duneEnd = duneStart + ctx.F("duneDepth");
+            float bankStart = b.HasPath ? math.max(D, b.PathDw + b.Hw + 6.5f) : D;
             float duneH = ctx.F("duneHeight");
             uint seed = Hashing.Mix(ctx.Seed, 0xD00Eu);
             float phase1 = Hashing.Unit(seed) * 6.283f, phase2 = Hashing.Unit(Hashing.Mix(seed, 1u)) * 6.283f;
@@ -346,9 +347,14 @@ namespace Placemaker.Core.Layers.Types.Beach
                     else
                     {
                         float top = r0 + 0.05f + slope * D + slope * 0.5f * (dw - D);
-                        float u = Sculpt.Smooth01((dw - D) / bankW);
+                        // s30: the bank starts behind the promenade bench (it used to start at the back of the sand, under the bench,
+                        // and the bench squeezed it into a near-vertical sheet).
+                        float u = Sculpt.Smooth01((dw - bankStart) / bankW);
                         t = math.lerp(math.min(top, h0 + 0.6f), h0, u);
                     }
+                    // s30: never deeper than the earthwork limit: a carve the limit clamped afterwards left a shelf and a near-vertical
+                    // bank behind it on a high shore; held here, the beach rides up parallel to the bank instead.
+                    t = math.max(t, h0 - 4.5f);
                 }
                 if (dunes && dw > duneStart && dw < duneEnd)
                 {
@@ -356,7 +362,9 @@ namespace Placemaker.Core.Layers.Types.Beach
                     float u = (dw - duneStart) / (duneEnd - duneStart);
                     float cross = math.pow(math.sin(math.PI * math.pow(u, 0.85f)), 1.6f);
                     float swell = 0.78f + 0.16f * math.sin(along / 90f * 6.283f + phase1) + 0.06f * math.sin(along / 37f * 6.283f + phase2);
-                    t += duneH * cross * swell;
+                    // s30: dunes only where the ground is not cut deeply (a dune ridge on top of a cut bank made it a near-vertical sheet).
+                    float onCut = math.saturate(1f - math.max(0f, h0 - t - 0.3f) / 1.5f);
+                    t += duneH * cross * swell * onCut;
                 }
                 return t;
             });

@@ -209,14 +209,33 @@ namespace Placemaker.Core.Layers.Types.Beach
         {
             var result = new List<float2[]>();
             if (s1 - s0 < 4f) return result;
-            var raw = new List<float2>();
+            // The real waterline, smoothed FIRST (its wiggles and the coarse water snapshot's steps gone), then offset along its
+            // own smooth normal: an offset of a jagged line folds into loops and cusps at every inside bend, and smoothing
+            // afterwards cannot round a cusp the size of the offset.
+            var water = new List<float2>();
             int n = math.max(2, (int)math.ceil((s1 - s0) / Spacing));
+            float2 inwMid = new float2(0, 1);
             for (int i = 0; i <= n; i++)
             {
                 var wp = shore.WaterAt(math.lerp(s0, s1, i / (float)n), out var inw);
-                raw.Add(wp + inw * dw);
+                water.Add(wp);
+                if (i == n / 2) inwMid = inw;
             }
-            var line = SmoothLine(Shoreline.RemoveLoops(raw), sigma, 3);
+            var ws = SmoothLine(Shoreline.RemoveLoops(water), sigma, 3);
+            if (ws == null || ws.Length < 2) return result;
+            float sideSign = 1f;
+            {
+                int m = ws.Length / 2;
+                var t = math.normalizesafe(ws[math.min(m + 1, ws.Length - 1)] - ws[math.max(0, m - 1)], new float2(1, 0));
+                if (math.dot(new float2(-t.y, t.x), inwMid) < 0f) sideSign = -1f;
+            }
+            var raw = new List<float2>(ws.Length);
+            for (int i = 0; i < ws.Length; i++)
+            {
+                var t = math.normalizesafe(ws[math.min(i + 1, ws.Length - 1)] - ws[math.max(0, i - 1)], new float2(1, 0));
+                raw.Add(ws[i] + new float2(-t.y, t.x) * (dw * sideSign));
+            }
+            var line = SmoothLine(Shoreline.RemoveLoops(raw), sigma * 0.5f, 2);
             if (minDw != null)
                 for (int iter = 0; iter < 3; iter++)
                 {
@@ -264,12 +283,39 @@ namespace Placemaker.Core.Layers.Types.Beach
             for (int k = 0; k < 4; k++)
             {
                 lines = FromWater(shore, dw, run.x, run.y, sigma, minDw, keep, minLength);
+                for (int i = 0; i < lines.Count; i++) lines[i] = TrimHooks(lines[i], MinCurveRadius);
                 bool ok = true;
                 foreach (var l in lines) if (MinRadius(l) < MinCurveRadius) ok = false;
                 if (ok) break;
                 sigma *= 1.4f;
             }
             return lines;
+        }
+
+        /// <summary>
+        /// Drops the ends of a curve where it hooks (radius &lt; <paramref name="minRadius"/> within the last metres): the
+        /// waterline turns round the outline's corners, and an end that follows it reads as a crook.
+        /// </summary>
+        public static float2[] TrimHooks(float2[] line, float minRadius, float half = 10f)
+        {
+            if (line == null || line.Length < 8) return line;
+            var s = Arc(line);
+            float total = s[s.Length - 1];
+            int a = 0, b = line.Length - 1;
+            bool Sharp(int i)
+            {
+                int lo = i, hi = i;
+                while (lo > 0 && s[i] - s[lo] < half) lo--;
+                while (hi < line.Length - 1 && s[hi] - s[i] < half) hi++;
+                if (lo == i || hi == i) return false;
+                return Circumradius(line[lo], line[i], line[hi]) < minRadius;
+            }
+            for (int i = 0; i < line.Length && s[i] < total * 0.3f; i++) if (Sharp(i)) a = i + 1;
+            for (int i = line.Length - 1; i >= 0 && s[i] > total * 0.7f; i--) if (Sharp(i)) b = i - 1;
+            if (b - a < 3) return line;
+            var r = new float2[b - a + 1];
+            Array.Copy(line, a, r, 0, r.Length);
+            return r;
         }
         /// <summary>A smooth envelope over a profile of needs: max over j of need_j · bump(|s_i − s_j| / width).</summary>
         public static float[] Dilate(float[] need, float spacing, float width)

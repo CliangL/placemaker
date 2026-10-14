@@ -28,7 +28,7 @@ namespace Placemaker.Core.Build
             /// <summary>Largest added jump between neighbouring texels (m).</summary>
             public float Max;
             public float2 At;
-            /// <summary>Texel pairs the build made steeper than <see cref="SheetGrade"/> (they were not before).</summary>
+            /// <summary>Texel pairs the build made steeper than <see cref="SheetGrade"/> (they were not before) by adding more than <see cref="CurtainLimit"/> of jump.</summary>
             public int Count;
             public override string ToString() => $"curtain {Max:0.00} m, {Count} sheets";
         }
@@ -65,7 +65,7 @@ namespace Placemaker.Core.Build
                         float added = math.abs(f[q] - f[k]) - math.abs(o[q] - o[k]);
                         if (added > r.Max) { r.Max = added; r.At = (min + new float2(i, j) * texel + min + new float2(ii, jj) * texel) * 0.5f; }
                         // A pair the build made steeper than SheetGrade (the original was not): over one texel that renders as a sheet.
-                        if (math.abs(f[q] - f[k]) > SheetGrade * texel && math.abs(o[q] - o[k]) <= SheetGrade * texel) r.Count++;
+                        if (math.abs(f[q] - f[k]) > SheetGrade * texel && math.abs(o[q] - o[k]) <= SheetGrade * texel && added > CurtainLimit) r.Count++;
                     }
                 }
             return r;

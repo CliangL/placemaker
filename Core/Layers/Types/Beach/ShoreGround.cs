@@ -76,12 +76,18 @@ namespace Placemaker.Core.Layers.Types.Beach
         }
 
         private readonly bool[] _cliff;
+        private List<float2> _cliffRuns;
 
         private bool CliffAt(float2 p, float along, float dw)
         {
             if (Survey.GradeAt(p) >= 0.6f) return true;
             if (Shore.Kinds == null || Shore.CliffShare <= 0f) return false;
-            return Shore.KindAt(along) == ShoreKind.Cliff && dw < CliffBand;
+            // (s30) Only a real cliff stretch (≥ 16 m of cliff stations): one misread station at the shore's end locked a small island
+            // of nodes in the middle of a graded bank, and the field stepped round it.
+            if (dw >= CliffBand) return false;
+            if (_cliffRuns == null) _cliffRuns = Runs(k => k == ShoreKind.Cliff, 16f);
+            foreach (var r in _cliffRuns) if (along >= r.x - 2f && along <= r.y + 2f) return true;
+            return false;
         }
 
         /// <summary>Nearest grid node of p, or −1 outside the grid.</summary>
@@ -425,7 +431,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                 for (int i = 0; i + 1 < pts.Length; i++)
                 {
                     var t = math.normalizesafe(pts[i + 1] - pts[i]); var nn = new float2(-t.y, t.x) * (hw + 1.5f);
-                    dev = math.max(dev, 0.5f * math.abs(H(pts[i] + nn) - H(pts[i] - nn)));
+                    dev = math.max(dev, math.abs(H(pts[i] + nn) - H(pts[i] - nn)));   // (a full cross difference: the banks ≤ ~15 % over the natural slope)
                 }
                 // (s30) Level across well past the path edges: on the 2–4 m node grid a strip only 0.4 m wider than the path kept a
                 // cross slope under it, and a net flattens its own width, leaving a lip along its edge.
