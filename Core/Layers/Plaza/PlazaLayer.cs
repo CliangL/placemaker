@@ -218,7 +218,7 @@ namespace Placemaker.Core.Layers.Plaza
             // each square turns on what belongs to it; statue squares keep their statue (no fountain feature).
             PresetFeatures("civic", "-fountain");
             PresetFeatures("podium", "-fountain");
-            PresetFeatures("green", "-fountain", "playground");
+            PresetFeatures("green", "-fountain");
             PresetFeatures("market", "kiosk");
             PresetFeatures("cafe", "kiosk");
             PresetFeatures("piazza", "kiosk", "-plazatrees");

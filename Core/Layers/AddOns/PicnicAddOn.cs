@@ -42,9 +42,18 @@ namespace Placemaker.Core.Layers.AddOns
             float ring = shelter ? shelterRadius + tableRadius + 1.2f : (tables > 1 ? tableRadius * 2.2f : 0f);
             float groupRadius = ring + tableRadius + (ctx.B("shadeTrees") ? 4f : 1f);
             var spots = Spread(occ, groupRadius, ctx.I("groups"), Spots.Preference.Open, ctx.Seed, groupRadius * 2.5f);
+            bool compact = false;
+            if (spots.Count == 0)
+            {
+                // No room for a full group: one compact group of tables, no shelter or shade trees, beats "no space".
+                shelter = false; compact = true;
+                ring = tables > 1 ? tableRadius * 2.2f : 0f;
+                groupRadius = ring + tableRadius + 1f;
+                spots = Spread(occ, groupRadius, 1, Spots.Preference.Open, ctx.Seed, groupRadius * 2.5f);
+            }
             int placedTables = 0, placedTrees = 0;
             var treeIds = ctx.L("treeSpecies");
-            bool trees = ctx.B("shadeTrees") && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree));
+            bool trees = !compact && ctx.B("shadeTrees") && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree));
             for (int g = 0; g < spots.Count; g++)
             {
                 var c = spots[g];

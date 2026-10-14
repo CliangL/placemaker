@@ -92,7 +92,7 @@ namespace Placemaker.Core.Layers.Park
 
         /// <summary>Features that need open ground of this radius, kept clear of planting by the park ("core" = in the core lawn).</summary>
         private static readonly (string layer, float radius, bool core)[] Destinations =
-            { ("playground", 15f, true), ("picnic", 13f, false), ("fountain", 11f, false), ("restrooms", 6f, false) };
+            { ("playground", 20f, true), ("picnic", 13f, false), ("fountain", 11f, false), ("restrooms", 6f, false) };
 
         public IReadOnlyList<FeatureInfo> Features => FeatureList;
 
@@ -214,8 +214,8 @@ namespace Placemaker.Core.Layers.Park
             // Playtest 4b: presets look complete. On top of the DefaultOn features (playground, picnic,
             // restrooms, big trees, flowerbeds, decals, shore) each idiom turns on what belongs to it.
             PresetFeatures("formal", "plaza");   // the park plaza has a fountain centre
-            PresetFeatures("garden", "fountain");
-            PresetFeatures("woodland", "-flowerbeds", "-playground");
+
+            PresetFeatures("woodland", "-flowerbeds", "-playground", "-bigtrees");
             PresetFeatures("meadow", "-flowerbeds");
             PresetFeatures("pocket", "fountain", "-picnic", "-restrooms");
             PresetFeatures("victorian", "plaza");
@@ -453,7 +453,7 @@ namespace Placemaker.Core.Layers.Park
                 if (search.Count == 0) search.Add(region);
                 clearings = FindClearings(ctx, s, search, s.Gates.ConvertAll(g => g.Position));
             }
-            else
+            // The core tag goes to the lawn that holds the playground clearing (a smaller lawn when the largest has no room).
             {
                 foreach (var cl in clearings)
                     if (cl.layer == "playground")
@@ -570,10 +570,11 @@ namespace Placemaker.Core.Layers.Park
                 bool found = false;
                 for (int attempt = 0; attempt < 2 && !found; attempt++)
                 {
-                    float r = ctx.M(attempt == 0 ? radius : radius * 0.7f, math.min(5f, radius));
+                    // Real equipment does not shrink with the layout size: a playground needs ~14 m even at small scale.
+                    float r = ctx.M(attempt == 0 ? radius : radius * 0.7f, layer == "playground" ? 14f : math.min(5f, radius));
                     for (int ri = 0; ri < search.Count && !found; ri++)
                     {
-                        if (core && ri > 0) break;
+                        if (core && ri > 0 && attempt == 0) break;   // the core lawn first; a smaller one beats "no space" (4b defaults)
                         var occ = new Occupancy(search[ri], null, ctx.Site);
                         foreach (var seg in s.Occ.Corridors.Segments) occ.Corridors.Add(seg.A, seg.B, seg.HalfWidth, seg.Kind);
                         foreach (var d in s.Occ.Discs.Items) occ.Discs.Add(d.P, d.R, d.Kind);

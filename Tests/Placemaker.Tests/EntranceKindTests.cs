@@ -173,7 +173,7 @@ namespace Placemaker.Tests
             }
             On("park", "playground", "picnic", "restrooms", "bigtrees", "flowerbeds", "decals");
             On("plaza", "plazatrees", "fountain", "flowerbeds");
-            On("campground", "restrooms", "playground");
+            On("campground", "restrooms", "decals");
             On("sportsPark", "restrooms");
             On("waterfront", "flowerbeds", "bigtrees");
             // Slow or situational features stay opt-in.
