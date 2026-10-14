@@ -27,13 +27,14 @@ namespace Placemaker.Core.Layers.Park
 
         private static readonly FeatureInfo[] FeatureList =
         {
-            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Campground.Feature.restrooms", TooltipKey = "Placemaker.Campground.Feature.restrooms.Tooltip" },
+            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Campground.Feature.restrooms", TooltipKey = "Placemaker.Campground.Feature.restrooms.Tooltip", DefaultOn = true },
             new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.playground", Preset = ParkLayer.Bag(("size", "small")) },
+            // Not on by default: pitches already have tables, and the core clearing goes to the playground.
             new FeatureInfo { Layer = "picnic", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.picnic", Preset = ParkLayer.Bag(("groups", 2.0), ("shelter", true)) },
             new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = ParkLayer.Bag(("count", 1.0), ("where", "entrances")) },
             StreetShopsFeature("Campground"),
             new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
-            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = ParkLayer.Bag(("theme", "leaves"), ("density", 2.0)) },
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = ParkLayer.Bag(("theme", "leaves"), ("density", 0.8)), DefaultOn = true },
             new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.terrain", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = ParkLayer.Bag(("shape", "mounds"), ("height", 1.5)) },
         };
 
@@ -53,7 +54,7 @@ namespace Placemaker.Core.Layers.Park
             c.Asset("padSurface", AssetCategories.SurfaceNatural, ControlTier.More, "pitches").When("pads=true");
             c.Choice("pathWidth", "narrow", ControlTier.More, "layout", "narrow", "wide");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
-            c.Markers("entrances", ControlTier.More, ParkLayer.EntranceKind);
+            EntranceKinds.WithOptions(c.Markers("entrances", ControlTier.More, EntranceKinds.Leisure), EntranceKinds.Leisure);
             c.Asset("restroomAsset", AssetCategories.Restroom, ControlTier.More, "facilities").When("facilities=true");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.Toggle("groundSurface", false, ControlTier.More, "ground");
@@ -71,26 +72,33 @@ namespace Placemaker.Core.Layers.Park
             Preset("forest", ("treeDensity", 110.0), ("pitchSize", 9.0), ("pads", true));
             Preset("meadow", ("treeDensity", 20.0), ("pitchSize", 12.0), ("tables", true));
             Preset("caravan", ("treeDensity", 35.0), ("pitchSize", 14.0), ("pathWidth", "wide"), ("campfires", false));
+            PresetFeatures("forest", "-playground");
         }
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
         {
             var region = LayerRegion.From(input?.Shape?.Ring);
-            return region == null ? new List<EdgeMarker>() : Entrances.Suggest(input, region, ParkLayer.EntranceKind, 1);
+            return region == null ? new List<EdgeMarker>() : Entrances.SuggestTyped(input, region, 1, EntranceKinds.Leisure);
         }
+
+        /// <summary>Playtest 4b: the player places the entrance (suggestions are hints only).</summary>
+        public override Readiness CheckReady(AreaInput input) => Entrances.RequireTyped(input, EntranceKinds.Leisure);
 
         protected override void PlanCore(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             // One entrance is typical for a campground (a reception point); more only if the player places them.
-            var gates = Entrances.Resolve(ctx.Input, region, ParkLayer.EntranceKind, 1);
+            var gates = Entrances.ResolveTyped(ctx.Input, region, 1, EntranceKinds.Leisure);
             var gatePoints = new List<float2>();
             foreach (var g in gates) gatePoints.Add(g.Position);
             var graph = ParkPathPlanner.PlanBest(region, gatePoints,
                 new ParkPathPlanner.Options { Loops = math.max(1, ParkPathPlanner.LoopsByArea(region.Area)), StretchLoop = region.Area > 20000f },
                 Hashing.Mix(ctx.Seed, 0xCA4Fu), ctx.Cancel);
             var curves = ParkPaths.Build(graph, region, true, ctx.S("pathWidth") == "wide" ? "wide" : "narrow");
+            foreach (var cv in curves)   // a main entrance gets a wide drive-in walk
+                if (cv.GateA >= 0 && gates[cv.GateA].Kind == EntranceKinds.Main || cv.GateD >= 0 && gates[cv.GateD].Kind == EntranceKinds.Main)
+                { cv.Role = NetRole.PathwayWide; cv.HalfWidth = Composer.DefaultHalfWidth(NetRole.PathwayWide); }
             ParkPaths.Index(curves, occ.Corridors, 100);
             ctx.Check();
 

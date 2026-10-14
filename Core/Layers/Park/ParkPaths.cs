@@ -13,7 +13,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Park
 {
     /// <summary>Path hierarchy tier (ParkPathHierarchy.cs): decides which asset a curve is built with.</summary>
-    public enum PathTier { Main = 0, Small = 1, Trail = 2, Bike = 3, Desire = 4 }
+    public enum PathTier { Main = 0, Small = 1, Trail = 2, Bike = 3, Desire = 4, Service = 5 }
 
     public sealed class PathCurve
     {
@@ -170,7 +170,7 @@ namespace Placemaker.Core.Layers.Park
                 var net = ctx.CurvedNet(c.A, c.B, c.C, c.D, c.Role, assetFor(c.Tier));
                 // Tier-specific automatic pools (bike route / dirt trail); empty pools fall back to pathway.
                 if (c.Tier == PathTier.Bike) net.Category = AssetCategories.BikePath;
-                else if (c.Tier == PathTier.Trail) net.Category = AssetCategories.TrailPath;
+                else if (c.Tier == PathTier.Trail || c.Tier == PathTier.Service) net.Category = AssetCategories.TrailPath;
                 if (c.GateA >= 0 && c.GateA < gates.Count && gates[c.GateA].AttachId >= 0)
                 { net.StartAttach = gates[c.GateA].AttachId; net.StartAttachT = gates[c.GateA].AttachT; }
                 if (c.GateD >= 0 && c.GateD < gates.Count && gates[c.GateD].AttachId >= 0)

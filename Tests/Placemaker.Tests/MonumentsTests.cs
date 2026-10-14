@@ -85,7 +85,10 @@ namespace Placemaker.Tests
         public void ComposesInAParkWithAPathToIt(string id)
         {
             var ring = TestKit.Rect(300, 220);
-            var plan = Compose(With("park", id), ring, TestKit.RoadAlongBottom(300));
+            var recipe = With("park", id);
+            // A wide walk (the pre-4b default) keeps the entrance path off the place, so the "path to it" spur exists.
+            recipe.Root.Settings.Values["pathWidth"] = "mixed";
+            var plan = Compose(recipe, ring, TestKit.RoadAlongBottom(300));
             Assert.True(string.IsNullOrEmpty(Errors(plan.AllIssues())), Errors(plan.AllIssues()));
             var park = plan.Layers.Single(l => l.GeneratorId == "park");
             var place = Ring2(park.Regions.Single(r => r.Key == Amenities.Place(id)).Ring);
@@ -111,7 +114,7 @@ namespace Placemaker.Tests
                 .Where(p => Poly.DistanceToBoundary(place, p) < 1.2f).ToList();
             Assert.NotEmpty(ends);
             Assert.Contains(m.Nets, n => ends.Any(e => math.distance(e, n.A.xz) < 0.05f || math.distance(e, n.D.xz) < 0.05f));
-            Assert.Equal(TestKit.Fingerprint(m), TestKit.Fingerprint(Compose(With("park", id), ring, TestKit.RoadAlongBottom(300)).Layers.Single(l => l.GeneratorId == id)));
+            Assert.Equal(TestKit.Fingerprint(m), TestKit.Fingerprint(Compose(recipe, ring, TestKit.RoadAlongBottom(300)).Layers.Single(l => l.GeneratorId == id)));
         }
 
         [Fact]

@@ -539,7 +539,7 @@ namespace Placemaker.Gallery
             {
                 if (i == null) continue;
                 if (i.Severity == IssueSeverity.Error) res.Errors++;
-                else if (i.Severity == IssueSeverity.Warning) res.Warnings++;
+                res.IssueKeys.Add(i.Severity.ToString()[0] + ":" + i.Key + (i.Args != null && i.Args.Length > 0 ? "(" + string.Join(",", i.Args) + ")" : ""));
                 res.IssueKeys.Add(i.Severity.ToString()[0] + ":" + i.Key);
                 if (i.At.HasValue)
                 {

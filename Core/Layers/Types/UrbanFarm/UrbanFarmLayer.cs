@@ -83,7 +83,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
             c.Asset("trackAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("fieldSurface", AssetCategories.SurfaceDirt, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("fieldSize", 30, 80);
             c.RandomRange("density", 70, 130);

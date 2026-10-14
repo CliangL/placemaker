@@ -67,6 +67,8 @@ namespace Placemaker.Core
         public NetCategory Category;
         public bool HasSidewalk;
         public bool IsOneWay;
+        /// <summary>Carries bicycles on their own lane: a bike path, a pathway with bike lanes or a road with bike lanes.</summary>
+        public bool HasBikeLane;
     }
 
     public enum NetCategory { Road = 0, Pathway = 1, Track = 2, Other = 3 }
@@ -359,6 +361,19 @@ namespace Placemaker.Core
         public string LabelKey = "";
         public string Icon = "";
         public SettingsBag Values = new SettingsBag();
+        /// <summary>
+        /// Feature layers this preset turns on besides the type's DefaultOn features; "-layer" turns a
+        /// DefaultOn feature off (playtest 4b: presets should look complete).
+        /// </summary>
+        public string[] Features = Array.Empty<string>();
+
+        /// <summary>Whether the preset has feature <paramref name="f"/> on.</summary>
+        public bool FeatureOn(FeatureInfo f)
+        {
+            if (f == null) return false;
+            if (Array.IndexOf(Features, "-" + f.Layer) >= 0) return false;
+            return f.DefaultOn || Array.IndexOf(Features, f.Layer) >= 0;
+        }
     }
 
     /// <summary>

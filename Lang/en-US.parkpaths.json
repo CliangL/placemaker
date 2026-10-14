@@ -21,7 +21,7 @@
   "Placemaker.Park.desireLayer": "Worn layer",
   "Placemaker.Park.desireLayer.Tooltip": "Terrain texture layer (1–4, depends on the map) used for worn ground.",
   "Placemaker.Park.Preset.greenway": "Greenway",
-  "Placemaker.Park.Issue.BikeNeedsTwoEntrances": "The bike route needs two entrances at least 40 m apart.",
+  "Placemaker.Park.Issue.BikeNeedsTwoEntrances": "The bike route needs two bike entrances at least 40 m apart.",
   "Placemaker.Park.Issue.NoBikeRoute": "No room for a bike route through the park.",
   "Placemaker.Park.Issue.FewerSmallPaths": "Fewer small paths fit than asked for.",
   "Placemaker.Park.Issue.NoRoomForTrails": "No room for dirt trails along the edge.",
@@ -30,5 +30,16 @@
   "Placemaker.Category.net.bike": "bike paths",
   "Placemaker.Category.net.trail": "trail paths",
   "Placemaker.Feature.ground": "Ground patches",
-  "Placemaker.Feature.ground.Tooltip": "Patches of dirt, mown grass, meadow, rocks, gravel or sand with soft, blended edges."
+  "Placemaker.Feature.ground.Tooltip": "Patches of dirt, mown grass, meadow, rocks, gravel or sand with soft, blended edges.",
+  "Placemaker.Park.Issue.NoBikeEntrances": "The bike route is on, but there are no bike entrances. Place two bike entrances on the outline.",
+  "Placemaker.Entrance.Pedestrian": "Pedestrian entrance",
+  "Placemaker.Entrance.Pedestrian.Tip": "People walk in here. A thin path joins the park paths.",
+  "Placemaker.Entrance.Bike": "Bike entrance",
+  "Placemaker.Entrance.Bike.Tip": "Cyclists and pedestrians come in here. The bike route runs between bike entrances. Best facing a bike path or a road with bike lanes.",
+  "Placemaker.Entrance.Main": "Main entrance",
+  "Placemaker.Entrance.Main.Tip": "The grand entrance: a wide main walk and a gateway of planters and lamps. Best on a big road.",
+  "Placemaker.Entrance.Service": "Service entrance",
+  "Placemaker.Entrance.Service.Tip": "Maintenance access: a short service track to the paths. Best on a quiet street.",
+  "Placemaker.Entrance.Step.Place": "Place an entrance",
+  "Placemaker.Entrance.Reason.Needs": "Place at least one entrance on the outline. The faint markers show good spots."
 }

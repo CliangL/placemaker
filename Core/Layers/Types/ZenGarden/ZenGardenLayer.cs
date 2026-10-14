@@ -92,7 +92,7 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
             c.Toggle("basin", true, ControlTier.More, "structures").Tip();
             c.Toggle("wall", true, ControlTier.More, "structures").Tip();
             c.Asset("wallAsset", AssetCategories.Fence, ControlTier.More, "structures").When("wall=true");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("gravel", 20, 60);
             c.RandomRange("rockGroups", 3, 7);

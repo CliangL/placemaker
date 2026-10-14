@@ -80,7 +80,7 @@ namespace Placemaker.Core.Layers.Types.Hiking
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "assets");
             c.AssetMulti("bushSpecies", AssetCategories.Bush, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("maxGrade", 6, 14);
             c.RandomRange("treeDensity", 40, 300);

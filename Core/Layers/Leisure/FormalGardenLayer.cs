@@ -45,7 +45,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Toggle("fence", true, ControlTier.More, "boundary");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("bedSize", 7, 14);
         }
@@ -72,11 +72,14 @@ namespace Placemaker.Core.Layers.Leisure
             float keep = math.max(ctx.M(2f), ctx.EdgeMargin + 0.5f);
             var graph = ParkPathStyles.Formal(region, pts, p => region.ContainsDisc(p, keep));
             var curves = ParkPaths.Build(graph, region, false, "narrow");
+            // The axes end at the round point's edge (an axis between two opposite entrances would
+            // otherwise run straight across the basin).
+            float rp = math.clamp(ins * 0.22f, ctx.M(5f, 4f), ctx.M(12f, 5f));
+            curves = ParkPlaces.ClipAndConnect(curves, LayerRegion.Circle(centre, rp, 24), region, out _);
             ParkPaths.Index(curves, occ.Corridors, 100);
             ParkPaths.Index(curves, occ.Paths, 100);
             ParkPaths.Emit(ctx, curves, gates, pathAsset);
             float axisHw = Composer.DefaultHalfWidth(NetRole.Pathway);
-            float rp = math.clamp(ins * 0.22f, ctx.M(5f, 4f), ctx.M(12f, 5f));
             // The main axis (the parterres' spine, where the cross walks join) must exist: the formal style
             // sometimes keeps only the cross axis.
             if (LeisureKit.Chord(region, centre, axis, keep + axisHw, out var m0, out var m1))

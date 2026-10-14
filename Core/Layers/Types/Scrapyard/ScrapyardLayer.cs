@@ -29,6 +29,9 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
     [AreaGenerator(310, Group = "industrial")]
     public sealed class ScrapyardLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public const string LayerId = "scrapyard";
         public static readonly string[] Styles = { "scrapyard", "salvage", "containers", "tires", "cars" };
         public const string NoCoreKey = "Placemaker.Scrapyard.Issue.NoCore";
@@ -82,7 +85,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             c.AssetMulti("machineAssets", AssetCategories.ScrapMachine, ControlTier.More, "assets");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets").When("visitorPaths=true");
             c.Asset("groundSurface", AssetCategories.SurfaceNatural, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.RandomRange("fill", 50, 90);

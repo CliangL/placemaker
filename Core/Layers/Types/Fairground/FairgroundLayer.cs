@@ -93,7 +93,7 @@ namespace Placemaker.Core.Layers.Types.Events
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.RandomRange("stalls", 12, 48);

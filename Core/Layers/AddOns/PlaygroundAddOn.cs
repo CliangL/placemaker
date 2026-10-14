@@ -43,9 +43,10 @@ namespace Placemaker.Core.Layers.AddOns
             var occ = Occupancy(ctx);
             int sizeIndex = Math.Max(0, Array.IndexOf(Sizes, ctx.S("size")));
             float itemRadius = AssetMix.MaxFootprint(ctx.Site, ids, 3f);
-            for (int si = sizeIndex; si >= 0; si--)
+            // small → 3 pieces; below that 2, then 1 (real equipment footprints are large: a lone piece beats "no space").
+            for (int si = sizeIndex; si >= -2; si--)
             {
-                int items = si == 0 ? 3 : si == 1 ? 5 : 8;
+                int items = si < 0 ? 3 + si : si == 0 ? 3 : si == 1 ? 5 : 8;
                 // Phyllotaxis packing radius for `items` discs of itemRadius + 1.2 m play space between them.
                 float spacing = itemRadius * 2f + 1.2f;
                 float cluster = spacing * 0.55f * math.sqrt(items) + itemRadius + 1f;

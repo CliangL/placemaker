@@ -96,7 +96,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.Choice("enclosure", "hedge", ControlTier.More, "boundary", "hedge", "fence", "none").Tip();
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("enclosure=fence");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "boundary");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("forecourt", 7, 14);
             c.RandomRange("lawnTrees", 5, 40);

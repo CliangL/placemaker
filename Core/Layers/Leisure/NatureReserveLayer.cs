@@ -20,7 +20,7 @@ namespace Placemaker.Core.Layers.Leisure
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature("rocks", ("clusters", 4.0), ("size", "large")), Feature("picnic", ("groups", 2.0)), Feature("restrooms", ("byArea", true), ("haEach", 8.0)),
-            Feature("decals", ("theme", "leaves"), ("density", 3.0)), Feature("terrain", ("shape", "hills"), ("height", 3.0)),
+            Feature("decals", ("theme", "leaves"), ("density", 1.0)), Feature("terrain", ("shape", "hills"), ("height", 3.0)),
         };
 
         protected override void DefineControls(ControlSet c)
@@ -37,7 +37,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Slider("floorLayer", 1, 1, 4, 1, "count", ControlTier.More, "planting").When("forestFloor=true");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.AssetMulti("bushSpecies", AssetCategories.Bush, ControlTier.More, "planting");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("treeDensity", 120, 300);
             c.Fixed("forestFloor");

@@ -86,7 +86,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "assets");
             c.AssetMulti("grassSpecies", AssetCategories.Bush, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.Fixed("waterSide");

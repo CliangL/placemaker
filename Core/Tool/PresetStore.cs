@@ -160,7 +160,7 @@ namespace Placemaker.Core.Tool
 
         /// <summary>
         /// The step a preset produces for a fresh step of <paramref name="layer"/>: built-in = defaults
-        /// (+ saved defaults) + PresetInfo.Values (locked) + the type's DefaultOn features; override /
+        /// (+ saved defaults) + PresetInfo.Values (locked) + the type's DefaultOn features and the preset's own (PresetInfo.Features); override /
         /// custom = defaults + the stored settings, stored Locked and the stored feature children.
         /// Null when the preset does not exist.
         /// </summary>
@@ -194,7 +194,7 @@ namespace Placemaker.Core.Tool
             step.Locked = locked;
             foreach (var f in Features.Of(gen))
             {
-                if (f == null || !f.DefaultOn || Features.ChildIndex(step, f) >= 0) continue;
+                if (f == null || !builtIn.FeatureOn(f) || Features.ChildIndex(step, f) >= 0) continue;
                 var fs = _editor.FeatureStep(f, 0);
                 fs.Markers.Clear();
                 step.Children.Add(fs);

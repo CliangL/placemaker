@@ -285,6 +285,14 @@ namespace Placemaker.Core.Tool
                 }
                 changed |= step.Locked.Add(kv.Key);
             }
+            // The preset's own features (PresetInfo.Features): "x" on, "-x" off; other features stay as they are.
+            uint fs = recipe.Root?.Seed ?? 0u;
+            foreach (var f in preset.Features ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrEmpty(f)) continue;
+                bool on = f[0] != '-';
+                changed |= SetFeature(recipe, path, on ? f : f.Substring(1), on, Placemaker.Core.Layers.Common.Hashing.Mix(fs, Seeds.Hash(f)));
+            }
             return changed;
         }
 

@@ -310,6 +310,18 @@ namespace Placemaker.Core.Layers.Common
             _presets.Add(p);
         }
 
+        /// <summary>Feature layers preset <paramref name="id"/> turns on ("-layer" = off) on top of the DefaultOn ones.</summary>
+        protected void PresetFeatures(string id, params string[] features)
+        {
+            foreach (var p in _presets)
+                if (p.Id == id)
+                {
+                    var list = new List<string>(p.Features);
+                    list.AddRange(features);
+                    p.Features = list.ToArray();
+                }
+        }
+
         private Dictionary<string, ControlSchema> _byId;
 
         public ControlSchema Control(string id)

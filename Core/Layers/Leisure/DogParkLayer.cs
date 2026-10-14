@@ -21,7 +21,7 @@ namespace Placemaker.Core.Layers.Leisure
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature("restrooms"), Feature("shops", ("count", 1.0)), StreetShopsFeature(Area), Feature("rocks", ("size", "small"), ("clusters", 2.0)),
-            Feature("decals", ("theme", "dirt"), ("density", 2.0)), Feature("terrain", ("shape", "mounds"), ("height", 1.0)),
+            Feature("decals", ("theme", "dirt"), ("density", 0.8)), Feature("terrain", ("shape", "mounds"), ("height", 1.0)),
         };
 
         protected override void DefineControls(ControlSet c)
@@ -38,7 +38,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("groundSurface", AssetCategories.SurfaceDirt, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("agility", 3, 8);
         }

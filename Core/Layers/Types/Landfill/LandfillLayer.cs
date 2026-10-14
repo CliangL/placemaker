@@ -28,6 +28,9 @@ namespace Placemaker.Core.Layers.Types.Landfill
     [AreaGenerator(311, Group = "industrial")]
     public sealed class LandfillLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public const string LayerId = "landfill";
         public static readonly string[] Styles = { "active", "capped", "compost", "recycling", "flytip" };
         public const string MoundTooSmallKey = "Placemaker.Landfill.Issue.MoundTooSmall";
@@ -85,7 +88,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
             c.AssetMulti("skipAssets", AssetCategories.LandfillSkip, ControlTier.More, "assets");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets").When("summitPath=true");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets").When("summitPath=true");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.RandomRange("moundHeight", 4, 18);

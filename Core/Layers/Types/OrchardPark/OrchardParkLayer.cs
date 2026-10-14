@@ -94,7 +94,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             c.Choice("edge", "hedge", ControlTier.More, "boundary", "hedge", "fence", "both", "none");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary");
 
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("spacing", 5, 10);
             c.RandomRange("gaps", 0, 15);

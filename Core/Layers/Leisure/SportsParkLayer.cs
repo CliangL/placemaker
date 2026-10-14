@@ -46,7 +46,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Slider("treeDensity", 25, 0, 100, 5, "perHa", ControlTier.More, "planting");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("pitches", 0, 2);
             c.RandomRange("basketball", 0, 3);

@@ -224,10 +224,35 @@ namespace Placemaker.Game.Preview
                     }
                     else if (prefab != Entity.Null && _em.HasComponent<PathwayData>(prefab)) net.Category = NetCategory.Pathway;
                     else if (_em.HasComponent<TrainTrack>(e) || _em.HasComponent<TramTrack>(e) || _em.HasComponent<SubwayTrack>(e)) net.Category = NetCategory.Track;
+                    if (net.Category != NetCategory.Track) net.HasBikeLane = HasBikeLane(e);
                     into.Add(net);
                 }
             }
             finally { results.Dispose(); }
+        }
+
+        /// <summary>
+        /// A bike-only lane (bike path, road bike lane) or a pedestrian lane that allows bicycles
+        /// (pathway with bike lanes): park entrances facing it become bike entrances.
+        /// </summary>
+        private bool HasBikeLane(Entity edge)
+        {
+            if (!_em.HasBuffer<global::Game.Net.SubLane>(edge)) return false;
+            var lanes = _em.GetBuffer<global::Game.Net.SubLane>(edge, true);
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                var lane = lanes[i].m_SubLane;
+                if (lane == Entity.Null) continue;
+                if (_em.HasComponent<global::Game.Net.PedestrianLane>(lane) &&
+                    (_em.GetComponentData<global::Game.Net.PedestrianLane>(lane).m_Flags & global::Game.Net.PedestrianLaneFlags.AllowBicycle) != 0)
+                    return true;
+                if (!_em.HasComponent<PrefabRef>(lane)) continue;
+                var lp = _em.GetComponentData<PrefabRef>(lane).m_Prefab;
+                if (lp != Entity.Null && _em.HasComponent<NetLaneData>(lp) &&
+                    (_em.GetComponentData<NetLaneData>(lp).m_Flags & global::Game.Prefabs.LaneFlags.BicyclesOnly) != 0)
+                    return true;
+            }
+            return false;
         }
 
         private void CaptureObstacles(float2 min, float2 max, List<Obstacle> into)

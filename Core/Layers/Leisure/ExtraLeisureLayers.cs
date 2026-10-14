@@ -35,7 +35,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("surface", AssetCategories.SurfacePaving, ControlTier.More, "skate");
             c.Slider("benches", 6, 0, 16, 1, "count", ControlTier.More, "skate");
             c.Toggle("lamps", true, ControlTier.More, "skate");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
         }
 
@@ -130,7 +130,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("chapelAsset", AssetCategories.CenterpieceStatue, ControlTier.More, "sections").When("chapel=true");
             c.Asset("treeAsset", AssetCategories.Tree, ControlTier.More, "sections");
             c.Toggle("fence", true, ControlTier.More, "boundary");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
         }
 
@@ -225,7 +225,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Slider("bushDensity", 80, 0, 250, 5, "perHa", ControlTier.More, "planting");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
             c.Toggle("lamps", true, ControlTier.More, "layout");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
         }
 

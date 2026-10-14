@@ -22,7 +22,52 @@ namespace Placemaker.Core.Layers.Leisure
         protected override bool HostsStreetShops => true;
 
         private IReadOnlyList<FeatureInfo> _features;
-        public IReadOnlyList<FeatureInfo> Features => _features ?? (_features = BuildFeatures().AsReadOnly());
+        public IReadOnlyList<FeatureInfo> Features => _features ?? (_features = WithDefaults(BuildFeatures()).AsReadOnly());
+
+        /// <summary>
+        /// Playtest 4b ("a lot more things should be on by default"): the fitting, cheap features each
+        /// park-like type starts with. Terrain shaping, rocks and shops stay opt-in (slow or situational);
+        /// picnic/playground/fountain only where the type leaves them room (the gallery showed NoSpace otherwise).
+        /// </summary>
+        private static readonly Dictionary<string, string[]> DefaultOnByType = new Dictionary<string, string[]>
+        {
+            { "botanicalGarden", new[] { "restrooms", "decals" } },
+            { "communityGarden", new[] { "decals" } },
+            { "dogPark", new[] { "decals" } },
+            { "formalGarden", new[] { "decals" } },
+            { "natureReserve", new[] { "decals" } },
+            { "picnicGrounds", new[] { "playground", "decals" } },
+            { "sportsPark", new[] { "restrooms", "decals" } },
+            { "skatePark", new[] { "decals" } },
+            { "cemeteryGrounds", new[] { "decals" } },
+            { "greenwayPark", new[] { "decals" } },
+            { "adventurePlayground", new[] { "restrooms", "decals" } },
+            { "amphitheatre", new[] { "restrooms", "flowerbeds", "decals" } },
+            { "animalPark", new[] { "restrooms", "decals" } },
+            { "beach", new[] { "restrooms", "picnic", "decals" } },
+            { "fairground", new[] { "restrooms", "decals" } },
+            { "golf", new[] { "restrooms", "decals" } },
+            { "hikingTrail", new[] { "decals" } },
+            { "lookoutHill", new[] { "decals" } },
+            { "memorialPark", new[] { "bigtrees", "flowerbeds", "decals" } },
+            { "orchardPark", new[] { "decals" } },
+            { "urbanFarm", new[] { "decals" } },
+            { "urbanRuins", new[] { "bigtrees", "decals" } },
+            { "waterfront", new[] { "flowerbeds", "bigtrees", "picnic", "decals" } },
+            { "wetland", new[] { "decals" } },
+            { "zenGarden", new[] { "decals" } },
+        };
+
+        /// <summary>Feature layers this type has on by default (besides features declared DefaultOn).</summary>
+        protected virtual string[] DefaultFeatures => DefaultOnByType.TryGetValue(Id, out var on) ? on : System.Array.Empty<string>();
+
+        private List<FeatureInfo> WithDefaults(List<FeatureInfo> list)
+        {
+            var on = DefaultFeatures;
+            foreach (var f in list)
+                if (f != null && System.Array.IndexOf(on, f.Layer) >= 0) f.DefaultOn = true;
+            return list;
+        }
 
         /// <summary>The type's features; essentials first. Default: restrooms, shops, street shops, decals, terrain.</summary>
         protected virtual List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
@@ -49,12 +94,28 @@ namespace Placemaker.Core.Layers.Leisure
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
         {
             var region = LayerRegion.From(input?.Shape?.Ring);
-            return region == null ? new List<EdgeMarker>() : Entrances.Suggest(input, region, EntranceKind, WantedEntrances(region));
+            if (region == null) return new List<EdgeMarker>();
+            return TypedEntrances ? Entrances.SuggestTyped(input, region, WantedEntrances(region), EntranceKinds.Leisure)
+                : Entrances.Suggest(input, region, EntranceKind, WantedEntrances(region));
         }
 
-        public override Readiness CheckReady(AreaInput input) => new Readiness { Ready = true };
+        /// <summary>
+        /// Park-like types use typed entrances (pedestrian, bike, main — EntranceKinds) and need at least one
+        /// placed by the player (playtest 4b); vehicle/industrial sites keep the plain "entrance" and never block.
+        /// </summary>
+        protected virtual bool TypedEntrances => true;
 
-        protected List<Gate> Gates(LayerContext ctx) => Entrances.Resolve(ctx.Input, ctx.LayerRegion, EntranceKind, WantedEntrances(ctx.LayerRegion));
+        /// <summary>The "entrances" Markers control with the kinds this type uses.</summary>
+        protected ControlSchema EntranceMarkers(ControlSet c) => TypedEntrances
+            ? EntranceKinds.WithOptions(c.Markers("entrances", ControlTier.More, EntranceKinds.Leisure), EntranceKinds.Leisure)
+            : c.Markers("entrances", ControlTier.More, EntranceKind);
+
+        public override Readiness CheckReady(AreaInput input) =>
+            TypedEntrances ? Entrances.RequireTyped(input, EntranceKinds.Leisure) : new Readiness { Ready = true };
+
+        protected List<Gate> Gates(LayerContext ctx) => TypedEntrances
+            ? Entrances.ResolveTyped(ctx.Input, ctx.LayerRegion, WantedEntrances(ctx.LayerRegion), EntranceKinds.Leisure)
+            : Entrances.Resolve(ctx.Input, ctx.LayerRegion, EntranceKind, WantedEntrances(ctx.LayerRegion));
 
         /// <summary>Lawns between everything taken (FreeSpace), largest tagged core; whole region when nothing is free.</summary>
         protected static void EmitGreenRegions(LayerContext ctx, Occupancy occ, float minArea = 150f)
