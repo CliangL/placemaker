@@ -344,14 +344,14 @@ namespace Placemaker.Core.Layers.Types.Transport
             {
                 string cat = LeisureKit.Category(ctx, "", AssetCategories.Restroom);
                 if (cat != null)
-                    foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 3.2f, 6f, 1f), 1, 20f, true))
-                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(""), cat, 3.2f, Hashing.Mix(seed, 1u), 0.3f, 0.2f, 0)) restrooms++;
+                    foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 3.2f, 6f, 1f), 6, 10f, true))
+                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(""), cat, 3.2f, Hashing.Mix(seed, 1u), 3.2f, 0.2f, 0)) { restrooms++; break; }
             }
             int want = ctx.I("kiosks") + ctx.I("vending");
             string any = want > 0 ? LeisureKit.Category(ctx, ctx.S("kioskAsset"), AssetCategories.Kiosk) : null;
             if (any != null)
                 foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 2f, 5f, 0.8f), want, 6f, true))
-                    if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(ctx.S("kioskAsset")), any, 2f, Hashing.Mix(seed, 90u + (uint)kiosks), 0.3f, 0.2f, 0)) kiosks++;
+                    if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(ctx.S("kioskAsset")), any, 2f, Hashing.Mix(seed, 90u + (uint)kiosks), 2f, 0.2f, 0)) kiosks++;
         }
 
         // ───────────── dog walk ─────────────
