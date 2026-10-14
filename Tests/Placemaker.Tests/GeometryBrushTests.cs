@@ -171,7 +171,7 @@ namespace Placemaker.Tests
             var mask = new BrushMask();
             Path(mask, 200f, false, 0, 0, 800, 300, 1600, 0);
             double ms = G.BestMs(() => mask.Outlines(), 1, 3);
-            Assert.True(ms < 250, $"{ms:F0} ms for {mask.PaintedCellCount} cells");
+            Assert.True(ms < TimingBudget.Ms(250), $"{ms:F0} ms for {mask.PaintedCellCount} cells");
         }
 
         [Fact]

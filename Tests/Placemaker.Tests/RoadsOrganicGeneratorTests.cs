@@ -225,7 +225,7 @@ namespace Placemaker.Tests
                 GridGenerator.GenerateGrid(perimeter, Organic(seed: 51 + i)); // a different seed on each run
             }
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 1500, $"5 generations in {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(1500), $"5 generations in {stopwatch.ElapsedMilliseconds} ms");
         }
     }
 }

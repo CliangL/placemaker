@@ -72,7 +72,7 @@ namespace Placemaker.Tests.Types
             sw.Stop();
             Assert.Equal(TestKit.Fingerprint(a.Layers[0]), TestKit.Fingerprint(b.Layers[0]));
             _out.WriteLine($"{preset}: {sw.ElapsedMilliseconds} ms");
-            Assert.True(sw.ElapsedMilliseconds < 250, $"{preset} took {sw.ElapsedMilliseconds} ms for 5 ha");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), $"{preset} took {sw.ElapsedMilliseconds} ms for 5 ha");
         }
 
         [Theory]

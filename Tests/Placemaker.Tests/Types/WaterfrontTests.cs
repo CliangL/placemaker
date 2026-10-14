@@ -68,7 +68,7 @@ namespace Placemaker.Tests.Types
                 {
                     long ms = Time(() => PlanPreset("waterfront", p, FiveHa, site));
                     _out.WriteLine($"{p.Id}: {ms} ms");
-                    Assert.True(ms < 250, $"waterfront/{p.Id} took {ms} ms for 5 ha");
+                    Assert.True(ms < TimingBudget.Ms(250), $"waterfront/{p.Id} took {ms} ms for 5 ha");
                 }
         }
 

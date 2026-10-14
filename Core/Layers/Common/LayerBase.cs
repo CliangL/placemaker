@@ -149,8 +149,21 @@ namespace Placemaker.Core.Layers.Common
         public uint Seed;
 
         public SiteContext Site => Input.Site;
+        /// <summary>Ground BEFORE this layer's own terraform (for a feature: its parent's reshaped ground).</summary>
         public float H(float2 p) => Site?.HeightAt != null ? Site.HeightAt(p) : 0f;
-        public float3 P3(float2 p) => new float3(p.x, H(p), p.y);
+
+        private TerrainField _ground;
+        /// <summary>
+        /// Ground AFTER this layer's own terraform. TerrainShaper registers what it shapes; layers with
+        /// their own sculptors may register too (Ground.Override). Published to the children as
+        /// AreaPlan.HeightAfter when anything was overridden.
+        /// </summary>
+        public TerrainField Ground => _ground ?? (_ground = new TerrainField(H));
+        public bool Reshaped => _ground != null && _ground.HasOverrides;
+        /// <summary>Planned ground height: the reshaped ground where this layer terraformed, else H.</summary>
+        public float G(float2 p) => Reshaped ? _ground.HeightAt(p) : H(p);
+        /// <summary>A point on the planned ground (objects, nets, surfaces and regions use it).</summary>
+        public float3 P3(float2 p) => new float3(p.x, G(p), p.y);
 
         public float F(string id) => (float)Settings.Num(id, 0);
         public int I(string id) => Settings.I(id, 0);
@@ -199,7 +212,7 @@ namespace Placemaker.Core.Layers.Common
         /// </summary>
         public bool Surface(IReadOnlyList<float2> ring, SurfaceRole role, AssetRef asset, string category = null)
         {
-            var pieces = SurfaceAcceptance.MakeAcceptable(ring, H);
+            var pieces = SurfaceAcceptance.MakeAcceptable(ring, G);
             int added = 0;
             foreach (var r in pieces)
             {
@@ -213,7 +226,7 @@ namespace Placemaker.Core.Layers.Common
 
         public bool NavigationArea(IReadOnlyList<float2> ring, AreaRole role, AssetRef asset)
         {
-            var pieces = SurfaceAcceptance.MakeAcceptable(ring, H);
+            var pieces = SurfaceAcceptance.MakeAcceptable(ring, G);
             int added = 0;
             foreach (var r in pieces)
             {
@@ -229,7 +242,7 @@ namespace Placemaker.Core.Layers.Common
         {
             var clean = Poly.Clean(ring, 0.05f);
             if (clean.Length < 3) return;
-            Plan.Regions.Add(new PlannedRegion { Ring = Poly.To3D(clean, H), Key = key, Tags = tags });
+            Plan.Regions.Add(new PlannedRegion { Ring = Poly.To3D(clean, G), Key = key, Tags = tags });
         }
     }
 
@@ -396,6 +409,8 @@ namespace Placemaker.Core.Layers.Common
             };
             if (HostsStreetShops && input.HasChild(StreetShopsLayer)) CarveStreetShops(ctx, input);
             PlanCore(ctx);
+            // Children plan on the ground this layer leaves: the composer derives it from
+            // plan.Terraform (every sculptor emits PlannedTerraform), unless the layer set HeightAfter.
             return plan;
         }
 

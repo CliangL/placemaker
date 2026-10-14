@@ -271,7 +271,7 @@ namespace Placemaker.Tests
             var segments = ConcentricGenerator.Generate(perimeter, layers: 4, connections: 6, diagnostics: _diag);
             stopwatch.Stop();
             AssertWellFormed(segments, perimeter);
-            Assert.True(stopwatch.ElapsedMilliseconds < 600, $"Generation too slow: {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(600), $"Generation too slow: {stopwatch.ElapsedMilliseconds} ms");
         }
 
         private static List<float3> Ellipse(float a, float b, int points)
@@ -1022,7 +1022,7 @@ namespace Placemaker.Tests
             ConcentricGenerator.GenerateRadial(perimeter, 16, 150f, 10, diagnostics: _radial);
             ConcentricGenerator.GenerateRadial(perimeter, 12, 50f, 10, diagnostics: _radial);
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 1800, $"Two Radial generations in {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(1800), $"Two Radial generations in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         [Fact]
@@ -1083,7 +1083,7 @@ namespace Placemaker.Tests
                 ConcentricGenerator.Generate(perimeter, layers, connections: 5, diagnostics: _diag);
             }
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 2800, $"4 setting changes in {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(2800), $"4 setting changes in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         [Fact]

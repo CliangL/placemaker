@@ -253,7 +253,7 @@ namespace Placemaker.Tests
             {
                 GridGenerator.GenerateGrid(perimeter, Contour(Hill(centre, 90f, 450f), 80f + i));
             }
-            Assert.True(stopwatch.ElapsedMilliseconds < 2400, $"3 generations in {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(2400), $"3 generations in {stopwatch.ElapsedMilliseconds} ms");
         }
     }
 }

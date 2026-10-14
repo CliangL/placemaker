@@ -398,7 +398,7 @@ namespace Placemaker.Tests
             sw.Stop();
             Assert.NotEmpty(r.Plan.Zoning);
             AssertZoningClear(r);
-            Assert.True(sw.ElapsedMilliseconds < 400, sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(400), sw.ElapsedMilliseconds + " ms");
         }
     }
 }

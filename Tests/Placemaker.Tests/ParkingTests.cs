@@ -162,7 +162,7 @@ namespace Placemaker.Tests
             Assert.True(math.distance(m[0].Position, m[1].Position) >= 40);
             input.Markers = m;
             Assert.True(g.CheckReady(input).Ready);
-            Assert.True(sw.ElapsedMilliseconds < 50, sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(50), sw.ElapsedMilliseconds + " ms");
 
             // the suggestions build without warnings about roads, connected to the street
             var plan = g.Plan(input, CancellationToken.None);
@@ -432,7 +432,7 @@ namespace Placemaker.Tests
             var cts2 = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Assert.ThrowsAny<OperationCanceledException>(() => g.Plan(input2, cts2.Token));
-            Assert.True(sw.ElapsedMilliseconds < 1500, sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(1500), sw.ElapsedMilliseconds + " ms");
         }
 
         private static string Fingerprint(AreaPlan p)

@@ -154,7 +154,7 @@ namespace Placemaker.Tests.Types
                 output.WriteLine($"{id}/{p.Id}: {sw.ElapsedMilliseconds} ms");
                 worst = Math.Max(worst, sw.ElapsedMilliseconds);
             }
-            Assert.True(worst < 250, $"{id} took {worst} ms for 5 ha");
+            Assert.True(worst < TimingBudget.Ms(250), $"{id} took {worst} ms for 5 ha");
         }
 
         /// <summary>Terraform never leaves a step at the outline: cells touching it keep the original height.</summary>

@@ -198,7 +198,7 @@ namespace Placemaker.Tests.Types
                 Out.WriteLine($"{TypeId}/{p.Id}: {sw.ElapsedMilliseconds} ms");
                 if (sw.ElapsedMilliseconds > worst) { worst = sw.ElapsedMilliseconds; slow = p.Id; }
             }
-            Assert.True(worst < 250, $"{TypeId}/{slow} took {worst} ms for 5 ha");
+            Assert.True(worst < TimingBudget.Ms(250), $"{TypeId}/{slow} took {worst} ms for 5 ha");
         }
 
         [Fact]

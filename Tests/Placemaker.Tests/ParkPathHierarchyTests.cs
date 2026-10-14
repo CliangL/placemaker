@@ -220,7 +220,7 @@ namespace Placemaker.Tests
             Plan(Bag(s, ("bikePath", false), ("trails", 0.0), ("smallPaths", 0.0), ("desireLines", "none")), ring);
             off.Stop();
             _out.WriteLine($"greenway 5 ha: {sw.ElapsedMilliseconds} ms (tiers off: {off.ElapsedMilliseconds} ms)");
-            Assert.True(sw.ElapsedMilliseconds - off.ElapsedMilliseconds < 250, $"tiers cost {sw.ElapsedMilliseconds - off.ElapsedMilliseconds} ms");
+            Assert.True(sw.ElapsedMilliseconds - off.ElapsedMilliseconds < TimingBudget.Ms(250), $"tiers cost {sw.ElapsedMilliseconds - off.ElapsedMilliseconds} ms");
         }
 
         [Fact]

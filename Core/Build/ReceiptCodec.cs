@@ -117,6 +117,7 @@ namespace Placemaker.Core.Build
             var r = new Recipe { Id = Str(rd), NameKey = Str(rd), Name = Str(rd), Icon = Str(rd) };
             r.FormatVersion = rd.ReadInt32();
             r.Root = ReadStep(rd, 0);
+            Layers.Common.LayerAliases.Normalize(r.Root);   // retired layer ids → canonical (g5)
             return r;
         }
 

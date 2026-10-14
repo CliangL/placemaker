@@ -52,7 +52,7 @@ namespace Placemaker.Tests.Types
         {
             long ms = TimeFiveHa(Id, preset);
             _out.WriteLine($"{preset}: {ms} ms");
-            Assert.True(ms < 250, $"{preset} took {ms} ms for 5 ha");
+            Assert.True(ms < TimingBudget.Ms(250), $"{preset} took {ms} ms for 5 ha");
         }
 
         [Fact]

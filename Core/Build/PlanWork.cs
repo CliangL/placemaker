@@ -24,6 +24,10 @@ namespace Placemaker.Core.Build
 
     public static class RoleCategories
     {
+        /// <summary>The net's explicit category when set, else the role's default (g5).</summary>
+        public static string ForNet(PlannedNet n) =>
+            n == null ? AssetCategories.Pathway : !string.IsNullOrEmpty(n.Category) ? n.Category : ForNet(n.Role);
+
         public static string ForNet(NetRole role)
         {
             switch (role)
@@ -164,7 +168,7 @@ namespace Placemaker.Core.Build
                     if (n == null) continue;
                     Add(w.Nets, excluded, new WorkItem
                     {
-                        Kind = WorkKind.Net, Layer = li, Index = i, Category = RoleCategories.ForNet(n.Role), Asset = n.Asset,
+                        Kind = WorkKind.Net, Layer = li, Index = i, Category = RoleCategories.ForNet(n), Asset = n.Asset,
                         GeneratorId = gen, Anchor = Composer.Bezier(n.A, n.B, n.C, n.D, 0.5f).xz,
                     });
                     if (parking && (n.Role == NetRole.DriveAisle || n.Role == NetRole.DriveConnector)) w.HasParking = true;

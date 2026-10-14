@@ -140,7 +140,7 @@ namespace Placemaker.Tests.Types
                 Compose(With(id, p.Values), FiveHa, Road(FiveHa));
                 sw.Stop();
                 output.WriteLine($"{id}/{p.Id}: {sw.ElapsedMilliseconds} ms");
-                Assert.True(sw.ElapsedMilliseconds < 250, $"{id}/{p.Id} took {sw.ElapsedMilliseconds} ms for 5 ha");
+                Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), $"{id}/{p.Id} took {sw.ElapsedMilliseconds} ms for 5 ha");
             }
         }
 

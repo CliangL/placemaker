@@ -172,7 +172,7 @@ namespace Placemaker.Tests.Types.T04
                     best = Math.Min(best, sw.ElapsedMilliseconds);
                 }
                 Out.WriteLine($"{p.Id}: {best} ms");
-                Assert.True(best < 250, $"{p.Id} took {best} ms for 5 ha");
+                Assert.True(best < TimingBudget.Ms(250), $"{p.Id} took {best} ms for 5 ha");
             }
         }
 

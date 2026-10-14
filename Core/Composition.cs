@@ -131,6 +131,9 @@ namespace Placemaker.Core
             var reserved = new ReservedSpace();
             int budget = MaxSteps;
             Run(recipe.Root, area, new[] { RegionTags.Root }, "root", site, reserved, null, "0", 0, result, ref budget, cancel);
+            // CS2 joins paths only at identical nodes: split a path where a spur (often a feature's
+            // "path to it") ends on it (g5).
+            Layers.Common.PathJoins.JoinAll(result);
             return result;
         }
 
@@ -189,6 +192,8 @@ namespace Placemaker.Core
             result.Layers.Add(plan);
             Reserve(plan, reserved);
             var places = ReservePlaces(plan, reserved);
+            // Features of a terraforming layer plan on the NEW ground (g5: TerrainField).
+            var childSite = ChildSite(plan, site);
 
             for (int ci = 0; ci < step.Children.Count; ci++)
             {
@@ -196,7 +201,7 @@ namespace Placemaker.Core
                 string childPath = path + "/" + ci;
                 if (string.IsNullOrEmpty(child.Target))
                 {
-                    Run(child, shape, tags, regionKey, site, reserved, ownPlaces, childPath, depth + 1, result, ref budget, cancel);
+                    Run(child, shape, tags, regionKey, childSite, reserved, ownPlaces, childPath, depth + 1, result, ref budget, cancel);
                     continue;
                 }
                 foreach (var region in plan.Regions)
@@ -206,9 +211,21 @@ namespace Placemaker.Core
                     var sub = new AreaShape { Ring = region.Ring, Source = shape.Source, Attachments = AttachmentsOn(shape.Attachments, region.Ring) };
                     var inside = ownPlaces;
                     if (places.TryGetValue(region, out var own)) inside = new List<float2[]>(ownPlaces ?? new List<float2[]>()) { own };
-                    Run(effective, sub, region.Tags, region.Key, site, reserved, inside, childPath, depth + 1, result, ref budget, cancel);
+                    Run(effective, sub, region.Tags, region.Key, childSite, reserved, inside, childPath, depth + 1, result, ref budget, cancel);
                 }
             }
+        }
+
+        /// <summary>
+        /// The site children of <paramref name="plan"/> see: the same snapshot with the ground after the
+        /// plan's terraform (AreaPlan.HeightAfter, else its terraform polygons), or <paramref name="site"/>
+        /// unchanged when the plan does not reshape the ground.
+        /// </summary>
+        public static SiteContext ChildSite(AreaPlan plan, SiteContext site)
+        {
+            if (plan == null || site == null) return site;
+            var after = plan.HeightAfter ?? Layers.Common.TerrainField.FromTerraform(plan.Terraform, site.HeightAt);
+            return after == null ? site : site.WithHeight(after);
         }
 
         /// <summary>Layer ids (or targets) of the enabled children of a step.</summary>

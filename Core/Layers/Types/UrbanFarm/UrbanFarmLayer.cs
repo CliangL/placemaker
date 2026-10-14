@@ -38,8 +38,8 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
-            CoreFeature(FarmStallAddOn.LayerId),
-            Feature(HoneyHivesAddOn.LayerId),
+            CoreFeature(Farmstead.FarmStandAddOn.LayerId),
+            Feature(Farmstead.ApiaryAddOn.LayerId),
             CoreFeature("picnic"),
             Feature("restrooms"),
             Feature("shops", ("count", 1.0), ("where", "entrances")),
@@ -451,7 +451,8 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                     if (budget <= 0) return n;
                     var p = a + t * s;
                     if (!occ.Free(p, radius, 0f, 0.1f)) continue;
-                    ctx.Object(p, yaw, role, asset, Hashing.Mix(rv, (uint)n), -1, cat);
+                    // One variation per row (pair): crops are a variety category (g5), so automatic picks vary by row, not by plant.
+                    ctx.Object(p, yaw, role, asset, rv, -1, cat);
                     n++; budget--;
                 }
             }

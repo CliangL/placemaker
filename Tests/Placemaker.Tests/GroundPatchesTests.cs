@@ -166,7 +166,7 @@ namespace Placemaker.Tests
             TestKit.Plan(Id, TestKit.Input(ring, s));
             var sw = Stopwatch.StartNew();
             TestKit.Plan(Id, TestKit.Input(ring, s));
-            Assert.True(sw.ElapsedMilliseconds < 250, sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), sw.ElapsedMilliseconds + " ms");
         }
     }
 

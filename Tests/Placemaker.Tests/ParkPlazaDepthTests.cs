@@ -218,7 +218,7 @@ namespace Placemaker.Tests
                 for (int i = 0; i < 3; i++) { input.Seed = (uint)(i + 21); TestKit.Plan("park", input); }
                 double ms = sw.Elapsed.TotalMilliseconds / 3;
                 _out.WriteLine($"{style}: {ms:0.0} ms");
-                Assert.True(ms < 250, $"{style} took {ms:0} ms");
+                Assert.True(ms < TimingBudget.Ms(250), $"{style} took {ms:0} ms");
             }
         }
 
@@ -398,7 +398,7 @@ namespace Placemaker.Tests
             var sw = Stopwatch.StartNew();
             Compose(r, ring, TestKit.RoadAlongBottom(250));
             _out.WriteLine($"park 5 ha + 4 amenities: {sw.Elapsed.TotalMilliseconds:0} ms");
-            Assert.True(sw.Elapsed.TotalMilliseconds < 400, "took " + sw.Elapsed.TotalMilliseconds);
+            Assert.True(sw.Elapsed.TotalMilliseconds < TimingBudget.Ms(400), "took " + sw.Elapsed.TotalMilliseconds);
         }
 
         [Theory]

@@ -73,6 +73,7 @@ namespace Placemaker.Core.Build
                 var s = SurfaceKind(lower);
                 if (s != null) r.Add(s);
                 LeisureHeuristics.SurfaceExtra(lower, r);
+                SurfaceCategoryRules.Classify(lower, r);   // type-defined surface kinds (rubber, bark, clay, track…)
                 return r;
             }
             if ((t & AssetTraits.SpaceArea) != 0)
@@ -85,18 +86,24 @@ namespace Placemaker.Core.Build
 
             if ((t & AssetTraits.Net) != 0)
             {
-                if ((t & AssetTraits.NetFence) != 0) { r.Add(AssetCategories.Fence); return r; }
-                if ((t & AssetTraits.Pathway) != 0)
+                if ((t & AssetTraits.NetFence) != 0) r.Add(AssetCategories.Fence);
+                else if ((t & AssetTraits.Pathway) != 0)
                 {
                     if (ContainsAny(lower, "invisible", "marker")) r.Add(AssetCategories.InvisiblePath);
                     else r.Add(AssetCategories.Pathway);
-                    return r;
                 }
-                if ((t & AssetTraits.Road) != 0)
+                else if ((t & AssetTraits.Road) != 0)
                 {
                     if (ContainsAny(lower, "invisible")) r.Add(AssetCategories.InvisiblePath);
                     else r.Add(AssetCategories.Road);
                 }
+                // Type rules see nets too (g5): net.bike / net.trail tiers of the park path hierarchy. Additive,
+                // and only "net.*" categories: object rules were written for props and must not pull a net
+                // into an object pool.
+                var extra = new List<string>(2);
+                CategoryRules.Classify(lower, t, extra);
+                foreach (var c in extra)
+                    if (c != null && c.StartsWith("net.", StringComparison.Ordinal) && !r.Contains(c)) r.Add(c);
                 return r;
             }
 
@@ -236,7 +243,15 @@ namespace Placemaker.Core.Build
                 if (ContainsAny(lower, AutoExcludedFor(category))) return false;
                 return isNet || ContainsAny(lower, "fence", "railing", "hedge");
             }
-            if (isNet || isArea) return true;
+            if (isNet)
+            {
+                // Bike nets may carry PathwayData: never an automatic footpath (g5 / g3 request).
+                if (category == AssetCategories.Pathway && IsBikeName(lower)) return false;
+                var netRuled = CategoryRules.AutoEligible(category, lower, t);
+                if (netRuled.HasValue) return netRuled.Value;
+                return true;
+            }
+            if (isArea) return true;
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
             var ruled = CategoryRules.AutoEligible(category, lower, t);
@@ -366,6 +381,8 @@ namespace Placemaker.Core.Build
             return null;
         }
 
+        public static bool IsBikeName(string lower) => ContainsAny(lower, "bike", "bicycle", "cycle");
+
         public static bool IsBenchName(string lower)
         {
             // "bank" alone also matches advertised financial brands (PM measured this).
@@ -433,6 +450,7 @@ namespace Placemaker.Core.Build
                     break;
                 case AssetCategories.Pathway:
                     if (lower.Contains("gravel")) score -= 10;
+                    if (IsBikeName(lower)) score -= 500;   // a footpath must not become a bike path
                     if (lower.StartsWith("pedestrian", StringComparison.Ordinal) || lower.Contains("pathway")) score += 40;
                     score -= (int)(netWidth * 2);   // narrow by default
                     break;

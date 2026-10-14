@@ -122,6 +122,14 @@ namespace Placemaker.Core.Build
             string Pick(string step, string category, uint variation)
             {
                 var list = Candidates(step, category);
+                // An empty custom category (no "rubber" surface installed) walks to its parent (g5).
+                if (list == null || list.Count == 0)
+                    foreach (var parent in CategoryFallbacks.Chain(category))
+                    {
+                        if (parent == category) continue;
+                        list = Candidates(step, parent);
+                        if (list != null && list.Count > 0) break;
+                    }
                 if (list == null || list.Count == 0) return null;
                 if (IsUniform(category) || list.Count == 1) return list[0];
                 int n = Math.Min(list.Count, MaxVariety);
@@ -137,7 +145,7 @@ namespace Placemaker.Core.Build
                 foreach (var n in l.Nets)
                     if (n != null && Needs(n.Asset, exists))
                         resolved += Set(ref n.Asset, n.Role == NetRole.Alley && exists != null && exists(AlleyPrefab)
-                            ? AlleyPrefab : Pick(step, RoleCategories.ForNet(n.Role), 0), exists);
+                            ? AlleyPrefab : Pick(step, RoleCategories.ForNet(n), 0), exists);
                 foreach (var s in l.Surfaces)
                     if (s != null && Needs(s.Asset, exists)) resolved += Set(ref s.Asset, Pick(step, RoleCategories.ForSurface(s), 0), exists);
                 foreach (var a in l.Areas)

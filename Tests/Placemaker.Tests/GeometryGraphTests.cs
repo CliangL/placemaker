@@ -243,7 +243,7 @@ namespace Placemaker.Tests
             var f = g.PickFace(p);
             Assert.True(f.Ok);
             Assert.Equal(6400f, f.Area, 1);
-            Assert.True(ms < 20, $"{ms:F1} ms for {g.EdgeCount} edges");
+            Assert.True(ms < TimingBudget.Ms(20), $"{ms:F1} ms for {g.EdgeCount} edges");
         }
 
         [Fact]

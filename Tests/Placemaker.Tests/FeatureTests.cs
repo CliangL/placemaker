@@ -201,7 +201,7 @@ namespace Placemaker.Tests
             sw.Stop();
             Assert.Equal(a.Layers.Count, b.Layers.Count);
             for (int i = 0; i < a.Layers.Count; i++) Assert.Equal(TestKit.Fingerprint(a.Layers[i]), TestKit.Fingerprint(b.Layers[i]));
-            Assert.True(sw.ElapsedMilliseconds < 4000, "park + plaza took " + sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(4000), "park + plaza took " + sw.ElapsedMilliseconds + " ms");
         }
 
         // ───────────── park + pond ─────────────
@@ -384,7 +384,7 @@ namespace Placemaker.Tests
                 }
             sw.Stop();
             Assert.True(first.Ok);
-            Assert.True(sw.ElapsedMilliseconds < 3000, "solver took " + sw.ElapsedMilliseconds + " ms for 24 solves");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(3000), "solver took " + sw.ElapsedMilliseconds + " ms for 24 solves");
         }
 
         // ───────────── path clipping ─────────────

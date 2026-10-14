@@ -762,7 +762,8 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                     {
                         var p = a + d * s;
                         if (!occ.Free(p, 0.4f, 0.4f, 0f)) continue;
-                        ctx.Object(p, yaw, role, crop, Hashing.Mix(v, (uint)n), -1, cat);
+                        // One variation per field: crops are a variety category (g5), so automatic picks vary by field, not by plant.
+                        ctx.Object(p, yaw, role, crop, v, -1, cat);
                         n++;
                     }
                 }
