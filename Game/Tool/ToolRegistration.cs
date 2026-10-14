@@ -82,7 +82,7 @@ namespace Placemaker.Game.Tool
             foreach (var p in new[]
             {
                 nameof(PlacemakerSettings.ShowCursorTooltips), nameof(PlacemakerSettings.PreviewDetail), nameof(PlacemakerSettings.SnapToRoadsWhenDrawing), nameof(PlacemakerSettings.KeepOffExistingRoads),
-                nameof(PlacemakerSettings.LayoutSize), nameof(PlacemakerSettings.EdgeMargin),
+                nameof(PlacemakerSettings.LayoutSize), nameof(PlacemakerSettings.EdgeMargin), nameof(PlacemakerSettings.PaintAvoidBuildings),
                 nameof(PlacemakerSettings.ToggleToolBinding), nameof(PlacemakerSettings.PrimaryBinding), nameof(PlacemakerSettings.UndoBinding),
                 nameof(PlacemakerSettings.RedoBinding), nameof(PlacemakerSettings.RedoAltBinding), nameof(PlacemakerSettings.ResetKeys),
                 nameof(PlacemakerSettings.RemoveEverything), nameof(PlacemakerSettings.ResetDefaults),

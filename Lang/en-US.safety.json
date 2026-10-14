@@ -1,0 +1,12 @@
+{
+  "Placemaker.Issue.BuildingsKept": "{0} buildings are in the way. They are kept: nothing is built on their lots.",
+  "Placemaker.Issue.BuildingsLeftOut": "{0} parts were left out or cut back to keep clear of existing buildings.",
+  "Placemaker.Build.WouldDemolish": "The game would have removed existing buildings for this build, so it stopped. Nothing was built.",
+  "Placemaker.Build.BuildingsKept": "Built. {0} existing buildings stood in the way; the parts touching them were left out, the buildings stay.",
+  "Placemaker.Problem.OnlyBuildings": "Only buildings are under the paint. Paint somewhere else.",
+  "Placemaker.Hint.BuildingsKept": "{0} buildings in the selection stay: nothing is built on their lots.",
+  "Placemaker.Settings.PaintAvoidBuildings": "Paint: keep off buildings",
+  "Placemaker.Settings.PaintAvoidBuildings.Desc": "Plain Paint cuts building lots out of the painted area (shaded red while painting). Off = the old behaviour: the outline covers buildings, and the build still leaves them standing.",
+  "Placemaker.Mode.Unavailable.Restart": "Restart the game: the mod was updated and this mode is not loaded yet.",
+  "Placemaker.UI.Version.Mismatch": "Restart the game: Placemaker's files were updated while it was running."
+}

@@ -85,6 +85,7 @@ namespace Placemaker.Game.Tool
                     if (BlockPaintHasTarget && rules.Roads) h.Add(new HintInfo("Placemaker.Hint.BlockPaintNewBlock"));
                     break;
             }
+            AddBuildingHint(h);
             if (_history.CanUndo) h.Add(new HintInfo("Placemaker.Hint.Undo", "Ctrl", "Z"));
             var p = StageMachine.Primary(_stage, Facts());
             if (p.Enabled && p.Kind != PrimaryKind.None) h.Add(new HintInfo("Placemaker.Hint.Primary", "Enter"));

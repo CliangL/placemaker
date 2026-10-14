@@ -50,7 +50,7 @@ namespace Placemaker.Game.Tool
 
         private void ShapeChanged(bool throttled = false, bool alreadyBuilt = false)
         {
-            if (alreadyBuilt) _shapeVersion++;
+            if (alreadyBuilt) { _shapeVersion++; UpdateBuildingsInSelection(); }
             else { _shapeDirty = true; _shapeThrottled = throttled; }
             _inputRevision++;
             _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
@@ -63,6 +63,11 @@ namespace Placemaker.Game.Tool
         {
             if (!_shapeDirty) return;
             float now = UnityEngine.Time.realtimeSinceStartup;
+            // s15 (paint lag): while a brush stroke runs the overlay draws the painted cells directly, so the
+            // outline — marching squares + smoothing, Block paint's booleans/offsets, keep-off-roads corridor
+            // booleans, the attachment and marker searches (each with a net query) — waits for mouse-up.
+            // It used to run ~7×/s during the drag (tens to hundreds of ms each on big areas).
+            if (!force && Painting && (_mode == SelectionMode.Paint || _mode == SelectionMode.BlockPaint)) return;
             if (!force && _shapeThrottled && now - _lastShapeBuild < 0.15f) return;
             _shapeDirty = false;
             _lastShapeBuild = now;
@@ -88,6 +93,7 @@ namespace Placemaker.Game.Tool
             _shape = s;
             _shapeVersion++;
             FollowOutline(old, s);
+            UpdateBuildingsInSelection();
             Touch();
         }
 
@@ -296,6 +302,8 @@ namespace Placemaker.Game.Tool
         private DesignEditor.ReadinessResult Unready()
         {
             if (_unreadyRevision == _inputRevision) return _unready;
+            // s15: the outline does not change during a brush stroke (rebuilt on mouse-up): no readiness checks per frame.
+            if (Painting && _unreadyRevision >= 0 && (_mode == SelectionMode.Paint || _mode == SelectionMode.BlockPaint)) return _unready;
             _unreadyRevision = _inputRevision;
             _unreadyAll = _shape != null && _recipe != null ? _editor.AllUnready(_recipe, _shape, _siteCache) : new List<DesignEditor.ReadinessResult>();
             _unready = _unreadyAll.Count > 0 ? _unreadyAll[0] : null;
@@ -372,6 +380,9 @@ namespace Placemaker.Game.Tool
             get
             {
                 if (_mode == SelectionMode.Draw && _draw.Closed) return _draw.Area();
+                // s15: while a stroke runs the outline is stale (rebuilt on mouse-up): show the painted cells.
+                if (Painting && _mode == SelectionMode.Paint) return _paint.Area;
+                if (Painting && _mode == SelectionMode.BlockPaint) return _bpMask.Area;
                 if (_shape != null) return Pricing.PolygonArea(_shape.Ring);
                 if (_mode == SelectionMode.Paint) return _paint.Area;
                 if (_mode == SelectionMode.BlockPaint) return _bpMask.Area;

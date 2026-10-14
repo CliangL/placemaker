@@ -30,7 +30,7 @@ namespace Placemaker.Game.Preview
         public const float Margin = 60f;
         private const int MaxGrid = 256;
         private const int MaxNets = 600;
-        private const int MaxObstacles = 1500;
+        private const int MaxObstacles = 6000;   // s15: every building near the area must be protected
 
         private readonly EntityManager _em;
         private readonly TerrainSystem _terrain;
@@ -109,9 +109,23 @@ namespace Placemaker.Game.Preview
             if (ring == null || ring.Length == 0) return list;
             float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
             foreach (var p in ring) { min = math.min(min, p.xz); max = math.max(max, p.xz); }
-            CaptureNets(min - margin, max + margin, list);
+            min -= margin; max += margin;
+            // s15: one outline rebuild asks for the same box up to three times (attachments, keep-off-roads,
+            // marker follow); each query walks the net tree and reads lane buffers. Reuse within a frame.
+            int frame = UnityEngine.Time.frameCount;
+            if (_netsCache != null && frame == _netsFrame && math.all(min == _netsMin) && math.all(max == _netsMax))
+                return new List<NearbyNet>(_netsCache);
+            CaptureNets(min, max, list);
+            _netsCache = new List<NearbyNet>(list);
+            _netsFrame = frame;
+            _netsMin = min;
+            _netsMax = max;
             return list;
         }
+
+        private List<NearbyNet> _netsCache;
+        private int _netsFrame = -1;
+        private float2 _netsMin, _netsMax;
 
         private Func<float2, float> HeightGrid(float2 min, float2 max)
         {
@@ -270,14 +284,12 @@ namespace Placemaker.Game.Preview
                 {
                     var e = results[i];
                     if (!seen.Add(e)) continue;
-                    if (!_em.HasComponent<global::Game.Buildings.Building>(e) || !_em.HasComponent<global::Game.Objects.Transform>(e)
-                        || !_em.HasComponent<PrefabRef>(e) || _em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) continue;
-                    var prefab = _em.GetComponentData<PrefabRef>(e).m_Prefab;
-                    if (!_em.HasComponent<BuildingData>(prefab)) continue;
-                    var lot = (float2)_em.GetComponentData<BuildingData>(prefab).m_LotSize * 8f;
-                    var tr = _em.GetComponentData<global::Game.Objects.Transform>(e);
-                    var q = global::Game.Objects.ObjectUtils.CalculateBaseCorners(tr.m_Position, tr.m_Rotation, lot);
-                    into.Add(new Obstacle { A = q.a.xz, B = q.b.xz, C = q.c.xz, D = q.d.xz, Kind = ObstacleKind.Building });
+                    // (s15) Lots AND, where larger, collision footprints of buildings and extensions: the build
+                    // safety pass (Core/Build/SiteSafety) keeps everything off them.
+                    if (!BuildingFootprints.IsBuilding(_em, e)) continue;
+                    BuildingFootprints.Of(_em, e, out var lot, out var footprint);
+                    if (lot != null) into.Add(new Obstacle { A = lot[0], B = lot[1], C = lot[2], D = lot[3], Kind = ObstacleKind.Building });
+                    if (footprint != null) into.Add(new Obstacle { A = footprint[0], B = footprint[1], C = footprint[2], D = footprint[3], Kind = ObstacleKind.Building });
                 }
             }
             finally { results.Dispose(); }

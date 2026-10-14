@@ -141,6 +141,7 @@ namespace Placemaker.Game.Build
             _clones = World.GetOrCreateSystemManaged<SurfaceCloneSystem>();
             InitOwner();
             InitGhost();
+            InitProtect();
             _tempQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<PrefabRef>() },
@@ -494,6 +495,10 @@ namespace Placemaker.Game.Build
                 BeginCleanup(BuildPhase.Failed, _errorKey, _errorArgs);
                 return;
             }
+            // (s15) Never apply while the game marks an existing building for removal by our temporaries.
+            int protect = ProtectBuildings();
+            if (protect > 0) { Go(Step.ResetForRetry); return; }
+            if (protect < 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.WouldDemolish"); return; }
             int tagged = TagTemporaries();
             if (TemporariesDuplicated())
             {
@@ -588,6 +593,7 @@ namespace Placemaker.Game.Build
             var groupId = _groupId;
             int dropped = _dropped;
             if (_cleared > 0) NoteSkip("Placemaker.Build.Cleared", null, IssueSeverity.Info, _cleared);
+            if (_buildingsProtected > 0) NoteSkip("Placemaker.Build.BuildingsKept", null, IssueSeverity.Info, _buildingsProtected);
             if (_ownerTemp == Entity.Null) NoteSkip("Placemaker.Build.OwnerUnavailable", null, IssueSeverity.Info, 0);
             var issues = ComposeWarnings(dropped);
             var warnings = new List<string>(_warnings);
@@ -712,6 +718,7 @@ namespace Placemaker.Game.Build
             _errorTypeName = "";
             ResetTerraform();
             ResetOwner();
+            ResetProtect();
             _ownerSuppressed = false;
             _skipped.Clear();
             _notedRings.Clear();
