@@ -126,11 +126,11 @@ namespace Placemaker.Core.Layers.Common
         public static float CornerClear(LayerRegion region) => math.clamp(region.Perimeter / 16f, 4f, 18f);
 
         /// <summary>
-        /// Picks up to <paramref name="wanted"/> outline points facing roads/paths (playtest 4b: never in the
-        /// corners). Candidates are the middles of frontage runs, cut at corners and kept CornerClear away
-        /// from outline corners and road intersections; a path ending at the outline (a desire line) and
-        /// sidewalk frontage weigh more. Selection is farthest-point, weighted, preferring sides not used yet.
-        /// Without frontage: middles of the longest sides.
+        /// Picks up to <paramref name="wanted"/> outline points facing roads/paths: road nodes/crossings on
+        /// the outline, ends of paths that reach it (desire lines) and the middles of frontage runs, then
+        /// (playtest 4b) slides every candidate at least CornerClear away from outline corners and road
+        /// intersections. Farthest-point selection spreads them; without frontage, the longest edge's middle
+        /// and points far from it.
         /// </summary>
         public static List<EdgeMarker> Suggest(AreaInput input, LayerRegion region, string kind, int wanted)
         {
@@ -141,7 +141,6 @@ namespace Placemaker.Core.Layers.Common
             float clear = CornerClear(region);
             var corners = Corners(region);
             var crossings = Intersections(input);
-            var nets = FrontageIndex(input);
             bool AwayFromCorners(float2 p)
             {
                 foreach (var c in corners) if (math.distancesq(c, p) < clear * clear) return false;
@@ -149,88 +148,121 @@ namespace Placemaker.Core.Layers.Common
                 return true;
             }
 
-            // Frontage runs: outline samples within reach of a road or path, away from corners.
-            float step = math.clamp(region.Perimeter / 400f, 1.5f, 6f);
-            int samples = math.max(16, (int)(region.Perimeter / step));
-            var ok = new bool[samples];
-            bool anyFront = false, anyOk = false;
-            for (int i = 0; i < samples; i++)
-            {
-                var p = region.PointAt(region.Perimeter * i / samples, out _, out _, out _);
-                bool front = nets.Clearance(p, FrontageReach + 0.01f) <= FrontageReach;
-                ok[i] = front && AwayFromCorners(p);
-                anyFront |= front; anyOk |= ok[i];
-            }
-            if (anyOk)
-            {
-                int startIdx = 0;
-                while (startIdx < samples && ok[startIdx]) startIdx++;
-                if (startIdx == samples) startIdx = 0;
-                int run = -1;
-                for (int k = 1; k <= samples; k++)
+            // Where a road meets the outline at a node or crossing (nudged off corners below).
+            foreach (var a in input.Shape.Attachments)
+                if (a.Kind == AttachmentKind.RoadCrossing || a.Kind == AttachmentKind.RoadNode)
                 {
-                    int i = (startIdx + k) % samples;
-                    if (ok[i] && run < 0) run = k;
-                    if ((!ok[i] || k == samples) && run >= 0)
-                    {
-                        int len = k - run;
-                        float length = len * region.Perimeter / samples;
-                        if (length >= 3f)
-                        {
-                            int pieces = length > 150f ? 3 : length > 70f ? 2 : 1;
-                            for (int q = 0; q < pieces; q++)
-                            {
-                                float along = (startIdx + run + len * (q + 0.5f) / pieces) * region.Perimeter / samples;
-                                var p = region.PointAt(along, out _, out _, out _);
-                                candidates.Add(p);
-                                weights.Add((1f + length / 300f) * FrontageWeight(input, nets, p));
-                            }
-                        }
-                        run = -1;
-                    }
+                    candidates.Add(region.ClosestOnBoundary(a.Position.xz, out _, out _));
+                    weights.Add(2f);
                 }
-            }
-            // A path that ends at the outline is where people already walk in: a strong candidate.
+            // A path that ends at the outline is where people already walk in.
             foreach (var n in input.Site?.NearbyNets ?? new List<NearbyNet>())
             {
                 if (n.Category != NetCategory.Pathway) continue;
                 foreach (var end in new[] { n.A.xz, n.D.xz })
                 {
                     if (region.BoundaryDistance(end, FrontageReach + 1f) > FrontageReach) continue;
-                    var p = region.ClosestOnBoundary(end, out _, out _);
-                    if (!AwayFromCorners(p)) continue;
-                    candidates.Add(p); weights.Add(2.5f);
+                    candidates.Add(region.ClosestOnBoundary(end, out _, out _));
+                    weights.Add(2.5f);
                 }
+            }
+
+            // Frontage runs: outline samples within reach of a road (attachment along edge or nearby net).
+            var roads = RoadSegments(input);
+            float step = math.clamp(region.Perimeter / 400f, 2f, 8f);
+            int samples = math.max(8, (int)(region.Perimeter / step));
+            var front = new bool[samples];
+            for (int i = 0; i < samples; i++)
+            {
+                var p = region.PointAt(region.Perimeter * i / samples, out _, out _, out _);
+                front[i] = roads.Clearance(p, FrontageReach + 0.01f) <= FrontageReach;
+            }
+            bool all = true; foreach (var f in front) all &= f;
+            if (all)
+            {
+                // Fully surrounded: candidates at the middle of every long edge.
+                for (int e = 0; e < region.Ring.Length; e++)
+                {
+                    var a = region.Ring[e]; var b = region.Ring[(e + 1) % region.Ring.Length];
+                    if (math.distance(a, b) < 12f) continue;
+                    candidates.Add(math.lerp(a, b, 0.5f)); weights.Add(1f + math.distance(a, b) / 200f);
+                }
+            }
+            else
+            {
+                int startIdx = 0;
+                while (startIdx < samples && front[startIdx]) startIdx++;   // begin at a non-front sample
+                int run = -1;
+                for (int k = 1; k <= samples; k++)
+                {
+                    int i = (startIdx + k) % samples;
+                    if (front[i] && run < 0) run = k;
+                    if ((!front[i] || k == samples) && run >= 0)
+                    {
+                        int len = k - run;
+                        float length = len * region.Perimeter / samples;
+                        if (length >= 6f)
+                        {
+                            int pieces = length > 150f ? 3 : length > 70f ? 2 : 1;
+                            for (int q = 0; q < pieces; q++)
+                            {
+                                float along = (startIdx + run + len * (q + 0.5f) / pieces) * region.Perimeter / samples;
+                                candidates.Add(region.PointAt(along, out _, out _, out _));
+                                weights.Add(1f + length / 300f);
+                            }
+                        }
+                        run = -1;
+                    }
+                }
+            }
+
+            // Playtest 4b: never in the corners. Frontage candidates closer than CornerClear to an outline
+            // corner or a road intersection slide along the outline until clear (and still facing the road),
+            // or are dropped.
+            bool roadside = candidates.Count > 0;
+            for (int i = candidates.Count - 1; i >= 0; i--)
+            {
+                if (AwayFromCorners(candidates[i])) continue;
+                region.ClosestOnBoundary(candidates[i], out int seg, out float t);
+                float along = region.AlongOf(seg, t);
+                bool moved = false;
+                for (float d = 2f; d <= clear * 2.5f && !moved; d += 2f)
+                    foreach (float sgn in new[] { 1f, -1f })
+                    {
+                        var p = region.PointAt(along + sgn * d, out _, out _, out _);
+                        if (!AwayFromCorners(p) || roads.Clearance(p, FrontageReach + 0.01f) > FrontageReach) continue;
+                        candidates[i] = p; moved = true; break;
+                    }
+                if (!moved) { candidates.RemoveAt(i); weights.RemoveAt(i); }
             }
 
             if (candidates.Count == 0)
             {
-                // No usable frontage: the middles of the longest sides (corner-free by construction).
-                var sides = new List<(float len, int e)>();
+                // No road anywhere (or only at corners): midpoint of the longest edge, then farthest points from it.
+                int longest = 0; float len = 0;
                 for (int e = 0; e < region.Ring.Length; e++)
-                    sides.Add((math.distance(region.Ring[e], region.Ring[(e + 1) % region.Ring.Length]), e));
-                sides.Sort((a, b) => b.len.CompareTo(a.len));
-                for (int i = 0; i < sides.Count && i < math.max(4, wanted * 2); i++)
                 {
-                    var (len, e) = sides[i];
-                    var p = math.lerp(region.Ring[e], region.Ring[(e + 1) % region.Ring.Length], 0.5f);
+                    float l = math.distance(region.Ring[e], region.Ring[(e + 1) % region.Ring.Length]);
+                    if (l > len) { len = l; longest = e; }
+                }
+                candidates.Add(math.lerp(region.Ring[longest], region.Ring[(longest + 1) % region.Ring.Length], 0.5f));
+                weights.Add(1f);
+                int extra = math.max(0, wanted - 1);
+                for (int i = 0; i < 16 && extra > 0; i++)
+                {
+                    var p = region.PointAt(region.Perimeter * (i + 0.5f) / 16f, out _, out _, out _);
+                    // Off-road outlines (tests, open land) keep their old spread; with roads about, still no corners.
+                    if (roadside && !AwayFromCorners(p)) continue;
                     candidates.Add(p);
-                    weights.Add((anyFront && nets.Clearance(p, FrontageReach + 0.01f) <= FrontageReach ? 1.5f : 1f) * (0.5f + len / math.max(1f, sides[0].len)));
+                    weights.Add(0.5f);
                 }
             }
 
-            // Farthest-point selection weighted by candidate strength; first = strongest; new sides preferred.
-            var sideOf = new int[candidates.Count];
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                region.ClosestOnBoundary(candidates[i], out int s, out _);
-                sideOf[i] = SideIndex(region, corners, s);
-            }
+            // Farthest-point selection weighted by candidate strength; first = strongest.
             var chosen = new List<int>();
-            var usedSides = new HashSet<int>();
             int first = 0;
             for (int i = 1; i < candidates.Count; i++) if (weights[i] > weights[first]) first = i;
-            chosen.Add(first); usedSides.Add(sideOf[first]);
+            chosen.Add(first);
             float minSpacing = math.max(20f, region.Perimeter / (wanted * 3f));
             while (chosen.Count < wanted)
             {
@@ -241,11 +273,11 @@ namespace Placemaker.Core.Layers.Common
                     float d = float.MaxValue;
                     foreach (int c in chosen) d = math.min(d, math.distance(candidates[i], candidates[c]));
                     if (d < minSpacing) continue;
-                    float score = d * weights[i] * (usedSides.Contains(sideOf[i]) ? 1f : 1.6f);
+                    float score = d * weights[i];
                     if (score > bestScore) { bestScore = score; best = i; }
                 }
                 if (best < 0) break;
-                chosen.Add(best); usedSides.Add(sideOf[best]);
+                chosen.Add(best);
             }
 
             foreach (int c in chosen)
@@ -255,17 +287,6 @@ namespace Placemaker.Core.Layers.Common
                 result.Add(new EdgeMarker { Kind = kind, RingSegment = seg, RingT = t, Position = new float3(p.x, y, p.y) });
             }
             return result;
-        }
-
-        /// <summary>Sidewalks and paths bring people: frontage with them weighs more.</summary>
-        private static float FrontageWeight(AreaInput input, SegmentIndex nets, float2 p)
-        {
-            int s = nets.Nearest(p, FrontageReach + 0.01f, out _);
-            if (s < 0) return 1f;
-            int code = nets.Segments[s].Kind;
-            if (code < 0) return 1f;
-            var n = input.Site.NearbyNets[code];
-            return n.Category == NetCategory.Pathway || n.HasSidewalk ? 1.3f : 1f;
         }
 
         /// <summary>Outline vertices that turn by more than CornerAngle.</summary>

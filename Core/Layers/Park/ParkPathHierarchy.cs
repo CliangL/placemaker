@@ -225,7 +225,7 @@ namespace Placemaker.Core.Layers.Park
 
         /// <summary>
         /// Entrances no path reaches yet get a straight link to the nearest path: a service entrance a
-        /// service track (gravel, wide), a bike entrance without a route a bike path, anything else a thin
+        /// service track (gravel), a bike entrance without a route a bike path, anything else a thin
         /// path. Hosts are split at the junction. Links that would leave the park are skipped.
         /// </summary>
         public static void ConnectLooseGates(LayerContext ctx, ParkSite s)
@@ -241,7 +241,7 @@ namespace Placemaker.Core.Layers.Park
                 var link = Link(s, g.Position);
                 if (link == null) continue;
                 string kind = EntranceKinds.Normalize(g.Kind);
-                var role = kind == EntranceKinds.Service || kind == EntranceKinds.Bike || kind == EntranceKinds.Main ? NetRole.PathwayWide : NetRole.Pathway;
+                var role = kind == EntranceKinds.Bike || kind == EntranceKinds.Main ? NetRole.PathwayWide : NetRole.Pathway;
                 link.Role = role; link.HalfWidth = Composer.DefaultHalfWidth(role);
                 link.Tier = kind == EntranceKinds.Service ? PathTier.Service : kind == EntranceKinds.Bike ? PathTier.Bike : PathTier.Main;
                 link.Kind = PathEdgeKind.Secondary;

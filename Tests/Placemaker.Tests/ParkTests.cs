@@ -131,9 +131,10 @@ namespace Placemaker.Tests
             var gen = TestKit.Gen("park");
             var markers = gen.SuggestMarkers(TestKit.Input(Hectare5, site: TestKit.RoadAlongBottom(250)));
             Assert.NotEmpty(markers);
-            Assert.All(markers, m => Assert.Equal("entrance", m.Kind));
+            Assert.All(markers, m => Assert.Contains(m.Kind, EntranceKinds.Park));
             Assert.All(markers, m => Assert.True(m.Position.z < 1f, "entrance not on the road side: " + m.Position));
-            Assert.True(gen.CheckReady(TestKit.Input(Hectare5)).Ready);
+            // Playtest 4b: suggestions are hints; Build needs a placed entrance.
+            Assert.False(gen.CheckReady(TestKit.Input(Hectare5)).Ready);
         }
 
         [Fact]

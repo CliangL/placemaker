@@ -236,38 +236,30 @@ namespace Placemaker.Core.Layers.Park
         public override Readiness CheckReady(AreaInput input) => Entrances.RequireTyped(input, EntranceKinds.Park);
 
         /// <summary>
-        /// Walk gates first (pedestrian, main, and bike gates when no bike route will take them), then the
-        /// bike gates the route serves, then service gates. <paramref name="walkCount"/> = number of walk gates.
+        /// Walk gates first (pedestrian, main and bike — a bike entrance is bike + pedestrian, so the walk
+        /// reaches it too and the bike route starts at the same point), then service gates, which only the
+        /// service track reaches. <paramref name="walkCount"/> = number of walk gates.
         /// </summary>
-        public static List<Gate> OrderGates(List<Gate> all, bool bikeRoute, out int walkCount)
+        public static List<Gate> OrderGates(List<Gate> all, out int walkCount)
         {
-            int bikes = 0;
-            foreach (var g in all) if (g.Kind == EntranceKinds.Bike) bikes++;
-            bool routeTakesBikes = bikeRoute && bikes >= 2;
-            var walk = new List<Gate>(); var bike = new List<Gate>(); var service = new List<Gate>();
-            foreach (var g in all)
-            {
-                if (g.Kind == EntranceKinds.Service) service.Add(g);
-                else if (g.Kind == EntranceKinds.Bike && routeTakesBikes) bike.Add(g);
-                else walk.Add(g);
-            }
-            // Only bike entrances: people walk in through them too (the walk shares the bike gates).
-            if (walk.Count == 0 && bike.Count > 0) { walk.AddRange(bike); bike.Clear(); }
+            var walk = new List<Gate>(); var service = new List<Gate>();
+            foreach (var g in all) (g.Kind == EntranceKinds.Service ? service : walk).Add(g);
             walkCount = walk.Count;
-            walk.AddRange(bike);
             walk.AddRange(service);
             return walk;
         }
 
-        /// <summary>Entrance kind drives the path: from a main entrance a wide walk, from the others a thin path.</summary>
-        private static void GatePathWidths(ParkSite s, string widthMode)
+        /// <summary>Entrance kind drives the path: from a main entrance a wide walk; from the others a thin path ("narrow", the default), the style's own width otherwise.</summary>
+        private static void GatePathWidths(ParkSite s, string widthMode, bool grandMain)
         {
             foreach (var c in s.Curves)
             {
                 string ka = c.GateA >= 0 && c.GateA < s.Gates.Count ? s.Gates[c.GateA].Kind : null;
                 string kd = c.GateD >= 0 && c.GateD < s.Gates.Count ? s.Gates[c.GateD].Kind : null;
                 if (ka == null && kd == null) continue;
-                var role = ka == EntranceKinds.Main || kd == EntranceKinds.Main || widthMode == "wide" ? NetRole.PathwayWide : NetRole.Pathway;
+                bool main = grandMain && (ka == EntranceKinds.Main || kd == EntranceKinds.Main);
+                if (!main && widthMode != "narrow") continue;
+                var role = main ? NetRole.PathwayWide : NetRole.Pathway;
                 c.Role = role; c.HalfWidth = Composer.DefaultHalfWidth(role);
                 if (role == NetRole.PathwayWide) c.Kind = PathEdgeKind.Primary;
             }
@@ -291,14 +283,14 @@ namespace Placemaker.Core.Layers.Park
                     uint v = Hashing.Mix(ctx.Seed, 0x6A7Eu + (uint)gi * 2u + (side > 0 ? 1u : 0u));
                     var pp = g.Position + inward * 1.6f + tangent * side * (hw + 1.4f);
                     float yaw = math.atan2(inward.x, inward.y);
-                    if (region.ContainsDisc(pp, 0.8f) && !s.Occ.Corridors.Overlaps(pp, 0.8f))
+                    if (region.ContainsDisc(pp, 0.8f) && !s.Occ.Corridors.Overlaps(pp, 1.2f) && !s.Occ.Discs.Overlaps(pp, 1f))
                     {
                         ctx.Object(pp, yaw, ObjectRole.Planter, planter, v);
                         s.Occ.Take(pp, 1f, 2);
                         made++;
                     }
-                    var lp = g.Position + inward * 4.5f + tangent * side * (hw + 1f);
-                    if (ctx.B("lamps") && region.ContainsDisc(lp, 0.5f) && !s.Occ.Corridors.Overlaps(lp, 0.3f))
+                    var lp = g.Position + inward * 4.5f + tangent * side * (hw + 1.6f);
+                    if (ctx.B("lamps") && region.ContainsDisc(lp, 0.5f) && !s.Occ.Corridors.Overlaps(lp, 1.2f) && !s.Occ.Discs.Overlaps(lp, ParkPlanting.LampRadius))
                     {
                         s.Items.Add(new ParkItem { Kind = ParkItemKind.Lamp, Position = lp, Yaw = yaw, Radius = ParkPlanting.LampRadius, Variant = v, Age = -1 });
                         s.Occ.Take(lp, ParkPlanting.LampRadius, 2);
@@ -326,8 +318,8 @@ namespace Placemaker.Core.Layers.Park
             int wantedGates = Entrances.WantedByArea(region.Area);
             var tiers = PathHierarchyOptions.From(ctx.Settings);
             // Typed entrances (pedestrian, bike, main, service): walk gates first (the main walk's gate
-            // indices), then bike gates the bike route serves on its own, then service gates.
-            var gates = OrderGates(Entrances.ResolveTyped(ctx.Input, region, wantedGates, EntranceKinds.Park), tiers.Bike, out int walkCount);
+            // indices), then service gates.
+            var gates = OrderGates(Entrances.ResolveTyped(ctx.Input, region, wantedGates, EntranceKinds.Park), out int walkCount);
 
             // 0. Places carved out for features (only when a child will fill them).
             float2[] plaza = Array.Empty<float2>();
@@ -417,7 +409,7 @@ namespace Placemaker.Core.Layers.Park
                 s.Graph = graph;
                 s.Curves = ParkPaths.Build(s.Graph, region, curved, widthMode);
                 if (math.any(avenueA != avenueB)) WidenAvenue(s.Curves, avenueA, avenueB, widthMode);
-                GatePathWidths(s, widthMode);
+                GatePathWidths(s, widthMode, pathStyle != "woodlandTrail");   // a trail park has no grand walk
                 if (plaza.Length >= 3)
                 {
                     s.Curves = ParkPlaces.ClipAndConnect(s.Curves, plaza, region, out int joins);
@@ -635,7 +627,7 @@ namespace Placemaker.Core.Layers.Park
                 if (!ctx.Input.HasChildTarget(Amenities.Place(spec.Layer))) continue;
                 ctx.Check();
                 string at = ctx.S(Amenities.AtControl(spec.Layer));
-                if (!Amenities.TrySolve(s.LayerRegion, s.Occ, spec.Length, spec.Width, at, gatePoints, Hashing.Mix(ctx.Seed, Seeds.Hash(spec.Layer)), blocked, out var rect, out bool moved))
+                if (!Amenities.TrySolve(s.LayerRegion, s.Occ, spec.Length, spec.Width, at, gatePoints, Hashing.Mix(ctx.Seed, Seeds.Hash(spec.Layer)), blocked, out var rect, out bool moved, 2.5f))   // room for its "path to it" beside thin paths
                 {
                     ctx.Issue(IssueSeverity.Warning, "Placemaker.Park.Issue.NoRoomForAmenity", "Placemaker.Feature." + spec.Layer);
                     continue;
@@ -673,7 +665,8 @@ namespace Placemaker.Core.Layers.Park
                         float d = dest.Distance(p);
                         if (d < bestD) { bestD = d; bestCurve = i; bestT = k / 32f; q = p; }
                     }
-                if (bestCurve < 0 || bestD <= 3.5f) continue;
+                // Already beside a path only when the path's edge (not its centre line) touches the destination.
+                if (bestCurve < 0 || bestD - s.Curves[bestCurve].HalfWidth <= 0.75f) continue;
                 var end = dest.Rim(q);
                 bool ok = true;
                 for (int k = 1; k < 10 && ok; k++)

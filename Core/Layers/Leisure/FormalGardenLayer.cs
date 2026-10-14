@@ -70,12 +70,15 @@ namespace Placemaker.Core.Layers.Leisure
             var pts = LeisureKit.Points(gates);
             var graph = ParkPathStyles.Formal(region, pts, p => region.ContainsDisc(p, 2f));
             var curves = ParkPaths.Build(graph, region, false, "wide");
+            // The axes end at the round point's edge (an axis between two opposite entrances would
+            // otherwise run straight across the basin).
+            float rp = math.clamp(ins * 0.22f, 5f, 12f);
+            curves = ParkPlaces.ClipAndConnect(curves, LayerRegion.Circle(centre, rp, 24), region, out _);
             ParkPaths.Index(curves, occ.Corridors, 100);
             ParkPaths.Index(curves, occ.Paths, 100);
             ParkPaths.Emit(ctx, curves, gates, AssetMix.One(ctx.S("pathAsset")));
 
             // Round point with the basin.
-            float rp = math.clamp(ins * 0.22f, 5f, 12f);
             ctx.Surface(LayerRegion.Circle(centre, rp, 24), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
             occ.Take(centre, rp, 0);
             if (ctx.B("fountain"))

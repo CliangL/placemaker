@@ -118,7 +118,7 @@ namespace Placemaker.Tests
             var plan = Plan(Bag(null, ("bikePath", true)), TestKit.Rect(40, 30));
             Assert.False(plan.HasErrors);
             Assert.DoesNotContain(plan.Nets, IsBike);
-            Assert.Contains(plan.Issues, i => i.Key == "Placemaker.Park.Issue.BikeNeedsTwoEntrances" || i.Key == "Placemaker.Park.Issue.NoBikeRoute");
+            Assert.Contains(plan.Issues, i => i.Key == "Placemaker.Park.Issue.BikeNeedsTwoEntrances" || i.Key == "Placemaker.Park.Issue.NoBikeEntrances" || i.Key == "Placemaker.Park.Issue.NoBikeRoute");
         }
 
         [Fact]
