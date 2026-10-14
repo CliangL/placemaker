@@ -12,10 +12,14 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Park
 {
+    /// <summary>Path hierarchy tier (ParkPathHierarchy.cs): decides which asset a curve is built with.</summary>
+    public enum PathTier { Main = 0, Small = 1, Trail = 2, Bike = 3, Desire = 4 }
+
     public sealed class PathCurve
     {
         public float2 A, B, C, D;
         public NetRole Role;
+        public PathTier Tier;
         public float HalfWidth;
         public PathEdgeKind Kind;
         /// <summary>Gate index at the A / D end, −1 when interior.</summary>
@@ -154,12 +158,16 @@ namespace Placemaker.Core.Layers.Park
         }
 
         /// <summary>Emits PlannedNets, attaching gate ends to existing roads when known.</summary>
-        public static float Emit(LayerContext ctx, List<PathCurve> curves, List<Gate> gates, AssetRef asset)
+        public static float Emit(LayerContext ctx, List<PathCurve> curves, List<Gate> gates, AssetRef asset) =>
+            Emit(ctx, curves, gates, _ => asset);
+
+        /// <summary>Emits PlannedNets with one asset per hierarchy tier.</summary>
+        public static float Emit(LayerContext ctx, List<PathCurve> curves, List<Gate> gates, System.Func<PathTier, AssetRef> assetFor)
         {
             float total = 0;
             foreach (var c in curves)
             {
-                var net = ctx.CurvedNet(c.A, c.B, c.C, c.D, c.Role, asset);
+                var net = ctx.CurvedNet(c.A, c.B, c.C, c.D, c.Role, assetFor(c.Tier));
                 if (c.GateA >= 0 && c.GateA < gates.Count && gates[c.GateA].AttachId >= 0)
                 { net.StartAttach = gates[c.GateA].AttachId; net.StartAttachT = gates[c.GateA].AttachT; }
                 if (c.GateD >= 0 && c.GateD < gates.Count && gates[c.GateD].AttachId >= 0)
