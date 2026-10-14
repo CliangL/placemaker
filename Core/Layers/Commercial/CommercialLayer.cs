@@ -3,6 +3,7 @@
 // from the Park, Plaza and Market square planners. Shared controls read the same on every type
 // (labels Placemaker.Commercial.<id>, zone type Placemaker.Zone.*).
 
+using System;
 using System.Collections.Generic;
 using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
@@ -24,13 +25,18 @@ namespace Placemaker.Core.Layers.Commercial
         public override float MinArea => 2500f;
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Paved, StreetFrontage.ShopsTag };
 
-        /// <summary>Few, cheap features: the composition itself is the type.</summary>
+        /// <summary>
+        /// Few, cheap features: the composition itself is the type. (s25) The "flatten terrain" feature is gone: one plane
+        /// over lanes, lots and plots on a slope dug the plots in and banked the lanes; the type grades itself now
+        /// (MallGrading, the lots' LotGrading). Decal sprinkles are off by default: the lots' own dressing (s21) is enough,
+        /// the cracks theme put dark blobs all over the lot (playtest).
+        /// </summary>
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
-            Feature("decals", ("theme", "cracks"), ("ground", "paved"), ("density", 0.4)), Feature("terrain", ("shape", "flatten")),
+            Feature("decals", ("theme", "cracks"), ("ground", "paved"), ("density", 0.4)),
         };
 
-        protected override string[] DefaultFeatures => new[] { "decals" };
+        protected override string[] DefaultFeatures => Array.Empty<string>();
 
         /// <summary>Zone type, plot depth and the parking options shared by every commercial type.</summary>
         protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "")
@@ -42,7 +48,7 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 if (lotSize != null) Shared(c.Choice("lotSize", lotSize, ControlTier.Essential, "parking", "small", "medium", "large")).Tip();
                 Shared(c.Choice("stallAngle", "90", ControlTier.More, "parking", "90", "60", "45")).When(lotWhen);
-                Shared(c.Choice("lotGreen", "edges", ControlTier.More, "parking", "none", "edges", "medians")).Tip().When(lotWhen);
+                Shared(c.Choice("lotGreen", "medians", ControlTier.More, "parking", "none", "edges", "medians")).Tip().When(lotWhen);
                 Shared(c.Slider("evShare", 4, 0, 30, 1, "%", ControlTier.More, "parking")).Tip().When(lotWhen);
                 Shared(c.Toggle("lamps", true, ControlTier.More, "parking")).When(lotWhen);
             }

@@ -212,7 +212,7 @@ namespace Placemaker.Game.Build
                         if (!_ownerSuppressed) { _ownerSuppressed = true; newly++; Mod.Log.Warn("Placemaker: the game rejected the owner lot; building without it."); }
                         continue;
                     }
-                    if (_itemByKey.TryGetValue(exact, out var hitItem)) { newly += Exclude(hitItem); continue; }
+                    if (_itemByKey.TryGetValue(exact, out var hitItem)) { newly += Exclude(hitItem, exact: true); continue; }
                 }
                 probes.Clear();
                 if (EntityManager.HasComponent<Curve>(e))
@@ -237,10 +237,13 @@ namespace Placemaker.Game.Build
         }
 
         /// <summary>(s22) What the last ExcludeErroneousItems left out, by kind (for the log).</summary>
-        private int _exNets, _exObjects, _exSurfaces, _exAreas;
+        private int _exNets, _exObjects, _exSurfaces, _exAreas, _keptFunctional, _taggedBays;
 
-        private int Exclude(WorkItem w)
+        private int Exclude(WorkItem w, bool exact = false)
         {
+            // (s25) Stall markings, chargers and arrows are never left out because something NEAR them failed (the probe
+            // match); one that is itself rejected goes only after two retries did not settle it (PlanWork.Excludable).
+            if (!PlanWork.Excludable(_request?.Plan, w) && !(exact && _excludeAttempts >= 2)) { _keptFunctional++; return 0; }
             if (!_excluded.Add(PlanWork.Key(w))) return 0;
             if (w.Kind == WorkKind.Net) _exNets++;
             else if (w.Kind == WorkKind.Surface) _exSurfaces++;
@@ -264,6 +267,7 @@ namespace Placemaker.Game.Build
             _tagged.Clear();
             int unmatched = 0, unmatchedEdges = 0;
             _taggedCounts = default;
+            _taggedBays = 0;
             var nodeRefs = new Dictionary<Entity, int2>();   // x = all temp edges, y = our edges
             bool carrier = _carrier != Entity.Null && EntityManager.Exists(_carrier);
             using var temps = _tempQuery.ToEntityArray(Allocator.Temp);
@@ -308,6 +312,7 @@ namespace Placemaker.Game.Build
                 }
                 if (role == MemberRole.ParkingAisle && carrier)
                     EntityManager.GetBuffer<global::Game.Net.SubNet>(_carrier).Add(new global::Game.Net.SubNet(e));
+                if (role == MemberRole.ParkingBay) _taggedBays++;
                 if (role == MemberRole.ParkingBay && carrier)
                 {
                     // Bare carrier owner (PLT): LaneConnectionSystem walks Owner/Attached to find the
@@ -327,6 +332,12 @@ namespace Placemaker.Game.Build
             Mod.Log.Info($"Placemaker tagged {_tagged.Count} temporary parts for group {_groupId}"
                 + (unmatched > 0 ? $" ({unmatched} objects/areas adopted without a plan match)" : "")
                 + (unmatchedEdges > 0 ? $"; {unmatchedEdges} unmatched new edges left to the city" : "") + ".");
+            int markings = PlanWork.StallMarkings(_request?.Plan);
+            if (markings > 0)
+            {
+                string msg = $"Placemaker parking: {_taggedBays} of {markings} stall markings built" + (carrier ? "" : " (no carrier)") + (_keptFunctional > 0 ? $"; {_keptFunctional} kept despite collision errors" : "") + ".";
+                if (_taggedBays < markings) Mod.Log.Warn(msg); else Mod.Log.Info(msg);
+            }
             return _tagged.Count;
         }
 

@@ -82,6 +82,8 @@ namespace Placemaker.Core.Layers.Commercial
             // Lane entrances between and beside the street ones, so cars can circulate lot ↔ shops.
             entrances.Add((r.At(math.lerp(s0, s1, 0.5f), lt), "alley"));
             if (s1 - s0 > 120f) { entrances.Add((r.At(math.lerp(s0, s1, 0.12f) + 4f, lt), "alley")); entrances.Add((r.At(math.lerp(s0, s1, 0.88f) - 4f, lt), "alley")); }
+            // (s25) Walkways from the lot to the shop fronts across the lane (a footpath meeting the lane at a node).
+            Walkways(entrances, r, s0, s1, lt);
             mall.Lot(Mall.Rect(r, s0 + 2 * h, s1 - 2 * h, 0f, lt), entrances, Mall.Parking(ctx), 0xA1u);
             // The shop row faces the lot across the lane's back run (and wraps the legs' ends).
             mall.ShopRow(r, s0, s1, lt + 2 * h, cells);
@@ -107,6 +109,7 @@ namespace Placemaker.Core.Layers.Commercial
                 float t0 = back + 2 * h, lt = Mall.LotDepth(aisles);
                 var entrances = new List<(float2, string)>();
                 LotEntrances(entrances, r, s0, s1, t0, "alley");
+                Walkways(entrances, r, s0, s1, t0);
                 if (!mall.Lot(Mall.Rect(r, s0, s1, t0, t0 + lt), entrances, Mall.Parking(ctx), 0xA2u)) ctx.Issue(IssueSeverity.Info, NoLotKey);
             }
             else ctx.Issue(IssueSeverity.Info, NoLotKey);
@@ -174,6 +177,14 @@ namespace Placemaker.Core.Layers.Commercial
             float bFrom = b.From + backT + h + d + 4f;
             if (b.To - bFrom > 2 * Mall.Cell) mall.ShopRow(b, bFrom, b.To - (b.EndCorner ? 2f : 0f), 0f, cells);
             return true;
+        }
+
+        /// <summary>Two pedestrian entrances (PLT Fussweg) on the lot edge at t, between the car entrances.</summary>
+        private static void Walkways(List<(float2, string)> list, StreetShops.Run r, float s0, float s1, float t)
+        {
+            if (s1 - s0 < 60f) return;
+            list.Add((r.At(math.lerp(s0, s1, 0.32f), t), "footpath"));
+            list.Add((r.At(math.lerp(s0, s1, 0.68f), t), "footpath"));
         }
 
         private static float2[] Poly4(float2 a, float2 b, float2 c, float2 d) => Geometry.Poly.EnsureCcw(new[] { a, b, c, d });

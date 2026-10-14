@@ -342,13 +342,13 @@ namespace Placemaker.Game.Build
             // variations do not turn a row of one bench into a mix (FEEDBACK-2 #1).
             int? seed = AutoAssets.IsUniform(w.Category) ? AutoAssets.UniformSeed(w.Category, (uint)_groupId) : (int?)null;
             float elevation = SinkDecals && o.Role == ObjectRole.Decal ? DecalSink : 0f;
-            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation);
+            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation, optional: !PlanWork.IsFunctional(o.Role));
             NoteUsed(prefab);
         }
 
         private static readonly float[] AgeStages = { 0f, 0.17500001f, 0.425f, 0.77500004f };   // ToolUtils.GetRandomAge
 
-        private void EmitObjectDefinition(Entity prefab, float3 position, float yaw, float scale, int age, uint variation, long key, bool snapToGround, int? randomSeed = null, float elevation = 0f)
+        private void EmitObjectDefinition(Entity prefab, float3 position, float yaw, float scale, int age, uint variation, long key, bool snapToGround, int? randomSeed = null, float elevation = 0f, bool optional = true)
         {
             _objectIndex = _objectIndex ?? new PlanIndex();
             var p = position;
@@ -360,7 +360,8 @@ namespace Placemaker.Game.Build
                 m_Prefab = prefab,
                 m_RandomSeed = randomSeed ?? (int)Seeds.Mix(variation, (uint)key),
                 // Ghost: a colliding object is silently cancelled (hidden, no error icon) like a vanilla brush.
-                m_Flags = _gEmission ? CreationFlags.Optional : 0,
+                // (s25) Never for functional parking pieces (PlanWork.IsFunctional): overlapping optional bays cancel each other.
+                m_Flags = _gEmission && optional ? CreationFlags.Optional : 0,
             });
             EntityManager.AddComponent<Updated>(def);
             EntityManager.AddComponentData(def, new ObjectDefinition

@@ -34,7 +34,8 @@ namespace Placemaker.Core.Layers.Parking
             var plan = new AreaPlan { GeneratorId = ParkingLayer.LayerId };
             var site = input.Site ?? new SiteContext();
             Func<float2, float> h = site.HeightAt ?? (_ => 0f);
-            float H(double2 p) { try { return h(new float2((float)p.x, (float)p.y)); } catch (Exception) { return 0f; } }
+            Func<double2, float> ground = p => { try { return h(new float2((float)p.x, (float)p.y)); } catch (Exception) { return 0f; } };
+            Func<double2, float> H = ground;
 
             // ── outline ──
             var world = new List<double2>(input.Shape.Ring.Length);
@@ -169,6 +170,27 @@ namespace Placemaker.Core.Layers.Parking
             }
             cancel.ThrowIfCancellationRequested();
 
+            // ── grading (s25): level tiers with ramps between them; everything below stands on the graded ground ──
+            if (s.Grading)
+            {
+                var grading = LotGrading.Grade(layout, ground, cancel, zoning.Quads.Count == 0 ? world : null);
+                plan.Facts["gradeTiers"] = grading.Tiers;
+                if (grading.Height != null)
+                {
+                    plan.Terraform.AddRange(grading.Pieces);
+                    H = grading.Height;
+                    var graded = grading.Height;
+                    plan.HeightAfter = p => graded(new double2(p.x, p.y));
+                    plan.Facts["gradeMaxCut"] = grading.MaxCut;
+                    plan.Facts["gradeMaxFill"] = grading.MaxFill;
+                    plan.Facts["gradeRowGrade"] = grading.RowGrade;
+                    plan.Facts["gradeMaxStep"] = grading.MaxStep;
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = Layers.Common.TerrainShaper.PermanentKey });
+                    if (Math.Max(grading.MaxCut, grading.MaxFill) > 2.5f)
+                        plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = K + "Issue.SteepGrade", Args = new object[] { Math.Round(Math.Max(grading.MaxCut, grading.MaxFill), 1) } });
+                }
+            }
+
             Emit(plan, layout, s, site, H, input, cancel, roads, zoning.MaxDepth);
             EmitBusStops(plan, busStops, world, roads, site, H);
             EmitZoning(plan, layout, zoning, s, H);
@@ -297,7 +319,7 @@ namespace Placemaker.Core.Layers.Parking
             }
 
             // ── surfaces & regions ──
-            var asphaltAsset = ParkingAssets.Pick(s.AsphaltAsset, ParkingAssets.Asphalt, ParkingAssets.AsphaltVanilla);
+            var asphaltAsset = ParkingAssets.Pick(s.AsphaltAsset, ParkingAssets.Asphalt, ParkingAssets.AsphaltEai, ParkingAssets.AsphaltVanilla);
             var greenAsset = ParkingAssets.Pick(s.GreenAsset, ParkingAssets.Grass);
             double covered = 0;
             int lotRegion = 0, greenRegion = 0;
