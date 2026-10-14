@@ -559,7 +559,8 @@ namespace Placemaker.Game.Build
             if (stillTemp > 0) Mod.Log.Warn($"Placemaker: {stillTemp} parts stayed temporary after Apply; they are discarded.");
             AdoptStrays();
             _registry.MarkDirty();
-            int members = _registry.CountMembers(_groupId, false);
+            // Loose builds (road grids) have no group: count what this build claimed and Apply kept.
+            int members = LooseBuild ? CountAppliedClaimed() : _registry.CountMembers(_groupId, false);
             if (members == 0)
             {
                 CollectErrors();
@@ -582,7 +583,8 @@ namespace Placemaker.Game.Build
                 BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Duplicated");
                 return;
             }
-            FinishRecord();
+            if (LooseBuild) Mod.Log.Info($"Placemaker loose build: {CountAppliedClaimed()} parts are ordinary city content (no group).");
+            else FinishRecord();
             RestoreTool();
             var groupId = _groupId;
             int dropped = _dropped;
@@ -701,6 +703,7 @@ namespace Placemaker.Game.Build
             _itemPrefab.Clear();
             _itemByKey.Clear();
             _tagged.Clear();
+            _claimed.Clear();
             _usedPrefabNames.Clear();
             _usedPrefabs.Clear();
             _preexisting.Clear();

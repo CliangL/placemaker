@@ -92,6 +92,7 @@ namespace Placemaker.Game.Build
         /// <summary>Emits the owner lot definition (first EmitRest frame). No-op when unavailable.</summary>
         private void EmitOwnerArea()
         {
+            if (LooseBuild) return;   // roads are just roads: nothing to select as one thing
             if (_ownerSuppressed || _ownerPrefabs == null) return;
             _ownerPrefab = _ownerPrefabs.ReadyPrefab;
             if (_ownerPrefab == Entity.Null) return;
@@ -131,6 +132,7 @@ namespace Placemaker.Game.Build
         private void EmitClearDefinitions()
         {
             _cleared = 0;
+            if (LooseBuild) return;   // road grids keep the trees; the game clears what a road overlaps
             if (!ClearExistingObjects || _clearQuery == null || _clearQuery.IsEmptyIgnoreFilter) return;
             var outline = BuildOutline();
             if (outline == null) return;
