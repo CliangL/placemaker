@@ -52,6 +52,7 @@ namespace Placemaker.Tests
                     if (f.Target.Length > 0) Assert.Contains(f.Target, g.Emits);
                 }
             Assert.Equal(new[] { "plaza", "playground", "pond", "picnic", "restrooms", "fountain", "bigtrees", "flowerbeds", "shops", "edgeZoning", "rocks", "ground", "decals", "terrain",
+                    "runningTrack", "cricketGround", "pitch", "baseballDiamond", "tennisCourts", "basketballCourt", "skateBowl",
                     "volleyball", "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "dogRun", "noticeboard",
                     "bigStatue", "folly", "obelisk", "triumphalArch", "sculptureWalk", "terraceGarden" },
                 Features.Of(GeneratorRegistry.Get("park")).Select(f => f.Layer).ToArray());
