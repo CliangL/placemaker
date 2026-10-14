@@ -116,7 +116,7 @@ namespace Placemaker.Game.Build
                 var settings = CourseFitSettings.Default;
                 settings.FollowTerrain = net.FollowTerrain;
                 settings.MaxLength = _catalog.MaxEdgeLength(prefab);
-                var pieces = CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), Height, settings);
+                var pieces = CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), GroundHeight, settings);
                 long key = PlanWork.Key(w);
                 bool any = false;
                 for (int p = 0; p < pieces.Count; p++)
@@ -297,7 +297,7 @@ namespace Placemaker.Game.Build
         {
             _objectIndex = _objectIndex ?? new PlanIndex();
             var p = position;
-            if (snapToGround || !math.isfinite(p.y)) p.y = Height(p.xz);
+            if (snapToGround || !math.isfinite(p.y)) p.y = GroundHeight(p.xz);
             var rotation = quaternion.RotateY(yaw);
             var def = NewDefinition();
             EntityManager.AddComponentData(def, new CreationDefinition
