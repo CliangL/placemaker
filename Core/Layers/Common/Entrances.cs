@@ -377,7 +377,7 @@ namespace Placemaker.Core.Layers.Common
         /// <summary>
         /// Suggested entrances with kinds picked from the net each one faces: bike paths and roads with bike
         /// lanes → bike; pathways and streets → pedestrian; the widest big road → main (a large park without
-        /// one gets its main entrance on a street); plus one service entrance on a quiet street, far from the
+        /// one gets its main entrance on a busier, non-quiet street); plus one service entrance on a quiet street, far from the
         /// others, for larger parks. Only kinds in <paramref name="kinds"/> are used.
         /// </summary>
         public static List<EdgeMarker> SuggestTyped(AreaInput input, LayerRegion region, int wanted, string[] kinds)
@@ -401,7 +401,7 @@ namespace Placemaker.Core.Layers.Common
             }
             if (main && mainAt < 0 && region.Area >= EntranceKinds.MainMinArea)
                 for (int i = 0; i < result.Count && mainAt < 0; i++)
-                    if (result[i].Kind == EntranceKinds.Pedestrian && (fronts[i] == Frontage.Street || fronts[i] == Frontage.QuietStreet)) mainAt = i;
+                    if (result[i].Kind == EntranceKinds.Pedestrian && fronts[i] == Frontage.Street) mainAt = i;   // not on a quiet street: thin paths stay the default
             if (mainAt >= 0 && region.Area >= 2500f)
             {
                 var m = result[mainAt]; m.Kind = EntranceKinds.Main; result[mainAt] = m;

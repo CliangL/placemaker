@@ -60,8 +60,10 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.Choice("focal", "end", ControlTier.Essential, "composition", "end", "centre").Tip();
             c.Slider("processionWidth", 6, 3, 12, 1, "m", ControlTier.Essential, "composition").Tip();
             c.Toggle("crossAxis", false, ControlTier.More, "composition").Tip();
+            // FEEDBACK-4: walks are path nets; a paved strip under the procession (and pads under sculptures) only on request.
+            c.Toggle("paving", false, ControlTier.More, "composition").Tip();
             // Monument.
-            c.Slider("forecourt", 10, 5, 24, 1, "m", ControlTier.Essential, "monument").Tip();
+            c.Slider("forecourt", 10, 5, 24, 1, "m", ControlTier.Essential, "monument").Layout(5).Tip();
             c.Toggle("raised", false, ControlTier.Essential, "monument").Tip();
             c.Slider("raiseHeight", 1.5, 0.5, 3, 0.5, "m", ControlTier.More, "monument").When("raised=true");
             c.Slider("plaques", 4, 0, 16, 1, "count", ControlTier.More, "monument").Tip();
@@ -77,18 +79,18 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.Asset("poolAsset", AssetCategories.SurfaceWater, ControlTier.More, "water").When("pool=true");
             // Hedged rooms.
             c.Toggle("rooms", true, ControlTier.Essential, "rooms").Tip();
-            c.Slider("roomSize", 14, 8, 24, 1, "m", ControlTier.More, "rooms").When("rooms=true");
+            c.Slider("roomSize", 14, 8, 24, 1, "m", ControlTier.More, "rooms").Layout(9).When("rooms=true");
             c.Choice("roomContent", "mixed", ControlTier.More, "rooms", "mixed", "benches", "flowers", "sculpture", "tree").When("rooms=true").Tip();
             c.Asset("hedgeAsset", AssetCategories.Hedge, ControlTier.More, "rooms");
             // Planting.
             c.Toggle("allees", true, ControlTier.Essential, "planting").Tip();
-            c.Slider("treeSpacing", 9, 6, 16, 1, "m", ControlTier.More, "planting").When("allees=true");
+            c.Slider("treeSpacing", 9, 6, 16, 1, "m", ControlTier.More, "planting").Layout(6).When("allees=true");
             c.Slider("lawnTrees", 20, 0, 80, 5, "perHa", ControlTier.More, "planting").Tip();
             c.Toggle("flowerRing", true, ControlTier.More, "planting").Tip();
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             // Lighting.
             c.Choice("lighting", "bollards", ControlTier.Essential, "lighting", "bollards", "lanterns", "uplights", "none").Tip();
-            c.Slider("lampSpacing", 14, 6, 30, 1, "m", ControlTier.More, "lighting");
+            c.Slider("lampSpacing", 14, 6, 30, 1, "m", ControlTier.More, "lighting").Layout(5);
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "lighting");
             // Boundary.
             c.Choice("enclosure", "hedge", ControlTier.More, "boundary", "hedge", "fence", "none").Tip();
@@ -105,7 +107,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         {
             Preset("garden", ("style", "garden"), ("focal", "end"), ("pool", false), ("rooms", true), ("roomContent", "flowers"), ("lighting", "bollards"),
                 ("flowerRing", true), ("plaques", 4.0), ("lawnTrees", 30.0));
-            Preset("square", ("style", "square"), ("focal", "centre"), ("crossAxis", true), ("forecourt", 16.0), ("pool", false), ("rooms", false),
+            Preset("square", ("style", "square"), ("focal", "centre"), ("crossAxis", true), ("paving", true), ("forecourt", 16.0), ("pool", false), ("rooms", false),
                 ("lighting", "lanterns"), ("enclosure", "none"), ("processionWidth", 10.0), ("lawnTrees", 0.0), ("flowerRing", false));
             Preset("war", ("style", "war"), ("focal", "end"), ("raised", true), ("raiseHeight", 2.0), ("plaques", 10.0), ("flags", 8.0), ("pool", true),
                 ("poolLength", 45.0), ("rooms", true), ("roomContent", "benches"), ("lighting", "uplights"), ("flowerRing", true), ("enclosure", "hedge"));
@@ -189,13 +191,16 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             string lighting = ctx.S("lighting");
             float spacing = ctx.F("lampSpacing");
             if (lighting == "lanterns") PathLights(st, spacing, chainLow: false, pairs: true);
-            else if (lighting == "bollards") PathLights(st, spacing * 0.5f, chainLow: true, pairs: false);
+            else if (lighting == "bollards") PathLights(st, math.max(5f, spacing * 0.5f), chainLow: true, pairs: false);
+            // FEEDBACK-4: seats and bins stand beside the path nets (never out on the lawn).
+            if (!trail) ctx.Plan.Facts["pathBenches"] = PathBenches(ctx, st.Occ, 40f, AssetMix.One(""), 0xBE7Au);
+            ctx.Plan.Facts["pathBins"] = PathBins(ctx, st.Occ, 80f, 0xB1A0u);
             ctx.Check();
 
-            // Lawn trees keep the vista along the axis open.
+            // Lawn trees keep the vista along the axis open (areal count: 1/scale, see docs/proposals/size.md).
             var treeIds = ctx.L("treeSpecies");
             float ha = region.Area / 10000f;
-            int trees = math.min(3000, (int)(ha * ctx.F("lawnTrees")));
+            int trees = math.min(3000, (int)(ha * ctx.F("lawnTrees") / ctx.Scale));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
                 LeisureKit.Plant(ctx, st.Occ, region, trees, ObjectRole.Tree, treeIds, 2.4f, 22f, 0.45f, 0x7E30u,
                     p => vista > 0f && SegmentIndex.DistSq(p, vistaA, vistaB) < vista * vista, 2, 3);
@@ -274,7 +279,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             bool squareCourt = style == "war" || style == "square";
             float fr = ctx.F("forecourt") * (style == "square" ? 1.4f : 1f);
             fr = math.min(fr, chord * (centreFocus ? 0.3f : 0.22f));
-            if (fr < 4f) return false;
+            if (fr < ctx.M(4f, 3f)) return false;
             var mon = centreFocus ? math.lerp(start, far, 0.5f) : far - dir * (fr + 2f);
             // Pull the monument inwards until the forecourt fits the outline and the free space.
             float courtReach = squareCourt ? fr * 1.42f : fr;
@@ -283,7 +288,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 if (i == 10) { fr *= 0.75f; courtReach = squareCourt ? fr * 1.42f : fr; }
                 mon -= dir * 2f;
             }
-            if (!occ.Free(mon, courtReach, courtReach + 1f, 0.2f) || math.dot(mon - start, dir) < fr + 8f) return false;
+            if (!occ.Free(mon, courtReach, courtReach + 1f, 0.2f) || math.dot(mon - start, dir) < fr + ctx.M(8f, 4f)) return false;
             st.Monument = mon; st.Forecourt = fr;
 
             if (ctx.B("raised"))
@@ -296,24 +301,26 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             occ.Take(mon, courtReach, 0);
 
             // Procession: start → forecourt rim, splitting round the pool.
-            float hwMain = ctx.F("processionWidth") >= 6f ? Composer.DefaultHalfWidth(NetRole.PathwayWide) : Composer.DefaultHalfWidth(NetRole.Pathway);
-            var mainRole = ctx.F("processionWidth") >= 6f ? NetRole.PathwayWide : NetRole.Pathway;
+            // Thin by default (FEEDBACK-4): a wide path only for a broad processional way (8 m+, e.g. the monument square).
+            bool broad = ctx.F("processionWidth") >= 8f, paving = ctx.B("paving");
+            float hwMain = broad ? Composer.DefaultHalfWidth(NetRole.PathwayWide) : Composer.DefaultHalfWidth(NetRole.Pathway);
+            var mainRole = broad ? NetRole.PathwayWide : NetRole.Pathway;
             var rimIn = mon - dir * fr;
             float axisLen = math.distance(start, rimIn);
-            float bandHalf = math.max(hwMain, ctx.F("processionWidth") * 0.5f);
+            float bandHalf = math.max(hwMain, (paving ? 1f : ctx.Scale) * ctx.F("processionWidth") * 0.5f);
             bool pool = false;
             OrientedRect poolRect = default;
             float walkOff = 0f;
-            if (ctx.B("pool") && axisLen > 26f)
+            if (ctx.B("pool") && axisLen > ctx.M(26f, 16f))
             {
                 float w = ctx.F("poolWidth");
                 float len = (axisLen - 12f) * ctx.F("poolLength") / 100f;
                 var mid = start + dir * (axisLen * 0.5f);
                 for (int i = 0; i < 4 && !pool; i++, len *= 0.8f)
                 {
-                    if (len < 8f) break;
+                    if (len < ctx.M(8f, 6f)) break;
                     poolRect = new OrientedRect { Center = mid, Axis = dir, HalfLength = len * 0.5f + 1.2f, HalfWidth = w * 0.5f + 1.2f };
-                    pool = LeisureKit.RectFits(region, occ, poolRect, 4.5f);
+                    pool = LeisureKit.RectFits(region, occ, poolRect, ctx.M(4.5f, 2.5f));
                 }
                 if (!pool) ctx.Issue(IssueSeverity.Info, K + "Issue.NoPool");
             }
@@ -337,9 +344,10 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 if (AddLine(st, mainRole, start, rimIn) == null) return false;
                 if (ctx.F("processionWidth") >= 4f)
                 {
+                    // The walk is the path net; the paved strip under it is optional (FEEDBACK-4: no painted walks).
                     var band = LayerRegion.Rect(start + dir * (axisLen * 0.5f), dir, axisLen * 0.5f, bandHalf);
                     var clipped = LeisureKit.Intersect(region, band);
-                    if (clipped != null) ctx.Surface(clipped.Ring, SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    if (paving && clipped != null) ctx.Surface(clipped.Ring, SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
                     occ.TakeCorridor(start, rimIn, bandHalf, 100);
                 }
             }
@@ -575,7 +583,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             {
                 var d = math.normalizesafe(b - a); var n = new float2(-d.y, d.x);
                 float len = math.distance(a, b);
-                for (float u = hl + 2f; u <= len - hl - 1f; u += s + 3f)
+                for (float u = hl + 2f; u <= len - hl - 1f; u += s + ctx.M(3f, 2f))
                 {
                     var p = a + d * u;
                     var left = new OrientedRect { Center = p + n * (from + hw), Axis = d, HalfLength = hl, HalfWidth = hw };
@@ -595,8 +603,10 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             var ctx = st.Ctx;
             var opening = r.Local(0f, towardAxis * r.HalfWidth);
             LeisureKit.TakeRect(st.Occ, r);
-            // Spur from the opening out to the nearest path (junction node on that path).
-            Spur(st, opening + r.Side * towardAxis * 0.2f, NetRole.Pathway, 30f, false, r.Side * towardAxis);
+            // Spur from the opening out to the nearest path (junction node on that path). FEEDBACK-4: the walk then
+            // continues into the room as a path net, and the room's benches stand beside it (never out on the lawn).
+            var door = opening + r.Side * towardAxis * 0.2f;
+            bool joined = Spur(st, door, NetRole.Pathway, 30f, false, r.Side * towardAxis);
             uint v = Hashing.Mix(ctx.Seed, 0x500Au + (uint)index);
             string hedgeCat = st.Chains.Get(ctx.S("hedgeAsset").Length > 0, AssetCategories.Hedge, AssetCategories.Bush);
             if (hedgeCat != null)
@@ -628,16 +638,38 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 content = cycle[(index / 2) % cycle.Length];
             }
             var bench = AssetMix.One("");
-            var back = r.Local(0f, -towardAxis * (r.HalfWidth - 1.6f));
+            float hw = r.HalfWidth;
+            float pathHw = Composer.DefaultHalfWidth(NetRole.Pathway);
+            const float benchSide = 2.9f;   // walk half width + bench footprint, from the walk's centre line
+            var back = r.Local(0f, -towardAxis * (hw - 1.0f));
             var centre = r.Center;
+            // Where the inner walk ends (local v, positive towards the axis): clear of what stands at its end.
+            float walkEndV;
+            switch (content)
+            {
+                case "benches": walkEndV = -(hw - 3.1f); break;          // plaque at the back
+                case "flowers": walkEndV = -(hw - 4.2f); break;          // bench at the back
+                case "sculpture": walkEndV = 2.6f; break;                // sculpture in the centre
+                default: walkEndV = 4.0f; break;                         // specimen tree in the centre
+            }
+            float doorV = hw + 0.2f;
+            bool walk = false;
+            if (joined && doorV - walkEndV >= 1.5f)
+            {
+                var inner = AddLine(st, NetRole.Pathway, door, r.Local(0f, towardAxis * walkEndV));
+                if (inner != null) { inner.IsSpur = true; walk = true; }
+            }
+            // Benches either side of the walk (facing it), or either side of the door when the room has no walk.
+            float seatV = walk ? math.max(walkEndV + 0.6f, math.min(doorV - 1.6f, 0.5f * (walkEndV + doorV))) : hw - 1.6f;
             switch (content)
             {
                 case "benches":
                 {
                     foreach (int sgn in new[] { -1, 1 })
                     {
-                        var p = r.Local(sgn * (r.HalfLength - 1.7f), 0f);
-                        ctx.Object(p, LeisureKit.Yaw(p, centre), ObjectRole.Bench, bench, Hashing.Mix(v, (uint)(sgn + 3)));
+                        if (r.HalfLength - benchSide < 1.2f) break;
+                        var p = r.Local(sgn * benchSide, towardAxis * seatV);
+                        ctx.Object(p, LeisureKit.Yaw(p, r.Local(0f, towardAxis * seatV)), ObjectRole.Bench, bench, Hashing.Mix(v, (uint)(sgn + 3)));
                     }
                     string pc = CategoryChains.Quiet(AssetCategories.MemorialPlaque);
                     if (pc != null) { ctx.Object(back, LeisureKit.Yaw(back, opening), ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(v, 9u), -1, pc); st.Plaques++; }
@@ -650,32 +682,35 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         for (float fu = -r.HalfLength + 2.2f; fu <= r.HalfLength - 2.1f; fu += 2.4f)
                             for (float fv = -r.HalfWidth + 2.2f; fv <= r.HalfWidth - 2.1f; fv += 2.4f)
                             {
-                                if (math.abs(fu) < 1.4f) continue;   // a walk through the middle
+                                if (math.abs(fu) < pathHw + 0.7f) continue;   // the walk through the middle
                                 ctx.Object(r.Local(fu, fv), r.Yaw, fc == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter, AssetMix.One(""), Hashing.Mix(v, (uint)(fu * 10f + fv * 100f + 1000f)), -1, fc);
                             }
-                    ctx.Object(back, LeisureKit.Yaw(back, opening), ObjectRole.Bench, bench, Hashing.Mix(v, 5u));
+                    // The bench closes the walk at the back, looking down it to the opening.
+                    var seat = r.Local(0f, -towardAxis * (hw - 1.3f));
+                    ctx.Object(seat, LeisureKit.Yaw(seat, opening), ObjectRole.Bench, bench, Hashing.Mix(v, 5u));
                     break;
                 }
                 case "sculpture":
                 {
                     string sc = st.Chains.Get(ctx.L("sculptureAssets").Length > 0, AssetCategories.MemorialSculpture, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
-                    ctx.Surface(LayerRegion.Circle(centre, math.min(2.4f, r.HalfWidth - 1.5f), 16), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    if (ctx.B("paving")) ctx.Surface(LayerRegion.Circle(centre, math.min(2.4f, r.HalfWidth - 1.5f), 16), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
                     if (sc != null)
                     {
                         ctx.Object(centre, LeisureKit.Yaw(centre, opening), ObjectRole.Centerpiece, AssetMix.Pick(ctx.L("sculptureAssets"), v), v, -1, sc);
                         st.Sculptures++;
                     }
-                    var p = math.lerp(centre, opening, 0.5f);
-                    if (math.distance(p, centre) > 2.6f && math.distance(p, opening) > 2.3f) ctx.Object(p, LeisureKit.Yaw(p, centre), ObjectRole.Bench, bench, Hashing.Mix(v, 7u));
+                    var p = r.Local(benchSide, towardAxis * seatV);
+                    if (r.HalfLength - benchSide >= 1.2f) ctx.Object(p, LeisureKit.Yaw(p, centre), ObjectRole.Bench, bench, Hashing.Mix(v, 7u));
                     break;
                 }
-                default:   // a single specimen tree, two benches at the back looking at it
+                default:   // a single specimen tree, two benches beside the walk looking at it
                 {
                     var treeIds = ctx.L("treeSpecies");
                     ctx.Object(centre, 0f, ObjectRole.Tree, AssetMix.Pick(treeIds, v), v, 3);
                     foreach (int sgn in new[] { -1, 1 })
                     {
-                        var p = r.Local(sgn * (r.HalfLength - 1.8f), -towardAxis * (r.HalfWidth - 1.6f));
+                        var p = r.Local(sgn * benchSide, towardAxis * seatV);
+                        if (r.HalfLength - benchSide < 1.2f || math.distance(p, centre) < 3.6f) continue;
                         ctx.Object(p, LeisureKit.Yaw(p, centre), ObjectRole.Bench, bench, Hashing.Mix(v, (uint)(sgn + 11)));
                     }
                     break;
@@ -744,13 +779,13 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 string hedgeCat = ctx.B("rooms") ? st.Chains.Get(ctx.S("hedgeAsset").Length > 0, AssetCategories.Hedge, AssetCategories.Bush) : null;
                 if (sc != null)
                 {
-                    var anchors = PathAnchors.Pick(PathAnchors.Beside(occ, 3.6f, 5f, 0.8f), want, 11f, false);
+                    var anchors = PathAnchors.Pick(PathAnchors.Beside(occ, 3.6f, 5f, 0.8f), want, ctx.M(11f, 7.5f), false);
                     int i = 0;
                     foreach (var an in anchors)
                     {
                         if (!occ.Free(an.Position, 3.6f, 4.2f, 0.3f)) continue;
                         uint v = Hashing.Mix(ctx.Seed, 0x5C00u + (uint)i++);
-                        ctx.Surface(LayerRegion.Circle(an.Position, 2.2f, 14), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+                        if (ctx.B("paving")) ctx.Surface(LayerRegion.Circle(an.Position, 2.2f, 14), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
                         ctx.Object(an.Position, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Centerpiece, AssetMix.Pick(ids, v), v, -1, sc);
                         st.Sculptures++;
                         if (hedgeCat != null)

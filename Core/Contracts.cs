@@ -99,13 +99,41 @@ namespace Placemaker.Core
         public Dictionary<string, AssetInfo> Assets = new Dictionary<string, AssetInfo>();
 
         /// <summary>
+        /// (FEEDBACK-4) Global "Layout size": multiplies layout DISTANCES (path loop sizes, spacing between
+        /// objects, plaza/feature footprints, grid pitches, margins). Props, path widths and real-dimension
+        /// layouts (parking stalls, roads, sports fields, golf greens/tees) keep their real size. 1 = the
+        /// design size the generators were written at; the game passes the player's option (default 0.5).
+        /// Read through <see cref="Scale"/> (clamped). See docs/proposals/size.md.
+        /// </summary>
+        public float LayoutScale = 1f;
+        /// <summary>
+        /// (FEEDBACK-4) The one edge margin (design metres, multiplied by the scale) every type keeps between
+        /// the outline and its paths/layout. Object clearances stay footprint-based on top of it.
+        /// </summary>
+        public float EdgeMargin = DefaultEdgeMargin;
+
+        public const float LayoutScaleMin = 0.25f, LayoutScaleMax = 1.5f, DefaultEdgeMargin = 2f, DefaultLayoutScale = 0.5f;
+
+        /// <summary>LayoutScale clamped to its valid range (NaN/≤0 → 1).</summary>
+        public float Scale => LayoutScale > 0f && !float.IsNaN(LayoutScale) ? Math.Min(LayoutScaleMax, Math.Max(LayoutScaleMin, LayoutScale)) : 1f;
+
+        /// <summary>Same snapshot with another layout scale / edge margin (shallow copy).</summary>
+        public SiteContext WithLayout(float layoutScale, float edgeMargin)
+        {
+            var c = WithHeight(HeightAt);
+            c.LayoutScale = layoutScale;
+            c.EdgeMargin = edgeMargin;
+            return c;
+        }
+
+        /// <summary>
         /// (g5) Same snapshot with another ground height: the composer hands children of a terraforming
         /// layer the ground after that layer's terraform (AreaPlan.HeightAfter). Shallow copy.
         /// </summary>
         public SiteContext WithHeight(Func<float2, float> heightAt) => new SiteContext
         {
             HeightAt = heightAt ?? HeightAt, WaterDepthAt = WaterDepthAt, NearbyNets = NearbyNets, Obstacles = Obstacles,
-            LeftHandTraffic = LeftHandTraffic, Assets = Assets,
+            LeftHandTraffic = LeftHandTraffic, Assets = Assets, LayoutScale = LayoutScale, EdgeMargin = EdgeMargin,
         };
     }
 
@@ -317,6 +345,14 @@ namespace Placemaker.Core
         public string VisibleWhen = "";
         /// <summary>Changing this control keeps the current seed/layout (true) or needs a full re-plan (false). Hint for preview cost.</summary>
         public bool Cheap;
+        /// <summary>
+        /// (FEEDBACK-4) A layout distance (spacing, footprint, pitch): LayerContext.F reads it multiplied by
+        /// the site's layout scale, never below <see cref="LayoutMin"/> real metres. Real dimensions (net
+        /// widths, heights, depths, stall sizes, regulation fields) leave this false.
+        /// </summary>
+        public bool Layout;
+        /// <summary>Real-metre floor of a Layout control after scaling (0 = none).</summary>
+        public double LayoutMin;
     }
 
     public sealed class PresetInfo

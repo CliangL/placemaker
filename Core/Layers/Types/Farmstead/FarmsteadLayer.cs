@@ -101,7 +101,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             c.Asset("siloAsset", AssetCategories.FarmSilo, ControlTier.More, "farmyard");
 
             c.Slider("paddocks", 2, 0, 8, 1, "count", ControlTier.More, "livestock").Tip();
-            c.Slider("paddockSize", 50, 20, 120, 5, "m", ControlTier.More, "livestock");
+            c.Slider("paddockSize", 50, 20, 120, 5, "m", ControlTier.More, "livestock").Layout(15);
             c.Choice("livestock", "mixed", ControlTier.More, "livestock", "cattle", "sheep", "horses", "pigs", "mixed");
             c.Toggle("animals", true, ControlTier.More, "livestock").Tip();
             c.Toggle("shelters", true, ControlTier.More, "livestock");
@@ -114,7 +114,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "hedgerows");
 
             c.Toggle("pond", true, ControlTier.More, "water");
-            c.Slider("pondSize", 30, 12, 80, 2, "m", ControlTier.More, "water").When("pond=true").Tip();
+            c.Slider("pondSize", 30, 12, 80, 2, "m", ControlTier.More, "water").Layout(8).When("pond=true").Tip();
             c.Choice("pondAt", "lowest", ControlTier.More, "water", "lowest", "nearYard", "far").When("pond=true").Tip();
 
             EntranceMarkers(c);

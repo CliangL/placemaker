@@ -69,15 +69,15 @@ namespace Placemaker.Core.Layers.Leisure
                     var asset = AssetMix.One(ctx.S("lookoutAsset"));
                     float r = AssetMix.FootprintRadius(ctx.Site, asset, 4f);
                     var anchors = PathAnchors.Beside(occ, r, 8f, 1.2f);
-                    int best = -1; float hi = float.MinValue;
-                    for (int i = 0; i < anchors.Count; i++)
-                    {
-                        float h = ctx.H(anchors[i].Position) + region.BoundaryDistance(anchors[i].Position, 30f) * 0.01f;
-                        if (h > hi) { hi = h; best = i; }
-                    }
-                    if (best >= 0)
-                        LeisureKit.Put(ctx, occ, anchors[best].Position, LeisureKit.Yaw(anchors[best].Position, anchors[best].Toward), ObjectRole.Furniture, asset, cat, r,
-                            Hashing.Mix(ctx.Seed, 0x100Cu), 0.5f, 0.3f, 0);
+                    ctx.Plan.Facts["lookoutAnchors"] = anchors.Count;
+                    // Highest spot first; the next one when the best is taken (a richer trail network may cross it).
+                    var order = new List<int>();
+                    for (int i = 0; i < anchors.Count; i++) order.Add(i);
+                    float Height(int i) => ctx.H(anchors[i].Position) + region.BoundaryDistance(anchors[i].Position, 30f) * 0.01f;
+                    order.Sort((x, y) => Height(y).CompareTo(Height(x)) != 0 ? Height(y).CompareTo(Height(x)) : x.CompareTo(y));
+                    foreach (int best in order)
+                        if (LeisureKit.Put(ctx, occ, anchors[best].Position, LeisureKit.Yaw(anchors[best].Position, anchors[best].Toward), ObjectRole.Furniture, asset, cat, r,
+                            Hashing.Mix(ctx.Seed, 0x100Cu), 0.5f, 0.3f, 0)) break;
                 }
             }
 

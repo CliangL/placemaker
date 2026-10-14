@@ -77,7 +77,7 @@ namespace Placemaker.Core.Layers.Types.Events
 
             c.Slider("toilets", 8, 0, 40, 1, "count", ControlTier.More, "fairService").Tip();
             c.Asset("toiletAsset", AssetCategories.EventToilet, ControlTier.More, "fairService");
-            c.Slider("lightSpacing", 40, 0, 100, 5, "m", ControlTier.More, "fairService").Tip();
+            c.Slider("lightSpacing", 40, 0, 100, 5, "m", ControlTier.More, "fairService").Layout(8).Tip();
             c.Asset("lightAsset", AssetCategories.EventLightTower, ControlTier.More, "fairService");
             c.Toggle("festoons", true, ControlTier.More, "fairService").Tip();
 

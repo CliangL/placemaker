@@ -142,7 +142,8 @@ namespace Placemaker.Tests
         {
             var markers = new List<EdgeMarker> { new EdgeMarker { Kind = "entrance", Position = new float3(250, 0, 100) } };
             var plan = TestKit.Plan("park", TestKit.Input(Hectare5, markers: markers));
-            Assert.Contains(plan.Nets, n => math.distance(n.A.xz, new float2(250, 100)) < 0.5f || math.distance(n.D.xz, new float2(250, 100)) < 0.5f);
+            // The walk starts at the entrance (pulled in by its half width when no road takes it).
+            Assert.Contains(plan.Nets, n => math.distance(n.A.xz, new float2(250, 100)) < 2f || math.distance(n.D.xz, new float2(250, 100)) < 2f);
             Assert.Equal(1, plan.Facts["entrances"]);
         }
 

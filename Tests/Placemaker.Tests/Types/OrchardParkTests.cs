@@ -100,7 +100,7 @@ namespace Placemaker.Tests.Types
             var plan = PlanPreset("cherryBlossom");
             var avenue = plan.Nets.Where(n => n.Role == NetRole.PathwayWide).ToList();
             Assert.NotEmpty(avenue);
-            int lined = plan.Objects.Count(o => o.Role == ObjectRole.Tree && avenue.Any(n => math.abs(TestKit.DistanceToCurve(o.Position.xz, n) - 5.5f) < 0.1f));
+            int lined = plan.Objects.Count(o => o.Role == ObjectRole.Tree && avenue.Any(n => math.abs(TestKit.DistanceToCurve(o.Position.xz, n) - (Composer.DefaultHalfWidth(NetRole.PathwayWide) + 3f)) < 0.1f));
             Assert.True(lined > 20, "avenue trees " + lined);
             Assert.Contains(plan.Surfaces, s => s.Role == SurfaceRole.Grass);
             Assert.True(TestKit.Stat(plan, Keys.StatLamps) > 0);

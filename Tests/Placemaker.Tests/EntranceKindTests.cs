@@ -106,11 +106,11 @@ namespace Placemaker.Tests
             Assert.Contains(loose, e => math.distance(e, new float2(300, 110)) < 1f);
             // Service track reaches the service entrance; the main entrance gets a wide walk and a gateway.
             Assert.Equal(1f, (float)plan.Facts["serviceTracks"]);
-            Assert.Contains(plan.Nets, n => n.Category == AssetCategories.TrailPath && (math.distance(n.A.xz, new float2(150, 200)) < 1f || math.distance(n.D.xz, new float2(150, 200)) < 1f));
-            Assert.Contains(plan.Nets, n => n.Role == NetRole.PathwayWide && !IsBike(n) && (math.distance(n.A.xz, new float2(80, 0)) < 1f || math.distance(n.D.xz, new float2(80, 0)) < 1f));
+            Assert.Contains(plan.Nets, n => n.Category == AssetCategories.TrailPath && (math.distance(n.A.xz, new float2(150, 200)) < 2f || math.distance(n.D.xz, new float2(150, 200)) < 2f));
+            Assert.Contains(plan.Nets, n => n.Role == NetRole.PathwayWide && !IsBike(n) && (math.distance(n.A.xz, new float2(80, 0)) < 2f || math.distance(n.D.xz, new float2(80, 0)) < 2f));
             Assert.True(plan.Facts.ContainsKey("gatewayProps"));
             // A pedestrian entrance gets a thin path.
-            Assert.Contains(plan.Nets, n => n.Role == NetRole.Pathway && (math.distance(n.A.xz, new float2(220, 0)) < 1f || math.distance(n.D.xz, new float2(220, 0)) < 1f));
+            Assert.Contains(plan.Nets, n => n.Role == NetRole.Pathway && (math.distance(n.A.xz, new float2(220, 0)) < 2f || math.distance(n.D.xz, new float2(220, 0)) < 2f));
         }
 
         [Fact]

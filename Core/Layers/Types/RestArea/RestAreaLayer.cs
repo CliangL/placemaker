@@ -56,7 +56,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             c.Slider("evShare", 4, 0, 30, 1, "%", ControlTier.More, "spaces").Tip();
             c.Slider("accessible", 2, 0, 10, 1, "%", ControlTier.More, "spaces");
 
-            c.Slider("hubSize", 24, 14, 44, 2, "m", ControlTier.More, "facilities").Tip();
+            c.Slider("hubSize", 24, 14, 44, 2, "m", ControlTier.More, "facilities").Layout(12).Tip();
             c.Slider("kiosks", 1, 0, 4, 1, "count", ControlTier.More, "facilities");
             c.Slider("vending", 2, 0, 8, 1, "count", ControlTier.More, "facilities").Tip();
             c.Slider("fuelPumps", 0, 0, 8, 1, "count", ControlTier.More, "facilities").Tip();
@@ -67,7 +67,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             c.Toggle("grills", false, ControlTier.More, "picnic").Tip();
 
             c.Toggle("dogRun", true, ControlTier.More, "dogs").Tip();
-            c.Slider("dogRunSize", 22, 12, 40, 2, "m", ControlTier.More, "dogs").When("dogRun=true");
+            c.Slider("dogRunSize", 22, 12, 40, 2, "m", ControlTier.More, "dogs").Layout(12).When("dogRun=true");
 
             c.Toggle("viewpoint", false, ControlTier.More, "views").Tip();
             c.Slider("moundHeight", 0, 0, 8, 0.5, "m", ControlTier.More, "views").When("viewpoint=true").Tip();
@@ -78,7 +78,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
 
             c.Toggle("lamps", true, ControlTier.More, "lighting");
-            c.Slider("lampSpacing", 24, 12, 40, 2, "m", ControlTier.More, "lighting").When("lamps=true");
+            c.Slider("lampSpacing", 24, 12, 40, 2, "m", ControlTier.More, "lighting").Layout(8).When("lamps=true");
 
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("tableAsset", AssetCategories.Picnic, ControlTier.More, "assets");
@@ -190,7 +190,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             // ── 8. Path furniture ──
             var bench = AssetMix.One(ctx.S("benchAsset"));
             PathBenches(ctx, occ, 45f, bench, 0xBE00u);
-            if (ctx.B("lamps")) PathLamps(ctx, occ, ctx.F("lampSpacing"), AssetMix.One(ctx.S("lampAsset")), 0x1A00u);
+            if (ctx.B("lamps")) PathLamps(ctx, occ, ctx.Raw("lampSpacing"), AssetMix.One(ctx.S("lampAsset")), 0x1A00u);
 
             // ── 9. Trees: a belt along the outline (screen) and shade clumps ──
             var treeIds = ctx.L("treeSpecies");

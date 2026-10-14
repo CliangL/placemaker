@@ -122,7 +122,7 @@ namespace Placemaker.Core.Layers.Park
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
             // Path hierarchy (ParkPathHierarchy.cs): bike route, small paths, dirt trails, desire lines.
             c.Toggle("bikePath", false, ControlTier.More, "paths").Tip();
-            c.Slider("bikeGap", 10, 4, 24, 1, "m", ControlTier.More, "paths").When("bikePath=true").Tip();
+            c.Slider("bikeGap", 10, 4, 24, 1, "m", ControlTier.More, "paths").Layout(4).When("bikePath=true").Tip();
             c.Asset("bikeAsset", AssetCategories.BikePath, ControlTier.More, "paths").When("bikePath=true").Tip();
             c.Slider("smallPaths", 0, 0, 8, 1, "count", ControlTier.More, "paths").Tip();
             c.Asset("smallPathAsset", AssetCategories.Pathway, ControlTier.More, "paths");
@@ -184,7 +184,7 @@ namespace Placemaker.Core.Layers.Park
         protected override void DefinePresets()
         {
             Preset("natural", ("style", "natural"), ("treeDensity", 26.0), ("bushDensity", 65.0), ("furniture", 4.0), ("pathStyle", "curvy"), ("desireLines", "worn"));
-            Preset("formal", ("style", "formal"), ("pathWidth", "wide"), ("curvedPaths", false), ("treeDensity", 30.0),
+            Preset("formal", ("style", "formal"), ("pathWidth", "narrow"), ("curvedPaths", false), ("treeDensity", 30.0),
                 ("bushDensity", 60.0), ("furniture", 4.5), ("paths", "network"), ("pathStyle", "formal"));
             Preset("garden", ("style", "natural"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 70.0),
                 ("furniture", 4.0), ("pathStyle", "garden"), ("naturalGround", true));
@@ -195,20 +195,20 @@ namespace Placemaker.Core.Layers.Park
             Preset("pocket", ("style", "pocket"), ("treeDensity", 40.0), ("bushDensity", 60.0), ("furniture", 6.0),
                 ("paths", "minimal"));
             // Round 5: six park idioms, each a different path figure + planting rule (not density tweaks).
-            Preset("victorian", ("style", "victorian"), ("pathStyle", "figureEight"), ("pathWidth", "mixed"), ("treeDensity", 30.0),
+            Preset("victorian", ("style", "victorian"), ("pathStyle", "figureEight"), ("pathWidth", "narrow"), ("treeDensity", 30.0),
                 ("bushDensity", 75.0), ("furniture", 5.0), ("fence", true), ("lamps", true), ("bins", true), ("curvedPaths", true));
             Preset("landscape", ("style", "landscape"), ("pathStyle", "circuit"), ("pathWidth", "narrow"), ("treeDensity", 34.0),
                 ("bushDensity", 45.0), ("furniture", 3.0), ("belt", true), ("lamps", false), ("curvedPaths", true), ("trails", 2.0), ("smallPaths", 1.0));
-            Preset("modern", ("style", "modern"), ("pathStyle", "promenade"), ("pathWidth", "mixed"), ("curvedPaths", false),
+            Preset("modern", ("style", "modern"), ("pathStyle", "promenade"), ("pathWidth", "narrow"), ("curvedPaths", false),
                 ("treeDensity", 40.0), ("bushDensity", 45.0), ("furniture", 5.0), ("belt", true), ("lamps", true));
             Preset("wildflower", ("style", "wildflower"), ("pathStyle", "woodlandTrail"), ("pathWidth", "narrow"), ("treeDensity", 6.0),
                 ("bushDensity", 45.0), ("furniture", 2.5), ("lamps", false), ("bins", false), ("naturalGround", true), ("animals", true));
-            Preset("urban", ("style", "urban"), ("pathStyle", "spokeRing"), ("pathWidth", "wide"), ("treeDensity", 45.0),
+            Preset("urban", ("style", "urban"), ("pathStyle", "spokeRing"), ("pathWidth", "mixed"), ("treeDensity", 45.0),
                 ("bushDensity", 50.0), ("furniture", 7.0), ("lamps", true), ("bins", true), ("belt", true));
             Preset("riverside", ("style", "riverside"), ("pathStyle", "riverside"), ("pathWidth", "narrow"), ("treeDensity", 30.0),
                 ("bushDensity", 60.0), ("furniture", 4.0), ("naturalGround", true), ("animals", true), ("curvedPaths", true), ("bikePath", true));
             // Grand park wave (g3): the full hierarchy — bike through-route, main walk, small paths, trails, worn shortcuts.
-            Preset("greenway", ("style", "natural"), ("pathStyle", "curvy"), ("pathWidth", "mixed"), ("treeDensity", 28.0), ("bushDensity", 60.0),
+            Preset("greenway", ("style", "natural"), ("pathStyle", "curvy"), ("pathWidth", "narrow"), ("treeDensity", 28.0), ("bushDensity", 60.0),
                 ("furniture", 3.5), ("bikePath", true), ("smallPaths", 2.0), ("trails", 1.0), ("desireLines", "worn"), ("curvedPaths", true));
 
             // Playtest 4b: presets look complete. On top of the DefaultOn features (playground, picnic,
@@ -306,7 +306,8 @@ namespace Placemaker.Core.Layers.Park
         {
             Shape = PlaceRule.ParseShape(s.S("plazaShape", "circle")),
             Anchor = PlaceRule.ParseAnchor(s.S("plazaAt", "centre")),
-            SizePct = (float)s.Num("plazaSize", 15), MinM = PlazaMinM, MaxM = PlazaMaxM, Aspect = 1.6f, Margin = 3f,
+            // Layout size: the plaza's share of the area scales with the square of the layout scale (its side with the scale).
+            SizePct = (float)s.Num("plazaSize", 15) * Layout.Scale * Layout.Scale, MinM = Layout.M(PlazaMinM, 8f), MaxM = Layout.M(PlazaMaxM, 20f), Aspect = 1.6f, Margin = Layout.M(3f, 1f),
         };
 
         protected override void PlanCore(LayerContext ctx)
@@ -360,8 +361,9 @@ namespace Placemaker.Core.Layers.Park
             if (lakeFirst) s.Lake = PlanLake(ctx, s, plaza);
             var clearings = new List<(string layer, float2 c, float r)>();
             var plazaRing = plaza;
-            Func<float2, bool> okPoint = p => region.ContainsDisc(p, 3f) && !s.InLake(p, 4f)
-                && !(plazaRing.Length >= 3 && (Poly.Contains(plazaRing, p) || ParkSite.MinDistToRing(plazaRing, p) < 3f));
+            float edgeKeep = math.max(ctx.M(3f), ctx.EdgeMargin + 1f), lakeKeep = ctx.M(4f, 2.5f), plazaKeep = ctx.M(3f, 1.5f);
+            Func<float2, bool> okPoint = p => region.ContainsDisc(p, edgeKeep) && !s.InLake(p, lakeKeep)
+                && !(plazaRing.Length >= 3 && (Poly.Contains(plazaRing, p) || ParkSite.MinDistToRing(plazaRing, p) < plazaKeep));
             if (pathMode != "none")
             {
                 s.Gates = gates;
@@ -397,16 +399,17 @@ namespace Placemaker.Core.Layers.Park
                 }
                 if (graph == null || graph.IsEmpty)
                 {
-                    var options = new ParkPathPlanner.Options { Loops = LoopsFor(pathMode, region.Area), StretchLoop = pathMode == "network" || pathMode == "auto" && region.Area > 12000f };
+                    var options = new ParkPathPlanner.Options { Loops = LoopsFor(pathMode, region.Area), StretchLoop = pathMode == "network" || pathMode == "auto" && Layout.DesignArea(region.Area) > 12000f };
                     graph = ParkPathPlanner.PlanBest(region, gatePoints, options, pathSeed, ctx.Cancel);
                     if (pathStyle != "auto" && pathStyle != "garden" && pathStyle != "curvy" && pathStyle != "formal")
                         ctx.Issue(IssueSeverity.Info, "Placemaker.Park.Issue.PathStyleFallback");
                     avenueA = avenueB = float2.zero;
                 }
                 if (style.Grid) curved = false;
-                if (pathStyle == "garden") { graph = ParkPathStyles.Meander(graph, gatePoints, 6.5f, 18f, pathSeed, okPoint); curved = true; }
-                else if (pathStyle == "curvy") { graph = ParkPathStyles.Meander(graph, gatePoints, 5f, 34f, pathSeed, okPoint); curved = true; }
+                if (pathStyle == "garden") { graph = ParkPathStyles.Meander(graph, gatePoints, ctx.M(6.5f), ctx.M(18f), pathSeed, okPoint); curved = true; }
+                else if (pathStyle == "curvy") { graph = ParkPathStyles.Meander(graph, gatePoints, ctx.M(5f), ctx.M(34f), pathSeed, okPoint); curved = true; }
                 s.Graph = graph;
+                ctx.Plan.Facts["graphLength"] = graph?.TotalLength ?? 0;
                 s.Curves = ParkPaths.Build(s.Graph, region, curved, widthMode);
                 if (math.any(avenueA != avenueB)) WidenAvenue(s.Curves, avenueA, avenueB, widthMode);
                 GatePathWidths(s, widthMode, pathStyle != "woodlandTrail");   // a trail park has no grand walk
@@ -470,8 +473,8 @@ namespace Placemaker.Core.Layers.Park
                 if (largest != null)
                 {
                     var centre = largest.DeepestPoint(out float inscribed, null, 16);
-                    float radius = math.min(math.min(inscribed - 2f, math.sqrt(largest.Area) * 0.3f), 30f) * style.ClearingFactor;
-                    if (radius >= 6f) { s.ClearingCenter = centre; s.ClearingRadius = radius; }
+                    float radius = math.min(math.min(inscribed - 2f, math.sqrt(largest.Area) * 0.3f), ctx.M(30f)) * style.ClearingFactor;
+                    if (radius >= ctx.M(6f, 4f)) { s.ClearingCenter = centre; s.ClearingRadius = radius; }
                 }
             }
             ctx.Check();
@@ -481,18 +484,20 @@ namespace Placemaker.Core.Layers.Park
             float per100 = ctx.F("furniture");
             if (per100 > 0f && s.Curves.Count > 0)
             {
-                float benchInterval = 100f / per100;
+                // Layout size: furniture per 100 m of path at design size → closer along the (real-size) paths.
+                float benchInterval = 100f / per100 * ctx.Scale;
                 ParkPlanting.PathFurniture(s, ParkItemKind.Bench, benchInterval, ParkPlanting.BenchRadius, 0x7f4a7c15u);
                 if (ctx.B("lamps")) ParkPlanting.PathFurniture(s, ParkItemKind.Lamp, benchInterval * 0.68f, ParkPlanting.LampRadius, 0x94d049bbu);
-                if (ctx.B("bins")) ParkPlanting.Bins(s, per100 / 3f);
+                if (ctx.B("bins")) ParkPlanting.Bins(s, per100 / 3f);   // Bins: one per scaled 90 m of path
             }
             ctx.Check();
 
-            // 5. Vegetation.
+            // 5. Vegetation. Layout size: areal counts scale by 1/scale (between keeping the density and keeping the
+            // spacing, since the canopies are real size); tree-to-tree clearances stay footprint-based (PlantFits).
             float carved = (s.Lake.Length >= 3 ? Poly.Area(s.Lake) : 0f) + (plaza.Length >= 3 ? Poly.Area(plaza) : 0f);
             float plantedHa = math.max(0f, region.Area - carved) / 10000f;
-            int trees = math.min(4000, (int)math.round(plantedHa * ctx.F("treeDensity")));
-            int bushes = math.min(6000, (int)math.round(plantedHa * ctx.F("bushDensity")));
+            int trees = math.min(4000, (int)math.round(plantedHa * ctx.F("treeDensity") / ctx.Scale));
+            int bushes = math.min(6000, (int)math.round(plantedHa * ctx.F("bushDensity") / ctx.Scale));
             bool belt = ctx.B("belt");
             var treeIds = ctx.L("treeSpecies"); var bushIds = ctx.L("bushSpecies");
             bool canTrees = trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree));
@@ -525,7 +530,7 @@ namespace Placemaker.Core.Layers.Park
             for (int i = 0; i < lawns.Count; i++)
                 if (i == coreIndex) ctx.AddRegion(lawns[i], "green:" + i, RegionTags.Green, RegionTags.Core);
                 else ctx.AddRegion(lawns[i], "green:" + i, RegionTags.Green);
-            var strips = region.BoundaryStrips(BeltDepth, math.clamp((int)math.round(region.Perimeter / 250f), 2, 6));
+            var strips = region.BoundaryStrips(ctx.M(BeltDepth, 4f), math.clamp((int)math.round(region.Perimeter / 250f), 2, 6));
             for (int i = 0; i < strips.Count; i++) ctx.AddRegion(strips[i], "edge:" + i, RegionTags.Edge);
 
             // 8. Summary.
@@ -565,7 +570,7 @@ namespace Placemaker.Core.Layers.Park
                 bool found = false;
                 for (int attempt = 0; attempt < 2 && !found; attempt++)
                 {
-                    float r = attempt == 0 ? radius : radius * 0.7f;
+                    float r = ctx.M(attempt == 0 ? radius : radius * 0.7f, math.min(5f, radius));
                     for (int ri = 0; ri < search.Count && !found; ri++)
                     {
                         if (core && ri > 0) break;
@@ -665,8 +670,7 @@ namespace Placemaker.Core.Layers.Park
                         float d = dest.Distance(p);
                         if (d < bestD) { bestD = d; bestCurve = i; bestT = k / 32f; q = p; }
                     }
-                // Already beside a path only when the path's edge (not its centre line) touches the destination.
-                if (bestCurve < 0 || bestD - s.Curves[bestCurve].HalfWidth <= 0.75f) continue;
+                if (bestCurve < 0 || bestD <= 1f) continue;   // a short connector still counts: the feature's own walk starts at its end
                 var end = dest.Rim(q);
                 bool ok = true;
                 for (int k = 1; k < 10 && ok; k++)

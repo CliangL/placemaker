@@ -68,7 +68,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
             // Equipment and buildings-as-props.
             c.Slider("machines", 3, 0, 12, 1, "perHa", ControlTier.More, "yardEquipment").Tip();
             c.Toggle("floodlights", true, ControlTier.More, "yardEquipment");
-            c.Slider("lightSpacing", 36, 16, 80, 4, "m", ControlTier.More, "yardEquipment").When("floodlights=true");
+            c.Slider("lightSpacing", 36, 16, 80, 4, "m", ControlTier.More, "yardEquipment").Layout(12).When("floodlights=true");
             c.Toggle("gatehouse", true, ControlTier.More, "yardEquipment").Tip();
             c.Toggle("office", true, ControlTier.More, "yardEquipment").Tip();
 

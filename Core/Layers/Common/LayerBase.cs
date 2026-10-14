@@ -135,6 +135,8 @@ namespace Placemaker.Core.Layers.Common
         public static ControlSchema In(this ControlSchema c, string group) { c.Group = group ?? ""; return c; }
         public static ControlSchema When(this ControlSchema c, string condition) { c.VisibleWhen = condition; return c; }
         public static ControlSchema Cheap(this ControlSchema c) { c.Cheap = true; return c; }
+        /// <summary>A layout distance: read scaled by the layout size, never below <paramref name="realMin"/> metres.</summary>
+        public static ControlSchema Layout(this ControlSchema c, double realMin = 0) { c.Layout = true; c.LayoutMin = realMin; return c; }
         public static ControlSchema WithIcon(this ControlSchema c, string icon) { c.Icon = icon; return c; }
     }
 
@@ -165,7 +167,29 @@ namespace Placemaker.Core.Layers.Common
         /// <summary>A point on the planned ground (objects, nets, surfaces and regions use it).</summary>
         public float3 P3(float2 p) => new float3(p.x, G(p), p.y);
 
-        public float F(string id) => (float)Settings.Num(id, 0);
+        /// <summary>The layer's control schema lookup (set by LayerBase): F scales controls declared .Layout().</summary>
+        public Func<string, ControlSchema> ControlOf;
+
+        /// <summary>Layout size (SiteContext.LayoutScale, clamped): multiplies layout distances, never prop sizes.</summary>
+        public float Scale => Site?.Scale ?? 1f;
+        /// <summary>Design metres → real metres at this plan's layout size.</summary>
+        public float M(float designMetres) => designMetres * Scale;
+        /// <summary>Design metres → real metres, never below a real-size floor (a footprint, a regulation size).</summary>
+        public float M(float designMetres, float realMin) => math.max(realMin, designMetres * Scale);
+        /// <summary>The one edge margin between the outline and the layout (real metres, = SiteContext.EdgeMargin × scale).</summary>
+        public float EdgeMargin => math.max(0f, Site?.EdgeMargin ?? SiteContext.DefaultEdgeMargin) * Scale;
+
+        /// <summary>Slider value; controls declared .Layout() come back multiplied by the layout scale (floored at LayoutMin).</summary>
+        public float F(string id)
+        {
+            float v = (float)Settings.Num(id, 0);
+            var c = ControlOf?.Invoke(id);
+            if (c == null || !c.Layout) return v;
+            return v <= 0f ? v : math.max((float)c.LayoutMin, v * Scale);
+        }
+
+        /// <summary>Slider value as set, never scaled.</summary>
+        public float Raw(string id) => (float)Settings.Num(id, 0);
         public int I(string id) => Settings.I(id, 0);
         public bool B(string id) => Settings.B(id, false);
         public string S(string id) => Settings.S(id, "");
@@ -298,10 +322,19 @@ namespace Placemaker.Core.Layers.Common
                 }
         }
 
+        private Dictionary<string, ControlSchema> _byId;
+
         public ControlSchema Control(string id)
         {
-            foreach (var c in _controls) if (c.Id == id) return c;
-            return null;
+            if (id == null) return null;
+            var map = _byId;
+            if (map == null)
+            {
+                map = new Dictionary<string, ControlSchema>(StringComparer.Ordinal);
+                foreach (var c in _controls) if (!map.ContainsKey(c.Id)) map[c.Id] = c;
+                _byId = map;
+            }
+            return map.TryGetValue(id, out var r) ? r : null;
         }
 
         public SettingsBag Defaults()
@@ -418,12 +451,49 @@ namespace Placemaker.Core.Layers.Common
             {
                 Input = input, LayerRegion = region, Plan = plan, Settings = Merge(input.Settings),
                 Cancel = cancel, Seed = Hashing.Mix(input.Seed == 0 ? 1u : input.Seed, Seeds.Hash(Id)),
+                ControlOf = Control,
             };
-            if (HostsStreetShops && input.HasChild(StreetShopsLayer)) CarveStreetShops(ctx, input);
-            PlanCore(ctx);
+            using (Common.Layout.Use(input.Site))
+            {
+                if (HostsStreetShops && input.HasChild(StreetShopsLayer)) CarveStreetShops(ctx, input);
+                PlanCore(ctx);
+            }
+            // Only the selected area itself: inside a parent, ends on the outline may meet the parent's paths.
+            if (tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0) KeepPathEndsInside(plan, region);
             // Children plan on the ground this layer leaves: the composer derives it from
             // plan.Terraform (every sculptor emits PlannedTerraform), unless the layer set HeightAfter.
             return plan;
+        }
+
+        /// <summary>
+        /// (FEEDBACK-4 / gallery) A walk that ends on the outline without joining a road would stick out of the
+        /// area by its half width (the rounded end cap). Pull such free ends back along the path so the cap
+        /// stays inside; ends attached to a road keep their node on the road edge.
+        /// </summary>
+        public static void KeepPathEndsInside(AreaPlan plan, LayerRegion region)
+        {
+            if (plan?.Nets == null || region == null) return;
+            foreach (var n in plan.Nets)
+            {
+                if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide) continue;
+                float hw = Composer.DefaultHalfWidth(n.Role);
+                if (n.StartAttach < 0) n.A = PullIn(n.A, n.B, n.D, hw, region);
+                if (n.EndAttach < 0) n.D = PullIn(n.D, n.C, n.A, hw, region);
+            }
+        }
+
+        private static float3 PullIn(float3 end, float3 control, float3 other, float hw, LayerRegion region)
+        {
+            var p = end.xz;
+            float inside = region.Contains(p) ? region.BoundaryDistance(p, hw + 1f) : -region.BoundaryDistance(p, 50f);
+            if (inside > 0.5f) return end;   // only ends ON (or beyond) the outline: entrances, edge-to-edge walks
+            float need = hw - inside;
+            if (need <= 0.05f) return end;
+            var toward = math.lengthsq(control.xz - p) > 0.01f ? control.xz : other.xz;
+            float len = math.distance(toward, p);
+            if (len < need * 2f + 0.5f) return end;   // too short to shorten: leave it
+            var q = p + (toward - p) / len * need;
+            return new float3(q.x, end.y, q.y);
         }
 
         // ───────────── "Shops along the street" (edgeZoning feature on a "shops" target) ─────────────

@@ -65,11 +65,11 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             c.Toggle("animals", true, ControlTier.Essential, "animals").Tip();
             c.Slider("animalsPerPen", 2, 1, 6, 1, "count", ControlTier.More, "animals").When("animals=true");
             c.Toggle("pond", true, ControlTier.More, "animals").Tip();
-            c.Slider("pondSize", 16, 10, 40, 2, "m", ControlTier.More, "animals").When("pond=true");
+            c.Slider("pondSize", 16, 10, 40, 2, "m", ControlTier.More, "animals").Layout(8).When("pond=true");
             c.Choice("layout", "loop", ControlTier.Essential, "visitors", "loop", "spine", "trail").Tip();
             c.Toggle("hub", true, ControlTier.Essential, "visitors").Tip();
             c.Slider("viewpoints", 3, 0, 8, 1, "count", ControlTier.More, "visitors").Tip();
-            c.Slider("benchSpacing", 35, 0, 80, 5, "m", ControlTier.More, "visitors").Tip();
+            c.Slider("benchSpacing", 35, 0, 80, 5, "m", ControlTier.More, "visitors").Layout(5).Tip();
             c.Toggle("lamps", false, ControlTier.More, "visitors");
             c.Slider("shadeTrees", 20, 0, 60, 5, "perHa", ControlTier.More, "planting").Tip();
             c.Slider("woodland", 0, 0, 60, 5, "%", ControlTier.More, "planting").Tip();

@@ -54,13 +54,14 @@ namespace Placemaker.Core.Layers.Common
                     if (len < 0.5f) continue;
                     var t = (s.B - s.A) / len;
                     var n = new float2(-t.y, t.x);
-                    for (float along = step * 0.5f; along < len; along += step)
+                    // Short segments (sampled curves) still get their midpoint: otherwise a meandering path has no anchors.
+                    for (float along = math.min(step * 0.5f, len * 0.5f); along < len; along += step)
                     {
                         var onPath = s.A + t * along;
                         for (int side = -1; side <= 1; side += 2)
                         {
                             var p = onPath + n * side * (s.HalfWidth + gapToPath + radius);
-                            if (!occ.Free(p, radius, 0.5f, 0.3f)) continue;
+                            if (!occ.Free(p, radius, radius, 0.3f)) continue;   // the whole footprint inside the area
                             result.Add(new PathAnchor { Position = p, Toward = onPath, Tangent = t, GateDistance = Nearest(gates, p) });
                         }
                     }

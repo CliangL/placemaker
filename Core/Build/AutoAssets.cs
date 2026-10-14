@@ -149,8 +149,14 @@ namespace Placemaker.Core.Build
                 if (!stepPalette.ContainsKey(step)) stepPalette[step] = PickPalette(source.Palettes, l.Seed);
                 foreach (var n in l.Nets)
                     if (n != null && Needs(n.Asset, exists))
-                        resolved += Set(ref n.Asset, n.Role == NetRole.Alley && exists != null && exists(AlleyPrefab)
-                            ? AlleyPrefab : Pick(step, RoleCategories.ForNet(n), 0), exists);
+                    {
+                        string cat = RoleCategories.ForNet(n);
+                        string id = n.Role == NetRole.Alley && exists != null && exists(AlleyPrefab) ? AlleyPrefab
+                            : (n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide) && cat == AssetCategories.Pathway
+                                ? PickWalk(Candidates(step, cat), n.Role == NetRole.PathwayWide) ?? Pick(step, cat, 0)
+                                : Pick(step, cat, 0);
+                        resolved += Set(ref n.Asset, id, exists);
+                    }
                 foreach (var s in l.Surfaces)
                     if (s != null && Needs(s.Asset, exists)) resolved += Set(ref s.Asset, Pick(step, RoleCategories.ForSurface(s), 0), exists);
                 foreach (var a in l.Areas)
@@ -189,6 +195,41 @@ namespace Placemaker.Core.Build
         }
 
         private const string SplitGeneratorId = "split";
+
+        /// <summary>
+        /// (FEEDBACK-4) The automatic ground walk: never a bridge, pier or quay; a plain thin path (vanilla
+        /// "Pavement Path", 3 m) for Pathway, a wide one only for PathwayWide. Null when the pool has no ground walk.
+        /// </summary>
+        public static string PickWalk(IReadOnlyList<string> pool, bool wide)
+        {
+            if (pool == null) return null;
+            string best = null; int bestScore = int.MinValue;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                var id = pool[i];
+                int s = WalkScore(id, wide);
+                if (s == int.MinValue) continue;
+                s = s * 64 - i;   // pool order breaks ties
+                if (s > bestScore) { bestScore = s; best = id; }
+            }
+            return best;
+        }
+
+        /// <summary>Rank of a pool item as an automatic ground walk (int.MinValue = never).</summary>
+        public static int WalkScore(string id, bool wide)
+        {
+            if (string.IsNullOrEmpty(id)) return int.MinValue;
+            var lower = id.ToLowerInvariant();
+            foreach (var bad in new[] { "bridge", "pier", "quay", "boardwalk", "tunnel", "elevated", "bike", "cycle" })
+                if (lower.Contains(bad)) return int.MinValue;
+            bool isWide = lower.Contains("wide");
+            int s = 0;
+            if (lower.Contains("pavement path")) s += 4;
+            else if (lower.Contains("path")) s += 2;
+            if (lower.Contains("gravel")) s -= 1;
+            s += isWide == wide ? 6 : 0;
+            return s;
+        }
 
         /// <summary>Vanilla two-way alley (PLT: never "Alley Oneway", it has 2.5 m parking strips).</summary>
         public const string AlleyPrefab = "Alley";

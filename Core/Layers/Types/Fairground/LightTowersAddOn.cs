@@ -21,7 +21,7 @@ namespace Placemaker.Core.Layers.Types.Events
         protected override void DefineControls(ControlSet c)
         {
             c.Slider("density", 2, 0.5, 8, 0.5, "perHa", ControlTier.Essential, "lighting").Tip();
-            c.Slider("spacing", 30, 12, 80, 2, "m", ControlTier.Essential, "lighting").Tip();
+            c.Slider("spacing", 30, 12, 80, 2, "m", ControlTier.Essential, "lighting").Layout(10).Tip();
             c.Choice("where", "paths", ControlTier.More, "lighting", "paths", "edges", "open").Tip();
             c.Asset("asset", AssetCategories.EventLightTower, ControlTier.More, "lighting");
             c.RandomRange("density", 1, 4);

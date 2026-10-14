@@ -193,7 +193,7 @@ namespace Placemaker.Core.Layers.Common
             foreach (var p in Scatter.Candidates(region, math.max(1.5f, radius * 1.4f), Hashing.Mix(ctx.Seed, salt + 1u), math.min(60000, wanted * 30 + 200), ctx.Cancel))
             {
                 if (placed >= wanted) break;
-                float chance = Scatter.Clustering(p, clumpScale, clump, floor);
+                float chance = Scatter.Clustering(p, Layout.M(clumpScale, 4f), clump, floor);   // clump size is a layout distance
                 if (Hashing.Unit(Hashing.Mix(clump, (int)(p.x * 13f), (int)(p.y * 7f))) > chance) continue;
                 if (reject != null && reject(p)) continue;
                 if (!occ.Free(p, radius, radius * 0.6f, 0.4f)) continue;

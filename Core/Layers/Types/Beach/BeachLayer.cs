@@ -44,7 +44,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         {
             c.Choice("style", "sandy", ControlTier.Essential, "beach", Styles).Tip();
             c.Choice("waterSide", "auto", ControlTier.Essential, "beach", Shoreline.Sides).Tip();
-            c.Slider("beachDepth", 30, 12, 80, 2, "m", ControlTier.Essential, "beach").Tip();
+            c.Slider("beachDepth", 30, 12, 80, 2, "m", ControlTier.Essential, "beach").Layout(8).Tip();
             c.Slider("umbrellas", 35, 0, 120, 5, "perHa", ControlTier.Essential, "beach").Tip();
             c.Choice("layout", "scattered", ControlTier.Essential, "beach", "scattered", "rows").Tip();
 
@@ -58,15 +58,15 @@ namespace Placemaker.Core.Layers.Types.Beach
 
             c.Choice("backdrop", "dunes", ControlTier.More, "backdrop", "dunes", "lawn", "woods", "none").Tip();
             c.Slider("duneHeight", 2, 0.5, 5, 0.5, "m", ControlTier.More, "backdrop").When("backdrop=dunes");
-            c.Slider("duneDepth", 20, 8, 50, 2, "m", ControlTier.More, "backdrop").Tip();
+            c.Slider("duneDepth", 20, 8, 50, 2, "m", ControlTier.More, "backdrop").Layout(6).Tip();
             c.Toggle("duneFence", true, ControlTier.More, "backdrop").When("backdrop=dunes").Tip();
             c.Slider("grassDensity", 60, 0, 100, 5, "%", ControlTier.More, "backdrop").Tip();
             c.Slider("treeDensity", 15, 0, 100, 5, "perHa", ControlTier.More, "backdrop");
 
             c.Toggle("backPath", true, ControlTier.More, "backPath").Tip();
             c.Choice("pathWidth", "narrow", ControlTier.More, "backPath", "narrow", "wide");
-            c.Slider("accessSpacing", 60, 20, 200, 10, "m", ControlTier.More, "backPath").Tip();
-            c.Slider("benchSpacing", 25, 0, 80, 5, "m", ControlTier.More, "backPath").Tip();
+            c.Slider("accessSpacing", 60, 20, 200, 10, "m", ControlTier.More, "backPath").Layout(10).Tip();
+            c.Slider("benchSpacing", 25, 0, 80, 5, "m", ControlTier.More, "backPath").Layout(5).Tip();
             c.Toggle("lamps", true, ControlTier.More, "backPath");
 
             c.Toggle("showers", true, ControlTier.More, "amenities").Tip();

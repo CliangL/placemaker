@@ -137,7 +137,7 @@ namespace Placemaker.Tests.Types
             Assert.True(plans["karesansui"].Facts["gravelArea"] > 3 * plans["stroll"].Facts["gravelArea"]);
             Assert.Equal(0, plans["bamboo"].Facts["waterArea"]);
             Assert.True(plans["moss"].Objects.Count(o => o.Role == ObjectRole.Tree) > plans["karesansui"].Objects.Count(o => o.Role == ObjectRole.Tree) * 2);
-            Assert.Contains(plans["bamboo"].Nets, n => n.Role == NetRole.PathwayWide);
+            Assert.Contains(plans["bamboo"].Nets, n => n.Role == NetRole.Pathway);   // thin by default (FEEDBACK-4)
         }
 
         [Fact]
