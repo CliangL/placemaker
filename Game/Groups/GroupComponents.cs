@@ -55,6 +55,8 @@ namespace Placemaker.Game.Groups
         Zoning = 7,
         /// <summary>The "Placemaker Area" lot covering the outline: the ONE selectable/bulldozable thing (US7).</summary>
         OwnerArea = 8,
+        /// <summary>(s19) Invisible physical "Placemaker Zone Block" lot: blocks the road zone cells under the build.</summary>
+        ZoneBlocker = 9,
     }
 
     /// <summary>The group record. Lives on a headless entity together with <see cref="PlacemakerGroupBlob"/>.</summary>
