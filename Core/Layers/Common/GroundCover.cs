@@ -282,6 +282,38 @@ namespace Placemaker.Core.Layers.Common
             return result;
         }
 
+        /// <summary>
+        /// A hedge as a ROW of hedge pieces laid end to end (one piece per piece length, evenly spread over
+        /// the run), never a bush every metre. Piece length from the chosen asset's bounds, else
+        /// <paramref name="fallbackPiece"/> (vanilla HedgePiece* are ≈ 4.1 m long; bush fallbacks ≈ 1.6 m).
+        /// </summary>
+        public static int HedgeRow(LayerContext ctx, float2 a, float2 b, AssetRef asset, string category, ObjectRole role, uint variation,
+            float fallbackPiece = 4f, Occupancy occ = null)
+        {
+            float len = math.distance(a, b);
+            if (len < 0.5f) return 0;
+            float piece = fallbackPiece;
+            if (!string.IsNullOrEmpty(asset.Id) && ctx.Site?.Assets != null && ctx.Site.Assets.TryGetValue(asset.Id, out var info))
+            {
+                float z = info.BoundsMax.z - info.BoundsMin.z;
+                if (z > 0.5f && math.isfinite(z)) piece = z;
+            }
+            if (category == AssetCategories.Bush) piece = math.min(piece, 1.6f);
+            if (len < piece * 0.75f) return 0;   // a piece would overhang the run by more than an eighth each end: leave it open
+            int n = math.max(1, (int)math.round(len / piece));
+            var d = (b - a) / len;
+            float yaw = math.atan2(d.x, d.y), step = len / n;
+            int placed = 0;
+            for (int i = 0; i < n; i++)
+            {
+                var p = a + d * (step * (i + 0.5f));
+                if (occ != null && occ.Corridors.Overlaps(p, 0.4f, 0f)) continue;
+                ctx.Object(p, yaw, role, asset, variation, -1, category);
+                placed++;
+            }
+            return placed;
+        }
+
         /// <summary>Accent budget for a layer: <paramref name="perHa"/> objects per hectare, clamped.</summary>
         public static int AccentBudget(float areaM2, float perHa, int min, int max) =>
             math.clamp((int)math.round(areaM2 / 10000f * perHa), min, max);
