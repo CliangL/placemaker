@@ -32,11 +32,12 @@ namespace Placemaker.Core.Layers.Types.Ruins
         public override string Icon => "Media/Game/Icons/Bulldozer.svg";
         public override float MinArea => 300f;
         protected override int WantedEntrances(LayerRegion region) => math.min(2, Entrances.WantedByArea(region.Area));
+        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, StreetFrontage.ShopsTag, DirtJumps.Place };
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature(DebrisAddOn.LayerId, ("mix", "junk"), ("where", "edges")),
-            Feature(DirtJumpsAddOn.LayerId, ("lines", 1.0), ("height", 1.25)),
+            DirtJumps.InPlace(Feature(DirtJumpsAddOn.LayerId, ("lines", 1.0), ("height", 1.25))),
             DecayKit.Relabel(Feature("bigtrees", ("density", 1.5)), "Placemaker.Abandoned.Feature.bigtrees"),
             Feature("rocks", ("size", "small"), ("clusters", 3.0)),
             Feature("decals", ("theme", "dirt"), ("ground", "lawn"), ("density", 1.5)),
@@ -143,21 +144,25 @@ namespace Placemaker.Core.Layers.Types.Ruins
 
             // ── Foundations: broken slabs (in a row along the street for a demolished block).
             int wantedSlabs = ctx.I("foundations");
-            float slabL = math.clamp(math.sqrt(region.Area) * 0.26f, 9f, 32f), slabW = slabL * 0.62f;
+            // Footprint of a former building: full length 9–32 m, about 0.62 as deep.
+            float slabL = math.clamp(math.sqrt(region.Area) * 0.13f, 9f, 32f), slabW = slabL * 0.62f;
             var slabs = new List<(OrientedRect r, DecayKit.Slab s)>();
             var slabAsset = AssetMix.One(ctx.S("slabSurface"));
             for (int i = 0; i < wantedSlabs; i++)
             {
-                float2 near = sub == "demolished" ? focus + axis * ((i - (wantedSlabs - 1) * 0.5f) * (slabL * 2f + 5f)) : focus + side * (i * slabW * 2.2f) * ((i & 1) == 0 ? 1f : -1f);
+                float2 near = sub == "demolished" ? focus + axis * ((i - (wantedSlabs - 1) * 0.5f) * (slabL + 5f)) : focus + side * (i * slabW * 1.2f) * ((i & 1) == 0 ? 1f : -1f);
                 if (!region.Contains(near)) near = focus;
                 uint s = Hashing.Mix(ctx.Seed, 0x51ABu + (uint)i);
                 float scale = 0.8f + 0.4f * Hashing.Unit(s);
-                if (!DecayKit.FindRect(region, occ, zones, near, axis, slabL * scale, slabW * scale, 2f, s, out var r, 90)) continue;
+                if (!DecayKit.FindRect(region, occ, zones, near, axis, slabL * 0.5f * scale, slabW * 0.5f * scale, 2f, s, out var r, 90)) continue;
                 zones.Add(Grow(r, 0.6f).Ring);
                 var slab = DecayKit.BrokenSlab(ctx, r, ctx.F("cracking") / 100f, SurfaceRole.Paving, slabAsset, AssetCategories.SurfacePaving, s);
                 slabs.Add((r, slab));
             }
             ctx.Check();
+
+            // ── Room for the dirt-jumps feature (kids dig their jumps into the open ground).
+            DirtJumps.CarvePlace(ctx, region, occ, zones, region.DeepestPoint(out _, null, 12), axis, 1);
 
             // ── Desire paths: worn across the lot between the gates (and to the camp later).
             if (ctx.B("desirePaths") && gates.Count >= 2)
@@ -317,7 +322,7 @@ namespace Placemaker.Core.Layers.Types.Ruins
             if (ctx.B("crackWeeds"))
                 foreach (var (r, slab) in slabs)
                     crackWeeds += DecayKit.CrackWeeds(ctx, occ, slab.Cracks, math.saturate(over * 0.9f + 0.05f), ctx.L("weedAssets"), weedCat, 0xC3Au + (uint)(r.Center.x * 3f));
-            float edgeReach = sub == "overgrown" ? math.max(18f, minor * 0.45f) : 14f;
+            float edgeReach = sub == "overgrown" ? 22f : 14f;
             var (weeds, trees) = DecayKit.Overgrowth(ctx, occ, region, over, ctx.F("youngTrees"), ctx.L("weedAssets"), weedCat, ctx.L("treeSpecies"), 0x0F6u,
                 p => zones.Inside(p, 0.8f), edgeReach);
             ctx.Check();

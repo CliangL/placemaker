@@ -101,6 +101,7 @@
   "Placemaker.AddOn.DirtJumps.paintLayer.Tooltip": "Which of the map's four extra terrain textures to paint.",
   "Placemaker.AddOn.DirtJumps.Preset.beginner": "Beginner line",
   "Placemaker.AddOn.DirtJumps.Preset.pro": "Pro lines",
+  "Placemaker.AddOn.DirtJumps.Issue.NoPlace": "No free ground was big enough for the dirt jumps.",
 
   "Placemaker.Stat.SkateFeatures": "Skate features",
   "Placemaker.Stat.Pillars": "Pillars",

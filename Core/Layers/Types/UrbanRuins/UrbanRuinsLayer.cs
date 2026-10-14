@@ -30,10 +30,11 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         public override string Icon => "Media/Game/Icons/ExtradosedBridge01.svg";
         public override float MinArea => 800f;
         protected override int WantedEntrances(LayerRegion region) => math.min(2, Entrances.WantedByArea(region.Area));
+        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, StreetFrontage.ShopsTag, DirtJumps.Place };
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
-            Feature(DirtJumpsAddOn.LayerId, ("lines", 1.0)),
+            DirtJumps.InPlace(Feature(DirtJumpsAddOn.LayerId, ("lines", 2.0))),
             Feature(DebrisAddOn.LayerId, ("mix", "mixed"), ("where", "edges")),
             Feature("restrooms"),
             Feature("shops", ("count", 1.0), ("where", "entrances")),
@@ -291,21 +292,33 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 DecayKit.BrokenFence(ctx, occ, region, gates, ctx.F("fenceGaps") / 100f, AssetMix.One(ctx.S("fenceAsset"), AbandonedLotLayer.SiteFences), 0xFE7Du);
             ctx.Check();
 
+            // Room for the dirt-jumps feature, on the yard side.
+            var yardSide = centre + side * (hasDeck && ctx.S("deckSide") == "side" ? minor * 0.25f : deck.HalfWidth + minor * 0.2f);
+            DirtJumps.CarvePlace(ctx, region, occ, all, region.Contains(yardSide) ? yardSide : centre, axis, 2);
+
             // ── 6. The DIY spot: a dug bowl, skate lines and concrete ledges on the pads.
             float bowlDepth = ctx.F("bowl");
             bool bowl = false;
             if (bowlDepth > 0f)
                 foreach (var pad in pads)
                 {
-                    float R = math.min(pad.HalfWidth - 1.2f, 7f);
-                    if (R < 4f || pad.HalfLength < R + 2f) continue;
-                    for (int t = 0; t < 5 && !bowl; t++)
+                    // Mid-span spots first (clear of the pillar pairs at the joints), then the pad centre.
+                    var us = new List<float> { 0f };
+                    foreach (var s in spans) if (!s.Collapsed && !s.Ramp) us.Insert(0, math.dot(s.R.Center - pad.Center, pad.Axis));
+                    foreach (float R0 in new[] { math.min(pad.HalfWidth - 1.2f, 7f), 5f, 4f })
                     {
-                        var c = pad.Local((t == 0 ? 0f : (t % 2 == 1 ? 1f : -1f) * ((t + 1) / 2) * R * 0.8f), 0f);
-                        if (math.abs(math.dot(c - pad.Center, pad.Axis)) > pad.HalfLength - R - 0.5f || !occ.Free(c, R, 1f, 0.3f)) continue;
-                        DirtJumps.Dish(ctx, c, R, bowlDepth);
-                        occ.Take(c, R, 2);
-                        bowl = true;
+                        float R = math.min(R0, pad.HalfWidth - 1.2f);
+                        if (R < 4f || pad.HalfLength < R + 1f) continue;
+                        foreach (var u in us)
+                        {
+                            var c = pad.Local(u, 0f);
+                            if (math.abs(u) > pad.HalfLength - R - 0.5f || !occ.Free(c, R, 1f, 0.3f)) continue;
+                            DirtJumps.Dish(ctx, c, R, bowlDepth);
+                            occ.Take(c, R, 2);
+                            bowl = true;
+                            break;
+                        }
+                        if (bowl) break;
                     }
                     if (bowl) break;
                 }

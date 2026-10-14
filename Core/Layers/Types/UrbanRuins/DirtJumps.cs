@@ -16,6 +16,33 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
     {
         public const float LineWidth = 7f;
         public const float EdgeMargin = 6f;
+        /// <summary>Region a host carves out for the dirtJumps feature (a composer "place": siblings keep out).</summary>
+        public const string Place = "place:jumps";
+
+        /// <summary>
+        /// Host side of the feature: when a dirtJumps child is on, claim a free rectangle for
+        /// <paramref name="lines"/> lines (shrinking to one short line when space is tight), keep the
+        /// host's own scatter out of it and hand it over as the "place:jumps" region.
+        /// </summary>
+        public static FeatureInfo InPlace(FeatureInfo f) { f.Target = Place; return f; }
+
+        public static bool CarvePlace(LayerContext ctx, LayerRegion region, Occupancy occ, Zones zones, float2 near, float2 axis, int lines)
+        {
+            if (!ctx.Input.HasChild(DirtJumpsAddOn.LayerId)) return false;
+            for (int l = math.max(1, lines); l >= 1; l--)
+                foreach (int jumps in new[] { 4, 3, 2 })
+                {
+                    float hl = LineLength(jumps, 9f, jumps >= 3) * 0.5f + EdgeMargin + 0.5f;
+                    float hw = (l * LineWidth + (l - 1) * 4f) * 0.5f + EdgeMargin + 0.5f;
+                    if (!DecayKit.FindRect(region, occ, zones, near, axis, hl, hw, 1f, Hashing.Mix(ctx.Seed, 0x91ACu + (uint)(l * 8 + jumps)), out var r, 100)) continue;
+                    zones.Add(r.Ring);
+                    occ.TakeCorridor(r.Local(-r.HalfLength, 0f), r.Local(r.HalfLength, 0f), r.HalfWidth, 5);
+                    ctx.AddRegion(r.Ring, Place, Place);
+                    return true;
+                }
+            ctx.Issue(IssueSeverity.Info, "Placemaker.AddOn.DirtJumps.Issue.NoPlace");
+            return false;
+        }
 
         /// <summary>Length of a line with <paramref name="jumps"/> pairs (roll-in hill + run-up + pairs + run-out).</summary>
         public static float LineLength(int jumps, float spacing, bool startHill) => (startHill ? 9f : 0f) + 5f + jumps * spacing + 3f;

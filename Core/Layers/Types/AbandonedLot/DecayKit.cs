@@ -306,7 +306,7 @@ namespace Placemaker.Core.Layers.Types.Ruins
             }
             int weedsWanted = math.min(2500, (int)(region.Area / 100f * amount * 1.4f));
             int weeds = LeisureKit.Plant(ctx, occ, region, weedsWanted, ObjectRole.Bush, weedIds, 0.8f, 7f, 0.25f, salt + 11u,
-                p => Edgy(p, 0.25f + 0.25f * amount), 1, 3, weedCategory);
+                p => Edgy(p, 0.05f + 0.25f * amount), 1, 3, weedCategory);
             int trees = 0;
             int treesWanted = math.min(600, (int)(ha * treesPerHa * math.saturate(amount * 1.2f)));
             if (treesWanted > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
