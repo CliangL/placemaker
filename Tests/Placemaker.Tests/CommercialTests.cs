@@ -19,7 +19,7 @@ namespace Placemaker.Tests
     public class CommercialTests
     {
         private static readonly DesignEditor Editor = new DesignEditor(GeneratorRegistry.Get);
-        public static readonly string[] Types = { "stripMall", "shoppingPlaza", "outdoorMall", "shopsPark" };
+        public static readonly string[] Types = { "stripMall", "shoppingPlaza", "outdoorMall", "shopsPark", "highStreet", "retailPark", "mallPark", "mallDistrict" };
 
         private static float3[] Site(string site) => site switch
         {
@@ -37,7 +37,8 @@ namespace Placemaker.Tests
                 presets.AddRange(GeneratorRegistry.Get(t).Presets.Select(p => p.Id));
                 foreach (var p in presets)
                     foreach (var s in new[] { "small", "big", "wide", "L" })
-                        yield return new object[] { t, p, s };
+                        if (Poly.Area(Poly.To2D(Site(s))) >= GeneratorRegistry.Get(t).MinArea)
+                            yield return new object[] { t, p, s };
             }
         }
 

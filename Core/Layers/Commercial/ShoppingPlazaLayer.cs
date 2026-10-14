@@ -20,7 +20,7 @@ namespace Placemaker.Core.Layers.Commercial
         public override string Id => "shoppingPlaza";
         public override string Icon => "Media/Game/Icons/PropsCommercial.svg";
 
-        public static readonly string[] Courts = { "plaza", "market", "court", "green" };
+        public static readonly string[] Courts = { "plaza", "market", "court", "green", "foodCourt" };
 
         protected override void DefineControls(ControlSet c)
         {
@@ -38,6 +38,8 @@ namespace Placemaker.Core.Layers.Commercial
             Preset("market", ("court", "market"), ("courtWidth", 56.0), ("courtDepth", 56.0));
             Preset("court", ("court", "court"), ("courtWidth", 52.0), ("courtDepth", 44.0));
             Preset("green", ("court", "green"), ("courtWidth", 60.0), ("courtDepth", 60.0), ("zoneKind", ZoneKinds.Mixed));
+            // (s32) An open-air food hall: a café square with food stands and their seating round the edge, a fountain in the middle.
+            Preset("foodCourt", ("court", "foodCourt"), ("courtWidth", 52.0), ("courtDepth", 48.0), ("plotDepth", 16.0));
         }
 
         protected override void Compose(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
@@ -90,6 +92,14 @@ namespace Placemaker.Core.Layers.Commercial
                 }
                 case "market": ok = mall.Fill(core, "marketSquare", "weekly", door, 0xB2u); break;
                 case "green": ok = mall.Fill(core, "park", "pocket", door, 0xB3u); break;
+                case "foodCourt":
+                    ok = mall.Fill(core, "plaza", "cafe", door, 0xB6u);
+                    if (ok)
+                    {
+                        mall.AddOn(core, "shops", 0xB7u, b => { b.Values["count"] = 6.0; b.Values["where"] = "edges"; b.Values["seating"] = true; });
+                        mall.AddOn(core, "kiosk", 0xB8u, b => { b.Values["count"] = 2.0; b.Values["benches"] = true; });
+                    }
+                    break;
                 default: ok = mall.Fill(core, "plaza", null, door, 0xB4u); break;
             }
             if (!ok) mall.Fill(core, "plaza", null, door, 0xB5u);

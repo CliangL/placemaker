@@ -19,7 +19,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Commercial
 {
-    public sealed class Mall
+    public sealed partial class Mall
     {
         public const float Cell = StreetFrontage.Cell;
         public const float AlleyHalf = StreetShops.AlleyHalf;
@@ -59,6 +59,16 @@ namespace Placemaker.Core.Layers.Commercial
             public float StartT, EndT;
             /// <summary>Points on the lane where something joins it (lot alley stubs, paths): the lane is split there.</summary>
             public readonly List<float2> Joins = new List<float2>();
+            /// <summary>(s32) The lane this lane's start / end node sits on (a T or X junction), null at a street or a free end.</summary>
+            public Lane StartOn, EndOn;
+            /// <summary>(s32) A closed loop: the last point is the first (one node).</summary>
+            public bool Closed;
+            /// <summary>(s32) Level shoulder beside the lane for the grading (m); negative = MallGrading.Shoulder.</summary>
+            public float Shoulder = -1f;
+            /// <summary>(s32) Steepest longitudinal grade the grading gives the lane; 0 = MallGrading.LaneMaxGrade (8 %).</summary>
+            public float MaxGrade;
+            /// <summary>(s32) The corridor pieces Connect took for it (so a lane can be taken back).</summary>
+            internal List<float2[]> Land;
             internal int Index;
         }
 
@@ -76,6 +86,9 @@ namespace Placemaker.Core.Layers.Commercial
         private readonly List<(float2[] ring, Func<float2, float> height)> _lotGround = new List<(float2[], Func<float2, float>)>();
         /// <summary>(s25) Off: the mall keeps the ground as it is (tests compare against the ungraded plan).</summary>
         public bool Grading = true;
+        /// <summary>(s32) Smallest height change the grading emits (m). The s32 types emit finer (lanes running up a slope would
+        /// otherwise keep 0.1 m lumps of the original ground in every cell the profile happens to come close to).</summary>
+        public float GradeTolerance = Sculpt.MinChange;
         /// <summary>(s25) Planned ground height of every lane at its centre line (after grading); empty before Finish.</summary>
         public readonly Dictionary<Lane, float[]> LaneProfiles = new Dictionary<Lane, float[]>();
 
@@ -231,6 +244,9 @@ namespace Placemaker.Core.Layers.Commercial
                 var d = math.normalizesafe(b - a); var n = new float2(-d.y, d.x);
                 // Square ends overlap at bends so the union is closed; at an attached end only the part inside the area matters.
                 float ea = i == 0 ? 0f : h, eb = i + 2 == lane.Points.Count ? (lane.EndAttach >= 0 ? 0f : 0.5f) : h;
+                // (s32) An end on another lane stops at that lane's edge (its corridor is already taken).
+                if (i == 0 && lane.StartOn != null) ea = -(lane.StartOn.Half + 0.1f);
+                if (i + 2 == lane.Points.Count && lane.EndOn != null) eb = -(lane.EndOn.Half + 0.1f);
                 list.Add(Poly.EnsureCcw(new[] { a - d * ea - n * h, b + d * eb - n * h, b + d * eb + n * h, a - d * ea + n * h }));
             }
             return list;
@@ -421,7 +437,7 @@ namespace Placemaker.Core.Layers.Commercial
         /// Plans <paramref name="ring"/> with another type's planner (park, plaza, marketSquare…) and merges the result.
         /// <paramref name="doors"/>: outline points where the piece should open (a lane end, the lot) besides its own suggestions.
         /// </summary>
-        public bool Fill(float2[] ring, string layerId, string preset, IReadOnlyList<float2> doors, uint salt, bool suggested = true, Action<SettingsBag> edit = null)
+        public bool Fill(float2[] ring, string layerId, string preset, IReadOnlyList<float2> doors, uint salt, bool suggested = true, Action<SettingsBag> edit = null, float doorSnap = 2.5f, Func<float2, bool> keepSuggested = null)
         {
             var gen = GeneratorRegistry.Get(layerId) as LayerBase;
             var region = ring == null ? null : LayerRegion.From(ring);
@@ -441,6 +457,8 @@ namespace Placemaker.Core.Layers.Commercial
             if (suggested)
                 foreach (var m in gen.SuggestMarkers(input) ?? new List<EdgeMarker>())
                 {
+                    // (s32) Only where people arrive: an entrance on a shop's back wall would end a walk at a plot.
+                    if (keepSuggested != null && !keepSuggested(m.Position.xz)) continue;
                     input.Markers.Add(m);
                     kind = kind ?? m.Kind;
                 }
@@ -453,7 +471,7 @@ namespace Placemaker.Core.Layers.Commercial
                 foreach (var d in doors)
                 {
                     var p = region.ClosestOnBoundary(d, out int seg, out float t);
-                    if (math.distance(p, d) > 6f) continue;
+                    if (math.distance(p, d) > math.max(6f, doorSnap + 0.5f)) continue;
                     bool near = false;
                     foreach (var m in input.Markers) if (math.distance(m.Position.xz, p) < 8f) near = true;
                     if (!near) input.Markers.Add(new EdgeMarker { Kind = kind ?? "entrance", RingSegment = seg, RingT = t, Position = Ctx.P3(p) });
@@ -468,15 +486,18 @@ namespace Placemaker.Core.Layers.Commercial
             sub.Regions.RemoveAll(g => Composer.IsPlace(g) || Array.IndexOf(g.Tags, StreetFrontage.ShopsTag) >= 0);
             // CS2 joins nets only at identical nodes: a path ending at a door ends exactly on it (a lane's end node).
             if (doors != null)
+            {
+                float snap2 = doorSnap * doorSnap;
                 foreach (var n in sub.Nets)
                 {
                     if (!PathJoins.IsPath(n)) continue;
                     foreach (var d in doors)
                     {
-                        if (n.StartAttach < 0 && math.distancesq(n.A.xz, d) < 6.25f) { var dd = Ctx.P3(d) - n.A; n.A += dd; n.B += dd; }
-                        if (n.EndAttach < 0 && math.distancesq(n.D.xz, d) < 6.25f) { var dd = Ctx.P3(d) - n.D; n.D += dd; n.C += dd; }
+                        if (n.StartAttach < 0 && math.distancesq(n.A.xz, d) < snap2) { var dd = Ctx.P3(d) - n.A; n.A += dd; n.B += dd; }
+                        if (n.EndAttach < 0 && math.distancesq(n.D.xz, d) < snap2) { var dd = Ctx.P3(d) - n.D; n.D += dd; n.C += dd; }
                     }
                 }
+            }
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error);
             Merge(sub);
             Taken.Add(Poly.EnsureCcw(ring));
@@ -554,7 +575,8 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 var ring = Shops[i];
                 var bag = new SettingsBag();
-                bag.Values[EdgeZoningAddOn.ZoneControl] = zoneId;
+                // (s32) A plot may carry its own zone (big high-density plots on the street, small low-density ones on the lanes).
+                bag.Values[EdgeZoningAddOn.ZoneControl] = ShopZone.TryGetValue(ring, out var own) && !string.IsNullOrEmpty(own) ? own : zoneId;
                 bag.Values[EdgeZoningAddOn.CutoutSetting] = true;
                 var input = new AreaInput
                 {

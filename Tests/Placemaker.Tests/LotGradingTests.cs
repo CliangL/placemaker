@@ -336,7 +336,8 @@ namespace Placemaker.Tests
             int Near(float2 p)
             {
                 foreach (var r in roads) if (math.sqrt(SegmentIndex.DistSq(p, r.A, r.B)) <= r.HalfWidth + StreetFrontage.Tolerance + 0.01f) return 1;
-                foreach (var n in lanes) if (math.sqrt(SegmentIndex.DistSq(p, n.A.xz, n.D.xz)) <= (n.Role == NetRole.Street ? Composer.DefaultHalfWidth(NetRole.Street) : StreetShops.AlleyHalf) + StreetFrontage.Tolerance + 0.01f) return 2;
+                // (s32) The lane's real width (a pedestrian street is 8 or 16 m, the Small Road 16 m), as the grading sees it.
+                foreach (var n in lanes) if (math.sqrt(SegmentIndex.DistSq(p, n.A.xz, n.D.xz)) <= ZoneGuard.NetWidth(n, null) * 0.5f + StreetFrontage.Tolerance + 0.01f) return 2;
                 return 0;
             }
             var faces = new List<(float2 a, float2 b, int kind)>();
