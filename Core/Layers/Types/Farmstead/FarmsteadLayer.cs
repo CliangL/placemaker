@@ -45,7 +45,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
         protected override bool HostsStreetShops => false;
         protected override int WantedEntrances(LayerRegion region) => region.Area > 60000f ? 2 : 1;
 
-        private const int MaxCropItems = 5000;
+        private const int MaxCropItems = 3000;
         private const int MaxStripes = 1600;
         private const int MaxFields = 120;
         private const int MaxHedgeItems = 2500;
@@ -359,7 +359,8 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             // 5. Tracks: spine along the farm's axis through the yard, cross tracks every second field.
             string trackMode = ctx.S("tracks");
             float fieldArea = ctx.F("fieldSize") * 10000f;
-            fieldArea = math.max(fieldArea, region.Area / MaxFields);
+            // Small farms still get a few fields; huge ones never exceed the field budget.
+            fieldArea = math.clamp(fieldArea, region.Area / MaxFields, math.max(1500f, region.Area / 4f));
             float Lf = math.sqrt(fieldArea * 1.6f), Wf = Lf / 1.6f;
             Func<float2, bool> trackBlocked = p => hard.Hits(p, 1.5f) || !region.ContainsDisc(p, 3f);
             var trackLinesB = new HashSet<int>();   // lattice lines along the axis carrying a track
@@ -416,7 +417,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                         break;
                     case FieldKind.Veg:
                         if (paint) TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 1f, 2f);
-                        if (cropCat != null) crops += CropRows(ctx, occ, f, false, math.max(1.5f, rs * 0.5f), 1.6f, cropIds, cropCat, MaxCropItems - crops, v);
+                        if (cropCat != null) crops += CropRows(ctx, occ, f, false, math.max(2f, rs * 0.6f), 2.2f, cropIds, cropCat, MaxCropItems - crops, v);
                         break;
                     case FieldKind.Fallow:
                         if (paint) TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 0.55f, 4f);
@@ -693,20 +694,34 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             bool hay = ctx.B("hayMeadows");
             string rowAngle = ctx.S("rowAngle");
             string cropMode = ctx.S("cropProps");
-            for (int i = 0; i < fields.Count; i++)
+            // Exact shares: fields ranked by a seeded hash, the first share arable, the rest grass; within
+            // each group every third is a variant (fallow / hay) and small plots of hobby farms grow vegetables.
+            var order = new List<int>();
+            for (int i = 0; i < fields.Count; i++) order.Add(i);
+            var keys = new uint[fields.Count];
+            for (int i = 0; i < fields.Count; i++) keys[i] = Hashing.Mix(ctx.Seed, fields[i].A * 7919 + 13, fields[i].B * 104729 + 7);
+            order.Sort((x, y) => keys[x] != keys[y] ? keys[x].CompareTo(keys[y]) : x.CompareTo(y));
+            int arableCount = (int)math.round(arablePct * fields.Count);
+            if (arablePct > 0f && arablePct < 1f && fields.Count >= 2) arableCount = math.clamp(arableCount, 1, fields.Count - 1);
+            int ai = 0, gi = 0;
+            for (int k = 0; k < order.Count; k++)
             {
-                var f = fields[i];
-                uint v = Hashing.Mix(ctx.Seed, f.A * 7919, f.B * 104729);
-                float u1 = Hashing.Unit(v), u2 = Hashing.Unit(Hashing.Mix(v, 11u));
-                bool arable = u1 < arablePct;
-                if (arable)
+                var f = fields[order[k]];
+                if (k < arableCount)
                 {
                     bool small = f.Region.Area < 4000f;
-                    if ((cropMode == "rows" && small) || (sub == "hobby" && u2 < 0.5f)) f.Kind = FieldKind.Veg;
-                    else if (u2 < 0.08f) f.Kind = FieldKind.Fallow;
+                    if ((cropMode == "rows" && small) || (sub == "hobby" && ai % 2 == 0)) f.Kind = FieldKind.Veg;
+                    else if (ai % 7 == 6) f.Kind = FieldKind.Fallow;
                     else f.Kind = FieldKind.Grain;
+                    ai++;
                 }
-                else f.Kind = hay && u2 < 0.35f ? FieldKind.Hay : FieldKind.Pasture;
+                else
+                {
+                    f.Kind = hay && gi % 3 == 1 ? FieldKind.Hay : FieldKind.Pasture;
+                    gi++;
+                }
+            }
+            foreach (var f in fields)
                 switch (rowAngle)
                 {
                     case "along": f.RowDir = axis; break;
@@ -717,7 +732,6 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                         f.RowDir = math.normalizesafe(major, axis);
                         break;
                 }
-            }
         }
 
         /// <summary>Crop props along rows (every <paramref name="along"/> m); edges = only the outer two rows on each side.</summary>
