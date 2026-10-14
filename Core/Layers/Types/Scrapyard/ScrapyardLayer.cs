@@ -140,7 +140,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 Gates = Gates(ctx),
                 Fill = math.saturate(ctx.F("fill") / 100f), Aisle = math.max(4f, ctx.F("aisle")),
             };
-            LeisureKit.Frame(region, out y.Centre, out y.Axis, out y.Side, out y.Major, out y.Minor);
+            YardKit.GridFrame(region, out y.Centre, out y.Axis, out y.Side, out y.Major, out y.Minor);
             string style = ctx.S("style");
 
             Ground(y, ctx.S("ground"));
@@ -325,7 +325,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             var ctx = y.Ctx;
             int wanted = (int)(y.Core.Area / 900f * y.Fill);
             int placed = 0;
-            foreach (var p in Scatter.Candidates(y.Core, 6f, y.Salt(0x5EC0u), 400, ctx.Cancel))
+            foreach (var p in YardKit.Shuffled(Scatter.Candidates(y.Core, 6f, y.Salt(0x5EC0u), 400, ctx.Cancel), y.Salt(0x5EC2u)))
             {
                 if (placed >= wanted) break;
                 float clear = y.Occ.Clearance(p, 9f);
@@ -506,16 +506,16 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             string cat = YardKit.Cat(ctx, ids, AssetCategories.ScrapTire, AssetCategories.ScrapHeap);
             if (cat == null) return;
             float heapH = ctx.F("heapHeight");
-            int wanted = math.clamp(1 + (int)(y.Core.Area / 5000f * y.Fill), 1, 9);
+            int wanted = math.clamp(1 + (int)(y.Core.Area / 2200f * y.Fill), 1, 14);
             var centres = new List<float2>();
             int made = 0;
-            foreach (var p in Scatter.Candidates(y.Core, 7f, y.Salt(0x713Eu), 500, ctx.Cancel))
+            foreach (var p in YardKit.Shuffled(Scatter.Candidates(y.Core, 7f, y.Salt(0x713Eu), 500, ctx.Cancel), y.Salt(0x713Fu)))
             {
                 if (made >= wanted) break;
                 float clear = y.Occ.Clearance(p, 16f);
                 if (clear < 6f) continue;
                 bool close = false;
-                foreach (var q in centres) if (math.distance(p, q) < 22f) { close = true; break; }
+                foreach (var q in centres) if (math.distance(p, q) < 18f) { close = true; break; }
                 if (close) continue;
                 float r = math.min(14f, clear - 1.5f);
                 int n = (int)(r * r * 0.7f * y.Fill) + 8;

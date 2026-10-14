@@ -120,6 +120,10 @@ namespace Placemaker.Core.Layers.Types.Landfill
             public float2 Centre, Axis, Side, Start;
             public float Major, Minor, Fill, EdgeInset = 1.5f;
             public bool HasMound;
+            /// <summary>Older, already-capped phases beside the main mound (big or long sites).</summary>
+            public readonly List<Mound> Phases = new List<Mound>();
+            public IEnumerable<Mound> Hills() { if (HasMound) yield return Mound; foreach (var p in Phases) yield return p; }
+            public bool OnHill(float2 p, float fraction) { foreach (var h in Hills()) if (h.Covers(p, fraction)) return true; return false; }
             public Mound Mound;
             public readonly List<Mound> Shapes = new List<Mound>();
             public readonly List<(float2 p, float r)> Dirty = new List<(float2, float)>();
@@ -139,7 +143,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
                 ReservedOnly = new Occupancy(region, ctx.Input.Reserved, ctx.Site),
                 Gates = Gates(ctx), Fill = math.saturate(ctx.F("fill") / 100f),
             };
-            LeisureKit.Frame(region, out s.Centre, out s.Axis, out s.Side, out s.Major, out s.Minor);
+            YardKit.GridFrame(region, out s.Centre, out s.Axis, out s.Side, out s.Major, out s.Minor);
             string style = ctx.S("style");
 
             YardKit.Fence(ctx, s.Gates, ctx.S("fence"), AssetMix.One(ctx.S("fenceAsset")), s.Salt(0xFE7Cu));
@@ -327,6 +331,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
                     }
                 }
             }
+            Phases(s);
             // Cap scrub on the finished part.
             GasVents(s, ctx.F("gasVents"));
             Meadow(s, ctx.F("meadow") * 0.5f, face ? a0 : float.NaN, half);
@@ -340,6 +345,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
             m.Flat = 0.25f;   // a rounder dome than an active site's working platform
             s.Shapes[s.Shapes.Count - 1] = m;
             s.Mound = m;
+            Phases(s);
             if (ctx.B("summitPath")) SummitPath(s);
             GasVents(s, ctx.F("gasVents"));
             Meadow(s, ctx.F("meadow"), float.NaN, 0f);
@@ -379,71 +385,104 @@ namespace Placemaker.Core.Layers.Types.Landfill
             if (look != null) LeisureKit.Put(ctx, s.Occ, m.Center + Dir(a + math.PI) * 2.2f, 0f, ObjectRole.Furniture, AssetMix.One(""), look, 1.5f, s.Salt(0x5E9u), 1f);
         }
 
-        /// <summary>Low scrub on the cap (no trees: their roots would breach the cap).</summary>
+        /// <summary>
+        /// Older phases: where the site has room beside the main mound (long or L-shaped sites), lower
+        /// capped mounds fill it — landfills grow cell by cell, and the finished cells stay as hills.
+        /// </summary>
+        private static void Phases(Site s)
+        {
+            if (!s.HasMound || s.Mound.Height < 1f) return;
+            var region = s.Region;
+            float toe = s.EdgeInset + 8f;
+            for (int k = 0; k < 3; k++)
+            {
+                var hills = new List<Mound>(s.Hills());
+                var c = region.DeepestPoint(out float ins, (q, cap) =>
+                {
+                    float cl = s.Occ.Clearance(q, cap);
+                    foreach (var h in hills) cl = math.min(cl, h.Distance(q) - h.Radius * 1.1f);
+                    return cl;
+                }, 16);
+                float R = (ins - toe * 0.6f) * 0.9f;
+                if (R < 16f) break;
+                var m = new Mound { Center = c, Radius = R, Flat = 0.35f, Ratio = 1f };
+                m.Height = math.min(s.Mound.Height * (0.75f - 0.15f * k), R * (1f - m.Flat) * 0.33f);
+                if (m.Height < 1.5f) break;
+                s.Phases.Add(m);
+                s.Shapes.Add(m);
+            }
+            s.Ctx.Plan.Facts["phases"] = s.Phases.Count;
+        }
+
+        private static float AngleTo(float2 p, float2 centre, float a0)
+        {
+            float a = math.atan2(p.y - centre.y, p.x - centre.x) - a0;
+            while (a > math.PI) a -= 2f * math.PI;
+            while (a < -math.PI) a += 2f * math.PI;
+            return a;
+        }
+
+        /// <summary>Low scrub on the caps (no trees: their roots would breach the cap).</summary>
         private static void Meadow(Site s, float perHa, float faceAngle, float half)
         {
             if (perHa <= 0f || !AssetAvailability.Has(AssetCategories.Bush)) return;
-            var m = s.Mound; bool mound = s.HasMound;
+            var main = s.Mound; bool any = s.HasMound || s.Phases.Count > 0;
             int wanted = (int)(s.Region.Area / 10000f * perHa);
             System.Func<float2, bool> reject = p =>
             {
-                if (!mound) return false;
-                if (!m.Covers(p, 0.95f)) return true;
-                if (!float.IsNaN(faceAngle))
-                {
-                    float a = math.atan2(p.y - m.Center.y, p.x - m.Center.x) - faceAngle;
-                    while (a > math.PI) a -= 2f * math.PI;
-                    while (a < -math.PI) a += 2f * math.PI;
-                    if (math.abs(a) < half + 0.3f) return true;
-                }
-                return false;
+                if (!any) return false;
+                if (!s.OnHill(p, 0.95f)) return true;
+                return !float.IsNaN(faceAngle) && main.Covers(p, 1f) && math.abs(AngleTo(p, main.Center, faceAngle)) < half + 0.3f;
             };
             LeisureKit.Plant(s.Ctx, s.Occ, s.Region, wanted, ObjectRole.Bush, null, 1.0f, 14f, 0.25f, 0xCA9u, reject);
         }
 
+        /// <summary>Gas wells in a grid on every capped part (never on the open face).</summary>
         private static void GasVents(Site s, float perHa)
         {
-            if (perHa <= 0f || !s.HasMound) return;
-            var ctx = s.Ctx; var m = s.Mound;
+            if (perHa <= 0f || (!s.HasMound && s.Phases.Count == 0)) return;
+            var ctx = s.Ctx;
             string cat = YardKit.Cat(ctx, null, AssetCategories.LandfillVent);
             if (cat == null) return;
             float spacing = math.sqrt(10000f / perHa);
-            float a0 = math.atan2(m.CutDir.y, m.CutDir.x);
             int i = 0;
-            float reach = m.Radius * math.max(1f, m.Ratio);
-            for (float u = -reach; u <= reach; u += spacing)
-                for (float v = -reach; v <= reach; v += spacing)
-                {
-                    var p = m.Center + s.Axis * u + s.Side * v;
-                    if (!m.Covers(p, 0.88f)) continue;
-                    if (m.CutHalfAngle > 0f)
+            foreach (var m in s.Hills())
+            {
+                float a0 = math.atan2(m.CutDir.y, m.CutDir.x);
+                float reach = m.Radius * math.max(1f, m.Ratio);
+                for (float u = -reach; u <= reach; u += spacing)
+                    for (float v = -reach; v <= reach; v += spacing)
                     {
-                        float a = math.atan2(p.y - m.Center.y, p.x - m.Center.x) - a0;
-                        while (a > math.PI) a -= 2f * math.PI;
-                        while (a < -math.PI) a += 2f * math.PI;
-                        if (math.abs(a) < m.CutHalfAngle + 0.1f && !m.Covers(p, 0.25f)) continue;
+                        var p = m.Center + s.Axis * u + s.Side * v;
+                        if (!m.Covers(p, 0.88f)) continue;
+                        if (m.CutHalfAngle > 0f && math.abs(AngleTo(p, m.Center, a0)) < m.CutHalfAngle + 0.1f && !m.Covers(p, 0.25f)) continue;
+                        uint h = s.Salt(0x6A5u + (uint)i++);
+                        // Wells follow a grid, with the small offsets of a real drilling plan.
+                        var q = p + new float2(Hashing.Unit(h) - 0.5f, Hashing.Unit(Hashing.Mix(h, 1u)) - 0.5f) * 2f;
+                        if (LeisureKit.Put(ctx, s.Occ, q, Hashing.Unit(Hashing.Mix(h, 2u)) * 6.283f, ObjectRole.Furniture, AssetMix.One(""), cat, 0.6f, h, 1f, 0.2f))
+                            s.Vents++;
                     }
-                    uint h = s.Salt(0x6A5u + (uint)i++);
-                    // Wells follow a grid, with the small offsets of a real drilling plan.
-                    var q = p + new float2(Hashing.Unit(h) - 0.5f, Hashing.Unit(Hashing.Mix(h, 1u)) - 0.5f) * 2f;
-                    if (LeisureKit.Put(ctx, s.Occ, q, Hashing.Unit(Hashing.Mix(h, 2u)) * 6.283f, ObjectRole.Furniture, AssetMix.One(""), cat, 0.6f, h, 1f, 0.2f))
-                        s.Vents++;
-                }
+            }
         }
 
+        /// <summary>A loose ring of trees round the foot of every mound.</summary>
         private static void ToeTrees(Site s)
         {
-            if (!s.HasMound || !s.Ctx.B("toeTrees") || !AssetAvailability.Has(AssetCategories.Tree)) return;
-            var m = s.Mound;
+            if (!s.Ctx.B("toeTrees") || !AssetAvailability.Has(AssetCategories.Tree)) return;
             var ids = s.Ctx.L("treeSpecies");
-            float circ = 2f * math.PI * m.Radius * (1f + m.Ratio) * 0.5f;
-            int n = (int)(circ / 11f);
-            for (int i = 0; i < n; i++)
+            int i = 0;
+            foreach (var m in s.Hills())
             {
-                uint v = s.Salt(0x70E0u + (uint)i);
-                float a = i * 2f * math.PI / n + (Hashing.Unit(v) - 0.5f) * 0.1f;
-                var p = m.At(Dir(a), 1.1f + 0.08f * Hashing.Unit(Hashing.Mix(v, 1u)));
-                LeisureKit.Put(s.Ctx, s.Occ, p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ids, v), null, 2.4f, v, 2f, 0.4f, 3, 1 + (int)(v % 3u));
+                float circ = 2f * math.PI * m.Radius * (1f + math.max(1f, m.Ratio)) * 0.5f;
+                int n = (int)(circ / 11f);
+                for (int k = 0; k < n; k++, i++)
+                {
+                    uint v = s.Salt(0x70E0u + (uint)i);
+                    float a = k * 2f * math.PI / n + (Hashing.Unit(v) - 0.5f) * 0.1f;
+                    var p = m.At(Dir(a), 1.1f + 0.08f * Hashing.Unit(Hashing.Mix(v, 1u)));
+                    if (s.OnHill(p, 1.02f)) continue;
+                    LeisureKit.Put(s.Ctx, s.Occ, p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ids, v), null, 2.4f, v, 2f, 0.4f, 3, 1 + (int)(v % 3u));
+                }
             }
         }
 
@@ -457,7 +496,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
             int i = 0;
             foreach (var p in Scatter.Candidates(s.Region, 6f, s.Salt(0x1A6u), 300, ctx.Cancel))
             {
-                if (s.HasMound && s.Mound.Covers(p, 1.12f)) continue;
+                if (s.OnHill(p, 1.12f)) continue;
                 if (!s.Region.ContainsDisc(p, 11f + s.EdgeInset * 0.3f)) continue;
                 if (s.Occ.Clearance(p, 12f) < 10.5f) continue;
                 float h = ctx.H(p) + Hashing.Unit(s.Salt(0x1A7u + (uint)i++)) * 0.01f;

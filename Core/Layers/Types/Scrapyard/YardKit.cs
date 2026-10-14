@@ -81,6 +81,76 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
         /// <summary>Feature with its own label key (for shared add-ons whose generic label is not in the language files).</summary>
         public static FeatureInfo Labelled(FeatureInfo f, string labelKey) { f.LabelKey = labelKey; return f; }
 
+        /// <summary>
+        /// Layout frame for yards: rows and blocks follow the outline's dominant edge direction (an
+        /// L-shaped lot gets rows parallel to its sides, not diagonal ones along the principal axis).
+        /// Painted outlines without a dominant direction keep the principal axis.
+        /// </summary>
+        public static void GridFrame(LayerRegion region, out float2 centre, out float2 axis, out float2 side, out float major, out float minor)
+        {
+            LeisureKit.Frame(region, out centre, out axis, out side, out major, out minor);
+            const int bins = 36;   // 2.5° bins over 90°
+            var weight = new float[bins];
+            var ring = region.Ring;
+            for (int i = 0; i < ring.Length; i++)
+            {
+                var d = ring[(i + 1) % ring.Length] - ring[i];
+                float len = math.length(d);
+                if (len < 0.5f) continue;
+                float a = math.atan2(d.y, d.x);
+                float m = a - math.floor(a / (math.PI * 0.5f)) * (math.PI * 0.5f);
+                weight[math.min(bins - 1, (int)(m / (math.PI * 0.5f) * bins))] += len;
+            }
+            int best = 0;
+            for (int b = 1; b < bins; b++) if (weight[b] > weight[best]) best = b;
+            float total = region.Perimeter;
+            float w = weight[best] + weight[(best + 1) % bins] + weight[(best + bins - 1) % bins];
+            if (w < total * 0.4f) return;
+            // Length-weighted mean angle within the winning bin and its neighbours.
+            double sx = 0, sy = 0;
+            for (int i = 0; i < ring.Length; i++)
+            {
+                var d = ring[(i + 1) % ring.Length] - ring[i];
+                float len = math.length(d);
+                if (len < 0.5f) continue;
+                float a = math.atan2(d.y, d.x);
+                float m = a - math.floor(a / (math.PI * 0.5f)) * (math.PI * 0.5f);
+                int b = math.min(bins - 1, (int)(m / (math.PI * 0.5f) * bins));
+                int diff = math.abs(b - best); diff = math.min(diff, bins - diff);
+                if (diff > 1) continue;
+                // Average on the 4-fold circle so 0° and 89° agree.
+                sx += len * math.cos(4f * a); sy += len * math.sin(4f * a);
+            }
+            float ang = (float)math.atan2(sy, sx) * 0.25f;
+            var ax = new float2(math.cos(ang), math.sin(ang));
+            var sd = new float2(-ax.y, ax.x);
+            float minA = float.MaxValue, maxA = float.MinValue, minB = float.MaxValue, maxB = float.MinValue;
+            foreach (var v in ring)
+            {
+                var d = v - centre;
+                minA = math.min(minA, math.dot(d, ax)); maxA = math.max(maxA, math.dot(d, ax));
+                minB = math.min(minB, math.dot(d, sd)); maxB = math.max(maxB, math.dot(d, sd));
+            }
+            float spanA = maxA - minA, spanB = maxB - minB;
+            if (spanB > spanA) { ax = sd; float t = spanA; spanA = spanB; spanB = t; }
+            axis = ax; side = new float2(-ax.y, ax.x);
+            major = spanA; minor = spanB;
+        }
+
+        /// <summary>
+        /// Candidates in a hashed order: the sampler's stride order walks the region in long diagonal
+        /// sweeps, which strings "first come" heaps out in a line.
+        /// </summary>
+        public static List<float2> Shuffled(List<float2> pts, uint seed)
+        {
+            var keyed = new List<(uint k, float2 p)>(pts.Count);
+            foreach (var p in pts) keyed.Add((Hashing.Mix(seed, (int)math.floor(p.x * 10f), (int)math.floor(p.y * 10f)), p));
+            keyed.Sort((a, b) => a.k.CompareTo(b.k));
+            var r = new List<float2>(keyed.Count);
+            foreach (var kp in keyed) r.Add(kp.p);
+            return r;
+        }
+
         public static float Smooth(float e0, float e1, float x)
         {
             if (e1 <= e0) return x >= e0 ? 1f : 0f;
