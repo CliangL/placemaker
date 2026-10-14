@@ -60,6 +60,10 @@
   "Placemaker.Problem.UnknownRecipe": "That design is not available.",
   "Placemaker.Problem.SaveFailed": "The design could not be saved.",
   "Placemaker.Problem.CannotDeleteRecipe": "Only your own designs can be deleted.",
+  "Placemaker.Problem.UnknownPreset": "That preset is not available.",
+  "Placemaker.Problem.PresetSaveFailed": "The preset could not be saved.",
+  "Placemaker.Problem.CannotRenamePreset": "Only your own presets can be renamed.",
+  "Placemaker.Problem.CannotDeletePreset": "Built-in presets cannot be deleted.",
   "Placemaker.Problem.CannotEdit": "This area cannot be edited (its design was not stored).",
   "Placemaker.Problem.RemoveFailed": "It could not be removed.",
 
@@ -100,6 +104,10 @@
   "Placemaker.Hint.BuildCancelled": "Building was cancelled.",
   "Placemaker.Hint.RecipeSaved": "Design saved.",
   "Placemaker.Hint.DefaultsSaved": "Saved as the default for this layer.",
+  "Placemaker.Hint.PresetSaved": "Preset saved.",
+  "Placemaker.Hint.PresetDeleted": "Preset deleted.",
+  "Placemaker.Hint.PresetReset": "Preset reset to its default.",
+  "Placemaker.Hint.PresetsExported": "Presets written to presets.json.",
   "Placemaker.Hint.Removed": "Removal started.",
 
   "Placemaker.Undo.AddPoint": "add corner",
@@ -134,6 +142,7 @@
   "Placemaker.Undo.ChangeValue": "change setting",
   "Placemaker.Undo.ResetLayer": "reset layer",
   "Placemaker.Undo.ApplyPreset": "apply preset",
+  "Placemaker.Undo.SelectPreset": "choose preset",
   "Placemaker.Undo.Randomize": "randomize",
   "Placemaker.Undo.UnlockValue": "unlock setting",
 

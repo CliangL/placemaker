@@ -44,6 +44,7 @@ namespace Placemaker.Game.Tool
         private LayerDefaultsStore _defaults;
         private DesignEditor _editor;
         private RecipeStore _recipes;
+        private PresetStore _presets;
         private RoadNetwork _roads;
         private SnapCollector _snapCollector;
         private SiteCapture _site;
@@ -98,6 +99,8 @@ namespace Placemaker.Game.Tool
             _defaults = ToolRegistration.Defaults ?? new LayerDefaultsStore();
             _editor = new DesignEditor(GeneratorRegistry.Get, id => _defaults.Get(id));
             _recipes = new RecipeStore(() => _editor);
+            _presets = new PresetStore(_editor);
+            PresetFile.Load(_presets);
             _roads = new RoadNetwork(EntityManager, World.GetOrCreateSystemManaged<global::Game.Net.SearchSystem>());
             _snapCollector = new SnapCollector(EntityManager, World);
             _site = new SiteCapture(EntityManager, World);
@@ -353,6 +356,8 @@ namespace Placemaker.Game.Tool
                 RecipeId = _recipeId ?? "",
                 Focus = _focus ?? RecipePaths.Root,
                 MarkersEdited = new HashSet<string>(_markersEdited, StringComparer.Ordinal),
+                PresetLayer = _presetLayer ?? "",
+                PresetId = _presetId ?? "",
             };
         }
 
@@ -395,6 +400,8 @@ namespace Placemaker.Game.Tool
             _recipeId = s.RecipeId ?? "";
             _focus = s.Focus ?? RecipePaths.Root;
             _markersEdited = s.MarkersEdited != null ? new HashSet<string>(s.MarkersEdited, StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
+            _presetLayer = s.PresetLayer ?? "";
+            _presetId = s.PresetId ?? "";
             ShapeChanged(alreadyBuilt: true);
             DesignChanged();
             _hoverFace = null;

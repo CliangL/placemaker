@@ -93,6 +93,8 @@ namespace Placemaker.Core.Tool
         public string Focus = RecipePaths.Root;
         /// <summary>Step paths whose markers the player edited (auto-suggested markers are no longer re-applied there).</summary>
         public HashSet<string> MarkersEdited = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>Preset applied to the root step (layer + id; "" = none) — drives design.activePreset.</summary>
+        public string PresetLayer = "", PresetId = "";
 
         public ToolSnapshot With(Action<ToolSnapshot> change)
         {

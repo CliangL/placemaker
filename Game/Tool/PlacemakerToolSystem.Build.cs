@@ -265,6 +265,7 @@ namespace Placemaker.Game.Tool
             foreach (var kv in RecipePaths.Walk(_recipe)) if (kv.Value.Markers.Count > 0) _markersEdited.Add(kv.Key);
             _permanentAck = null;
             _recipeId = _recipes.Find(receipt.Recipe.Id) != null ? receipt.Recipe.Id : "";
+            _presetLayer = ""; _presetId = "";
             _focus = RecipePaths.Root;
             _editingGroup = groupId;
             _managedGroup = 0;
