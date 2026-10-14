@@ -56,6 +56,24 @@
     background-color: rgba(143, 209, 255, 0.55);
 }
 
+// Bottom-edge height grip: drag to make the panel taller or shorter (moving never changes the height).
+.resizeBottom {
+    position: absolute;
+    left: 8rem;
+    right: 8rem;
+    bottom: -4rem;
+    height: 8rem;
+    z-index: 2;
+    pointer-events: auto;
+    cursor: ns-resize;
+    border-radius: 4rem;
+    transition-property: background-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: rgba(143, 209, 255, 0.35);
+    }
+}
+
 .wrapCollapsed {
     bottom: auto;
 }

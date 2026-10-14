@@ -39,6 +39,9 @@ const STAGES: { id: Stage; key: string; en: string }[] = [
 
 const POS_KEY = "placemaker.panelPos.v2";
 const WIDTH_KEY = "placemaker.panelWidth.v1";
+const HEIGHT_KEY = "placemaker.panelHeight.v1";
+/** Smallest panel height in rem (header + a few rows). */
+const MIN_HEIGHT_REM = 200;
 /** Docked insets in rem (keep in sync with .wrap): below the top bar, above the bottom toolbar. */
 const DOCK_TOP = 64;
 const DOCK_BOTTOM = 112;
@@ -86,6 +89,26 @@ function saveWidth(w: number | null) {
     }
 }
 
+/** The player's chosen height in rem, or null (= docked height: top bar to bottom toolbar). */
+function loadHeight(): number | null {
+    try {
+        const raw = window.localStorage?.getItem(HEIGHT_KEY);
+        const v = raw ? Number(raw) : NaN;
+        return isFinite(v) && v > 0 ? v : null;
+    } catch {
+        return null;
+    }
+}
+
+function saveHeight(h: number | null) {
+    try {
+        if (h) window.localStorage?.setItem(HEIGHT_KEY, String(Math.round(h)));
+        else window.localStorage?.removeItem(HEIGHT_KEY);
+    } catch {
+        /* not remembered */
+    }
+}
+
 /** Default width: wider on big screens (≥ 1600 px), the classic 400rem otherwise. */
 const defaultWidth = () => (window.innerWidth >= WIDE_SCREEN_PX ? WIDE_DEFAULT_REM : NARROW_REM);
 
@@ -105,6 +128,8 @@ function usePanelPosition() {
     const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
     const [chosen, setChosen] = useState<number | null>(loadWidth);
     const [resizing, setResizing] = useState<number | null>(null);
+    const [chosenH, setChosenH] = useState<number | null>(loadHeight);
+    const [resizingH, setResizingH] = useState<number | null>(null);
     const [, bump] = useState(0);
     const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -119,12 +144,18 @@ function usePanelPosition() {
     const clampWidth = (w: number) => Math.max(MIN_REM, Math.min(maxWidth(), Math.round(w)));
     const width = clampWidth(resizing ?? chosen ?? defaultWidth());
 
-    /** Clamped pixel position: the whole width and at least the header stay on screen. */
-    const clamp = (x: number, y: number, w = width) => {
+    /** Height in rem: the chosen one (or the docked height), never taller than the screen. */
+    const dockedHeight = () => Math.max(MIN_HEIGHT_REM, window.innerHeight / remPx() - (DOCK_TOP + DOCK_BOTTOM));
+    const maxHeight = () => Math.max(MIN_HEIGHT_REM, Math.floor((window.innerHeight - 16) / remPx()));
+    const clampHeight = (h: number) => Math.max(MIN_HEIGHT_REM, Math.min(maxHeight(), Math.round(h)));
+    const height = clampHeight(resizingH ?? chosenH ?? dockedHeight());
+
+    /** Clamped pixel position: the whole panel stays on screen; moving never changes its height. */
+    const clamp = (x: number, y: number, w = width, h = height) => {
         const r = remPx();
         return {
             x: Math.max(0, Math.min(window.innerWidth - w * r, x)),
-            y: Math.max(0, Math.min(window.innerHeight - 140 * r, y)),
+            y: Math.max(0, Math.min(window.innerHeight - h * r - 8, y)),
         };
     };
 
@@ -195,6 +226,37 @@ function usePanelPosition() {
         window.addEventListener("mouseup", up);
     };
 
+    /** Drag the bottom edge: the top stays put, the height follows. */
+    const onResizeHeightMouseDown = (e: React.MouseEvent<HTMLElement>) => {
+        if (e.button !== 0) return;
+        const rect = wrapRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const r = remPx();
+        const sy = e.clientY;
+        const start = rect.height / r;
+        const limit = (window.innerHeight - rect.top - 8) / r;
+        const at = (ev: MouseEvent) => Math.max(MIN_HEIGHT_REM, Math.min(limit, Math.round(start + (ev.clientY - sy) / r)));
+        const move = (ev: MouseEvent) => setResizingH(at(ev));
+        const up = (ev: MouseEvent) => {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("mouseup", up);
+            const h = at(ev);
+            saveHeight(h);
+            setChosenH(h);
+            setResizingH(null);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+    };
+
+    /** Double-click the bottom edge: back to the full docked height. */
+    const resetHeight = () => {
+        saveHeight(null);
+        setChosenH(null);
+    };
+
     /** Double-click the edge: back to the default width for this screen. */
     const resetWidth = () => {
         saveWidth(null);
@@ -210,12 +272,12 @@ function usePanelPosition() {
     const r = remPx();
     let style: React.CSSProperties = { width: width + "rem" };
     let centerX = window.innerWidth; // docked right
+    // Docked with a chosen height: the top stays under the top bar, the bottom ends where the player dragged it.
+    if (chosenH !== null || resizingH !== null) style = { ...style, bottom: "auto", height: height + "rem" };
     if (drag || pos) {
         const c = drag ?? clamp((pos as { fx: number }).fx * window.innerWidth, (pos as { fy: number }).fy * window.innerHeight);
-        // Same height as when docked, but never past the bottom of the screen.
-        const docked = window.innerHeight - (DOCK_TOP + DOCK_BOTTOM) * r;
-        const height = Math.max(140 * r, Math.min(docked, window.innerHeight - c.y - 12 * r));
-        style = { ...style, left: c.x + "px", top: c.y + "px", right: "auto", bottom: "auto", height: height + "px" };
+        // Floating: its own height (chosen, or the docked height); moving never changes it.
+        style = { ...style, left: c.x + "px", top: c.y + "px", right: "auto", bottom: "auto", height: height + "rem" };
         centerX = c.x + (width * r) / 2;
     }
     const side: TipDirection = centerX > window.innerWidth / 2 ? "left" : "right";
@@ -225,6 +287,9 @@ function usePanelPosition() {
         floating: !!(drag || pos),
         dragging: !!drag && resizing === null,
         resizing: resizing !== null,
+        resizingHeight: resizingH !== null,
+        onResizeHeightMouseDown,
+        resetHeight,
         onHeaderMouseDown,
         onResizeMouseDown,
         resetWidth,
@@ -757,6 +822,22 @@ export const PlacemakerPanel = () => {
                                     onDoubleClick={(e) => {
                                         e.stopPropagation();
                                         position.resetWidth();
+                                    }}
+                                />
+                            </Tip>
+                        )}
+                        {collapsed ? null : (
+                            <Tip
+                                title={t("Placemaker.UI.ResizeHeight", "Resize the height")}
+                                description={t("Placemaker.UI.ResizeHeightTip", "Drag to make it taller or shorter. Double-click for full height.")}
+                            >
+                                <div
+                                    className={classNames(s.resizeBottom, { [s.resizeActive]: position.resizingHeight })}
+                                    data-testid="panel-resize-height"
+                                    onMouseDown={position.onResizeHeightMouseDown}
+                                    onDoubleClick={(e) => {
+                                        e.stopPropagation();
+                                        position.resetHeight();
                                     }}
                                 />
                             </Tip>

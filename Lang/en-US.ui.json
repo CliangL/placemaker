@@ -230,6 +230,8 @@
   "Placemaker.UI.ResetStep": "Reset all",
   "Placemaker.UI.ResetValue": "Reset to default",
   "Placemaker.UI.Resize": "Resize the panel",
+  "Placemaker.UI.ResizeHeight": "Resize the height",
+  "Placemaker.UI.ResizeHeightTip": "Drag to make it taller or shorter. Double-click for full height.",
   "Placemaker.UI.ResizeTip": "Drag to make it wider or narrower. Double-click for the default width.",
   "Placemaker.UI.Review.Ack": "I understand",
   "Placemaker.UI.Review.AckFirst": "Tick the box to confirm permanent changes",
