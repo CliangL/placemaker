@@ -110,6 +110,8 @@ export interface RecipeInfo {
   custom: boolean;
   /** Short description key for the Make row tooltip. */
   description?: string;
+  /** Make-row group declared by the type ("parks", "gardens", "squares", "sports", "water", "nature", "farms", "events", "industrial", "transport", "parking", "roads"). */
+  group?: string;
 }
 
 /** catalog — changes rarely (load, mods/assets change). */

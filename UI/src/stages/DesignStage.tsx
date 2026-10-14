@@ -263,11 +263,25 @@ const TypeCard = ({ r, on }: { r: RecipeInfo; on: boolean }) => {
 // Make-row groups: a type lands in a group by its id (no catalog field needed), unknown ids in "Other".
 export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
     { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
+    { id: "gardens", key: "Placemaker.UI.MakeGroup.Gardens", en: "Gardens" },
     { id: "squares", key: "Placemaker.UI.MakeGroup.Squares", en: "Squares" },
+    { id: "sports", key: "Placemaker.UI.MakeGroup.Sports", en: "Sports" },
+    { id: "water", key: "Placemaker.UI.MakeGroup.Water", en: "Water" },
+    { id: "nature", key: "Placemaker.UI.MakeGroup.Nature", en: "Nature" },
+    { id: "farms", key: "Placemaker.UI.MakeGroup.Farms", en: "Farms" },
+    { id: "events", key: "Placemaker.UI.MakeGroup.Events", en: "Events" },
+    { id: "industrial", key: "Placemaker.UI.MakeGroup.Industrial", en: "Industrial" },
+    { id: "transport", key: "Placemaker.UI.MakeGroup.Transport", en: "Transport" },
     { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
     { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
     { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
 ];
+
+/** Group of a recipe: the group its type declares, else guessed from the id. */
+export function recipeGroup(r: RecipeInfo): string {
+    if (r.group && MAKE_GROUPS.some((g) => g.id === r.group)) return r.group;
+    return makeGroupOf(r.id);
+}
 
 /** Group of a type id (checked in this order: "parking" before "park", "market square" before parks). */
 export function makeGroupOf(id: string): string {
@@ -293,7 +307,7 @@ const TypeCards = ({ catalog, design }: { catalog: Catalog; design: DesignState 
                 ))}
             </div>
         );
-    const groups = MAKE_GROUPS.map((g) => ({ ...g, items: list.filter((r) => makeGroupOf(r.id) === g.id) })).filter((g) => g.items.length);
+    const groups = MAKE_GROUPS.map((g) => ({ ...g, items: list.filter((r) => recipeGroup(r) === g.id) })).filter((g) => g.items.length);
     return (
         <div className={s.makeGroups} data-testid="recipes" data-grouped="true">
             {groups.map((g) => {

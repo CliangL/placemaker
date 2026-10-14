@@ -149,6 +149,8 @@ namespace Placemaker.Core.Tool
             {
                 var ro = JsonValue.Obj().Set("id", r.Id).Set("name", r.Name).Set("icon", IconPath(r.Icon)).Set("custom", r.Custom);
                 if (!string.IsNullOrEmpty(r.DescriptionKey)) ro.Set("description", r.DescriptionKey);
+                var grp = GeneratorGroups.Of(GeneratorRegistry.Get(r.Id));
+                if (!string.IsNullOrEmpty(grp)) ro.Set("group", grp);
                 list.Add(ro);
             }
             return JsonValue.Obj().Set("layers", layers).Set("recipes", list);
@@ -164,6 +166,8 @@ namespace Placemaker.Core.Tool
                 .Set("accepts", Strings(g.Accepts))
                 .Set("emits", Strings(g.Emits));
             if (GeneratorRegistry.IsHidden(g)) o.Set("hidden", true);
+            var group = GeneratorGroups.Of(g);
+            if (!string.IsNullOrEmpty(group)) o.Set("group", group);
             var controls = JsonValue.Arr();
             if (g.Controls != null) foreach (var c in g.Controls) if (c != null) controls.Add(Control(c));
             o.Set("controls", controls);

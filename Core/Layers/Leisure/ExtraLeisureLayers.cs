@@ -11,7 +11,7 @@ namespace Placemaker.Core.Layers.Leisure
     /// Skate park: a paved bowl area with a cluster of ramps/rails in the middle (sports.skate),
     /// spectator benches round it, graffiti decals at the edges, lamps and a few trees outside.
     /// </summary>
-    [AreaGenerator(58)]
+    [AreaGenerator(58, Group = "sports")]
     public sealed class SkateParkLayer : LeisureLayer
     {
         protected override string Area => "Skate";
@@ -106,7 +106,7 @@ namespace Placemaker.Core.Layers.Leisure
     /// Cemetery grounds: straight solemn paths on a grid, sections of graves in rows (all facing the
     /// same way), hedges round each section, a chapel / memorial at the crossing, cypress-like tree rows.
     /// </summary>
-    [AreaGenerator(59)]
+    [AreaGenerator(59, Group = "parks")]
     public sealed class CemeteryGroundsLayer : LeisureLayer
     {
         protected override string Area => "Cemetery";
@@ -202,7 +202,7 @@ namespace Placemaker.Core.Layers.Leisure
     /// a narrow parallel path where the strip is wide enough, planting along both sides, and rest stops
     /// (bench pair, bin, shade tree) every N metres.
     /// </summary>
-    [AreaGenerator(60)]
+    [AreaGenerator(60, Group = "nature")]
     public sealed class GreenwayParkLayer : LeisureLayer
     {
         protected override string Area => "Greenway";

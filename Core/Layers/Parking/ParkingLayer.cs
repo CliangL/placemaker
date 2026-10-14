@@ -12,7 +12,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Parking
 {
-    [AreaGenerator(10)]
+    [AreaGenerator(10, Group = "parking")]
     public sealed class ParkingLayer : IAreaGenerator, IHasFeatures
     {
         /// <summary>

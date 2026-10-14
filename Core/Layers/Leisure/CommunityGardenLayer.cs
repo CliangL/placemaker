@@ -9,7 +9,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Leisure
 {
-    [AreaGenerator(56)]
+    [AreaGenerator(56, Group = "gardens")]
     public sealed class CommunityGardenLayer : LeisureLayer
     {
         protected override string Area => "Allotments";

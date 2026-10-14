@@ -10,7 +10,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Leisure
 {
-    [AreaGenerator(57)]
+    [AreaGenerator(57, Group = "squares")]
     public sealed class MarketSquareLayer : LeisureLayer
     {
         public const string AccessKind = PlazaLayer.AccessKind;
