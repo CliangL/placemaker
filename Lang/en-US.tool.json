@@ -190,6 +190,8 @@
   "Placemaker.Settings.AutoExcludeCollisions.Desc": "When a few planned pieces collide with existing things, build the rest instead of refusing the whole area.",
   "Placemaker.Settings.SurfaceClones": "Surfaces drawn above roads",
   "Placemaker.Settings.SurfaceClones.Desc": "Lets planned ground surfaces show on top of road decals where they meet.",
+  "Placemaker.Settings.TexturedPreviewSurfaces": "Textured surfaces in preview (experimental)",
+  "Placemaker.Settings.TexturedPreviewSurfaces.Desc": "Shows ground surfaces in the 3D preview with their real texture. Changes how the game batches surfaces for rendering; off by default until verified stable.",
   "Placemaker.Settings.ParkingEconomy": "Parking lots earn fees",
   "Placemaker.Settings.ParkingEconomy.Desc": "Parking lots built with Placemaker charge a parking fee and count as parking in the city.",
   "Placemaker.Settings.DefaultParkingFee": "Default parking fee",

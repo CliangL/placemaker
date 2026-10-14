@@ -166,6 +166,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool SurfaceClones { get; set; }
 
+        /// <summary>Widens AreaBatchSystem queries so ghost surfaces render textured (reflection hack; off by default).</summary>
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool TexturedPreviewSurfaces { get; set; }
+
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool ParkingEconomy { get; set; }
 
@@ -206,6 +210,7 @@ namespace Placemaker.Game.Settings
                 global::Placemaker.Game.Groups.Patches.RaycastLiftPatch.Enabled = SelectAsOneThing;
                 global::Placemaker.Game.Groups.Patches.BulldozeConfirmationPatch.Enabled = ConfirmBulldoze;
                 global::Placemaker.Game.Build.SurfaceCloneSystem.FeatureEnabled = SurfaceClones;
+                global::Placemaker.Game.Build.GhostSurfaceSystem.FeatureEnabled = TexturedPreviewSurfaces;
                 global::Placemaker.Game.Economy.ParkingEconomySystem.FeatureEnabled = ParkingEconomy;
                 global::Placemaker.Game.Economy.ParkingEconomySystem.DefaultFee = DefaultParkingFee;
                 global::Placemaker.Game.Economy.ParkingCompanionSystem.CompanionEnabled = ExperimentalParkingCompanion;
@@ -247,6 +252,7 @@ namespace Placemaker.Game.Settings
             SelectAsOneThing = true;
             ConfirmBulldoze = true;
             SurfaceClones = true;
+            TexturedPreviewSurfaces = false;
             ParkingEconomy = true;
             DefaultParkingFee = 0;
             ExperimentalParkingCompanion = false;

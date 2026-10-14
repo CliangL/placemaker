@@ -87,6 +87,13 @@ namespace Placemaker.Game.Build
         private BuildStatus _status;
         private Step _step;
         private int _stepFrame;
+        /// <summary>
+        /// Set by Go: the next OnUpdate is the step's first frame (_stepFrame = that frame). Go is usually
+        /// called from inside the previous step, so without this "frame == _stepFrame" never held and the
+        /// first-frame work of ResetForRetry (destroy definitions + Clear), Paint and Cleanup was SKIPPED:
+        /// a retry kept the first attempt's temporaries and Apply built everything twice (playtest 4b).
+        /// </summary>
+        private bool _stepFresh;
         private int _startFrame;
         private BuildRequest _request;
         private BuildWork _work;
@@ -275,6 +282,7 @@ namespace Placemaker.Game.Build
             if (_step == Step.Idle) { GhostWatchdog(); return; }
             int frame = UnityEngine.Time.frameCount;
             _heightsValid = false;   // terrain data handles are only valid within the frame they were fetched
+            if (_stepFresh) { _stepFresh = false; _stepFrame = frame; }
             try
             {
                 if (_toolActivated && _step != Step.Cleanup && _toolSystem.activeTool != _tool)
@@ -316,6 +324,7 @@ namespace Placemaker.Game.Build
         {
             _step = step;
             _stepFrame = UnityEngine.Time.frameCount;
+            _stepFresh = true;
         }
 
         private void DoPrepare()
@@ -487,6 +496,13 @@ namespace Placemaker.Game.Build
                 return;
             }
             int tagged = TagTemporaries();
+            if (TemporariesDuplicated())
+            {
+                // Never apply a doubled set: clear everything and emit once more, then give up.
+                if (!_dupRetried) { _dupRetried = true; Go(Step.ResetForRetry); return; }
+                BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Duplicated");
+                return;
+            }
             if (tagged > 0 && !CanAffordNets(out int netCost))
             {
                 Mod.Log.Warn($"Placemaker: the roads/paths of this build cost {netCost}, more than the city has.");
@@ -559,7 +575,13 @@ namespace Placemaker.Game.Build
         private void DoFinish()
         {
             _registry.MarkDirty();
-            VerifyMembers();
+            if (VerifyMembers())
+            {
+                // Built twice despite the pre-Apply check: roll the whole group back (Cleanup after Apply
+                // removes it through the phase-correct removal system) and report.
+                BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Duplicated");
+                return;
+            }
             FinishRecord();
             RestoreTool();
             var groupId = _groupId;
@@ -691,6 +713,7 @@ namespace Placemaker.Game.Build
             _ownerSuppressed = false;
             _skipped.Clear();
             _notedRings.Clear();
+            _dupRetried = false;
             _instant = false;
             if (_toolActivated) RestoreTool();
         }

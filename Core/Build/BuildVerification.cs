@@ -46,6 +46,24 @@ namespace Placemaker.Core.Build
     public static class BuildVerification
     {
         /// <summary>
+        /// Hard invariant (playtest 4b: a retry kept the first attempt's temporaries and everything was
+        /// built twice): more tagged objects/areas than were emitted beyond a small margin means a
+        /// duplicate set. The build must not keep it. Margin: objects max(4, 5 %), areas max(2, 10 %)
+        /// (a few unmatched temporaries are adopted legitimately).
+        /// </summary>
+        public static bool Duplicated(PlannedCounts planned, MemberCounts actual, out string why)
+        {
+            why = null;
+            int objectMargin = System.Math.Max(4, (int)System.Math.Ceiling(planned.Objects * 0.05));
+            int areaMargin = System.Math.Max(2, (int)System.Math.Ceiling(planned.Areas * 0.1));
+            if (actual.Objects > planned.Objects + objectMargin)
+                why = $"{actual.Objects} objects for {planned.Objects} planned";
+            else if (actual.Areas > planned.Areas + areaMargin)
+                why = $"{actual.Areas} areas for {planned.Areas} planned";
+            return why != null;
+        }
+
+        /// <summary>
         /// Human-readable mismatches between plan and tagged members (empty = consistent). Objects and
         /// areas must match exactly up to the known optional drops; more members than planned means
         /// something was adopted twice or foreign entities were tagged; fewer means parts were built

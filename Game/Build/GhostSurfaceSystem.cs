@@ -35,8 +35,8 @@ namespace Placemaker.Game.Build
 
     public sealed partial class GhostSurfaceSystem : GameSystemBase
     {
-        /// <summary>Setting hook: render ghost surfaces with their real material (default on).</summary>
-        public static bool FeatureEnabled = true;
+        /// <summary>Setting hook: render ghost surfaces with their real material (default OFF: suspected in a native crash, playtest 4b).</summary>
+        public static bool FeatureEnabled = false;
 
         private BuildService _build;
         private EntityQuery _untagged;

@@ -25,13 +25,22 @@ namespace Placemaker.Game.Groups
         private const int MaxPassesWithoutProgress = 600;
         private EntityQuery _requestQuery;
         private EntityQuery _memberQuery;
+        private const int ToolReleaseFrames = 30;
         private GroupRegistrySystem _registry;
+        private ToolSystem _toolSystem;
+        private EntityQuery _tempQuery;
 
         [Preserve]
         protected override void OnCreate()
         {
             base.OnCreate();
             _registry = World.GetOrCreateSystemManaged<GroupRegistrySystem>();
+            _toolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
+            _tempQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Temp>() },
+                None = new[] { ComponentType.ReadOnly<Deleted>() },
+            });
             _requestQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<PlacemakerGroup>(), ComponentType.ReadWrite<PlacemakerRemoval>() },
@@ -84,6 +93,24 @@ namespace Placemaker.Game.Groups
                 }
             if (anyTemp && entities.Count == 0) return;
 
+            // Crash guard (playtest 4b: native crash right after bulldozing a group): a tool's temporary
+            // copy (Temp.m_Original) of a member — e.g. the bulldozer still hovering a path, or a node
+            // preview — keeps referencing it. Deleting the original under it leaves the tool's jobs
+            // reading a dead entity. Wait for the tool to drop its copies; if it does not within
+            // ToolReleaseFrames, switch to the default tool once (its next Clear removes them).
+            if (ReferencedByTemporaries(entities))
+            {
+                removal.Passes++;
+                if (removal.Passes == ToolReleaseFrames && _toolSystem.activeTool != null && !(_toolSystem.activeTool is DefaultToolSystem))
+                {
+                    Mod.Log.Info($"Placemaker: a tool still previews parts of group {group.GroupId}; switching to the default tool to remove it safely.");
+                    _toolSystem.activeTool = World.GetOrCreateSystemManaged<DefaultToolSystem>();
+                }
+                if (removal.Passes > MaxPassesWithoutProgress) { GiveUp(record); return; }
+                EntityManager.SetComponentData(record, removal);
+                return;
+            }
+
             var byId = new Dictionary<long, Entity>(entities.Count);
             var members = new List<RemovalMember>(entities.Count);
             var nodeEdges = new Dictionary<long, List<long>>();
@@ -122,7 +149,7 @@ namespace Placemaker.Game.Groups
             var refresh = new HashSet<Entity>();
             foreach (var id in pass.Delete)
             {
-                if (!byId.TryGetValue(id, out var e) || !EntityManager.Exists(e)) continue;
+                if (!byId.TryGetValue(id, out var e) || !EntityManager.Exists(e) || EntityManager.HasComponent<Deleted>(e)) continue;   // idempotent
                 if (EntityManager.HasComponent<Edge>(e))
                 {
                     var edge = EntityManager.GetComponentData<Edge>(e);
@@ -158,6 +185,16 @@ namespace Placemaker.Game.Groups
             if (removal.Passes > MaxPassesWithoutProgress) { GiveUp(record); return; }
             EntityManager.SetComponentData(record, removal);
             _registry.MarkDirty();
+        }
+
+        private bool ReferencedByTemporaries(List<Entity> members)
+        {
+            if (_tempQuery.IsEmptyIgnoreFilter) return false;
+            var set = new HashSet<Entity>(members);
+            using var temps = _tempQuery.ToComponentDataArray<Temp>(Allocator.Temp);
+            for (int i = 0; i < temps.Length; i++)
+                if (temps[i].m_Original != Entity.Null && set.Contains(temps[i].m_Original)) return true;
+            return false;
         }
 
         private MemberKind Classify(Entity e, PlacemakerMember tag)
