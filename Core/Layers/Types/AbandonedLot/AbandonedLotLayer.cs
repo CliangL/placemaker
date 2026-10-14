@@ -126,7 +126,8 @@ namespace Placemaker.Core.Layers.Types.Ruins
             var zones = new Zones();
             var gates = Gates(ctx);
             string sub = ctx.S("subtype");
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
+            // Foundations follow the plot edges, like the building that stood here.
+            YardKit.GridFrame(region, out var centre, out var axis, out var side, out float major, out float minor);
             float ha = region.Area / 10000f;
             float over = ctx.F("overgrowth") / 100f, rubble = ctx.F("rubble") / 100f, junk = ctx.F("junk") / 100f, graffiti = ctx.F("graffiti") / 100f;
             int paintLayer = ctx.I("paintLayer");

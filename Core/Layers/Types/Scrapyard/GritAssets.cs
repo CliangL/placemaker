@@ -52,7 +52,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             // No vanilla car wrecks or tyres exist: vehicle props (utility vans, trailers, caravans, truck
             // cabs) stand in for wrecks, low dark coal loads for tyre heaps.
             [AssetCategories.ScrapWreck] = Mixed("Prop_ParkMaintenanceVehicle01|Prop_CarTrailer01", "Prop_ParkMaintenanceVehicle01|Prop_CarTrailer01", "Prop_CarTrailer01|Prop_ParkMaintenanceVehicle01",
-                "Prop_CamperTrailer01|Prop_ParkMaintenanceVehicle01", "Prop_EU_TruckTractor01|Prop_NA_TruckTractor01|Prop_ParkMaintenanceVehicle01"),
+                "Prop_ParkMaintenanceVehicle01|Prop_CarTrailer01", "Prop_CarTrailer01|Prop_ParkMaintenanceVehicle01", "Prop_CamperTrailer01|Prop_ParkMaintenanceVehicle01"),
             [AssetCategories.ScrapTire] = Mixed("Prop_CoalTruck01_CoalPile01_Partial2|CoalTruck01_CoalPile01", "CoalTruck01_CoalPile01", "Prop_CoalTruck01_CoalPile01_Partial1|CoalTruck01_CoalPile01"),
             [AssetCategories.ScrapContainer] = Mixed("ShippingContainer01", "ShippingContainer02", "ShippingContainer03", "ShippingContainer01", "ShippingContainer03"),
             [AssetCategories.ScrapPallet] = Mixed("CratePile01", "CratePile02", "CratePile03", "Pallet02", "Pallet01", "Crate02", "Pallet04"),

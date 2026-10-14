@@ -586,9 +586,9 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 if (nearGate) continue;
                 uint v = y.Salt(0x71EDu + (uint)edge++);
                 if (Hashing.Unit(v) > y.Fill) continue;
-                var c = e + inward * (y.EdgeInset + 3f);
-                int got = YardKit.Heap(ctx, y.Occ, c, 2.6f, 6, ids, cat, 1.0f, v);
-                if (got > 0) { y.Junk += got; y.Heaps++; y.Anchors.Add(new Anchor(c, 2.6f)); }
+                var c = e + inward * (y.EdgeInset + 4f);
+                int got = YardKit.Heap(ctx, y.Occ, c, 4f, 6, ids, cat, 1.0f, v);
+                if (got > 0) { y.Junk += got; y.Heaps++; y.Anchors.Add(new Anchor(c, 4f)); }
             }
         }
 
