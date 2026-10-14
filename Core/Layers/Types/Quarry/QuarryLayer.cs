@@ -13,6 +13,7 @@
 // The basin and the lake are permanent (warned). Water sits below every containing bench, so it
 // never spills; every change is blended back to the original ground at the outline.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System;
 using System.Collections.Generic;
 using Placemaker.Core.Geometry;
@@ -142,7 +143,13 @@ namespace Placemaker.Core.Layers.Types.Quarry
             public bool Wet(float2 p) => !float.IsNaN(Water) && WaterRing != null && Poly.Contains(WaterRing, p);
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var q = new Q

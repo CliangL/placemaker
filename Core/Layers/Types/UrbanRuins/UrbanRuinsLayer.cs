@@ -12,6 +12,7 @@
 //     outline and the fallen deck.
 // Subtypes: DIY skate spot, Broken highway ruins, Graffiti park, Parkour yard, BMX dirt jumps.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System.Collections.Generic;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
@@ -111,7 +112,13 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
 
         private struct Span { public OrientedRect R; public bool Collapsed, Ramp; }
 
-        protected override void PlanCore(LayerContext ctx)
+        /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);

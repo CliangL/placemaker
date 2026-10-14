@@ -10,6 +10,7 @@
 //   earthworks  cut & fill: a gentle excavation on one side, spoil mounds on the other, a haul loop
 // Terrain changes are always blended back to the original ground at the outline (SiteKit.Sculpt).
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System;
 using System.Collections.Generic;
 using Placemaker.Core.Geometry;
@@ -137,7 +138,13 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
             public readonly List<List<float2>> Tracks = new List<List<float2>>();
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var s = new Site
