@@ -13,3 +13,4 @@ Tests/**/obj/
 # Gallery renders (regenerate: dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery)
 docs/gallery/*/
 docs/gallery/index.html
+docs/showcase/
