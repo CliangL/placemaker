@@ -266,6 +266,8 @@ namespace Placemaker.Gallery
 
         /// <summary>--showcase: square site with streets on all four sides; entrances from the planner's own suggestions.</summary>
         public static bool Showcase;
+        [ThreadStatic] private static List<NearbyNet> _roads;
+        [ThreadStatic] private static List<EdgeMarker> _markers;
 
         public static float3[] Square(float targetArea)
         {
@@ -310,6 +312,7 @@ namespace Placemaker.Gallery
             var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
             var site = new SiteContext { Assets = catalog.Items, LayoutScale = LayoutScale };
             if (Showcase) site.NearbyNets = RoadsAround(ring);
+            _roads = site.NearbyNets;
             ComposedPlan plan;
             var sw = Stopwatch.StartNew();
             try
@@ -331,6 +334,7 @@ namespace Placemaker.Gallery
             var dir = Path.Combine(outDir, job.Type);
             Directory.CreateDirectory(dir);
             res.File = job.Type + "/" + job.Variant + ".png";
+            _markers = job.Recipe?.Root?.Markers;
             Draw(plan, ring, catalog, Path.Combine(dir, job.Variant + ".png"), res);
             if (res.Failure == null)
                 res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.Ms:0} ms";
@@ -433,12 +437,20 @@ namespace Placemaker.Gallery
             var ring2 = ring.Select(p => p.xz).ToArray();
             float2 min = ring2[0], max = ring2[0];
             foreach (var p in ring2) { min = math.min(min, p); max = math.max(max, p); }
-            float margin = math.max(10f, math.cmax(max - min) * 0.06f);
+            float margin = math.max(Showcase ? 26f : 10f, math.cmax(max - min) * 0.06f);
             min -= margin; max += margin;
             float2 ext = max - min;
             float ppm = math.min(6f, 880f / math.cmax(ext));
             int w = (int)math.ceil(ext.x * ppm), h = (int)math.ceil(ext.y * ppm);
             var cv = new Canvas(w, h, min, ppm, Outside);
+            // Surrounding streets (showcase): grey 12 m band with a dashed centre line.
+            if (_roads != null)
+                foreach (var r in _roads)
+                {
+                    var rp = new[] { r.A.xz, r.D.xz };
+                    cv.StrokePolyline(rp, r.Width, Rgba.Hex("#9a9aa0"));
+                    cv.DashedPolyline(rp, cv.Px(1f), 4f, 4f, Rgba.Hex("#ffffff", 0.8f));
+                }
             cv.FillPolygon(ring2, Ground);
 
             // Terraform: height after all layers (last plan with HeightAfter wins), tinted + 1 m contours.
@@ -518,6 +530,13 @@ namespace Placemaker.Gallery
 
             // Area outline on top of surfaces.
             cv.StrokePolyline(ring2, cv.Px(2f), Rgba.Hex("#33415c"), closed: true);
+            // Placed entrances / markers: magenta discs on the outline.
+            if (_markers != null)
+                foreach (var m in _markers)
+                {
+                    cv.FillCircle(m.Position.xz, cv.Px(5f), Rgba.Hex("#d01fd0"));
+                    cv.StrokeCircle(m.Position.xz, cv.Px(5f), cv.Px(1.2f), Rgba.Hex("#ffffff"));
+                }
 
             // Objects: decals first (faint), then ground cover, then furniture, then trees (crowns over everything).
             var objs = plan.Layers.Where(l => l != null).SelectMany(l => l.Objects).Where(o => o != null).ToList();
@@ -734,10 +753,52 @@ namespace Placemaker.Gallery
             sb.Append(".card img{width:100%;height:auto;border-radius:4px;display:block}.m{color:var(--muted);font-size:12px}.bad{color:#d33}.leg span{display:inline-block;margin-right:12px}.sw{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-1px;margin-right:4px;border:1px solid #0003}");
             sb.Append("</style></head><body><h1>Placemaker visual review gallery</h1>");
             sb.Append($"<p class=\"m\">Generated {DateTime.Now:yyyy-MM-dd HH:mm} by Tests/Placemaker.Gallery from the real Core planners and catalog footprints. {jobs.Count} images. See <a href=\"REVIEW.md\">REVIEW.md</a>.</p>");
-            sb.Append("<p class=\"leg m\">");
-            foreach (var (c, t) in new[] { ("#b5d99a", "grass"), ("#d6cfbf", "paving"), ("#e2d6bb", "plaza"), ("#76767c", "asphalt"), ("#7fb2e5", "water"), ("#cdb98f", "ground/natural"), ("#f4e7c6", "path (real width)"), ("#8d8d93", "road"), ("#3c8a3c", "tree crown"), ("#6cb04c", "bush"), ("#3f7f37", "hedge"), ("#7b4a1e", "bench"), ("#f0c419", "lamp"), ("#3a3a3a", "bin"), ("#2c78c8", "centerpiece ring"), ("#e8833a", "playground"), ("#7a6fb0", "other furniture"), ("#8f7a5a", "decal (faint)"), ("#e02020", "issue") })
-                sb.Append($"<span><i class=\"sw\" style=\"background:{c}\"></i>{t}</span>");
-            sb.Append("<span>orange/blue tint + contours = terraform raise/lower; scale bar 2×10 m</span></p>");
+            var legend = new (string c, string t)[] {
+                ("#b5d99a", "grass"),
+                ("#d6cfbf", "paving"),
+                ("#e2d6bb", "plaza paving"),
+                ("#76767c", "asphalt"),
+                ("#7fb2e5", "water"),
+                ("#cdb98f", "ground / natural"),
+                ("#ead9a2", "sand"),
+                ("#b9976a", "dirt"),
+                ("#9e9e9e", "rock ground"),
+                ("#e3aacb", "decorative surface"),
+                ("#8a8172", "terrain paint (grey tint)"),
+                ("#f4e7c6", "footpath (real width)"),
+                ("#e6b3a8", "bike path"),
+                ("#d9c39a", "trail"),
+                ("#8d8d93", "road / track"),
+                ("#a3adc4", "parking aisle"),
+                ("#7a5a3c", "fence"),
+                ("#9a9aa0", "surrounding street"),
+                ("#3c8a3c", "tree (crown)"),
+                ("#6cb04c", "bush"),
+                ("#3f7f37", "hedge"),
+                ("#d470a8", "flowerbed"),
+                ("#a07850", "planter"),
+                ("#8a8a8a", "rock"),
+                ("#7b4a1e", "bench"),
+                ("#f0c419", "lamp"),
+                ("#3a3a3a", "bin"),
+                ("#2c78c8", "centerpiece (ring)"),
+                ("#6c63b5", "monument / memorial"),
+                ("#e8833a", "playground"),
+                ("#d65a5a", "sports"),
+                ("#b06f3c", "picnic"),
+                ("#c0703f", "kiosk / shelter / restroom"),
+                ("#22aa66", "EV charger"),
+                ("#ffffff", "parking bay (outline)"),
+                ("#8f7a5a", "decal (very faint)"),
+                ("#7a6fb0", "OTHER prop (no own colour: farm, yard, industrial...)"),
+                ("#d01fd0", "entrance / marker (big disc on outline)"),
+                ("#c02cc0", "spawner / access point (small dot)"),
+                ("#e02020", "issue")
+            };
+            sb.Append("<div class=\"leg m\" style=\"position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0;border-bottom:1px solid var(--line)\">");
+            sb.Append("<b>How to read:</b> top-down view, 2x10 m scale bar bottom-left. Dark outline = selected area; grey bands = streets around it. Orange tint with contour lines = ground raised, blue = lowered (dashed orange outline = permanent change). Everything is drawn at its real footprint. ");
+            foreach (var (c, t) in legend) sb.Append($"<span><i class=\"sw\" style=\"background:{c}\"></i>{t}</span>");
+            sb.Append("</div>");
             var json = new List<object>();
             foreach (var group in jobs.Select((j, i) => (j, r: results[i])).GroupBy(x => x.j.Type))
             {
