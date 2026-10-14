@@ -61,9 +61,9 @@ namespace Placemaker.Core.Layers.Types.Beach
             foreach (var raw in shore.OffsetFromWater(set, hw + 1f, 16f, 3f, p =>
             {
                 shore.Nearest(p, out _, out float a);
-                return a < from - 1f || a > to + 1f || g.Survey.GradeAt(p) > 0.3f;
+                return a < from - 1f || a > to + 1f || g.Survey.GradeAt(p) > 0.12f;   // on the flat plateau only
             }))
-            foreach (var (line, _) in g.Walk(raw, hw + 0.8f, 4f, 10f, TerrainSurvey.WalkGrade, 1.5f, 16f))
+            foreach (var (line, _) in g.Walk(raw, hw + 0.8f, 4f, 10f, TerrainSurvey.WalkGrade, 1.5f, 16f, cliffTop: true))
             {
                 var curves = Shoreline.Curves(shore.Land, line, role);
                 if (curves.Count == 0) continue;
@@ -85,7 +85,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                     var c = p + sea * (hw + 0.3f + 1.9f);
                     var rect = new OrientedRect { Center = c, Axis = t, HalfLength = 3.2f, HalfWidth = 1.9f };
                     if (!LeisureKit.RectFits(shore.Land, occ, rect, 0.3f, 0.1f) || g.OnCliff(c) || g.OnCliff(c + sea * 1.9f)) continue;
-                    if (!g.MakeLevel(c, 2.4f, 1.6f, out _)) continue;
+                    if (TerrainSurvey.Relief(g.H, c, 2.4f) > 1.6f) continue;   // level at the walk's own height below, not a mean that reaches over the edge
                     g.Sculpt.Pad(rect.Ring, g.H(p), 2.5f);
                     if (!ctx.Surface(rect.Ring, SurfaceRole.Paving, paving, AssetCategories.SurfacePaving)) continue;
                     LeisureKit.TakeRect(occ, rect);

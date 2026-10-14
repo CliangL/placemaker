@@ -258,7 +258,9 @@ namespace Placemaker.Core.Layers.Types.Beach
         internal static void EmitGreenRegions(LayerContext ctx, Occupancy occ, ShoreGround g)
         {
             var region = ctx.LayerRegion;
-            var pieces = FreeSpace.Pieces(region, p => occ.Corridors.Overlaps(p, 0.75f) || occ.HitsPolygon(p, 0.5f) || g.OnCliff(p) || g.Sculpt.GradeAt(p, 2f) > 0.2f,
+            // (and never ground the sculpt took under the water)
+            var pieces = FreeSpace.Pieces(region, p => occ.Corridors.Overlaps(p, 0.75f) || occ.HitsPolygon(p, 0.5f) || g.OnCliff(p) || g.Sculpt.GradeAt(p, 2f) > 0.2f
+                || g.HasLevel && ctx.G(p) < g.Level + 0.4f,
                 2.5f, 150f, ctx.Cancel);
             if (pieces.Count == 0) { ctx.AddRegion(region.Ring, "green:0", RegionTags.Green, RegionTags.Core); return; }
             for (int i = 0; i < pieces.Count && i < 24; i++)
@@ -448,6 +450,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                 }))
                     // ONE continuous walk on a level bench: smoothed along the shore, ≤ 6 % along it, flat across; it ends
                     // where its level would have to climb to ground it may not change (the side borders, a cliff).
+                {
                     foreach (var (piece, profile) in g.Walk(line, b.Hw + 1.2f, 5f, 16f, 0.06f, 0.8f, 24f))
                     {
                         var curves = Shoreline.Curves(shore.Land, piece, role);
@@ -460,14 +463,17 @@ namespace Placemaker.Core.Layers.Types.Beach
                         b.Lines.Add(piece);
                         b.Profiles.Add(profile);
                     }
+                }
             b.HasPath = b.Lines.Count > 0;
 
+            var cliffLines = new List<float2[]>();
             // Cliff stretches: a walk on the cliff top with lookouts (the cliff face stays natural).
             foreach (var run in b.CliffRuns)
             {
                 var res = CliffTop.Plan(ctx, g, occ, run.x, run.y, NetRole.Pathway, asset, AssetMix.Pick(BeachArt.Benches, 0u),
                     AssetMix.Pick(BeachArt.Railings, 0u), AssetMix.Pick(BeachArt.Lamps, 0u), AssetMix.Pick(BeachArt.Lookout, 0u), 70f);
                 b.Lookouts += res.Lookouts;
+                cliffLines.AddRange(res.Lines);
                 foreach (var line in res.Lines)
                     for (int i = 1; i < line.Length; i++) spine.Add((line[i - 1], line[i]));
             }
@@ -479,7 +485,11 @@ namespace Placemaker.Core.Layers.Types.Beach
             // An entrance placed on the wet sand or in the water is reached over the sand: no path is drawn to it.
             if (gates.Count == 0) foreach (var gt in all) if (shore.FromWater(gt.Position) > b.Wet + 4f) gates.Add(gt);
             if (spine.Count > 0)
-                foreach (var gt in gates) g.Connect(occ, gt.Position, spine, NetRole.Pathway, asset);
+            {
+                var walks = new List<float2[]>(b.Lines);
+                walks.AddRange(cliffLines);
+                g.ConnectAll(occ, gates.ConvertAll(gt => gt.Position), walks, NetRole.Pathway, asset);
+            }
             if (allCliff) return;
 
             // Short accesses off the promenade, each ending on a level landing on the sand.
@@ -797,9 +807,10 @@ namespace Placemaker.Core.Layers.Types.Beach
 
             bool Set(float2 p, uint v)
             {
-                shore.Nearest(p, out var inw, out _);
+                shore.Nearest(p, out var inw, out float pAlong);
                 float dp = shore.FromWater(p);
-                if (dp < d0 || dp > d1) return false;
+                if (dp < d0 || dp > d1 || !InBeachRun(b, pAlong)) return false;   // never on a cliff top beside the beach
+                if (b.G.H(p) > b.G.Ref(pAlong) + 1.4f + ctx.F("slope") / 100f * dp) return false;   // on the sand, not on a bank above it
                 var toWater = -inw;
                 var tan = new float2(inw.y, -inw.x);
                 float jitter = tidy ? 0f : (Hashing.Unit(Hashing.Mix(v, 3u)) - 0.5f) * 0.35f;

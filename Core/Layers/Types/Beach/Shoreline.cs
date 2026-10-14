@@ -119,7 +119,11 @@ namespace Placemaker.Core.Layers.Types.Beach
         public float SignedDepth(float2 p, float cap = 2000f)
         {
             float d = Depth(p, cap);
-            return Land.Contains(p) ? d : -d;
+            if (Land.Contains(p)) return d;
+            // (s20) Outside the land: on the water side only when it lies seaward of the nearest shore point (a point beyond
+            // the outline away from the water, e.g. an entrance on the back edge, is inland).
+            var q = Nearest(p, out var inw, out _);
+            return math.dot(p - q, inw) >= -0.01f ? d : -d;
         }
 
         // ───────────── foreshore (s13) ─────────────
@@ -529,8 +533,9 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// </summary>
         public float FromWater(float2 p)
         {
-            Nearest(p, out _, out float along);
-            return SignedDepth(p) + GapAt(along);
+            var q = Nearest(p, out var inw, out float along);
+            float d = math.distance(p, q);
+            return (Land.Contains(p) || math.dot(p - q, inw) >= -0.01f ? d : -d) + GapAt(along);
         }
 
         /// <summary>The real waterline point in front of arc length s.</summary>
@@ -800,7 +805,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         public List<float2[]> BandFromWater(float dw0, float dw1)
         {
             var result = new List<float2[]>();
-            foreach (var strip in StripFromWater(dw0, dw1))
+            foreach (var strip in StripFromWater(dw0, dw1, 0f, -1f, 4f))
                 try
                 {
                     foreach (var r in Poly.Boolean(new[] { (IReadOnlyList<float2>)strip }, new[] { (IReadOnlyList<float2>)Land.Ring }, BoolOp.Intersection, FillRule.Positive))
@@ -818,12 +823,12 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// (s20) The strip between dw0 and dw1 m from the real waterline (negative = out over the water), NOT clipped to
         /// the land: one simple ring per run of stations [fromAlong, toAlong]. Callers clip (paint reaches into the water).
         /// </summary>
-        public List<float2[]> StripFromWater(float dw0, float dw1, float fromAlong = 0f, float toAlong = -1f)
+        public List<float2[]> StripFromWater(float dw0, float dw1, float fromAlong = 0f, float toAlong = -1f, float step = 2f)
         {
             var result = new List<float2[]>();
             if (toAlong < 0f) toAlong = Length;
             if (dw1 <= dw0 + 0.5f || toAlong - fromAlong < 1f) return result;
-            int steps = math.max(2, (int)math.ceil((toAlong - fromAlong) / 2f));
+            int steps = math.max(2, (int)math.ceil((toAlong - fromAlong) / math.max(1f, step)));
             var outer = new List<float2>(steps + 1);
             var inner = new List<float2>(steps + 1);
             for (int i = 0; i <= steps; i++)

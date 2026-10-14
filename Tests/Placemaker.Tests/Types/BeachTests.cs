@@ -230,7 +230,8 @@ namespace Placemaker.Tests.Types
             Assert.Equal(plan.Facts["accessPaths"], plan.Facts["landings"]);
             var landings = plan.Surfaces.Where(s => s.Role == SurfaceRole.Paving).Select(s => Poly.Centroid(Poly.To2D(s.Ring))).ToList();
             // Every access path ends at a landing (its seaward end touches one).
-            foreach (var n in plan.Nets.Where(n => n.Role == NetRole.Pathway && math.abs(n.A.x - n.D.x) < 0.5f && n.A.z > n.D.z + 3f))
+            // (the accesses drop off the promenade; an entrance connector coming down from the street ends on the promenade)
+            foreach (var n in plan.Nets.Where(n => n.Role == NetRole.Pathway && math.abs(n.A.x - n.D.x) < 0.5f && n.A.z > n.D.z + 3f && n.A.z < (float)plan.Facts["beachDepth"] + 6f))
                 Assert.Contains(landings, c => math.distance(c, n.D.xz) < 3f);
             Assert.Single(plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella).Select(o => o.Asset.Id).Distinct());
             Assert.Single(plan.Objects.Where(o => o.Category == AssetCategories.BeachLounger).Select(o => o.Asset.Id).Distinct());

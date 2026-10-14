@@ -65,9 +65,11 @@ namespace Placemaker.Core.Layers.Types.Beach
             for (int k = 0; k < Sculpt.Count; k++)
             {
                 var p = Sculpt.Pos(k);
-                shore.Nearest(p, out _, out float along);
+                // One nearest-point query per node: distance and side (seaward of the nearest shore point = negative).
+                var q = shore.Nearest(p, out var qin, out float along);
                 _along[k] = along;
-                _dw[k] = shore.SignedDepth(p) + shore.GapAt(along);
+                float dd = math.distance(p, q);
+                _dw[k] = (math.dot(p - q, qin) >= -0.01f ? dd : -dd) + shore.GapAt(along);
                 _cliff[k] = CliffAt(p, along, _dw[k]);
                 if (_cliff[k]) Sculpt.Free[k] = false;
             }
@@ -232,11 +234,12 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// border away from the water, a cliff) more steeply than ~25 %; it is trimmed there (and split around a cliff)
         /// instead of climbing at its ends. Each piece gets its own level bench; returns (line, profile) pairs.
         /// </summary>
-        public List<(float2[] line, Func<float, float> profile)> Walk(float2[] line, float halfWidth, float blend, float smoothing, float maxGrade, float minAboveWater, float minLength)
+        public List<(float2[] line, Func<float, float> profile)> Walk(float2[] line, float halfWidth, float blend, float smoothing, float maxGrade, float minAboveWater, float minLength,
+            bool cliffTop = false)
         {
             var result = new List<(float2[], Func<float, float>)>();
             if (line == null || line.Length < 2) return result;
-            EnsureLocked();
+            EnsureLocked(cliffTop);
             var profile = ProfileAlong(line, halfWidth, smoothing, maxGrade, minAboveWater);
             var run = new List<float2>();
             float s = 0f;
@@ -264,16 +267,18 @@ namespace Placemaker.Core.Layers.Types.Beach
         }
 
         private float[] _lockedDist, _lockedH;
+        private bool _lockedIgnoresCliffs;
 
         /// <summary>Per node: distance to the nearest locked node and that node's height (two-pass chamfer carrying the height).</summary>
-        private void EnsureLocked()
+        private void EnsureLocked(bool ignoreCliffs)
         {
-            if (_lockedDist != null) return;
+            if (_lockedDist != null && _lockedIgnoresCliffs == ignoreCliffs) return;
+            _lockedIgnoresCliffs = ignoreCliffs;
             int nx = Sculpt.Nx, ny = Sculpt.Ny, n = Sculpt.Count;
             var d = new float[n]; var h = new float[n];
-            // Seeds: locked DRY ground only (the outline away from the water, cliffs). The deep water beyond the foreshore is
-            // locked too, but a walk need not blend to the sea bed.
-            for (int k = 0; k < n; k++) { d[k] = Sculpt.Free[k] || Shore.IsWet(Sculpt.Pos(k)) ? 1e9f : 0f; h[k] = Sculpt.Target[k]; }
+            // Seeds: locked DRY ground (the outline away from the water, cliff faces: a cliff-top walk is beside their top edge,
+            // at its own level). The deep water beyond the foreshore is locked too, but a walk need not blend to the sea bed.
+            for (int k = 0; k < n; k++) { d[k] = Sculpt.Free[k] || (ignoreCliffs && _cliff[k]) || Shore.IsWet(Sculpt.Pos(k)) ? 1e9f : 0f; h[k] = Sculpt.Target[k]; }
             float a = Sculpt.Cell, b = Sculpt.Cell * 1.41421356f;
             void Relax(int k, int m, float c) { if (d[m] + c < d[k]) { d[k] = d[m] + c; h[k] = h[m]; } }
             for (int j = 0; j < ny; j++)
@@ -372,7 +377,19 @@ namespace Placemaker.Core.Layers.Types.Beach
                     hb = H(bestQ);
                 }
             }
-            if (len > 1f) Sculpt.Corridor(route, s => math.lerp(ha, hb, math.saturate(s / len)), hw + 0.4f, 3f);
+            if (len > 1f)
+            {
+                // The ramp follows the planned ground smoothed along the way (≤ 12 %), pinned to both ends; where it must cut or
+                // fill, its banks widen with the depth (a broad graded cutting, never a crease).
+                var pts = Poly.ResamplePolyline(route, 2f);
+                var along = ProfileAlong(pts, hw, 10f, TerrainSurvey.RampGrade, 0.3f);
+                float total = Shoreline.LengthOf(pts);
+                float a0 = along(0f), a1 = along(total);
+                Func<float, float> prof = s => along(s) + math.lerp(ha - a0, hb - a1, math.saturate(s / math.max(1f, total)));
+                float dev = 0f, run = 0f;
+                for (int i = 0; i < pts.Length; i++) { if (i > 0) run += math.distance(pts[i - 1], pts[i]); dev = math.max(dev, math.abs(prof(run) - H(pts[i]))); }
+                Sculpt.Corridor(pts, prof, hw + 0.4f, math.clamp(dev / 0.16f, 4f, 20f));
+            }
             for (int i = 1; i < route.Count; i++) LeisureKit.Path(ctx, occ, route[i - 1], route[i], role, asset);
             return route;
         }
@@ -394,6 +411,65 @@ namespace Placemaker.Core.Layers.Types.Beach
                 dropped++;
             }
             if (dropped > 0) Ctx.Plan.Facts["droppedTilted"] = dropped;
+        }
+
+        /// <summary>
+        /// Every walk reachable from an entrance: each gate joins its nearest walk; a walk no gate reached (a beach walk
+        /// beside a cliff-top walk) gets its own connector from the nearest gate when that can stay under ~15 %.
+        /// </summary>
+        public void ConnectAll(Occupancy occ, IReadOnlyList<float2> gates, IReadOnlyList<float2[]> lines, NetRole role, AssetRef asset)
+        {
+            if (gates.Count == 0 || lines.Count == 0) return;
+            var spines = new List<List<(float2, float2)>>();
+            foreach (var l in lines)
+            {
+                var sp = new List<(float2, float2)>();
+                for (int i = 1; i < l.Length; i++) sp.Add((l[i - 1], l[i]));
+                spines.Add(sp);
+            }
+            float Dist(float2 p, List<(float2 a, float2 b)> sp, out float2 at)
+            {
+                float best = float.MaxValue; at = p;
+                foreach (var (a, b) in sp) { var c = SegmentIndex.ClosestPoint(p, a, b); float d = math.distance(c, p); if (d < best) { best = d; at = c; } }
+                return best;
+            }
+            var reached = new bool[lines.Count];
+            var all = new List<(float2, float2)>();
+            foreach (var sp in spines) all.AddRange(sp);
+            var routes = new List<List<float2>>();
+            foreach (var gt in gates)
+            {
+                int bi = -1; float bd = float.MaxValue;
+                for (int i = 0; i < spines.Count; i++) { float d = Dist(gt, spines[i], out _); if (d < bd) { bd = d; bi = i; } }
+                var r = bi >= 0 ? Connect(occ, gt, all, role, asset) : null;
+                if (r == null) continue;
+                reached[bi] = true;
+                routes.Add(r);
+            }
+            // A walk no gate reached: one spur from the nearest point of an entrance connector (it joins that path), a
+            // straight graded ramp of ≤ 12 % or nothing — never a second path doubling a connector from the same gate.
+            float hw = Composer.DefaultHalfWidth(role);
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (reached[i] || routes.Count == 0) continue;
+                float best = float.MaxValue; float2 from = default, to = default;
+                foreach (var r in routes)
+                    for (int k = 1; k < r.Count; k++)
+                        for (int s = 0; s <= 8; s++)
+                        {
+                            var p = math.lerp(r[k - 1], r[k], s / 8f);
+                            if (Ctx.LayerRegion.BoundaryDistance(p, 6f) < 5f) continue;   // not off the gate itself
+                            float d = Dist(p, spines[i], out var a);
+                            if (d < best) { best = d; from = p; to = a; }
+                        }
+                if (best > 300f || best < 2f) continue;
+                float hf = H(from), ht = H(to);
+                if (math.abs(hf - ht) / best > TerrainSurvey.RampGrade) continue;
+                if (Ctx.LayerRegion.CrossesBoundary(from, to, true)) continue;
+                Sculpt.Corridor(new[] { from, to }, s => math.lerp(hf, ht, math.saturate(s / best)), hw + 0.4f, 5f);
+                LeisureKit.Path(Ctx, occ, from, to, role, asset);
+                reached[i] = true;
+            }
         }
         /// <summary>Arc-length runs [from, to] (≥ minLength) of the shore whose kind passes <paramref name="ok"/>.</summary>
         public List<float2> Runs(Func<ShoreKind, bool> ok, float minLength = 8f)

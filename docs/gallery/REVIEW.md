@@ -93,3 +93,15 @@ formalGarden, plaza, marketSquare, greenwayPark, amphitheatre:
 - greenwayPark: seats at the path edge; lamps every N m along chained curve segments (no lamp per sample segment).
 - Remaining "off-path" counts on plaza / marketSquare / amphitheatre are seats on paving or in seating rows (expected).
 - plaza default still under-dressed; marketSquare tree ring hugs the outline (next pass).
+
+## s20 — water types on sloped shores (`--water beach,waterfront --shores flat,bank,headland,cliff`)
+
+Looked at every beach and waterfront preset on all four shore sites (top-down + `-3d` oblique with sections).
+- Terraces gone: sections show one smooth graded surface; beach faces run under the water; the 6.5 m bank is cut back to a
+  ≤ 25 % embankment behind one level promenade; dunes are low smooth ridges (on a strongly rising bank they are absorbed by the cut).
+- Headland: the low shore gets the beach / promenade, the cliff face stays natural, a cliff-top walk with a lookout runs on the
+  plateau; the entrance in the steep transition reaches whichever walk it can at ≤ 12 % (a walk it cannot reach gently gets no
+  connector — known limit, place an entrance near it).
+- Harbour on a low shore raises the apron to deck level (1.8 m) with a long gentle bank behind: reads as a built-up quay (intended).
+- Known: terraform outlines in the top-down view show where the change exceeds 0.12 m (patchy rectangles on gentle sand); quay
+  benches follow the coast's curvature (slightly rotated on bends).

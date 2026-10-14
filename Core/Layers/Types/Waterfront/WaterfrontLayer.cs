@@ -145,7 +145,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             // landings at the water, a gravel walk set back.
             Preset("fishing", ("style", "fishing"), ("edge", "bank"), ("promWidth", 10.0), ("surface", "gravel"), ("pathWidth", "narrow"), ("railings", false),
                 ("riprap", true), ("fishing", true), ("fishingSpacing", 16.0), ("lampSpacing", 0.0), ("benchSpacing", 0.0), ("trees", "none"), ("backdrop", "park"),
-                ("kiosks", 0.0), ("steps", "none"), ("piers", 1.0), ("pierLength", 16.0));
+                ("kiosks", 0.0), ("steps", "none"), ("piers", 1.0), ("pierLength", 16.0), ("beds", false));
         }
 
         protected override int WantedEntrances(LayerRegion region) => math.min(4, Entrances.WantedByArea(region.Area));
@@ -513,17 +513,15 @@ namespace Placemaker.Core.Layers.Types.Waterfront
         private void ConnectEntrances(Work w)
         {
             var ctx = w.Ctx; var shore = w.Shore;
-            var spine = new List<(float2, float2)>();
-            foreach (var line in w.Lines)
-                for (int i = 1; i < line.Length; i++) spine.Add((line[i - 1], line[i]));
-            if (spine.Count == 0)
-                foreach (var line in w.EdgeLines)
-                    if (w.Edge != "boardwalk")
-                        for (int i = 1; i < line.Length; i++) spine.Add((line[i - 1], line[i]));
-            if (spine.Count == 0) return;
-            var asset = AssetMix.One(ctx.S("pathAsset"));
+            var walks = new List<float2[]>(w.Lines);
+            if (walks.Count == 0 && w.Edge != "boardwalk") walks.AddRange(w.EdgeLines);
+            if (walks.Count == 0) return;
+            var gates = new List<float2>();
             foreach (var gt in Gates(ctx))
-                if (shore.FromWater(gt.Position) > w.DwP * 0.5f) w.G.Connect(w.Occ, gt.Position, spine, NetRole.Pathway, asset);
+                if (shore.FromWater(gt.Position) > w.DwP * 0.5f) gates.Add(gt.Position);
+            // Every walk reachable: each gate to its nearest walk, a walk no gate reached (the cliff-top walk beside the
+            // promenade) from the nearest gate when that stays gentle.
+            w.G.ConnectAll(w.Occ, gates, walks, NetRole.Pathway, AssetMix.One(ctx.S("pathAsset")));
         }
 
         /// <summary>Closest point on a set of Bézier pieces (16 samples each, then refined on the best span).</summary>
@@ -1131,15 +1129,15 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                     var ids = new[] { WaterfrontArt.BedShrubs[bed % WaterfrontArt.BedShrubs.Length] };
                     int placed = 0;
                     var pts = new List<float2>();
-                    for (float s = s0; s < s0 + bay * 0.6f; s += 1.6f)
+                    for (float s = s0; s < s0 + bay * 0.6f; s += 2.1f)
                     {
                         var p = Shoreline.PointOn(line, s, out var t);
                         var n = new float2(-t.y, t.x);
                         uint v = Hashing.Mix(ctx.Seed, 0xBED0u + (uint)(bed * 64 + placed));
                         var q = p + n * (Hashing.Unit(v) - 0.5f) * 0.8f;
-                        if (!occ.Free(q, 1.0f, 0.3f, 0.05f)) continue;
+                        if (!occ.Free(q, 0.9f, 0.3f, 0.05f)) continue;
                         ctx.Object(q, Hashing.Unit(Hashing.Mix(v, 1u)) * 6.283f, ObjectRole.Bush, AssetMix.Pick(ids, 0u), v);
-                        occ.Take(q, 1.0f, 4);
+                        occ.Take(q, 0.9f, 4);
                         pts.Add(q);
                         placed++;
                     }
