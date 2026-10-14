@@ -276,7 +276,8 @@ namespace Placemaker.Tests
         [Fact]
         public void ShopsStandNearEntrancesBesidePaths()
         {
-            var plan = Compose(With("park", "shops"), TestKit.Rect(200, 150), TestKit.RoadAlongBottom(200));
+            var site = TestKit.RoadAlongBottom(200);
+            var plan = Compose(TestKit.Entered(With("park", "shops"), TestKit.Rect(200, 150), site), TestKit.Rect(200, 150), site);
             var park = plan.Layers.Single(l => l.GeneratorId == "park");
             var shops = plan.Layers.Single(l => l.GeneratorId == "shops");
             var stands = shops.Objects.Where(o => o.Category == AssetCategories.Kiosk).ToList();
@@ -318,7 +319,8 @@ namespace Placemaker.Tests
         public void RestroomsByAreaNearAnEntrance()
         {
             var ring = TestKit.Rect(250, 200);
-            var plan = Compose(With("park", "restrooms"), ring, TestKit.RoadAlongBottom(250));
+            var site = TestKit.RoadAlongBottom(250);
+            var plan = Compose(TestKit.Entered(With("park", "restrooms"), ring, site), ring, site);
             var rest = plan.Layers.Single(l => l.GeneratorId == "restrooms").Objects.Where(o => o.Category == AssetCategories.Restroom).ToList();
             Assert.Equal(2, rest.Count);   // 5 ha, one per 3 ha (rounded)
             var park = plan.Layers.Single(l => l.GeneratorId == "park");

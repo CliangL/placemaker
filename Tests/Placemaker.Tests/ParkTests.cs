@@ -23,7 +23,7 @@ namespace Placemaker.Tests
         [Fact]
         public void DefaultParkHasPathsPlantingFurnitureAndRegions()
         {
-            var plan = TestKit.Plan("park", TestKit.Input(Hectare5, site: TestKit.RoadAlongBottom(250)));
+            var plan = TestKit.Plan("park", TestKit.Entered("park", TestKit.Input(Hectare5, site: TestKit.RoadAlongBottom(250))));
             Assert.False(plan.HasErrors);
             Assert.NotEmpty(plan.Nets);
             Assert.All(plan.Nets, n => Assert.True(n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide));

@@ -79,6 +79,26 @@ namespace Placemaker.Tests
 
         public static AreaPlan Plan(string id, AreaInput input) => Gen(id).Plan(input, CancellationToken.None);
 
+        /// <summary>
+        /// (s9) The player accepted the layer's suggested entrances: they become placed markers. Without any
+        /// placed entrance a park-family layer keeps its paths inside (no connectors to the outline or a road).
+        /// </summary>
+        public static AreaInput Entered(string id, AreaInput input)
+        {
+            if (input.Markers.Count == 0) input.Markers.AddRange(Gen(id).SuggestMarkers(input) ?? new List<EdgeMarker>());
+            return input;
+        }
+
+        /// <summary>(s9) Suggested entrances placed on a recipe's root step (as the gallery showcase does).</summary>
+        public static Recipe Entered(Recipe r, float3[] ring, SiteContext site)
+        {
+            var step = r.Root;
+            if (step.Markers.Count > 0) return r;
+            var input = new AreaInput { Shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn }, Site = site ?? new SiteContext(), Settings = step.Settings, Markers = step.Markers };
+            step.Markers.AddRange(Gen(step.Layer).SuggestMarkers(input) ?? new List<EdgeMarker>());
+            return r;
+        }
+
         // ───────────── invariants ─────────────
 
         public static void AssertObjectsInside(AreaPlan plan, float3[] ring, float tolerance = 0.01f)

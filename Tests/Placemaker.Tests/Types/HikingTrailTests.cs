@@ -184,7 +184,8 @@ namespace Placemaker.Tests.Types
         [Fact]
         public void TrailheadHasParkingMapAndBench()
         {
-            var plan = B12Kit.Compose(B12Kit.With(Id, PresetValues("forestTrail")), B12Kit.FiveHa, B12Kit.Road(250)).Layers[0];
+            var road = B12Kit.Road(250);
+            var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues("forestTrail")), B12Kit.FiveHa, road), B12Kit.FiveHa, road).Layers[0];
             Assert.Contains(plan.Objects, o => o.Category == AssetCategories.TrailSign);
             Assert.True(plan.Facts.TryGetValue("parkingStalls", out var stalls) && stalls >= 8, "no trailhead car park");
             Assert.Contains(plan.Surfaces, s => s.Category == AssetCategories.SurfaceNatural);

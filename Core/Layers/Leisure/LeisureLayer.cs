@@ -221,7 +221,7 @@ namespace Placemaker.Core.Layers.Leisure
             var pts = LeisureKit.Points(gates);
             uint seed = Hashing.Mix(ctx.Seed, 0x9A75u);
             var graph = ParkPathPlanner.PlanBest(region, pts, new ParkPathPlanner.Options { Loops = loops, StretchLoop = stretch }, seed, ctx.Cancel);
-            float keep = math.max(ctx.M(3f), ctx.EdgeMargin + 1f);
+            float keep = math.max(math.max(ctx.M(3f), ctx.EdgeMargin + 1f), PathQuality.Band + 1.5f);   // s9: bends never hug the outline
             if (amplitude > 0f) graph = ParkPathStyles.Meander(graph, pts, ctx.M(amplitude), ctx.M(wavelength), seed, p => region.ContainsDisc(p, keep) && !occ.HitsPolygon(p, 2f));
             var curves = ParkPaths.Build(graph, region, true, width);
             ParkPaths.Index(curves, occ.Corridors, 100);

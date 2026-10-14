@@ -55,7 +55,7 @@ namespace Placemaker.Tests
         public void BikeRouteIsAWideThroughRouteBetweenItsOwnEntries()
         {
             var ring = L(6);
-            var plan = Plan(Bag(null, ("bikePath", true)), ring);
+            var plan = TestKit.Plan("park", TestKit.Entered("park", TestKit.Input(ring, Bag(null, ("bikePath", true)), 3)));
             Assert.False(plan.HasErrors);
             var bike = plan.Nets.Where(IsBike).ToList();
             Assert.NotEmpty(bike);

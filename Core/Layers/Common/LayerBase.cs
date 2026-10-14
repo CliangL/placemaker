@@ -453,13 +453,20 @@ namespace Placemaker.Core.Layers.Common
                 Cancel = cancel, Seed = Hashing.Mix(input.Seed == 0 ? 1u : input.Seed, Seeds.Hash(Id)),
                 ControlOf = Control,
             };
+            float unplacedInset;
             using (Common.Layout.Use(input.Site))
             {
                 if (HostsStreetShops && input.HasChild(StreetShopsLayer)) CarveStreetShops(ctx, input);
                 PlanCore(ctx);
+                unplacedInset = Entrances.UnplacedInset;
             }
             // Only the selected area itself: inside a parent, ends on the outline may meet the parent's paths.
-            if (tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0) KeepPathEndsInside(plan, region);
+            if (tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0)
+            {
+                // s9: no entrance placed yet (park family) → no connectors: paths stop inside the outline.
+                if (!CheckReady(input).Ready) TrimOutlineEnds(plan, region, unplacedInset);
+                KeepPathEndsInside(plan, region);
+            }
             // Children plan on the ground this layer leaves: the composer derives it from
             // plan.Terraform (every sculptor emits PlannedTerraform), unless the layer set HeightAfter.
             return plan;
@@ -480,6 +487,123 @@ namespace Placemaker.Core.Layers.Common
                 if (n.StartAttach < 0) n.A = PullIn(n.A, n.B, n.D, hw, region);
                 if (n.EndAttach < 0) n.D = PullIn(n.D, n.C, n.A, hw, region);
             }
+        }
+
+        /// <summary>
+        /// (s9) While no entrance is placed, no path may run out to the outline: every free path end on (or
+        /// within 1 m of) the outline is cut back to <paramref name="inset"/> m inside; a path lying wholly in
+        /// that band is dropped. Benches, lamps and bins left beside a removed stretch go with it.
+        /// </summary>
+        public static void TrimOutlineEnds(AreaPlan plan, LayerRegion region, float inset)
+        {
+            if (plan?.Nets == null || region == null || inset <= 0f) return;
+            const int samples = 48;
+            var cut = new List<float2>();
+            var removed = new List<int>();
+            var trimmed = new List<(PlannedNet net, bool isA, float2 was)>();
+            float Depth(float2 p) => region.Contains(p) ? region.BoundaryDistance(p, inset + 1f) : 0f;
+            for (int i = 0; i < plan.Nets.Count; i++)
+            {
+                var n = plan.Nets[i];
+                if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide) continue;
+                bool atA = n.StartAttach < 0 && Depth(n.A.xz) <= 1f;
+                bool atD = n.EndAttach < 0 && Depth(n.D.xz) <= 1f;
+                if (!atA && !atD) continue;
+                float tA = 0f, tD = 1f;
+                if (atA)
+                {
+                    tA = -1f;
+                    for (int k = 1; k <= samples; k++)
+                        if (Depth(Composer.Bezier(n.A, n.B, n.C, n.D, k / (float)samples).xz) >= inset) { tA = k / (float)samples; break; }
+                }
+                if (atD)
+                {
+                    tD = -1f;
+                    for (int k = samples - 1; k >= 0; k--)
+                        if (Depth(Composer.Bezier(n.A, n.B, n.C, n.D, k / (float)samples).xz) >= inset) { tD = k / (float)samples; break; }
+                }
+                bool drop = tA < 0f || tD < 0f || tD - tA < 0.05f;
+                for (int k = 0; k <= samples; k++)
+                {
+                    float t = k / (float)samples;
+                    if (drop || t < tA || t > tD) cut.Add(Composer.Bezier(n.A, n.B, n.C, n.D, t).xz);
+                }
+                if (drop) { removed.Add(i); continue; }
+                if (atD) trimmed.Add((n, false, n.D.xz));
+                if (atA) trimmed.Add((n, true, n.A.xz));
+                if (atD && tD < 1f) PathJoins.Split(n, tD);
+                if (atA && tA > 0f)
+                {
+                    var rest = PathJoins.Split(n, tA / tD);
+                    n.A = rest.A; n.B = rest.B; n.C = rest.C; n.D = rest.D;
+                    n.StartAttach = -1; n.EndAttach = rest.EndAttach; n.EndAttachT = rest.EndAttachT;
+                }
+            }
+            if (cut.Count == 0) return;
+            // Ends left free by the cut (new ends, and the inner ends of dropped stubs) that lie within 3 m of
+            // each other were one entrance junction: join them at one node so the paths still meet (and never
+            // cross just short of it).
+            var exposed = new List<float2>();
+            foreach (var t in trimmed) exposed.Add(t.isA ? t.net.A.xz : t.net.D.xz);
+            foreach (int r in removed) { exposed.Add(plan.Nets[r].A.xz); exposed.Add(plan.Nets[r].D.xz); }
+            var ends = new List<(PlannedNet net, bool isA)>();
+            for (int k = 0; k < plan.Nets.Count; k++)
+            {
+                var o = plan.Nets[k];
+                if (removed.Contains(k) || (o.Role != NetRole.Pathway && o.Role != NetRole.PathwayWide)) continue;
+                foreach (bool isA in new[] { true, false })
+                {
+                    var e = isA ? o.A.xz : o.D.xz;
+                    foreach (var x in exposed) if (math.distancesq(x, e) < 0.01f) { ends.Add((o, isA)); break; }
+                }
+            }
+            var parent = new int[ends.Count];
+            for (int k = 0; k < ends.Count; k++) parent[k] = k;
+            int Find(int k) { while (parent[k] != k) k = parent[k] = parent[parent[k]]; return k; }
+            float3 End((PlannedNet net, bool isA) e) => e.isA ? e.net.A : e.net.D;
+            for (int a = 0; a < ends.Count; a++)
+                for (int b = a + 1; b < ends.Count; b++)
+                    if (math.distancesq(End(ends[a]).xz, End(ends[b]).xz) < 9f) parent[Find(a)] = Find(b);
+            var sums = new Dictionary<int, (float3 sum, int count)>();
+            for (int k = 0; k < ends.Count; k++)
+            {
+                int root = Find(k);
+                sums.TryGetValue(root, out var s);
+                sums[root] = (s.sum + End(ends[k]), s.count + 1);
+            }
+            for (int k = 0; k < ends.Count; k++)
+            {
+                var (sum, count) = sums[Find(k)];
+                if (count < 2) continue;
+                var c = sum / count;
+                var (n, isA) = ends[k];
+                if (isA) { var d = c - n.A; n.A = c; n.B += d; }
+                else { var d = c - n.D; n.D = c; n.C += d; }
+            }
+            for (int r = removed.Count - 1; r >= 0; r--)
+            {
+                int idx = removed[r];
+                plan.Nets.RemoveAt(idx);
+                foreach (var o in plan.Objects)
+                    if (o.AttachedNet == idx) o.AttachedNet = -1;
+                    else if (o.AttachedNet > idx) o.AttachedNet--;
+            }
+            // Furniture that lined a removed stretch (and is not beside a remaining path).
+            plan.Objects.RemoveAll(o =>
+            {
+                if (o.Role != ObjectRole.Bench && o.Role != ObjectRole.Lamp && o.Role != ObjectRole.Bin) return false;
+                var p = o.Position.xz;
+                bool nearCut = false;
+                foreach (var c in cut) if (math.distancesq(c, p) < 16f) { nearCut = true; break; }
+                if (!nearCut) return false;
+                foreach (var n in plan.Nets)
+                {
+                    if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide) continue;
+                    for (int k = 0; k <= 16; k++)
+                        if (math.distancesq(Composer.Bezier(n.A, n.B, n.C, n.D, k / 16f).xz, p) < 12.25f) return false;
+                }
+                return true;
+            });
         }
 
         private static float3 PullIn(float3 end, float3 control, float3 other, float hw, LayerRegion region)
