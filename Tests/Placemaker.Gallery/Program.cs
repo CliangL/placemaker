@@ -57,6 +57,8 @@ namespace Placemaker.Gallery
                     case "--palettes": Variants.Palettes = true; break;
                     case "--presets": Variants.PresetFilter = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--no-features": Variants.NoFeatureVariants = true; break;
+                    case "--terrain": Variants.TerrainVariants = true; break;
+                    case "--no-harmony": Variants.NoHarmony = true; break;
                     case "--no-shops": Variants.NoShops = true; break;
                     case "--dump": dump = next; i++; break;
                 }
@@ -203,6 +205,10 @@ namespace Placemaker.Gallery
         public static HashSet<string> PresetFilter;
         /// <summary>--no-features: skip the all/none feature variants.</summary>
         public static bool NoFeatureVariants;
+        /// <summary>(s31) --terrain: every job also with the Terrain feature on ("rolling" hills), suffix "+terrain".</summary>
+        public static bool TerrainVariants;
+        /// <summary>(s31) --no-harmony: compose without the site harmony pass (to see the old behaviour).</summary>
+        public static bool NoHarmony;
         /// <summary>--no-shops: street shops off everywhere (judge a type's own layout on a site with streets all round).</summary>
         public static bool NoShops;
         /// <summary>--shops: one image per street-shop layout/amount (s12) for every type that hosts street shops.</summary>
@@ -336,6 +342,30 @@ namespace Placemaker.Gallery
                     if (!Renderer.WaterTypes.Contains(j.Type)) { expanded.Add(j); continue; }
                     foreach (var s in Renderer.Shores)
                         expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "~" + s, Title = j.Title + " (" + s + " shore)", Recipe = j.Recipe.Clone(), TargetArea = j.TargetArea, Shore = s });
+                }
+                jobs = expanded;
+            }
+            if (TerrainVariants)
+            {
+                var expanded = new List<Job>();
+                foreach (var j in jobs)
+                {
+                    expanded.Add(j);
+                    var r = j.Recipe.Clone();
+                    var ed = new DesignEditor(GeneratorRegistry.Get);
+                    if (!ed.SetFeature(r, RecipePaths.Root, "terrain", true, 4242u))
+                    {
+                        var tg = GeneratorRegistry.Get("terrain");
+                        if (tg == null) continue;
+                        r.Root.Children.Add(new RecipeStep { Layer = "terrain", Seed = 4242u, Settings = tg.Defaults() });
+                    }
+                    foreach (var st in r.Root.Children)
+                        if (st.Layer == "terrain")
+                        {
+                            st.Enabled = true;
+                            st.Settings.Values["shape"] = "hills"; st.Settings.Values["height"] = 3.0; st.Settings.Values["scale"] = 45.0;
+                        }
+                    expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "+terrain", Title = j.Title + " + rolling terrain", Recipe = r, TargetArea = j.TargetArea, Shape = j.Shape, Shore = j.Shore });
                 }
                 jobs = expanded;
             }
@@ -524,6 +554,7 @@ namespace Placemaker.Gallery
                 if (Showcase || shaped) ApplySuggestedMarkers(job.Recipe, ring, site);
                 AddMarkersIfNeeded(job.Recipe, ring);
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                Placemaker.Core.Build.SiteHarmony.Disabled = Variants.NoHarmony;
                 plan = Composer.Compose(job.Recipe, shape, site, cts.Token);
                 AutoAssets.Resolve(plan, catalog.Source());
                 Placemaker.Core.Decals.DecalFit.Orient(plan, catalog.Items);
@@ -547,6 +578,8 @@ namespace Placemaker.Gallery
             {
                 var gf = plan.Layers.Where(l => l != null).SelectMany(l => l.Facts).Where(kv => kv.Key.StartsWith("grade") || kv.Key.StartsWith("terrain")).Select(kv => kv.Key + "=" + kv.Value.ToString("0.##", CultureInfo.InvariantCulture));
                 res.Summary += " | " + string.Join(" ", gf) + " tf " + plan.Layers.Where(l => l != null).Sum(l => l.Terraform.Count);
+                // (s31) Site harmony metrics on the ground the build leaves.
+                try { res.Summary += " | " + Placemaker.Core.Build.SiteHarmony.Measure(plan, site); } catch (Exception) { }
             }
             if (res.Failure == null && job.Shore != null && plan.Layers.Count > 0 && plan.Layers[0] != null)
             {

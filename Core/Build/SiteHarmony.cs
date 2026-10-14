@@ -101,6 +101,8 @@ namespace Placemaker.Core.Build
         public const float LargeSurfaceArea = 2000f, LongSurface = 45f;
         /// <summary>A cluster of furniture shares one level when its ground spans at most this (m); else each item is terraced.</summary>
         public const float ClusterSpan = 0.8f;
+        /// <summary>Metrics: path samples within half width + this of a junction or crossing are judged as the junction (bands blend there).</summary>
+        public const float JunctionZone = 5f;
         /// <summary>A sloping cluster is terraced as one plane of at most this tilt when that stays within the deviation (m).</summary>
         public const float ClusterTilt = 0.05f, ClusterPlaneDeviation = 1.5f;
         /// <summary>Surfaces up to this size touching a path's level band (beds, link strips) take the path's cross-level instead of their own plane.</summary>
@@ -1539,7 +1541,7 @@ namespace Placemaker.Core.Build
             // Paths: cross-slope at the edges, along-grade over 4 m; junctions (shared ends) excepted.
             var ends = new List<(float2 p, float r)>();
             var paths = CollectPaths(c, plan, site);
-            foreach (var pn in paths) { ends.Add((pn.Net.A.xz, pn.Hw + 3f)); ends.Add((pn.Net.D.xz, pn.Hw + 3f)); }
+            foreach (var pn in paths) { ends.Add((pn.Net.A.xz, pn.Hw + JunctionZone)); ends.Add((pn.Net.D.xz, pn.Hw + JunctionZone)); }
             // X crossings (no shared node) are junctions too.
             var polys = new List<(float2[] pts, float2 mn, float2 mx, float hw)>();
             foreach (var pn in paths)
@@ -1558,7 +1560,7 @@ namespace Placemaker.Core.Build
                     for (int i = 1; i < A.pts.Length; i++)
                         for (int j = 1; j < B.pts.Length; j++)
                             if (Poly.SegmentIntersection(A.pts[i - 1], A.pts[i], B.pts[j - 1], B.pts[j], out var x, out _, out _))
-                                ends.Add((x, math.max(A.hw, B.hw) + 3f));
+                                ends.Add((x, math.max(A.hw, B.hw) + JunctionZone));
                 }
             var cross = new List<float>();
             var padRings = new List<float2[]>();
@@ -1606,6 +1608,7 @@ namespace Placemaker.Core.Build
                     }
                 }
             }
+            if (cross.Count > 0) { cross.Sort(); m.P95PathCross = cross[(int)math.floor(0.95f * (cross.Count - 1))]; }
             // Pads: graded surfaces (grouped like the pass groups them) are planes within tolerance, judged more than 1 m inside
             // and off the paths' level bands. Not pads: large or long ones (smoothed), ones a path runs into (part of the path),
             // ones at the outline (they meet the street / neighbour as it is).

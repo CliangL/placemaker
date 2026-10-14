@@ -177,6 +177,26 @@ namespace Placemaker.Tests
             Assert.True(holders[0].Facts["harmonyCells"] > 0);
         }
 
+        /// <summary>Mixed recipes: a road grid's blocks as parks, a split park | plaza. Roads keep their ground; the parks are graded.</summary>
+        [Theory]
+        [InlineData("{\"id\":\"x\",\"root\":{\"layer\":\"roads\",\"children\":[{\"layer\":\"park\",\"target\":\"block\"}]}}")]
+        [InlineData("{\"id\":\"x\",\"root\":{\"layer\":\"split\",\"children\":[{\"layer\":\"park\",\"target\":\"part:0\",\"children\":[{\"layer\":\"terrain\",\"settings\":{\"shape\":\"hills\",\"height\":3}}]},{\"layer\":\"plaza\",\"target\":\"part:1\"}]}}")]
+        public void MixedRecipes_GradeOnlyTheirParks(string json)
+        {
+            var r = RecipeJson.Parse(json).Recipe;
+            var ring = TestKit.Rect(240, 180);
+            var site = SiteOn("hill", ring);
+            var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
+            Assert.DoesNotContain(plan.AllIssues(), i => i.Severity == IssueSeverity.Error);
+            var m = SiteHarmony.Measure(plan, site);
+            _out.WriteLine(m.ToString());
+            Assert.True(m.MaxPathCross <= 0.021f, m.ToString());
+            Assert.True(m.MaxObjectOff <= 0.3f, m.ToString());
+            Assert.True(m.MaxJump <= 0.8f, m.ToString());
+            // Road nets are never harmony's: their layer keeps no harmony field.
+            Assert.DoesNotContain(plan.Layers.Where(l => !SiteHarmony.Participates(l.GeneratorId)), l => l.Facts.ContainsKey("harmonyCells"));
+        }
+
         [Fact]
         public void FlatGround_WithoutTerrainFeature_NoEarthworks()
         {
