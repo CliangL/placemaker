@@ -59,6 +59,7 @@ namespace Placemaker.Game.Build
         private bool _tfVerified;        // the ground reached the raster: nets/objects may use it
         private int _tfPass, _tfOrientation, _tfOrientationTries, _tfStaleWaits, _tfWaitUntil;
         private float _tfStartRms, _tfLastRms;
+        private TerraformRaster.Residual _tfFinal;
         private readonly List<TfApplied> _tfApplied = new List<TfApplied>();
         private readonly List<UnityEngine.Texture2D> _tfTextures = new List<UnityEngine.Texture2D>();
 
@@ -198,6 +199,7 @@ namespace Placemaker.Game.Build
                 DestroyTerraformTextures();
             }
 
+            _tfFinal = stats;
             if (stats.Done(TerraformTolerance, TerraformOffFraction))
             {
                 FinishTerraformDirect(true, null);
@@ -225,7 +227,8 @@ namespace Placemaker.Game.Build
                 _warnings.Add("Placemaker.Build.TerraformIncomplete");
                 Mod.Log.Warn($"Placemaker terraform incomplete ({why}).");
             }
-            else Mod.Log.Info($"Placemaker terraform reached its target in {_tfPass} pass(es), {(DateTime.UtcNow - _terraformStart).TotalSeconds:F1} s.");
+            else Mod.Log.Info($"Placemaker terraform reached its target in {_tfPass} pass(es), {(DateTime.UtcNow - _terraformStart).TotalSeconds:F1} s"
+                + $" (measured on the live terrain: {_tfFinal.InsideOff}/{_tfFinal.Inside} texels off, worst {_tfFinal.InsideMaxAbs:F2} m, rms {_tfFinal.Rms:F2} m).");
             SetProgress(0.18f);
             Go(AfterTerraform());
         }
