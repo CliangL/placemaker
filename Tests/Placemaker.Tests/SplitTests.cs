@@ -97,7 +97,8 @@ namespace Placemaker.Tests
             var plan = TestKit.Plan("split", TestKit.Input(TestKit.Rect(100, 60), s));
             Assert.Single(plan.Nets);
             Assert.Equal(NetRole.PathwayWide, plan.Nets[0].Role);
-            Assert.Equal(60, math.distance(plan.Nets[0].A.xz, plan.Nets[0].D.xz), 1);
+            // Edge to edge, its free ends kept inside the outline by its half width (no cap sticking out).
+            Assert.Equal(60 - 2 * Composer.DefaultHalfWidth(NetRole.PathwayWide), math.distance(plan.Nets[0].A.xz, plan.Nets[0].D.xz), 1);
         }
 
         [Fact]

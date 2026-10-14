@@ -24,9 +24,9 @@ namespace Placemaker.Core.Layers.AddOns
                 "mounds", "hills", "terraces", "terracedDown", "sunken", "raised", "bowl", "berms", "flatten").Tip();
             c.Slider("height", 2, 0.5, 8, 0.5, "m", ControlTier.Essential, "terrain").Tip();
             // (mounds: the noise humps reach the full height only at their peaks)
-            c.Slider("scale", 30, 10, 80, 5, "m", ControlTier.More, "terrain").Tip();
+            c.Slider("scale", 30, 10, 80, 5, "m", ControlTier.More, "terrain").Layout(8).Tip();
             c.Slider("maxSlope", 20, 5, 50, 5, "%", ControlTier.More, "terrain").Tip();
-            c.Slider("falloff", 18, 6, 60, 2, "m", ControlTier.More, "terrain").Tip();
+            c.Slider("falloff", 18, 6, 60, 2, "m", ControlTier.More, "terrain").Layout(4).Tip();
             c.Slider("levels", 3, 2, 4, 1, "count", ControlTier.More, "terrain");
             c.RandomRange("height", 1, 3);
             c.Fixed("shape");

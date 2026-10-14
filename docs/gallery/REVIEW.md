@@ -80,3 +80,16 @@ Per-image numbers (benches off-path, overlapping solid objects, objects outside)
   Add site variants (a road along one edge, a lake edge) to the job list.
 - Tree crowns use the same estimate as the in-game sketch (`max(bounds/2, 0.28 × height)`); real crown sizes would need a crown dump.
 - No text in the PNGs; titles/metrics are in `index.html`.
+
+## Second pass — s2 fix round (layout size 50 %, thin walks)
+
+Gallery now renders at the game default Layout size (`--scale`, default 0.5). Looked at park, memorialPark,
+formalGarden, plaza, marketSquare, greenwayPark, amphitheatre:
+- Automatic walk = thin "Pavement Path" (`AutoAssets.PickWalk`, pool ranking); wide only for PathwayWide
+  (planning half width now its real 4 m). Free entrance ends are pulled inside the outline.
+- park: loops back at 50 % (coverage-loop anchor retry, missing loops penalised), benches/lamps beside thin walks.
+- memorialPark: off-path benches 85 → 14 over all variants (rooms have inner walks), no painted procession band.
+- formalGarden: main axis + cross walks between the parterres; off-path benches 24 → 0.
+- greenwayPark: seats at the path edge; lamps every N m along chained curve segments (no lamp per sample segment).
+- Remaining "off-path" counts on plaza / marketSquare / amphitheatre are seats on paving or in seating rows (expected).
+- plaza default still under-dressed; marketSquare tree ring hugs the outline (next pass).

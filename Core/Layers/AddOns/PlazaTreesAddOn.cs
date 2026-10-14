@@ -24,7 +24,7 @@ namespace Placemaker.Core.Layers.AddOns
         protected override void DefineControls(ControlSet c)
         {
             c.Choice("layout", "grid", ControlTier.Essential, "trees", "grid", "islands").Tip();
-            c.Slider("spacing", 10, 6, 24, 1, "m", ControlTier.Essential, "trees").Tip();
+            c.Slider("spacing", 10, 6, 24, 1, "m", ControlTier.Essential, "trees").Layout(6).Tip();
             c.AssetMulti("species", AssetCategories.Tree, ControlTier.More, "trees");
             c.Asset("grass", AssetCategories.SurfaceGrass, ControlTier.More, "trees").When("layout=islands");
             c.RandomRange("spacing", 8, 14);

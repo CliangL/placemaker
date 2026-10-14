@@ -250,7 +250,7 @@ namespace Placemaker.Tests
             var pylons = Alone(TriumphalArchAddOn.LayerId, Bag(("kind", "pylons")));
             Assert.Equal(2.0, pylons.Facts["gatePieces"]);
             var propylaea = Alone(TriumphalArchAddOn.LayerId, Bag(("kind", "propylaea")));
-            Assert.True(propylaea.Facts["gatePieces"] >= 8);
+            Assert.True(propylaea.Facts["gatePieces"] >= 4);   // the walk through it is the real 8 m wide path (FEEDBACK-4)
         }
 
         [Fact]

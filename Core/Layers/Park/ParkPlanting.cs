@@ -110,8 +110,8 @@ namespace Placemaker.Core.Layers.Park
             var rng = Hashing.Rng(s.Seed, 0x3c6ef372u);
             var region = s.LayerRegion;
             float side = math.sqrt(region.Area);
-            float baseRadius = math.clamp(side * 0.16f, 12f, 30f) * style.GroveScale;
-            float largest = math.max(8f, side * 0.28f) * style.GroveScale;
+            float baseRadius = math.clamp(side * 0.16f, Layout.M(12f, 6f), Layout.M(30f, 6f)) * style.GroveScale;
+            float largest = math.max(Layout.M(8f, 6f), side * 0.28f) * style.GroveScale;
             float budget = region.Area * style.GroveCoverage;
             float covered = 0;
             for (int attempt = 0; attempt < 4000 && s.Groves.Count < MaxGroves && (covered < budget || s.Groves.Count < 2); attempt++)
@@ -284,7 +284,7 @@ namespace Placemaker.Core.Layers.Park
             uint species = rng.NextUInt();
             if (tree)
             {
-                const float interval = 9f;
+                float interval = Layout.M(9f, 6f);
                 foreach (var c in s.Curves)
                 {
                     if (placed >= target) break;
@@ -335,7 +335,7 @@ namespace Placemaker.Core.Layers.Park
             var n = new float2(-axis.y, axis.x);
             float ext = math.length(region.Max - region.Min) * 0.5f + 2f;
             var points = new List<float2>();
-            for (float pitch = 10f; pitch <= 30f; pitch *= 1.12f)
+            for (float pitch = Layout.M(10f, 6f); pitch <= Layout.M(30f, 6.5f); pitch *= 1.12f)
             {
                 s.Cancel.ThrowIfCancellationRequested();
                 points.Clear();
@@ -375,7 +375,7 @@ namespace Placemaker.Core.Layers.Park
         {
             s.LayerRegion.PrincipalAxes(out var c, out var axis, out _, out _);
             var n = new float2(-axis.y, axis.x);
-            float pitch = tree ? 12f : 5f;
+            float pitch = tree ? Layout.M(12f, 6f) : Layout.M(5f, 2.4f);
             float radius = tree ? 2.5f : 1.0f;
             var region = s.LayerRegion;
             float ext = math.length(region.Max - region.Min);
@@ -428,7 +428,7 @@ namespace Placemaker.Core.Layers.Park
 
             public float Coverage(float along) => math.smoothstep(0.42f, 0.72f, Noise(along, _coverageCells, 1u));
             public float DepthFactor(float along) => 0.25f + 0.75f * (0.6f * Noise(along, _coverageCells, 1u) + 0.4f * Noise(along, _depthCells, 2u));
-            public float MaxDepth(bool tree) => (tree ? 7f : 9f) * _depthScale;
+            public float MaxDepth(bool tree) => Layout.M((tree ? 7f : 9f) * _depthScale, tree ? 3f : 2f);
             public uint SectionVariant(float along, uint layerSeed) =>
                 Hashing.Mix(layerSeed, (uint)((int)(along / Perimeter * _sectionCells) % _sectionCells));
             public float2 Point(float along, float inset) => _region.PointAt(along, out _, out var inward, out _) + inward * inset;
@@ -462,7 +462,7 @@ namespace Placemaker.Core.Layers.Park
                     var normal = new float2(-tangent.y, tangent.x);
                     float side = ((i + ci + sidePhase) & 1) == 0 ? 1f : -1f;
                     var q = p + normal * (c.HalfWidth + footprint + 0.2f) * side;
-                    if (!FurnitureFits(s, q, footprint, kind, kind == ParkItemKind.Bench ? 14f : kind == ParkItemKind.Lamp ? 10f : 12f)) continue;
+                    if (!FurnitureFits(s, q, footprint, kind, kind == ParkItemKind.Bench ? Layout.M(14f, 4f) : kind == ParkItemKind.Lamp ? Layout.M(10f, 2f) : Layout.M(12f, 2f))) continue;
                     // Yaw convention kept from ParkManager (verified in game): along the path, flipped on the left side.
                     float yaw = math.atan2(tangent.x, tangent.y) + (side < 0f ? math.PI : 0f);
                     s.Add(new ParkItem { Kind = kind, Position = q, Radius = footprint, Yaw = Wrap(yaw), Variant = rng.NextUInt(), Age = -1 });
@@ -498,7 +498,7 @@ namespace Placemaker.Core.Layers.Park
             int important = 0;
             for (int i = 0; i < s.Graph.Nodes.Count; i++)
                 if (s.Graph.Nodes[i].Kind == PathNodeKind.Gate || adj[i].Count >= 3) important++;
-            int target = math.clamp((int)Math.Round(Math.Max(important, s.Graph.TotalLength / 90f) * densityScale), 1, MaxBins);
+            int target = math.clamp((int)Math.Round(Math.Max(important, s.Graph.TotalLength / Layout.M(90f)) * densityScale), 1, MaxBins);
             int placed = 0;
             for (int pass = 0; pass < 2; pass++)
                 for (int i = 0; i < s.Graph.Nodes.Count && placed < target; i++)

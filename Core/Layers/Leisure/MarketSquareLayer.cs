@@ -40,7 +40,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Toggle("treeRing", true, ControlTier.Essential, "market").Tip();
             c.Choice("centerKind", "statue", ControlTier.Essential, "market", "none", "any", "fountain", "statue");
             c.Asset("stallAsset", AssetCategories.MarketStall, ControlTier.More, "market");
-            c.Slider("treeSpacing", 8, 5, 14, 1, "m", ControlTier.More, "market").When("treeRing=true");
+            c.Slider("treeSpacing", 8, 5, 14, 1, "m", ControlTier.More, "market").Layout(7).When("treeRing=true");
             c.Slider("cafe", 2, 0, 8, 1, "count", ControlTier.More, "market");
             c.Asset("cafeAsset", AssetCategories.CafeSeating, ControlTier.More, "market");
             c.Toggle("bollards", true, ControlTier.More, "market").Tip();

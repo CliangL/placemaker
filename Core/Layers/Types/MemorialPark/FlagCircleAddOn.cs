@@ -19,7 +19,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         protected override void DefineControls(ControlSet c)
         {
             c.Slider("flags", 8, 3, 16, 1, "count", ControlTier.Essential, "flagCircle");
-            c.Slider("radius", 7, 4, 14, 0.5, "m", ControlTier.Essential, "flagCircle");
+            c.Slider("radius", 7, 4, 14, 0.5, "m", ControlTier.Essential, "flagCircle").Layout(4);
             c.Toggle("benches", true, ControlTier.More, "flagCircle");
             c.Asset("flagAsset", AssetCategories.MemorialFlag, ControlTier.More, "flagCircle");
         }

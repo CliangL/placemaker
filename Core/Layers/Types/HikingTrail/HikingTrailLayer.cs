@@ -49,11 +49,11 @@ namespace Placemaker.Core.Layers.Types.Hiking
             c.Slider("wander", 40, 0, 100, 5, "%", ControlTier.Essential, "trailRoute").Tip();
             c.Choice("trailWidth", "narrow", ControlTier.More, "trailRoute", "narrow", "wide");
 
-            c.Slider("restSpacing", 220, 0, 600, 20, "m", ControlTier.Essential, "trailStops").Tip();
+            c.Slider("restSpacing", 220, 0, 600, 20, "m", ControlTier.Essential, "trailStops").Layout(40).Tip();
             c.Slider("viewpoints", 2, 0, 6, 1, "count", ControlTier.Essential, "trailStops").Tip();
             c.Toggle("lookoutTower", false, ControlTier.More, "trailStops").Tip();
             c.Toggle("picnicTables", true, ControlTier.More, "trailStops").Tip();
-            c.Slider("waymarkers", 150, 0, 400, 25, "m", ControlTier.More, "trailStops").Tip();
+            c.Slider("waymarkers", 150, 0, 400, 25, "m", ControlTier.More, "trailStops").Layout(25).Tip();
 
             c.Choice("trailheads", "main", ControlTier.More, "trailheads", "main", "all", "none").Tip();
             c.Slider("parking", 8, 0, 30, 1, "count", ControlTier.More, "trailheads").Tip();

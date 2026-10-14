@@ -290,7 +290,7 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
                 {
                     var e0 = g.Occ.Paths.Nearest(a0, 12f, out var f0) >= 0 ? f0 : a0;
                     var e1 = g.Occ.Paths.Nearest(a1, 12f, out var f1) >= 0 ? f1 : a1;
-                    if (!region.CrossesBoundary(e0, e1, false)) LeisureKit.Path(ctx, g.Occ, e0, e1, NetRole.PathwayWide, g.Path);
+                    if (!region.CrossesBoundary(e0, e1, false)) LeisureKit.Path(ctx, g.Occ, e0, e1, NetRole.Pathway, g.Path);
                 }
             }
         }
@@ -360,7 +360,7 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
             var b = c + axis * (halfL + 1f) + side * (sign * off);
             if (!g.Region.ContainsDisc(a, 3f) || !g.Region.ContainsDisc(b, 3f) || g.Region.CrossesBoundary(a, b, false)) return;
             if (g.Occ.Corridors.Overlaps((a + b) * 0.5f, 2.5f) || g.Occ.Discs.Overlaps((a + b) * 0.5f, 2.5f)) return;
-            LeisureKit.Path(ctx, g.Occ, a, b, NetRole.PathwayWide, g.Path);
+            LeisureKit.Path(ctx, g.Occ, a, b, NetRole.Pathway, g.Path);
             foreach (var end in new[] { a, b })
             {
                 if (g.Occ.Paths.Nearest(end, 40f, out var foot) < 0) continue;

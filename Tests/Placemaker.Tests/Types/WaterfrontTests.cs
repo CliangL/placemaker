@@ -76,8 +76,8 @@ namespace Placemaker.Tests.Types
         public void PromenadeRunsAlongTheWaterWithRailingsBenchesAndLamps()
         {
             var plan = PlanPreset("waterfront", Preset("promenade"), FiveHa, SeaSouth(0.02f));
-            // Walk parallel to the edge, 6–7 m in.
-            Assert.Contains(plan.Nets, n => n.Role == NetRole.PathwayWide && math.abs(n.A.z - n.D.z) < 1f && n.A.z > 5f && n.A.z < 8f);
+            // Walk parallel to the edge, a few metres in (its 8 m width clear of the edge).
+            Assert.True(plan.Nets.Any(n => n.Role == NetRole.PathwayWide && math.abs(n.A.z - n.D.z) < 1f && n.A.z > 5f && n.A.z < 11f), string.Join(" ", plan.Nets.Select(n => n.Role + ":" + n.A.xz + "-" + n.D.xz)));
             // Railings hug the edge, with gaps (the step flights).
             var rails = plan.Nets.Where(n => n.Role == NetRole.Fence).ToList();
             Assert.True(rails.Count >= 3);
@@ -88,7 +88,7 @@ namespace Placemaker.Tests.Types
             Assert.True(benches.Count >= 8);
             Assert.All(benches.Where(b => b.Position.z < 5f), b => Assert.True(math.cos(b.Yaw) < -0.7f));
             Assert.Contains(plan.Objects, o => o.Role == ObjectRole.Lamp && o.Position.z < 3f);
-            Assert.Contains(plan.Objects, o => o.Role == ObjectRole.Tree && o.Position.z > 12f && o.Position.z < 16f);
+            Assert.True(plan.Objects.Any(o => o.Role == ObjectRole.Tree && o.Position.z > 12f && o.Position.z < 20f), "trees z " + string.Join(",", plan.Objects.Where(o => o.Role == ObjectRole.Tree).Select(o => o.Position.z).OrderBy(z => z).Take(10)));   // behind the real 8 m walk
             Assert.Equal(2, plan.Facts["steps"]);
             Assert.Contains(plan.Terraform, t => t.Kind == TerraformKind.Level);
             Assert.Contains(plan.Issues, i => i.Key == "Placemaker.Waterfront.Issue.PiersNeedWater");

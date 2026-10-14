@@ -26,8 +26,8 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("plotWidth", 6, 3, 12, 0.5, "m", ControlTier.Essential, "plots");
-            c.Slider("plotDepth", 10, 5, 20, 1, "m", ControlTier.Essential, "plots");
+            c.Slider("plotWidth", 6, 3, 12, 0.5, "m", ControlTier.Essential, "plots").Layout(3);
+            c.Slider("plotDepth", 10, 5, 20, 1, "m", ControlTier.Essential, "plots").Layout(5);
             c.Choice("crops", "normal", ControlTier.Essential, "plots", "sparse", "normal", "dense");
             c.Choice("sheds", "shared", ControlTier.Essential, "plots", "none", "shared", "each").Tip();
             c.AssetMulti("cropAssets", AssetCategories.GardenCrop, ControlTier.More, "plots");

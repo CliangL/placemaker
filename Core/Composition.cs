@@ -311,7 +311,7 @@ namespace Placemaker.Core
                 case NetRole.Street: case NetRole.PerimeterRoad: case NetRole.Roundabout: return 8f;
                 case NetRole.CulDeSac: return 6f;
                 case NetRole.DriveAisle: case NetRole.DriveConnector: case NetRole.Alley: return 3.5f;
-                case NetRole.PathwayWide: return 2.5f;
+                case NetRole.PathwayWide: return 4f;   // the automatic wide walk is the vanilla 8 m PedestrianPathWide01 (FEEDBACK-4: offsets use the real width)
                 case NetRole.Pathway: return 1.5f;
                 case NetRole.Fence: return 0.3f;
                 default: return 2f;

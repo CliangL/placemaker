@@ -19,7 +19,7 @@ namespace Placemaker.Core.Layers.AddOns
         {
             c.Slider("density", 2, 0.5, 10, 0.5, "perHa", ControlTier.Essential, "trees").Tip();
             c.AssetMulti("species", AssetCategories.Tree, ControlTier.Essential, "trees");
-            c.Slider("spacing", 25, 12, 60, 1, "m", ControlTier.More, "trees").Tip();
+            c.Slider("spacing", 25, 12, 60, 1, "m", ControlTier.More, "trees").Layout(8).Tip();
             c.Slider("clearance", 6, 3, 15, 0.5, "m", ControlTier.More, "trees").Tip();
             c.RandomRange("density", 1, 5);
         }

@@ -65,7 +65,7 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
             c.Toggle("lights", true, ControlTier.More, "machinery");
 
             c.Toggle("barriers", true, ControlTier.More, "safety").Tip();
-            c.Slider("coneSpacing", 6, 2, 20, 1, "m", ControlTier.More, "safety").Tip();
+            c.Slider("coneSpacing", 6, 2, 20, 1, "m", ControlTier.More, "safety").Layout(1.5).Tip();
             c.Toggle("signs", true, ControlTier.More, "safety");
 
             c.Choice("groundCover", "dirt", ControlTier.More, "ground", "dirt", "gravel", "none").Tip();

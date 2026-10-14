@@ -34,7 +34,7 @@ namespace Placemaker.Core.Layers.Park
             c.Slider("rowboats", 0, 0, 8, 1, "count", ControlTier.More, "boating").Tip();
             c.Toggle("promenade", false, ControlTier.More, "promenade").Tip();
             c.Slider("promWidth", 8, 4, 14, 0.5, "m", ControlTier.More, "promenade").When("promenade=true");
-            c.Slider("benchSpacing", 14, 0, 40, 1, "m", ControlTier.More, "promenade").When("promenade=true");
+            c.Slider("benchSpacing", 14, 0, 40, 1, "m", ControlTier.More, "promenade").Layout(4).When("promenade=true");
             c.Toggle("lamps", true, ControlTier.More, "promenade").When("promenade=true");
             c.Toggle("connect", true, ControlTier.More, "promenade").Tip();
             c.Fixed("depth");

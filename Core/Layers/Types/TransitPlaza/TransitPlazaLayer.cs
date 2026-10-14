@@ -68,12 +68,12 @@ namespace Placemaker.Core.Layers.Types.Transport
             c.Toggle("centrepiece", false, ControlTier.More, "furniture").Tip();
 
             c.Choice("treeLayout", "grid", ControlTier.More, "planting", "grid", "rows", "islands", "none").Tip();
-            c.Slider("treeSpacing", 10, 6, 20, 1, "m", ControlTier.More, "planting").When("treeLayout=grid");
+            c.Slider("treeSpacing", 10, 6, 20, 1, "m", ControlTier.More, "planting").Layout(6).When("treeLayout=grid");
             c.Toggle("planters", false, ControlTier.More, "planting").Tip();
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
 
             c.Toggle("lamps", true, ControlTier.More, "lighting");
-            c.Slider("lampSpacing", 16, 10, 30, 1, "m", ControlTier.More, "lighting").When("lamps=true");
+            c.Slider("lampSpacing", 16, 10, 30, 1, "m", ControlTier.More, "lighting").Layout(8).When("lamps=true");
 
             c.Asset("pavingAsset", AssetCategories.SurfacePaving, ControlTier.More, "assets");
             c.Asset("shelterAsset", AssetCategories.TransportShelter, ControlTier.More, "assets");

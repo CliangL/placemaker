@@ -122,7 +122,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("sectionSize", 24, 12, 40, 2, "m", ControlTier.Essential, "sections").Tip();
+            c.Slider("sectionSize", 24, 12, 40, 2, "m", ControlTier.Essential, "sections").Layout(12).Tip();
             c.Slider("graveSpacing", 2.5, 1.8, 4, 0.1, "m", ControlTier.Essential, "sections");
             c.Toggle("hedges", true, ControlTier.Essential, "sections");
             c.Toggle("chapel", true, ControlTier.Essential, "sections").Tip();
@@ -219,7 +219,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("restStops", 60, 25, 200, 5, "m", ControlTier.Essential, "layout").Tip();
+            c.Slider("restStops", 60, 25, 200, 5, "m", ControlTier.Essential, "layout").Layout(20).Tip();
             c.Slider("treeDensity", 60, 0, 200, 5, "perHa", ControlTier.Essential, "planting");
             c.Toggle("secondPath", true, ControlTier.Essential, "layout").Tip();
             c.Slider("bushDensity", 80, 0, 250, 5, "perHa", ControlTier.More, "planting");
@@ -241,7 +241,7 @@ namespace Placemaker.Core.Layers.Leisure
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
             ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
-            NaturalPaths(ctx, occ, gates, 0, 4f, 40f, "wide", AssetMix.One(ctx.S("pathAsset")));
+            NaturalPaths(ctx, occ, gates, 0, 4f, 40f, "narrow", AssetMix.One(ctx.S("pathAsset")));
             LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
             if (ctx.B("secondPath") && minor > 28f && LeisureKit.Chord(region, centre + side * (minor * 0.28f), axis, 4f, out var a, out var b))
                 LeisureKit.Path(ctx, occ, a, b, NetRole.Pathway, AssetMix.One(ctx.S("pathAsset")));
@@ -250,10 +250,11 @@ namespace Placemaker.Core.Layers.Leisure
             foreach (var an in PathAnchors.Pick(PathAnchors.Beside(occ, 3f, 8f, 0.6f), 200, ctx.F("restStops"), false))
             {
                 var t = an.Tangent;
-                bool ok = LeisureKit.Put(ctx, occ, an.Position + t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stops));
-                LeisureKit.Put(ctx, occ, an.Position - t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5780u + (uint)stops));
-                LeisureKit.Put(ctx, occ, an.Position - t * 3.2f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5800u + (uint)stops));
                 var away = math.normalizesafe(an.Position - an.Toward);
+                var seat = an.Position - away * 1.7f;   // seats at the path edge (the anchor disc reaches 3 m out)
+                bool ok = LeisureKit.Put(ctx, occ, seat + t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stops));
+                LeisureKit.Put(ctx, occ, seat - t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5780u + (uint)stops));
+                LeisureKit.Put(ctx, occ, seat - t * 3.2f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5800u + (uint)stops));
                 LeisureKit.Put(ctx, occ, an.Position + away * 4f, 0f, ObjectRole.Tree, AssetMix.One(""), null, 2.4f, Hashing.Mix(ctx.Seed, 0x5880u + (uint)stops), 1f, 0.3f, 3, 3);
                 if (ok) stops++;
             }
