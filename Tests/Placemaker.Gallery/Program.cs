@@ -46,6 +46,7 @@ namespace Placemaker.Gallery
                     case "--showcase": Renderer.Showcase = true; break;
                     case "--shops": Variants.ShopVariants = true; break;
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
+                    case "--shores": Renderer.Shores = next.Split(','); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
                 }
@@ -152,6 +153,8 @@ namespace Placemaker.Gallery
     public sealed class Job
     {
         public string Type, Variant, Title;
+        /// <summary>(s20) Shore site kind for water renders (ShoreSites.Kinds), null = the old flat fixture.</summary>
+        public string Shore;
         public Recipe Recipe;
         public float TargetArea;
     }
@@ -245,6 +248,17 @@ namespace Placemaker.Gallery
                         expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "-" + ha.ToString("0.#", CultureInfo.InvariantCulture) + "ha", Title = j.Title + " " + ha + " ha", Recipe = j.Recipe.Clone(), TargetArea = ha * 10000f });
                 jobs = expanded;
             }
+            if (Renderer.Shores != null && Renderer.Shores.Length > 0 && Renderer.WaterTypes != null)
+            {
+                var expanded = new List<Job>();
+                foreach (var j in jobs)
+                {
+                    if (!Renderer.WaterTypes.Contains(j.Type)) { expanded.Add(j); continue; }
+                    foreach (var s in Renderer.Shores)
+                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "~" + s, Title = j.Title + " (" + s + " shore)", Recipe = j.Recipe.Clone(), TargetArea = j.TargetArea, Shore = s });
+                }
+                jobs = expanded;
+            }
             return jobs;
         }
 
@@ -303,6 +317,10 @@ namespace Placemaker.Gallery
         /// (beach, waterfront, wetland, lakeshore trails) find real water instead of an assumed side.
         /// </summary>
         public static HashSet<string> WaterTypes;
+        /// <summary>(s20) --shores flat,bank,headland,cliff: every water job is rendered once per shore site (sloped ground, curved coast, 8 m water snapshot).</summary>
+        public static string[] Shores;
+        [ThreadStatic] private static float _level;
+        [ThreadStatic] private static Func<float2, float> _original;
         public const float WaterSurface = -0.6f;
         [ThreadStatic] private static float _waterZ;
         [ThreadStatic] private static List<NearbyNet> _roads;
@@ -360,7 +378,16 @@ namespace Placemaker.Gallery
                 site.HeightAt = bed;
                 site.WaterDepthAt = p => p.y >= wz ? 0f : WaterSurface - bed(p);
                 site.NearbyNets = site.NearbyNets.Where(n => math.max(n.A.z, n.D.z) > zMin + 0.5f).ToList();
+                if (job.Shore != null)
+                {
+                    // s20: a real shore — curved coast, sloped ground, the game's coarse water snapshot.
+                    var g = ShoreSites.Ground(ring, job.Shore);
+                    site.HeightAt = g;
+                    site.WaterDepthAt = ShoreSites.Depth(ring, g);
+                }
             }
+            _level = float.IsNaN(_waterZ) ? float.NaN : job.Shore != null ? ShoreSites.Level : WaterSurface;
+            _original = site.HeightAt;
             _roads = site.NearbyNets;
             ComposedPlan plan;
             var sw = Stopwatch.StartNew();
@@ -387,6 +414,12 @@ namespace Placemaker.Gallery
             Draw(plan, ring, catalog, Path.Combine(dir, job.Variant + ".png"), res);
             if (res.Failure == null)
                 res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.EdgeSpikes} spikes, {res.Ms:0} ms";
+            if (res.Failure == null && job.Shore != null && plan.Layers.Count > 0 && plan.Layers[0] != null)
+            {
+                var fx = plan.Layers[0].Facts;
+                string F(string k) => fx.TryGetValue(k, out var v) ? v.ToString("0.##", CultureInfo.InvariantCulture) : "-";
+                res.Summary += $" | steps {F("steps")} links {F("edgeLinks")} beds {F("beds")} piers {F("piers")} | cliff {F("shoreCliffShare")} lookouts {F("lookouts")} cut {F("earthMaxCut")} fill {F("earthMaxFill")} rough {F("terrainRoughness")} | " + string.Join(" ", plan.AllIssues().Where(i => i != null && i.Severity != IssueSeverity.Info || (i != null && i.Key.Contains("Shore"))).Select(i => i.Key.Replace("Placemaker.", "")).Distinct());
+            }
             return res;
         }
 
@@ -403,7 +436,10 @@ namespace Placemaker.Gallery
             var kinds = (gen.Controls ?? Array.Empty<ControlSchema>()).Where(c => c.Kind == ControlKind.Markers && c.MarkerKinds != null).SelectMany(c => c.MarkerKinds).Distinct().ToList();
             foreach (var kind in kinds)
             {
-                var m = new EdgeMarker { Kind = kind, RingSegment = 0, RingT = 0.5f, Position = (ring[0] + ring[1]) * 0.5f };
+                // Water sites: the entrance on the landward edge (the first edge runs along the water).
+                int seg = 0;
+                if (!float.IsNaN(_waterZ)) { float best = float.MinValue; for (int e = 0; e < ring.Length; e++) { float z = (ring[e].z + ring[(e + 1) % ring.Length].z) * 0.5f; if (z > best) { best = z; seg = e; } } }
+                var m = new EdgeMarker { Kind = kind, RingSegment = seg, RingT = 0.5f, Position = (ring[seg] + ring[(seg + 1) % ring.Length]) * 0.5f };
                 step.Markers.Add(m);
                 try { if (gen.CheckReady(input).Ready) return; } catch (Exception) { return; }
                 step.Markers.Remove(m);
@@ -425,7 +461,7 @@ namespace Placemaker.Gallery
             }
         }
 
-        private static void DrawPaint(Canvas cv, ComposedPlan plan, float2 min, float2 max)
+        private static void DrawPaint(Canvas cv, ComposedPlan plan, float2 min, float2 max, bool underWater = true)
         {
             var paints = plan.Layers.Where(l => l != null).SelectMany(l => l.Paint).Where(p => p?.Ring != null && p.Ring.Length >= 3).ToList();
             if (paints.Count == 0) return;
@@ -440,7 +476,7 @@ namespace Placemaker.Gallery
                     float v = s.Sample(p);
                     if (v < 0.02f) return default;
                     float a = 0.92f * v;
-                    if (!float.IsNaN(wz) && p.y < wz) a *= 0.45f;
+                    if (underWater && !float.IsNaN(wz) && p.y < wz) a *= 0.45f;
                     return c.WithA(a);
                 }, math.max(min, smin), math.min(max, smax));
             }
@@ -596,21 +632,56 @@ namespace Placemaker.Gallery
                     cv.DashedPolyline(rp, cv.Px(1f), 4f, 4f, Rgba.Hex("#ffffff", 0.8f));
                 }
             cv.FillPolygon(ring2, Ground);
+            Func<float2, float> final = null;
             if (!float.IsNaN(_waterZ))
             {
-                float wz = _waterZ;   // test water fixture (--water): lake south of wz
-                cv.Shade(p => p.y < wz ? Rgba.Hex("#8fbde6") : default, min, max);
+                // s20: the ground the build leaves (real raster over sloped patches), hillshaded, water where it is
+                // below the level, 1 m contours; paint goes under the water tint so sand visibly continues under it.
+                var original = _original;
+                final = TerrainView.Final(plan, original);
+                var fin = final;
+                float level = _level;
+                cv.FillPolygon(new[] { min, new float2(max.x, min.y), max, new float2(min.x, max.y) }, Rgba.Hex("#d5dcc6"));
+                cv.FillPolygon(ring2, Ground);
+                DrawPaint(cv, plan, min, max, underWater: false);
+                float px = cv.Px(1f);
+                cv.Shade(p =>
+                {
+                    float sh = TerrainView.Shade(fin, p);
+                    return sh < 1f ? new Rgba(0.05f, 0.08f, 0.12f, (1f - sh) * 0.85f) : new Rgba(1f, 1f, 0.95f, (sh - 1f) * 0.6f);
+                }, min, max);
+                cv.Shade(p =>
+                {
+                    float h = fin(p);
+                    if (h < level - 0.02f)
+                    {
+                        float d = math.saturate((level - h) / 3.5f);
+                        return Rgba.Hex("#3f86c6", 0.28f + 0.6f * d);
+                    }
+                    float hx = fin(p + new float2(px * 1.5f, 0)), hz = fin(p + new float2(0, px * 1.5f));
+                    if (math.floor(h) != math.floor(hx) || math.floor(h) != math.floor(hz)) return new Rgba(0.25f, 0.2f, 0.15f, 0.28f);
+                    return default;
+                }, min, max);
+                // Original waterline (dashed) for reference.
+                cv.Shade(p =>
+                {
+                    float h = original(p);
+                    float hx = original(p + new float2(px * 1.2f, 0)), hz = original(p + new float2(0, px * 1.2f));
+                    bool edge = (h < level) != (hx < level) || (h < level) != (hz < level);
+                    return edge && ((int)math.floor((p.x + p.y) / 2f) & 1) == 0 ? Rgba.Hex("#1d4f8a", 0.9f) : default;
+                }, min, max);
             }
 
             // Terraform: height after all layers (last plan with HeightAfter wins), tinted + 1 m contours.
             Func<float2, float> height = null;
             foreach (var l in plan.Layers) if (l?.HeightAfter != null) height = l.HeightAfter;
-            if (height == null && plan.Layers.Any(l => l != null && l.Terraform.Count > 0))
+            if (final != null) { }
+            else if (height == null && plan.Layers.Any(l => l != null && l.Terraform.Count > 0))
             {
                 var tf = plan.Layers.Where(l => l != null).SelectMany(l => l.Terraform).Where(t => t?.Ring != null && t.Ring.Length >= 3).ToList();
                 height = p => { float hh = 0; foreach (var t in tf) if (Inside(t.Ring, p)) hh = t.TargetHeight; return hh; };
             }
-            if (height != null)
+            if (height != null && final == null)
             {
                 var hf = height;
                 float px = cv.Px(1f);
@@ -630,7 +701,7 @@ namespace Placemaker.Gallery
 
             // Terrain texture paint (s13): the real per-point strength field the game paints (PaintRaster stamps: feather,
             // gradient, edge noise), in the vanilla material colours, alpha = strength; fainter under water.
-            DrawPaint(cv, plan, min, max);
+            if (final == null) DrawPaint(cv, plan, min, max);
 
             // Surfaces: translucent fill + crisp darker outline; paved surfaces one stone tone per paving asset.
             var tones = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -652,9 +723,12 @@ namespace Placemaker.Gallery
                     cv.DashedPolyline(Close(a.Ring.Select(p => p.xz).ToArray()), cv.Px(1f), 2f, 1.5f, Rgba.Hex("#5a7fa8", 0.8f));
                 }
                 foreach (var t in l.Terraform)
-                    if (t?.Ring != null && t.Ring.Length >= 3)
+                    if (t?.Ring != null && t.Ring.Length >= 3 && !t.Sloped)
                         cv.DashedPolyline(Close(t.Ring.Select(p => p.xz).ToArray()), cv.Px(1f), 3f, 2f, t.Permanent ? Rgba.Hex("#d08a00", 0.35f) : Rgba.Hex("#4f86c6", 0.5f));
             }
+            // s20: sculpted (sloped) terraform shows as its outline, not a dashed grid.
+            foreach (var (ea, eb) in TerraformSurface.BoundaryEdges(plan.Layers.Where(l => l != null).SelectMany(l => l.Terraform).Where(t => t != null && t.Sloped)))
+                cv.DashedPolyline(new[] { ea.xz, eb.xz }, cv.Px(1f), 3f, 2f, Rgba.Hex("#d08a00", 0.6f));
 
             // Zoning (street shops, edge zoning): commercial blue, the 8 m cells the game will zone.
             foreach (var l in plan.Layers.Where(l => l != null))
@@ -741,6 +815,9 @@ namespace Placemaker.Gallery
             res.EdgeSpikes = spikes.Count;
             foreach (var sp in spikes) cv.StrokePolyline(new[] { sp.From, sp.To }, 1.6f, Rgba.Hex("#e01010", 0.85f));
             cv.SavePng(file);
+            if (final != null)
+                try { TerrainView.Oblique(file.Replace(".png", "-3d.png"), cv, plan, cat, _original, final, _level, min, max); }
+                catch (Exception e) { Console.WriteLine("  3d view failed: " + e.Message); }
         }
 
         private static float Safe(Func<float2, float> f, float2 p) { try { return f(p); } catch (Exception) { return 0; } }

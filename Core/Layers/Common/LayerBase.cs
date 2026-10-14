@@ -511,7 +511,8 @@ namespace Placemaker.Core.Layers.Common
             if (plan?.Nets == null || region == null) return;
             foreach (var n in plan.Nets)
             {
-                if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide) continue;
+                // (s20) Decks (quays, piers, boardwalks: explicit heights) are built at the water, which may lie past the outline.
+                if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide || !n.FollowTerrain) continue;
                 float hw = Composer.DefaultHalfWidth(n.Role);
                 if (n.StartAttach < 0) n.A = PullIn(n.A, n.B, n.D, hw, region);
                 if (n.EndAttach < 0) n.D = PullIn(n.D, n.C, n.A, hw, region);
@@ -534,7 +535,7 @@ namespace Placemaker.Core.Layers.Common
             for (int i = 0; i < plan.Nets.Count; i++)
             {
                 var n = plan.Nets[i];
-                if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide) continue;
+                if (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide || !n.FollowTerrain) continue;   // s20: decks stay
                 bool atA = n.StartAttach < 0 && Depth(n.A.xz) <= 1f && (keepEnd == null || !keepEnd(n.A.xz));
                 bool atD = n.EndAttach < 0 && Depth(n.D.xz) <= 1f && (keepEnd == null || !keepEnd(n.D.xz));
                 if (!atA && !atD) continue;

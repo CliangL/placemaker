@@ -2,6 +2,7 @@
 // siblings) plus whatever the current layer placed so far. Every placement in this workstream
 // goes through Occupancy, which is how "respect input.Reserved" is guaranteed uniformly.
 
+using System;
 using System.Collections.Generic;
 using Placemaker.Core.Geometry;
 using Unity.Mathematics;
@@ -18,6 +19,11 @@ namespace Placemaker.Core.Layers.Common
         /// <summary>Reserved corridors whose tag says they are walkable paths (useful anchors for add-ons).</summary>
         public readonly SegmentIndex Paths = new SegmentIndex(10f);
         private readonly List<float2[]> _polygons = new List<float2[]>();
+        /// <summary>
+        /// (s20, optional) Terrain check for placements: (centre, radius) → the ground there can take it (e.g. not steeper
+        /// than a bench tolerates). Null = any ground. Set by layers that survey their terrain (water types).
+        /// </summary>
+        public Func<float2, float, bool> GroundOk;
 
         public Occupancy(LayerRegion region, ReservedSpace reserved, SiteContext site = null)
         {
@@ -58,6 +64,7 @@ namespace Placemaker.Core.Layers.Common
         public bool Free(float2 p, float r, float boundaryMargin, float gap = 0.3f)
         {
             if (!LayerRegion.ContainsDisc(p, math.max(0f, boundaryMargin))) return false;
+            if (GroundOk != null && !GroundOk(p, r)) return false;
             if (Discs.Overlaps(p, r, gap)) return false;
             if (Corridors.Overlaps(p, r, gap)) return false;
             foreach (var poly in _polygons)

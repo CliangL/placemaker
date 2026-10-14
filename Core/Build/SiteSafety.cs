@@ -351,11 +351,14 @@ namespace Placemaker.Core.Build
                 if (pieces.Count == 0) { r.Terraform++; r.At(Poly.Centroid(Poly.To2D(t.Ring))); continue; }
                 r.Cut++;
                 float y = t.Ring[0].y;
+                var src = t;
+                // Sloped (s20): the cut piece keeps the same surface (vertex heights re-interpolated).
+                Func<float2, float> h = t.Sloped ? (Func<float2, float>)(q => TerraformSurface.At(src.Ring, q)) : _ => y;
                 foreach (var p in pieces)
                     result.Add(new PlannedTerraform
                     {
-                        Ring = Poly.To3D(p, _ => y), Kind = t.Kind, TargetHeight = t.TargetHeight, Permanent = t.Permanent,
-                        WaterLevel = t.WaterLevel, WaterAnchor = t.WaterAnchor,
+                        Ring = Poly.To3D(p, h), Kind = t.Kind, TargetHeight = t.TargetHeight, Permanent = t.Permanent,
+                        WaterLevel = t.WaterLevel, WaterAnchor = t.WaterAnchor, Sloped = t.Sloped,
                     });
             }
             l.Terraform.Clear();

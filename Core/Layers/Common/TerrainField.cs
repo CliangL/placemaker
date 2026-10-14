@@ -95,7 +95,7 @@ namespace Placemaker.Core.Layers.Common
         /// <summary>Bucket grid over terraform polygons so per-point lookups stay cheap for ~1500 cells.</summary>
         private sealed class TerraformIndex
         {
-            private readonly List<(float2[] ring, float target, float2 min, float2 max)> _items = new List<(float2[], float, float2, float2)>();
+            private readonly List<(float2[] ring, float target, float2 min, float2 max, PlannedTerraform item)> _items = new List<(float2[], float, float2, float2, PlannedTerraform)>();
             private readonly Dictionary<long, List<int>> _cells = new Dictionary<long, List<int>>();
             private readonly float _cell;
 
@@ -110,7 +110,7 @@ namespace Placemaker.Core.Layers.Common
                     var ring = new float2[t.Ring.Length];
                     float2 min = float.MaxValue, max = float.MinValue;
                     for (int i = 0; i < ring.Length; i++) { ring[i] = t.Ring[i].xz; min = math.min(min, ring[i]); max = math.max(max, ring[i]); }
-                    _items.Add((ring, t.TargetHeight, min, max));
+                    _items.Add((ring, t.TargetHeight, min, max, t.Sloped ? t : null));
                     size += math.cmax(max - min);
                 }
                 _cell = _items.Count == 0 ? 16f : math.max(4f, (float)(size / _items.Count) * 2f);
@@ -139,7 +139,7 @@ namespace Placemaker.Core.Layers.Common
                 int best = -1;
                 if (_cells.TryGetValue(Key((int)math.floor(p.x / _cell), (int)math.floor(p.y / _cell)), out var list)) best = Scan(list, p, best);
                 if (_cells.TryGetValue(long.MinValue, out var big)) best = Scan(big, p, best);
-                h = best >= 0 ? _items[best].target : 0f;
+                h = best < 0 ? 0f : _items[best].item != null ? Build.TerraformSurface.At(_items[best].item.Ring, p) : _items[best].target;
                 return best >= 0;
             }
 

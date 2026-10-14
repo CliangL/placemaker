@@ -175,7 +175,8 @@ namespace Placemaker.Tests
             On("plaza", "fountain");   // art pass a2: the square plants its own trees and beds
             On("campground", "restrooms", "decals");
             On("sportsPark", "pitch", "tennisCourts", "basketballCourt", "playground");   // s10: the clubhouse has the toilets
-            On("waterfront", "flowerbeds", "bigtrees");
+            // s20: the waterfront plants its own beds and tree rows (the flower-bed feature scattered planter rows over its lawn).
+            Assert.DoesNotContain(Features.Of(TestKit.Gen("waterfront")), x => x.DefaultOn && (x.Layer == "flowerbeds" || x.Layer == "bigtrees"));
             // Slow or situational features stay opt-in.
             foreach (var type in new[] { "park", "plaza", "campground", "botanicalGarden" })
                 Assert.DoesNotContain(Features.Of(TestKit.Gen(type)), x => x.DefaultOn && (x.Layer == "terrain" || x.Layer == "rocks"));

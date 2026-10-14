@@ -143,7 +143,8 @@ namespace Placemaker.Game.Preview
         {
             try
             {
-                float cell = math.max(16f, math.cmax(max - min) / (MaxGrid / 2));
+                // s20: 8 m (was 16 m): the waterline is read from this grid; at 16 m bilinear depth put it up to a cell off.
+                float cell = math.max(8f, math.cmax(max - min) / (MaxGrid * 3 / 4));
                 int nx = (int)math.ceil((max.x - min.x) / cell) + 1, nz = (int)math.ceil((max.y - min.y) / cell) + 1;
                 var depth = new float[nx * nz];
                 var data = _water.GetSurfacesData(out var deps);

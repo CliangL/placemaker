@@ -81,11 +81,15 @@ namespace Placemaker.Tests.Types
                 Assert.True(Poly.Contains(r, o.Position.xz) || Poly.DistanceToBoundary(r, o.Position.xz) < tolerance,
                     $"{plan.GeneratorId}: {o.Role}/{o.Category} at {o.Position.xz} lies outside the area");
             foreach (var n in plan.Nets)
+            {
+                // s20: a quay or boardwalk is built AT the water, which may lie a few metres past the drawn outline.
+                bool deck = !n.FollowTerrain && (n.Category == AssetCategories.NetQuay || n.Category == AssetCategories.NetPier);
                 for (int i = 0; i <= 8; i++)
                 {
                     var p = Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f).xz;
-                    Assert.True(Poly.Contains(r, p) || Poly.DistanceToBoundary(r, p) < 0.5f, $"{plan.GeneratorId}: {n.Role} at {p} outside");
+                    Assert.True(Poly.Contains(r, p) || Poly.DistanceToBoundary(r, p) < (deck ? 10.5f : 0.5f), $"{plan.GeneratorId}: {n.Role} at {p} outside");
                 }
+            }
         }
 
         public static void AssertNothingOnPaths(AreaPlan plan)
@@ -118,7 +122,7 @@ namespace Placemaker.Tests.Types
                 if (distanceToWater(c) < shoreBand) continue;
                 float edge = Poly.DistanceToBoundary(r, c);
                 float change = math.abs(t.TargetHeight - site.HeightAt(c));
-                Assert.True(change < edge * 0.3f + 0.3f, $"{plan.GeneratorId}: {change:0.00} m change {edge:0.0} m from the edge (cliff)");
+                Assert.True(change < edge * 0.3f + 0.3f, $"{plan.GeneratorId}: {change:0.00} m change {edge:0.0} m from the edge at {c} (cliff)");
             }
         }
 

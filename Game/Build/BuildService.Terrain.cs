@@ -90,9 +90,13 @@ namespace Placemaker.Game.Build
             if (value > _status.Progress) _status.Progress = math.min(1f, value);
         }
 
-        private List<(float2[] ring, float target, int layer)> TerraformItems()
+        private List<(float2[] ring, float target, int layer)> TerraformItems() => TerraformItems(out _);
+
+        /// <summary>Terraform items of the plan; <paramref name="vertexHeights"/> parallel: ring heights of sloped (s20) items, else null.</summary>
+        private List<(float2[] ring, float target, int layer)> TerraformItems(out List<float[]> vertexHeights)
         {
             var items = new List<(float2[] ring, float target, int layer)>();
+            vertexHeights = new List<float[]>();
             foreach (var w in _work.Terraform)
             {
                 var t = _request.Plan.Layers[w.Layer].Terraform[w.Index];
@@ -100,6 +104,7 @@ namespace Placemaker.Game.Build
                 var ring = new float2[t.Ring.Length];
                 for (int i = 0; i < ring.Length; i++) ring[i] = t.Ring[i].xz;
                 items.Add((ring, t.TargetHeight, w.Layer));
+                vertexHeights.Add(TerraformSurface.VertexHeights(t));
             }
             return items;
         }
@@ -113,11 +118,13 @@ namespace Placemaker.Game.Build
             _tfAwaiting = _tfReverting = _tfVerified = false;
             _tfWaitUntil = 0;
             _tfOrientation = s_shiftOrientation >= 0 ? s_shiftOrientation : 0;
-            var items = TerraformItems();
+            var items = TerraformItems(out var vertexHeights);
             if (items.Count == 0) { Go(AfterTerraform()); return; }
             try
             {
-                _tfRaster = TerraformRaster.Build(items, TerraformCell, TerraformBank, TerraformMaxRasterCells);
+                // The ground before this build (read now, before any pass) carries the banks around sloped patches (s20).
+                _heightsValid = false;
+                _tfRaster = TerraformRaster.Build(items, TerraformCell, TerraformBank, TerraformMaxRasterCells, vertexHeights, Height);
             }
             catch (Exception e)
             {

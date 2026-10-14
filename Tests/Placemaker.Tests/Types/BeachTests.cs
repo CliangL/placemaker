@@ -80,15 +80,16 @@ namespace Placemaker.Tests.Types
             var plan = PlanPreset("beach", Preset("sandy"), FiveHa, SeaSouth(0.02f));
             Assert.DoesNotContain(plan.Issues, i => i.Key == "Placemaker.Shore.Issue.NoWater");
             Assert.Equal(250, plan.Facts["shoreLength"], 0);
-            // Back path parallel to the water near the beach depth (60 m since the art pass).
+            // Back path parallel to the water just behind the sand (s20: measured from the real waterline).
             var paths = plan.Nets.Where(n => n.Role == NetRole.Pathway).ToList();
-            Assert.Contains(paths, n => math.abs(n.A.z - 60f) < 2f && math.abs(n.D.z - 60f) < 2f && math.abs(n.A.x - n.D.x) > 5f);
+            float pathZ = (float)plan.Facts["beachDepth"] + Composer.DefaultHalfWidth(NetRole.Pathway) + 0.5f;
+            Assert.Contains(paths, n => math.abs(n.A.z - pathZ) < 2f && math.abs(n.D.z - pathZ) < 2f && math.abs(n.A.x - n.D.x) > 5f);
             // Umbrellas and lifeguards on the sand between the water and the path; huts behind it.
             var umbrellas = plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella).ToList();
             Assert.NotEmpty(umbrellas);
-            Assert.All(umbrellas, o => Assert.InRange(o.Position.z, 2f, 60f));
+            Assert.All(umbrellas, o => Assert.InRange(o.Position.z, 2f, pathZ));
             Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachLifeguard), o => Assert.InRange(o.Position.z, 4f, 15f));
-            Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachHut), o => Assert.True(o.Position.z > 60f));
+            Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachHut), o => Assert.True(o.Position.z > pathZ));
             // Umbrellas face the sea (yaw ≈ π: towards −Z).
             Assert.All(umbrellas, o => Assert.True(math.cos(o.Yaw) < -0.7f, "umbrella yaw " + o.Yaw));
             // Showers at the bottom of the beach accesses.
@@ -134,21 +135,32 @@ namespace Placemaker.Tests.Types
             var lowered = plan.Terraform.Where(t => t.Kind == TerraformKind.Lower).ToList();
             var raised = plan.Terraform.Where(t => t.Kind == TerraformKind.Raise).ToList();
             Assert.NotEmpty(lowered);
-            Assert.NotEmpty(raised);   // dunes
+            // Dunes behind the path: the ground there stands higher than the same bank without dunes.
+            var lawnValues = Preset("sandy").Values.Clone();
+            lawnValues.Values["backdrop"] = "lawn";
+            // (on a gentle shore: on this 20 % bank the cut behind the beach is already at the earthwork limit)
+            var gentle = SeaSouth(0.03f);
+            var withDunes = TestKit.Gen("beach").Plan(TestKit.Input(FiveHa, Preset("sandy").Values.Clone(), 5, null, gentle), CancellationToken.None);
+            var lawn = TestKit.Gen("beach").Plan(TestKit.Input(FiveHa, lawnValues, 5, null, gentle), CancellationToken.None);
+            float After(AreaPlan pl, float2 q) { foreach (var t in pl.Terraform) if (Poly.Contains(Poly.To2D(t.Ring), q)) return Placemaker.Core.Build.TerraformSurface.At(t.Ring, q); return gentle.HeightAt(q); }
+            float duneZ = (float)withDunes.Facts["beachDepth"] + 16f;
+            Assert.True(After(withDunes, new float2(125, duneZ)) > After(lawn, new float2(125, duneZ)) + 0.6f, $"no dune at z {duneZ}");
             // Beach cells sit on a gentle plane: at most ~6 % + slack above the waterline.
             foreach (var t in lowered)
             {
                 var c = Poly.Centroid(Poly.To2D(t.Ring));
                 if (c.y < 26f && c.x > 30f && c.x < 220f) Assert.True(t.TargetHeight <= 0.06f * c.y + 0.8f, $"beach at {c} is {t.TargetHeight:0.00} m high");
             }
-            // Dunes behind the back path.
-            Assert.All(raised, t => Assert.True(Poly.Centroid(Poly.To2D(t.Ring)).y > 30f));
+            // s20: hollows on the beach face may be filled a little (≤ 0.6 m), never more.
+            Assert.All(raised.Where(t => Poly.Centroid(Poly.To2D(t.Ring)).y < (float)plan.Facts["beachDepth"]),
+                t => Assert.True(t.TargetHeight <= site.HeightAt(Poly.Centroid(Poly.To2D(t.Ring))) + 0.7f));
             AssertTerrainBlended(plan, FiveHa, site, p => p.y, 4f);
             // Carving off: no lowering.
             var keep = Preset("sandy").Values.Clone();
             keep.Values["carve"] = false;
             var flat = TestKit.Gen("beach").Plan(TestKit.Input(FiveHa, keep, 5, null, site), CancellationToken.None);
-            Assert.DoesNotContain(flat.Terraform, t => t.TargetHeight < site.HeightAt(Poly.Centroid(Poly.To2D(t.Ring))) - 0.01f);
+            // (s20: level pads under huts and kiosks behind the path may cut a little into the bank; the beach itself is not lowered)
+            Assert.DoesNotContain(flat.Terraform, t => Poly.Centroid(Poly.To2D(t.Ring)).y < (float)flat.Facts["beachDepth"] - 4f && t.TargetHeight < site.HeightAt(Poly.Centroid(Poly.To2D(t.Ring))) - 0.15f);
         }
 
         [Fact]
@@ -181,7 +193,8 @@ namespace Placemaker.Tests.Types
             Assert.True(resort.Objects.Count(o => o.Category == AssetCategories.BeachUmbrella) > P("sandy").Objects.Count(o => o.Category == AssetCategories.BeachUmbrella));
 
             var sandy = P("sandy");
-            Assert.Contains(sandy.Nets, n => n.Role == NetRole.Fence);   // sand fences on the dunes
+            // s20: no sand fences by default (vanilla has no timber sand fence; the pool picked brick walls with railings).
+            Assert.DoesNotContain(sandy.Nets, n => n.Role == NetRole.Fence);
             Assert.True(sandy.Objects.Count(o => o.Role == ObjectRole.Bush) > 50, "dune grass");
         }
 
@@ -198,12 +211,15 @@ namespace Placemaker.Tests.Types
             Assert.True(At(new float2(125, -8.5f)) > 0.9f, "sand at the waterline " + At(new float2(125, -8.5f)));
             Assert.True(At(new float2(125, 20)) > 0.9f, "sand on the beach");
             float blend = (float)plan.Facts["sandBlend"], depth = (float)plan.Facts["beachDepth"];
-            float mid = At(new float2(125, depth + blend * 0.5f));
+            // s20: the beach depth is measured from the real waterline (8 m in front of the outline here).
+            float mid = At(new float2(125, -8f + depth + blend * 0.5f));
             Assert.InRange(mid, 0.15f, 0.85f);                                   // the blend is a gradient, not an edge
-            Assert.True(At(new float2(125, depth + blend + 6f)) < 0.05f, "sand beyond the blend");
+            Assert.True(At(new float2(125, -8f + depth + blend + 6f)) < 0.05f, "sand beyond the blend");
+            Assert.True(At(new float2(125, -14f)) > 0.9f, "sand under the water");
             Assert.DoesNotContain(plan.Surfaces, s => s.Category == AssetCategories.SurfaceSand);   // no hard-edged sand quad by default
-            // The carve may follow the sand down into the water (lower only).
-            Assert.All(plan.Terraform.Where(t => Poly.Centroid(Poly.To2D(t.Ring)).y < 0f), t => Assert.Equal(TerraformKind.Lower, t.Kind));
+            // The graded slope follows the sand down into the water, never filling the bed up to the surface (0.5 m here).
+            Assert.Contains(plan.Terraform, t => Poly.Centroid(Poly.To2D(t.Ring)).y < -8f);
+            Assert.All(plan.Terraform.Where(t => Poly.Centroid(Poly.To2D(t.Ring)).y < -9f), t => Assert.True(t.TargetHeight < 0.3f, "bed raised to " + t.TargetHeight));
         }
 
         [Fact]

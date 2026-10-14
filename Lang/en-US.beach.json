@@ -34,7 +34,7 @@
   "Placemaker.Beach.layout.scattered": "Scattered",
   "Placemaker.Beach.layout.rows": "Rows",
   "Placemaker.Beach.carve": "Carve terrain",
-  "Placemaker.Beach.carve.Tooltip": "Lower the ground into a gentle slope down to the waterline (permanent). Never raises it.",
+  "Placemaker.Beach.carve.Tooltip": "Grade the ground into one smooth gentle slope down to the waterline and on under the water (permanent): it lowers the ground and only fills small hollows; cliffs are left natural.",
   "Placemaker.Beach.slope": "Beach slope",
   "Placemaker.Beach.slope.Tooltip": "Gradient of the carved beach. Real sand beaches are 2–8 %.",
   "Placemaker.Beach.wetBand": "Wet sand",
@@ -45,7 +45,7 @@
   "Placemaker.Beach.sandBlend": "Sand blend",
   "Placemaker.Beach.sandBlend.Tooltip": "How far the sand texture fades into the ground behind the beach. Small = a crisp edge at the promenade, large = sand drifting far inland.",
   "Placemaker.Beach.sandReach": "Sand to water",
-  "Placemaker.Beach.sandReach.Tooltip": "Carry the sand (and the gentle slope) past the outline down into the water, so the beach meets the water even if the area was drawn a little short of it (up to 24 m, permanent).",
+  "Placemaker.Beach.sandReach.Tooltip": "Carry the sand and the graded slope past the outline down to the real water and on under it (see Sand under water), so the beach meets the water even when the area was drawn short of it (permanent).",
   "Placemaker.Beach.paint": "Paint ground",
   "Placemaker.Beach.paint.Tooltip": "Paint the beach into the terrain texture like the game's Paint texture tool, with a soft blend (permanent).",
   "Placemaker.Beach.paintLayer": "Sand texture",
@@ -60,7 +60,7 @@
   "Placemaker.Beach.duneDepth": "Backdrop depth",
   "Placemaker.Beach.duneDepth.Tooltip": "How deep the dune belt (or the planted strip) is behind the back path.",
   "Placemaker.Beach.duneFence": "Sand fences",
-  "Placemaker.Beach.duneFence.Tooltip": "Short fence runs along the dune foot, with gaps where paths cross.",
+  "Placemaker.Beach.duneFence.Tooltip": "Short fence runs along the dune foot where the ground is even, with gaps where paths cross. Off by default: vanilla has no timber sand fence.",
   "Placemaker.Beach.grassDensity": "Dune grass",
   "Placemaker.Beach.grassDensity.Tooltip": "How much grass and scrub grows on the dunes or along the backdrop edge.",
   "Placemaker.Beach.treeDensity": "Tree density",
@@ -149,5 +149,9 @@
   "Placemaker.Category.beach.boat": "small boats",
   "Placemaker.Category.waterfront.mooring": "mooring bollards",
   "Placemaker.Category.waterfront.fishing": "fishing props",
-  "Placemaker.Category.waterfront.nautical": "nautical props"
+  "Placemaker.Category.waterfront.nautical": "nautical props",
+  "Placemaker.Shore.Issue.Cliff": "{0}% of this shore is cliff: the cliff face is left natural, with a cliff-top walk and lookouts there instead.",
+  "Placemaker.Shore.Issue.Earthwork": "The ground was only reshaped within limits (cut up to {0} m, fill up to {1} m): the design follows the terrain where it would have needed more.",
+  "Placemaker.Beach.underwater": "Sand under water",
+  "Placemaker.Beach.underwater.Tooltip": "How far the sand and the gentle beach slope continue under the water past the waterline (permanent)."
 }
