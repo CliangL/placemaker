@@ -43,12 +43,14 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>Removes / clips everything of every layer (but the zoning) that reaches into a cutout.</summary>
-        public static int Enforce(ComposedPlan plan) => Enforce(plan, Of(plan));
+        /// <param name="outlines">(s24) The build's outer outline(s): borders (fences, walls, hedges) are kept only along them.</param>
+        public static int Enforce(ComposedPlan plan, IReadOnlyList<float2[]> outlines = null) => Enforce(plan, Of(plan), outlines);
 
         /// <summary>(s19) Same for given rings (ZoneGuard: zoned cells reaching past a cutout).</summary>
-        public static int Enforce(ComposedPlan plan, List<float2[]> cuts)
+        public static int Enforce(ComposedPlan plan, List<float2[]> cuts, IReadOnlyList<float2[]> outlines = null)
         {
             if (plan?.Layers == null || cuts == null || cuts.Count == 0) return 0;
+            int borders = ClearBorders(plan, cuts, outlines);
             for (int i = 0; i < cuts.Count; i++) cuts[i] = Poly.EnsureCcw(cuts[i]);
             var inner = new List<float2[]>(cuts.Count);
             var min = new List<float2>(); var max = new List<float2>();
@@ -82,6 +84,75 @@ namespace Placemaker.Core.Layers.Common
                 // ── ground: surfaces and areas minus the cutouts ──
                 changed += ClipRings(l.Surfaces, s => s.Ring, (s, ring) => new PlannedSurface { Ring = ring, Role = s.Role, Asset = s.Asset, Category = s.Category }, cuts);
                 changed += ClipRings(l.Areas, a => a.Ring, (a, ring) => new PlannedArea { Ring = ring, Role = a.Role, Asset = a.Asset }, cuts);
+            }
+            return changed + borders;
+        }
+
+        // ───────────── s24: borders follow the outer outline only ─────────────
+        //
+        // Playtest s24: the park's brick wall with railings ran round three sides of every cutout — a walled pen
+        // around the shops. A host runs its border (Fences.Runs, edge strips with hedges) round its own region, and
+        // that region has the cutouts notched out. Borders belong on the outline facing the streets / neighbours,
+        // never between the park and its cutouts.
+
+        /// <summary>A border piece this close to a cutout edge goes, unless it also lies this close to the outer outline.</summary>
+        public const float BorderReach = 1.0f;
+
+        /// <summary>Fences, walls, hedges, railings, bollards: what reads as a border.</summary>
+        public static bool IsBorder(PlannedNet n) => n != null && n.Role == NetRole.Fence;
+
+        public static bool IsBorder(PlannedObject o)
+        {
+            if (o == null) return false;
+            if (o.Role == ObjectRole.FencePiece) return true;
+            var c = o.Category ?? "";
+            return c.StartsWith(AssetCategories.Fence, StringComparison.Ordinal) || c.StartsWith(AssetCategories.Hedge, StringComparison.Ordinal)
+                || c.StartsWith(AssetCategories.Bollard, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Clips border nets and drops border objects within <see cref="BorderReach"/> of a cutout edge, except where
+        /// that edge is (within the same reach) the outer outline. No outline known: every cutout edge counts.
+        /// </summary>
+        public static int ClearBorders(ComposedPlan plan, List<float2[]> cuts, IReadOnlyList<float2[]> outlines)
+        {
+            if (plan?.Layers == null || cuts == null || cuts.Count == 0) return 0;
+            bool NearCutEdge(float2 p, float reach)
+            {
+                bool near = false;
+                foreach (var c in cuts)
+                    if (Poly.DistanceToBoundary(c, p) < reach) { near = true; break; }
+                if (!near) return false;
+                if (outlines != null)
+                    foreach (var o in outlines)
+                        if (o != null && o.Length >= 3 && Poly.DistanceToBoundary(o, p) < BorderReach) return false;
+                return true;
+            }
+            int changed = 0;
+            foreach (var l in plan.Layers)
+            {
+                if (l == null || l.GeneratorId == ZoningLayer) continue;
+                changed += l.Objects.RemoveAll(o => IsBorder(o) && NearCutEdge(o.Position.xz, BorderReach + 0.5f));
+                // Clip only the border nets (paths that cross a cutout edge are handled by the inside test).
+                var others = new List<PlannedNet>();
+                var borders = new List<PlannedNet>();
+                foreach (var n in l.Nets) (IsBorder(n) ? borders : others).Add(n);
+                if (borders.Count == 0) continue;
+                var tmp = new AreaPlan { GeneratorId = l.GeneratorId };
+                tmp.Nets.AddRange(borders);
+                int c = ClipNets(tmp, (p, pad) => NearCutEdge(p, BorderReach));
+                if (c == 0) continue;
+                changed += c;
+                // Rebuild the net list: other nets keep their indices (objects attach to them by index), borders after.
+                var keep = new List<PlannedNet>(l.Nets.Count);
+                var map = new Dictionary<int, int>();
+                for (int i = 0; i < l.Nets.Count; i++)
+                    if (!IsBorder(l.Nets[i])) { map[i] = keep.Count; keep.Add(l.Nets[i]); }
+                keep.AddRange(tmp.Nets);
+                foreach (var o in l.Objects)
+                    if (o.AttachedNet >= 0) o.AttachedNet = map.TryGetValue(o.AttachedNet, out var ni) ? ni : -1;
+                l.Nets.Clear();
+                l.Nets.AddRange(keep);
             }
             return changed;
         }

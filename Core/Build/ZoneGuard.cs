@@ -189,7 +189,7 @@ namespace Placemaker.Core.Build
                 }
                 if (!inside) extra.Add(sq);
             }
-            if (extra.Count > 0) Layers.Common.Cutouts.Enforce(plan, extra);
+            if (extra.Count > 0) Layers.Common.Cutouts.Enforce(plan, extra, plan.Footprints);
 
             plan.ZoneBlockers.AddRange(r.Blockers);
             foreach (var c in r.Cells)
