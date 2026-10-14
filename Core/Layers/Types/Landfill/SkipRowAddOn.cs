@@ -34,7 +34,10 @@ namespace Placemaker.Core.Layers.Types.Landfill
             Preset("civicAmenity", ("count", 10.0), ("where", "edge"));
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var ids = ctx.L("assets");
             string cat = YardKit.Cat(ctx, ids, AssetCategories.LandfillSkip, AssetCategories.ScrapContainer);

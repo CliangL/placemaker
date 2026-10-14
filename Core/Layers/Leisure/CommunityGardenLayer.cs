@@ -32,7 +32,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Choice("sheds", "shared", ControlTier.Essential, "plots", "none", "shared", "each").Tip();
             c.AssetMulti("cropAssets", AssetCategories.GardenCrop, ControlTier.More, "plots");
             c.Asset("shedAsset", AssetCategories.GardenShed, ControlTier.More, "plots");
-            c.Asset("plotSurface", AssetCategories.SurfaceDirt, ControlTier.More, "plots");
+            c.Asset("plotSurface", AssetCategories.SurfaceCrop, ControlTier.More, "plots");
             c.Toggle("hub", true, ControlTier.More, "facilities").Tip();
             c.Toggle("fence", true, ControlTier.More, "boundary");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
@@ -50,8 +50,10 @@ namespace Placemaker.Core.Layers.Leisure
             Preset("marketGarden", ("plotWidth", 12.0), ("plotDepth", 20.0), ("sheds", "none"), ("crops", "dense"));
         }
 
-        /// <summary>Object budget for crop props over the whole garden (big market gardens thin out).</summary>
-        private const int MaxCropItems = 8000;
+        /// <summary>Most sample plants over the whole garden: plots are surfaces (GroundCover).</summary>
+        private const int MaxCropItems = 500;
+        private const float CropsPerHa = 200f;
+        private static readonly string[] PlotGround = { GroundCover.Rows, GroundCover.Soil, GroundCover.Rows, GroundCover.Green, GroundCover.Plowed };
 
         protected override void PlanCore(LayerContext ctx)
         {
@@ -119,34 +121,44 @@ namespace Placemaker.Core.Layers.Leisure
             }
             ctx.Check();
 
-            string plotCat = LeisureKit.Category(ctx, ctx.S("plotSurface"), AssetCategories.SurfaceDirt, AssetCategories.SurfaceNatural);
+            // Ground before props (GroundCover): every plot is ONE surface — a patchwork of vegetable rows,
+            // bare soil, leafy green and freshly dug beds — with a few sample plants along its lane-side
+            // front and a shed at the back of every other plot. Never a plant per square metre.
+            string chosenPlot = ctx.S("plotSurface");
             var cropIds = ctx.L("cropAssets");
             string cropCat = LeisureKit.Category(ctx, cropIds.Length > 0 ? "x" : "", AssetCategories.GardenCrop, AssetCategories.Planter, AssetCategories.Bush);
-            float rowGap = ctx.S("crops") == "dense" ? 1.1f : ctx.S("crops") == "sparse" ? 2.2f : 1.5f;
+            string density = ctx.S("crops");
+            int perPlot = density == "dense" ? 6 : density == "sparse" ? 2 : 4;
+            float rowGap = density == "dense" ? 1.1f : density == "sparse" ? 2.2f : 1.5f;
+            int budget = GroundCover.AccentBudget(region.Area, CropsPerHa, 30, MaxCropItems);
             string shedMode = ctx.S("sheds");
             string shedCat = shedMode == "none" ? null : LeisureKit.Category(ctx, ctx.S("shedAsset"), AssetCategories.GardenShed, AssetCategories.Shelter);
             var shed = AssetMix.One(ctx.S("shedAsset"));
+            // Spread the budget evenly: fewer plants per plot (and plants on every k-th plot) on big gardens.
+            if (plots.Count > 0) perPlot = math.clamp(budget / plots.Count, 1, perPlot);
+            int plotStride = plots.Count > 0 ? math.max(1, (plots.Count * perPlot + budget - 1) / math.max(1, budget)) : 1;
             int crops = 0, sheds = 0;
             for (int i = 0; i < plots.Count; i++)
             {
                 var r = plots[i];
                 uint v = Hashing.Mix(ctx.Seed, 0x9100u + (uint)i);
-                if (plotCat != null) ctx.Surface(r.Ring, SurfaceRole.Decorative, AssetMix.One(ctx.S("plotSurface")), plotCat);
+                GroundCover.Field(ctx, r.Ring, PlotGround[(int)(v % (uint)PlotGround.Length)], chosenPlot);
                 // Orientation: which side of the plot faces its lane (the back is the other side).
                 float backSign = occ.Paths.Nearest(r.Center, 50f, out var q) >= 0 && math.dot(q - r.Center, r.Side) > 0f ? -1f : 1f;
-                bool hasShed = shedCat != null && (shedMode == "each" || i % 6 == 0);
-                float cropStart = -r.HalfWidth + 0.8f, cropEnd = r.HalfWidth - (hasShed ? 0.8f : 0.8f);
-                // Crop rows run along the plot depth; one variety per plot (allotments look patchwork).
+                bool hasShed = shedCat != null && (shedMode == "each" ? i % 2 == 0 : i % 6 == 0);
+                // A short front row of sample plants facing the lane (one variety per plot: patchwork).
                 var crop = AssetMix.Pick(cropIds, v);
-                if (cropCat != null && crops < MaxCropItems)
-                    for (float u = -r.HalfLength + 0.7f; u <= r.HalfLength - 0.7f; u += rowGap)
-                        for (float t = cropStart; t <= cropEnd; t += 1.2f)
-                        {
-                            if (hasShed && t * backSign > r.HalfWidth - 3f && u > r.HalfLength - 3f) continue;
-                            ctx.Object(r.Local(u, t), r.Yaw, cropCat == AssetCategories.Bush ? ObjectRole.Bush : cropCat == AssetCategories.Planter ? ObjectRole.Planter : ObjectRole.Furniture,
-                                crop, v, -1, cropCat);
-                            crops++;
-                        }
+                if (cropCat != null && budget > 0 && i % plotStride == 0)
+                {
+                    float t = -backSign * (r.HalfWidth - 0.8f);
+                    int k = 0;
+                    for (float u = -r.HalfLength + 0.7f; u <= r.HalfLength - 0.7f && k < perPlot && budget > 0; u += rowGap, k++)
+                    {
+                        ctx.Object(r.Local(u, t), r.Yaw, cropCat == AssetCategories.Bush ? ObjectRole.Bush : cropCat == AssetCategories.Planter ? ObjectRole.Planter : ObjectRole.Furniture,
+                            crop, v, -1, cropCat);
+                        crops++; budget--;
+                    }
+                }
                 if (hasShed)
                 {
                     var p = r.Local(r.HalfLength - 1.4f, backSign * (r.HalfWidth - 1.4f));

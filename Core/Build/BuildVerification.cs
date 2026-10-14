@@ -69,7 +69,7 @@ namespace Placemaker.Core.Build
         /// something was adopted twice or foreign entities were tagged; fewer means parts were built
         /// untagged (they would survive removal) or vanished.
         /// </summary>
-        public static List<string> Compare(PlannedCounts planned, MemberCounts actual, int ownerAreas = 0)
+        public static List<string> Compare(PlannedCounts planned, MemberCounts actual, int ownerAreas = 0, bool looseNets = false)
         {
             var issues = new List<string>();
             int minObjects = planned.Objects - planned.OptionalDropped;
@@ -84,7 +84,8 @@ namespace Placemaker.Core.Build
                 issues.Add($"areas: {areas} tagged, only {planned.Areas} planned ({areas - planned.Areas} extra)");
             if (planned.NetPieces > 0 && actual.Edges == 0)
                 issues.Add($"nets: {planned.NetPieces} pieces planned, no edge tagged");
-            if (actual.Edges > 0 && actual.Nodes == 0)
+            // Loose builds (road grids) never claim nodes: their nodes are city nodes.
+            if (!looseNets && actual.Edges > 0 && actual.Nodes == 0)
                 issues.Add("nets: edges tagged without any node (removal would leave nodes behind)");
             return issues;
         }

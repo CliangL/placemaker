@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using Placemaker.Core.Build;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
@@ -33,6 +34,8 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
         public const string WaterPlace = "place:water";
         public const string PondPermanentKey = "Placemaker.Zen.Issue.PondPermanent";
         public static readonly string[] Styles = { "karesansui", "stroll", "tea", "moss", "bamboo" };
+        /// <summary>Most bamboo clumps in a grove (the floor is a surface; clumps are massing accents).</summary>
+        public const int MaxGroveClumps = 2500;
 
         protected override string Area => "Zen";
         public override string Id => LayerId;
@@ -44,7 +47,7 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature(TeaHouseAddOn.LayerId), Feature("restrooms", ("byArea", true), ("haEach", 6.0)), WetlandLayer.KioskFeature(),
-            Feature("decals", ("theme", "leaves"), ("density", 1.5)), Feature("rocks", ("clusters", 2.0), ("size", "small")),
+            Feature("decals", ("theme", "leaves"), ("density", 0.6)), Feature("rocks", ("clusters", 2.0), ("size", "small")),
             Feature("terrain", ("shape", "mounds"), ("height", 1.5)),
         };
 
@@ -652,8 +655,12 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
             }
             else if (bambooCat != null && bamboo == "grove")
             {
-                int n = math.min(5000, (int)(region.Area / 9f));
-                LeisureKit.Plant(ctx, g.Occ, region, n, ObjectRole.Bush, null, 0.9f, 30f, 0.85f, 0xBA3Cu, p => g.Blocked(p, 1.5f), 1, 3,
+                // Ground before props (GroundCover): the grove is a leaf-litter floor with bamboo THICKETS on it
+                // (clumped, ~1 culm clump per 40 m²), not a clump every 3 m over the whole garden.
+                if (g.Field == null && g.Water.Ponds.Count == 0)
+                    ctx.Surface(g.Inner.Ring, SurfaceRole.Ground, AssetMix.One(""), SurfaceCategories.Bark);
+                int n = math.min(MaxGroveClumps, (int)(region.Area / 40f));   // 250 per ha
+                LeisureKit.Plant(ctx, g.Occ, region, n, ObjectRole.Bush, null, 0.9f, 22f, 0.3f, 0xBA3Cu, p => g.Blocked(p, 1.5f), 1, 3,
                     bambooCat == AssetCategories.Bush ? null : bambooCat);
             }
 

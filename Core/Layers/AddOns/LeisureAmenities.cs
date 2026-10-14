@@ -141,8 +141,9 @@ namespace Placemaker.Core.Layers.AddOns
             float r = math.min(si == 0 ? 4f : si == 1 ? 5.5f : 7f, room);
             if (r < 2.5f) { NoSpace(ctx, NameKey); return; }
             var deck = AddOnAssets.Or(ctx.S("padAsset"), AddOnAssets.SplashDeck);
-            ctx.Surface(Disc(site.Center, r), SurfaceRole.Decorative, deck, AssetCategories.SurfacePaving);
-            if (occ.Paths.Count > 0) AddOnKit.Link(ctx, Monuments.MonumentKit.Entry(occ, site, toward), site.Center, r, 1.2f, deck, AssetCategories.SurfacePaving, 20f);
+            // The deck also carries the parents' bench ring (r + 1.5), so seats stand on paving (s5).
+            ctx.Surface(Disc(site.Center, benches ? r + 2.4f : r), SurfaceRole.Decorative, deck, AssetCategories.SurfacePaving);
+            if (occ.Paths.Count > 0) AddOnKit.Link(ctx, Monuments.MonumentKit.Entry(occ, site, toward), site.Center, benches ? r + 2.4f : r, 1.2f, deck, AssetCategories.SurfacePaving, 20f);
             int placed = 0;
             if (jets)
             {
@@ -261,7 +262,9 @@ namespace Placemaker.Core.Layers.AddOns
             const float firstGap = 2.6f, rowPitch = 2.5f, rim = 1.1f;
             int rows = ctx.I("rows");
             while (rows > 0 && sr + firstGap + (rows - 1) * rowPitch + rim > room) rows--;
-            float forecourt = rows > 0 ? sr + firstGap + (rows - 1) * rowPitch + rim : sr + 1.8f;
+            // No rows (a gazebo garden): one even ring of benches at the paving edge, arrival side open (s5).
+            float ringR = sr + 2.2f;
+            float forecourt = rows > 0 ? sr + firstGap + (rows - 1) * rowPitch + rim : ringR + 1.2f;
             if (forecourt > room + 0.01f) { NoSpace(ctx, NameKey); return; }
             var focal = site.Center;
             var arrival = Monuments.MonumentKit.Entry(occ, site, toward);
@@ -280,6 +283,16 @@ namespace Placemaker.Core.Layers.AddOns
             float aisleHalf = 1.3f;   // metres either side of an aisle's centre line
             int benches = 0;
             var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
+            if (rows == 0)
+            {
+                int n = math.clamp((int)math.floor(2f * math.PI * ringR / 4.2f), 3, 8);
+                for (int i = 1; i <= n; i++)
+                {
+                    float a = open + i * 2f * math.PI / (n + 1);
+                    var p = focal + new float2(math.cos(a), math.sin(a)) * ringR;
+                    if (LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, focal), ObjectRole.Bench, bench, null, 1.1f, Hashing.Mix(ctx.Seed, 0xBE80u + (uint)i), 0.1f, 0.1f)) benches++;
+                }
+            }
             for (int row = 0; row < rows; row++)
             {
                 float r = sr + firstGap + row * rowPitch;

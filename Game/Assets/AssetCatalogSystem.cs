@@ -231,7 +231,7 @@ namespace Placemaker.Game.Assets
                 {
                     c.Value.Sort((a, b) => CompareAuto(c.Key, a, b));
                     var names = new List<string>(c.Value.Count);
-                    foreach (var it in c.Value) names.Add(it.Id);
+                    foreach (var it in c.Value) if (AssetCuration.FitsSize(c.Key, Candidate(c.Key, it).Footprint)) names.Add(it.Id);
                     byCat[c.Key] = names;
                 }
                 paletteItems[kv.Key] = byCat;

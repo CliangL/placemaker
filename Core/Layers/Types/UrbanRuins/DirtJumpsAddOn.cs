@@ -1,6 +1,7 @@
 // "Dirt jumps" feature: kids and BMX riders dig jump lines into any leftover ground — offered by the
 // abandoned lot and the urban ruins (and usable by any recipe). See DirtJumps for the shaping.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Types.Ruins;
@@ -36,7 +37,10 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
             Preset("pro", ("lines", 3.0), ("height", 2.5), ("jumps", 6.0), ("spacing", 12.0));
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = Occupancy(ctx);

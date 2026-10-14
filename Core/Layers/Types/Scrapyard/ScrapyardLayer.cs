@@ -132,7 +132,13 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             public uint Salt(uint k) => Hashing.Mix(Ctx.Seed, k);
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var y = new Yard
@@ -284,8 +290,11 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             float R = math.min(ins - 2f, (6f + math.sqrt(y.Core.Area) * 0.22f) * (0.6f + 0.4f * y.Fill));
             if (R >= 4f && heapCat != null)
             {
-                int n = (int)(R * R * 0.32f * y.Fill) + 6;
-                y.Junk += YardKit.Heap(ctx, y.Occ, c, R, n, scrap, heapCat, 2.2f, y.Salt(0x3A11u), 0.8f, 1.6f);
+                // Art pass: the peak is a few big rubble/ore loads (one read from above), the flanks
+                // fewer, bigger scrap props — ~45% of the old count, which stamped 130 small items.
+                if (scrap == null || scrap.Length == 0) y.Junk += Peak(y, c, R);
+                int n = (int)(R * R * 0.15f * y.Fill) + 5;
+                y.Junk += YardKit.Heap(ctx, y.Occ, c, R, n, scrap, heapCat, 2.8f, y.Salt(0x3A11u), 0.8f, 1.4f);
                 y.Mounds.Add(new Mound { Center = c, Radius = R * 1.15f, Height = heapH, Flat = 0.2f });
                 y.Anchors.Add(new Anchor(c, R));
                 y.Heaps++;
@@ -295,13 +304,13 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             // Bays round the edge, materials cycling like a sorted yard.
             string[] cycle = { AssetCategories.ScrapHeap, AssetCategories.ScrapHeap, AssetCategories.ScrapTire, AssetCategories.ScrapBarrel, AssetCategories.ScrapPallet, AssetCategories.ScrapWreck };
             float bayDepth = math.max(6f, y.BandDepth - 1f);
-            y.Bays += YardKit.Bays(ctx, y.Occ, y.EdgeInset, 10f, bayDepth, y.Gates, 16f, null, (i, bc, inward, hl, hw) =>
+            y.Bays += YardKit.Bays(ctx, y.Occ, y.EdgeInset, 10f, bayDepth, y.Gates, 16f, BackHalf(y), (i, bc, inward, hl, hw) =>
             {
                 string cat = YardKit.CatQuiet(cycle[i % cycle.Length], AssetCategories.ScrapHeap, AssetCategories.ScrapPallet);
                 if (cat == null) return;
                 float r = math.min(hl, hw) * 0.8f;
-                int n = (int)(r * r * 0.5f * (0.4f + 0.6f * y.Fill)) + 3;
-                y.Junk += YardKit.Heap(ctx, y.Occ, bc - inward * hw * 0.15f, r, n, cat == AssetCategories.ScrapHeap ? scrap : null, cat, cat == AssetCategories.ScrapWreck ? 2.6f : 1.4f, y.Salt(0xBA0u + (uint)i));
+                int n = (int)(r * r * 0.3f * (0.4f + 0.6f * y.Fill)) + 2;
+                y.Junk += YardKit.Heap(ctx, y.Occ, bc - inward * hw * 0.15f, r, n, cat == AssetCategories.ScrapHeap ? scrap : null, cat, cat == AssetCategories.ScrapWreck ? 2.6f : 1.8f, y.Salt(0xBA0u + (uint)i));
                 y.Anchors.Add(new Anchor(bc, r));
                 y.Heaps++;
             }, y.Salt(0xBA75u));
@@ -322,6 +331,36 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             }
         }
 
+        /// <summary>Material bays only where the outline is in the back ~half of the yard (front stays open round the gate).</summary>
+        private static System.Func<float2, bool> BackHalf(Yard y)
+        {
+            if (y.Gates.Count == 0) return null;
+            var g = y.Gates[0].Position;
+            float far = 0f;
+            foreach (var v in y.Region.Ring) far = math.max(far, math.distance(v, g));
+            float min = far * 0.55f;
+            return c => math.distance(c, g) > min;
+        }
+
+        /// <summary>Big rubble and ore loads at the top of the scrap mountain. Returns the count placed.</summary>
+        private static int Peak(Yard y, float2 c, float R)
+        {
+            string[] big = { "OreMiningTruck01_OrePile03", "RubblePileMixed03", "OreMiningTruck01_OrePile02", "RubblePileMixed01" };
+            int want = R > 9f ? 3 : R > 6f ? 2 : 1, n = 0;
+            for (int i = 0; i < 6 && n < want; i++)
+            {
+                uint v = y.Salt(0x9EA0u + (uint)i);
+                float a = Hashing.Unit(v) * 6.283f, d = i == 0 ? 0f : R * 0.35f;
+                var p = c + new float2(math.cos(a), math.sin(a)) * d;
+                if (!y.Occ.Free(p, 3.6f, 0.5f, -0.5f)) continue;
+                var o = y.Ctx.Object(p, Hashing.Unit(Hashing.Mix(v, 1u)) * 6.283f, ObjectRole.Furniture,
+                    new AssetRef(big[(int)(v % (uint)big.Length)], big), v, -1, AssetCategories.ScrapHeap);
+                y.Occ.Take(p, 3.6f, YardKit.KindStuff);
+                n++;
+            }
+            return n;
+        }
+
         private static void SecondaryHeaps(Yard y, string[] ids, string cat, float height)
         {
             if (cat == null) return;
@@ -334,8 +373,8 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 float clear = y.Occ.Clearance(p, 9f);
                 if (clear < 4f) continue;
                 float r = math.min(7f, clear - 1.5f);
-                int n = (int)(r * r * 0.45f * y.Fill) + 3;
-                int got = YardKit.Heap(ctx, y.Occ, p, r, n, ids, cat, 1.8f, y.Salt(0x5EC1u + (uint)placed));
+                int n = (int)(r * r * 0.25f * y.Fill) + 3;
+                int got = YardKit.Heap(ctx, y.Occ, p, r, n, ids, cat, 2.4f, y.Salt(0x5EC1u + (uint)placed));
                 if (got == 0) continue;
                 y.Junk += got; y.Heaps++; placed++;
                 y.Anchors.Add(new Anchor(p, r));
@@ -374,7 +413,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                         if (cat == null) continue;
                         var ra = math.lerp(a, b, (float)r / runs); var rb = math.lerp(a, b, (float)(r + 1) / runs);
                         bool car = cat == AssetCategories.ScrapWreck;
-                        float spacing = car ? 2.8f : cat == AssetCategories.ScrapBarrel ? 1.5f : 2.2f;
+                        float spacing = car ? 2.8f : cat == AssetCategories.ScrapBarrel ? 2.0f : 2.8f;
                         int placedRun = 0, i = 0;
                         foreach (var p in LeisureKit.Along(ra, rb, spacing))
                         {
@@ -392,8 +431,8 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                     rowIndex++;
                 }
             // Racks of pallets and drums along the fence.
-            EdgeRow(y, new[] { AssetCategories.ScrapPallet, AssetCategories.ScrapBarrel, AssetCategories.ScrapHeap }, 2.2f, 1.0f, 0f);
-            if (y.Fill > 0.55f) EdgeRow(y, new[] { AssetCategories.ScrapBarrel, AssetCategories.ScrapPallet }, 1.8f, 0.8f, 2.6f);
+            EdgeRow(y, new[] { AssetCategories.ScrapPallet, AssetCategories.ScrapBarrel, AssetCategories.ScrapHeap }, 2.8f, 1.0f, 0f);
+            if (y.Fill > 0.8f) EdgeRow(y, new[] { AssetCategories.ScrapBarrel, AssetCategories.ScrapPallet }, 2.4f, 0.8f, 2.6f);
             // Workshop shed deep in the yard.
             string shed = YardKit.CatQuiet(AssetCategories.ScrapCabin, AssetCategories.GardenShed);
             if (shed != null)
@@ -509,7 +548,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             string cat = YardKit.Cat(ctx, ids, AssetCategories.ScrapTire, AssetCategories.ScrapHeap);
             if (cat == null) return;
             float heapH = ctx.F("heapHeight");
-            int wanted = math.clamp(1 + (int)(y.Core.Area / 2200f * y.Fill), 1, 14);
+            int wanted = math.clamp(1 + (int)(y.Core.Area / 1300f * y.Fill), 2, 14);
             var centres = new List<float2>();
             int made = 0;
             foreach (var p in YardKit.Shuffled(Scatter.Candidates(y.Core, 7f, y.Salt(0x713Eu), 500, ctx.Cancel), y.Salt(0x713Fu)))
@@ -518,11 +557,18 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 float clear = y.Occ.Clearance(p, 16f);
                 if (clear < 6f) continue;
                 bool close = false;
-                foreach (var q in centres) if (math.distance(p, q) < 18f) { close = true; break; }
+                foreach (var q in centres) if (math.distance(p, q) < 15f) { close = true; break; }
                 if (close) continue;
                 float r = math.min(14f, clear - 1.5f);
-                int n = (int)(r * r * 0.7f * y.Fill) + 8;
-                int got = YardKit.Heap(ctx, y.Occ, p, r, n, ids, cat, 1.2f, y.Salt(0x7140u + (uint)made), 0.8f, 1.3f);
+                int n = (int)(r * r * 0.3f * y.Fill) + 6;
+                if ((ids == null || ids.Length == 0) && r >= 6.5f && y.Occ.Free(p, 5f, 0.5f, -0.5f))
+                {
+                    // The mountain itself: one long dark heap, loads tipped round it.
+                    ctx.Object(p, Hashing.Unit(y.Salt(0x7150u + (uint)made)) * 6.283f, ObjectRole.Furniture,
+                        new AssetRef("PileCoalSmall01", "Prop_PileCoalSmall01_Full", "CoalTruck01_CoalPile01"), y.Salt(0x7151u + (uint)made), -1, cat);
+                    y.Occ.Take(p, 5f, YardKit.KindStuff);
+                }
+                int got = YardKit.Heap(ctx, y.Occ, p, r, n, ids, cat, 2.2f, y.Salt(0x7140u + (uint)made), 0.8f, 1.3f);
                 if (got == 0) continue;
                 centres.Add(p); made++;
                 y.Junk += got; y.Heaps++;
@@ -540,9 +586,9 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 if (nearGate) continue;
                 uint v = y.Salt(0x71EDu + (uint)edge++);
                 if (Hashing.Unit(v) > y.Fill) continue;
-                var c = e + inward * (y.EdgeInset + 3f);
-                int got = YardKit.Heap(ctx, y.Occ, c, 2.6f, 6, ids, cat, 1.0f, v);
-                if (got > 0) { y.Junk += got; y.Heaps++; y.Anchors.Add(new Anchor(c, 2.6f)); }
+                var c = e + inward * (y.EdgeInset + 4f);
+                int got = YardKit.Heap(ctx, y.Occ, c, 4f, 6, ids, cat, 1.0f, v);
+                if (got > 0) { y.Junk += got; y.Heaps++; y.Anchors.Add(new Anchor(c, 4f)); }
             }
         }
 
@@ -714,6 +760,8 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             y.Machines += placed;
         }
 
+        private static readonly GritAssets.Set StraySet = new GritAssets.Set(false, "Barrel01", "Barrel02", "Barrel03", "Pallet01", "Pallet04", "Crate01", "CardboardBox02", "GasBottleCart01|Barrel01");
+
         /// <summary>Stray junk by the fence: single tyres, drums and bits of scrap.</summary>
         private static void Strays(Yard y, float perHa)
         {
@@ -729,7 +777,10 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                 uint v = y.Salt(0x57A8u + (uint)i++);
                 string cat = YardKit.CatQuiet(cats[(int)(v % (uint)cats.Length)]);
                 if (cat == null) continue;
-                if (LeisureKit.Put(y.Ctx, y.Occ, p, Hashing.Unit(Hashing.Mix(v, 1u)) * 6.283f, ObjectRole.Furniture, AssetMix.Pick(Ids(y.Ctx, cat), v), cat, 0.7f, v, 0.6f, 0.3f))
+                // Strays are single small things (the category's heaps are metres long and would poke through the fence).
+                var ids = Ids(y.Ctx, cat);
+                var asset = ids != null && ids.Length > 0 ? AssetMix.Pick(ids, v) : GritAssets.Ref(StraySet, v);
+                if (LeisureKit.Put(y.Ctx, y.Occ, p, Hashing.Unit(Hashing.Mix(v, 1u)) * 6.283f, ObjectRole.Furniture, asset, cat, 0.7f, v, 0.6f, 0.3f))
                     placed++;
             }
             y.Junk += placed;
@@ -755,10 +806,12 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
         {
             if (per100 <= 0f) return;
             var ctx = y.Ctx;
-            int total = (int)(y.Region.Area / 100f * per100);
+            // Art pass: never more than ~110 grime decals per hectare — beyond that it reads as noise, not wear.
+            int total = (int)math.min(y.Region.Area / 100f * per100, y.Region.Area / 10000f * 110f);
             string dirt = YardKit.CatQuiet(AssetCategories.DecalLitter, AssetCategories.DecalDirt, AssetCategories.Decal);
             string puddle = YardKit.CatQuiet(AssetCategories.DecalPuddles, AssetCategories.DecalDirt);
             string crack = YardKit.CatQuiet(AssetCategories.DecalCracks, AssetCategories.DecalDirt);
+            string oil = YardKit.CatQuiet(AssetCategories.DecalDirt);
             if (dirt == null && puddle == null) { AssetAvailability.Require(ctx.Plan, AssetCategories.DecalDirt, null, Keys.Category(AssetCategories.DecalDirt)); return; }
             int nearStuff = (int)(total * 0.6f), onRoad = (int)(total * 0.25f), loose = total - nearStuff - onRoad;
             int n = 0;
@@ -766,7 +819,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             {
                 int each = math.max(1, nearStuff / y.Anchors.Count);
                 for (int i = 0; i < y.Anchors.Count && i < 200; i++)
-                    n += YardKit.Grime(ctx, y.ReservedOnly, y.Anchors[i].P, y.Anchors[i].R + 3f, each, dirt, y.Salt(0x9E1u + (uint)i));
+                    n += YardKit.Grime(ctx, y.ReservedOnly, y.Anchors[i].P, y.Anchors[i].R + 3f, each, i % 3 == 2 ? dirt : oil ?? dirt, y.Salt(0x9E1u + (uint)i));
             }
             if (y.HaulPoints.Count > 0)
             {
