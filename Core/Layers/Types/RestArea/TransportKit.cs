@@ -154,12 +154,35 @@ namespace Placemaker.Core.Layers.Types.Transport
             var region = ctx.LayerRegion;
             if (math.distance(a, b) < 2f) return false;
             if (Clear(region, occ, a, b)) { LeisureKit.Path(ctx, occ, a, b, role, asset); return true; }
-            var via = region.DeepestPoint(out _, null, 14);
-            if (Clear(region, occ, a, via) && Clear(region, occ, via, b))
+            // One bend: the shortest a→v→b over a coarse grid of interior points (concave outlines, L-shapes).
+            if (OneBend(region, occ, a, b, out var via))
             {
                 LeisureKit.Path(ctx, occ, a, via, role, asset);
                 LeisureKit.Path(ctx, occ, via, b, role, asset);
                 return true;
+            }
+            return false;
+        }
+
+        private static bool OneBend(LayerRegion region, Occupancy occ, float2 a, float2 b, out float2 via)
+        {
+            via = region.DeepestPoint(out _, null, 14);
+            var candidates = new List<(float cost, float2 p)> { (math.distance(a, via) + math.distance(via, b), via) };
+            var size = region.Max - region.Min;
+            float step = math.max(4f, math.sqrt(size.x * size.y / 400f));
+            for (float y = region.Min.y + step * 0.5f; y < region.Max.y; y += step)
+                for (float x = region.Min.x + step * 0.5f; x < region.Max.x; x += step)
+                {
+                    var p = new float2(x, y);
+                    if (!region.ContainsDisc(p, 3f)) continue;
+                    candidates.Add((math.distance(a, p) + math.distance(p, b), p));
+                }
+            candidates.Sort((l, r) => l.cost != r.cost ? l.cost.CompareTo(r.cost) : l.p.x != r.p.x ? l.p.x.CompareTo(r.p.x) : l.p.y.CompareTo(r.p.y));
+            int tries = 0;
+            foreach (var (_, p) in candidates)
+            {
+                if (++tries > 120) break;
+                if (Clear(region, occ, a, p) && Clear(region, occ, p, b)) { via = p; return true; }
             }
             return false;
         }
