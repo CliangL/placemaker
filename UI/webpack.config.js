@@ -22,6 +22,8 @@ const banner = `
 
 module.exports = {
   mode: "production",
+  // The bundle is loaded from disk by the game (no network): webpack's 244 KiB web download hint does not apply.
+  performance: { hints: false },
   stats: "none",
   entry: {
     [MOD.id]: "./src/index.tsx",

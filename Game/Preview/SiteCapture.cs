@@ -30,13 +30,15 @@ namespace Placemaker.Game.Preview
         public const float Margin = 60f;
         private const int MaxGrid = 256;
         private const int MaxNets = 600;
-        private const int MaxObstacles = 1500;
+        private const int MaxObstacles = 6000;   // s15: every building near the area must be protected
+        private const int MaxZoneBlocks = 4000;
 
         private readonly EntityManager _em;
         private readonly TerrainSystem _terrain;
         private readonly WaterSystem _water;
         private readonly global::Game.Net.SearchSystem _netSearch;
         private readonly global::Game.Objects.SearchSystem _objectSearch;
+        private readonly global::Game.Zones.SearchSystem _zoneSearch;
         private readonly CityConfigurationSystem _cityConfig;
 
         private Dictionary<string, AssetInfo> _assets = new Dictionary<string, AssetInfo>();
@@ -50,6 +52,7 @@ namespace Placemaker.Game.Preview
             _water = world.GetOrCreateSystemManaged<WaterSystem>();
             _netSearch = world.GetOrCreateSystemManaged<global::Game.Net.SearchSystem>();
             _objectSearch = world.GetOrCreateSystemManaged<global::Game.Objects.SearchSystem>();
+            _zoneSearch = world.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>();
             _cityConfig = world.GetOrCreateSystemManaged<CityConfigurationSystem>();
         }
 
@@ -96,6 +99,7 @@ namespace Placemaker.Game.Preview
             site.WaterDepthAt = WaterGrid(min, max);
             CaptureNets(min, max, site.NearbyNets);
             CaptureObstacles(min, max, site.Obstacles);
+            CaptureZoneBlocks(min, max, site.ZoneGrids);
             try { site.LeftHandTraffic = _cityConfig != null && _cityConfig.leftHandTraffic; } catch (Exception) { }
             // Copy: the worker must not see the catalog's dictionary mutate under it.
             site.Assets = new Dictionary<string, AssetInfo>(Assets());
@@ -109,9 +113,23 @@ namespace Placemaker.Game.Preview
             if (ring == null || ring.Length == 0) return list;
             float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
             foreach (var p in ring) { min = math.min(min, p.xz); max = math.max(max, p.xz); }
-            CaptureNets(min - margin, max + margin, list);
+            min -= margin; max += margin;
+            // s15: one outline rebuild asks for the same box up to three times (attachments, keep-off-roads,
+            // marker follow); each query walks the net tree and reads lane buffers. Reuse within a frame.
+            int frame = UnityEngine.Time.frameCount;
+            if (_netsCache != null && frame == _netsFrame && math.all(min == _netsMin) && math.all(max == _netsMax))
+                return new List<NearbyNet>(_netsCache);
+            CaptureNets(min, max, list);
+            _netsCache = new List<NearbyNet>(list);
+            _netsFrame = frame;
+            _netsMin = min;
+            _netsMax = max;
             return list;
         }
+
+        private List<NearbyNet> _netsCache;
+        private int _netsFrame = -1;
+        private float2 _netsMin, _netsMax;
 
         private Func<float2, float> HeightGrid(float2 min, float2 max)
         {
@@ -255,6 +273,48 @@ namespace Placemaker.Game.Preview
             return false;
         }
 
+        private struct BlockIterator : INativeQuadTreeIterator<Entity, Bounds2>
+        {
+            public Bounds2 Bounds;
+            public NativeList<Entity> Results;
+            public bool Intersect(Bounds2 bounds) => MathUtils.Intersect(bounds, Bounds);
+            public void Iterate(Bounds2 bounds, Entity e)
+            {
+                if (MathUtils.Intersect(bounds, Bounds)) Results.Add(e);
+            }
+        }
+
+        /// <summary>
+        /// (s19) Zone blocks of existing roads around the area (Game.Zones.Block): ZoneGuard snaps the build's zoning
+        /// to their cells and blocks the others under the build. Geometry only (cells are 8 m, see Core ZoneGuard).
+        /// </summary>
+        private void CaptureZoneBlocks(float2 min, float2 max, List<ZoneGrid> into)
+        {
+            if (_zoneSearch == null) return;
+            var tree = _zoneSearch.GetSearchTree(true, out var deps);
+            deps.Complete();
+            var results = new NativeList<Entity>(64, Allocator.Temp);
+            try
+            {
+                var it = new BlockIterator { Bounds = new Bounds2(min, max), Results = results };
+                tree.Iterate(ref it);
+                var seen = new HashSet<Entity>();
+                for (int i = 0; i < results.Length && into.Count < MaxZoneBlocks; i++)
+                {
+                    var e = results[i];
+                    if (!seen.Add(e) || !_em.HasComponent<global::Game.Zones.Block>(e)) continue;
+                    if (_em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) continue;
+                    var b = _em.GetComponentData<global::Game.Zones.Block>(e);
+                    into.Add(new ZoneGrid { Position = b.m_Position.xz, Direction = b.m_Direction, Size = b.m_Size });
+                }
+            }
+            catch (Exception ex)
+            {
+                Mod.Log.Warn("Placemaker: zone block capture failed: " + ex.Message);
+            }
+            finally { results.Dispose(); }
+        }
+
         private void CaptureObstacles(float2 min, float2 max, List<Obstacle> into)
         {
             if (_objectSearch == null) return;
@@ -270,14 +330,12 @@ namespace Placemaker.Game.Preview
                 {
                     var e = results[i];
                     if (!seen.Add(e)) continue;
-                    if (!_em.HasComponent<global::Game.Buildings.Building>(e) || !_em.HasComponent<global::Game.Objects.Transform>(e)
-                        || !_em.HasComponent<PrefabRef>(e) || _em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) continue;
-                    var prefab = _em.GetComponentData<PrefabRef>(e).m_Prefab;
-                    if (!_em.HasComponent<BuildingData>(prefab)) continue;
-                    var lot = (float2)_em.GetComponentData<BuildingData>(prefab).m_LotSize * 8f;
-                    var tr = _em.GetComponentData<global::Game.Objects.Transform>(e);
-                    var q = global::Game.Objects.ObjectUtils.CalculateBaseCorners(tr.m_Position, tr.m_Rotation, lot);
-                    into.Add(new Obstacle { A = q.a.xz, B = q.b.xz, C = q.c.xz, D = q.d.xz, Kind = ObstacleKind.Building });
+                    // (s15) Lots AND, where larger, collision footprints of buildings and extensions: the build
+                    // safety pass (Core/Build/SiteSafety) keeps everything off them.
+                    if (!BuildingFootprints.IsBuilding(_em, e)) continue;
+                    BuildingFootprints.Of(_em, e, out var lot, out var footprint);
+                    if (lot != null) into.Add(new Obstacle { A = lot[0], B = lot[1], C = lot[2], D = lot[3], Kind = ObstacleKind.Building });
+                    if (footprint != null) into.Add(new Obstacle { A = footprint[0], B = footprint[1], C = footprint[2], D = footprint[3], Kind = ObstacleKind.Building });
                 }
             }
             finally { results.Dispose(); }

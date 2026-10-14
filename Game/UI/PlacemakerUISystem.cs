@@ -24,7 +24,8 @@ namespace Placemaker.Game.UI
         private ValueBinding<string> _state, _catalog, _design, _summary, _assets, _managed;
 
         private int _stateStamp = -1;
-        private int _designStamp = -1, _designPlanStamp = -1;
+        private int _statePushFrame = -100;
+        private int _designStamp = -1, _designPlanStamp = -1, _designAssetsStamp = -1;
         private int _designPushFrame = -100;
         private string _summaryStamp;
         private int _catalogStamp = -1, _catalogGenerators = -1, _catalogPresets = -1;
@@ -155,6 +156,10 @@ namespace Placemaker.Game.UI
         {
             // Money, planning and hover states change without an edit: also refresh twice a second.
             if (_stateStamp == _tool.ViewVersion && _frame % 30 != 0) return;
+            // s15: a brush stroke changes the view every frame (area readout): build the state JSON (hints,
+            // stage facts, readiness) at most ~10×/s while it runs; the stroke's end pushes at once.
+            if (_tool.Painting && _frame - _statePushFrame < 6) return;
+            _statePushFrame = _frame;
             _stateStamp = _tool.ViewVersion;
             _state.Update(UiModels.State(_tool.StateInput()).ToString());
         }
@@ -188,15 +193,41 @@ namespace Placemaker.Game.UI
 
         private void PushDesign()
         {
-            if (_designStamp == _tool.DesignVersion && _designPlanStamp == _tool.PlanRevision && _frame % 30 != 0) return;
+            // AssetsResolvedStamp: automatic picks are resolved a frame after the plan lands (resolvedAssets / netLegend names).
+            if (_designStamp == _tool.DesignVersion && _designPlanStamp == _tool.PlanRevision && _designAssetsStamp == _tool.AssetsResolvedStamp && _frame % 30 != 0) return;
             // While a slider drags (previewValue) the panel already shows the dragged value: push the design at
             // most every 6th frame so the drag stays smooth; endPreview bumps the version and the final state goes out.
             if (_tool.ValuePreviewActive && _designPlanStamp == _tool.PlanRevision && _frame - _designPushFrame < 6) return;
             _designPushFrame = _frame;
             _designStamp = _tool.DesignVersion;
             _designPlanStamp = _tool.PlanRevision;
+            _designAssetsStamp = _tool.AssetsResolvedStamp;
             _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan,
-                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale).ToString());
+                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale, _tool.Unavailability(), AssetLabelOf).ToString());
+        }
+
+        // (s16) Prefab id → localised display name + thumbnail, for "Automatic · Two-Lane Road" and the road legend.
+        private readonly Dictionary<string, AssetLabel> _labels = new Dictionary<string, AssetLabel>(StringComparer.Ordinal);
+        private int _labelsVersion = int.MinValue;
+
+        private AssetLabel AssetLabelOf(string category, string id)
+        {
+            var catalog = Services.Assets;
+            if (string.IsNullOrEmpty(id) || catalog == null || !catalog.Ready) return null;
+            if (_labelsVersion != catalog.Version) { _labels.Clear(); _labelsVersion = catalog.Version; }
+            string key = (category ?? "") + "|" + id;
+            if (_labels.TryGetValue(key, out var hit)) return hit;
+            AssetLabel found = null;
+            try
+            {
+                var items = catalog.Items(category ?? "");
+                if (items != null)
+                    foreach (var it in items)
+                        if (it != null && it.Id == id) { found = new AssetLabel { Name = it.DisplayName ?? "", Icon = it.Icon ?? "" }; break; }
+            }
+            catch (Exception) { found = null; }
+            _labels[key] = found;
+            return found;
         }
 
         private void PushSummary()

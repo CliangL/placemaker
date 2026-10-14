@@ -93,6 +93,17 @@ namespace Placemaker.Game.Selection
             return list;
         }
 
+        /// <summary>(s15) Building lots / footprints touching the box only (plain Paint, the selection overlay).</summary>
+        public List<float2[]> BuildingsIn(float2 min, float2 max, int ignoreGroup)
+        {
+            var list = new List<BrushObstacle>();
+            try { Buildings(new Bounds2(min, max), ignoreGroup, list); }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: could not read buildings: " + e.Message); }
+            var rings = new List<float2[]>(list.Count);
+            foreach (var o in list) rings.Add(o.Ring);
+            return rings;
+        }
+
         /// <summary>
         /// Predicate "under water" for points in the box, or null when the box is dry. Sampled once into
         /// a grid (the water surface data must not be held across frames).
@@ -155,14 +166,10 @@ namespace Placemaker.Game.Selection
                 {
                     var e = results[i];
                     if (!seen.Add(e)) continue;
-                    if (!_em.HasComponent<global::Game.Buildings.Building>(e) || !_em.HasComponent<global::Game.Objects.Transform>(e)
-                        || !_em.HasComponent<PrefabRef>(e) || Skip(e, ignoreGroup)) continue;
-                    var prefab = _em.GetComponentData<PrefabRef>(e).m_Prefab;
-                    if (!_em.HasComponent<BuildingData>(prefab)) continue;
-                    var lot = (float2)_em.GetComponentData<BuildingData>(prefab).m_LotSize * 8f;
-                    var tr = _em.GetComponentData<global::Game.Objects.Transform>(e);
-                    var q = global::Game.Objects.ObjectUtils.CalculateBaseCorners(tr.m_Position, tr.m_Rotation, lot);
-                    into.Add(new BrushObstacle(BrushObstacleKind.Building, new[] { q.a.xz, q.b.xz, q.c.xz, q.d.xz }));
+                    if (!BuildingFootprints.IsBuilding(_em, e) || Skip(e, ignoreGroup)) continue;
+                    BuildingFootprints.Of(_em, e, out var lot, out var footprint);
+                    if (lot != null) into.Add(new BrushObstacle(BrushObstacleKind.Building, lot));
+                    if (footprint != null) into.Add(new BrushObstacle(BrushObstacleKind.Building, footprint));
                 }
             }
             finally { results.Dispose(); }

@@ -4,14 +4,15 @@
 // ControlSchema group is a foldable section whose header summarises its values ("90° · 6.0 m");
 // only the first essential group starts open (remembered per layer + group). visibleWhen is honoured.
 // Each row shows a lock when the player set the value explicitly (Randomize keeps it) and a reset
-// button only when the value differs from the default. Descriptions live in tooltips only.
+// button only when the value differs from the default. Long explanations live in tooltips; a control may
+// carry one short visible line (description, s16: "what is this road role?").
 import React from "react";
 import classNames from "classnames";
-import { LayerType, SettingValue, StepView, ToolState } from "../contract";
+import { ControlOptionView, LayerType, ResolvedAsset, SettingValue, StepView, SwatchStripe, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { formatValue } from "../lib/format";
 import { humanize, TFunc, useT } from "../lib/l10n";
-import { ControlEx, defaultFor, isVisible, valueOf, valuesEqual } from "../lib/schema";
+import { ControlAvailability, controlAvailability, ControlEx, defaultFor, isVisible, valueOf, valuesEqual } from "../lib/schema";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Segmented, Switch } from "../components/common";
 import { AutoMosaic, autoPool, Thumb, useAssetList, useAssetName, usePicker } from "../components/picker";
@@ -25,21 +26,26 @@ type RowCtx = { step: StepView; layer: LayerType; state: ToolState };
 const label = (t: TFunc, c: ControlEx) => t(c.label, humanize(c.label || c.id));
 const optLabel = (t: TFunc, o: { value: string; label: string }) => t(o.label, humanize(o.label || o.value));
 
-export const ControlRow = ({ c, ctx, className }: { c: ControlEx; ctx: RowCtx; className?: string }) => {
+export const ControlRow = ({ c, ctx, className, avail }: { c: ControlEx; ctx: RowCtx; className?: string; avail?: ControlAvailability }) => {
     const { t } = useT();
     const { step } = ctx;
     const value = valueOf(step, c);
     const locked = step.locked.includes(c.id);
     const def = c.default !== undefined && c.default !== null ? c.default : undefined;
-    const changed = def !== undefined && !valuesEqual(value, def);
-    const commit = (v: SettingValue) => act.setValue(step.path, c.id, v);
-    const tip = c.tooltip ? t(c.tooltip, "") : c.kind === "arrangement" ? t("Placemaker.UI.Arrangement.Hint", "Repeats in this order along the edges") : "";
+    // s15: a control that does not apply now is shown greyed out with the reason (never silently hidden).
+    const off = !!avail?.disabled;
+    const changed = !off && def !== undefined && !valuesEqual(value, def);
+    const commit = (v: SettingValue) => {
+        if (!off) act.setValue(step.path, c.id, v);
+    };
+    const help = c.tooltip ? t(c.tooltip, "") : c.kind === "arrangement" ? t("Placemaker.UI.Arrangement.Hint", "Repeats in this order along the edges") : "";
+    const tip = off && avail?.reason ? avail.reason + (help ? " — " + help : "") : help;
     // Wide editors get their own line under the label: lists, and choices whose labels wouldn't fit beside it.
     const stacked = c.kind === "arrangement" || c.kind === "assetMulti" || (c.kind === "choice" && choiceLayout(c, t) !== "inline");
 
     const affordances = (
         <div className={s.affordances}>
-            {locked ? (
+            {locked && !off ? (
                 <Btn
                     icon="lock"
                     iconSize={11}
@@ -71,17 +77,30 @@ export const ControlRow = ({ c, ctx, className }: { c: ControlEx; ctx: RowCtx; c
     );
 
     return (
-        <div className={classNames(s.row, { [s.rowStacked]: stacked, [s.rowAsset]: c.kind === "asset" }, className)} data-testid={`control-${c.id}`} data-kind={c.kind}>
+        <div
+            className={classNames(s.row, { [s.rowStacked]: stacked, [s.rowAsset]: c.kind === "asset", [s.rowDisabled]: off }, className)}
+            data-testid={`control-${c.id}`}
+            data-kind={c.kind}
+            data-disabled={off ? "true" : undefined}
+            data-reason={off ? avail?.reason : undefined}
+        >
             <div className={s.rowHead}>
                 <Tip title={label(t, c)} description={tip || undefined}>
                     <div className={classNames(s.label, { [s.labelWide]: stacked || c.kind === "toggle" })}>
                         <div className={s.labelText}>{label(t, c)}</div>
                     </div>
                 </Tip>
-                {stacked ? null : <div className={classNames(s.editor, { [s.editorTight]: c.kind === "toggle" })}>{renderEditor(c, value, commit, ctx, t)}</div>}
+                {stacked ? null : (
+                    <div className={classNames(s.editor, { [s.editorTight]: c.kind === "toggle", [s.editorOff]: off })}>{renderEditor(c, value, commit, ctx, t)}</div>
+                )}
                 {affordances}
             </div>
-            {stacked ? <div className={s.stackedBody}>{renderEditor(c, value, commit, ctx, t)}</div> : null}
+            {c.description && t(c.description, "") ? (
+                <div className={s.description} data-testid={`description-${c.id}`}>
+                    {t(c.description, "")}
+                </div>
+            ) : null}
+            {stacked ? <div className={classNames(s.stackedBody, { [s.editorOff]: off })}>{renderEditor(c, value, commit, ctx, t)}</div> : null}
         </div>
     );
 };
@@ -111,7 +130,7 @@ function renderEditor(c: ControlEx, value: SettingValue, commit: (v: SettingValu
         case "choice":
             return <ChoiceEditor c={c} value={String(value)} commit={commit} />;
         case "asset":
-            return <AssetEditor c={c} value={typeof value === "string" ? value : ""} commit={commit} path={ctx.step.path} />;
+            return <AssetEditor c={c} value={typeof value === "string" ? value : ""} commit={commit} path={ctx.step.path} resolved={ctx.step.resolvedAssets?.[c.id]} />;
         case "assetMulti":
             return <AssetMultiEditor c={c} value={Array.isArray(value) ? value : []} commit={commit} path={ctx.step.path} />;
         case "arrangement":
@@ -127,8 +146,10 @@ function renderEditor(c: ControlEx, value: SettingValue, commit: (v: SettingValu
  * How a choice is laid out, so labels never get cut: up to 3 short options inline beside the label;
  * up to 3 longer ones as a full-width segmented row under it; more than 3 as wrapping chips under it.
  */
-export function choiceLayout(c: ControlEx, t: TFunc): "inline" | "stacked" | "chips" {
+export function choiceLayout(c: ControlEx, t: TFunc): "inline" | "stacked" | "chips" | "cards" {
     const opts = c.options ?? [];
+    // Options that carry a picture or a detail line (road mixes) are shown as small cards, two per row.
+    if (opts.some((o) => (o.swatch && o.swatch.length > 0) || !!o.detail)) return "cards";
     if (opts.length > 3) return "chips";
     const lens = opts.map((o) => optLabel(t, o).length + (o.icon ? 3 : 0));
     const total = lens.reduce((n, x) => n + x, 0);
@@ -138,6 +159,15 @@ export function choiceLayout(c: ControlEx, t: TFunc): "inline" | "stacked" | "ch
 const ChoiceEditor = ({ c, value, commit }: { c: ControlEx; value: string; commit: (v: SettingValue) => void }) => {
     const { t } = useT();
     const opts = c.options ?? [];
+    if (choiceLayout(c, t) === "cards") {
+        return (
+            <div className={s.cards} data-testid={`choice-${c.id}`}>
+                {opts.map((o) => (
+                    <OptionCard key={o.value} c={c} o={o} on={o.value === value} commit={commit} />
+                ))}
+            </div>
+        );
+    }
     if (choiceLayout(c, t) === "chips") {
         return (
             <div className={s.chips} data-testid={`choice-${c.id}`}>
@@ -187,6 +217,75 @@ const ChoiceEditor = ({ c, value, commit }: { c: ControlEx; value: string; commi
     );
 };
 
+/** One option as a card: a generated swatch, the name and a detail line ("Streets: Two-Lane · Avenues: Four-Lane"). */
+const OptionCard = ({ c, o, on, commit }: { c: ControlEx; o: ControlOptionView; on: boolean; commit: (v: SettingValue) => void }) => {
+    const { t } = useT();
+    const detail = o.detail ? t(o.detail, "") : "";
+    const card = (
+        <button
+            type="button"
+            data-testid={`choice-${c.id}-${o.value}`}
+            aria-pressed={on ? "true" : "false"}
+            className={classNames(s.card, { [s.cardOn]: on })}
+            onClick={(e) => {
+                e.stopPropagation();
+                if (!on) commit(o.value);
+            }}
+        >
+            {o.swatch && o.swatch.length ? (
+                <RoadSwatch stripes={o.swatch} />
+            ) : (
+                <div className={s.swatchNone}>{o.icon ? <Icon name={o.icon} size={14} tint="dim" /> : null}</div>
+            )}
+            <div className={s.cardText}>
+                <div className={s.cardLabel}>{optLabel(t, o)}</div>
+                {detail ? <div className={s.cardDetail}>{detail}</div> : null}
+            </div>
+        </button>
+    );
+    return o.tooltip ? (
+        <Tip key={o.value} title={optLabel(t, o)} description={t(o.tooltip, "")}>
+            {card}
+        </Tip>
+    ) : (
+        card
+    );
+};
+
+/**
+ * A road mix as a tiny plan: one avenue running down the middle, two streets across it and a short local
+ * stub, each in its role colour and at its real width relative to the others. Green edges = trees/verges,
+ * a dotted centre = bike lanes. Absolute-positioned divs only (Gameface: no CSS grid).
+ */
+/** Four border colour longhands (Gameface: no shorthands). */
+const edgeColor = (c: string): React.CSSProperties => ({ borderTopColor: c, borderRightColor: c, borderBottomColor: c, borderLeftColor: c });
+
+export const RoadSwatch = ({ stripes, size = 34 }: { stripes: SwatchStripe[]; size?: number }) => {
+    const by = (role: string) => stripes.find((x) => x.role === role);
+    const max = Math.max(1, ...stripes.map((x) => x.width || 0));
+    const px = (st: SwatchStripe | undefined) => Math.max(2, Math.round(((st?.width || 8) / max) * size * 0.26));
+    const street = by("street");
+    const avenue = by("avenue");
+    const local = by("local");
+    const bar = (st: SwatchStripe | undefined, style: React.CSSProperties, key: string) =>
+        st ? (
+            <div key={key} className={s.swatchBar} style={{ ...style, backgroundColor: st.color, ...edgeColor(st.green ? "#4caf50" : "rgba(0, 0, 0, 0.35)") }}>
+                {st.bike ? <div className={s.swatchBike} /> : null}
+            </div>
+        ) : null;
+    const sw = px(street);
+    const aw = px(avenue);
+    const lw = px(local);
+    return (
+        <div className={s.swatch} style={{ width: size + "rem", height: size + "rem" }} data-testid="road-swatch">
+            {bar(street, { left: "0rem", width: size + "rem", top: Math.round(size * 0.25 - sw / 2) + "rem", height: sw + "rem" }, "s1")}
+            {bar(street, { left: "0rem", width: size + "rem", top: Math.round(size * 0.72 - sw / 2) + "rem", height: sw + "rem" }, "s2")}
+            {bar(local, { left: Math.round(size * 0.8 - lw / 2) + "rem", width: lw + "rem", top: Math.round(size * 0.25) + "rem", height: Math.round(size * 0.3) + "rem" }, "l")}
+            {bar(avenue, { left: Math.round(size * 0.42 - aw / 2) + "rem", width: aw + "rem", top: "0rem", height: size + "rem" }, "a")}
+        </div>
+    );
+};
+
 /**
  * Map preview while hovering picker tiles: previewValue with what the value would become; endPreview
  * reverts a hover (C# treats asset previews as a look only); a click commits with setValue.
@@ -198,12 +297,20 @@ function previewHandlers(path: string, id: string, toValue: (ids: string[]) => S
     };
 }
 
-const AssetEditor = ({ c, value, commit, path }: { c: ControlEx; value: string; commit: (v: SettingValue) => void; path: string }) => {
+const AssetEditor = ({
+    c, value, commit, path, resolved,
+}: { c: ControlEx; value: string; commit: (v: SettingValue) => void; path: string; resolved?: ResolvedAsset }) => {
     const { t } = useT();
     const picker = usePicker();
     const list = useAssetList(c.assetCategory);
     const name = useAssetName();
     const item = list?.find((a) => a.id === value);
+    // s16: Automatic says what you get — the prefab the latest plan really uses for this control.
+    const autoItem =
+        !value && resolved?.id
+            ? list?.find((a) => a.id === resolved.id) ?? { id: resolved.id, name: resolved.name || name(c.assetCategory, resolved.id), icon: resolved.icon ?? "" }
+            : undefined;
+    const autoName = autoItem ? autoItem.name || name(c.assetCategory, autoItem.id) : "";
     return (
         <button
             type="button"
@@ -217,6 +324,7 @@ const AssetEditor = ({ c, value, commit, path }: { c: ControlEx; value: string; 
                     mode: "single",
                     selected: value ? [value] : [],
                     allowAutomatic: true,
+                    autoItem,
                     onPick: (ids) => commit(ids[0] ?? ""),
                     ...previewHandlers(path, c.id, (ids) => ids[0] ?? ""),
                 });
@@ -224,10 +332,23 @@ const AssetEditor = ({ c, value, commit, path }: { c: ControlEx; value: string; 
         >
             {value ? (
                 <Thumb item={item ?? { id: value, name: name(c.assetCategory, value), icon: "" }} size={28} testId={`asset-thumb-${c.id}`} />
+            ) : autoItem ? (
+                <div className={s.autoThumb}>
+                    <Thumb item={autoItem} size={28} testId={`asset-thumb-${c.id}`} />
+                    <div className={s.autoBadge}>
+                        <Icon name="auto" size={9} tint="accent" />
+                    </div>
+                </div>
             ) : (
                 <AutoMosaic items={autoPool(list, c.assetCategory, 3)} size={28} testId={`asset-thumb-${c.id}`} />
             )}
-            <div className={s.assetName}>{value ? name(c.assetCategory, value) : t("Placemaker.UI.Picker.Auto", "Automatic")}</div>
+            <div className={s.assetName} data-testid={`asset-name-${c.id}`}>
+                {value
+                    ? list?.find((a) => a.id === value)?.name ?? (resolved?.id === value && resolved.name ? resolved.name : name(c.assetCategory, value))
+                    : autoName
+                      ? t("Placemaker.UI.Picker.AutoIs", "Automatic · {0}", [autoName])
+                      : t("Placemaker.UI.Picker.Auto", "Automatic")}
+            </div>
             <Icon name="chevronRight" size={11} tint="dim" />
         </button>
     );
@@ -471,27 +592,39 @@ export const ControlList = ({
     const assetName = useAssetName();
     const layout = usePanelLayout();
     const isOpen = useSections();
+    const { tl } = useT();
     const ctx = { step, layer, state };
     /**
      * Wide panel: short rows (sliders, switches) pair up in two columns; lists, choices and assets keep
      * the full width. Narrow: one column.
      */
     const rows = (list: ControlEx[]) => {
-        if (!layout.wide) return list.map((c) => <ControlRow key={c.id} c={c} ctx={ctx} />);
+        if (!layout.wide) return list.map((c) => <ControlRow key={c.id} c={c} ctx={ctx} avail={avail(c)} />);
         const half = pairHalves(list.map((c) => c.kind === "slider" || c.kind === "toggle"));
         return (
             <div className={s.grid} data-testid="control-grid">
                 {list.map((c, i) => (
-                    <ControlRow key={c.id} c={c} ctx={ctx} className={half[i] ? s.half : s.full} />
+                    <ControlRow key={c.id} c={c} ctx={ctx} className={half[i] ? s.half : s.full} avail={avail(c)} />
                 ))}
             </div>
         );
     };
     const typedMarkers = !!(step.markerKinds && step.markerKinds.length);
     const values = withDefaults(layer, step);
+    // s15: greyed out instead of hidden (lib/schema controlAvailability); only hideWhenOff controls vanish.
+    const availability = new Map<string, ControlAvailability>();
+    const avail = (c: ControlEx) => {
+        let a = availability.get(c.id);
+        if (!a) {
+            const area = step.disabled?.[c.id];
+            a = controlAvailability(c, values, layer.controls as ControlEx[], t, area ? tl(area) : undefined);
+            availability.set(c.id, a);
+        }
+        return a;
+    };
     const visible = (layer.controls as ControlEx[]).filter(
         (c) =>
-            isVisible(c.visibleWhen, values) &&
+            avail(c).show &&
             !(typedMarkers && c.kind === "markers") &&
             (!only || only.includes(c.id)) &&
             !(exclude && exclude.has(c.id)),
@@ -587,3 +720,41 @@ function groupBy(list: ControlEx[]): [string, ControlEx[]][] {
         .sort((a, b) => Number(ess(b.e[1])) - Number(ess(a.e[1])) || Number(b.e[0] === "") - Number(a.e[0] === "") || a.i - b.i)
         .map((x) => x.e);
 }
+
+/** "850 m" / "1.2 km". */
+export function formatLength(m: number): string {
+    return m >= 1000 ? (m / 1000).toFixed(1) + " km" : Math.round(m) + " m";
+}
+
+/**
+ * s16: the roads of the latest plan by role, in the in-game preview colours — only the roles present:
+ * "■ Street · Two-Lane Road · 1.2 km". Answers "what are these roads being drawn on my screen?".
+ */
+export const NetLegend = ({ step }: { step: StepView }) => {
+    const { t } = useT();
+    const assetName = useAssetName();
+    const entries = step.netLegend ?? [];
+    if (!entries.length) return null;
+    return (
+        <div className={s.legend} data-testid="net-legend">
+            <div className={s.legendTitle}>{t("Placemaker.UI.Legend.Title", "On the map")}</div>
+            {entries.map((e) => {
+                const road = e.assetName || (e.assetId ? assetName(e.role === "carFree" ? "net.pathway" : "net.road", e.assetId) : "");
+                return (
+                    <Tip
+                        key={e.role}
+                        title={t(e.label, humanize(e.role))}
+                        description={t("Placemaker.UI.Legend.Tip", "{0} segments, {1} in total", [e.count, formatLength(e.lengthM)])}
+                    >
+                        <div className={s.legendRow} data-testid={`legend-${e.role}`}>
+                            <div className={s.legendSwatch} style={{ backgroundColor: e.color }} />
+                            <div className={s.legendRole}>{t(e.label, humanize(e.role))}</div>
+                            <div className={s.legendText}>{road ? "· " + road : ""}</div>
+                            <div className={s.legendLen}>{formatLength(e.lengthM)}</div>
+                        </div>
+                    </Tip>
+                );
+            })}
+        </div>
+    );
+};

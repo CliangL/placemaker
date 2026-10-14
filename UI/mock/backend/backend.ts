@@ -4,7 +4,7 @@
 // randomize (respecting locks), player recipes, built groups with manage/edit/remove.
 // It publishes exactly the six values of contract.ts and handles exactly its triggers.
 import {
-    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, FeatureFit, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, RecipeInfo, SettingValue, Stage, StepView,
+    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, FeatureFit, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, PROTOCOL, RecipeInfo, SettingValue, Stage, StepView,
     Issue, Summary, ToolState,
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
@@ -85,6 +85,10 @@ export class MockBackend {
     brush = { shape: "round" as BrushShape, size: 40, angle: 0 };
     // Block paint brush rules (C# defaults); the mock has no obstacles, they are only shown and toggled.
     brushRules = { ...DEFAULT_BRUSH_RULES };
+    /** (s15) Contract version the fake DLL reports; tests set an older one (or undefined) to see the restart notice. */
+    protocol: number | undefined = PROTOCOL;
+    /** (s15) Selection modes the fake DLL handles (undefined = not sent, like a DLL older than s15). */
+    areaModes: ToolState["areaModes"] = (["draw", "block", "blockPaint", "paint", "perimeter"] as AreaMode[]).map((mode) => ({ mode, enabled: true }));
     userCollapsed: boolean | null = null;
     anarchy = { available: true, enabled: false };
     money = 250000;
@@ -712,6 +716,7 @@ export class MockBackend {
                     },
                     a[0] + "|" + a[1],
                 );
+                void this.applyLinked(step, a[1]);
                 return;
             }
             case "previewValue": {
@@ -947,6 +952,38 @@ export class MockBackend {
     }
 
     locateAt: [number, number, number] | null = null;
+
+    /** s16: like C# UiModels.Step — an automatic asset control the plan does not use is greyed "Not used by this layout". */
+    notInLayout(s: StepModel, path: string): Record<string, LocText> | undefined {
+        const res = this.plan?.steps?.[path]?.resolvedAssets;
+        if (!res) return undefined;
+        const out: Record<string, LocText> = {};
+        for (const [id, r] of Object.entries(res)) if (r.unused && !s.values[id]) out[id] = { key: "Placemaker.UI.Why.NotInLayout" };
+        return Object.keys(out).length ? out : undefined;
+    }
+
+    /** s16: linked controls of a real layer (a road mix writes the road picks; the mix follows them), as C# DesignEditor does. */
+    async applyLinked(step: StepModel, controlId: string) {
+        if (!this.hostLayers.has(step.layer)) return;
+        try {
+            const r = await fetch("/api/linked", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ layer: step.layer, values: step.values, controlId }),
+            }).then((x) => x.json());
+            if (!r || r.error || !r.values) return;
+            let changed = false;
+            for (const [k, v] of Object.entries(r.values as Record<string, SettingValue>))
+                if (JSON.stringify(step.values[k]) !== JSON.stringify(v)) {
+                    step.values[k] = v;
+                    changed = true;
+                }
+            for (const id of (r.driven as string[]) ?? []) if (!step.locked.includes(id)) step.locked.push(id);
+            if (changed) this.changed(true);
+        } catch {
+            /* host down: no linked controls */
+        }
+    }
 
     async randomize(path: string) {
         const steps: StepModel[] = [];
@@ -1417,6 +1454,8 @@ export class MockBackend {
             previewMode: this.previewMode(),
             planningProgress: this.planning ? this.planProgress : undefined,
             ghostPending: this.previewMode() === "ghost" && this.ghostPending,
+            protocol: this.protocol,
+            areaModes: this.areaModes,
         };
     }
 
@@ -1462,6 +1501,12 @@ export class MockBackend {
         return { kind: "ok", stale };
     }
 
+    private featureTooBig(layerId: string): LocText | undefined {
+        const min = (this.layer(layerId) as any)?.minArea as number | undefined;
+        if (!min || !this.closed || this.ring.length < 3) return undefined;
+        return area(this.ring) < min ? { key: "Placemaker.Why.AreaTooSmall", args: [Math.round(min)] } : undefined;
+    }
+
     stepView(s: StepModel, path: string): StepView {
         const overrides: Record<string, StepView> = {};
         for (const k of Object.keys(s.overrides)) overrides[k] = this.stepView(s.overrides[k], path + "/" + this.overrideIndex(s, k) + "@" + k);
@@ -1492,6 +1537,8 @@ export class MockBackend {
                 layer: f.layer, label: f.labelKey ?? "", icon: this.layer(f.layer)?.icon ?? f.layer, enabled: on, path: on ? path + "/" + i : undefined,
                 tooltip: f.tooltip || undefined, options: f.options && f.options.length ? f.options : undefined, defaultOn: !!f.defaultOn,
                 status: on ? this.featureFit(path, path + "/" + i, f.layer) : undefined,
+                // s15: like C# Availability — a feature that needs more room than the whole selection is greyed with why.
+                disabled: this.featureTooBig(f.layer),
             };
         });
         return {
@@ -1511,6 +1558,9 @@ export class MockBackend {
             children: s.children.map((c, i) => this.stepView(c, path + "/" + i)),
             overrides,
             regions,
+            resolvedAssets: this.plan?.steps?.[path]?.resolvedAssets,
+            netLegend: this.plan?.steps?.[path]?.netLegend?.length ? this.plan?.steps?.[path]?.netLegend : undefined,
+            disabled: this.notInLayout(s, path),
         };
     }
 

@@ -1,7 +1,7 @@
 // Against the REAL Core layers served by the mock host (whatever GeneratorRegistry.All returns).
 // Skips itself when the host has no layers, so the suite stays green on a branch without them.
 import { expect, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
+import { clickWorld, drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
 
 async function realLayers(page: import("@playwright/test").Page) {
     await page.waitForFunction(() => (window as any).pm.backend.hostUp !== undefined);
@@ -13,6 +13,32 @@ async function realLayers(page: import("@playwright/test").Page) {
 async function openAllCategories(page: import("@playwright/test").Page) {
     const all = page.getByTestId("make-group-all");
     if (await all.count()) await all.click();
+}
+
+/**
+ * (s15) Real park-family layers need a placed entrance before Review (s9: none are placed automatically). The
+ * disabled primary button then starts placement (Playwright needs force for aria-disabled): place one on the
+ * outline and finish. This is what failed on master since s9 ("Next disabled at Design").
+ */
+async function placeEntranceIfAsked(page: import("@playwright/test").Page) {
+    const primary = page.getByTestId("primary");
+    if ((await primary.getAttribute("data-action")) === "placeMarkers") await primary.click({ force: true });
+    else {
+        // The real park's untyped entrance markers: start placement on the step's markers control.
+        const kind = await page.evaluate(() => {
+            const b = (window as any).pm.backend;
+            const p = b.primary();
+            if (p.enabled || !b.root) return null;
+            const c = b.layer(b.root.layer)?.controls?.find((x: any) => x.kind === "markers");
+            return c ? (c.markerKinds && c.markerKinds[0]) || c.id : null;
+        });
+        if (!kind) return;
+        await page.evaluate((k) => (window as any).pm.trigger("Placemaker", "startMarkers", "0", k), kind);
+    }
+    await page.getByTestId("marker-banner").waitFor();
+    await clickWorld(page, (FIELD[0][0] + FIELD[1][0]) / 2, (FIELD[0][1] + FIELD[1][1]) / 2);
+    await page.getByTestId("marker-done").click();
+    await waitCore(page);
 }
 
 async function waitCore(page: import("@playwright/test").Page) {
@@ -50,6 +76,7 @@ test("real Core: shipped recipes in the Make row, real plans on the map", async 
     await shot(page, "real-01-park-design");
     await panelShot(page, "real-panel-park-design");
 
+    await placeEntranceIfAsked(page);
     await page.getByTestId("primary").click();
     await waitCore(page);
     await expect(page.getByTestId("review-cost")).toContainText("¢");

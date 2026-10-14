@@ -43,10 +43,13 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>Removes / clips everything of every layer (but the zoning) that reaches into a cutout.</summary>
-        public static int Enforce(ComposedPlan plan)
+        public static int Enforce(ComposedPlan plan) => Enforce(plan, Of(plan));
+
+        /// <summary>(s19) Same for given rings (ZoneGuard: zoned cells reaching past a cutout).</summary>
+        public static int Enforce(ComposedPlan plan, List<float2[]> cuts)
         {
-            var cuts = Of(plan);
-            if (cuts.Count == 0) return 0;
+            if (plan?.Layers == null || cuts == null || cuts.Count == 0) return 0;
+            for (int i = 0; i < cuts.Count; i++) cuts[i] = Poly.EnsureCcw(cuts[i]);
             var inner = new List<float2[]>(cuts.Count);
             var min = new List<float2>(); var max = new List<float2>();
             foreach (var c in cuts)

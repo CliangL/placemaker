@@ -242,6 +242,14 @@ namespace Placemaker.Game.Build
 
         // ───────────────────────── clearing (US6) ─────────────────────────
 
+        private bool OnBuildingLot(float2 p)
+        {
+            var prot = _request?.Plan?.Protected;
+            if (prot == null) return false;
+            foreach (var q in prot) if (Poly.Contains(q, p)) return true;
+            return false;
+        }
+
         private void EmitClearDefinitions()
         {
             _cleared = 0;
@@ -258,6 +266,7 @@ namespace Placemaker.Game.Build
                 var p = t.m_Position.xz;
                 if (p.x < min.x || p.y < min.y || p.x > max.x || p.y > max.y) continue;
                 if (!Poly.Contains(outline, p)) continue;
+                if (OnBuildingLot(p)) continue;   // (s15) a building's garden stays as it is
                 var e = entities[i];
                 if (EntityManager.HasComponent<Elevation>(e)) continue;   // stacked/elevated props belong to something
                 var def = NewDefinition();

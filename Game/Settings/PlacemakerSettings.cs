@@ -63,6 +63,13 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupGeneral)]
         public bool KeepOffExistingRoads { get; set; }
 
+        /// <summary>
+        /// (s15) Plain Paint cuts building lots out of the painted outline (default on). Off = the legacy outline
+        /// over buildings; builds never touch buildings either way (Core/Build/SiteSafety).
+        /// </summary>
+        [SettingsUISection(SectionMain, GroupGeneral)]
+        public bool PaintAvoidBuildings { get; set; }
+
 
         /// <summary>
         /// (FEEDBACK-4) Layout size in percent: scales layout distances (path loops, spacing, plaza and feature
@@ -207,6 +214,9 @@ namespace Placemaker.Game.Settings
         public bool ClearExistingTreesAndProps { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
+        public bool KeepZonedBuildingsOff { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
         public bool RecoverRejectedPieces { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
@@ -264,6 +274,7 @@ namespace Placemaker.Game.Settings
             {
                 global::Placemaker.Game.Build.BuildService.AutoExcludeCollisions = AutoExcludeCollisions;
                 global::Placemaker.Game.Build.BuildService.ClearExistingObjects = ClearExistingTreesAndProps;
+                global::Placemaker.Game.Build.BuildService.BlockZoning = KeepZonedBuildingsOff;
                 global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;
                 global::Placemaker.Game.Build.BuildService.OverlayPavedSurfaces = OverlayPavedSurfaces;
                 global::Placemaker.Game.Build.BuildService.ChargeNetConstruction = ChargeNetConstruction;
@@ -298,6 +309,7 @@ namespace Placemaker.Game.Settings
             SketchSurfaceFill = true;
             SnapToRoadsWhenDrawing = true;
             KeepOffExistingRoads = true;
+            PaintAvoidBuildings = true;
             SetBrushRules(global::Placemaker.Core.Geometry.BrushRules.Defaults());
             LayoutSize = (int)System.Math.Round(global::Placemaker.Core.SiteContext.DefaultLayoutScale * 100f);
             EdgeMargin = global::Placemaker.Core.SiteContext.DefaultEdgeMargin;
@@ -308,6 +320,7 @@ namespace Placemaker.Game.Settings
             PanelCollapsed = false;
             AutoExcludeCollisions = true;
             ClearExistingTreesAndProps = true;
+            KeepZonedBuildingsOff = true;
             RecoverRejectedPieces = true;
             OverlayPavedSurfaces = true;
             ChargeNetConstruction = true;

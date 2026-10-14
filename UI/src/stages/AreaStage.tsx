@@ -2,7 +2,7 @@
 // in tooltips), brush settings, and a one-line readout of the current area with what to do next.
 import React from "react";
 import classNames from "classnames";
-import { AreaMode, BrushRules, BrushShape, ToolState } from "../contract";
+import { AreaMode, BrushRules, BrushShape, LocText, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { area as fmtArea, group } from "../lib/format";
 import { TFunc, useT } from "../lib/l10n";
@@ -173,8 +173,24 @@ export const AreaReadout = ({ state }: { state: ToolState; compact?: boolean }) 
     );
 };
 
+/**
+ * (s15) Can this mode be used? The DLL lists the modes it handles (state.areaModes). An older DLL sends no list:
+ * Block paint arrived together with the brush rules (s11), so without rules the DLL cannot do it — the button is
+ * greyed with "restart" instead of silently doing nothing (the UI file reloads without a restart, the DLL does not).
+ */
+export function modeAvailability(state: ToolState, mode: string, t: TFunc, tl: (l: LocText | undefined, f?: string) => string): { enabled: boolean; reason?: string } {
+    const restart = t("Placemaker.UI.Why.RestartForMode", "Restart the game to use this: Placemaker was updated while the game was running.");
+    if (state.areaModes) {
+        const m = state.areaModes.find((x) => x.mode === mode);
+        if (!m) return { enabled: false, reason: restart };
+        return m.enabled ? { enabled: true } : { enabled: false, reason: tl(m.reason, t("Placemaker.UI.Why.NotNow", "Not available with the current settings")) };
+    }
+    if (mode === "blockPaint" && !state.brush.rules) return { enabled: false, reason: restart };
+    return { enabled: true };
+}
+
 export const AreaStage = ({ state }: { state: ToolState }) => {
-    const { t } = useT();
+    const { t, tl } = useT();
     const b = state.brush;
     const a = state.area;
     return (
@@ -183,17 +199,20 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                 <div className={s.modes} data-testid="area-mode">
                     {modeOptions(t).map((o) => {
                         const on = o.value === state.areaMode;
+                        const av = modeAvailability(state, o.value, t, tl);
                         return (
                             <div key={o.value} className={s.modeCell}>
-                                <Tip title={o.title} description={o.description}>
+                                <Tip title={o.title} description={av.enabled ? o.description : av.reason + " — " + o.description}>
                                     <button
                                         type="button"
                                         data-testid={`area-mode-${o.value}`}
                                         aria-pressed={on ? "true" : "false"}
-                                        className={classNames(s.mode, { [s.modeOn]: on })}
+                                        aria-disabled={av.enabled ? undefined : "true"}
+                                        data-reason={av.enabled ? undefined : av.reason}
+                                        className={classNames(s.mode, { [s.modeOn]: on, [s.modeOff]: !av.enabled && !on })}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (!on) act.setAreaMode(o.value as AreaMode);
+                                            if (!on && av.enabled) act.setAreaMode(o.value as AreaMode);
                                         }}
                                     >
                                         <Icon name={o.icon} size={14} tint={on ? "dark" : "light"} />
@@ -233,9 +252,18 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                             onCommit={(v) => act.setBrush(b.shape, v, b.angle)}
                         />
                     </div>
-                    {b.shape === "square" ? (
-                        <div className={s.brushRow}>
+                    {/* s15: shown for both shapes, greyed for the round brush (it has no angle) instead of appearing from nowhere. */}
+                    <Tip
+                        title={t("Placemaker.UI.Brush.Angle", "Angle")}
+                        description={b.shape === "square" ? undefined : t("Placemaker.UI.Why.SquareBrush", "Only for the square brush")}
+                    >
+                        <div
+                            className={classNames(s.brushRow, { [s.rowOff]: b.shape !== "square" })}
+                            data-testid="brush-angle-row"
+                            data-disabled={b.shape === "square" ? undefined : "true"}
+                        >
                             <div className={s.brushLabel}>{t("Placemaker.UI.Brush.Angle", "Angle")}</div>
+                            <div className={b.shape === "square" ? s.fillCell : classNames(s.fillCell, s.offInner)}>
                             <Slider
                                 testId="brush-angle"
                                 value={b.angle}
@@ -243,12 +271,26 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                                 max={90}
                                 step={1}
                                 unit="deg"
-                                onPreview={(v) => act.setBrush(b.shape, b.size, v)}
-                                onCommit={(v) => act.setBrush(b.shape, b.size, v)}
+                                onPreview={(v) => b.shape === "square" && act.setBrush(b.shape, b.size, v)}
+                                onCommit={(v) => b.shape === "square" && act.setBrush(b.shape, b.size, v)}
                             />
+                            </div>
                         </div>
-                    ) : null}
+                    </Tip>
                     {state.areaMode === "blockPaint" && b.rules ? <BrushRulesRow rules={b.rules} /> : null}
+                    {state.areaMode === "paint" && b.rules ? (
+                        // s15: the rules exist for Block paint only — shown greyed in Paint so their absence is explained.
+                        <Tip
+                            title={t("Placemaker.UI.Rules.Title", "Rules")}
+                            description={t("Placemaker.UI.Why.BlockPaintOnly", "Only for Block paint. Paint keeps off buildings (Options).")}
+                        >
+                            <div className={s.rowOff} data-testid="brush-rules-off" data-disabled="true">
+                                <div className={s.offInner}>
+                                    <BrushRulesRow rules={b.rules} />
+                                </div>
+                            </div>
+                        </Tip>
+                    ) : null}
                 </Section>
             ) : null}
             <Section
