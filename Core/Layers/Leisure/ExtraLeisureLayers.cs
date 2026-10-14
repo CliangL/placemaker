@@ -118,7 +118,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
-            Feature("restrooms"), StreetShopsFeature(Area), Feature("decals", ("theme", "leaves")), Feature("terrain", ("shape", "flatten")),
+            Feature("restrooms"), StreetShopsFeature(Area), Feature("decals", ("theme", "leaves"), ("density", 0.3)), Feature("terrain", ("shape", "flatten")),
         };
 
         protected override void DefineControls(ControlSet c)
@@ -137,8 +137,9 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefinePresets()
         {
-            Preset("churchyard", ("sectionSize", 16.0), ("graveSpacing", 2.2), ("hedges", true));
-            Preset("lawn", ("sectionSize", 32.0), ("graveSpacing", 3.0), ("hedges", false));
+            // Art pass (a1): an old churchyard has weathered headstones; a lawn cemetery modern ones in open rows.
+            Preset("churchyard", ("sectionSize", 16.0), ("graveSpacing", 2.2), ("hedges", true), ("graveAssets", (string[])CemeteryArt.OldStones.Clone()));
+            Preset("lawn", ("sectionSize", 32.0), ("graveSpacing", 3.0), ("hedges", false), ("graveAssets", (string[])CemeteryArt.LawnStones.Clone()));
         }
 
         protected override void PlanCore(LayerContext ctx)
@@ -146,24 +147,39 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
             var graph = ParkPathStyles.Formal(region, LeisureKit.Points(gates), p => region.ContainsDisc(p, 2f));
             var curves = ParkPaths.Build(graph, region, false, "narrow");
             ParkPaths.Index(curves, occ.Corridors, 100);
             ParkPaths.Index(curves, occ.Paths, 100);
             ParkPaths.Emit(ctx, curves, gates, AssetMix.One(""));
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
+            // Art pass (a1): sections square to the street like the paths (ParkPathStyles.Formal): on a near-square site
+            // the principal axes are ambiguous and the grave rows ran diagonally.
+            if (minor > major * 0.85f)
+            {
+                float best = 0f;
+                for (int i = 0; i < region.Ring.Length; i++)
+                {
+                    var e = region.Ring[(i + 1) % region.Ring.Length] - region.Ring[i];
+                    float l = math.length(e);
+                    if (l > best) { best = l; axis = e / l; }
+                }
+                side = new float2(-axis.y, axis.x);
+            }
 
             if (ctx.B("chapel"))
             {
                 string cat = LeisureKit.Category(ctx, ctx.S("chapelAsset"), AssetCategories.CenterpieceStatue, AssetCategories.Shelter, AssetCategories.Centerpiece);
                 if (cat != null) LeisureKit.Put(ctx, occ, centre + axis * 8f + side * 8f, math.atan2(axis.x, axis.y), cat == AssetCategories.Shelter ? ObjectRole.Furniture : ObjectRole.Centerpiece,
-                    AssetMix.One(ctx.S("chapelAsset")), cat, 4f, Hashing.Mix(ctx.Seed, 0xC4Au), 1f, 0.5f, 0);
+                    AssetMix.One(ctx.S("chapelAsset"), CemeteryArt.Chapel), cat, 4f, Hashing.Mix(ctx.Seed, 0xC4Au), 1f, 0.5f, 0);
             }
             float size = ctx.F("sectionSize");
             var sections = LeisureKit.Pack(region, occ, centre, axis, size, size * 0.7f, 3.5f, 3.5f, 400, 2f);
             var ids = ctx.L("graveAssets");
             bool graves = AssetAvailability.Require(ctx.Plan, AssetCategories.Grave, ids, Keys.Category(AssetCategories.Grave));
+            // The automatic grave pool mixes 6.5 m mausoleums into the 2.5 m rows; headstones only.
+            if (ids.Length == 0) ids = CemeteryArt.Stones;
             string hedgeCat = ctx.B("hedges") ? LeisureKit.Category(ctx, "", AssetCategories.Hedge, AssetCategories.Bush) : null;
             float sp = ctx.F("graveSpacing");
             int count = 0;
@@ -181,15 +197,32 @@ namespace Placemaker.Core.Layers.Leisure
                         }
                 if (hedgeCat != null)
                 {
+                    // Low hedge pieces (~4.1 m) along each side at their own pitch, turned along the side; an opening
+                    // on the side facing the nearest path (the old rows were 1.8 m apart and all faced north).
                     var ring = r.Ring;
+                    bool isHedge = hedgeCat == AssetCategories.Hedge;
+                    int door = -1; float doorD = float.MaxValue;
                     for (int k = 0; k < 4; k++)
-                        foreach (var p in LeisureKit.Along(ring[k], ring[(k + 1) % 4], 1.8f))
-                            ctx.Object(p, 0f, ObjectRole.Bush, AssetMix.One(""), v, -1, hedgeCat);
+                    {
+                        var mid = (ring[k] + ring[(k + 1) % 4]) * 0.5f;
+                        if (occ.Paths.Nearest(mid, 200f, out var foot) >= 0 && math.distance(mid, foot) < doorD) { doorD = math.distance(mid, foot); door = k; }
+                    }
+                    for (int k = 0; k < 4; k++)
+                    {
+                        var a = ring[k]; var b = ring[(k + 1) % 4];
+                        float yaw = LeisureKit.Yaw(a, b);
+                        var mid = (a + b) * 0.5f;
+                        foreach (var p in LeisureKit.Along(a, b, isHedge ? 4.1f : 1.8f))
+                        {
+                            if (k == door && math.distance(p, mid) < 2.2f) continue;
+                            ctx.Object(p, yaw, ObjectRole.Bush, isHedge ? AssetMix.One("", ParkArt.LowHedge) : AssetMix.Pick(ParkArt.GreenShrubs, v), v, -1, hedgeCat);
+                        }
+                    }
                 }
             }
-            PathLamps(ctx, occ, 30f, AssetMix.One(""), 0x1A6u);
-            PathBenches(ctx, occ, 60f, AssetMix.One(""), 0xBE6u);
-            LeisureKit.Plant(ctx, occ, region, (int)(region.Area / 10000f * 25f), ObjectRole.Tree, ctx.S("treeAsset").Length > 0 ? new[] { ctx.S("treeAsset") } : null,
+            PathLamps(ctx, occ, 30f, AssetMix.One("", ParkArt.ParkLamps), 0x1A6u);
+            PathBenches(ctx, occ, 60f, AssetMix.One("", ParkArt.Benches), 0xBE6u);
+            LeisureKit.Plant(ctx, occ, region, (int)(region.Area / 10000f * 25f), ObjectRole.Tree, ctx.S("treeAsset").Length > 0 ? new[] { ctx.S("treeAsset") } : CemeteryArt.Trees,
                 2.2f, 10f, 0.5f, 0x7C6u, p => region.BoundaryDistance(p, 10f) > 6f, 3, 3);
             if (ctx.B("fence")) Fence(ctx, gates, AssetMix.One(""), 3f);
             EmitGreenRegions(ctx, occ, 80f);
@@ -267,5 +300,19 @@ namespace Placemaker.Core.Layers.Leisure
             CommonStats(ctx);
             ctx.Plan.Facts["restStops"] = stops;
         }
+    }
+
+    /// <summary>Art pass (a1): vanilla cemetery set (headstones, the old-cemetery mausoleum as chapel, columnar poplars).</summary>
+    public static class CemeteryArt
+    {
+        public static readonly string[] OldStones =
+            { "OldCemeteryTombstone01", "OldCemeteryTombstone02", "OldCemeteryTombstone03", "OldCemeteryTombstone04", "OldCemeteryTombstone05", "OldCemeteryTombstone06", "OldCemeteryTombstone07", "OldCemeteryTombstone08" };
+        public static readonly string[] LawnStones =
+            { "Tombstone01", "Tombstone02", "Tombstone03", "Tombstone04", "Tombstone05", "Tombstone06", "Tombstone07", "Tombstone08", "Tombstone09", "TombstoneDouble01", "TombstoneDouble02" };
+        public static readonly string[] Stones =
+            { "Tombstone01", "OldCemeteryTombstone02", "Tombstone03", "OldCemeteryTombstone05", "Tombstone05", "OldCemeteryTombstone07", "Tombstone07", "TombstoneDouble01" };
+        public static readonly string[] Chapel = { "OldCemeteryMausoleum01" };
+        /// <summary>Lombardy poplars stand in for cypresses; limes and birches as in old European cemeteries.</summary>
+        public static readonly string[] Trees = { "EU_PoplarTree01", "NA_LindenTree01", "BirchTree01" };
     }
 }
