@@ -2,6 +2,7 @@
 // dirt stains around them. Heaps prefer the outline (stuff gets dumped over the fence from the
 // street) or open ground. Offered by the decay types; usable by any recipe.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
@@ -36,7 +37,10 @@ namespace Placemaker.Core.Layers.Types.Ruins
             Preset("rubble", ("heaps", 5.0), ("items", 8.0), ("mix", "rubble"), ("where", "open"));
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var occ = Occupancy(ctx);
             var guard = Occupancy(ctx);

@@ -11,6 +11,7 @@
 // sorted piles, intact site fence), Squatter camp (shacks round a fire), Fenced wasteland (graded
 // gravel behind an intact chain-link fence, waiting for a developer).
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System.Collections.Generic;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
@@ -107,7 +108,17 @@ namespace Placemaker.Core.Layers.Types.Ruins
                 ("foundations", 0.0), ("fenceGaps", 0.0), ("youngTrees", 5.0), ("desirePaths", false), ("walls", false));
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = new Dictionary<string, GritAssets.Set>
+        {
+            // Squatters keep warm round a burn barrel (the pool's "campfire" was a tent).
+            [AssetCategories.CampingFire] = new GritAssets.Set(true, "BarrelFire01|BarrelFire02", "BarrelFire02|BarrelFire01"),
+        }, ArtSurfaces = null;
+
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 110f); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
@@ -115,7 +126,8 @@ namespace Placemaker.Core.Layers.Types.Ruins
             var zones = new Zones();
             var gates = Gates(ctx);
             string sub = ctx.S("subtype");
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
+            // Foundations follow the plot edges, like the building that stood here.
+            YardKit.GridFrame(region, out var centre, out var axis, out var side, out float major, out float minor);
             float ha = region.Area / 10000f;
             float over = ctx.F("overgrowth") / 100f, rubble = ctx.F("rubble") / 100f, junk = ctx.F("junk") / 100f, graffiti = ctx.F("graffiti") / 100f;
             int paintLayer = ctx.I("paintLayer");
