@@ -192,7 +192,7 @@ namespace Placemaker.Core.Layers.Plaza
                 ("arrangement", new[] { "bench" }), ("arrangementMode", "center"), ("arrangementGap", 5.0), ("treeLayout", "grid"), ("pattern", "border"),
                 ("lighting", "feature"), ("bollards", true), ("planters", 0.0), ("beds", 0.0));
             Preset("fountain", ("paveStyle", "warm"), ("centerMode", "single"), ("centerSize", 9.0), ("centerKind", "fountain"), ("furniture", 0.0),
-                ("pattern", "border"), ("beds", 4.0), ("treeLayout", "edge"), ("lighting", "feature"));
+                ("pattern", "scatter"), ("beds", 4.0), ("treeLayout", "edge"), ("lighting", "feature"), ("planters", 8.0));
             Preset("market", ("paveStyle", "cobble"), ("centerMode", "none"), ("furniture", 0.0), ("stalls", 18.0), ("cafe", 2.0), ("treeLayout", "edge"),
                 ("pattern", "none"), ("beds", 0.0), ("shade", 0.0));
             Preset("garden", ("paveStyle", "garden"), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "any"), ("furniture", 0.0),
@@ -204,7 +204,7 @@ namespace Placemaker.Core.Layers.Plaza
             Preset("terraced", ("paveStyle", "modern"), ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 0.0), ("levels", "terracedUp"), ("levelCount", 3.0),
                 ("levelHeight", 2.5), ("beds", 4.0), ("treeLayout", "edge"), ("centerKind", "statue"), ("pattern", "none"));
             Preset("cafe", ("paveStyle", "warm"), ("centerMode", "single"), ("centerSize", 3.0), ("centerKind", "fountain"), ("furniture", 0.0), ("cafe", 6.0),
-                ("shade", 2.0), ("planters", 0.0), ("pattern", "scatter"), ("games", true), ("jets", false), ("treeLayout", "edge"), ("beds", 0.0));
+                ("shade", 2.0), ("planters", 0.0), ("pattern", "grid"), ("games", true), ("jets", false), ("treeLayout", "edge"), ("beds", 0.0));
             // Round 5: architectural level variants (PlazaLevels) and two classic squares.
             Preset("splitLevel", ("paveStyle", "modern"), ("centerMode", "single"), ("centerSize", 3.0), ("furniture", 0.0), ("levels", "split"), ("levelHeight", 1.5),
                 ("levelPlanters", true), ("treeLayout", "edge"), ("pattern", "border"), ("beds", 2.0));

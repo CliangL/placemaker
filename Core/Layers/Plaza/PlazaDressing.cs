@@ -147,7 +147,7 @@ namespace Placemaker.Core.Layers.Plaza
             switch (ctx.S("pattern"))
             {
                 case "grid":
-                    pave.Add(PavingShapes.Grid(region, centre, axis, math.max(10f, ctx.M(24f)), 0.8f), SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving);
+                    pave.Add(PavingShapes.Grid(region, centre, axis, math.max(12f, ctx.M(28f)), 0.8f), SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving);
                     break;
                 case "border":
                 {
@@ -161,7 +161,7 @@ namespace Placemaker.Core.Layers.Plaza
                 {
                     // Large slabs laid as a loose chequer: every other cell of a 9 m lattice.
                     var side = new float2(-axis.y, axis.x);
-                    float pitch = math.max(6f, ctx.M(18f));
+                    float pitch = math.max(10f, ctx.M(28f));
                     float reach = math.length(region.Max - region.Min);
                     int n = (int)math.ceil(reach / pitch);
                     var tiles = new List<float2[]>();
