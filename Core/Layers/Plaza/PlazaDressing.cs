@@ -430,7 +430,8 @@ namespace Placemaker.Core.Layers.Plaza
         public static void Games(LayerContext ctx, Occupancy occ)
         {
             if (!ctx.B("games")) return;
-            string cat = LeisureKit.Category(ctx, ctx.S("cafeAsset"), AssetCategories.CafeSeating, AssetCategories.Picnic);
+            // Round 5: real chess / game tables first (games.chess), then cafe tables, then picnic tables.
+            string cat = LeisureKit.Category(ctx, "", AssetCategories.GamesChess, AssetCategories.CafeSeating, AssetCategories.Picnic);
             if (cat == null) return;
             if (!Spots.Find(occ, 5f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x6A3Eu), out var c, null, 0f, 1f, budget: 1500)) return;
             for (int k = 0; k < 4; k++)
