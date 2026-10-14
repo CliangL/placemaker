@@ -109,9 +109,11 @@ export interface Control {
   group: string;
   label: string;            // localisation key
   tooltip?: string;         // localisation key
+  /** Additive (s16): one visible line under the label saying what the control is FOR (localisation key). */
+  description?: string;
   icon?: string;
   min?: number; max?: number; step?: number; unit?: string;
-  options?: { value: string; label: string; icon?: string; tooltip?: string }[];
+  options?: ControlOptionView[];
   assetCategory?: string;
   markerKinds?: string[];
   /** Applies only when "otherId=value" (s15: shown greyed out with a reason while it does not, unless hideWhenOff). */
@@ -125,6 +127,48 @@ export interface Control {
   cheap?: boolean;
   /** Default value (for per-control reset). */
   default?: SettingValue;
+}
+
+/** One option of a choice control. */
+export interface ControlOptionView {
+  value: string;
+  label: string;            // localisation key
+  icon?: string;
+  tooltip?: string;
+  /** Additive (s16): a visible line under the option label, e.g. "Streets: Two-Lane · Avenues: Four-Lane" (localisation key). */
+  detail?: string;
+  /** Additive (s16): a tiny generated picture of the option — stripes by role in their colours and real widths (road mixes). */
+  swatch?: SwatchStripe[];
+}
+
+/** One stripe of an option swatch (C# Core.OptionSwatch). */
+export interface SwatchStripe {
+  role: string;             // "street" | "avenue" | "local" | "roundabout" | "perimeter" | "carFree"
+  color: string;            // "#rrggbb"
+  width: number;            // real metres; draw relative to the other stripes
+  green?: boolean;          // trees / grass verges
+  bike?: boolean;           // bike lanes
+}
+
+/** Additive (s16): what an asset control really places in the latest plan ("Automatic · Two-Lane Road"). */
+export interface ResolvedAsset {
+  id: string;               // prefab name
+  name?: string;            // localised display name (absent until the game catalog knows it)
+  icon?: string;            // thumbnail url
+  /** The current layout does not use this control: id is what Automatic WOULD place (e.g. avenues in a layout without avenues). */
+  unused?: boolean;
+}
+
+/** Additive (s16): the roads a step's plan places, by role — the map legend (same colours as the preview). */
+export interface NetLegendEntry {
+  role: string;             // "street" | "avenue" | "local" | "roundabout" | "perimeter" | "carFree"
+  label: string;            // localisation key ("Placemaker.Roads.Role.street")
+  color: string;            // "#rrggbb", identical to the in-game preview line colour
+  count: number;            // segments
+  lengthM: number;          // total length, metres
+  assetId?: string;         // main prefab of the role
+  assetName?: string;       // its localised display name
+  control?: string;         // the asset control that picks this role's road
 }
 
 export interface LayerType {
@@ -216,6 +260,10 @@ export interface StepView {
   overrides: Record<string, StepView>;
   /** Regions this step produced in the latest plan (for "then fill blocks with…" and per-region overrides). */
   regions: { key: string; tags: string[]; areaM2: number }[];
+  /** Additive (s16): asset control id → the prefab the latest plan uses for it (what "Automatic" became). */
+  resolvedAssets?: Record<string, ResolvedAsset>;
+  /** Additive (s16): the plan's roads by role (only roles present), for the legend. */
+  netLegend?: NetLegendEntry[];
   /** (s15) Controls that do not apply to the current area: control id → why (shown greyed out). */
   disabled?: Record<string, LocText>;
 }

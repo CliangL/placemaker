@@ -35,7 +35,7 @@ namespace Placemaker.Core.Layers.Common
             float3 m = math.lerp(d, e, t);
             var second = new PlannedNet
             {
-                A = m, B = e, C = c, D = p3, Role = n.Role, Asset = n.Asset, Category = n.Category,
+                A = m, B = e, C = c, D = p3, Role = n.Role, Asset = n.Asset, Category = n.Category, Control = n.Control,
                 StartAttach = -1, EndAttach = n.EndAttach, EndAttachT = n.EndAttachT,
                 Upgrades = n.Upgrades != null ? (string[])n.Upgrades.Clone() : Array.Empty<string>(),
                 FollowTerrain = n.FollowTerrain,

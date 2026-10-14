@@ -214,6 +214,9 @@ namespace Placemaker.Game.Settings
         public bool ClearExistingTreesAndProps { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
+        public bool KeepZonedBuildingsOff { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBuild)]
         public bool RecoverRejectedPieces { get; set; }
 
         [SettingsUISection(SectionMain, GroupBuild)]
@@ -275,6 +278,7 @@ namespace Placemaker.Game.Settings
             {
                 global::Placemaker.Game.Build.BuildService.AutoExcludeCollisions = AutoExcludeCollisions;
                 global::Placemaker.Game.Build.BuildService.ClearExistingObjects = ClearExistingTreesAndProps;
+                global::Placemaker.Game.Build.BuildService.BlockZoning = KeepZonedBuildingsOff;
                 global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;
                 global::Placemaker.Game.Build.BuildService.OverlayPavedSurfaces = OverlayPavedSurfaces;
                 global::Placemaker.Game.Build.BuildService.ChargeNetConstruction = ChargeNetConstruction;
@@ -321,6 +325,7 @@ namespace Placemaker.Game.Settings
             PanelCollapsed = false;
             AutoExcludeCollisions = true;
             ClearExistingTreesAndProps = true;
+            KeepZonedBuildingsOff = true;
             RecoverRejectedPieces = true;
             OverlayPavedSurfaces = true;
             ChargeNetConstruction = true;

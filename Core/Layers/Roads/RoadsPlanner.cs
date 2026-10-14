@@ -213,6 +213,7 @@ namespace Placemaker.Core.Layers.Roads
                     A = curve.A, B = curve.B, C = curve.C, D = curve.D,
                     Role = e.Role,
                     Asset = AssetFor(e.Role, settings, street),
+                    Control = RoadRoles.ControlOf(e.Role),
                     StartAttach = sa, EndAttach = da,
                     StartAttachT = sa >= 0 ? st : 0f, EndAttachT = da >= 0 ? dt : 0f,
                     Upgrades = RoadsSchema.Upgrades(settings, e.Role),
@@ -332,9 +333,16 @@ namespace Placemaker.Core.Layers.Roads
             string street = settings.S(RoadsIds.StreetAsset, "");
             return role =>
             {
+                // The width of what will really be placed: the pick, else (automatic) the street pick for
+                // street-like roles, else the first automatic prefab this playset has (Four-Lane avenues are 24 m).
                 string id = RoleAssetId(role, settings);
                 if (Known(site, id, out float w)) return w;
-                if ((role == NetRole.Street || role == NetRole.PerimeterRoad || role == NetRole.CulDeSac) && string.IsNullOrEmpty(id) && Known(site, street, out w)) return w;
+                if (string.IsNullOrEmpty(id))
+                {
+                    if ((role == NetRole.Street || role == NetRole.PerimeterRoad || role == NetRole.CulDeSac) && Known(site, street, out w)) return w;
+                    foreach (var pick in RoadRoles.AutoPicks(role))
+                        if (Known(site, pick, out w)) return w;
+                }
                 return Composer.DefaultHalfWidth(role);
             };
         }
@@ -356,16 +364,35 @@ namespace Placemaker.Core.Layers.Roads
                 case NetRole.Roundabout: return s.S(RoadsIds.RoundaboutAsset, "");
                 case NetRole.CulDeSac: return s.S(RoadsIds.LocalAsset, "");
                 case NetRole.Pathway: return s.S(RoadsIds.PathAsset, "");
+                case NetRole.PerimeterRoad:
+                    string p = s.S(RoadsIds.PerimeterAsset, "");
+                    return p.Length > 0 ? p : s.S(RoadsIds.StreetAsset, "");
                 default: return s.S(RoadsIds.StreetAsset, "");
             }
         }
 
-        private static AssetRef AssetFor(NetRole role, SettingsBag s, string street)
+        /// <summary>
+        /// The road of a role. An explicit pick falls back to the street pick, then the role's automatic
+        /// prefabs. Automatic (empty id) carries the role's preferred vanilla prefabs as fallbacks
+        /// (RoadRoles.AutoPicks: Two-Lane streets, Four-Lane avenues, Two-Lane One-Way rings) — AutoAssets
+        /// takes the first one this playset has, else the category pool.
+        /// </summary>
+        public static AssetRef AssetFor(NetRole role, SettingsBag s, string street)
         {
             string id = RoleAssetId(role, s);
             if (role == NetRole.Pathway) return new AssetRef(id);
-            if (string.IsNullOrEmpty(id)) return new AssetRef(role == NetRole.PerimeterRoad || role == NetRole.Street ? street : "");
-            return string.IsNullOrEmpty(street) || street == id ? new AssetRef(id) : new AssetRef(id, street);
+            var picks = RoadRoles.AutoPicks(role);
+            var fb = new List<string>(picks.Length + 1);
+            bool streetLike = role == NetRole.PerimeterRoad || role == NetRole.Street || role == NetRole.CulDeSac;
+            if (string.IsNullOrEmpty(id))
+            {
+                // Automatic local / perimeter roads follow an explicit street pick (a gravel village stays gravel).
+                if (streetLike && !string.IsNullOrEmpty(street)) return new AssetRef(street, picks);
+                return new AssetRef("", picks);
+            }
+            if (!string.IsNullOrEmpty(street) && street != id) fb.Add(street);
+            foreach (var p in picks) if (p != id && !fb.Contains(p)) fb.Add(p);
+            return new AssetRef(id, fb.ToArray());
         }
 
         /// <summary>CS2 ships turning circles named CulDeSac{Small|Medium|Large|XL}{01 asphalt|02 grass|03 trees}.</summary>

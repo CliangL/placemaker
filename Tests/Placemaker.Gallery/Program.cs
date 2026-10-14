@@ -23,6 +23,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Placemaker.Core;
 using Placemaker.Core.Build;
+using Placemaker.Core.Layers.Roads;
 using Placemaker.Core.Tool;
 using Unity.Mathematics;
 
@@ -216,6 +217,16 @@ namespace Placemaker.Gallery
                     if (p == null || string.IsNullOrEmpty(p.Id)) continue;
                     jobs.Add(Make("preset-" + Safe(p.Id), "Preset " + p.Id, r => editor.ApplyPreset(r, RecipePaths.Root, p.Id)));
                 }
+                // s16: every road mix on a grid with an avenue column + row (so avenues and a roundabout show up).
+                if (gen is ILinkedControls && gen.Controls.Any(c => c.Id == RoadsIds.RoadMix))
+                    foreach (var mix in RoadMixes.All)
+                        jobs.Add(Make("mix-" + Safe(mix.Id), "Road mix " + mix.Id, r =>
+                        {
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.Pattern, "grid", true);
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.AvenueColumn, true, true);
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.AvenueRow, true, true);
+                            editor.SetValue(r, RecipePaths.Root, RoadsIds.RoadMix, mix.Id, true);
+                        }));
                 var features = Features.Of(gen);
                 if (ShopVariants && features.Any(f => f.Layer == "edgeZoning" && f.Target == "shops"))
                     foreach (var (layout, amount) in ShopCombos)
@@ -274,6 +285,8 @@ namespace Placemaker.Gallery
         public Dictionary<string, int> ByCategory = new Dictionary<string, int>();
         public List<string> IssueKeys = new List<string>();
         public string Failure;
+        /// <summary>s16: the plan's roads by role (same legend as the panel).</summary>
+        public List<RoadRoles.LegendEntry> RoadLegend = new List<RoadRoles.LegendEntry>();
     }
 
     public static class Renderer
@@ -686,8 +699,21 @@ namespace Placemaker.Gallery
                 cv.StrokePolyline(pts, hw * 2f, fill);
             }
             foreach (var (n, pts, hw) in polylines)
-                if (n.Role != NetRole.Fence && hw * 2f * cv.PixelsPerMetre > 8f)
+            {
+                if (n.Role == NetRole.Fence) continue;
+                // s16: roads of the roads layer carry their role colour as a centre band (same colours as the
+                // in-game preview and the panel legend); other nets keep the thin dashed centre line.
+                string role = RoadRoles.Of(n.Role);
+                bool roadPlan = role != null && (role != RoadRoles.CarFree || n.Control == RoadsIds.PathAsset);
+                if (roadPlan)
+                {
+                    var rc = RoadRoles.Rgb(role);
+                    cv.StrokePolyline(pts, math.max(cv.Px(3f), hw * 0.55f), new Rgba(rc.x, rc.y, rc.z, 1f));
+                }
+                else if (hw * 2f * cv.PixelsPerMetre > 8f)
                     cv.DashedPolyline(pts, cv.Px(0.8f), 2f, 2f, NetColors(n).edge.WithA(0.5f));
+            }
+            res.RoadLegend = RoadRoles.Legend(nets.Where(n => n.Role != NetRole.Pathway || n.Control == RoadsIds.PathAsset));
 
             // Area outline on top of surfaces.
             cv.StrokePolyline(ring2, cv.Px(2f), Rgba.Hex("#33415c"), closed: true);
@@ -934,7 +960,13 @@ namespace Placemaker.Gallery
                 ("#f4e7c6", "footpath (real width)"),
                 ("#e6b3a8", "bike path"),
                 ("#d9c39a", "trail"),
-                ("#8d8d93", "road / track"),
+                ("#8d8d93", "road / track (asphalt at real width)"),
+                (RoadRoles.Color(RoadRoles.Street), "road role: street (centre band)"),
+                (RoadRoles.Color(RoadRoles.Avenue), "road role: avenue"),
+                (RoadRoles.Color(RoadRoles.Local), "road role: local / cul-de-sac"),
+                (RoadRoles.Color(RoadRoles.Roundabout), "road role: roundabout ring"),
+                (RoadRoles.Color(RoadRoles.Perimeter), "road role: perimeter road"),
+                (RoadRoles.Color(RoadRoles.CarFree), "road role: car-free street"),
                 ("#a3adc4", "parking aisle"),
                 ("#7a5a3c", "fence"),
                 ("#9a9aa0", "surrounding street"),
@@ -977,6 +1009,8 @@ namespace Placemaker.Gallery
                     {
                         sb.Append($"{r.Objects} objects · {r.Nets} nets / {r.PathMetres:0} m · {r.Surfaces} surfaces · {r.Ms:0} ms<br>");
                         sb.Append(string.Join(", ", r.ByRole.OrderByDescending(k => k.Value).Select(k => $"{k.Key} {k.Value}")) + "<br>");
+                        foreach (var e in r.RoadLegend)
+                            sb.Append($"<span><i class=\"sw\" style=\"background:{RoadRoles.Color(e.Role)}\"></i>{e.Role} · {Esc(RoadRoles.NameOf(e.AssetId))} · {(e.LengthM >= 1000 ? (e.LengthM / 1000).ToString("0.0", CultureInfo.InvariantCulture) + " km" : e.LengthM.ToString("0", CultureInfo.InvariantCulture) + " m")} ({e.Count})</span><br>");
                         var flags = new List<string>();
                         if (r.BenchesOffPath > 0) flags.Add($"{r.BenchesOffPath} benches off-path");
                         if (r.Overlaps > 0) flags.Add($"{r.Overlaps} overlapping objects");
@@ -992,6 +1026,7 @@ namespace Placemaker.Gallery
                         type = j.Type, variant = j.Variant, file = r.File, ms = Math.Round(r.Ms), failure = r.Failure, objects = r.Objects, nets = r.Nets,
                         pathMetres = Math.Round(r.PathMetres), surfaces = r.Surfaces, errors = r.Errors, warnings = r.Warnings,
                         benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, edgeSpikes = r.EdgeSpikes, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(),
+                        roads = r.RoadLegend.Select(e => new { role = e.Role, asset = e.AssetId, lengthM = e.LengthM, count = e.Count }).ToList(),
                     });
                 }
                 sb.Append("</div>");

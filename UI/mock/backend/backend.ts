@@ -718,6 +718,7 @@ export class MockBackend {
                     },
                     a[0] + "|" + a[1],
                 );
+                void this.applyLinked(step, a[1]);
                 return;
             }
             case "previewValue": {
@@ -968,6 +969,38 @@ export class MockBackend {
     }
 
     locateAt: [number, number, number] | null = null;
+
+    /** s16: like C# UiModels.Step — an automatic asset control the plan does not use is greyed "Not used by this layout". */
+    notInLayout(s: StepModel, path: string): Record<string, LocText> | undefined {
+        const res = this.plan?.steps?.[path]?.resolvedAssets;
+        if (!res) return undefined;
+        const out: Record<string, LocText> = {};
+        for (const [id, r] of Object.entries(res)) if (r.unused && !s.values[id]) out[id] = { key: "Placemaker.UI.Why.NotInLayout" };
+        return Object.keys(out).length ? out : undefined;
+    }
+
+    /** s16: linked controls of a real layer (a road mix writes the road picks; the mix follows them), as C# DesignEditor does. */
+    async applyLinked(step: StepModel, controlId: string) {
+        if (!this.hostLayers.has(step.layer)) return;
+        try {
+            const r = await fetch("/api/linked", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ layer: step.layer, values: step.values, controlId }),
+            }).then((x) => x.json());
+            if (!r || r.error || !r.values) return;
+            let changed = false;
+            for (const [k, v] of Object.entries(r.values as Record<string, SettingValue>))
+                if (JSON.stringify(step.values[k]) !== JSON.stringify(v)) {
+                    step.values[k] = v;
+                    changed = true;
+                }
+            for (const id of (r.driven as string[]) ?? []) if (!step.locked.includes(id)) step.locked.push(id);
+            if (changed) this.changed(true);
+        } catch {
+            /* host down: no linked controls */
+        }
+    }
 
     async randomize(path: string) {
         const steps: StepModel[] = [];
@@ -1542,6 +1575,9 @@ export class MockBackend {
             children: s.children.map((c, i) => this.stepView(c, path + "/" + i)),
             overrides,
             regions,
+            resolvedAssets: this.plan?.steps?.[path]?.resolvedAssets,
+            netLegend: this.plan?.steps?.[path]?.netLegend?.length ? this.plan?.steps?.[path]?.netLegend : undefined,
+            disabled: this.notInLayout(s, path),
         };
     }
 
