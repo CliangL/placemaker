@@ -45,7 +45,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             c.Choice("style", "sandy", ControlTier.Essential, "beach", Styles).Tip();
             c.Choice("waterSide", "auto", ControlTier.Essential, "beach", Shoreline.Sides).Tip();
             c.Slider("beachDepth", 30, 12, 80, 2, "m", ControlTier.Essential, "beach").Tip();
-            c.Slider("umbrellas", 20, 0, 80, 5, "perHa", ControlTier.Essential, "beach").Tip();
+            c.Slider("umbrellas", 35, 0, 120, 5, "perHa", ControlTier.Essential, "beach").Tip();
             c.Choice("layout", "scattered", ControlTier.Essential, "beach", "scattered", "rows").Tip();
 
             c.Toggle("carve", true, ControlTier.More, "shore").Tip();
@@ -93,7 +93,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             c.Fixed("carve");
             c.Fixed("paintLayer");
             c.RandomRange("beachDepth", 20, 45);
-            c.RandomRange("umbrellas", 5, 40);
+            c.RandomRange("umbrellas", 10, 60);
             c.RandomRange("courts", 0, 2);
             c.RandomRange("rockClusters", 0, 4);
             c.RandomRange("tidePools", 0, 2);
@@ -103,8 +103,8 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         protected override void DefinePresets()
         {
-            Preset("sandy", ("style", "sandy"), ("umbrellas", 20.0), ("layout", "scattered"), ("backdrop", "dunes"), ("huts", "few"), ("lifeguards", 2.0));
-            Preset("resort", ("style", "sandy"), ("umbrellas", 50.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "row"), ("pathWidth", "wide"),
+            Preset("sandy", ("style", "sandy"), ("umbrellas", 35.0), ("layout", "scattered"), ("backdrop", "dunes"), ("huts", "few"), ("lifeguards", 2.0));
+            Preset("resort", ("style", "sandy"), ("umbrellas", 80.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "row"), ("pathWidth", "wide"),
                 ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 3.0), ("slope", 3.0), ("treeDensity", 25.0));
             Preset("rocky", ("style", "rocky"), ("umbrellas", 5.0), ("sandSurface", false), ("paintLayer", 3.0), ("backdrop", "none"), ("huts", "none"),
                 ("lifeguards", 0.0), ("kiosks", 0.0), ("rockClusters", 8.0), ("tidePools", 5.0), ("beachDepth", 24.0), ("slope", 8.0), ("treeDensity", 10.0));
@@ -714,7 +714,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                 return;
             }
             if (backdrop == "none" && treeDensity <= 0f) return;
-            float factor = backdrop == "woods" ? 2.5f : 1f;
+            float factor = backdrop == "woods" ? 1.8f : 1f;
             float from = backdrop == "woods" ? behind : behind + 3f;
             if (canTrees && treeDensity > 0f)
                 foreach (var ring in shore.Band(from, shore.MaxDepth + 20f))

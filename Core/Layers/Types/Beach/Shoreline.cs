@@ -220,18 +220,24 @@ namespace Placemaker.Core.Layers.Types.Beach
             return s;
         }
 
-        /// <summary>Region minus the wet cells (grown back to the outline so the land keeps its real edges).</summary>
+        /// <summary>
+        /// Region minus the wet cells. The water is traced on a slightly enlarged outline (the raster
+        /// keeps 1.5 cells off its own border), so the wet pieces are exact at the waterline and reach
+        /// past the real outline; the land keeps its real edges everywhere else.
+        /// </summary>
         private static LayerRegion DryPart(LayerContext ctx, LayerRegion region, Func<float2, float> depth, float step)
         {
             try
             {
-                float cell = math.max(2f, step * 0.7f);
-                var wetPieces = FreeSpace.Pieces(region, p => depth(p) <= WetDepth, cell, 30f, ctx.Cancel);
+                float cell = math.max(1.5f, step * 0.5f);
+                var grownOutline = Poly.Offset(region.Ring, -cell * 2f);
+                var traced = grownOutline.Count > 0 ? LayerRegion.From(grownOutline[0]) : null;
+                if (traced == null) return null;
+                var wetPieces = FreeSpace.Pieces(traced, p => depth(p) <= WetDepth, cell, 30f, ctx.Cancel);
                 if (wetPieces.Count == 0) return null;
-                var grown = new List<IReadOnlyList<float2>>();
-                foreach (var w in wetPieces)
-                    foreach (var g in Poly.Offset(w, -cell * 1.6f)) grown.Add(g);
-                var dry = Poly.Boolean(new[] { region.Ring }, grown, BoolOp.Difference);
+                var wet = new List<IReadOnlyList<float2>>();
+                foreach (var w in wetPieces) wet.Add(w);
+                var dry = Poly.Boolean(new[] { region.Ring }, wet, BoolOp.Difference);
                 LayerRegion best = null;
                 foreach (var r in dry)
                     foreach (var ring in Poly.CutHoles(r, 1f))
