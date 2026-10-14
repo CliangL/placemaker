@@ -273,6 +273,10 @@ namespace Placemaker.Gallery
                     // s23: decals are opt-in (default 0): "on" = what a player gets switching them on at 100 %.
                     jobs.Add(Make("decals-on", "Decals 100 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 100.0));
                     jobs.Add(Make("decals-gritty", "Decals gritty", r => { r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 100.0; r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.StyleId] = "gritty"; }));
+                    // s28: terrain-paint ground wear only shows on bare terrain: "wear-bare" turns the type's lawn surface off.
+                    jobs.Add(Make("wear-off", "Ground wear 0 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.PaintWearId] = 0.0));
+                    if (gen.Controls.Any(c => c.Id == "groundSurface"))
+                        jobs.Add(Make("wear-bare", "Ground wear, bare lawn", r => r.Root.Settings.Values["groundSurface"] = false));
                 }
                 var paletteControl = (gen.Controls ?? Array.Empty<ControlSchema>()).FirstOrDefault(c => c.Id == "palette" && c.Kind == ControlKind.Choice);
                 if (Palettes && paletteControl != null)

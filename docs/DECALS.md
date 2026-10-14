@@ -188,6 +188,45 @@ Decals stay ON by default (Decals 100 %, the Decals feature as before); the art 
   Lawn wear is grass-tone (moss, weeds, wet-grass effects), never the brown Ground Dirt discs; dressing pools no longer
   fall back to broader pools; junction and entrance wear is rarer.
 
+## s28 phase 2: ground wear painted into the terrain (`Core/Decals/GroundWear.cs`)
+
+User idea: use the terrain texture paint (s13 `PaintRaster`; materials 1 Dry grass, 2 Lush grass, 3 Dirt, 4 Sand; soft
+feathered edges, per-point strength) as ground dressing. Runs in the dressing pass and needs no decal packs:
+
+- **Verges**: faint dirt (12–18 %) along every path, full at the path edge and fading over ~1.8 m, edge noise.
+- **Desire paths**: faint dirt lines (22–30 %, ~1.5 m wide) cutting corners where path arms meet at 35–115°, 7–11 m back
+  from the junction, and from the nearest path across the lawn to benches, play items and picnic tables 6–30 m off it.
+  A line is drawn only when its whole length is clear: bare terrain, off nets, past tree trunks.
+- **Patches**: worn dirt at play items, picnic tables, bench fronts and either side of entrances.
+- **Edges**: speckled dry grass (sometimes dirt) discs 3–6 m inside the outline, every ~11 m, to blend into the
+  surroundings.
+- Paint only where the terrain shows: not under any planned surface (grass included), net, water, paving, sand or
+  zoning cutout. Max 360 paints per fill step. Amount = Ground wear × style (Clean 0.6, Lived-in 1, Gritty 1.4).
+- Controls in **Decals**: **Ground wear** (`dressPaintWear`, 0–300 %, default 100) and **Desire paths**
+  (`dressDesirePaths`, on by default, off by default for Clean-style types; greyed while Ground wear is 0). The old
+  `dressGround` slider is now labelled "Open-ground decals". Paint is permanent: the plan carries the Permanent warning
+  and the permanent-changes summary lists it under Paint (so a build with ground wear asks for the permanent
+  acknowledgement).
+- Gallery: `--decals` adds `wear-off` (Ground wear 0 %) and, where the type has a ground-surface toggle, `wear-bare`.
+
+**Which types show it.** Defaults, 120 × 100 m (share of the area under a planned surface → ground-wear paints):
+
+| Lawn under a grass surface (wear invisible, nothing painted) | Bare terrain (wear shows) |
+|---|---|
+| park, formalGarden, botanicalGarden, cemeteryGrounds, communityGarden, dogPark, greenwayPark, memorialPark, picnicGrounds, adventurePlayground, amphitheatre, animalPark, fairground, sportsPark, skatePark, urbanFarm, shopsPark, outdoorMall, shoppingPlaza, stripMall (all 100 %) | natureReserve 67, wetland 68, zenGarden 94, lookoutHill 63, hikingTrail 54, orchardPark 54, restArea 58, golf 49, urbanRuins 48, campground 45, abandonedLot 40, landfill 39, quarry 39, farmstead 23, beach 15, waterfront 18 |
+
+Paved or yard types (plaza, marketSquare, transitPlaza, parking, logisticsYard, scrapyard, constructionSite, pond) are
+fully covered and get none, as intended.
+
+**Recommendation.** A flat grass *surface* hides the terrain, so every lawn-heavy park type gets no ground wear today.
+CS2's terrain grass already varies with height and slope, and the paint materials (dry/lush grass, dirt) blend into it
+with soft edges, which a uniform tiled grass surface cannot do. For the naturalistic types (park lived-in presets,
+picnicGrounds, dogPark, greenwayPark, adventurePlayground, animalPark, campground) leaving the lawn as bare terrain,
+with a light lush-grass paint field and this wear on top, is likely to look better. Keep the grass surface for formal,
+memorial and cemetery types and for maps whose base terrain is not grass (desert or rock maps: bare terrain would show
+sand or rock). Next step (not done here, it changes the types' own layers): an A/B in game with park
+`groundSurface` off (`wear-bare` in the gallery) before flipping any defaults.
+
 ## Open problems
 
 - In-game confirmation of the sunk-decal trick (renders on the Tunnel mesh layer; projection unaffected?). Fallback: the

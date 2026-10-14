@@ -44,6 +44,8 @@ namespace Placemaker.Core.Decals
         public sealed class Report
         {
             public int Added, Removed;
+            /// <summary>(s28) Terrain-paint ground wear added by this pass.</summary>
+            public GroundWear.Report Paint;
             public readonly Dictionary<string, int> ByPool = new Dictionary<string, int>(StringComparer.Ordinal);
             public double Ms;
         }
@@ -94,13 +96,17 @@ namespace Placemaker.Core.Decals
                 report.Removed += ThinLayerDecals(l, s.Master);
             }
 
+            var world = new DressingWorld(plan, area, site);
+            if (world.Root == null) return report;
+            // s28: ground wear painted into the terrain texture (needs no decal packs).
+            report.Paint = GroundWear.Apply(plan, world, site, dress);
+
             if (!DecalPools.PacksAvailable())
             {
                 plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = DecalPools.NoPacksKey });
+                report.Ms = sw.Elapsed.TotalMilliseconds;
                 return report;
             }
-            var world = new DressingWorld(plan, area, site);
-            if (world.Root == null) return report;
             float ha = world.Root.Area / 10000f;
 
             // One budget per fill step (its features share it), filled by priority.

@@ -29,7 +29,9 @@ namespace Placemaker.Core.Decals
         public readonly List<AreaPlan> Plans = new List<AreaPlan>();
         /// <summary>Zoning cutouts (Cutouts.Of): no decal reaches into one.</summary>
         public readonly List<float2[]> Cutouts;
-        private readonly Grid _treeGrid = new Grid(8f), _segGrid = new Grid(8f), _polyGrid = new Grid(16f);
+        /// <summary>(s28) Every planned surface, grass included: terrain paint under one is hidden.</summary>
+        public readonly List<Poly> Covers = new List<Poly>();
+        private readonly Grid _treeGrid = new Grid(8f), _segGrid = new Grid(8f), _polyGrid = new Grid(16f), _coverGrid = new Grid(16f);
         private readonly Func<float2, bool> _wet;
 
         private static readonly string[] ConiferWords = { "pine", "spruce", "fir", "conifer", "cedar", "larch", "cypress", "yew", "hemlock", "juniper", "thuja" };
@@ -68,6 +70,7 @@ namespace Placemaker.Core.Decals
                 {
                     if (s?.Ring == null || s.Ring.Length < 3) continue;
                     var k = KindOf(s);
+                    AddCover(Geometry.Poly.To2D(s.Ring), k);
                     if (k == GroundKind.Grass) continue;
                     AddPoly(Geometry.Poly.To2D(s.Ring), k);
                 }
@@ -96,6 +99,28 @@ namespace Placemaker.Core.Decals
             foreach (var v in ring) { p.Min = math.min(p.Min, v); p.Max = math.max(p.Max, v); }
             _polyGrid.AddBox(p.Min, p.Max, Polys.Count);
             Polys.Add(p);
+        }
+
+        private void AddCover(float2[] ring, GroundKind k)
+        {
+            if (ring == null || ring.Length < 3) return;
+            var p = new Poly { Ring = ring, Kind = k, Min = ring[0], Max = ring[0] };
+            foreach (var v in ring) { p.Min = math.min(p.Min, v); p.Max = math.max(p.Max, v); }
+            _coverGrid.AddBox(p.Min, p.Max, Covers.Count);
+            Covers.Add(p);
+        }
+
+        /// <summary>(s28) Under a planned surface (any kind, grass included) or a net: terrain texture paint would not show.</summary>
+        public bool Covered(float2 p)
+        {
+            if (NetClearance(p, 0.5f, out _) < 0f) return true;
+            foreach (int i in _coverGrid.Near(p, 0f))
+            {
+                var q = Covers[i];
+                if (p.x < q.Min.x || p.y < q.Min.y || p.x > q.Max.x || p.y > q.Max.y) continue;
+                if (Geometry.Poly.Contains(q.Ring, p)) return true;
+            }
+            return false;
         }
 
         public static GroundKind KindOf(PlannedSurface s)
