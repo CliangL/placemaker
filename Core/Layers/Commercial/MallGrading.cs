@@ -131,9 +131,9 @@ namespace Placemaker.Core.Layers.Commercial
                     var p = sc.Pos(k);
                     float dist = pr.Distance(p, out float s);
                     // A plot keeps its own level up to the lane's edge (a plot between a street and a lane faces the street).
-                    // (s32) A lane with its own shoulder also levels a cell of a plot that faces another road (a corner plot
+                    // (s32) A lane with its own shoulder also levels a cell of a plot that faces another of the lanes (a corner plot
                     // beside a junction): the step between the two grades falls in the plot's side margin, not into the lane.
-                    float keep = plotCore[k] ? (lane.Shoulder >= 0f && plotLane[k] != lane ? lane.Half + Cell : lane.Half + 0.25f) : reach;
+                    float keep = plotCore[k] ? (lane.Shoulder >= 0f && plotLane[k] != null && plotLane[k] != lane ? lane.Half + Cell : lane.Half + 0.25f) : reach;
                     if (dist > keep) continue;
                     float h = pr.At(s);
                     // (s32) Lanes with their own shoulder: the nearest lane sets a node (at a T or X junction the shoulder of the

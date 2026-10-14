@@ -205,6 +205,8 @@ namespace Placemaker.Core.Layers.Commercial
             var paseos = new List<(float2[] rect, float2 a, float2 b)>();
             var tps = new List<float>();
             if (len >= 72f) { tps.Add(math.round(len * 0.33f)); tps.Add(math.round(len * 0.7f)); } else tps.Add(math.round(len * 0.5f));
+            // A paseo stays clear of the ring's back corner (a walk there would meet the bend, not the leg).
+            tps.RemoveAll(tp => tp > math.min(len - Mall.Cell, tB - hr - 6f));
             foreach (float tp in tps)
                 foreach (int side in new[] { -1, 1 })
                 {
@@ -233,7 +235,10 @@ namespace Placemaker.Core.Layers.Commercial
                 if (lotLen < 18f) continue;
                 var e = new List<(float2, string)>();
                 LotEntrances(e, r, s0, s1, 0f, "entrance");
-                e.Add((r.At(edge, math.min(lotLen - 8f, tB * 0.85f)), "alley"));
+                // The stub onto the ring keeps clear of the paseo footpaths (two joins a few cm apart would split the ring into
+                // a sliver and leave one of them short of its node).
+                foreach (float at in new[] { math.min(lotLen - 8f, tB * 0.85f), lotLen * 0.55f, lotLen * 0.2f })
+                    if (at > 6f && tps.TrueForAll(tp => math.abs(tp - at) >= 8f)) { e.Add((r.At(edge, at), "alley")); break; }
                 foreach (float tp in tps) if (tp < lotLen - 3f) e.Add((r.At(edge, tp), "footpath"));
                 mall.Lot(Mall.Rect(r, s0, s1, 0f, lotLen), e, Mall.Parking(ctx), salt++);
             }

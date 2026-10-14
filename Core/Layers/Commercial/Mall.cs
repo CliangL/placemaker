@@ -301,8 +301,8 @@ namespace Placemaker.Core.Layers.Commercial
             // split the lane at the stub's end instead.
             foreach (var n in sub.Nets)
             {
-                if (_synthetic.TryGetValue(n.StartAttach, out var s0)) { s0.lane.Joins.Add(n.A.xz); n.StartAttach = -1; }
-                if (_synthetic.TryGetValue(n.EndAttach, out var s1)) { s1.lane.Joins.Add(n.D.xz); n.EndAttach = -1; }
+                if (_synthetic.TryGetValue(n.StartAttach, out var s0)) { SnapOnto(s0.lane, s0.seg, ref n.A, ref n.B); s0.lane.Joins.Add(n.A.xz); n.StartAttach = -1; }
+                if (_synthetic.TryGetValue(n.EndAttach, out var s1)) { SnapOnto(s1.lane, s1.seg, ref n.D, ref n.C); s1.lane.Joins.Add(n.D.xz); n.EndAttach = -1; }
             }
             sub.Regions.Clear();
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error || i.Key == "Placemaker.Parking.Issue.NoEntrance");
@@ -576,7 +576,7 @@ namespace Placemaker.Core.Layers.Commercial
                 var ring = Shops[i];
                 var bag = new SettingsBag();
                 // (s32) A plot may carry its own zone (big high-density plots on the street, small low-density ones on the lanes).
-                bag.Values[EdgeZoningAddOn.ZoneControl] = ShopZone.TryGetValue(ring, out var own) && !string.IsNullOrEmpty(own) ? own : zoneId;
+                bag.Values[EdgeZoningAddOn.ZoneControl] = ShopZone.TryGetValue(ring, out var own) && !string.IsNullOrEmpty(own) ? (ZoneKinds.IsKind(own) ? ZoneKinds.PrefabId(own) : own) : zoneId;
                 bag.Values[EdgeZoningAddOn.CutoutSetting] = true;
                 var input = new AreaInput
                 {

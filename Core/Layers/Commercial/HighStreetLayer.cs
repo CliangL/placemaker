@@ -24,6 +24,8 @@ namespace Placemaker.Core.Layers.Commercial
         public static readonly string[] Centres = { "market", "farmers", "cafe", "garden", "trees" };
         public static readonly string[] LaneKinds = { "pedestrian", "shared" };
         public static readonly string[] Grains = { "fine", "mixed", "coarse" };
+        /// <summary>Planted forecourt between a street and the first plots of a lane leaving it (m): beyond the facing tolerance.</summary>
+        public const float Forecourt = 4f;
 
         protected override void DefineControls(ControlSet c)
         {
@@ -140,7 +142,9 @@ namespace Placemaker.Core.Layers.Commercial
             }
 
             // Shops: every lane lined on its outer side (the inner side is the market).
-            foreach (var l in lanes) mall.LaneRows(l, cells, null, 0, 0f, 0f, grain);
+            // A small forecourt where a lane leaves a street: the first plots face the lane only (a corner plot would be
+            // levelled to the street while its side meets a lane climbing away from it).
+            foreach (var l in lanes) mall.LaneRows(l, cells, null, 0, mall.GateTrim(l, true, Forecourt), mall.GateTrim(l, false, Forecourt), grain);
             // The streets round the site keep their own shop fronts (deeper, a whole cell off the lanes).
             if (ctx.B("outerRow")) mall.StreetRows(runs, math.min(6, cells + 1), ctx.S("outerZone"), 3);
             uint ps = 0xE40u;

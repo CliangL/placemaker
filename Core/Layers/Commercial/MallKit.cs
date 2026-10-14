@@ -106,6 +106,23 @@ namespace Placemaker.Core.Layers.Commercial
             return lane;
         }
 
+        /// <summary>
+        /// (s32) A lot's stub or footpath that found one of the lanes ends exactly on that lane's segment: the lane is split
+        /// at the projection (Finish), so the net end must be that point (a hit computed on a segment's end beyond a bend
+        /// would otherwise stop a few centimetres short of the node). Ends already on the line are left bit-for-bit alone.
+        /// </summary>
+        private void SnapOnto(Lane lane, int seg, ref float3 end, ref float3 control)
+        {
+            if (seg < 0 || seg + 1 >= lane.Points.Count) return;
+            var a = lane.Points[seg]; var b = lane.Points[seg + 1];
+            var ab = b - a; float l2 = math.lengthsq(ab);
+            if (l2 < 1e-6f) return;
+            var q = a + ab * math.saturate(math.dot(end.xz - a, ab) / l2);
+            if (math.distance(q, end.xz) <= 0.01f) return;
+            var d = new float3(q.x - end.x, 0f, q.y - end.z);
+            end += d; control += d;
+        }
+
         /// <summary>Takes back a lane made by <see cref="Connect"/> (before anything was planned against it).</summary>
         public void Remove(Lane lane)
         {
@@ -212,7 +229,9 @@ namespace Placemaker.Core.Layers.Commercial
         {
             int made = 0;
             float len = s1 - s0;
-            int n = math.max(1, (int)math.ceil(len / (maxPiece * Cell) - 0.01f));
+            // Pieces at least maxPiece cells long: every 8 m of frontage holds one cell centre of the road's block whatever its
+            // alignment, so a piece shorter than a cell could hold none (ZoneGuard would drop it).
+            int n = math.max(1, (int)math.floor(len / (maxPiece * Cell) + 0.01f));
             for (int k = 0; k < n; k++)
             {
                 float a = math.lerp(s0, s1, (float)k / n), b = math.lerp(s0, s1, (float)(k + 1) / n);
@@ -263,14 +282,47 @@ namespace Placemaker.Core.Layers.Commercial
                 if (i < last) s1 -= lane.Half;
                 if (i == 0) s0 += trimStart;
                 if (i == last) s1 -= trimEnd;
-                if (i == 0 && lane.StartOn != null) s0 += lane.StartOn.Half;
-                if (i == last && lane.EndOn != null) s1 -= lane.EndOn.Half;
-                if (s1 - s0 < Cell - 0.01f) continue;
-                if (side >= 0) made += Row(f, s0, s1, ZoneOffset(lane), cells, 1f, zone, maxPiece, minCells);
-                if (side <= 0) made += Row(f, s0, s1, -ZoneOffset(lane), cells, -1f, zone, maxPiece, minCells);
+                // At a T or X junction the rows keep clear of the crossing lane by more than the facing tolerance: a corner
+                // plot touching both lanes would be zoned by two crossing grids (ZoneGuard keeps the first, the rest of
+                // the plot is lost). The corner stays a small planted square.
+                if (i == 0 && lane.StartOn != null) s0 += lane.StartOn.Half + JunctionClear;
+                if (i == last && lane.EndOn != null) s1 -= lane.EndOn.Half + JunctionClear;
+                var cuts = new List<(float a, float b)>();
+                foreach (var other in Lanes)
+                {
+                    if (other == lane) continue;
+                    if (other.StartOn == lane) Cut(other.Points[0], other.Half);
+                    if (other.EndOn == lane) Cut(other.Points[other.Points.Count - 1], other.Half);
+                }
+                void Cut(float2 p, float half)
+                {
+                    float u = math.dot(p - a, f.Dir);
+                    if (math.abs(math.dot(p - a, f.In)) > 0.5f || u < -half - JunctionClear || u > f.To + half + JunctionClear) return;
+                    cuts.Add((u - half - JunctionClear, u + half + JunctionClear));
+                }
+                cuts.Sort((x, y) => x.a.CompareTo(y.a));
+                float from = s0;
+                foreach (var (ca, cb) in cuts)
+                {
+                    made += Both(f, from, math.min(ca, s1));
+                    from = math.max(from, cb);
+                }
+                made += Both(f, from, s1);
             }
             return made;
+
+            int Both(StreetShops.Run f, float u0, float u1)
+            {
+                if (u1 - u0 < Cell - 0.01f) return 0;
+                int m = 0;
+                if (side >= 0) m += Row(f, u0, u1, ZoneOffset(lane), cells, 1f, zone, maxPiece, minCells);
+                if (side <= 0) m += Row(f, u0, u1, -ZoneOffset(lane), cells, -1f, zone, maxPiece, minCells);
+                return m;
+            }
         }
+
+        /// <summary>Extra clearance (m) of lane rows from a crossing lane's edge: more than the 4 m facing tolerance.</summary>
+        public const float JunctionClear = StreetFrontage.Tolerance + 0.5f;
 
         /// <summary>
         /// Rows of plots facing existing streets (the runs given), kept a whole cell (<see cref="Gap"/>) away from every lane
@@ -521,22 +573,41 @@ namespace Placemaker.Core.Layers.Commercial
                 foreach (var s in Shops) best = math.min(best, Poly.Contains(s, p) ? 0f : Poly.DistanceToBoundary(s, p));
                 return best;
             }
-            for (int k = from; k < nets.Count; k++)
+            for (int pass = 0; pass < 4; pass++)
             {
-                var n = nets[k];
-                if (!PathJoins.IsPath(n)) continue;
-                float len = math.distance(n.A.xz, n.D.xz);
-                if (len < 5f) continue;
-                if (n.EndAttach < 0 && Near(n.D.xz) < 3f && Degree(n.D.xz) == 1)
+                bool changed = false;
+                for (int k = from; k < nets.Count; k++)
                 {
+                    var n = nets[k];
+                    if (!PathJoins.IsPath(n)) continue;
+                    float len = math.distance(n.A.xz, n.D.xz);
+                    bool endBad = n.EndAttach < 0 && Near(n.D.xz) < 3f && Degree(n.D.xz) == 1;
+                    bool startBad = !endBad && n.StartAttach < 0 && Near(n.A.xz) < 3f && Degree(n.A.xz) == 1;
+                    if (!endBad && !startBad) continue;
+                    if (len < 5f)
+                    {
+                        // Too short to pull back: the piece goes (the one before it becomes the dead end, next pass).
+                        RemoveNet(k--);
+                        changed = true;
+                        continue;
+                    }
                     float f = 3.5f / len;
-                    n.D = math.lerp(n.D, n.A, f); n.C = math.lerp(n.C, n.A, f * 0.5f);
+                    if (endBad) { n.D = math.lerp(n.D, n.A, f); n.C = math.lerp(n.C, n.A, f * 0.5f); }
+                    else { n.A = math.lerp(n.A, n.D, f); n.B = math.lerp(n.B, n.D, f * 0.5f); }
+                    changed = true;
                 }
-                else if (n.StartAttach < 0 && Near(n.A.xz) < 3f && Degree(n.A.xz) == 1)
-                {
-                    float f = 3.5f / len;
-                    n.A = math.lerp(n.A, n.D, f); n.B = math.lerp(n.B, n.D, f * 0.5f);
-                }
+                if (!changed) break;
+            }
+        }
+
+        /// <summary>Removes a planned net; objects attached to later nets keep their net (indices shift).</summary>
+        private void RemoveNet(int idx)
+        {
+            Ctx.Plan.Nets.RemoveAt(idx);
+            foreach (var o in Ctx.Plan.Objects)
+            {
+                if (o.AttachedNet == idx) o.AttachedNet = -1;
+                else if (o.AttachedNet > idx) o.AttachedNet--;
             }
         }
 
