@@ -517,6 +517,30 @@ export const ControlList = ({
     );
 };
 
+/**
+ * Values summary of a step's visible controls (optionally only some ids), for a folded header such as a
+ * feature row: "Circle · Centre · 15%". "" when nothing is visible. Hook-free: pass useAssetName().
+ */
+export function controlsSummary(
+    step: StepView,
+    layer: LayerType,
+    t: TFunc,
+    assetName: (category: string | undefined, id: string) => string,
+    only?: string[],
+): string {
+    const values = withDefaults(layer, step);
+    const typedMarkers = !!(step.markerKinds && step.markerKinds.length);
+    const all = groupBy(
+        (layer.controls as ControlEx[]).filter(
+            (c) => isVisible(c.visibleWhen, values) && !(typedMarkers && c.kind === "markers") && (!only || only.includes(c.id)),
+        ),
+    ).flatMap(([, l]) => l);
+    // Essentials say what the feature is; "more" settings only when there is nothing else.
+    const essentials = all.filter((c) => c.tier !== "more");
+    const list = essentials.length ? essentials : all;
+    return list.length ? summarize(list, step, t, assetName) : "";
+}
+
 function withDefaults(layer: LayerType, step: StepView): Record<string, SettingValue> {
     const v: Record<string, SettingValue> = {};
     for (const c of layer.controls as ControlEx[]) v[c.id] = defaultFor(c);

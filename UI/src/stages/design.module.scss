@@ -261,6 +261,105 @@
     border-left-color: $c-line-strong;
 }
 
+// Feature row: [chevron icon name · summary] [fit] [switch]; options fold out under it (FEEDBACK-4b #7, #8).
+.featureFold {
+    @include row;
+    @include button-reset;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: $row-h;
+    padding: 0;
+    text-align: left;
+    overflow: hidden;
+}
+
+.featureChevronSpace {
+    width: 12rem;
+    height: 12rem;
+    flex-shrink: 0;
+}
+
+.featureIcon {
+    margin-left: 4rem;
+}
+
+.featureSummary {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-right: 6rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    text-align: right;
+    @include ellipsis;
+}
+
+.featureOn .featureName {
+    flex: 0 1 auto;
+}
+
+.fitIcon {
+    @include row;
+    flex-shrink: 0;
+    margin-right: 6rem;
+}
+
+.fitStale {
+    opacity: 0.5;
+}
+
+.fitLine {
+    @include row;
+    min-width: 0;
+    margin: 0 0 3rem 34rem;
+    font-size: $fs-s;
+}
+
+.fitLabel {
+    flex-shrink: 0;
+    font-weight: bold;
+}
+
+.fitLineFailed .fitLabel {
+    color: $c-danger;
+}
+
+.fitLineReduced .fitLabel {
+    color: $c-warning;
+}
+
+.fitDetail {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 6rem;
+    color: $c-text-dim;
+    @include ellipsis;
+}
+
+// "2 didn't fit" on the type header.
+.misfit {
+    @include row;
+    flex-shrink: 0;
+    height: 18rem;
+    margin-right: 4rem;
+    padding: 0 6rem 0 4rem;
+    border-radius: $radius-s;
+    background-color: rgba(0, 0, 0, 0.25);
+}
+
+.misfitText {
+    margin-left: 4rem;
+    font-size: $fs-s;
+    white-space: nowrap;
+}
+
+.misfitFailed .misfitText {
+    color: $c-danger;
+}
+
+.misfitReduced .misfitText {
+    color: $c-warning;
+}
+
 // Make browser (folds to "Park · Formal garden").
 .make {
     margin-bottom: 2rem;
@@ -268,4 +367,17 @@
 
 .make > div + div {
     padding-left: 0;
+}
+
+// Entrances section, flashed when the footer leads the player here ("Add at least one entrance").
+.entrances {
+    @include col;
+    min-width: 0;
+    border-radius: $radius;
+    @include border(1rem, transparent);
+}
+
+.entrancesFlash {
+    @include border(1rem, $c-warning);
+    background-color: rgba(255, 181, 71, 0.12);
 }

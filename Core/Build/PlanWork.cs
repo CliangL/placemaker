@@ -159,7 +159,8 @@ namespace Placemaker.Core.Build
                 {
                     var t = l.Terraform[i];
                     if (t?.Ring == null || t.Ring.Length < 3) continue;
-                    if (t.Permanent) w.HasPermanentTerrain = true;
+                    // Every terraform is permanent in practice: removal cannot restore the old ground.
+                    w.HasPermanentTerrain = true;
                     Add(w.Terraform, excluded, new WorkItem { Kind = WorkKind.Terraform, Layer = li, Index = i, GeneratorId = gen, Anchor = Centroid(t.Ring) });
                 }
                 for (int i = 0; i < l.Nets.Count; i++)

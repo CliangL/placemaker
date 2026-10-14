@@ -343,6 +343,29 @@ namespace Placemaker.Tests
             Assert.Contains(plan.AllIssues(), i => i.Key == TerrainPaint.PermanentKey);
         }
 
+        [Fact]
+        public void RockyOutcropsAreMostlyPaintWithFewClusteredRocks()
+        {
+            // Playtest 4b #3: mostly terrain paint, a few rocks in odd huddles, never evenly spaced.
+            Assert.Equal(new[] { 5 }, Placemaker.Core.Layers.AddOns.RocksAddOn.OddGroups(5));
+            Assert.Equal(new[] { 5, 1 }, Placemaker.Core.Layers.AddOns.RocksAddOn.OddGroups(6));
+            Assert.Equal(new[] { 7, 3 }, Placemaker.Core.Layers.AddOns.RocksAddOn.OddGroups(10));
+            var r = With("park", "rocks");
+            var plan = Compose(r, TestKit.Rect(200, 150));
+            var rocks = plan.Layers.Single(l => l.GeneratorId == "rocks");
+            var stones = rocks.Objects.Where(o => o.Category == AssetCategories.Rock).ToList();
+            Assert.NotEmpty(stones);
+            float painted = rocks.Paint.Where(p => p.Strength >= 0.3f).Sum(p => Math.Abs(Poly.SignedArea(Poly.To2D(p.Ring))));
+            float stoneArea = stones.Sum(o => 0.5f * o.Scale * o.Scale);
+            Assert.True(painted > 8f * stoneArea, $"paint {painted:0} m² vs stones {stoneArea:0} m²");
+            Assert.True(rocks.Paint.Select(p => p.Strength).Distinct().Count() >= 3, "soft edges need graded strengths");
+            // Clustered: most stones have a neighbour within 3 m, and spacing varies (no lattice/spiral).
+            var nn = stones.Select(a => stones.Where(b => b != a).Select(b => math.distance(a.Position.xz, b.Position.xz)).DefaultIfEmpty(0f).Min()).ToList();
+            Assert.True(nn.Count(d => d < 3f) >= nn.Count * 0.7f, "rocks should huddle");
+            Assert.True(nn.Max() - nn.Min() > 0.3f, "spacing must not be uniform");
+            Assert.True(stones.Select(o => Math.Round(o.Scale, 1)).Distinct().Count() >= 3, "varied sizes");
+        }
+
         // ───────────── park: free space, playground, path styles ─────────────
 
         [Theory]

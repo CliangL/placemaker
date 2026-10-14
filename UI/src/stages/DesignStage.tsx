@@ -6,17 +6,20 @@
 //   section per control group (only the first essential one open), then Features: a switch per
 //   built-in feature, whose own options fold out underneath when it is on.
 //   "Places inside": reserved slot for round 3, hidden for now.
-import React from "react";
+import React, { useRef } from "react";
 import classNames from "classnames";
-import { Catalog, DesignState, FeatureView, LayerType, StepView, ToolState } from "../contract";
-import { act } from "../lib/bindings";
+import { Catalog, DesignState, FeatureFit, FeatureView, LayerType, StepView, ToolState } from "../contract";
+import { act, playSound } from "../lib/bindings";
+import { setOpen as setSectionOpen, useOpen } from "../lib/collapse";
+import { scrollToTop, useReveal } from "../lib/reveal";
 import { entityIcon, layerColor } from "../lib/icons";
 import { humanize, TFunc, useT } from "../lib/l10n";
 import { findStep, isOverridePath, layerOf, parentOf, regionLabelArgs } from "../lib/schema";
 import { ErrorBoundary } from "../lib/errorBoundary";
 import { Tip } from "../lib/tips";
 import { Btn, Collapsible, Icon, Section, Switch } from "../components/common";
-import { ControlList } from "../controls/Controls";
+import { ControlList, controlsSummary } from "../controls/Controls";
+import { useAssetName } from "../components/picker";
 import { makeSummary, PresetBar, TypeBrowser } from "./PresetBrowser";
 import s from "./design.module.scss";
 
@@ -120,9 +123,17 @@ const Entrances = ({ step, layer, state }: { step: StepView; layer: LayerType; s
               .join(" · ")
         : String(have);
     const numbers = new Map<string, number>();
+    // The footer's "Add at least one entrance" leads here: open, scroll to the top, flash.
+    const foldId = layer.id + ":entrances";
+    const ref = useRef<HTMLDivElement>(null);
+    const flash = useReveal("entrances:" + step.path, () => {
+        setSectionOpen(foldId, true);
+        window.setTimeout(() => scrollToTop(ref.current), 30);
+    });
     return (
+        <div ref={ref} className={classNames(s.entrances, { [s.entrancesFlash]: flash })} data-testid={`entrances-wrap-${step.path}`} data-flash={flash ? "true" : "false"}>
         <Collapsible
-            id={layer.id + ":entrances"}
+            id={foldId}
             testId={`entrances-${step.path}`}
             title={
                 <Tip
@@ -136,13 +147,13 @@ const Entrances = ({ step, layer, state }: { step: StepView; layer: LayerType; s
             defaultOpen
         >
             {missing ? (
-                <Tip title={t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance")} description={t("Placemaker.UI.Markers.HowTo", "Choose a type, then click the outline next to a road.")}>
+                <Tip title={t("Placemaker.UI.Markers.NeedOne", "Add at least one entrance")} description={t("Placemaker.UI.Markers.HowTo", "Choose a type, then click the outline next to a road.")}>
                     <div className={s.required} data-testid="entrance-required">
                         <Icon name="warning" size={13} tint="warn" />
                         <div className={s.requiredText}>
                             {need > 1
-                                ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need])
-                                : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance")}
+                                ? t("Placemaker.UI.Markers.NeedN", "Add at least {0} entrances", [need])
+                                : t("Placemaker.UI.Markers.NeedOne", "Add at least one entrance")}
                         </div>
                     </div>
                 </Tip>
@@ -204,6 +215,7 @@ const Entrances = ({ step, layer, state }: { step: StepView; layer: LayerType; s
                 </div>
             ) : null}
         </Collapsible>
+        </div>
     );
 };
 
@@ -235,23 +247,127 @@ function featureStep(root: StepView | null, parent: StepView, f: FeatureView): S
     return parent.children.find((c) => c.layer === f.layer) ?? null;
 }
 
+/** Short verdict of a fit status ("No room" / "Won't fit — reduced"); "" for ok. */
+function fitLabel(t: TFunc, fit: FeatureFit): string {
+    if (fit.kind === "failed") return t("Placemaker.UI.Fit.NoRoom", "No room");
+    if (fit.kind === "reduced") return t("Placemaker.UI.Fit.Reduced", "Won't fit — reduced");
+    return "";
+}
+
+/** Why, from the plan (the feature layer's own issue), or what to do about "no room". */
+function fitDetail(t: TFunc, fit: FeatureFit): string {
+    if (!fit.text || !fit.text.key) return "";
+    if (fit.text.key === "Placemaker.UI.Feature.NoRoom") return t("Placemaker.UI.Fit.NoRoomHint", "Make the area bigger or turn other features off.");
+    return t(fit.text.key, humanize(fit.text.key), fit.text.args);
+}
+
+/** Enabled features of a step that did not (fully) fit in the latest plan. */
+export function misfits(step: StepView): FeatureView[] {
+    return (step.features ?? []).filter((f) => f.enabled && f.status && f.status.kind !== "ok");
+}
+
+/** Fit badge at the end of a feature row: a green check, or the amber / red warning sign. */
+const FitIcon = ({ t, fit, layer }: { t: TFunc; fit: FeatureFit; layer: string }) => {
+    const ok = fit.kind === "ok";
+    const title = ok ? t("Placemaker.UI.Fit.Ok", "Fits") : fitLabel(t, fit);
+    return (
+        <Tip title={title} description={ok ? undefined : fitDetail(t, fit) || undefined}>
+            <div className={classNames(s.fitIcon, { [s.fitStale]: fit.stale })} data-testid={`feature-fit-${layer}`} data-kind={fit.kind} data-stale={fit.stale ? "true" : "false"}>
+                <Icon name={ok ? "check" : fit.kind === "failed" ? "error" : "warning"} size={13} tint={ok ? "ok" : fit.kind === "failed" ? "danger" : "warn"} />
+            </div>
+        </Tip>
+    );
+};
+
 const FeatureRow = ({ catalog, design, state, parent, f }: { catalog: Catalog; design: DesignState; state: ToolState; parent: StepView; f: FeatureView }) => {
     const { t } = useT();
+    const assetName = useAssetName();
     const layer = layerOf(catalog, f.layer);
     const name = f.label ? t(f.label, layerName(t, layer)) : layerName(t, layer);
     const child = f.enabled ? featureStep(design.root, parent, f) : null;
     const own = f.options ?? [];
     const tip = f.tooltip ? t(f.tooltip, "") : "";
-    return (
-        <div className={classNames(s.feature, { [s.featureOn]: f.enabled })} data-testid={`feature-${f.layer}`} data-enabled={f.enabled ? "true" : "false"}>
-            <div className={s.featureHead}>
-                <Icon name={entityIcon(f.layer, f.icon || layer.icon)} size={14} tint={f.enabled ? "light" : "dim"} />
-                <Tip title={name} description={tip || undefined}>
-                    <div className={s.featureName}>{name}</div>
+    // Collapsed by default once enabled; remembered per parent layer + feature (FEEDBACK-4b #7).
+    const [open, setOpen] = useOpen("feature:" + parent.layer + ">" + f.layer, false);
+    // One-line summary of its visible options; none visible → nothing to fold (no empty body).
+    const parts: string[] = [];
+    if (f.enabled && own.length) parts.push(controlsSummary(parent, layerOf(catalog, parent.layer), t, assetName, own));
+    if (child) parts.push(controlsSummary(child, layerOf(catalog, child.layer), t, assetName));
+    const filled = parts.filter((p) => p);
+    const foldable = f.enabled && filled.length > 0;
+    const shown = foldable && open;
+    let summary = "";
+    if (foldable && !open) {
+        const real = filled.filter((p) => p !== t("Placemaker.UI.Picker.Auto", "Automatic"));
+        summary = (real.length ? real : filled).join(" · ");
+    }
+    const fit = f.enabled ? f.status : undefined;
+    const bad = fit && fit.kind !== "ok";
+    const detail = bad ? fitDetail(t, fit!) : "";
+    const head = (
+        <>
+            {foldable ? <Icon name={open ? "chevronDown" : "chevronRight"} size={12} tint="dim" /> : <div className={s.featureChevronSpace} />}
+            <Icon name={entityIcon(f.layer, f.icon || layer.icon)} size={14} tint={f.enabled ? "light" : "dim"} className={s.featureIcon} />
+            <Tip title={name} description={tip || undefined}>
+                <div className={s.featureName}>{name}</div>
+            </Tip>
+            {summary ? (
+                <Tip title={name} description={summary}>
+                    <div className={s.featureSummary} data-ellipsis data-testid={`feature-summary-${f.layer}`}>
+                        {summary}
+                    </div>
                 </Tip>
+            ) : (
+                <div className={s.flex} />
+            )}
+        </>
+    );
+    return (
+        <div
+            className={classNames(s.feature, { [s.featureOn]: f.enabled, [s.featureOpen]: shown })}
+            data-testid={`feature-${f.layer}`}
+            data-enabled={f.enabled ? "true" : "false"}
+            data-open={shown ? "true" : "false"}
+            data-fit={fit?.kind ?? ""}
+        >
+            <div className={s.featureHead}>
+                {foldable ? (
+                    <button
+                        type="button"
+                        className={s.featureFold}
+                        aria-expanded={open ? "true" : "false"}
+                        data-testid={`feature-fold-${f.layer}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            playSound(open ? "toggle-off" : "toggle-on");
+                            setOpen(!open);
+                        }}
+                    >
+                        {head}
+                    </button>
+                ) : (
+                    <div className={s.featureFold}>{head}</div>
+                )}
+                {fit ? <FitIcon t={t} fit={fit} layer={f.layer} /> : null}
                 <Switch on={f.enabled} onChange={(v) => act.setFeature(parent.path, f.layer, v)} testId={`feature-toggle-${f.layer}`} />
             </div>
-            {f.enabled && (child || own.length) ? (
+            {bad ? (
+                <Tip title={fitLabel(t, fit!)} description={detail || undefined}>
+                    <div
+                        className={classNames(s.fitLine, fit!.kind === "failed" ? s.fitLineFailed : s.fitLineReduced, { [s.fitStale]: fit!.stale })}
+                        data-testid={`feature-fit-line-${f.layer}`}
+                        data-kind={fit!.kind}
+                    >
+                        <div className={s.fitLabel}>{fitLabel(t, fit!)}</div>
+                        {detail ? (
+                            <div className={s.fitDetail} data-ellipsis>
+                                {detail}
+                            </div>
+                        ) : null}
+                    </div>
+                </Tip>
+            ) : null}
+            {shown ? (
                 <div className={s.featureBody} data-testid={`feature-options-${f.layer}`}>
                     <ErrorBoundary name={"feature-" + f.layer}>
                         {own.length ? <ControlList step={parent} layer={layerOf(catalog, parent.layer)} state={state} only={own} flat /> : null}
@@ -294,6 +410,34 @@ function featurePaths(root: StepView | null, step: StepView): Set<string> {
     return out;
 }
 
+/** "2 didn't fit" on a type's header: its enabled features that the latest plan had to shrink or drop. */
+const MisfitChip = ({ step, catalog }: { step: StepView; catalog: Catalog }) => {
+    const { t } = useT();
+    const list = misfits(step);
+    if (!list.length) return null;
+    const failed = list.some((f) => f.status!.kind === "failed");
+    const names = list
+        .map((f) => {
+            const l = layerOf(catalog, f.layer);
+            return (f.label ? t(f.label, layerName(t, l)) : layerName(t, l)) + ": " + fitLabel(t, f.status!);
+        })
+        .join("\n");
+    return (
+        <Tip title={t("Placemaker.UI.Fit.CountTitle", "Not everything fits")} description={names}>
+            <div
+                className={classNames(s.misfit, failed ? s.misfitFailed : s.misfitReduced)}
+                data-testid={`misfits-${step.path}`}
+                data-count={list.length}
+            >
+                <Icon name="warning" size={12} tint={failed ? "danger" : "warn"} />
+                <div className={s.misfitText}>
+                    {list.length === 1 ? t("Placemaker.UI.Fit.CountOne", "1 didn't fit") : t("Placemaker.UI.Fit.Count", "{0} didn't fit", [list.length])}
+                </div>
+            </div>
+        </Tip>
+    );
+};
+
 // ───────────── step options ─────────────
 
 const StepOptions = ({ catalog, design, state, step }: { catalog: Catalog; design: DesignState; state: ToolState; step: StepView }) => {
@@ -311,6 +455,7 @@ const StepOptions = ({ catalog, design, state, step }: { catalog: Catalog; desig
                 <div className={s.stepBar} style={{ backgroundColor: color }} />
                 <Icon name={entityIcon(layer.id, layer.icon)} size={15} />
                 <div className={s.stepName}>{stepHeading(t, catalog, design.root, step)}</div>
+                {step.enabled ? <MisfitChip step={step} catalog={catalog} /> : null}
                 {parent && !isOverridePath(design.root, step.path) ? (
                     <Tip title={step.enabled ? t("Placemaker.UI.Disable", "Turn off") : t("Placemaker.UI.Enable", "Turn on")}>
                         <div className={s.stepSwitch}>

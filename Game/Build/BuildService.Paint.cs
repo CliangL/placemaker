@@ -62,6 +62,10 @@ namespace Placemaker.Game.Build
                     Go(Step.EmitNets);
                     return;
                 }
+                _paintDirect = false;
+                try { _paintDirect = PaintDirect(); }
+                catch (Exception e) { Mod.Log.Warn("Placemaker direct terrain painting failed, using brush dabs: " + e.Message); }
+                if (_paintDirect) return;
                 _heightsValid = false;
                 foreach (var l in _request.Plan.Layers)
                 {
@@ -79,6 +83,13 @@ namespace Placemaker.Game.Build
                 if (_paintDabs.Count == 0) { Go(Step.EmitNets); return; }
                 Mod.Log.Info($"Placemaker paints the terrain with {_paintDabs.Count} brush dabs.");
             }
+            if (_paintDirect)
+            {
+                // Applied in the first frame; give the GPU a frame before the textures may go.
+                SetProgress(0.2f);
+                if (frame - _stepFrame >= 2) Go(Step.EmitNets);
+                return;
+            }
             // One wave per two frames: emit + apply, then discard on the next frame.
             if (((frame - _stepFrame) & 1) == 1) { DiscardTerraformBrushes(); return; }
             if (_paintCursor >= _paintDabs.Count)
@@ -92,7 +103,79 @@ namespace Placemaker.Game.Build
             for (int i = _paintCursor; i < end; i++) EmitPaintBrush(_paintDabs[i].Tool, _paintDabs[i].At, _paintDabs[i].Strength);
             _paintCursor = end;
             _tool.Requested = ApplyMode.Apply;
-            _status.Progress = 0.18f + 0.02f * (_paintCursor / (float)_paintDabs.Count);
+            SetProgress(0.18f + 0.02f * (_paintCursor / (float)_paintDabs.Count));
+        }
+
+        private bool _paintDirect;
+        private const float PaintCell = 1.75f;
+        private const float PaintEdge = 3f;          // soft edge width (m)
+        private const int PaintMaxTexels = 1024;
+
+        /// <summary>
+        /// Paints every PlannedPaint with ONE TerrainMaterialSystem.ApplyBrush call: the material brush
+        /// blits BrushPrefab.m_Texture, so the resolved brush prefab's texture is swapped for a
+        /// generated soft-edged coverage mask of the polygon for the duration of the call (the command
+        /// buffer is executed inside the call). No brush entities, no previews, one frame.
+        /// </summary>
+        private bool PaintDirect()
+        {
+            if (!_prefabs.TryGetPrefab<BrushPrefab>(_brushPrefab, out var brushPrefab) || brushPrefab == null) return false;
+            var materials = World.GetOrCreateSystemManaged<global::Game.Rendering.TerrainMaterialSystem>();
+            if (materials == null) return false;
+            int orientation = s_shiftOrientation >= 0 ? s_shiftOrientation : 0;
+            bool flipX = (orientation & 1) != 0, flipY = (orientation & 2) != 0;
+            int painted = 0;
+            var original = brushPrefab.m_Texture;
+            try
+            {
+                foreach (var l in _request.Plan.Layers)
+                {
+                    if (l?.Paint == null) continue;
+                    foreach (var paint in l.Paint)
+                    {
+                        if (paint?.Ring == null || paint.Ring.Length < 3) continue;
+                        if (!_paintTools.TryGetValue(math.clamp(paint.Layer, 0, 4), out var tool)) continue;
+                        var ring = new float2[paint.Ring.Length];
+                        float2 min = float.MaxValue, max = float.MinValue;
+                        for (int i = 0; i < ring.Length; i++) { ring[i] = paint.Ring[i].xz; min = math.min(min, ring[i]); max = math.max(max, ring[i]); }
+                        float side = math.cmax(max - min) + PaintEdge * 2f + PaintCell * 2f;
+                        float cell = math.max(PaintCell, side / PaintMaxTexels);
+                        int n = math.max(4, (int)math.ceil(side / cell));
+                        side = n * cell;
+                        float2 center = (min + max) * 0.5f;
+                        float2 origin = center - side * 0.5f;
+                        var cover = TerraformRaster.Coverage(ring, origin, cell, n, n, PaintEdge);
+                        var mask = new float[n * n];
+                        for (int y = 0; y < n; y++)
+                            for (int x = 0; x < n; x++)
+                                mask[(flipY ? n - 1 - y : y) * n + (flipX ? n - 1 - x : x)] = cover[y * n + x];
+                        var tex = MaskTexture(mask, n, 1f);
+                        float h = Height(center);
+                        var brush = new Brush
+                        {
+                            m_Tool = tool,
+                            m_Position = new float3(center.x, h, center.y),
+                            m_Target = new float3(center.x, h, center.y),
+                            m_Start = new float3(center.x, h, center.y),
+                            m_Angle = 0f,
+                            m_Size = side,
+                            m_Strength = math.saturate(paint.Strength),
+                            m_Opacity = 1f,
+                        };
+                        brushPrefab.m_Texture = tex;
+                        materials.ApplyBrush(brush, _brushPrefab);
+                        brushPrefab.m_Texture = original;
+                        painted++;
+                    }
+                }
+            }
+            finally
+            {
+                brushPrefab.m_Texture = original;
+            }
+            if (painted == 0) return false;
+            Mod.Log.Info($"Placemaker painted {painted} terrain areas directly (orientation {orientation}).");
+            return true;
         }
 
         private void EmitPaintBrush(Entity tool, float3 position, float strength)

@@ -49,6 +49,7 @@ namespace Placemaker.Core
         public const string DecalPaving = "decal.paving";
         public const string DecalMarkings = "decal.markings";
         public const string DecalGraffiti = "decal.graffiti";
+        public const string DecalLitter = "decal.litter";    // trash, litter, debris (yards, landfills); falls back to decal.dirt
 
         // Networks
         public const string Road = "net.road";

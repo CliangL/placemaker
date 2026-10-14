@@ -139,3 +139,134 @@ call `AreaRings.IsValid(ring, AreaRings.SurfaceMinNodeDistance + AreaRings.Margi
     `BuildService.Paint.cs`. Whether the material TerraformingPrefabs are loaded in game mode (not only the
     editor) must be confirmed in-game: the build logs "terrain paint layers available: …" or warns
     `Placemaker.Build.PaintUnavailable`. Painting is permanent (not undone when the group is removed).
+
+## Object collisions — what makes CS2 reject a placed object (FEEDBACK-4, decompiled 1.6.2f1)
+
+Sources: `Game.Objects.ValidationHelpers` (ObjectIterator / NetIterator / AreaIterator, ValidateObject),
+`Game.Tools.ValidationSystem` (ProcessError, CancelOptional), `Game.Prefabs.ObjectInitializeSystem`
+(geometry flags and bounds), `Game.Objects.ObjectUtils.GetCollisionMask`, `Game.Net.NetUtils`,
+`Game.Objects.OverrideSystem`.
+
+47. **Collision box = `ObjectGeometryData.m_Bounds`** (what the catalog stores as `AssetInfo.BoundsMin/Max`
+    and dumps as `bounds`). Rotated with the object (`ObjectUtils.CalculateBounds`). Refinements:
+    `Circular` → cylinder, `Standing` legs → leg cylinders/boxes + the body above the legs,
+    `IgnoreBottomCollision` → box clipped at y ≥ 0. Our Declutter uses the oriented box (a superset).
+48. **Plants are shrunk.** For `PlantData` prefabs the XZ bounds come from the *child-stage* meshes and are
+    then reduced: `size.xz -= size.xz · min(0.5, 1 − potCoverage)` (height likewise, capped). A tree's
+    collision core is ~half its young trunk/canopy width (AppleTree01 2.7 m, Alder 3.3 m) — bushes under a
+    mature canopy are legal as long as the cores do not meet. The catalog bounds already are the core.
+49. **Collision masks.** Every non-marker object collides `OnGround | Overground` (+`ExclusiveGround` with
+    `ExclusiveGround`/`BaseCollision`, i.e. buildings/pillars). `Marker` objects never collide in game mode.
+    Two objects are tested only if their masks share a bit and their 3D bounds intersect — so props on the
+    ground always meet in height; only e.g. a hanging object above a bench passes on height alone.
+50. **Who is overridable.** Every static prop/plant/decal that is not a building, net object, utility object
+    or pillar gets `Overridable | Brushable` (trees, bushes, benches, lamps, bins, fountains, decals, hedge
+    pieces). Decal-only meshes are additionally `WalkThrough` (not `Physical`) but still collide: a leaves
+    decal's box is 6×1×6 m (y −0.5…0.5) and meets every ground object it covers.
+51. **Object ↔ object.** Overlap → `OverlapExisting`. Severity for a new overridable temp
+    (`m_CanOverride` = Overridable && !Essential): **Override** (no icon, not an Error). For a temp with
+    `TempFlags.Optional` (our ghost: `CreationFlags.Optional`): `CancelOptional` cancels it
+    (`TempFlags.Hidden|Cancel`) — and when the other party is an optional temp too, **both** are cancelled.
+    Temps are also checked against each other (`objectList` sweep), so two overlapping planned objects
+    vanish together in the ghost (playtest: 480/553 and 3200/3238 "optional objects dropped").
+52. **After Apply** (`OverrideSystem`): an overridable object that collides with a non-overridable thing
+    (net, building, physical area) gets `Overridden` — hidden, removed from the search tree mask, restored if
+    the obstacle goes. Overridable ↔ overridable pairs are resolved by priority: one of each pair is hidden.
+    So a real build "succeeds" but silently hides overlapping props — now counted as
+    `Placemaker.Build.Hidden.Object` (temps carrying `Game.Tools.Override` at tag time).
+53. **Object ↔ net.** Ground nets with a surface collide `OnGround|ExclusiveGround|Overground`; against an
+    `Overground` object their height range is extended 10 km downwards, so the object's XZ box must stay off
+    the whole net geometry (road incl. sidewalks, path width). Overridable objects → Override (→ hidden after
+    Apply; cancelled in the ghost). Exempt: the net the object is attached to (`Attached.m_Parent`, its
+    nodes) and nets owned by the same top-level owner. `NoSubCollisions` compositions (markers) never collide.
+54. **Object ↔ area.** Only areas with `PhysicalGeometry` or `ProtectedArea` count. **Surfaces are not
+    physical** → objects on surfaces are always fine; lots with `m_AllowOverlap` are not physical either.
+    MapTile → `ExceedsCityLimits`. Physical overlap of an overridable object → Override.
+55. **Other object errors**: `PlacementFlags.Unique` → AlreadyExists; shoreline/water rules (`InWater`,
+    `NoWater`, `NotOnShoreline`) for `Standing`/shoreline objects; world bounds → ExceedsCityLimits.
+56. **Placemaker consequences.** (a) `Core/Build/Declutter` runs once per plan inside
+    `AssetCatalogSystem.ResolveAutomatic` (tool preview/price, ghost and build all call it): rows of
+    hedge/fence pieces are re-spaced without overlap, then objects are accepted by role priority
+    (centerpiece > furniture > trees > bushes/planters > decals), nudged ≤ 2 m or dropped, and drops are
+    PlanIssues per role. (b) Prop-fence pieces on fence nets use `Fences.SpacedPieceCount` (no overlap) and
+    run along the prefab's longer axis (vanilla hedge pieces are long in Z). (c) Whatever the game still
+    rejects is counted: ghost cancellations → `Placemaker.Issue.GhostObjectsDropped` in Review; build
+    Override temps → `Placemaker.Build.Hidden.Object`; missing parts → `PartsDropped`; Errors → `Skipped.*`.
+
+## Direct terraform and paint (fix round s4, decompiled 1.6.2f1)
+
+Problem (playtest 4b): the build emitted up to 48 vanilla level-brush `BrushDefinition`s per frame
+(plus 96 paint dabs). Each became a Temp `Brush` with an overlay preview (the purple blobs), was applied
+only on an Apply frame, and was re-measured every frame. On large areas this ran at 2 FPS, the bar
+stalled at 18 %, and it timed out.
+
+Findings (`Game.Simulation.TerrainSystem`, `Game.Rendering.TerrainMaterialSystem`, `Game.Tools.ApplyBrushesSystem`):
+- `TerrainSystem.ApplyBrush(TerraformingType type, Bounds2 area, Brush brush, Texture texture)` is public.
+  It runs the `AdjustTerrain` compute shader straight on `m_Heightmap` (R16_UNorm, playable area) and
+  `m_WorldMapEditable`. It also does every piece of bookkeeping itself: `OnAreaChanged`, `m_TerrainChange`,
+  `m_LastWrite`, `UpdateMinMax`, `TriggerAsyncChange` → CPU readback, and `WaterSystem.TerrainWillChangeFromBrush`.
+  The texture can be ANY `Texture`. The game maps it onto the square `brush.m_Position ± m_Size/2`
+  (`_CenterSizeRotation`, angle `m_Angle`). This is the call `ApplyBrushesSystem.ApplyHeight` makes with
+  `BrushPrefab.m_Texture`.
+- Step size: `x = clamp(unscaledDeltaTime, 0.05, 1) · strength · toolStrength / heightScale`, with
+  `toolStrength` = `TerraformingBrushData.m_ToolStrength` of `brush.m_Tool`, or else
+  `GetTerrainAdjustmentSpeed` (Level/Slope 4000, Shift 2000, Soften 1000). |strength| < 0.002 is bent by `pow(·, 0.055)`.
+  Shift adds `x · mask`, so it is linear and additive. Level moves toward a SINGLE target height, so it
+  cannot reproduce a blended bank that has a different original height at every point.
+- `RenderCascades` re-renders the cascade and calls `TriggerAsyncChange` again, so the CPU heights
+  (`GetHeightData(true)`) are current a few frames after the dispatch.
+- `TerrainMaterialSystem.ApplyBrush(Brush, Entity brushPrefab)` is public too. It blits
+  `PrefabSystem.GetPrefab<BrushPrefab>(prefab).m_Texture` into the user splatmaps (opacity = strength,
+  channel from `TerrainMaterialProperties` of `brush.m_Tool`) and executes its command buffer inside the
+  call. It takes no delta time.
+
+What the build does now (`BuildService.Terrain.cs`, `Core/Build/TerraformRaster.cs`):
+1. Rasterise every terraform item into one desired-ground grid (1.75 m cells, which is half a heightmap
+   pixel). Later layers and items win. A 4 m smoothstep bank outside the rings blends back to the original ground.
+2. Per pass: Δ = desired − current (from the CPU readback). For each square tile of at most 1024 texels,
+   build ONE raise mask and ONE lower mask (RGBAHalf, all channels equal) and call
+   `ApplyBrush(Shift, …)` with strength = max|Δ| / (clamp(dt)·2000), sign by mask. Strengths are kept
+   ≥ 0.0021; below that the mask is scaled down instead. A normal park takes 1–2 dispatches per pass.
+3. Wait 6 frames, re-measure, and stop when the inside cells are within 0.3 m (2 % allowed off). There
+   are at most 4 passes and a 6 s wall-clock cap. Progress is the drop in RMS residual and only moves forward.
+4. Calibration: the texture orientation relative to world x/z is not visible in C#. The first pass
+   must cut the RMS to < 0.8×. If it does not, the pass is reverted exactly (Shift is additive: same
+   textures, negated strength scaled for the frame's dt) and the next mirror (flipX/flipY) is tried.
+   The confirmed orientation is remembered for the session and also used for paint.
+5. Fallback: if no orientation converges, or the raster cannot be built, the old level-brush dabs run.
+   They now emit only for spots that are still off target.
+6. Paint: one `TerrainMaterialSystem.ApplyBrush` per `PlannedPaint`. The resolved brush prefab's
+   `m_Texture` is swapped for a soft-edged (3 m) coverage mask during the call and restored right after
+   (in `finally`). Everything is applied in one frame. Dabs remain the fallback if this throws.
+No brush entities exist on the direct path, so nothing previews, nothing has to be applied with the
+tool, and Cancel has nothing to clean up except textures (destroyed on reset). Terraform and paint stay
+permanent: removal never restores the ground, and every group with terraform or paint is flagged
+`PermanentTerrain`.
+
+Ground for nets/objects after terraform: `GroundHeight` = the raster's desired ground where terraform
+reached its target (verified), else the live terrain. Course fitting now re-solves the inner Bézier
+control heights so the curve meets the ground at t = 1/3 and 2/3, splits where it deviates by more
+than 0.35 m (pieces ≥ 6 m), and fits after the max-length split. Before, the inner control points kept
+the plan heights (often the pre-terraform ground) and pieces < 16 m were never split, so short paths
+clipped.
+
+Unverified in game (needs a playtest): the Shift kernel's exact linearity and which texture channel it
+samples (all channels are set equal). The verify/revert loop and the dab fallback cover a mismatch.
+
+## Removal leaving things behind (fix round s4)
+
+Cause: tags were added only to temporaries that matched a plan item (prefab + position within 0.75 m).
+Anything else was applied untagged and removal never saw it. That covers random variants, objects
+moved on placement, optional ghost objects whose collision cleared between tagging and Apply, and
+decals/bushes matched to nothing. Fixes:
+- `TagTemporaries`: every own top-level object or area (Temp without original, no Owner, not a
+  delete/cancel) is ours while our tool is active, so unmatched ones are adopted as Generic. Edges stay
+  match-only, because pieces of a foreign road split by our junctions belong to the city.
+- `TagLateTemporaries` on the Apply frame catches temporaries that changed after validation.
+- `AdoptStrays` after Apply: untagged top-level objects inside the outline that did not exist before
+  the build (snapshot at record creation) and use a prefab this build placed get adopted.
+- `VerifyMembers`: tagged members per kind vs emitted objects/areas/net pieces (`BuildVerification`),
+  logged at build end.
+- Removal logs and releases anything still tagged after the record goes (`ReportLeftovers`).
+Known gap: when the player later splits one of our edges (a road built across a path), the game
+replaces the edge with untagged pieces. Propagating tags on splits is future work.

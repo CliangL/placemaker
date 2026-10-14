@@ -746,7 +746,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
             if (per100 <= 0f) return;
             var ctx = s.Ctx;
             int total = (int)(s.Region.Area / 100f * per100);
-            string dirt = YardKit.CatQuiet(AssetCategories.DecalDirt, AssetCategories.Decal);
+            string dirt = YardKit.CatQuiet(AssetCategories.DecalLitter, AssetCategories.DecalDirt, AssetCategories.Decal);
             string puddle = YardKit.CatQuiet(AssetCategories.DecalPuddles, AssetCategories.DecalDirt);
             if (dirt == null && puddle == null) { AssetAvailability.Require(ctx.Plan, AssetCategories.DecalDirt, null, Keys.Category(AssetCategories.DecalDirt)); return; }
             int nearStuff = (int)(total * 0.65f), wet = (int)(total * 0.25f), loose = total - nearStuff - wet;

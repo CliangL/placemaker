@@ -73,10 +73,14 @@ namespace Placemaker.Tests
             f.UnreadyMarkerKind = "entrance";
             f.UnreadyNextStep = new LocText("Placemaker.Step.PlaceEntrance");
             var p = StageMachine.Primary(ToolStage.Design, f);
+            // No automatic entrances (FEEDBACK-4b): disabled "Review" with "Add at least one entrance",
+            // still carrying the step + kind so pressing it starts placement there.
             Assert.Equal(PrimaryKind.PlaceMarkers, p.Kind);
-            Assert.True(p.Enabled);
+            Assert.False(p.Enabled);
+            Assert.Equal(StageMachine.AddEntranceKey, p.Reason.Key);
             Assert.Equal("entrance", p.MarkerKind);
-            Assert.Equal("Placemaker.Step.PlaceEntrance", p.Label.Key);
+            Assert.Equal("0", p.StepPath);
+            Assert.Equal("Placemaker.Primary.Review", p.Label.Key);
 
             f.UnreadyMarkerKind = null;
             f.UnreadyReason = new LocText("Placemaker.Reason.TooNarrow");

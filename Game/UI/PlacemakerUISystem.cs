@@ -194,7 +194,7 @@ namespace Placemaker.Game.UI
             _designStamp = _tool.DesignVersion;
             _designPlanStamp = _tool.PlanRevision;
             _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan,
-                null, _tool.ActivePreset, _tool.PresetsFile).ToString());
+                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale).ToString());
         }
 
         private void PushSummary()
@@ -203,7 +203,7 @@ namespace Placemaker.Game.UI
             var failure = _tool.BuildFailure;
             bool ack = _tool.PermanentAcknowledged;
             string stamp = _tool.PlanRevision + "|" + _tool.PlanStale + "|" + afford + "|" + _tool.FeedbackVersion + "|" + (failure?.Key ?? "") + "|"
-                + (Services.Assets?.Version ?? -1) + "|" + _tool.AssetsResolvedStamp + "|" + ack;
+                + (Services.Assets?.Version ?? -1) + "|" + _tool.AssetsResolvedStamp + "|" + ack + "|" + _tool.GhostDropped;
             if (stamp == _summaryStamp) return;
             _summaryStamp = stamp;
             var input = new SummaryInput
@@ -218,6 +218,8 @@ namespace Placemaker.Game.UI
             foreach (var n in _tool.BuildNotes) input.ExtraIssues.Add(n);
             var clipIssue = _tool.ClipIssue;
             if (clipIssue != null) input.ExtraIssues.Add(clipIssue);
+            var ghostDropped = _tool.GhostDroppedIssue;
+            if (ghostDropped != null) input.ExtraIssues.Add(ghostDropped);
             if (failure != null)
             {
                 input.ExtraIssues.Add(failure);

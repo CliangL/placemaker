@@ -1,0 +1,8466 @@
+[
+  {
+    "type": "abandonedLot",
+    "variant": "default",
+    "file": "abandonedLot/default.png",
+    "ms": 56,
+    "failure": null,
+    "objects": 237,
+    "nets": 35,
+    "pathMetres": 273,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 12,
+    "outside": 0,
+    "decals": 73,
+    "byRole": {
+      "Furniture": 43,
+      "Decal": 73,
+      "Bush": 104,
+      "Tree": 17
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "abandonedLot",
+    "variant": "preset-overgrown",
+    "file": "abandonedLot/preset-overgrown.png",
+    "ms": 65,
+    "failure": null,
+    "objects": 282,
+    "nets": 8,
+    "pathMetres": 63,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 55,
+    "byRole": {
+      "Furniture": 9,
+      "Decal": 55,
+      "Bush": 165,
+      "Tree": 53
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "abandonedLot",
+    "variant": "preset-rubbleField",
+    "file": "abandonedLot/preset-rubbleField.png",
+    "ms": 53,
+    "failure": null,
+    "objects": 735,
+    "nets": 24,
+    "pathMetres": 187,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 256,
+    "outside": 0,
+    "decals": 287,
+    "byRole": {
+      "Decal": 287,
+      "Furniture": 415,
+      "Bush": 33
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "abandonedLot",
+    "variant": "preset-demolished",
+    "file": "abandonedLot/preset-demolished.png",
+    "ms": 103,
+    "failure": null,
+    "objects": 167,
+    "nets": 53,
+    "pathMetres": 410,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 14,
+    "outside": 0,
+    "decals": 103,
+    "byRole": {
+      "Decal": 103,
+      "Furniture": 44,
+      "Bush": 20
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "abandonedLot",
+    "variant": "preset-squatterCamp",
+    "file": "abandonedLot/preset-squatterCamp.png",
+    "ms": 166,
+    "failure": null,
+    "objects": 229,
+    "nets": 17,
+    "pathMetres": 133,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 3,
+    "outside": 0,
+    "decals": 64,
+    "byRole": {
+      "Decal": 64,
+      "Furniture": 59,
+      "Bush": 92,
+      "Tree": 14
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "abandonedLot",
+    "variant": "preset-fencedWasteland",
+    "file": "abandonedLot/preset-fencedWasteland.png",
+    "ms": 28,
+    "failure": null,
+    "objects": 113,
+    "nets": 53,
+    "pathMetres": 414,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 42,
+    "byRole": {
+      "Furniture": 11,
+      "Decal": 42,
+      "Bush": 58,
+      "Tree": 2
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "abandonedLot",
+    "variant": "features-all",
+    "file": "abandonedLot/features-all.png",
+    "ms": 276,
+    "failure": null,
+    "objects": 456,
+    "nets": 35,
+    "pathMetres": 273,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 5,
+    "benchesOffPath": 0,
+    "overlaps": 8,
+    "outside": 0,
+    "decals": 257,
+    "byRole": {
+      "Furniture": 69,
+      "Decal": 257,
+      "Bush": 111,
+      "Tree": 19
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "abandonedLot",
+    "variant": "features-none",
+    "file": "abandonedLot/features-none.png",
+    "ms": 70,
+    "failure": null,
+    "objects": 237,
+    "nets": 35,
+    "pathMetres": 273,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 12,
+    "outside": 0,
+    "decals": 73,
+    "byRole": {
+      "Furniture": 43,
+      "Decal": 73,
+      "Bush": 104,
+      "Tree": 17
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "default",
+    "file": "adventurePlayground/default.png",
+    "ms": 116,
+    "failure": null,
+    "objects": 162,
+    "nets": 40,
+    "pathMetres": 760,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 5,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 40,
+      "Bush": 36,
+      "Bench": 9,
+      "Bin": 2,
+      "Tree": 63,
+      "Lamp": 12
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "preset-adventure",
+    "file": "adventurePlayground/preset-adventure.png",
+    "ms": 68,
+    "failure": null,
+    "objects": 164,
+    "nets": 40,
+    "pathMetres": 766,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 5,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 43,
+      "Bush": 36,
+      "Bench": 9,
+      "Bin": 2,
+      "Tree": 62,
+      "Lamp": 12
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "preset-toddler",
+    "file": "adventurePlayground/preset-toddler.png",
+    "ms": 116,
+    "failure": null,
+    "objects": 120,
+    "nets": 52,
+    "pathMetres": 809,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 9,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 18,
+      "Bench": 13,
+      "Bin": 2,
+      "Lamp": 12,
+      "Tree": 47,
+      "Bush": 28
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "preset-water",
+    "file": "adventurePlayground/preset-water.png",
+    "ms": 119,
+    "failure": null,
+    "objects": 137,
+    "nets": 28,
+    "pathMetres": 699,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 18,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 30,
+      "Bench": 10,
+      "Bin": 2,
+      "Tree": 55,
+      "Lamp": 12,
+      "Bush": 28
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "preset-nature",
+    "file": "adventurePlayground/preset-nature.png",
+    "ms": 99,
+    "failure": null,
+    "objects": 273,
+    "nets": 28,
+    "pathMetres": 699,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 2,
+    "overlaps": 20,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 36,
+      "Bush": 85,
+      "Bench": 10,
+      "Bin": 2,
+      "Tree": 140
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "preset-jungle",
+    "file": "adventurePlayground/preset-jungle.png",
+    "ms": 67,
+    "failure": null,
+    "objects": 126,
+    "nets": 40,
+    "pathMetres": 777,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 5,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 16,
+      "Bench": 10,
+      "Bin": 2,
+      "Tree": 58,
+      "Lamp": 12,
+      "Bush": 28
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "features-all",
+    "file": "adventurePlayground/features-all.png",
+    "ms": 211,
+    "failure": null,
+    "objects": 304,
+    "nets": 40,
+    "pathMetres": 760,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 5,
+    "benchesOffPath": 7,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 120,
+    "byRole": {
+      "Furniture": 56,
+      "Bush": 40,
+      "Bench": 11,
+      "Bin": 2,
+      "Tree": 63,
+      "Lamp": 12,
+      "Decal": 120
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.AddOn.Kickabout.Issue.Smaller",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "adventurePlayground",
+    "variant": "features-none",
+    "file": "adventurePlayground/features-none.png",
+    "ms": 43,
+    "failure": null,
+    "objects": 162,
+    "nets": 40,
+    "pathMetres": 760,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 5,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 40,
+      "Bush": 36,
+      "Bench": 9,
+      "Bin": 2,
+      "Tree": 63,
+      "Lamp": 12
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "default",
+    "file": "amphitheatre/default.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 117,
+    "nets": 13,
+    "pathMetres": 243,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 6,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 2,
+      "Centerpiece": 2,
+      "Bench": 78,
+      "Lamp": 6,
+      "Tree": 29
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "preset-classic",
+    "file": "amphitheatre/preset-classic.png",
+    "ms": 9,
+    "failure": null,
+    "objects": 168,
+    "nets": 13,
+    "pathMetres": 244,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 2,
+      "Centerpiece": 2,
+      "Bench": 126,
+      "Lamp": 7,
+      "Tree": 31
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "preset-cinema",
+    "file": "amphitheatre/preset-cinema.png",
+    "ms": 2,
+    "failure": null,
+    "objects": 149,
+    "nets": 7,
+    "pathMetres": 222,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 129,
+      "Tree": 17,
+      "Bench": 3
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "preset-bandstand",
+    "file": "amphitheatre/preset-bandstand.png",
+    "ms": 2,
+    "failure": null,
+    "objects": 154,
+    "nets": 16,
+    "pathMetres": 285,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 99,
+      "Lamp": 14,
+      "Tree": 37,
+      "Bench": 4
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "preset-meadow",
+    "file": "amphitheatre/preset-meadow.png",
+    "ms": 2,
+    "failure": null,
+    "objects": 53,
+    "nets": 9,
+    "pathMetres": 299,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 18,
+      "Lamp": 5,
+      "Tree": 25,
+      "Bench": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "preset-speakers",
+    "file": "amphitheatre/preset-speakers.png",
+    "ms": 54,
+    "failure": null,
+    "objects": 71,
+    "nets": 10,
+    "pathMetres": 163,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 21,
+      "Lamp": 5,
+      "Tree": 44
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "features-all",
+    "file": "amphitheatre/features-all.png",
+    "ms": 238,
+    "failure": null,
+    "objects": 330,
+    "nets": 13,
+    "pathMetres": 243,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 6,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 120,
+    "byRole": {
+      "Furniture": 44,
+      "Centerpiece": 2,
+      "Bench": 78,
+      "Lamp": 6,
+      "Tree": 35,
+      "Planter": 35,
+      "Bush": 10,
+      "Decal": 120
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "amphitheatre",
+    "variant": "features-none",
+    "file": "amphitheatre/features-none.png",
+    "ms": 10,
+    "failure": null,
+    "objects": 117,
+    "nets": 13,
+    "pathMetres": 243,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 6,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 2,
+      "Centerpiece": 2,
+      "Bench": 78,
+      "Lamp": 6,
+      "Tree": 29
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "default",
+    "file": "animalPark/default.png",
+    "ms": 80,
+    "failure": null,
+    "objects": 257,
+    "nets": 61,
+    "pathMetres": 1470,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 208,
+      "Bin": 2,
+      "Tree": 22,
+      "AnimalSpawner": 10,
+      "Bench": 15
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "preset-pettingFarm",
+    "file": "animalPark/preset-pettingFarm.png",
+    "ms": 71,
+    "failure": null,
+    "objects": 260,
+    "nets": 60,
+    "pathMetres": 1564,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 210,
+      "Bin": 2,
+      "Tree": 21,
+      "AnimalSpawner": 12,
+      "Bench": 15
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "preset-paddocks",
+    "file": "animalPark/preset-paddocks.png",
+    "ms": 15,
+    "failure": null,
+    "objects": 240,
+    "nets": 43,
+    "pathMetres": 1264,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 199,
+      "Bin": 2,
+      "Tree": 15,
+      "AnimalSpawner": 12,
+      "Bench": 12
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "preset-horsePaddock",
+    "file": "animalPark/preset-horsePaddock.png",
+    "ms": 15,
+    "failure": null,
+    "objects": 54,
+    "nets": 55,
+    "pathMetres": 1461,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Bin": 2,
+      "AnimalSpawner": 6,
+      "Tree": 10,
+      "Bench": 13
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "preset-deerPark",
+    "file": "animalPark/preset-deerPark.png",
+    "ms": 34,
+    "failure": null,
+    "objects": 45,
+    "nets": 55,
+    "pathMetres": 1088,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 8,
+      "Bin": 2,
+      "Tree": 23,
+      "AnimalSpawner": 5,
+      "Bench": 7
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "preset-aviaryGarden",
+    "file": "animalPark/preset-aviaryGarden.png",
+    "ms": 39,
+    "failure": null,
+    "objects": 281,
+    "nets": 77,
+    "pathMetres": 1290,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 202,
+      "Planter": 19,
+      "Bin": 2,
+      "Tree": 34,
+      "AnimalSpawner": 2,
+      "Bench": 12,
+      "Lamp": 10
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "features-all",
+    "file": "animalPark/features-all.png",
+    "ms": 58,
+    "failure": null,
+    "objects": 500,
+    "nets": 61,
+    "pathMetres": 1470,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 6,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Furniture": 211,
+      "Bin": 2,
+      "Tree": 22,
+      "AnimalSpawner": 10,
+      "Bench": 15,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "animalPark",
+    "variant": "features-none",
+    "file": "animalPark/features-none.png",
+    "ms": 21,
+    "failure": null,
+    "objects": 257,
+    "nets": 61,
+    "pathMetres": 1470,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 208,
+      "Bin": 2,
+      "Tree": 22,
+      "AnimalSpawner": 10,
+      "Bench": 15
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "default",
+    "file": "beach/default.png",
+    "ms": 26,
+    "failure": null,
+    "objects": 120,
+    "nets": 11,
+    "pathMetres": 254,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 29,
+      "Bench": 5,
+      "Bin": 2,
+      "Lamp": 4,
+      "Bush": 70,
+      "Tree": 10
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "preset-sandy",
+    "file": "beach/preset-sandy.png",
+    "ms": 17,
+    "failure": null,
+    "objects": 120,
+    "nets": 11,
+    "pathMetres": 254,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 29,
+      "Bench": 5,
+      "Bin": 2,
+      "Lamp": 4,
+      "Bush": 70,
+      "Tree": 10
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "preset-resort",
+    "file": "beach/preset-resort.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 103,
+    "nets": 10,
+    "pathMetres": 238,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 43,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 68,
+      "Bench": 7,
+      "Bin": 3,
+      "Lamp": 4,
+      "Tree": 16,
+      "Bush": 5
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "preset-rocky",
+    "file": "beach/preset-rocky.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 84,
+    "nets": 10,
+    "pathMetres": 232,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 66,
+      "Bench": 5,
+      "Bin": 2,
+      "Lamp": 4,
+      "Tree": 7
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "preset-river",
+    "file": "beach/preset-river.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 55,
+    "nets": 12,
+    "pathMetres": 237,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 11,
+      "Bench": 4,
+      "Bin": 2,
+      "Lamp": 3,
+      "Tree": 30,
+      "Bush": 5
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "preset-cove",
+    "file": "beach/preset-cove.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 163,
+    "nets": 10,
+    "pathMetres": 230,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 56,
+      "Bench": 11,
+      "Bin": 2,
+      "Tree": 89,
+      "Bush": 5
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "preset-volleyball",
+    "file": "beach/preset-volleyball.png",
+    "ms": 10,
+    "failure": null,
+    "objects": 46,
+    "nets": 10,
+    "pathMetres": 248,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 3,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 22,
+      "Bench": 5,
+      "Bin": 2,
+      "Lamp": 4,
+      "Tree": 8,
+      "Bush": 5
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "features-all",
+    "file": "beach/features-all.png",
+    "ms": 22,
+    "failure": null,
+    "objects": 412,
+    "nets": 11,
+    "pathMetres": 254,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 5,
+    "benchesOffPath": 0,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Furniture": 69,
+      "Bench": 5,
+      "Bin": 2,
+      "Lamp": 4,
+      "Bush": 80,
+      "Tree": 12,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "beach",
+    "variant": "features-none",
+    "file": "beach/features-none.png",
+    "ms": 40,
+    "failure": null,
+    "objects": 120,
+    "nets": 11,
+    "pathMetres": 254,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 29,
+      "Bench": 5,
+      "Bin": 2,
+      "Lamp": 4,
+      "Bush": 70,
+      "Tree": 10
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "botanicalGarden",
+    "variant": "default",
+    "file": "botanicalGarden/default.png",
+    "ms": 25,
+    "failure": null,
+    "objects": 252,
+    "nets": 30,
+    "pathMetres": 696,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 4,
+      "Lamp": 130,
+      "Bush": 96,
+      "Tree": 3,
+      "Planter": 18
+    },
+    "issues": []
+  },
+  {
+    "type": "botanicalGarden",
+    "variant": "preset-mixed",
+    "file": "botanicalGarden/preset-mixed.png",
+    "ms": 94,
+    "failure": null,
+    "objects": 252,
+    "nets": 30,
+    "pathMetres": 696,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 4,
+      "Lamp": 130,
+      "Bush": 96,
+      "Tree": 3,
+      "Planter": 18
+    },
+    "issues": []
+  },
+  {
+    "type": "botanicalGarden",
+    "variant": "preset-flowerShow",
+    "file": "botanicalGarden/preset-flowerShow.png",
+    "ms": 74,
+    "failure": null,
+    "objects": 424,
+    "nets": 30,
+    "pathMetres": 696,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 5,
+      "Lamp": 128,
+      "Planter": 231,
+      "Bush": 59
+    },
+    "issues": []
+  },
+  {
+    "type": "botanicalGarden",
+    "variant": "preset-arboretum",
+    "file": "botanicalGarden/preset-arboretum.png",
+    "ms": 27,
+    "failure": null,
+    "objects": 161,
+    "nets": 30,
+    "pathMetres": 696,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Lamp": 130,
+      "Tree": 26,
+      "Bush": 1
+    },
+    "issues": []
+  },
+  {
+    "type": "botanicalGarden",
+    "variant": "preset-shrubbery",
+    "file": "botanicalGarden/preset-shrubbery.png",
+    "ms": 50,
+    "failure": null,
+    "objects": 397,
+    "nets": 30,
+    "pathMetres": 696,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 4,
+      "Lamp": 130,
+      "Bush": 256,
+      "Tree": 6
+    },
+    "issues": []
+  },
+  {
+    "type": "botanicalGarden",
+    "variant": "features-all",
+    "file": "botanicalGarden/features-all.png",
+    "ms": 145,
+    "failure": null,
+    "objects": 531,
+    "nets": 30,
+    "pathMetres": 696,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 6,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Furniture": 21,
+      "Bench": 10,
+      "Lamp": 136,
+      "Bush": 102,
+      "Tree": 3,
+      "Planter": 18,
+      "Centerpiece": 1,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "botanicalGarden",
+    "variant": "features-none",
+    "file": "botanicalGarden/features-none.png",
+    "ms": 69,
+    "failure": null,
+    "objects": 252,
+    "nets": 30,
+    "pathMetres": 696,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 4,
+      "Lamp": 130,
+      "Bush": 96,
+      "Tree": 3,
+      "Planter": 18
+    },
+    "issues": []
+  },
+  {
+    "type": "campground",
+    "variant": "default",
+    "file": "campground/default.png",
+    "ms": 168,
+    "failure": null,
+    "objects": 98,
+    "nets": 4,
+    "pathMetres": 94,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Tree": 75
+    },
+    "issues": []
+  },
+  {
+    "type": "campground",
+    "variant": "preset-forest",
+    "file": "campground/preset-forest.png",
+    "ms": 153,
+    "failure": null,
+    "objects": 125,
+    "nets": 4,
+    "pathMetres": 94,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Tree": 102
+    },
+    "issues": []
+  },
+  {
+    "type": "campground",
+    "variant": "preset-meadow",
+    "file": "campground/preset-meadow.png",
+    "ms": 110,
+    "failure": null,
+    "objects": 50,
+    "nets": 4,
+    "pathMetres": 94,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 21,
+      "Tree": 29
+    },
+    "issues": []
+  },
+  {
+    "type": "campground",
+    "variant": "preset-caravan",
+    "file": "campground/preset-caravan.png",
+    "ms": 114,
+    "failure": null,
+    "objects": 54,
+    "nets": 4,
+    "pathMetres": 94,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 9,
+      "Tree": 45
+    },
+    "issues": []
+  },
+  {
+    "type": "campground",
+    "variant": "features-all",
+    "file": "campground/features-all.png",
+    "ms": 219,
+    "failure": null,
+    "objects": 379,
+    "nets": 4,
+    "pathMetres": 94,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Furniture": 56,
+      "Tree": 75,
+      "Bush": 8,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "campground",
+    "variant": "features-none",
+    "file": "campground/features-none.png",
+    "ms": 32,
+    "failure": null,
+    "objects": 91,
+    "nets": 4,
+    "pathMetres": 94,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 19,
+      "Tree": 72
+    },
+    "issues": []
+  },
+  {
+    "type": "cemeteryGrounds",
+    "variant": "default",
+    "file": "cemeteryGrounds/default.png",
+    "ms": 31,
+    "failure": null,
+    "objects": 468,
+    "nets": 17,
+    "pathMetres": 647,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 180,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Furniture": 180,
+      "Bush": 220,
+      "Lamp": 35,
+      "Bench": 3,
+      "Tree": 29
+    },
+    "issues": []
+  },
+  {
+    "type": "cemeteryGrounds",
+    "variant": "preset-churchyard",
+    "file": "cemeteryGrounds/preset-churchyard.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 509,
+    "nets": 17,
+    "pathMetres": 647,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 189,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Furniture": 189,
+      "Bush": 252,
+      "Lamp": 35,
+      "Bench": 3,
+      "Tree": 29
+    },
+    "issues": []
+  },
+  {
+    "type": "cemeteryGrounds",
+    "variant": "preset-lawn",
+    "file": "cemeteryGrounds/preset-lawn.png",
+    "ms": 27,
+    "failure": null,
+    "objects": 168,
+    "nets": 17,
+    "pathMetres": 647,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 100,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Furniture": 100,
+      "Lamp": 35,
+      "Bench": 3,
+      "Tree": 29
+    },
+    "issues": []
+  },
+  {
+    "type": "cemeteryGrounds",
+    "variant": "features-all",
+    "file": "cemeteryGrounds/features-all.png",
+    "ms": 21,
+    "failure": null,
+    "objects": 709,
+    "nets": 17,
+    "pathMetres": 647,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 180,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Centerpiece": 1,
+      "Furniture": 181,
+      "Bush": 220,
+      "Lamp": 35,
+      "Bench": 3,
+      "Tree": 29,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing"
+    ]
+  },
+  {
+    "type": "cemeteryGrounds",
+    "variant": "features-none",
+    "file": "cemeteryGrounds/features-none.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 468,
+    "nets": 17,
+    "pathMetres": 647,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 180,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Furniture": 180,
+      "Bush": 220,
+      "Lamp": 35,
+      "Bench": 3,
+      "Tree": 29
+    },
+    "issues": []
+  },
+  {
+    "type": "communityGarden",
+    "variant": "default",
+    "file": "communityGarden/default.png",
+    "ms": 18,
+    "failure": null,
+    "objects": 1579,
+    "nets": 21,
+    "pathMetres": 998,
+    "surfaces": 58,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1579
+    },
+    "issues": []
+  },
+  {
+    "type": "communityGarden",
+    "variant": "preset-allotments",
+    "file": "communityGarden/preset-allotments.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 1484,
+    "nets": 21,
+    "pathMetres": 998,
+    "surfaces": 58,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1484
+    },
+    "issues": []
+  },
+  {
+    "type": "communityGarden",
+    "variant": "preset-community",
+    "file": "communityGarden/preset-community.png",
+    "ms": 20,
+    "failure": null,
+    "objects": 1458,
+    "nets": 24,
+    "pathMetres": 1244,
+    "surfaces": 128,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1458
+    },
+    "issues": []
+  },
+  {
+    "type": "communityGarden",
+    "variant": "preset-marketGarden",
+    "file": "communityGarden/preset-marketGarden.png",
+    "ms": 24,
+    "failure": null,
+    "objects": 2083,
+    "nets": 19,
+    "pathMetres": 793,
+    "surfaces": 14,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 2083
+    },
+    "issues": []
+  },
+  {
+    "type": "communityGarden",
+    "variant": "features-all",
+    "file": "communityGarden/features-all.png",
+    "ms": 62,
+    "failure": null,
+    "objects": 1761,
+    "nets": 21,
+    "pathMetres": 998,
+    "surfaces": 58,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 180,
+    "byRole": {
+      "Furniture": 1581,
+      "Decal": 180
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing"
+    ]
+  },
+  {
+    "type": "communityGarden",
+    "variant": "features-none",
+    "file": "communityGarden/features-none.png",
+    "ms": 16,
+    "failure": null,
+    "objects": 1579,
+    "nets": 21,
+    "pathMetres": 998,
+    "surfaces": 58,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1579
+    },
+    "issues": []
+  },
+  {
+    "type": "constructionSite",
+    "variant": "default",
+    "file": "constructionSite/default.png",
+    "ms": 62,
+    "failure": null,
+    "objects": 150,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 24,
+    "outside": 0,
+    "decals": 53,
+    "byRole": {
+      "Furniture": 92,
+      "Lamp": 5,
+      "Decal": 53
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "constructionSite",
+    "variant": "preset-foundation",
+    "file": "constructionSite/preset-foundation.png",
+    "ms": 41,
+    "failure": null,
+    "objects": 150,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 24,
+    "outside": 0,
+    "decals": 53,
+    "byRole": {
+      "Furniture": 92,
+      "Lamp": 5,
+      "Decal": 53
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "constructionSite",
+    "variant": "preset-roadworks",
+    "file": "constructionSite/preset-roadworks.png",
+    "ms": 75,
+    "failure": null,
+    "objects": 251,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 29,
+    "outside": 0,
+    "decals": 85,
+    "byRole": {
+      "Decal": 85,
+      "Furniture": 161,
+      "Lamp": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "constructionSite",
+    "variant": "preset-compound",
+    "file": "constructionSite/preset-compound.png",
+    "ms": 51,
+    "failure": null,
+    "objects": 144,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 14,
+    "outside": 0,
+    "decals": 70,
+    "byRole": {
+      "Furniture": 69,
+      "Lamp": 5,
+      "Decal": 70
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "constructionSite",
+    "variant": "preset-demolition",
+    "file": "constructionSite/preset-demolition.png",
+    "ms": 35,
+    "failure": null,
+    "objects": 293,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 10,
+    "outside": 0,
+    "decals": 221,
+    "byRole": {
+      "Decal": 221,
+      "Furniture": 66,
+      "Lamp": 6
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "constructionSite",
+    "variant": "preset-earthworks",
+    "file": "constructionSite/preset-earthworks.png",
+    "ms": 14,
+    "failure": null,
+    "objects": 33,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 3,
+    "byRole": {
+      "Furniture": 25,
+      "Lamp": 5,
+      "Decal": 3
+    },
+    "issues": [
+      "I:Placemaker.ConstructionSite.Issue.NoRoomForWorks",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "constructionSite",
+    "variant": "features-all",
+    "file": "constructionSite/features-all.png",
+    "ms": 65,
+    "failure": null,
+    "objects": 535,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 4,
+    "benchesOffPath": 4,
+    "overlaps": 24,
+    "outside": 0,
+    "decals": 413,
+    "byRole": {
+      "Furniture": 111,
+      "Lamp": 7,
+      "Decal": 413,
+      "Bench": 4
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "constructionSite",
+    "variant": "features-none",
+    "file": "constructionSite/features-none.png",
+    "ms": 14,
+    "failure": null,
+    "objects": 150,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 24,
+    "outside": 0,
+    "decals": 53,
+    "byRole": {
+      "Furniture": 92,
+      "Lamp": 5,
+      "Decal": 53
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "dogPark",
+    "variant": "default",
+    "file": "dogPark/default.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 35,
+    "nets": 15,
+    "pathMetres": 429,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Furniture": 8,
+      "Tree": 23
+    },
+    "issues": []
+  },
+  {
+    "type": "dogPark",
+    "variant": "preset-neighbourhood",
+    "file": "dogPark/preset-neighbourhood.png",
+    "ms": 18,
+    "failure": null,
+    "objects": 33,
+    "nets": 15,
+    "pathMetres": 429,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Furniture": 6,
+      "Tree": 23
+    },
+    "issues": []
+  },
+  {
+    "type": "dogPark",
+    "variant": "preset-split",
+    "file": "dogPark/preset-split.png",
+    "ms": 6,
+    "failure": null,
+    "objects": 35,
+    "nets": 17,
+    "pathMetres": 524,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Furniture": 8,
+      "Tree": 23
+    },
+    "issues": []
+  },
+  {
+    "type": "dogPark",
+    "variant": "preset-agility",
+    "file": "dogPark/preset-agility.png",
+    "ms": 28,
+    "failure": null,
+    "objects": 45,
+    "nets": 15,
+    "pathMetres": 429,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 6,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 6,
+      "Furniture": 16,
+      "Tree": 23
+    },
+    "issues": []
+  },
+  {
+    "type": "dogPark",
+    "variant": "features-all",
+    "file": "dogPark/features-all.png",
+    "ms": 23,
+    "failure": null,
+    "objects": 293,
+    "nets": 15,
+    "pathMetres": 429,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Bench": 4,
+      "Furniture": 21,
+      "Tree": 23,
+      "Bush": 5,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "dogPark",
+    "variant": "features-none",
+    "file": "dogPark/features-none.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 35,
+    "nets": 15,
+    "pathMetres": 429,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Furniture": 8,
+      "Tree": 23
+    },
+    "issues": []
+  },
+  {
+    "type": "fairground",
+    "variant": "default",
+    "file": "fairground/default.png",
+    "ms": 45,
+    "failure": null,
+    "objects": 92,
+    "nets": 19,
+    "pathMetres": 798,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 66,
+      "Bin": 6,
+      "Bench": 6,
+      "Tree": 14
+    },
+    "issues": [
+      "I:Placemaker.Fairground.Issue.NoBackstage",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "fairground",
+    "variant": "preset-fairground",
+    "file": "fairground/preset-fairground.png",
+    "ms": 33,
+    "failure": null,
+    "objects": 103,
+    "nets": 19,
+    "pathMetres": 799,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 76,
+      "Bin": 7,
+      "Bench": 6,
+      "Tree": 14
+    },
+    "issues": [
+      "I:Placemaker.Fairground.Issue.NoBackstage",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "fairground",
+    "variant": "preset-festival",
+    "file": "fairground/preset-festival.png",
+    "ms": 23,
+    "failure": null,
+    "objects": 106,
+    "nets": 18,
+    "pathMetres": 744,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 25,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 85,
+      "Bin": 7,
+      "Bench": 7,
+      "Tree": 7
+    },
+    "issues": [
+      "I:Placemaker.Fairground.Issue.SmallField",
+      "I:Placemaker.Fairground.Issue.NoBackstage",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "fairground",
+    "variant": "preset-funfair",
+    "file": "fairground/preset-funfair.png",
+    "ms": 51,
+    "failure": null,
+    "objects": 94,
+    "nets": 16,
+    "pathMetres": 738,
+    "surfaces": 15,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 65,
+      "Bin": 8,
+      "Bench": 7,
+      "Tree": 14
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "fairground",
+    "variant": "preset-christmas",
+    "file": "fairground/preset-christmas.png",
+    "ms": 25,
+    "failure": null,
+    "objects": 91,
+    "nets": 4,
+    "pathMetres": 250,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 73,
+      "Bin": 6,
+      "Bench": 5,
+      "Tree": 7
+    },
+    "issues": []
+  },
+  {
+    "type": "fairground",
+    "variant": "preset-foodTrucks",
+    "file": "fairground/preset-foodTrucks.png",
+    "ms": 54,
+    "failure": null,
+    "objects": 76,
+    "nets": 3,
+    "pathMetres": 125,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 56,
+      "Bin": 4,
+      "Bench": 2,
+      "Tree": 14
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "fairground",
+    "variant": "features-all",
+    "file": "fairground/features-all.png",
+    "ms": 74,
+    "failure": null,
+    "objects": 220,
+    "nets": 19,
+    "pathMetres": 798,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 120,
+    "byRole": {
+      "Furniture": 72,
+      "Bin": 6,
+      "Bench": 6,
+      "Tree": 16,
+      "Decal": 120
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.Fairground.Issue.NoBackstage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing"
+    ]
+  },
+  {
+    "type": "fairground",
+    "variant": "features-none",
+    "file": "fairground/features-none.png",
+    "ms": 37,
+    "failure": null,
+    "objects": 92,
+    "nets": 19,
+    "pathMetres": 798,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 66,
+      "Bin": 6,
+      "Bench": 6,
+      "Tree": 14
+    },
+    "issues": [
+      "I:Placemaker.Fairground.Issue.NoBackstage",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "default",
+    "file": "farmstead/default.png",
+    "ms": 75,
+    "failure": null,
+    "objects": 275,
+    "nets": 12,
+    "pathMetres": 241,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 63,
+      "Tree": 11,
+      "AnimalSpawner": 2,
+      "Bush": 199
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "preset-dairy",
+    "file": "farmstead/preset-dairy.png",
+    "ms": 21,
+    "failure": null,
+    "objects": 234,
+    "nets": 8,
+    "pathMetres": 196,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Tree": 12,
+      "AnimalSpawner": 3,
+      "Furniture": 20,
+      "Bush": 199
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "I:Placemaker.Farmstead.Issue.FewerPaddocks",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "preset-arable",
+    "file": "farmstead/preset-arable.png",
+    "ms": 9,
+    "failure": null,
+    "objects": 351,
+    "nets": 4,
+    "pathMetres": 148,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 202,
+      "Tree": 4,
+      "Bush": 145
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "preset-mixed",
+    "file": "farmstead/preset-mixed.png",
+    "ms": 17,
+    "failure": null,
+    "objects": 280,
+    "nets": 12,
+    "pathMetres": 241,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 68,
+      "Tree": 11,
+      "AnimalSpawner": 2,
+      "Bush": 199
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "preset-hobby",
+    "file": "farmstead/preset-hobby.png",
+    "ms": 32,
+    "failure": null,
+    "objects": 1053,
+    "nets": 34,
+    "pathMetres": 633,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Tree": 8,
+      "Furniture": 982,
+      "AnimalSpawner": 1,
+      "Bush": 62
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "preset-ranch",
+    "file": "farmstead/preset-ranch.png",
+    "ms": 42,
+    "failure": null,
+    "objects": 47,
+    "nets": 29,
+    "pathMetres": 536,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Tree": 6,
+      "AnimalSpawner": 1,
+      "Furniture": 17,
+      "Bush": 23
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "I:Placemaker.Farmstead.Issue.FewerPaddocks",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "features-all",
+    "file": "farmstead/features-all.png",
+    "ms": 244,
+    "failure": null,
+    "objects": 335,
+    "nets": 22,
+    "pathMetres": 270,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 6,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 29,
+    "byRole": {
+      "Furniture": 78,
+      "Tree": 12,
+      "AnimalSpawner": 2,
+      "Bush": 204,
+      "Planter": 10,
+      "Decal": 29
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "farmstead",
+    "variant": "features-none",
+    "file": "farmstead/features-none.png",
+    "ms": 56,
+    "failure": null,
+    "objects": 275,
+    "nets": 12,
+    "pathMetres": 241,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 63,
+      "Tree": 11,
+      "AnimalSpawner": 2,
+      "Bush": 199
+    },
+    "issues": [
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "formalGarden",
+    "variant": "default",
+    "file": "formalGarden/default.png",
+    "ms": 19,
+    "failure": null,
+    "objects": 711,
+    "nets": 15,
+    "pathMetres": 545,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 4,
+      "Tree": 24,
+      "Lamp": 10,
+      "Bush": 528,
+      "Planter": 144
+    },
+    "issues": []
+  },
+  {
+    "type": "formalGarden",
+    "variant": "preset-french",
+    "file": "formalGarden/preset-french.png",
+    "ms": 13,
+    "failure": null,
+    "objects": 639,
+    "nets": 15,
+    "pathMetres": 545,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 4,
+      "Tree": 24,
+      "Lamp": 10,
+      "Bush": 440,
+      "Planter": 160
+    },
+    "issues": []
+  },
+  {
+    "type": "formalGarden",
+    "variant": "preset-italian",
+    "file": "formalGarden/preset-italian.png",
+    "ms": 37,
+    "failure": null,
+    "objects": 847,
+    "nets": 15,
+    "pathMetres": 545,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 4,
+      "Lamp": 10,
+      "Bush": 640,
+      "Planter": 192
+    },
+    "issues": []
+  },
+  {
+    "type": "formalGarden",
+    "variant": "preset-knot",
+    "file": "formalGarden/preset-knot.png",
+    "ms": 33,
+    "failure": null,
+    "objects": 1035,
+    "nets": 15,
+    "pathMetres": 545,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 4,
+      "Lamp": 10,
+      "Bush": 952,
+      "Planter": 68
+    },
+    "issues": []
+  },
+  {
+    "type": "formalGarden",
+    "variant": "features-all",
+    "file": "formalGarden/features-all.png",
+    "ms": 2289,
+    "failure": null,
+    "objects": 764,
+    "nets": 18,
+    "pathMetres": 574,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 6,
+    "benchesOffPath": 4,
+    "overlaps": 8,
+    "outside": 0,
+    "decals": 11,
+    "byRole": {
+      "Centerpiece": 7,
+      "Bench": 5,
+      "Tree": 26,
+      "Lamp": 19,
+      "Bush": 528,
+      "Planter": 151,
+      "Furniture": 17,
+      "Decal": 11
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Monuments.Issue.Smaller",
+      "I:Placemaker.Monuments.Issue.ScaledDown",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "formalGarden",
+    "variant": "features-none",
+    "file": "formalGarden/features-none.png",
+    "ms": 11,
+    "failure": null,
+    "objects": 711,
+    "nets": 15,
+    "pathMetres": 545,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 4,
+      "Tree": 24,
+      "Lamp": 10,
+      "Bush": 528,
+      "Planter": 144
+    },
+    "issues": []
+  },
+  {
+    "type": "golf",
+    "variant": "default",
+    "file": "golf/default.png",
+    "ms": 40,
+    "failure": null,
+    "objects": 110,
+    "nets": 2,
+    "pathMetres": 98,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 1,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 9,
+      "Bench": 1,
+      "Tree": 71,
+      "Bush": 29
+    },
+    "issues": [
+      "I:Placemaker.Golf.Issue.FewerHoles",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Golf.Issue.FewerPonds",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "golf",
+    "variant": "preset-parkland",
+    "file": "golf/preset-parkland.png",
+    "ms": 32,
+    "failure": null,
+    "objects": 127,
+    "nets": 2,
+    "pathMetres": 120,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 9,
+      "Bench": 2,
+      "Tree": 87,
+      "Bush": 29
+    },
+    "issues": [
+      "I:Placemaker.Golf.Issue.FewerHoles",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "golf",
+    "variant": "preset-links",
+    "file": "golf/preset-links.png",
+    "ms": 72,
+    "failure": null,
+    "objects": 125,
+    "nets": 8,
+    "pathMetres": 158,
+    "surfaces": 14,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 15,
+      "Bench": 3,
+      "Bush": 107
+    },
+    "issues": [
+      "I:Placemaker.Golf.Issue.FewerHoles",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "golf",
+    "variant": "preset-pitchPutt",
+    "file": "golf/preset-pitchPutt.png",
+    "ms": 51,
+    "failure": null,
+    "objects": 103,
+    "nets": 3,
+    "pathMetres": 41,
+    "surfaces": 16,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 3,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 12,
+      "Bench": 3,
+      "Tree": 59,
+      "Bush": 29
+    },
+    "issues": [
+      "I:Placemaker.Golf.Issue.FewerHoles",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "golf",
+    "variant": "preset-miniGolf",
+    "file": "golf/preset-miniGolf.png",
+    "ms": 54,
+    "failure": null,
+    "objects": 211,
+    "nets": 5,
+    "pathMetres": 228,
+    "surfaces": 38,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 18,
+    "byRole": {
+      "Furniture": 37,
+      "Decal": 18,
+      "Bench": 14,
+      "Lamp": 12,
+      "Tree": 35,
+      "Bush": 95
+    },
+    "issues": []
+  },
+  {
+    "type": "golf",
+    "variant": "preset-drivingRange",
+    "file": "golf/preset-drivingRange.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 82,
+    "nets": 12,
+    "pathMetres": 409,
+    "surfaces": 13,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 10,
+    "byRole": {
+      "Decal": 10,
+      "Bench": 4,
+      "Furniture": 16,
+      "Tree": 23,
+      "Bush": 29
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "golf",
+    "variant": "preset-discGolf",
+    "file": "golf/preset-discGolf.png",
+    "ms": 69,
+    "failure": null,
+    "objects": 230,
+    "nets": 4,
+    "pathMetres": 32,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 13,
+      "Tree": 110,
+      "Bush": 107
+    },
+    "issues": [
+      "I:Placemaker.Golf.Issue.FewerHoles",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "golf",
+    "variant": "features-all",
+    "file": "golf/features-all.png",
+    "ms": 133,
+    "failure": null,
+    "objects": 305,
+    "nets": 2,
+    "pathMetres": 98,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 3,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 120,
+    "byRole": {
+      "Furniture": 45,
+      "Bench": 3,
+      "Tree": 73,
+      "Bush": 39,
+      "Planter": 25,
+      "Decal": 120
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.Golf.Issue.FewerHoles",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Golf.Issue.FewerPonds",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "golf",
+    "variant": "features-none",
+    "file": "golf/features-none.png",
+    "ms": 43,
+    "failure": null,
+    "objects": 110,
+    "nets": 2,
+    "pathMetres": 98,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 1,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 9,
+      "Bench": 1,
+      "Tree": 71,
+      "Bush": 29
+    },
+    "issues": [
+      "I:Placemaker.Golf.Issue.FewerHoles",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Golf.Issue.FewerPonds",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "greenwayPark",
+    "variant": "default",
+    "file": "greenwayPark/default.png",
+    "ms": 16,
+    "failure": null,
+    "objects": 207,
+    "nets": 5,
+    "pathMetres": 225,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Tree": 73,
+      "Lamp": 35,
+      "Bush": 95
+    },
+    "issues": []
+  },
+  {
+    "type": "greenwayPark",
+    "variant": "preset-leafy",
+    "file": "greenwayPark/preset-leafy.png",
+    "ms": 17,
+    "failure": null,
+    "objects": 315,
+    "nets": 5,
+    "pathMetres": 225,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Tree": 133,
+      "Lamp": 35,
+      "Bush": 143
+    },
+    "issues": []
+  },
+  {
+    "type": "greenwayPark",
+    "variant": "preset-open",
+    "file": "greenwayPark/preset-open.png",
+    "ms": 13,
+    "failure": null,
+    "objects": 117,
+    "nets": 4,
+    "pathMetres": 110,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 2,
+      "Tree": 36,
+      "Lamp": 32,
+      "Bush": 47
+    },
+    "issues": []
+  },
+  {
+    "type": "greenwayPark",
+    "variant": "features-all",
+    "file": "greenwayPark/features-all.png",
+    "ms": 41,
+    "failure": null,
+    "objects": 453,
+    "nets": 5,
+    "pathMetres": 225,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Bench": 4,
+      "Tree": 73,
+      "Lamp": 35,
+      "Bush": 95,
+      "Furniture": 6,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.AddOn.Terrain.Issue.NoRoads",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "greenwayPark",
+    "variant": "features-none",
+    "file": "greenwayPark/features-none.png",
+    "ms": 22,
+    "failure": null,
+    "objects": 207,
+    "nets": 5,
+    "pathMetres": 225,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Tree": 73,
+      "Lamp": 35,
+      "Bush": 95
+    },
+    "issues": []
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "default",
+    "file": "hikingTrail/default.png",
+    "ms": 66,
+    "failure": null,
+    "objects": 265,
+    "nets": 13,
+    "pathMetres": 316,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 1,
+    "overlaps": 9,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Bin": 2,
+      "Bench": 6,
+      "Furniture": 14,
+      "Tree": 162,
+      "Bush": 71,
+      "AnimalSpawner": 1
+    },
+    "issues": []
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "preset-forestTrail",
+    "file": "hikingTrail/preset-forestTrail.png",
+    "ms": 31,
+    "failure": null,
+    "objects": 312,
+    "nets": 13,
+    "pathMetres": 316,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 1,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Bin": 2,
+      "Bench": 4,
+      "Furniture": 15,
+      "Tree": 162,
+      "Bush": 119,
+      "AnimalSpawner": 1
+    },
+    "issues": []
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "preset-meadowWalk",
+    "file": "hikingTrail/preset-meadowWalk.png",
+    "ms": 29,
+    "failure": null,
+    "objects": 111,
+    "nets": 11,
+    "pathMetres": 310,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 1,
+    "overlaps": 9,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Furniture": 18,
+      "Bin": 3,
+      "Bench": 7,
+      "Tree": 14,
+      "Bush": 59,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "preset-ridgeHike",
+    "file": "hikingTrail/preset-ridgeHike.png",
+    "ms": 30,
+    "failure": null,
+    "objects": 147,
+    "nets": 5,
+    "pathMetres": 114,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 1,
+    "overlaps": 3,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Bin": 1,
+      "Bench": 3,
+      "Furniture": 27,
+      "Tree": 59,
+      "Bush": 47,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "preset-canyonTrail",
+    "file": "hikingTrail/preset-canyonTrail.png",
+    "ms": 19,
+    "failure": null,
+    "objects": 203,
+    "nets": 5,
+    "pathMetres": 114,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 1,
+    "overlaps": 7,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Bin": 1,
+      "Bench": 3,
+      "Furniture": 35,
+      "Tree": 47,
+      "Bush": 107,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "preset-summitClimb",
+    "file": "hikingTrail/preset-summitClimb.png",
+    "ms": 22,
+    "failure": null,
+    "objects": 241,
+    "nets": 5,
+    "pathMetres": 215,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 1,
+    "overlaps": 7,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Furniture": 11,
+      "Bin": 2,
+      "Bench": 4,
+      "Tree": 143,
+      "Bush": 71,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "preset-lakeshoreLoop",
+    "file": "hikingTrail/preset-lakeshoreLoop.png",
+    "ms": 35,
+    "failure": null,
+    "objects": 285,
+    "nets": 13,
+    "pathMetres": 321,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 1,
+    "overlaps": 18,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Bin": 2,
+      "Bench": 9,
+      "Furniture": 14,
+      "Tree": 107,
+      "Bush": 143,
+      "AnimalSpawner": 1
+    },
+    "issues": []
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "features-all",
+    "file": "hikingTrail/features-all.png",
+    "ms": 268,
+    "failure": null,
+    "objects": 532,
+    "nets": 13,
+    "pathMetres": 316,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 3,
+    "overlaps": 9,
+    "outside": 0,
+    "decals": 249,
+    "byRole": {
+      "Decal": 249,
+      "Bin": 2,
+      "Bench": 8,
+      "Furniture": 63,
+      "Tree": 131,
+      "Bush": 78,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "hikingTrail",
+    "variant": "features-none",
+    "file": "hikingTrail/features-none.png",
+    "ms": 18,
+    "failure": null,
+    "objects": 265,
+    "nets": 13,
+    "pathMetres": 316,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 1,
+    "overlaps": 9,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Bin": 2,
+      "Bench": 6,
+      "Furniture": 14,
+      "Tree": 162,
+      "Bush": 71,
+      "AnimalSpawner": 1
+    },
+    "issues": []
+  },
+  {
+    "type": "landfill",
+    "variant": "default",
+    "file": "landfill/default.png",
+    "ms": 49,
+    "failure": null,
+    "objects": 321,
+    "nets": 20,
+    "pathMetres": 496,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 31,
+    "outside": 0,
+    "decals": 172,
+    "byRole": {
+      "Furniture": 36,
+      "Bush": 52,
+      "Tree": 61,
+      "Decal": 172
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "landfill",
+    "variant": "preset-active",
+    "file": "landfill/preset-active.png",
+    "ms": 16,
+    "failure": null,
+    "objects": 325,
+    "nets": 20,
+    "pathMetres": 497,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 38,
+    "outside": 0,
+    "decals": 171,
+    "byRole": {
+      "Furniture": 40,
+      "Bush": 52,
+      "Tree": 62,
+      "Decal": 171
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "landfill",
+    "variant": "preset-capped",
+    "file": "landfill/preset-capped.png",
+    "ms": 54,
+    "failure": null,
+    "objects": 135,
+    "nets": 34,
+    "pathMetres": 277,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 1,
+    "overlaps": 6,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Bench": 3,
+      "Furniture": 4,
+      "Bush": 100,
+      "Tree": 19,
+      "Decal": 9
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "landfill",
+    "variant": "preset-compost",
+    "file": "landfill/preset-compost.png",
+    "ms": 35,
+    "failure": null,
+    "objects": 385,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 11,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 23,
+    "outside": 0,
+    "decals": 125,
+    "byRole": {
+      "Furniture": 185,
+      "Bush": 34,
+      "Tree": 41,
+      "Decal": 125
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "landfill",
+    "variant": "preset-recycling",
+    "file": "landfill/preset-recycling.png",
+    "ms": 50,
+    "failure": null,
+    "objects": 615,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 15,
+    "outside": 0,
+    "decals": 104,
+    "byRole": {
+      "Furniture": 453,
+      "Tree": 44,
+      "Bush": 14,
+      "Decal": 104
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "landfill",
+    "variant": "preset-flytip",
+    "file": "landfill/preset-flytip.png",
+    "ms": 25,
+    "failure": null,
+    "objects": 461,
+    "nets": 14,
+    "pathMetres": 226,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 286,
+    "byRole": {
+      "Furniture": 39,
+      "Tree": 29,
+      "Bush": 107,
+      "Decal": 286
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "landfill",
+    "variant": "features-all",
+    "file": "landfill/features-all.png",
+    "ms": 159,
+    "failure": null,
+    "objects": 547,
+    "nets": 20,
+    "pathMetres": 496,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 49,
+    "outside": 0,
+    "decals": 332,
+    "byRole": {
+      "Furniture": 101,
+      "Bush": 52,
+      "Tree": 62,
+      "Decal": 332
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "landfill",
+    "variant": "features-none",
+    "file": "landfill/features-none.png",
+    "ms": 28,
+    "failure": null,
+    "objects": 321,
+    "nets": 20,
+    "pathMetres": 496,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 31,
+    "outside": 0,
+    "decals": 172,
+    "byRole": {
+      "Furniture": 36,
+      "Bush": 52,
+      "Tree": 61,
+      "Decal": 172
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "default",
+    "file": "logisticsYard/default.png",
+    "ms": 25,
+    "failure": null,
+    "objects": 442,
+    "nets": 12,
+    "pathMetres": 414,
+    "surfaces": 18,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 53,
+    "outside": 0,
+    "decals": 370,
+    "byRole": {
+      "Furniture": 68,
+      "Decal": 370,
+      "Lamp": 4
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "preset-containerStacks",
+    "file": "logisticsYard/preset-containerStacks.png",
+    "ms": 6,
+    "failure": null,
+    "objects": 445,
+    "nets": 10,
+    "pathMetres": 412,
+    "surfaces": 18,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 61,
+    "outside": 0,
+    "decals": 364,
+    "byRole": {
+      "Furniture": 77,
+      "Decal": 364,
+      "Lamp": 4
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "preset-palletYard",
+    "file": "logisticsYard/preset-palletYard.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 1033,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 41,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 555,
+    "byRole": {
+      "Furniture": 472,
+      "Decal": 555,
+      "Lamp": 6
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "preset-lumberYard",
+    "file": "logisticsYard/preset-lumberYard.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 332,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 19,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 248,
+    "outside": 0,
+    "decals": 57,
+    "byRole": {
+      "Furniture": 241,
+      "Lamp": 6,
+      "Decal": 57,
+      "Tree": 14,
+      "Bush": 14
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "preset-storageYard",
+    "file": "logisticsYard/preset-storageYard.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 212,
+    "nets": 12,
+    "pathMetres": 414,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 7,
+    "outside": 0,
+    "decals": 191,
+    "byRole": {
+      "Furniture": 21,
+      "Decal": 191
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "preset-loadingYard",
+    "file": "logisticsYard/preset-loadingYard.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 676,
+    "nets": 12,
+    "pathMetres": 413,
+    "surfaces": 38,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 506,
+    "byRole": {
+      "Furniture": 165,
+      "Decal": 506,
+      "Lamp": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "preset-shipmentYard",
+    "file": "logisticsYard/preset-shipmentYard.png",
+    "ms": 6,
+    "failure": null,
+    "objects": 799,
+    "nets": 12,
+    "pathMetres": 416,
+    "surfaces": 32,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 36,
+    "outside": 0,
+    "decals": 487,
+    "byRole": {
+      "Furniture": 304,
+      "Decal": 487,
+      "Lamp": 8
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "features-all",
+    "file": "logisticsYard/features-all.png",
+    "ms": 30,
+    "failure": null,
+    "objects": 522,
+    "nets": 12,
+    "pathMetres": 414,
+    "surfaces": 18,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 42,
+    "outside": 0,
+    "decals": 455,
+    "byRole": {
+      "Furniture": 63,
+      "Decal": 455,
+      "Lamp": 4
+    },
+    "issues": []
+  },
+  {
+    "type": "logisticsYard",
+    "variant": "features-none",
+    "file": "logisticsYard/features-none.png",
+    "ms": 16,
+    "failure": null,
+    "objects": 442,
+    "nets": 12,
+    "pathMetres": 414,
+    "surfaces": 18,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 53,
+    "outside": 0,
+    "decals": 370,
+    "byRole": {
+      "Furniture": 68,
+      "Decal": 370,
+      "Lamp": 4
+    },
+    "issues": []
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "default",
+    "file": "lookoutHill/default.png",
+    "ms": 20,
+    "failure": null,
+    "objects": 166,
+    "nets": 22,
+    "pathMetres": 213,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 2,
+    "overlaps": 8,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 2,
+      "Bench": 10,
+      "Tree": 107,
+      "Bush": 47
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "preset-hilltop",
+    "file": "lookoutHill/preset-hilltop.png",
+    "ms": 5,
+    "failure": null,
+    "objects": 202,
+    "nets": 16,
+    "pathMetres": 194,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 4,
+    "overlaps": 8,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 3,
+      "Bench": 9,
+      "Tree": 143,
+      "Bush": 47
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.LookoutHill.Issue.Lower",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "preset-sledding",
+    "file": "lookoutHill/preset-sledding.png",
+    "ms": 4,
+    "failure": null,
+    "objects": 141,
+    "nets": 13,
+    "pathMetres": 183,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 4,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 3,
+      "Bench": 8,
+      "Tree": 83,
+      "Bush": 47
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "preset-viewpointMound",
+    "file": "lookoutHill/preset-viewpointMound.png",
+    "ms": 4,
+    "failure": null,
+    "objects": 102,
+    "nets": 15,
+    "pathMetres": 141,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Tree": 47,
+      "Bush": 47
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "preset-terraces",
+    "file": "lookoutHill/preset-terraces.png",
+    "ms": 5,
+    "failure": null,
+    "objects": 156,
+    "nets": 27,
+    "pathMetres": 237,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 18,
+    "overlaps": 9,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 27,
+      "Furniture": 2,
+      "Lamp": 21,
+      "Tree": 59,
+      "Bush": 47
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "preset-kiteHill",
+    "file": "lookoutHill/preset-kiteHill.png",
+    "ms": 5,
+    "failure": null,
+    "objects": 96,
+    "nets": 9,
+    "pathMetres": 107,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 7,
+      "Bench": 7,
+      "Tree": 35,
+      "Bush": 47
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "features-all",
+    "file": "lookoutHill/features-all.png",
+    "ms": 147,
+    "failure": null,
+    "objects": 361,
+    "nets": 22,
+    "pathMetres": 213,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 2,
+    "overlaps": 12,
+    "outside": 0,
+    "decals": 180,
+    "byRole": {
+      "Furniture": 11,
+      "Bench": 12,
+      "Tree": 111,
+      "Bush": 47,
+      "Decal": 180
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "lookoutHill",
+    "variant": "features-none",
+    "file": "lookoutHill/features-none.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 166,
+    "nets": 22,
+    "pathMetres": 213,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 2,
+    "overlaps": 8,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 2,
+      "Bench": 10,
+      "Tree": 107,
+      "Bush": 47
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "marketSquare",
+    "variant": "default",
+    "file": "marketSquare/default.png",
+    "ms": 3,
+    "failure": null,
+    "objects": 117,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 41,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "AccessPoint": 5,
+      "Centerpiece": 1,
+      "Tree": 43,
+      "Bench": 41,
+      "Furniture": 24,
+      "Lamp": 3
+    },
+    "issues": [
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "marketSquare",
+    "variant": "preset-weekly",
+    "file": "marketSquare/preset-weekly.png",
+    "ms": 3,
+    "failure": null,
+    "objects": 117,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 41,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "AccessPoint": 5,
+      "Centerpiece": 1,
+      "Tree": 43,
+      "Bench": 41,
+      "Furniture": 24,
+      "Lamp": 3
+    },
+    "issues": [
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "marketSquare",
+    "variant": "preset-bigMarket",
+    "file": "marketSquare/preset-bigMarket.png",
+    "ms": 0,
+    "failure": null,
+    "objects": 57,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "AccessPoint": 5,
+      "Furniture": 44,
+      "Lamp": 8
+    },
+    "issues": [
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "marketSquare",
+    "variant": "preset-farmers",
+    "file": "marketSquare/preset-farmers.png",
+    "ms": 3,
+    "failure": null,
+    "objects": 178,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 41,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 64,
+    "byRole": {
+      "AccessPoint": 5,
+      "Centerpiece": 1,
+      "Tree": 43,
+      "Bench": 41,
+      "Furniture": 22,
+      "Lamp": 2,
+      "Decal": 64
+    },
+    "issues": [
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "marketSquare",
+    "variant": "features-all",
+    "file": "marketSquare/features-all.png",
+    "ms": 4,
+    "failure": null,
+    "objects": 193,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 41,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 72,
+    "byRole": {
+      "AccessPoint": 5,
+      "Centerpiece": 1,
+      "Tree": 43,
+      "Bench": 41,
+      "Furniture": 28,
+      "Lamp": 3,
+      "Decal": 72
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.Plaza.Issue.NoRoadEdge",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing"
+    ]
+  },
+  {
+    "type": "marketSquare",
+    "variant": "features-none",
+    "file": "marketSquare/features-none.png",
+    "ms": 3,
+    "failure": null,
+    "objects": 117,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 41,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "AccessPoint": 5,
+      "Centerpiece": 1,
+      "Tree": 43,
+      "Bench": 41,
+      "Furniture": 24,
+      "Lamp": 3
+    },
+    "issues": [
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "memorialPark",
+    "variant": "default",
+    "file": "memorialPark/default.png",
+    "ms": 9,
+    "failure": null,
+    "objects": 555,
+    "nets": 22,
+    "pathMetres": 336,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 12,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Lamp": 43,
+      "Centerpiece": 1,
+      "Furniture": 6,
+      "Bench": 12,
+      "Planter": 59,
+      "Bush": 395,
+      "Tree": 39
+    },
+    "issues": []
+  },
+  {
+    "type": "memorialPark",
+    "variant": "preset-garden",
+    "file": "memorialPark/preset-garden.png",
+    "ms": 2,
+    "failure": null,
+    "objects": 599,
+    "nets": 14,
+    "pathMetres": 262,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 8,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Furniture": 4,
+      "Bench": 8,
+      "Lamp": 21,
+      "Planter": 122,
+      "Bush": 394,
+      "Tree": 49
+    },
+    "issues": []
+  },
+  {
+    "type": "memorialPark",
+    "variant": "preset-square",
+    "file": "memorialPark/preset-square.png",
+    "ms": 1,
+    "failure": null,
+    "objects": 67,
+    "nets": 6,
+    "pathMetres": 179,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 6,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Furniture": 4,
+      "Bench": 6,
+      "Lamp": 21,
+      "Tree": 35
+    },
+    "issues": []
+  },
+  {
+    "type": "memorialPark",
+    "variant": "preset-war",
+    "file": "memorialPark/preset-war.png",
+    "ms": 2,
+    "failure": null,
+    "objects": 525,
+    "nets": 23,
+    "pathMetres": 330,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 14,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Lamp": 26,
+      "Centerpiece": 1,
+      "Furniture": 24,
+      "Bench": 14,
+      "Planter": 35,
+      "Bush": 388,
+      "Tree": 37
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "memorialPark",
+    "variant": "preset-reflection",
+    "file": "memorialPark/preset-reflection.png",
+    "ms": 2,
+    "failure": null,
+    "objects": 533,
+    "nets": 21,
+    "pathMetres": 350,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 14,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Lamp": 51,
+      "Centerpiece": 1,
+      "Bench": 14,
+      "Planter": 27,
+      "Bush": 395,
+      "Tree": 45
+    },
+    "issues": []
+  },
+  {
+    "type": "memorialPark",
+    "variant": "preset-sculpture",
+    "file": "memorialPark/preset-sculpture.png",
+    "ms": 6,
+    "failure": null,
+    "objects": 183,
+    "nets": 19,
+    "pathMetres": 534,
+    "surfaces": 15,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 2,
+    "overlaps": 27,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 12,
+      "Bench": 4,
+      "Lamp": 21,
+      "Planter": 28,
+      "Bush": 77,
+      "Tree": 41
+    },
+    "issues": [
+      "I:Placemaker.Memorial.Issue.FewerSculptures"
+    ]
+  },
+  {
+    "type": "memorialPark",
+    "variant": "features-all",
+    "file": "memorialPark/features-all.png",
+    "ms": 271,
+    "failure": null,
+    "objects": 712,
+    "nets": 24,
+    "pathMetres": 361,
+    "surfaces": 7,
+    "errors": 0,
+    "warnings": 5,
+    "benchesOffPath": 17,
+    "overlaps": 17,
+    "outside": 0,
+    "decals": 72,
+    "byRole": {
+      "Lamp": 47,
+      "Centerpiece": 6,
+      "Furniture": 36,
+      "Bench": 17,
+      "Planter": 98,
+      "Bush": 395,
+      "Tree": 41,
+      "Decal": 72
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.Monuments.Issue.Smaller",
+      "I:Placemaker.Monuments.Issue.ScaledDown",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "memorialPark",
+    "variant": "features-none",
+    "file": "memorialPark/features-none.png",
+    "ms": 2,
+    "failure": null,
+    "objects": 555,
+    "nets": 22,
+    "pathMetres": 336,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 12,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Lamp": 43,
+      "Centerpiece": 1,
+      "Furniture": 6,
+      "Bench": 12,
+      "Planter": 59,
+      "Bush": 395,
+      "Tree": 39
+    },
+    "issues": []
+  },
+  {
+    "type": "natureReserve",
+    "variant": "default",
+    "file": "natureReserve/default.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 378,
+    "nets": 8,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 2,
+      "Tree": 208,
+      "Bush": 167,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "natureReserve",
+    "variant": "preset-forest",
+    "file": "natureReserve/preset-forest.png",
+    "ms": 27,
+    "failure": null,
+    "objects": 354,
+    "nets": 8,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 2,
+      "Tree": 208,
+      "Bush": 143,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "natureReserve",
+    "variant": "preset-heath",
+    "file": "natureReserve/preset-heath.png",
+    "ms": 42,
+    "failure": null,
+    "objects": 459,
+    "nets": 8,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Tree": 95,
+      "Bush": 359,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "natureReserve",
+    "variant": "preset-wildwood",
+    "file": "natureReserve/preset-wildwood.png",
+    "ms": 36,
+    "failure": null,
+    "objects": 460,
+    "nets": 8,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 1,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 1,
+      "Tree": 220,
+      "Bush": 239
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "natureReserve",
+    "variant": "features-all",
+    "file": "natureReserve/features-all.png",
+    "ms": 145,
+    "failure": null,
+    "objects": 739,
+    "nets": 8,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 4,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 360,
+    "byRole": {
+      "Bench": 2,
+      "Tree": 208,
+      "Bush": 167,
+      "AnimalSpawner": 1,
+      "Furniture": 1,
+      "Decal": 360
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "natureReserve",
+    "variant": "features-none",
+    "file": "natureReserve/features-none.png",
+    "ms": 116,
+    "failure": null,
+    "objects": 378,
+    "nets": 8,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 2,
+      "Tree": 208,
+      "Bush": 167,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "orchardPark",
+    "variant": "default",
+    "file": "orchardPark/default.png",
+    "ms": 84,
+    "failure": null,
+    "objects": 319,
+    "nets": 16,
+    "pathMetres": 444,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bush": 143,
+      "Tree": 106,
+      "Bench": 15,
+      "Planter": 30,
+      "Furniture": 25
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "orchardPark",
+    "variant": "preset-apple",
+    "file": "orchardPark/preset-apple.png",
+    "ms": 42,
+    "failure": null,
+    "objects": 319,
+    "nets": 16,
+    "pathMetres": 444,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bush": 143,
+      "Tree": 106,
+      "Bench": 15,
+      "Planter": 30,
+      "Furniture": 25
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "orchardPark",
+    "variant": "preset-cherryBlossom",
+    "file": "orchardPark/preset-cherryBlossom.png",
+    "ms": 98,
+    "failure": null,
+    "objects": 175,
+    "nets": 14,
+    "pathMetres": 305,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 6,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Tree": 104,
+      "Bench": 18,
+      "Planter": 21,
+      "Furniture": 25,
+      "Lamp": 7
+    },
+    "issues": []
+  },
+  {
+    "type": "orchardPark",
+    "variant": "preset-oliveGrove",
+    "file": "orchardPark/preset-oliveGrove.png",
+    "ms": 87,
+    "failure": null,
+    "objects": 113,
+    "nets": 32,
+    "pathMetres": 944,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Tree": 62,
+      "Planter": 20,
+      "Furniture": 23,
+      "Bench": 8
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "orchardPark",
+    "variant": "preset-citrus",
+    "file": "orchardPark/preset-citrus.png",
+    "ms": 74,
+    "failure": null,
+    "objects": 336,
+    "nets": 14,
+    "pathMetres": 305,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 3,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bush": 140,
+      "Tree": 152,
+      "Bench": 11,
+      "Furniture": 20,
+      "Lamp": 7,
+      "Planter": 6
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "orchardPark",
+    "variant": "preset-community",
+    "file": "orchardPark/preset-community.png",
+    "ms": 98,
+    "failure": null,
+    "objects": 203,
+    "nets": 31,
+    "pathMetres": 1172,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Tree": 69,
+      "Bench": 26,
+      "Planter": 81,
+      "Furniture": 27
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "orchardPark",
+    "variant": "features-all",
+    "file": "orchardPark/features-all.png",
+    "ms": 278,
+    "failure": null,
+    "objects": 525,
+    "nets": 16,
+    "pathMetres": 444,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 5,
+    "benchesOffPath": 7,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 180,
+    "byRole": {
+      "Bush": 147,
+      "Tree": 106,
+      "Bench": 21,
+      "Planter": 30,
+      "Furniture": 34,
+      "Centerpiece": 1,
+      "Lamp": 6,
+      "Decal": 180
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "orchardPark",
+    "variant": "features-none",
+    "file": "orchardPark/features-none.png",
+    "ms": 9,
+    "failure": null,
+    "objects": 294,
+    "nets": 6,
+    "pathMetres": 411,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 4,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bush": 143,
+      "Tree": 106,
+      "Bench": 15,
+      "Planter": 20,
+      "Furniture": 10
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "default",
+    "file": "park/default.png",
+    "ms": 103,
+    "failure": null,
+    "objects": 106,
+    "nets": 11,
+    "pathMetres": 267,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Lamp": 9,
+      "Bin": 4,
+      "Tree": 33,
+      "Bush": 52
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-natural",
+    "file": "park/preset-natural.png",
+    "ms": 60,
+    "failure": null,
+    "objects": 106,
+    "nets": 11,
+    "pathMetres": 267,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Lamp": 9,
+      "Bin": 4,
+      "Tree": 33,
+      "Bush": 52
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "preset-formal",
+    "file": "park/preset-formal.png",
+    "ms": 43,
+    "failure": null,
+    "objects": 122,
+    "nets": 3,
+    "pathMetres": 136,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 3,
+      "Lamp": 6,
+      "Bin": 3,
+      "Tree": 38,
+      "Bush": 72
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-garden",
+    "file": "park/preset-garden.png",
+    "ms": 26,
+    "failure": null,
+    "objects": 139,
+    "nets": 15,
+    "pathMetres": 271,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 13,
+      "Lamp": 13,
+      "Bin": 5,
+      "Tree": 28,
+      "Bush": 80
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "preset-woodland",
+    "file": "park/preset-woodland.png",
+    "ms": 119,
+    "failure": null,
+    "objects": 155,
+    "nets": 42,
+    "pathMetres": 642,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 1,
+      "Bin": 2,
+      "Tree": 49,
+      "Bush": 102,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "preset-meadow",
+    "file": "park/preset-meadow.png",
+    "ms": 9,
+    "failure": null,
+    "objects": 39,
+    "nets": 2,
+    "pathMetres": 47,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Lamp": 2,
+      "Bin": 1,
+      "Tree": 12,
+      "Bush": 24
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-pocket",
+    "file": "park/preset-pocket.png",
+    "ms": 20,
+    "failure": null,
+    "objects": 100,
+    "nets": 4,
+    "pathMetres": 111,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 4,
+      "Lamp": 6,
+      "Bin": 4,
+      "Tree": 39,
+      "Bush": 47
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-victorian",
+    "file": "park/preset-victorian.png",
+    "ms": 163,
+    "failure": null,
+    "objects": 177,
+    "nets": 42,
+    "pathMetres": 827,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 13,
+      "Lamp": 28,
+      "Bin": 8,
+      "Tree": 38,
+      "Bush": 90
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-landscape",
+    "file": "park/preset-landscape.png",
+    "ms": 136,
+    "failure": null,
+    "objects": 74,
+    "nets": 39,
+    "pathMetres": 531,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 2,
+      "Bin": 3,
+      "Tree": 33,
+      "Bush": 36
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-modern",
+    "file": "park/preset-modern.png",
+    "ms": 21,
+    "failure": null,
+    "objects": 133,
+    "nets": 11,
+    "pathMetres": 479,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 20,
+      "Lamp": 23,
+      "Bin": 10,
+      "Tree": 50,
+      "Bush": 30
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-wildflower",
+    "file": "park/preset-wildflower.png",
+    "ms": 22,
+    "failure": null,
+    "objects": 46,
+    "nets": 17,
+    "pathMetres": 285,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Tree": 9,
+      "Bush": 36,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "preset-urban",
+    "file": "park/preset-urban.png",
+    "ms": 26,
+    "failure": null,
+    "objects": 202,
+    "nets": 31,
+    "pathMetres": 569,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 23,
+      "Lamp": 33,
+      "Bin": 31,
+      "Tree": 55,
+      "Bush": 60
+    },
+    "issues": []
+  },
+  {
+    "type": "park",
+    "variant": "preset-riverside",
+    "file": "park/preset-riverside.png",
+    "ms": 110,
+    "failure": null,
+    "objects": 122,
+    "nets": 25,
+    "pathMetres": 444,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 13,
+      "Lamp": 17,
+      "Bin": 5,
+      "Tree": 38,
+      "Bush": 48,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "preset-greenway",
+    "file": "park/preset-greenway.png",
+    "ms": 111,
+    "failure": null,
+    "objects": 119,
+    "nets": 33,
+    "pathMetres": 584,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 16,
+      "Lamp": 17,
+      "Bin": 5,
+      "Tree": 27,
+      "Bush": 54
+    },
+    "issues": [
+      "I:Placemaker.Park.Issue.FewerSmallPaths",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "features-all",
+    "file": "park/features-all.png",
+    "ms": 6158,
+    "failure": null,
+    "objects": 665,
+    "nets": 27,
+    "pathMetres": 382,
+    "surfaces": 13,
+    "errors": 0,
+    "warnings": 21,
+    "benchesOffPath": 22,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 510,
+    "byRole": {
+      "Bench": 24,
+      "Lamp": 15,
+      "Bin": 6,
+      "Tree": 11,
+      "Bush": 21,
+      "Centerpiece": 1,
+      "Planter": 37,
+      "Decal": 510,
+      "AccessPoint": 2,
+      "Furniture": 38
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Park.Issue.NoRoomForAmenity",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.Pond.Issue.FewerIslands",
+      "W:Placemaker.Park.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "I:Placemaker.AddOn.Ground.Issue.Fewer",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Field.Tennis.Issue.Fewer",
+      "I:Placemaker.AddOn.TableTennis.Issue.Fewer"
+    ]
+  },
+  {
+    "type": "park",
+    "variant": "features-none",
+    "file": "park/features-none.png",
+    "ms": 22,
+    "failure": null,
+    "objects": 104,
+    "nets": 11,
+    "pathMetres": 267,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Lamp": 9,
+      "Bin": 4,
+      "Tree": 31,
+      "Bush": 52
+    },
+    "issues": []
+  },
+  {
+    "type": "parking",
+    "variant": "default",
+    "file": "parking/default.png",
+    "ms": 96,
+    "failure": null,
+    "objects": 422,
+    "nets": 35,
+    "pathMetres": 843,
+    "surfaces": 36,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 272,
+      "Charger": 5,
+      "Lamp": 35,
+      "Tree": 7,
+      "Bush": 103
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "parking",
+    "variant": "preset-standard",
+    "file": "parking/preset-standard.png",
+    "ms": 107,
+    "failure": null,
+    "objects": 422,
+    "nets": 35,
+    "pathMetres": 843,
+    "surfaces": 36,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 272,
+      "Charger": 5,
+      "Lamp": 35,
+      "Tree": 7,
+      "Bush": 103
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "parking",
+    "variant": "preset-compact",
+    "file": "parking/preset-compact.png",
+    "ms": 46,
+    "failure": null,
+    "objects": 411,
+    "nets": 19,
+    "pathMetres": 775,
+    "surfaces": 17,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 309,
+      "Charger": 6,
+      "Lamp": 30,
+      "Tree": 7,
+      "Bush": 59
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "parking",
+    "variant": "preset-green",
+    "file": "parking/preset-green.png",
+    "ms": 75,
+    "failure": null,
+    "objects": 490,
+    "nets": 44,
+    "pathMetres": 907,
+    "surfaces": 44,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 10,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 252,
+      "Charger": 5,
+      "Lamp": 32,
+      "Tree": 28,
+      "Bush": 173
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "parking",
+    "variant": "preset-angled",
+    "file": "parking/preset-angled.png",
+    "ms": 63,
+    "failure": null,
+    "objects": 413,
+    "nets": 35,
+    "pathMetres": 835,
+    "surfaces": 56,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 10,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 234,
+      "Charger": 5,
+      "Lamp": 53,
+      "Tree": 10,
+      "Bush": 111
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "parking",
+    "variant": "features-all",
+    "file": "parking/features-all.png",
+    "ms": 83,
+    "failure": null,
+    "objects": 422,
+    "nets": 35,
+    "pathMetres": 843,
+    "surfaces": 36,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 272,
+      "Charger": 5,
+      "Lamp": 35,
+      "Tree": 7,
+      "Bush": 103
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.AddOn.Decals.Issue.NoGround",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing"
+    ]
+  },
+  {
+    "type": "parking",
+    "variant": "features-none",
+    "file": "parking/features-none.png",
+    "ms": 68,
+    "failure": null,
+    "objects": 422,
+    "nets": 35,
+    "pathMetres": 843,
+    "surfaces": 36,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 272,
+      "Charger": 5,
+      "Lamp": 35,
+      "Tree": 7,
+      "Bush": 103
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "picnicGrounds",
+    "variant": "default",
+    "file": "picnicGrounds/default.png",
+    "ms": 57,
+    "failure": null,
+    "objects": 50,
+    "nets": 4,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Tree": 27
+    },
+    "issues": []
+  },
+  {
+    "type": "picnicGrounds",
+    "variant": "preset-family",
+    "file": "picnicGrounds/preset-family.png",
+    "ms": 24,
+    "failure": null,
+    "objects": 50,
+    "nets": 4,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Tree": 27
+    },
+    "issues": []
+  },
+  {
+    "type": "picnicGrounds",
+    "variant": "preset-bbq",
+    "file": "picnicGrounds/preset-bbq.png",
+    "ms": 41,
+    "failure": null,
+    "objects": 68,
+    "nets": 4,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 31,
+      "Bin": 7,
+      "Tree": 30
+    },
+    "issues": []
+  },
+  {
+    "type": "picnicGrounds",
+    "variant": "preset-shady",
+    "file": "picnicGrounds/preset-shady.png",
+    "ms": 68,
+    "failure": null,
+    "objects": 91,
+    "nets": 4,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 21,
+      "Tree": 70
+    },
+    "issues": []
+  },
+  {
+    "type": "picnicGrounds",
+    "variant": "features-all",
+    "file": "picnicGrounds/features-all.png",
+    "ms": 162,
+    "failure": null,
+    "objects": 332,
+    "nets": 4,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Furniture": 58,
+      "Tree": 27,
+      "Bush": 7,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "picnicGrounds",
+    "variant": "features-none",
+    "file": "picnicGrounds/features-none.png",
+    "ms": 49,
+    "failure": null,
+    "objects": 50,
+    "nets": 4,
+    "pathMetres": 112,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Tree": 27
+    },
+    "issues": []
+  },
+  {
+    "type": "plaza",
+    "variant": "default",
+    "file": "plaza/default.png",
+    "ms": 1,
+    "failure": null,
+    "objects": 30,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 16,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 16,
+      "Lamp": 8,
+      "AccessPoint": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-civic",
+    "file": "plaza/preset-civic.png",
+    "ms": 5,
+    "failure": null,
+    "objects": 511,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 16,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 423,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 16,
+      "Lamp": 36,
+      "Tree": 27,
+      "Planter": 3,
+      "Decal": 423,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-fountain",
+    "file": "plaza/preset-fountain.png",
+    "ms": 14,
+    "failure": null,
+    "objects": 256,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 24,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 169,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 24,
+      "Planter": 28,
+      "Lamp": 29,
+      "Decal": 169,
+      "AccessPoint": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-market",
+    "file": "plaza/preset-market.png",
+    "ms": 15,
+    "failure": null,
+    "objects": 68,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 12,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Bench": 12,
+      "Bin": 6,
+      "Tree": 22,
+      "AccessPoint": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-garden",
+    "file": "plaza/preset-garden.png",
+    "ms": 123,
+    "failure": null,
+    "objects": 132,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 11,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 20,
+    "overlaps": 2,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Bush": 62,
+      "Tree": 20,
+      "Centerpiece": 1,
+      "Bench": 20,
+      "Planter": 24,
+      "AccessPoint": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-sunken",
+    "file": "plaza/preset-sunken.png",
+    "ms": 318,
+    "failure": null,
+    "objects": 228,
+    "nets": 5,
+    "pathMetres": 140,
+    "surfaces": 25,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 52,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Planter": 73,
+      "Bush": 144,
+      "Tree": 5,
+      "Centerpiece": 1,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-amphitheatre",
+    "file": "plaza/preset-amphitheatre.png",
+    "ms": 15,
+    "failure": null,
+    "objects": 140,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 62,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 3,
+      "Bench": 62,
+      "Lamp": 30,
+      "Tree": 40,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-terraced",
+    "file": "plaza/preset-terraced.png",
+    "ms": 43,
+    "failure": null,
+    "objects": 183,
+    "nets": 5,
+    "pathMetres": 140,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 8,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Planter": 100,
+      "Centerpiece": 1,
+      "Bench": 8,
+      "Lamp": 4,
+      "Tree": 65,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-cafe",
+    "file": "plaza/preset-cafe.png",
+    "ms": 22,
+    "failure": null,
+    "objects": 366,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 12,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 271,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 12,
+      "Lamp": 6,
+      "Tree": 40,
+      "Planter": 4,
+      "Furniture": 27,
+      "Decal": 271,
+      "AccessPoint": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-splitLevel",
+    "file": "plaza/preset-splitLevel.png",
+    "ms": 14,
+    "failure": null,
+    "objects": 199,
+    "nets": 2,
+    "pathMetres": 14,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 16,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 106,
+    "byRole": {
+      "Planter": 24,
+      "Centerpiece": 1,
+      "Bench": 16,
+      "Lamp": 8,
+      "Tree": 39,
+      "Decal": 106,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-cascade",
+    "file": "plaza/preset-cascade.png",
+    "ms": 28,
+    "failure": null,
+    "objects": 122,
+    "nets": 6,
+    "pathMetres": 42,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 20,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Planter": 62,
+      "Centerpiece": 1,
+      "Bench": 20,
+      "Lamp": 10,
+      "Tree": 24,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-podium",
+    "file": "plaza/preset-podium.png",
+    "ms": 3,
+    "failure": null,
+    "objects": 566,
+    "nets": 4,
+    "pathMetres": 28,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 15,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 447,
+    "byRole": {
+      "Planter": 56,
+      "Centerpiece": 1,
+      "Bench": 16,
+      "Lamp": 41,
+      "Decal": 447,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-sunkenCourt",
+    "file": "plaza/preset-sunkenCourt.png",
+    "ms": 37,
+    "failure": null,
+    "objects": 165,
+    "nets": 4,
+    "pathMetres": 28,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 12,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Planter": 56,
+      "Centerpiece": 1,
+      "Bench": 12,
+      "Lamp": 6,
+      "Tree": 67,
+      "Furniture": 18,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-piazza",
+    "file": "plaza/preset-piazza.png",
+    "ms": 10,
+    "failure": null,
+    "objects": 518,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 12,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 445,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 12,
+      "Lamp": 39,
+      "Furniture": 16,
+      "Decal": 445,
+      "AccessPoint": 5
+    },
+    "issues": [
+      "I:Placemaker.Plaza.Issue.NoRoadEdge"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "preset-green",
+    "file": "plaza/preset-green.png",
+    "ms": 70,
+    "failure": null,
+    "objects": 165,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 19,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 20,
+    "overlaps": 21,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Bush": 90,
+      "Tree": 25,
+      "Centerpiece": 1,
+      "Bench": 20,
+      "Planter": 24,
+      "AccessPoint": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "plaza",
+    "variant": "features-all",
+    "file": "plaza/features-all.png",
+    "ms": 141,
+    "failure": null,
+    "objects": 345,
+    "nets": 2,
+    "pathMetres": 48,
+    "surfaces": 12,
+    "errors": 0,
+    "warnings": 7,
+    "benchesOffPath": 31,
+    "overlaps": 26,
+    "outside": 3,
+    "decals": 99,
+    "byRole": {
+      "Bench": 31,
+      "Lamp": 17,
+      "AccessPoint": 5,
+      "Tree": 59,
+      "Planter": 48,
+      "Furniture": 79,
+      "Decal": 99,
+      "Bin": 1,
+      "Centerpiece": 6
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Plaza.Issue.NoRoomForAmenity",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing",
+      "I:Placemaker.AddOn.TableTennis.Issue.Fewer",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "plaza",
+    "variant": "features-none",
+    "file": "plaza/features-none.png",
+    "ms": 1,
+    "failure": null,
+    "objects": 30,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 16,
+    "overlaps": 0,
+    "outside": 3,
+    "decals": 0,
+    "byRole": {
+      "Centerpiece": 1,
+      "Bench": 16,
+      "Lamp": 8,
+      "AccessPoint": 5
+    },
+    "issues": []
+  },
+  {
+    "type": "quarry",
+    "variant": "default",
+    "file": "quarry/default.png",
+    "ms": 26,
+    "failure": null,
+    "objects": 124,
+    "nets": 32,
+    "pathMetres": 657,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 100,
+    "byRole": {
+      "Furniture": 24,
+      "Decal": 100
+    },
+    "issues": [
+      "I:Placemaker.Quarry.Issue.FewerBenches",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "preset-openPit",
+    "file": "quarry/preset-openPit.png",
+    "ms": 15,
+    "failure": null,
+    "objects": 129,
+    "nets": 32,
+    "pathMetres": 657,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 103,
+    "byRole": {
+      "Furniture": 26,
+      "Decal": 103
+    },
+    "issues": [
+      "I:Placemaker.Quarry.Issue.FewerBenches",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "preset-gravelPit",
+    "file": "quarry/preset-gravelPit.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 264,
+    "nets": 33,
+    "pathMetres": 667,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 234,
+    "byRole": {
+      "Furniture": 30,
+      "Decal": 234
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "preset-sandPit",
+    "file": "quarry/preset-sandPit.png",
+    "ms": 10,
+    "failure": null,
+    "objects": 148,
+    "nets": 32,
+    "pathMetres": 657,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 124,
+    "byRole": {
+      "Furniture": 24,
+      "Decal": 124
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "preset-lakeDig",
+    "file": "quarry/preset-lakeDig.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 617,
+    "nets": 34,
+    "pathMetres": 682,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 588,
+    "byRole": {
+      "Furniture": 29,
+      "Decal": 588
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Quarry.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "preset-flooded",
+    "file": "quarry/preset-flooded.png",
+    "ms": 9,
+    "failure": null,
+    "objects": 97,
+    "nets": 33,
+    "pathMetres": 671,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 2,
+    "byRole": {
+      "Bench": 2,
+      "Furniture": 6,
+      "Tree": 29,
+      "Bush": 58,
+      "Decal": 2
+    },
+    "issues": [
+      "I:Placemaker.Quarry.Issue.FewerBenches",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Quarry.Issue.LakePermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "preset-abandoned",
+    "file": "quarry/preset-abandoned.png",
+    "ms": 9,
+    "failure": null,
+    "objects": 173,
+    "nets": 20,
+    "pathMetres": 241,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 7,
+    "byRole": {
+      "Furniture": 16,
+      "Tree": 50,
+      "Bush": 100,
+      "Decal": 7
+    },
+    "issues": [
+      "I:Placemaker.Quarry.Issue.FewerBenches",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "features-all",
+    "file": "quarry/features-all.png",
+    "ms": 13,
+    "failure": null,
+    "objects": 415,
+    "nets": 32,
+    "pathMetres": 657,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 4,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 340,
+    "byRole": {
+      "Furniture": 61,
+      "Decal": 340,
+      "Lamp": 4,
+      "Bush": 8,
+      "Tree": 2
+    },
+    "issues": [
+      "I:Placemaker.Quarry.Issue.FewerBenches",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "quarry",
+    "variant": "features-none",
+    "file": "quarry/features-none.png",
+    "ms": 83,
+    "failure": null,
+    "objects": 124,
+    "nets": 32,
+    "pathMetres": 657,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 100,
+    "byRole": {
+      "Furniture": 24,
+      "Decal": 100
+    },
+    "issues": [
+      "I:Placemaker.Quarry.Issue.FewerBenches",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "default",
+    "file": "restArea/default.png",
+    "ms": 191,
+    "failure": null,
+    "objects": 257,
+    "nets": 32,
+    "pathMetres": 459,
+    "surfaces": 24,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 76,
+      "Charger": 2,
+      "Lamp": 23,
+      "Tree": 82,
+      "Bush": 36,
+      "Furniture": 24,
+      "Bench": 7,
+      "Bin": 7
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "preset-highway",
+    "file": "restArea/preset-highway.png",
+    "ms": 110,
+    "failure": null,
+    "objects": 257,
+    "nets": 32,
+    "pathMetres": 459,
+    "surfaces": 24,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 76,
+      "Charger": 2,
+      "Lamp": 23,
+      "Tree": 82,
+      "Bush": 36,
+      "Furniture": 24,
+      "Bench": 7,
+      "Bin": 7
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "preset-picnic",
+    "file": "restArea/preset-picnic.png",
+    "ms": 119,
+    "failure": null,
+    "objects": 248,
+    "nets": 23,
+    "pathMetres": 275,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 38,
+      "Charger": 1,
+      "Lamp": 14,
+      "Bush": 22,
+      "Furniture": 68,
+      "Bench": 6,
+      "Bin": 2,
+      "Tree": 97
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "preset-truck",
+    "file": "restArea/preset-truck.png",
+    "ms": 28,
+    "failure": null,
+    "objects": 200,
+    "nets": 17,
+    "pathMetres": 512,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 95,
+      "Charger": 2,
+      "Lamp": 19,
+      "Furniture": 20,
+      "Bench": 6,
+      "Bin": 4,
+      "Tree": 54
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "preset-overlook",
+    "file": "restArea/preset-overlook.png",
+    "ms": 60,
+    "failure": null,
+    "objects": 149,
+    "nets": 10,
+    "pathMetres": 241,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 3,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 59,
+      "Charger": 1,
+      "Lamp": 15,
+      "Tree": 20,
+      "Bush": 24,
+      "Furniture": 18,
+      "Bench": 6,
+      "Bin": 6
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "preset-ev",
+    "file": "restArea/preset-ev.png",
+    "ms": 115,
+    "failure": null,
+    "objects": 281,
+    "nets": 32,
+    "pathMetres": 506,
+    "surfaces": 25,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 6,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 85,
+      "Charger": 13,
+      "Lamp": 28,
+      "Tree": 72,
+      "Bush": 40,
+      "Furniture": 29,
+      "Bench": 7,
+      "Bin": 7
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "features-all",
+    "file": "restArea/features-all.png",
+    "ms": 210,
+    "failure": null,
+    "objects": 545,
+    "nets": 32,
+    "pathMetres": 459,
+    "surfaces": 24,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "ParkingBay": 76,
+      "Charger": 2,
+      "Lamp": 23,
+      "Tree": 83,
+      "Bush": 41,
+      "Furniture": 42,
+      "Bench": 7,
+      "Bin": 7,
+      "Planter": 24,
+      "Decal": 240
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing"
+    ]
+  },
+  {
+    "type": "restArea",
+    "variant": "features-none",
+    "file": "restArea/features-none.png",
+    "ms": 116,
+    "failure": null,
+    "objects": 257,
+    "nets": 32,
+    "pathMetres": 459,
+    "surfaces": 24,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "ParkingBay": 76,
+      "Charger": 2,
+      "Lamp": 23,
+      "Tree": 82,
+      "Bush": 36,
+      "Furniture": 24,
+      "Bench": 7,
+      "Bin": 7
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "roads",
+    "variant": "default",
+    "file": "roads/default.png",
+    "ms": 10,
+    "failure": null,
+    "objects": 0,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": [
+      "W:Placemaker.Roads.Issue.NothingFits"
+    ]
+  },
+  {
+    "type": "roads",
+    "variant": "preset-downtown",
+    "file": "roads/preset-downtown.png",
+    "ms": 0,
+    "failure": null,
+    "objects": 0,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": [
+      "W:Placemaker.Roads.Issue.NothingFits"
+    ]
+  },
+  {
+    "type": "roads",
+    "variant": "preset-suburb",
+    "file": "roads/preset-suburb.png",
+    "ms": 38,
+    "failure": null,
+    "objects": 0,
+    "nets": 13,
+    "pathMetres": 528,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": []
+  },
+  {
+    "type": "roads",
+    "variant": "preset-village",
+    "file": "roads/preset-village.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 0,
+    "nets": 15,
+    "pathMetres": 528,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": []
+  },
+  {
+    "type": "roads",
+    "variant": "preset-hillside",
+    "file": "roads/preset-hillside.png",
+    "ms": 1,
+    "failure": null,
+    "objects": 0,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": [
+      "W:Placemaker.Roads.Issue.TerrainFlat"
+    ]
+  },
+  {
+    "type": "roads",
+    "variant": "preset-garden-city",
+    "file": "roads/preset-garden-city.png",
+    "ms": 29,
+    "failure": null,
+    "objects": 0,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": [
+      "W:Placemaker.Roads.Issue.NothingFits"
+    ]
+  },
+  {
+    "type": "roads",
+    "variant": "features-all",
+    "file": "roads/features-all.png",
+    "ms": 0,
+    "failure": null,
+    "objects": 0,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": [
+      "W:Placemaker.Roads.Issue.NothingFits"
+    ]
+  },
+  {
+    "type": "roads",
+    "variant": "features-none",
+    "file": "roads/features-none.png",
+    "ms": 0,
+    "failure": null,
+    "objects": 0,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {},
+    "issues": [
+      "W:Placemaker.Roads.Issue.NothingFits"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "default",
+    "file": "scrapyard/default.png",
+    "ms": 19,
+    "failure": null,
+    "objects": 631,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 23,
+    "outside": 0,
+    "decals": 149,
+    "byRole": {
+      "Furniture": 422,
+      "Tree": 49,
+      "Bush": 11,
+      "Decal": 149
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "preset-scrapyard",
+    "file": "scrapyard/preset-scrapyard.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 631,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 23,
+    "outside": 0,
+    "decals": 149,
+    "byRole": {
+      "Furniture": 422,
+      "Tree": 49,
+      "Bush": 11,
+      "Decal": 149
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "preset-salvage",
+    "file": "scrapyard/preset-salvage.png",
+    "ms": 41,
+    "failure": null,
+    "objects": 711,
+    "nets": 19,
+    "pathMetres": 704,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 155,
+    "byRole": {
+      "Furniture": 503,
+      "Tree": 45,
+      "Bush": 8,
+      "Decal": 155
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "preset-containers",
+    "file": "scrapyard/preset-containers.png",
+    "ms": 37,
+    "failure": null,
+    "objects": 175,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 44,
+    "outside": 0,
+    "decals": 108,
+    "byRole": {
+      "Furniture": 62,
+      "Bush": 5,
+      "Decal": 108
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "preset-tires",
+    "file": "scrapyard/preset-tires.png",
+    "ms": 80,
+    "failure": null,
+    "objects": 622,
+    "nets": 18,
+    "pathMetres": 344,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 26,
+    "outside": 0,
+    "decals": 258,
+    "byRole": {
+      "Furniture": 239,
+      "Tree": 46,
+      "Bush": 79,
+      "Decal": 258
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "preset-cars",
+    "file": "scrapyard/preset-cars.png",
+    "ms": 24,
+    "failure": null,
+    "objects": 523,
+    "nets": 19,
+    "pathMetres": 623,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 155,
+    "byRole": {
+      "Furniture": 230,
+      "Tree": 46,
+      "Bush": 92,
+      "Decal": 155
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "features-all",
+    "file": "scrapyard/features-all.png",
+    "ms": 169,
+    "failure": null,
+    "objects": 933,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 4,
+    "benchesOffPath": 0,
+    "overlaps": 25,
+    "outside": 0,
+    "decals": 369,
+    "byRole": {
+      "Furniture": 498,
+      "Tree": 50,
+      "Bush": 16,
+      "Decal": 369
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "scrapyard",
+    "variant": "features-none",
+    "file": "scrapyard/features-none.png",
+    "ms": 26,
+    "failure": null,
+    "objects": 631,
+    "nets": 12,
+    "pathMetres": 415,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 23,
+    "outside": 0,
+    "decals": 149,
+    "byRole": {
+      "Furniture": 422,
+      "Tree": 49,
+      "Bush": 11,
+      "Decal": 149
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "skatePark",
+    "variant": "default",
+    "file": "skatePark/default.png",
+    "ms": 13,
+    "failure": null,
+    "objects": 108,
+    "nets": 1,
+    "pathMetres": 8,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 5,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 53,
+    "byRole": {
+      "Furniture": 8,
+      "Bench": 6,
+      "Lamp": 6,
+      "Decal": 53,
+      "Tree": 35
+    },
+    "issues": []
+  },
+  {
+    "type": "skatePark",
+    "variant": "preset-street",
+    "file": "skatePark/preset-street.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 93,
+    "nets": 1,
+    "pathMetres": 3,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 5,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 59,
+    "byRole": {
+      "Furniture": 10,
+      "Bench": 6,
+      "Lamp": 6,
+      "Decal": 59,
+      "Tree": 12
+    },
+    "issues": []
+  },
+  {
+    "type": "skatePark",
+    "variant": "preset-bowl",
+    "file": "skatePark/preset-bowl.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 52,
+    "nets": 1,
+    "pathMetres": 11,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 5,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 5,
+      "Bench": 6,
+      "Lamp": 6,
+      "Tree": 35
+    },
+    "issues": []
+  },
+  {
+    "type": "skatePark",
+    "variant": "features-all",
+    "file": "skatePark/features-all.png",
+    "ms": 22,
+    "failure": null,
+    "objects": 187,
+    "nets": 1,
+    "pathMetres": 8,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 5,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 130,
+    "byRole": {
+      "Furniture": 10,
+      "Bench": 6,
+      "Lamp": 6,
+      "Decal": 130,
+      "Tree": 35
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "skatePark",
+    "variant": "features-none",
+    "file": "skatePark/features-none.png",
+    "ms": 4,
+    "failure": null,
+    "objects": 108,
+    "nets": 1,
+    "pathMetres": 8,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 5,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 53,
+    "byRole": {
+      "Furniture": 8,
+      "Bench": 6,
+      "Lamp": 6,
+      "Decal": 53,
+      "Tree": 35
+    },
+    "issues": []
+  },
+  {
+    "type": "sportsPark",
+    "variant": "default",
+    "file": "sportsPark/default.png",
+    "ms": 10,
+    "failure": null,
+    "objects": 70,
+    "nets": 15,
+    "pathMetres": 408,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Furniture": 15,
+      "Lamp": 11,
+      "Bench": 6,
+      "Tree": 29
+    },
+    "issues": [
+      "I:Placemaker.Sports.Issue.Fewer"
+    ]
+  },
+  {
+    "type": "sportsPark",
+    "variant": "preset-community",
+    "file": "sportsPark/preset-community.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 70,
+    "nets": 15,
+    "pathMetres": 408,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Furniture": 15,
+      "Lamp": 11,
+      "Bench": 6,
+      "Tree": 29
+    },
+    "issues": [
+      "I:Placemaker.Sports.Issue.Fewer"
+    ]
+  },
+  {
+    "type": "sportsPark",
+    "variant": "preset-football",
+    "file": "sportsPark/preset-football.png",
+    "ms": 26,
+    "failure": null,
+    "objects": 44,
+    "nets": 5,
+    "pathMetres": 226,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 9,
+      "Bench": 6,
+      "Tree": 29
+    },
+    "issues": [
+      "I:Placemaker.Sports.Issue.Fewer"
+    ]
+  },
+  {
+    "type": "sportsPark",
+    "variant": "preset-tennisClub",
+    "file": "sportsPark/preset-tennisClub.png",
+    "ms": 12,
+    "failure": null,
+    "objects": 52,
+    "nets": 15,
+    "pathMetres": 424,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 6,
+    "byRole": {
+      "Decal": 6,
+      "Furniture": 3,
+      "Lamp": 8,
+      "Bench": 6,
+      "Tree": 29
+    },
+    "issues": [
+      "I:Placemaker.Sports.Issue.Fewer"
+    ]
+  },
+  {
+    "type": "sportsPark",
+    "variant": "preset-streetball",
+    "file": "sportsPark/preset-streetball.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 76,
+    "nets": 25,
+    "pathMetres": 590,
+    "surfaces": 5,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 12,
+    "byRole": {
+      "Decal": 12,
+      "Furniture": 17,
+      "Lamp": 12,
+      "Bench": 6,
+      "Tree": 29
+    },
+    "issues": []
+  },
+  {
+    "type": "sportsPark",
+    "variant": "features-all",
+    "file": "sportsPark/features-all.png",
+    "ms": 491,
+    "failure": null,
+    "objects": 448,
+    "nets": 24,
+    "pathMetres": 529,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 6,
+    "benchesOffPath": 3,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 373,
+    "byRole": {
+      "Decal": 373,
+      "Furniture": 24,
+      "Lamp": 13,
+      "Bench": 9,
+      "Tree": 29
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.Sports.Issue.Fewer",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing",
+      "I:Placemaker.Field.Tennis.Issue.Fewer"
+    ]
+  },
+  {
+    "type": "sportsPark",
+    "variant": "features-none",
+    "file": "sportsPark/features-none.png",
+    "ms": 7,
+    "failure": null,
+    "objects": 70,
+    "nets": 15,
+    "pathMetres": 408,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "Decal": 9,
+      "Furniture": 15,
+      "Lamp": 11,
+      "Bench": 6,
+      "Tree": 29
+    },
+    "issues": [
+      "I:Placemaker.Sports.Issue.Fewer"
+    ]
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "default",
+    "file": "transitPlaza/default.png",
+    "ms": 4,
+    "failure": null,
+    "objects": 226,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 7,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 13,
+    "byRole": {
+      "Decal": 13,
+      "Furniture": 59,
+      "Bench": 7,
+      "Tree": 107,
+      "Lamp": 40
+    },
+    "issues": []
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "preset-parkRide",
+    "file": "transitPlaza/preset-parkRide.png",
+    "ms": 50,
+    "failure": null,
+    "objects": 354,
+    "nets": 20,
+    "pathMetres": 463,
+    "surfaces": 20,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 7,
+    "overlaps": 35,
+    "outside": 0,
+    "decals": 9,
+    "byRole": {
+      "ParkingBay": 161,
+      "Charger": 3,
+      "Lamp": 38,
+      "Tree": 42,
+      "Bush": 57,
+      "Decal": 9,
+      "Furniture": 37,
+      "Bench": 7
+    },
+    "issues": [
+      "W:Placemaker.Parking.Issue.EntranceNoRoad"
+    ]
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "preset-busPlaza",
+    "file": "transitPlaza/preset-busPlaza.png",
+    "ms": 28,
+    "failure": null,
+    "objects": 199,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 30,
+    "overlaps": 23,
+    "outside": 0,
+    "decals": 20,
+    "byRole": {
+      "Decal": 20,
+      "Furniture": 60,
+      "Tree": 48,
+      "Bench": 30,
+      "Lamp": 41
+    },
+    "issues": []
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "preset-bikeHub",
+    "file": "transitPlaza/preset-bikeHub.png",
+    "ms": 4,
+    "failure": null,
+    "objects": 226,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 7,
+    "overlaps": 93,
+    "outside": 0,
+    "decals": 5,
+    "byRole": {
+      "Decal": 5,
+      "Furniture": 101,
+      "Bench": 7,
+      "Tree": 75,
+      "Lamp": 38
+    },
+    "issues": []
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "preset-taxiRank",
+    "file": "transitPlaza/preset-taxiRank.png",
+    "ms": 3,
+    "failure": null,
+    "objects": 201,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 9,
+    "overlaps": 17,
+    "outside": 0,
+    "decals": 16,
+    "byRole": {
+      "Decal": 16,
+      "Furniture": 61,
+      "Bench": 9,
+      "Tree": 76,
+      "Lamp": 39
+    },
+    "issues": []
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "preset-forecourt",
+    "file": "transitPlaza/preset-forecourt.png",
+    "ms": 54,
+    "failure": null,
+    "objects": 207,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 17,
+    "overlaps": 20,
+    "outside": 0,
+    "decals": 11,
+    "byRole": {
+      "Decal": 11,
+      "Furniture": 63,
+      "Bench": 17,
+      "Centerpiece": 1,
+      "Tree": 77,
+      "Lamp": 38
+    },
+    "issues": []
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "features-all",
+    "file": "transitPlaza/features-all.png",
+    "ms": 23,
+    "failure": null,
+    "objects": 335,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 4,
+    "benchesOffPath": 7,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 85,
+    "byRole": {
+      "Decal": 85,
+      "Furniture": 63,
+      "Bench": 7,
+      "Tree": 135,
+      "Lamp": 40,
+      "Planter": 5
+    },
+    "issues": [
+      "W:Placemaker.Common.Issue.NoSpace",
+      "I:Placemaker.AddOn.Terrain.Issue.Nothing"
+    ]
+  },
+  {
+    "type": "transitPlaza",
+    "variant": "features-none",
+    "file": "transitPlaza/features-none.png",
+    "ms": 6,
+    "failure": null,
+    "objects": 226,
+    "nets": 0,
+    "pathMetres": 0,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 7,
+    "overlaps": 16,
+    "outside": 0,
+    "decals": 13,
+    "byRole": {
+      "Decal": 13,
+      "Furniture": 59,
+      "Bench": 7,
+      "Tree": 107,
+      "Lamp": 40
+    },
+    "issues": []
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "default",
+    "file": "urbanFarm/default.png",
+    "ms": 32,
+    "failure": null,
+    "objects": 4744,
+    "nets": 4,
+    "pathMetres": 341,
+    "surfaces": 13,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 4744
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "preset-marketGarden",
+    "file": "urbanFarm/preset-marketGarden.png",
+    "ms": 27,
+    "failure": null,
+    "objects": 3051,
+    "nets": 6,
+    "pathMetres": 472,
+    "surfaces": 15,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 3051
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "preset-vineyard",
+    "file": "urbanFarm/preset-vineyard.png",
+    "ms": 18,
+    "failure": null,
+    "objects": 2183,
+    "nets": 7,
+    "pathMetres": 485,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 27,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 2183
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "preset-greenhouses",
+    "file": "urbanFarm/preset-greenhouses.png",
+    "ms": 17,
+    "failure": null,
+    "objects": 270,
+    "nets": 19,
+    "pathMetres": 973,
+    "surfaces": 11,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 270
+    },
+    "issues": []
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "preset-lavenderField",
+    "file": "urbanFarm/preset-lavenderField.png",
+    "ms": 48,
+    "failure": null,
+    "objects": 5531,
+    "nets": 4,
+    "pathMetres": 351,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 5324,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 5492,
+      "Tree": 33,
+      "Bench": 6
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "preset-rooftopBeds",
+    "file": "urbanFarm/preset-rooftopBeds.png",
+    "ms": 45,
+    "failure": null,
+    "objects": 277,
+    "nets": 24,
+    "pathMetres": 1566,
+    "surfaces": 28,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 42,
+      "Lamp": 32,
+      "Planter": 203
+    },
+    "issues": []
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "preset-cityFarm",
+    "file": "urbanFarm/preset-cityFarm.png",
+    "ms": 19,
+    "failure": null,
+    "objects": 1724,
+    "nets": 21,
+    "pathMetres": 926,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 784,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1712,
+      "Bench": 12
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "features-all",
+    "file": "urbanFarm/features-all.png",
+    "ms": 173,
+    "failure": null,
+    "objects": 4704,
+    "nets": 14,
+    "pathMetres": 374,
+    "surfaces": 13,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 180,
+    "byRole": {
+      "Furniture": 4516,
+      "Planter": 8,
+      "Decal": 180
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "urbanFarm",
+    "variant": "features-none",
+    "file": "urbanFarm/features-none.png",
+    "ms": 35,
+    "failure": null,
+    "objects": 4744,
+    "nets": 4,
+    "pathMetres": 341,
+    "surfaces": 13,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 4744
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "default",
+    "file": "urbanRuins/default.png",
+    "ms": 14,
+    "failure": null,
+    "objects": 192,
+    "nets": 2,
+    "pathMetres": 59,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 6,
+    "overlaps": 47,
+    "outside": 0,
+    "decals": 58,
+    "byRole": {
+      "Decal": 58,
+      "Furniture": 36,
+      "Bench": 6,
+      "Lamp": 7,
+      "Bush": 71,
+      "Tree": 14
+    },
+    "issues": []
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "preset-diySpot",
+    "file": "urbanRuins/preset-diySpot.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 179,
+    "nets": 2,
+    "pathMetres": 60,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 6,
+    "overlaps": 34,
+    "outside": 0,
+    "decals": 62,
+    "byRole": {
+      "Decal": 62,
+      "Furniture": 34,
+      "Bench": 6,
+      "Lamp": 4,
+      "Bush": 62,
+      "Tree": 11
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "preset-highwayRuins",
+    "file": "urbanRuins/preset-highwayRuins.png",
+    "ms": 8,
+    "failure": null,
+    "objects": 378,
+    "nets": 2,
+    "pathMetres": 66,
+    "surfaces": 11,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 2,
+    "overlaps": 132,
+    "outside": 0,
+    "decals": 72,
+    "byRole": {
+      "Decal": 72,
+      "Furniture": 42,
+      "Bench": 2,
+      "Lamp": 6,
+      "Bush": 213,
+      "Tree": 43
+    },
+    "issues": [
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "preset-graffitiPark",
+    "file": "urbanRuins/preset-graffitiPark.png",
+    "ms": 19,
+    "failure": null,
+    "objects": 169,
+    "nets": 2,
+    "pathMetres": 67,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 9,
+    "overlaps": 25,
+    "outside": 0,
+    "decals": 79,
+    "byRole": {
+      "Furniture": 36,
+      "Decal": 79,
+      "Bench": 10,
+      "Lamp": 5,
+      "Bush": 33,
+      "Tree": 6
+    },
+    "issues": []
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "preset-parkour",
+    "file": "urbanRuins/preset-parkour.png",
+    "ms": 6,
+    "failure": null,
+    "objects": 123,
+    "nets": 2,
+    "pathMetres": 58,
+    "surfaces": 3,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 5,
+    "overlaps": 30,
+    "outside": 0,
+    "decals": 24,
+    "byRole": {
+      "Furniture": 38,
+      "Decal": 24,
+      "Bench": 6,
+      "Lamp": 5,
+      "Bush": 41,
+      "Tree": 9
+    },
+    "issues": []
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "preset-dirtJumps",
+    "file": "urbanRuins/preset-dirtJumps.png",
+    "ms": 19,
+    "failure": null,
+    "objects": 280,
+    "nets": 2,
+    "pathMetres": 78,
+    "surfaces": 8,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 113,
+    "outside": 0,
+    "decals": 55,
+    "byRole": {
+      "Decal": 55,
+      "Furniture": 38,
+      "Bush": 158,
+      "Tree": 29
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "features-all",
+    "file": "urbanRuins/features-all.png",
+    "ms": 69,
+    "failure": null,
+    "objects": 329,
+    "nets": 2,
+    "pathMetres": 59,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 6,
+    "overlaps": 61,
+    "outside": 0,
+    "decals": 167,
+    "byRole": {
+      "Decal": 167,
+      "Furniture": 63,
+      "Bench": 6,
+      "Lamp": 7,
+      "Bush": 71,
+      "Tree": 15
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "urbanRuins",
+    "variant": "features-none",
+    "file": "urbanRuins/features-none.png",
+    "ms": 5,
+    "failure": null,
+    "objects": 192,
+    "nets": 2,
+    "pathMetres": 59,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 6,
+    "overlaps": 47,
+    "outside": 0,
+    "decals": 58,
+    "byRole": {
+      "Decal": 58,
+      "Furniture": 36,
+      "Bench": 6,
+      "Lamp": 7,
+      "Bush": 71,
+      "Tree": 14
+    },
+    "issues": []
+  },
+  {
+    "type": "waterfront",
+    "variant": "default",
+    "file": "waterfront/default.png",
+    "ms": 20,
+    "failure": null,
+    "objects": 28,
+    "nets": 9,
+    "pathMetres": 315,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Lamp": 5,
+      "Furniture": 5,
+      "Tree": 10
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Waterfront.Issue.PiersNeedWater"
+    ]
+  },
+  {
+    "type": "waterfront",
+    "variant": "preset-promenade",
+    "file": "waterfront/preset-promenade.png",
+    "ms": 55,
+    "failure": null,
+    "objects": 28,
+    "nets": 9,
+    "pathMetres": 315,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Lamp": 5,
+      "Furniture": 5,
+      "Tree": 10
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Waterfront.Issue.PiersNeedWater"
+    ]
+  },
+  {
+    "type": "waterfront",
+    "variant": "preset-pier",
+    "file": "waterfront/preset-pier.png",
+    "ms": 34,
+    "failure": null,
+    "objects": 23,
+    "nets": 11,
+    "pathMetres": 351,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 10,
+      "Lamp": 7,
+      "Furniture": 6
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "I:Placemaker.Waterfront.Issue.PiersNeedWater"
+    ]
+  },
+  {
+    "type": "waterfront",
+    "variant": "preset-harbor",
+    "file": "waterfront/preset-harbor.png",
+    "ms": 16,
+    "failure": null,
+    "objects": 57,
+    "nets": 6,
+    "pathMetres": 214,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 34,
+      "Bench": 8,
+      "Bin": 2,
+      "Lamp": 8,
+      "Tree": 5
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Waterfront.Issue.PiersNeedWater"
+    ]
+  },
+  {
+    "type": "waterfront",
+    "variant": "preset-riverSteps",
+    "file": "waterfront/preset-riverSteps.png",
+    "ms": 105,
+    "failure": null,
+    "objects": 86,
+    "nets": 6,
+    "pathMetres": 215,
+    "surfaces": 9,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Lamp": 4,
+      "Furniture": 5,
+      "Tree": 37,
+      "Bush": 32
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "waterfront",
+    "variant": "preset-fishing",
+    "file": "waterfront/preset-fishing.png",
+    "ms": 88,
+    "failure": null,
+    "objects": 105,
+    "nets": 8,
+    "pathMetres": 222,
+    "surfaces": 2,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 30,
+      "Bench": 9,
+      "Bin": 5,
+      "Tree": 26,
+      "Bush": 35
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "I:Placemaker.Waterfront.Issue.PiersNeedWater"
+    ]
+  },
+  {
+    "type": "waterfront",
+    "variant": "features-all",
+    "file": "waterfront/features-all.png",
+    "ms": 242,
+    "failure": null,
+    "objects": 368,
+    "nets": 9,
+    "pathMetres": 315,
+    "surfaces": 6,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 8,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 240,
+    "byRole": {
+      "Bench": 16,
+      "Lamp": 11,
+      "Furniture": 34,
+      "Tree": 19,
+      "Centerpiece": 1,
+      "Planter": 47,
+      "Decal": 240
+    },
+    "issues": [
+      "I:Placemaker.Feature.streetShops.Issue.NoFrontage",
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Waterfront.Issue.PiersNeedWater"
+    ]
+  },
+  {
+    "type": "waterfront",
+    "variant": "features-none",
+    "file": "waterfront/features-none.png",
+    "ms": 60,
+    "failure": null,
+    "objects": 28,
+    "nets": 9,
+    "pathMetres": 315,
+    "surfaces": 4,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Lamp": 5,
+      "Furniture": 5,
+      "Tree": 10
+    },
+    "issues": [
+      "I:Placemaker.Shore.Issue.NoWater",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "I:Placemaker.Waterfront.Issue.PiersNeedWater"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "default",
+    "file": "wetland/default.png",
+    "ms": 252,
+    "failure": null,
+    "objects": 465,
+    "nets": 22,
+    "pathMetres": 352,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 4,
+      "Bush": 388,
+      "Tree": 71,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "preset-wetlandPark",
+    "file": "wetland/preset-wetlandPark.png",
+    "ms": 163,
+    "failure": null,
+    "objects": 465,
+    "nets": 22,
+    "pathMetres": 352,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 4,
+      "Bush": 388,
+      "Tree": 71,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "preset-waterGarden",
+    "file": "wetland/preset-waterGarden.png",
+    "ms": 220,
+    "failure": null,
+    "objects": 502,
+    "nets": 29,
+    "pathMetres": 376,
+    "surfaces": 1,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 10,
+      "Lamp": 119,
+      "Bush": 309,
+      "Planter": 17,
+      "Tree": 47
+    },
+    "issues": [
+      "I:Placemaker.Wetland.Issue.FewerPonds",
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "preset-reedMarsh",
+    "file": "wetland/preset-reedMarsh.png",
+    "ms": 63,
+    "failure": null,
+    "objects": 595,
+    "nets": 16,
+    "pathMetres": 230,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 2,
+      "Bush": 565,
+      "Tree": 26,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "preset-rainGarden",
+    "file": "wetland/preset-rainGarden.png",
+    "ms": 54,
+    "failure": null,
+    "objects": 405,
+    "nets": 28,
+    "pathMetres": 368,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Bench": 8,
+      "Bush": 296,
+      "Planter": 42,
+      "Tree": 59
+    },
+    "issues": [
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "preset-birdReserve",
+    "file": "wetland/preset-birdReserve.png",
+    "ms": 41,
+    "failure": null,
+    "objects": 432,
+    "nets": 32,
+    "pathMetres": 720,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 5,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 4,
+      "Bench": 1,
+      "Bush": 295,
+      "Tree": 131,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "I:Placemaker.Wetland.Issue.FewerHides",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "features-all",
+    "file": "wetland/features-all.png",
+    "ms": 70,
+    "failure": null,
+    "objects": 596,
+    "nets": 22,
+    "pathMetres": 352,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 6,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 120,
+    "byRole": {
+      "Furniture": 10,
+      "Bench": 4,
+      "Bush": 388,
+      "Tree": 71,
+      "AnimalSpawner": 3,
+      "Decal": 120
+    },
+    "issues": [
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace"
+    ]
+  },
+  {
+    "type": "wetland",
+    "variant": "features-none",
+    "file": "wetland/features-none.png",
+    "ms": 19,
+    "failure": null,
+    "objects": 465,
+    "nets": 22,
+    "pathMetres": 352,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 3,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 1,
+      "Bench": 4,
+      "Bush": 388,
+      "Tree": 71,
+      "AnimalSpawner": 1
+    },
+    "issues": [
+      "W:Placemaker.Wetland.Issue.WaterPermanent",
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "zenGarden",
+    "variant": "default",
+    "file": "zenGarden/default.png",
+    "ms": 24,
+    "failure": null,
+    "objects": 217,
+    "nets": 64,
+    "pathMetres": 847,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 10,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 35,
+      "Lamp": 7,
+      "Bench": 4,
+      "Bush": 136,
+      "Tree": 35
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "zenGarden",
+    "variant": "preset-karesansui",
+    "file": "zenGarden/preset-karesansui.png",
+    "ms": 29,
+    "failure": null,
+    "objects": 187,
+    "nets": 65,
+    "pathMetres": 852,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 4,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 23,
+      "Lamp": 4,
+      "Bench": 4,
+      "Bush": 133,
+      "Tree": 23
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "zenGarden",
+    "variant": "preset-stroll",
+    "file": "zenGarden/preset-stroll.png",
+    "ms": 37,
+    "failure": null,
+    "objects": 191,
+    "nets": 50,
+    "pathMetres": 353,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 45,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 86,
+      "Lamp": 11,
+      "Bench": 6,
+      "Tree": 53,
+      "Bush": 35
+    },
+    "issues": [
+      "I:Placemaker.Zen.Issue.NoPond",
+      "I:Placemaker.Zen.Issue.FewerGroups",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "zenGarden",
+    "variant": "preset-tea",
+    "file": "zenGarden/preset-tea.png",
+    "ms": 16,
+    "failure": null,
+    "objects": 333,
+    "nets": 62,
+    "pathMetres": 762,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 2,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 73,
+      "Lamp": 7,
+      "Bench": 2,
+      "Bush": 168,
+      "Tree": 83
+    },
+    "issues": [
+      "I:Placemaker.Zen.Issue.FewerGroups",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "zenGarden",
+    "variant": "preset-moss",
+    "file": "zenGarden/preset-moss.png",
+    "ms": 34,
+    "failure": null,
+    "objects": 267,
+    "nets": 50,
+    "pathMetres": 353,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 2,
+    "benchesOffPath": 0,
+    "overlaps": 58,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 112,
+      "Lamp": 6,
+      "Bench": 4,
+      "Tree": 132,
+      "Bush": 13
+    },
+    "issues": [
+      "W:Placemaker.Zen.Issue.PondPermanent",
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "zenGarden",
+    "variant": "preset-bamboo",
+    "file": "zenGarden/preset-bamboo.png",
+    "ms": 23,
+    "failure": null,
+    "objects": 1000,
+    "nets": 65,
+    "pathMetres": 883,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 0,
+    "benchesOffPath": 0,
+    "overlaps": 0,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 4,
+      "Lamp": 13,
+      "Bench": 4,
+      "Bush": 979
+    },
+    "issues": []
+  },
+  {
+    "type": "zenGarden",
+    "variant": "features-all",
+    "file": "zenGarden/features-all.png",
+    "ms": 79,
+    "failure": null,
+    "objects": 412,
+    "nets": 64,
+    "pathMetres": 847,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 5,
+    "benchesOffPath": 0,
+    "overlaps": 10,
+    "outside": 0,
+    "decals": 180,
+    "byRole": {
+      "Furniture": 45,
+      "Lamp": 7,
+      "Bench": 4,
+      "Bush": 141,
+      "Tree": 35,
+      "Decal": 180
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent",
+      "W:Placemaker.Common.Issue.NoSpace",
+      "W:Placemaker.Terrain.Issue.Permanent"
+    ]
+  },
+  {
+    "type": "zenGarden",
+    "variant": "features-none",
+    "file": "zenGarden/features-none.png",
+    "ms": 53,
+    "failure": null,
+    "objects": 217,
+    "nets": 64,
+    "pathMetres": 847,
+    "surfaces": 0,
+    "errors": 0,
+    "warnings": 1,
+    "benchesOffPath": 0,
+    "overlaps": 10,
+    "outside": 0,
+    "decals": 0,
+    "byRole": {
+      "Furniture": 35,
+      "Lamp": 7,
+      "Bench": 4,
+      "Bush": 136,
+      "Tree": 35
+    },
+    "issues": [
+      "W:Placemaker.Paint.Issue.Permanent"
+    ]
+  }
+]

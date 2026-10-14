@@ -18,6 +18,7 @@ import { useRtl } from "../lib/rtl";
 import { Tip, TipDirection, TipDirectionContext } from "../lib/tips";
 import { statIcon } from "../lib/icons";
 import { walk } from "../lib/schema";
+import { requestReveal } from "../lib/reveal";
 import { AreaReadout, AreaStage, modeOptions } from "../stages/AreaStage";
 import { DesignStage, markerLabel } from "../stages/DesignStage";
 import { BuildingStage, ReviewStage } from "../stages/ReviewStage";
@@ -286,7 +287,24 @@ export function missingMarkers(root: StepView | null): StepView | null {
     return miss;
 }
 
-const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; summary: Summary; blockedReason: string | null; compact?: boolean }) => {
+/** A step that still needs entrances: pressing the disabled primary starts placing one there. */
+type EntranceLead = { path: string; kind: string; viaPrimary: boolean };
+
+function leadToEntrances(state: ToolState, lead: EntranceLead) {
+    if (lead.viaPrimary) act.primary(); // C# (and the mock) start placement on that step, back in Design
+    else {
+        if (state.stage !== "design") act.goToStage("design");
+        if (lead.kind) {
+            act.startMarkers(lead.path, lead.kind);
+            act.setMarkerKind(lead.path, lead.kind);
+        }
+    }
+    requestReveal("entrances:" + lead.path);
+}
+
+const Footer = ({
+    state, summary, blockedReason, lead, compact,
+}: { state: ToolState; summary: Summary; blockedReason: string | null; lead?: EntranceLead | null; compact?: boolean }) => {
     const { t, tl } = useT();
     const p = state.primary;
     const enabled = p.enabled && !blockedReason;
@@ -321,10 +339,11 @@ const Footer = ({ state, summary, blockedReason, compact }: { state: ToolState; 
             data-testid="primary"
             data-action={p.action}
             aria-disabled={enabled ? "false" : "true"}
-            className={classNames(s.primary, { [s.primaryOff]: !enabled, [s.primaryCancel]: p.action === "cancelBuild" })}
+            className={classNames(s.primary, { [s.primaryOff]: !enabled, [s.primaryLead]: !enabled && !!lead, [s.primaryCancel]: p.action === "cancelBuild" })}
             onClick={(e) => {
                 e.stopPropagation();
                 if (enabled) act.primary();
+                else if (lead && !state.markerMode) leadToEntrances(state, lead);
             }}
         >
             <div className={s.primaryLabel}>{label}</div>
@@ -461,6 +480,16 @@ export const PlacemakerPanel = () => {
         if (!state.open || state.stage !== "design" || state.panelCollapsed) setPicker(null);
     }, [state.open, state.stage, state.panelCollapsed]);
 
+    // Entering entrance placement while entrances are missing (button, or Enter in the game) brings the
+    // Entrances section into view, open and flashing (FEEDBACK-4b).
+    const placingPath = state.markerMode?.stepPath ?? "";
+    const missingPath = state.open && state.stage === "design" ? missingMarkers(design.root)?.path ?? "" : "";
+    useEffect(() => {
+        if (placingPath && placingPath === missingPath) requestReveal("entrances:" + placingPath);
+        // only when placement starts, not on every marker added
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [placingPath]);
+
     const closePicker = useCallback(() => setPicker(null), []);
     const pickerCtx = useMemo(() => ({ open: (r: PickerRequest) => {
                 pickerSerial.current++;
@@ -473,13 +502,21 @@ export const PlacemakerPanel = () => {
         state.stage === "review" && summary.permanent.length > 0 && !ack && (state.primary.action === "build" || state.primary.action === "finishEdit");
     const missing = state.stage === "design" || state.stage === "review" ? missingMarkers(design.root) : null;
     const gated = state.primary.action === "toReview" || state.primary.action === "build" || state.primary.action === "finishEdit";
+    // Who to lead to when the player presses the (disabled) button while entrances are missing.
+    const pr = state.primary;
+    const lead: EntranceLead | null =
+        pr.action === "placeMarkers" && !pr.enabled && pr.stepPath
+            ? { path: pr.stepPath, kind: pr.markerKind ?? "", viaPrimary: true }
+            : missing && gated
+              ? { path: missing.path, kind: missing.markerKinds?.[0]?.kind ?? missing.markers[0]?.kind ?? "", viaPrimary: false }
+              : null;
     let blockedReason: string | null = null;
     if (missing && gated) {
         const need = missing.markersRequired ?? 1;
         blockedReason =
             need > 1
-                ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need])
-                : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance");
+                ? t("Placemaker.UI.Markers.NeedN", "Add at least {0} entrances", [need])
+                : t("Placemaker.UI.Markers.NeedOne", "Add at least one entrance");
     } else if (needsAck) {
         blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick the box to confirm permanent changes");
     }
@@ -629,7 +666,7 @@ export const PlacemakerPanel = () => {
                                                     testId="expand"
                                                 />
                                             </div>
-                                            <Footer state={state} summary={summary} blockedReason={blockedReason} compact />
+                                            <Footer state={state} summary={summary} blockedReason={blockedReason} lead={lead} compact />
                                         </div>
                                     </ErrorBoundary>
                                 ) : (
@@ -646,7 +683,7 @@ export const PlacemakerPanel = () => {
                                             </div>
                                         </div>
                                         <ErrorBoundary name="footer">
-                                            <Footer state={state} summary={summary} blockedReason={blockedReason} />
+                                            <Footer state={state} summary={summary} blockedReason={blockedReason} lead={lead} />
                                         </ErrorBoundary>
                                         <Hints state={state} />
                                     </>

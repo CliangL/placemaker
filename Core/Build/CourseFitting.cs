@@ -88,7 +88,7 @@ namespace Placemaker.Core.Build
 
         public static CourseFitSettings Default => new CourseFitSettings
         {
-            MaxTerrainDeviation = 0.6f, MinSplitLength = 16f, MaxLength = 0f, MaxDepth = 8, FollowTerrain = true,
+            MaxTerrainDeviation = 0.35f, MinSplitLength = 6f, MaxLength = 0f, MaxDepth = 10, FollowTerrain = true,
         };
     }
 
@@ -106,20 +106,19 @@ namespace Placemaker.Core.Build
             var result = new List<Cubic>();
             if (!IsFinite(curve)) return result;
             if (s.MaxDepth <= 0) s.MaxDepth = 8;
-            if (s.FollowTerrain && heightAt != null) curve = PinEnds(curve, heightAt, true, true);
-            FitRecursive(curve, heightAt, s, 0, result);
-
-            if (s.MaxLength > 0.5f)
-            {
-                var limited = new List<Cubic>(result.Count);
-                foreach (var c in result) SplitByLength(c, s.MaxLength, heightAt, s.FollowTerrain, limited);
-                result = limited;
-            }
+            bool follow = s.FollowTerrain && heightAt != null;
+            if (follow) curve = PinEnds(curve, heightAt, true, true);
+            // Length first, then terrain: every piece CS2 gets is fitted to the ground it crosses.
+            var pieces = new List<Cubic>();
+            if (s.MaxLength > 0.5f) SplitByLength(curve, s.MaxLength, heightAt, follow, pieces);
+            else pieces.Add(curve);
+            foreach (var c in pieces) FitRecursive(c, heightAt, s, 0, result);
             return result;
         }
 
         private static void FitRecursive(Cubic c, Func<float2, float> heightAt, CourseFitSettings s, int depth, List<Cubic> output)
         {
+            if (s.FollowTerrain && heightAt != null) c = FitProfile(c, heightAt);
             if (!s.FollowTerrain || heightAt == null || depth >= s.MaxDepth || c.Length() < s.MinSplitLength)
             {
                 output.Add(c);
@@ -143,9 +142,9 @@ namespace Placemaker.Core.Build
         {
             worstT = 0.5f;
             float worst = 0;
-            for (int i = 1; i < 16; i++)
+            for (int i = 1; i < 24; i++)
             {
-                float t = i / 16f;
+                float t = i / 24f;
                 var p = c.Position(t);
                 float g = heightAt(p.xz);
                 if (!math.isfinite(g)) continue;
@@ -176,6 +175,25 @@ namespace Placemaker.Core.Build
                 rest = tail;
             }
             output.Add(rest);
+        }
+
+        /// <summary>
+        /// Playtest 4b ("paths clip into the ground"): a course only knew the ground at its ends; its
+        /// inner control heights came from the plan (often the ground BEFORE terraform). Re-solves the
+        /// two inner control heights so the curve meets the ground at t = 1/3 and 2/3 (ends kept).
+        /// XZ is untouched, so the planned shape and joins stay exact.
+        /// </summary>
+        public static Cubic FitProfile(Cubic c, Func<float2, float> heightAt)
+        {
+            if (heightAt == null) return c;
+            float g1 = heightAt(c.Position(1f / 3f).xz), g2 = heightAt(c.Position(2f / 3f).xz);
+            if (!math.isfinite(g1) || !math.isfinite(g2)) return c;
+            // 27·P(1/3) = 8A + 12B + 6C + D, 27·P(2/3) = A + 6B + 12C + 8D (y only).
+            float r1 = 27f * g1 - 8f * c.A.y - c.D.y, r2 = 27f * g2 - c.A.y - 8f * c.D.y;
+            float b = (12f * r1 - 6f * r2) / 108f, cc = (12f * r2 - 6f * r1) / 108f;
+            if (!math.isfinite(b) || !math.isfinite(cc)) return c;
+            c.B.y = b; c.C.y = cc;
+            return c;
         }
 
         /// <summary>

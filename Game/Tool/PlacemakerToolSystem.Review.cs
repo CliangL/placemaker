@@ -75,34 +75,9 @@ namespace Placemaker.Game.Tool
             Touch();
         }
 
-        // ───────────── automatic markers ─────────────
-
-        /// <summary>
-        /// Untouched marker steps get the layer's suggestions (MarkerAuto): replaced when the outline
-        /// changed, filled when empty after a design change. Never during a drag.
-        /// </summary>
-        private void UpdateAutoMarkers()
-        {
-            if (_recipe == null || _shape == null || _stage == ToolStage.Building) return;
-            if (_gesture != Gesture.None || _previewBase != null || _shapeDirty) return;
-            bool shapeChanged = _autoShapeVersion != _shapeVersion;
-            if (!shapeChanged && _autoDesignVersion == _designVersion) return;
-            _autoShapeVersion = _shapeVersion;
-            bool changed = false;
-            try
-            {
-                changed = MarkerAuto.Apply(_recipe, _shape, SiteFor(_shape), _markersEdited, shapeChanged, GeneratorRegistry.Get);
-            }
-            catch (Exception e) { Mod.Log.Warn("Placemaker: automatic markers failed: " + e.Message); }
-            if (changed)
-            {
-                _designVersion++;
-                _inputRevision++;
-                _lastInputChange = UnityEngine.Time.realtimeSinceStartup;
-                Touch();
-            }
-            _autoDesignVersion = _designVersion;
-        }
+        // ───────────── markers ─────────────
+        // Entrances are never placed automatically (FEEDBACK-4b; playtest-1 "no auto entrances"): a step
+        // that needs one stays unready and the primary button leads the player to place it.
 
         private void MarkMarkersEdited(string path)
         {

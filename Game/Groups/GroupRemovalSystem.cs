@@ -150,6 +150,7 @@ namespace Placemaker.Game.Groups
                 {
                     EntityManager.AddComponent<Deleted>(record);
                     Mod.Log.Info($"Placemaker removed group {group.GroupId}.");
+                    ReportLeftovers(group.GroupId);
                     _registry.MarkDirty();
                     return;
                 }
@@ -215,6 +216,32 @@ namespace Placemaker.Game.Groups
                     if (EntityManager.Exists(edge) && !EntityManager.HasComponent<Deleted>(edge) && !EntityManager.HasComponent<Temp>(edge))
                         EntityManager.AddComponent<Updated>(edge);
             }
+        }
+
+        /// <summary>
+        /// Playtest 4b: removal must account for everything. Anything still tagged with the group after
+        /// its record goes (a member a tool held as Temp copy, a kind removal does not handle) is
+        /// logged per kind and released, so it never points at a dead group.
+        /// </summary>
+        private void ReportLeftovers(int groupId)
+        {
+            var left = new Dictionary<MemberKind, int>();
+            var release = new List<Entity>();
+            using (var all = _memberQuery.ToEntityArray(Allocator.Temp))
+            using (var tags = _memberQuery.ToComponentDataArray<PlacemakerMember>(Allocator.Temp))
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (tags[i].GroupId != groupId) continue;
+                    if (EntityManager.HasComponent<Deleted>(all[i])) continue;
+                    var k = Classify(all[i], tags[i]);
+                    left[k] = (left.TryGetValue(k, out var n) ? n : 0) + 1;
+                    if (!EntityManager.HasComponent<Temp>(all[i])) release.Add(all[i]);
+                }
+            if (left.Count == 0) return;
+            var parts = new List<string>();
+            foreach (var kv in left) parts.Add($"{kv.Value} {kv.Key}");
+            Mod.Log.Warn($"Placemaker could not remove everything of group {groupId}: {string.Join(", ", parts)} left in the city.");
+            foreach (var e in release) EntityManager.RemoveComponent<PlacemakerMember>(e);
         }
 
         private void GiveUp(Entity record)

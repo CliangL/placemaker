@@ -36,6 +36,8 @@ namespace Placemaker.Game.Build
         private PlanIndex _netIndex, _objectIndex, _areaIndex;
         private long _syntheticKey = 1L << 62;
         private readonly HashSet<string> _usedPrefabNames = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<Entity> _usedPrefabs = new HashSet<Entity>();
+        private int _emittedObjects, _emittedAreas;
         private TerrainHeightData _heights;
         private bool _heightsValid;
 
@@ -61,6 +63,7 @@ namespace Placemaker.Game.Build
 
         private void ResetIndexes()
         {
+            _emittedObjects = _emittedAreas = 0;
             _netIndex = _objectIndex = _areaIndex = null;
             _itemByKey.Clear();
             _heightsValid = false;
@@ -72,6 +75,7 @@ namespace Placemaker.Game.Build
         {
             var n = _catalog.NameOf(prefab);
             if (!string.IsNullOrEmpty(n)) _usedPrefabNames.Add(n);
+            _usedPrefabs.Add(prefab);
         }
 
         private static long PrefabId(Entity e) => ((long)e.Version << 32) | (uint)e.Index;
@@ -116,7 +120,7 @@ namespace Placemaker.Game.Build
                 var settings = CourseFitSettings.Default;
                 settings.FollowTerrain = net.FollowTerrain;
                 settings.MaxLength = _catalog.MaxEdgeLength(prefab);
-                var pieces = CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), Height, settings);
+                var pieces = CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), GroundHeight, settings);
                 long key = PlanWork.Key(w);
                 bool any = false;
                 for (int p = 0; p < pieces.Count; p++)
@@ -258,16 +262,18 @@ namespace Placemaker.Game.Build
             float piece = math.max(0.5f, math.max(size.x, size.z));
             var c = new Cubic(net.A, net.B, net.C, net.D);
             float len = c.LengthXZ();
-            // No gaps: the pieces reach both course ends (= the corners of the ring), overlapping a little.
-            int count = Placemaker.Core.Layers.Common.Fences.PieceCount(len, piece);
+            // FEEDBACK-4: never overlapping — the game cancels (ghost) or hides (build) one of every two
+            // overlapping props, which left every other hedge piece missing. Small even gaps instead.
+            int count = Placemaker.Core.Layers.Common.Fences.SpacedPieceCount(len, piece);
             int seed = AutoAssets.UniformSeed(w.Category, (uint)_groupId);   // one look for every piece
+            // Pieces run along their longer local axis (fences usually X; vanilla hedge pieces are long in Z).
+            bool alongZ = size.z > size.x;
             for (int i = 0; i < count; i++)
             {
                 float t = (i + 0.5f) / count;
                 var p = c.Position(t);
                 var tan = c.Tangent(t);
-                // Pieces are modelled along their local X axis.
-                float yaw = math.atan2(tan.x, tan.z) - math.PI * 0.5f;
+                float yaw = math.atan2(tan.x, tan.z) - (alongZ ? 0f : math.PI * 0.5f);
                 long key = _syntheticKey++;
                 _itemByKey[key] = w;
                 EmitObjectDefinition(prefab, p, yaw, 1f, -1, (uint)i, key, true, seed);
@@ -297,7 +303,7 @@ namespace Placemaker.Game.Build
         {
             _objectIndex = _objectIndex ?? new PlanIndex();
             var p = position;
-            if (snapToGround || !math.isfinite(p.y)) p.y = Height(p.xz);
+            if (snapToGround || !math.isfinite(p.y)) p.y = GroundHeight(p.xz);
             var rotation = quaternion.RotateY(yaw);
             var def = NewDefinition();
             EntityManager.AddComponentData(def, new CreationDefinition
@@ -322,6 +328,8 @@ namespace Placemaker.Game.Build
                 m_ParentMesh = -1,
             });
             _objectIndex.AddPoint(key, PrefabId(prefab), p.xz);
+            _emittedObjects++;
+            _usedPrefabs.Add(prefab);
         }
 
         // ───────────────────────── surfaces and areas ─────────────────────────
@@ -410,10 +418,11 @@ namespace Placemaker.Game.Build
             {
                 var p = ring[i];
                 // float.MinValue elevation = "on the ground" (vanilla AreaToolSystem).
-                nodes[i] = new global::Game.Areas.Node(new float3(p.x, Height(p.xz), p.z), float.MinValue);
+                nodes[i] = new global::Game.Areas.Node(new float3(p.x, GroundHeight(p.xz), p.z), float.MinValue);
             }
             nodes[ring.Length] = nodes[0];   // vanilla closes the ring by repeating the first node
             _areaIndex.AddPoint(key, PrefabId(prefab), PlanWork.Centroid(ring));
+            _emittedAreas++;
             _itemByKey[key] = w;
             NoteUsed(prefab);
         }
