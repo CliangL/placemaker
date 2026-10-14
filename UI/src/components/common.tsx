@@ -276,7 +276,7 @@ export const Collapsible = ({
                     {icon ? <Icon name={icon} size={14} tint="dim" className={s.foldIcon} /> : null}
                     <div className={s.foldTitle}>{title}</div>
                     {!open && summary ? (
-                        <div className={s.foldSummary} data-testid={testId ? testId + "-summary" : undefined}>
+                        <div className={s.foldSummary} data-ellipsis data-testid={testId ? testId + "-summary" : undefined}>
                             {summary}
                         </div>
                     ) : (

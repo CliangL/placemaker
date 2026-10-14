@@ -304,7 +304,10 @@ namespace Placemaker.Tests.Types
             Assert.Contains(plan.Objects, o => o.Category == AssetCategories.FarmSilo);
             Assert.True(plan.Facts["hedgeItems"] > 50, "hedge items " + plan.Facts["hedgeItems"]);
             Assert.Contains(plan.Nets, n => n.Role == NetRole.Pathway);
-            Assert.True(plan.Paint.Count > 20, "paint " + plan.Paint.Count);   // ploughed soil and row stripes
+            // Ground before props: fields are crop surfaces (straw, rows, ploughed, green), not thousands of plants.
+            Assert.True(plan.Facts["fieldSurfaces"] >= 3, "field surfaces " + plan.Facts["fieldSurfaces"]);
+            Assert.Contains(plan.Surfaces, s => (s.Category ?? "").StartsWith(AssetCategories.SurfaceCrop));
+            Assert.True(plan.Facts["cropItems"] <= 600, "crop accents " + plan.Facts["cropItems"]);
             Assert.Contains(plan.Regions, r => r.Tags.Contains(RegionTags.Core));
             // Fields are places: features keep out.
             Assert.Contains(plan.Regions, r => r.Tags.Contains(Placemaker.Core.Layers.Types.Farmstead.FarmsteadLayer.FieldPlace));
@@ -319,13 +322,10 @@ namespace Placemaker.Tests.Types
                 var bag = new SettingsBag();
                 bag.Values["rowAngle"] = mode; bag.Values["arablePct"] = 100.0; bag.Values["fieldSize"] = 1.0;
                 var plan = g.Plan(TestKit.Input(FarmTypeChecks.FiveHa, bag, 4, null, TestKit.RoadAlongBottom(250)), CancellationToken.None);
-                // Stripes are thin rectangles: their long edge gives the row direction.
-                var stripes = plan.Paint.Where(p => p.Ring.Length == 4).ToList();
-                Assert.NotEmpty(stripes);
-                var s = stripes[stripes.Count / 2].Ring;
-                var e0 = s[1].xz - s[0].xz; var e1 = s[2].xz - s[1].xz;
-                var longEdge = math.lengthsq(e0) > math.lengthsq(e1) ? e0 : e1;
-                return math.abs(math.normalize(longEdge).x);
+                // Fields are surfaces (world-mapped textures): the rows show as wheel-rut decals laid along them.
+                var ruts = plan.Objects.Where(o => o.Category == AssetCategories.DecalFarm).ToList();
+                Assert.NotEmpty(ruts);
+                return math.abs(math.sin(ruts[ruts.Count / 2].Yaw));
             }
             // The 250 × 200 rect's long axis is x: along → |x| ≈ 1, across → ≈ 0.
             Assert.True(Angle("along") > 0.9f);

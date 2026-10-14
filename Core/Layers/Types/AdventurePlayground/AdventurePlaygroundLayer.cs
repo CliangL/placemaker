@@ -42,7 +42,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             {
                 Feature("restrooms"), Feature("shops", ("count", 1.0), ("where", "entrances")), kick, Feature("picnic", ("groups", 2.0)),
                 StreetShopsFeature(Area), Feature("rocks", ("clusters", 2.0), ("size", "small")),
-                Feature("decals", ("theme", "dirt"), ("density", 1.0)), Feature("terrain", ("shape", "mounds"), ("height", 1.5)),
+                Feature("decals", ("theme", "dirt"), ("density", 0.5)), Feature("terrain", ("shape", "mounds"), ("height", 1.5)),
             };
         }
 
@@ -103,7 +103,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             Preset("water", ("style", "water"), ("ageZones", "mixed"), ("equipment", 8.0), ("ground", "sand"), ("waterPlay", true), ("jets", 18.0),
                 ("pools", 5.0), ("naturePlay", false), ("shade", "both"));
             Preset("nature", ("style", "nature"), ("ageZones", "mixed"), ("equipment", 6.0), ("ground", "bark"), ("waterPlay", false), ("naturePlay", true),
-                ("logs", 18.0), ("boulders", 14.0), ("mound", true), ("moundHeight", 2.5), ("tunnel", true), ("treeDensity", 110.0), ("lamps", false));
+                ("logs", 18.0), ("boulders", 14.0), ("mound", true), ("moundHeight", 2.5), ("tunnel", true), ("treeDensity", 75.0), ("lamps", false));
             Preset("jungle", ("style", "jungle"), ("ageZones", "byAge"), ("equipment", 30.0), ("clearance", 3.0), ("ground", "sand"), ("waterPlay", false),
                 ("naturePlay", false), ("shade", "trees"));
         }
@@ -127,7 +127,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
             var chains = new CategoryChains(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
 
             // Circulation: meandering paths between the entrances, a loop on bigger sites.
             int loops = region.Area > 9000f ? 1 : 0;
@@ -184,7 +184,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     z.Fenced = true;
                     foreach (var run in Fences.Ring(z.Centre, z.Radius + 0.4f, 12, toHub, 3f))
                     {
-                        ctx.StraightNet(run.c0, run.c1, NetRole.Fence, AssetMix.One(ctx.S("fenceAsset")));
+                        ctx.StraightNet(run.c0, run.c1, NetRole.Fence, AssetMix.One(ctx.S("fenceAsset"), PlayArt.Fence));
                         occ.TakeCorridor(run.c0, run.c1, 0.3f, 5);
                     }
                 }
@@ -196,7 +196,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             ctx.Check();
 
             // Parent benches on every zone rim, on the side facing the hub (sightline back to the parents).
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = AssetMix.One(ctx.S("benchAsset"), ParkArt.Benches);
             int wantedBenches = ctx.I("benches");
             int placedZones = 0;
             foreach (var z in zones) if (z.Placed) placedZones++;
@@ -222,6 +222,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             // Shade trees behind each zone (far side from the hub keeps the sightline open).
             string shade = ctx.S("shade");
             var treeIds = ctx.L("treeSpecies");
+            if (treeIds.Length == 0) treeIds = ctx.S("style") == "nature" ? ParkArt.WoodlandTrees : PlayArt.ShadeTrees;
             if (shade == "trees" || shade == "both")
                 foreach (var z in zones)
                 {
@@ -244,7 +245,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                 foreach (var (p, nrm, hw) in PathWalk.Every(occ, 24f))
                 {
                     var q = p + nrm * ((k & 1) == 0 ? 1f : -1f) * (hw + 0.8f);
-                    LeisureKit.Put(ctx, occ, q, 0f, ObjectRole.Lamp, AssetMix.One(""), null, 0.4f, Hashing.Mix(ctx.Seed, 0x1AD0u + (uint)k), 0.3f, 0.2f);
+                    LeisureKit.Put(ctx, occ, q, 0f, ObjectRole.Lamp, AssetMix.One("", ParkArt.ParkLamps), null, 0.4f, Hashing.Mix(ctx.Seed, 0x1AD0u + (uint)k), 0.3f, 0.2f);
                     k++;
                 }
             }
@@ -263,11 +264,11 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             int trees = math.min(4000, (int)(ha * ctx.F("treeDensity")));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
                 LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, treeIds, 2.4f, 18f, 0.4f, 0x7AD0u, blocksView, 1, 3);
-            LeisureKit.Plant(ctx, occ, region, math.min(4000, (int)(ha * ctx.F("treeDensity") * 0.6f)), ObjectRole.Bush, null, 1f, 8f, 0.3f, 0xB0D0u,
+            LeisureKit.Plant(ctx, occ, region, math.min(4000, (int)(ha * ctx.F("treeDensity") * 0.6f)), ObjectRole.Bush, ParkArt.MixedShrubs, 1f, 8f, 0.3f, 0xB0D0u,
                 p => blocksView(p) || region.BoundaryDistance(p, 9f) > 8f);
             ctx.Check();
 
-            if (ctx.B("fence")) Fence(ctx, gates, AssetMix.One(ctx.S("fenceAsset")));
+            if (ctx.B("fence")) Fence(ctx, gates, AssetMix.One(ctx.S("fenceAsset"), PlayArt.Fence));
 
             // Regions: lawn left over for features; the hub is the core when there is one.
             EmitGreenRegions(ctx, occ, 100f);
@@ -462,7 +463,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                 string cat = chains.Get(chosenSurface.Length > 0, groundChain);
                 if (cat != null)
                     ctx.Surface(LeisureKit.Blob(z.Centre, z.Radius / 1.12f, Hashing.Mix(ctx.Seed, 0x5F0u + (uint)z.Kind), 16, 0.1f), SurfaceRole.Decorative,
-                        AssetMix.One(chosenSurface), cat);
+                        AssetMix.One(chosenSurface, PlayArt.Ground(ctx.S("ground"), z.Kind == ZoneKind.Toddler)), cat);
             }
             var placed = new List<(float2 p, float r)>();
             int n = 0;
@@ -476,7 +477,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                 if (cat != null)
                 {
                     uint v = Hashing.Mix(ctx.Seed, 0x7A3u);
-                    ctx.Object(z.Centre, LeisureKit.Yaw(z.Centre, z.Centre + toHub), ObjectRole.Furniture, AssetMix.Pick(ids, v), v, -1, cat);
+                    ctx.Object(z.Centre, LeisureKit.Yaw(z.Centre, z.Centre + toHub), ObjectRole.Furniture, ids != null && ids.Length > 0 ? AssetMix.Pick(ids, v) : AssetMix.One("", PlayArt.Tower), v, -1, cat);
                     placed.Add((z.Centre, z.ItemRadius + 1.5f));
                     n++;
                 }
@@ -505,20 +506,27 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
         private static int BuildWater(LayerContext ctx, Occupancy occ, Zone z, float2 toHub, CategoryChains chains)
         {
             float padR = z.Radius;
-            ctx.Surface(LayerRegion.Circle(z.Centre, padR, 24), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+            ctx.Surface(LayerRegion.Circle(z.Centre, padR, 24), SurfaceRole.Plaza, AssetMix.One("", ParkArt.Tiles), AssetCategories.SurfacePaving);
             string water = CategoryChains.Quiet(AssetCategories.SurfaceWater);
             if (water != null) ctx.Surface(LeisureKit.Blob(z.Centre, padR * 0.45f, Hashing.Mix(ctx.Seed, 0x3A7u), 14, 0.12f), SurfaceRole.Water, AssetMix.One(""), water);
             int n = 0;
-            string jets = chains.Get(false, AssetCategories.WaterJets, AssetCategories.CenterpieceFountain);
+            // Art pass (a1): never "water.jets" here: in the vanilla catalog that is an agricultural sprinkler boom.
+            // Small fountains (about 3.5 m across) stand in for the jets, spaced by their real footprint.
+            string jets = chains.Get(false, AssetCategories.CenterpieceFountain, AssetCategories.Centerpiece);
             if (jets != null)
             {
                 const float golden = 2.39996323f;
-                for (int i = 0; i < z.Items * 3 && n < z.Items; i++)
+                var jetSpots = new List<float2>();
+                for (int i = 0; i < z.Items * 3 && n < math.max(1, (z.Items + 2) / 3); i++)
                 {
-                    float rr = 1.9f * math.sqrt(i + 0.5f);
-                    if (rr > padR - 1.2f) break;
+                    float rr = 2.6f * math.sqrt(i + 0.5f);
+                    if (rr > padR - 2f) break;
                     var p = z.Centre + new float2(math.cos(i * golden), math.sin(i * golden)) * rr;
-                    ctx.Object(p, 0f, ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x7E7u + (uint)i), -1, jets);
+                    bool clash = false;
+                    foreach (var q in jetSpots) if (math.distance(q, p) < 5.4f) { clash = true; break; }
+                    if (clash) continue;
+                    jetSpots.Add(p);
+                    ctx.Object(p, 0f, ObjectRole.Furniture, AssetMix.Pick(PlayArt.Jets, (uint)i), Hashing.Mix(ctx.Seed, 0x7E7u + (uint)i), -1, jets);
                     n++;
                 }
             }
@@ -543,7 +551,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     if (rock != null)
                     {
                         var s = math.lerp(prev, c, 0.5f) + side * ((i & 1) == 0 ? 1.6f : -1.6f);
-                        LeisureKit.Put(ctx, occ, s, Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)i)) * 6.28f, ObjectRole.Furniture, AssetMix.One(""), rock, 0.7f,
+                        LeisureKit.Put(ctx, occ, s, Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)i)) * 6.28f, ObjectRole.Furniture, AssetMix.Pick(PlayArt.Boulders, (uint)i), rock, 0.7f,
                             Hashing.Mix(ctx.Seed, 0x9200u + (uint)i), 0.5f, 0.1f);
                     }
                     prev = c + dir * r;
@@ -574,19 +582,23 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             string logCat = ctx.I("logs") > 0 ? chains.Get(false, AssetCategories.PlayNature) : null;
             if (logCat != null)
             {
+                // Art pass (a1): the vanilla logs are ~10 m trunks (and the automatic "play.nature" pool also holds a
+                // chainsaw-wielding logger): a few whole trunks laid end to end round the mound as a balance trail.
                 float ring = z.Radius * 0.72f;
-                int logs = ctx.I("logs");
-                float step = 2.8f / math.max(2f, ring);
+                int logs = math.min(ctx.I("logs"), math.max(1, (int)(2f * math.PI * ring / 11.5f)));
+                float step = 11.5f / math.max(6f, ring);
                 float a0 = math.atan2(toHub.y, toHub.x) + 0.6f;
-                for (int i = 0; i < logs * 2 && n < logs; i++)
+                for (int i = 0, placedLogs = 0; i < logs * 2 && placedLogs < logs; i++)
                 {
                     float a = a0 + i * step;
                     var p = z.Centre + new float2(math.cos(a), math.sin(a)) * ring;
-                    if (!Fits(p, 1.1f)) continue;
                     var t = new float2(-math.sin(a), math.cos(a));
-                    ctx.Object(p, math.atan2(t.x, t.y) + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x1060u + (uint)i), -1, logCat);
-                    local.Add((p, 1.1f));
-                    n++;
+                    bool fits = true;
+                    for (int k = -2; k <= 2 && fits; k++) fits = Fits(p + t * (k * 2.4f), 0.6f);
+                    if (!fits) continue;
+                    ctx.Object(p, math.atan2(t.x, t.y), ObjectRole.Furniture, AssetMix.Pick(PlayArt.Logs, (uint)i), Hashing.Mix(ctx.Seed, 0x1060u + (uint)i), -1, logCat);
+                    for (int k = -2; k <= 2; k++) local.Add((p + t * (k * 2.4f), 0.6f));
+                    n++; placedLogs++;
                 }
             }
             // Willow tunnel: two bush rows, an arched walk-through across the zone on the hub side.
@@ -599,7 +611,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     {
                         var p = mid + side * u + toHub * s;
                         if (!Fits(p, 0.6f)) continue;
-                        ctx.Object(p, 0f, ObjectRole.Bush, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x7E1u + (uint)(u * 10f + 100f)));
+                        ctx.Object(p, 0f, ObjectRole.Bush, AssetMix.Pick(PlayArt.TunnelShrubs, (uint)(u * 10f + 100f)), Hashing.Mix(ctx.Seed, 0x7E1u + (uint)(u * 10f + 100f)));
                         local.Add((p, 0.6f));
                     }
             }
@@ -620,7 +632,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                         var p = cc + new float2(math.cos(aa), math.sin(aa)) * rr;
                         float br = 0.7f + 0.5f * Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)(k * 97 + i)));
                         if (!Fits(p, br)) continue;
-                        ctx.Object(p, Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)(k * 31 + i))) * 6.28f, ObjectRole.Furniture, AssetMix.One(""),
+                        ctx.Object(p, Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)(k * 31 + i))) * 6.28f, ObjectRole.Furniture, AssetMix.Pick(PlayArt.Boulders, (uint)(k * 31 + i)),
                             Hashing.Mix(ctx.Seed, 0xB01Du + (uint)(k * 64 + i)), -1, rock);
                         local.Add((p, br));
                         placed++; n++;
@@ -643,11 +655,11 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             CategoryChains chains)
         {
             string shade = ctx.S("shade");
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = AssetMix.One(ctx.S("benchAsset"), ParkArt.Benches);
             if ((shade == "shelters" || shade == "both") && hubR >= 6f)
             {
                 string cat = chains.Get(ctx.S("shelterAsset").Length > 0, AssetCategories.Shelter, AssetCategories.CafeSeating);
-                if (cat != null) ctx.Object(hubC, 0f, ObjectRole.Furniture, AssetMix.One(ctx.S("shelterAsset")), Hashing.Mix(ctx.Seed, 0x5E1u), -1, cat);
+                if (cat != null) ctx.Object(hubC, 0f, ObjectRole.Furniture, AssetMix.One(ctx.S("shelterAsset"), ParkArt.Pergolas), Hashing.Mix(ctx.Seed, 0x5E1u), -1, cat);
             }
             bool OnSpur(float2 p)
             {
@@ -678,7 +690,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             {
                 float a = 0.3f + (i + 0.5f) * math.PI;
                 var p = hubC + new float2(math.cos(a), math.sin(a)) * (hubR + 1.2f);
-                LeisureKit.Put(ctx, occ, p, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0xB1Bu + (uint)i), 0.3f, 0.2f);
+                LeisureKit.Put(ctx, occ, p, 0f, ObjectRole.Bin, AssetMix.One("", ParkArt.Bins), null, 0.5f, Hashing.Mix(ctx.Seed, 0xB1Bu + (uint)i), 0.3f, 0.2f);
             }
             // Picnic tables just outside the hub, between the zones.
             if (ctx.B("hubTables"))
@@ -691,7 +703,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     {
                         float a = i * 2f * math.PI / 12f + 0.15f;
                         var p = hubC + new float2(math.cos(a), math.sin(a)) * (hubR + 3.5f);
-                        if (LeisureKit.Put(ctx, occ, p, a, ObjectRole.Furniture, AssetMix.One(""), cat, 1.6f, Hashing.Mix(ctx.Seed, 0x91Cu + (uint)i), 0.8f, 0.6f)) t++;
+                        if (LeisureKit.Put(ctx, occ, p, a, ObjectRole.Furniture, AssetMix.One("", CampArt.Tables), cat, 1.6f, Hashing.Mix(ctx.Seed, 0x91Cu + (uint)i), 0.8f, 0.6f)) t++;
                     }
                 }
             }

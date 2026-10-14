@@ -115,7 +115,7 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
                         if (off > hw - 1f) break;
                         // Two rows (front and back) make the screen read as a porch, not a fence.
                         for (int row = -1; row <= 1; row += 2)
-                            if (MonumentKit.Put(ctx, occ, C + side * s * off + d * row * 1.6f, MonumentKit.Yaw(d), role, AssetMix.One(ctx.S("columnAsset")), cat, 0.6f,
+                            if (MonumentKit.Put(ctx, occ, C + side * s * off + d * row * 1.6f, MonumentKit.Yaw(d), role, role == ObjectRole.Tree && string.IsNullOrEmpty(ctx.S("columnAsset")) ? MonumentKit.ColumnTree : AssetMix.One(ctx.S("columnAsset")), cat, 0.6f,
                                 Hashing.Mix(ctx.Seed, 0xC010u), role == ObjectRole.Tree ? 1f : scale * 0.8f, 0.3f, 0.1f) != null) pieces++;
                     }
             }
@@ -123,13 +123,15 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
 
             if (ctx.B("wings"))
             {
-                string sc = MonumentKit.Quiet("", MonumentKit.StatueChain);
+                string sc = MonumentKit.Quiet("", MonumentKit.OrnamentChain);
+                var wingAsset = MonumentKit.OrnamentAsset(sc, out var wingRole);
                 if (sc != null)
                     for (int s = -1; s <= 1; s += 2)
                         for (int row = -1; row <= 1; row += 2)
                         {
                             var q = C + side * s * math.min(hw - 1.5f, walk + 5.5f) + d * row * (sqHalf - 1.2f);
-                            MonumentKit.Put(ctx, occ, q, MonumentKit.Yaw(row < 0 ? -d : d), ObjectRole.Centerpiece, new AssetRef(""), sc, 1.1f, Hashing.Mix(ctx.Seed, 0x3170u), math.max(1f, scale * 0.5f));
+                            MonumentKit.Put(ctx, occ, q, MonumentKit.Yaw(row < 0 ? -d : d), wingRole, wingAsset, sc, 1.1f, Hashing.Mix(ctx.Seed, 0x3170u),
+                                wingRole == ObjectRole.Planter ? 1f : math.max(1f, scale * 0.5f));
                         }
             }
 

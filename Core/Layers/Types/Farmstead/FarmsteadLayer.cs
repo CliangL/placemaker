@@ -48,7 +48,8 @@ namespace Placemaker.Core.Layers.Types.Farmstead
         protected override bool HostsStreetShops => false;
         protected override int WantedEntrances(LayerRegion region) => region.Area > 60000f ? 2 : 1;
 
-        private const int MaxCropItems = 3000;
+        private const int MaxCropItems = 500;
+        private const float CropsPerHa = 150f;
         private const int MaxStripes = 1600;
         private const int MaxFields = 120;
         private const int MaxHedgeItems = 2500;
@@ -403,6 +404,14 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             string hayCat = hasHay ? LeisureKit.Category(ctx, "", AssetCategories.FarmHay) : null;
             float rs = ctx.F("rowSpacing");
             int stripeLayer = ctx.I("stripeLayer");
+            // Ground before props (GroundCover): each field is one crop surface — stubble/straw for grain,
+            // vegetable rows, ploughed fallow, green hay meadow — with terrain paint only as the fallback when
+            // no farmland surface exists. Crop plants are accents on the row heads; wheel ruts show the rows.
+            int cropBudget = GroundCover.AccentBudget(region.Area, CropsPerHa, 30, MaxCropItems), tracksBudget = 60;
+            int arableFields = 0;
+            foreach (var f in fields) if (f.Kind == FieldKind.Grain || f.Kind == FieldKind.Veg) arableFields++;
+            int perField = math.max(8, cropBudget / math.max(1, arableFields));
+            int fieldSurfaces = 0;
             for (int i = 0; i < fields.Count; i++)
             {
                 var f = fields[i];
@@ -410,23 +419,33 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 switch (f.Kind)
                 {
                     case FieldKind.Grain:
-                        if (paint)
+                        if (GroundCover.Field(ctx, f.Ring, GroundCover.Straw)) fieldSurfaces++;
+                        else if (paint)
                         {
                             TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 0.85f, 3f);
                             stripes += Stripes(ctx, f.Ring, f.RowDir, rs, stripeLayer, 0.55f, MaxStripes - stripes);
                         }
+                        GroundCover.RowTracks(ctx, occ, f.Ring, f.RowDir, ref tracksBudget, v, 6);
                         if (cropCat != null && cropMode != "none")
-                            crops += CropRows(ctx, occ, f, cropMode == "edges", rs, 3f, cropIds, cropCat, MaxCropItems - crops, v);
+                            crops += GroundCover.RowHeads(ctx, occ, f.Ring, f.RowDir, rs, 2.5f, cropMode == "rows" ? 6f : 2.5f, cropMode == "rows" ? 1 : 3,
+                                CropRole(cropCat), cropCat, cropIds, perField, ref cropBudget, v);
                         break;
                     case FieldKind.Veg:
-                        if (paint) TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 1f, 2f);
-                        if (cropCat != null) crops += CropRows(ctx, occ, f, false, math.max(2f, rs * 0.6f), 2.2f, cropIds, cropCat, MaxCropItems - crops, v);
+                        if (GroundCover.Field(ctx, f.Ring, GroundCover.Rows)) fieldSurfaces++;
+                        else if (paint) TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 1f, 2f);
+                        if (cropCat != null)
+                            crops += GroundCover.RowHeads(ctx, occ, f.Ring, f.RowDir, math.max(2f, rs * 0.6f), 2.2f, 4.5f, 1,
+                                CropRole(cropCat), cropCat, cropIds, perField, ref cropBudget, v);
                         break;
                     case FieldKind.Fallow:
-                        if (paint) TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 0.55f, 4f);
+                        if (GroundCover.Field(ctx, f.Ring, GroundCover.Plowed)) fieldSurfaces++;
+                        else if (paint) TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 0.55f, 4f);
+                        GroundCover.RowTracks(ctx, occ, f.Ring, f.RowDir, ref tracksBudget, v, 4);
                         break;
                     case FieldKind.Hay:
-                        if (paint) stripes += Stripes(ctx, f.Ring, f.RowDir, math.max(4f, rs * 1.5f), stripeLayer, 0.35f, MaxStripes - stripes);
+                        if (GroundCover.Field(ctx, f.Ring, GroundCover.Green)) fieldSurfaces++;
+                        else if (paint) stripes += Stripes(ctx, f.Ring, f.RowDir, math.max(4f, rs * 1.5f), stripeLayer, 0.35f, MaxStripes - stripes);
+                        GroundCover.RowTracks(ctx, occ, f.Ring, f.RowDir, ref tracksBudget, v, 4);
                         if (hayCat != null) bales += HayBales(ctx, occ, f, hayCat, v);
                         break;
                     case FieldKind.Pasture:
@@ -520,6 +539,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             ctx.Plan.Facts["pastureFields"] = pasture;
             ctx.Plan.Facts["cropItems"] = crops;
             ctx.Plan.Facts["stripes"] = stripes;
+            ctx.Plan.Facts["fieldSurfaces"] = fieldSurfaces;
             ctx.Plan.Facts["hayBales"] = bales;
             ctx.Plan.Facts["hedgeItems"] = hedgeItems;
             ctx.Plan.Facts["fieldTrees"] = fieldTrees;
@@ -738,41 +758,8 @@ namespace Placemaker.Core.Layers.Types.Farmstead
         }
 
         /// <summary>Crop props along rows (every <paramref name="along"/> m); edges = only the outer two rows on each side.</summary>
-        private static int CropRows(LayerContext ctx, Occupancy occ, Field f, bool edgesOnly, float spacing, float along, string[] ids, string cat,
-            int budget, uint v)
-        {
-            if (budget <= 0) return 0;
-            var dir = f.RowDir;
-            var perp = new float2(-dir.y, dir.x);
-            var c = f.Region.Centroid;
-            float lo = float.MaxValue, hi = float.MinValue;
-            foreach (var q in f.Ring) { float t = math.dot(q - c, perp); lo = math.min(lo, t); hi = math.max(hi, t); }
-            int rows = (int)math.floor((hi - lo - 1f) / spacing);
-            var role = cat == AssetCategories.FieldCrop || cat == AssetCategories.GardenCrop ? ObjectRole.Furniture : ObjectRole.Bush;
-            var crop = AssetMix.Pick(ids, v);
-            float yaw = math.atan2(dir.x, dir.y);
-            int n = 0;
-            for (int k = 0; k <= rows && n < budget; k++)
-            {
-                if (edgesOnly && k > 1 && k < rows - 1) continue;
-                float t = lo + 0.5f + k * spacing;
-                foreach (var (a, b) in Line(f.Region, c + perp * t, dir))
-                {
-                    float len = math.distance(a, b);
-                    if (len < 2f) continue;
-                    var d = (b - a) / len;
-                    for (float s = 0.8f; s < len - 0.8f && n < budget; s += along)
-                    {
-                        var p = a + d * s;
-                        if (!occ.Free(p, 0.4f, 0.4f, 0f)) continue;
-                        // One variation per field: crops are a variety category (g5), so automatic picks vary by field, not by plant.
-                        ctx.Object(p, yaw, role, crop, v, -1, cat);
-                        n++;
-                    }
-                }
-            }
-            return n;
-        }
+        private static ObjectRole CropRole(string cat) =>
+            cat == AssetCategories.FieldCrop || cat == AssetCategories.GardenCrop ? ObjectRole.Furniture : ObjectRole.Bush;
 
         private static int HayBales(LayerContext ctx, Occupancy occ, Field f, string cat, uint v)
         {

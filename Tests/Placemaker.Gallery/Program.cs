@@ -9,7 +9,7 @@
 //   terraform as height tint + 1 m contours, plan issues as red/amber rings, a 10 m scale bar.
 // Writes <out>/<type>/<variant>.png, <out>/index.html and <out>/gallery.json (metrics per image).
 //
-//   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark]
+//   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront]
 
 using System;
 using System.Collections.Generic;
@@ -44,6 +44,7 @@ namespace Placemaker.Gallery
                     case "--catalog": fixture = next; i++; break;
                     case "--only": only = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--showcase": Renderer.Showcase = true; break;
+                    case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
                 }
@@ -251,9 +252,10 @@ namespace Placemaker.Gallery
     {
         public string Summary = "", File = "";
         public double Ms;
-        public int Objects, Nets, Surfaces, Errors, Warnings, BenchesOffPath, Overlaps, Outside, Decals;
+        public int Objects, Nets, Surfaces, Errors, Warnings, BenchesOffPath, Overlaps, Outside, Decals, EdgeSpikes;
         public double PathMetres;
         public Dictionary<string, int> ByRole = new Dictionary<string, int>();
+        public Dictionary<string, int> ByCategory = new Dictionary<string, int>();
         public List<string> IssueKeys = new List<string>();
         public string Failure;
     }
@@ -278,6 +280,15 @@ namespace Placemaker.Gallery
 
         /// <summary>--showcase: square site with streets on all four sides; entrances from the planner's own suggestions.</summary>
         public static bool Showcase;
+        /// <summary>
+        /// --water a,b/preset-x (test-only fixture; the gallery site is otherwise dry): for these types (or type/variant) the south strip of the
+        /// site (z &lt; 18 % of its depth) and everything beyond it is a lake. Land stays at 0 m, the water surface is at
+        /// -0.6 m and the lake bed shelves down to -5 m; the street on that side is dropped. Lets shore types
+        /// (beach, waterfront, wetland, lakeshore trails) find real water instead of an assumed side.
+        /// </summary>
+        public static HashSet<string> WaterTypes;
+        public const float WaterSurface = -0.6f;
+        [ThreadStatic] private static float _waterZ;
         [ThreadStatic] private static List<NearbyNet> _roads;
         [ThreadStatic] private static List<EdgeMarker> _markers;
 
@@ -324,6 +335,16 @@ namespace Placemaker.Gallery
             var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
             var site = new SiteContext { Assets = catalog.Items, LayoutScale = LayoutScale };
             if (Showcase) site.NearbyNets = RoadsAround(ring);
+            _waterZ = float.NaN;
+            if (WaterTypes != null && (WaterTypes.Contains(job.Type) || WaterTypes.Contains(job.Type + "/" + job.Variant)))
+            {
+                float zMin = ring.Min(p => p.z), zMax = ring.Max(p => p.z), wz = zMin + (zMax - zMin) * 0.18f;
+                _waterZ = wz;
+                Func<float2, float> bed = p => p.y >= wz ? 0f : math.max(-5f, -1f - (wz - p.y) * 0.12f);
+                site.HeightAt = bed;
+                site.WaterDepthAt = p => p.y >= wz ? 0f : WaterSurface - bed(p);
+                site.NearbyNets = site.NearbyNets.Where(n => math.max(n.A.z, n.D.z) > zMin + 0.5f).ToList();
+            }
             _roads = site.NearbyNets;
             ComposedPlan plan;
             var sw = Stopwatch.StartNew();
@@ -349,7 +370,7 @@ namespace Placemaker.Gallery
             _markers = job.Recipe?.Root?.Markers;
             Draw(plan, ring, catalog, Path.Combine(dir, job.Variant + ".png"), res);
             if (res.Failure == null)
-                res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.Ms:0} ms";
+                res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.EdgeSpikes} spikes, {res.Ms:0} ms";
             return res;
         }
 
@@ -381,6 +402,21 @@ namespace Placemaker.Gallery
         private static Rgba SurfaceColor(PlannedSurface s)
         {
             string cat = s.Category ?? "";
+            if (cat.StartsWith("surface.crop"))
+            {
+                switch (cat)
+                {
+                    case "surface.crop.soil": return Rgba.Hex("#8d6c4c");
+                    case "surface.crop.plowed": return Rgba.Hex("#76573b");
+                    case "surface.crop.rows": return Rgba.Hex("#7d8a4e");
+                    case "surface.crop.green": return Rgba.Hex("#86b856");
+                    case "surface.crop.straw": return Rgba.Hex("#dcc276");
+                    case "surface.crop.lavender": return Rgba.Hex("#9a86c8");
+                    case "surface.crop.yellow": return Rgba.Hex("#e3d24e");
+                    case "surface.crop.flower": return Rgba.Hex("#d39cc0");
+                    default: return Rgba.Hex("#a99063");
+                }
+            }
             if (cat.StartsWith("surface.sand")) return Rgba.Hex("#ead9a2");
             if (cat.StartsWith("surface.gravel")) return Rgba.Hex("#c9c2b2");
             if (cat.StartsWith("surface.dirt")) return Rgba.Hex("#b9976a");
@@ -464,6 +500,11 @@ namespace Placemaker.Gallery
                     cv.DashedPolyline(rp, cv.Px(1f), 4f, 4f, Rgba.Hex("#ffffff", 0.8f));
                 }
             cv.FillPolygon(ring2, Ground);
+            if (!float.IsNaN(_waterZ))
+            {
+                float wz = _waterZ;   // test water fixture (--water): lake south of wz
+                cv.Shade(p => p.y < wz ? Rgba.Hex("#8fbde6") : default, min, max);
+            }
 
             // Terraform: height after all layers (last plan with HeightAfter wins), tinted + 1 m contours.
             Func<float2, float> height = null;
@@ -558,6 +599,7 @@ namespace Placemaker.Gallery
             {
                 string c = RoleCategories.ForObject(o) ?? "";
                 res.ByRole[o.Role.ToString()] = res.ByRole.TryGetValue(o.Role.ToString(), out var k) ? k + 1 : 1;
+                res.ByCategory[c] = res.ByCategory.TryGetValue(c, out var kc) ? kc + 1 : 1;
                 var (poly, r) = Footprint(o, cat);
                 fps.Add((o, c, poly, r));
             }
@@ -586,6 +628,10 @@ namespace Placemaker.Gallery
             cv.StrokePolyline(new[] { sb, sb + new float2(20, 0), sb + new float2(20, cv.Px(4)), sb + new float2(0, cv.Px(4)) }, cv.Px(1), Rgba.Hex("#222222"), closed: true);
 
             Metrics(res, fps, polylines.Select(p => (p.n, p.pts, p.hw)).ToList(), ring2);
+            // s9: edge spikes (paths hugging or leaving the outline) drawn as red bars.
+            var spikes = Placemaker.Core.Layers.Common.PathQuality.EdgeSpikes(plan, ring);
+            res.EdgeSpikes = spikes.Count;
+            foreach (var sp in spikes) cv.StrokePolyline(new[] { sp.From, sp.To }, 1.6f, Rgba.Hex("#e01010", 0.85f));
             cv.SavePng(file);
         }
 
@@ -827,6 +873,7 @@ namespace Placemaker.Gallery
                         if (r.BenchesOffPath > 0) flags.Add($"{r.BenchesOffPath} benches off-path");
                         if (r.Overlaps > 0) flags.Add($"{r.Overlaps} overlapping objects");
                         if (r.Outside > 0) flags.Add($"{r.Outside} outside area");
+                        if (r.EdgeSpikes > 0) flags.Add($"{r.EdgeSpikes} edge spikes");
                         if (r.Errors > 0) flags.Add($"{r.Errors} errors");
                         if (flags.Count > 0) sb.Append($"<span class=\"bad\">{string.Join(" · ", flags)}</span><br>");
                         if (r.IssueKeys.Count > 0) sb.Append(Esc(string.Join(", ", r.IssueKeys.Distinct().Take(6))));
@@ -836,7 +883,7 @@ namespace Placemaker.Gallery
                     {
                         type = j.Type, variant = j.Variant, file = r.File, ms = Math.Round(r.Ms), failure = r.Failure, objects = r.Objects, nets = r.Nets,
                         pathMetres = Math.Round(r.PathMetres), surfaces = r.Surfaces, errors = r.Errors, warnings = r.Warnings,
-                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, decals = r.Decals, byRole = r.ByRole, issues = r.IssueKeys.Distinct().ToList(),
+                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, edgeSpikes = r.EdgeSpikes, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(),
                     });
                 }
                 sb.Append("</div>");

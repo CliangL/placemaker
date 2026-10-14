@@ -12,6 +12,7 @@
 //     outline and the fallen deck.
 // Subtypes: DIY skate spot, Broken highway ruins, Graffiti park, Parkour yard, BMX dirt jumps.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System.Collections.Generic;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
@@ -111,7 +112,13 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
 
         private struct Span { public OrientedRect R; public bool Collapsed, Ramp; }
 
-        protected override void PlanCore(LayerContext ctx)
+        /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 130f); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
@@ -120,7 +127,8 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
             var keep = new Zones();     // pads, modules, ramp: scatters keep out
             var gates = Gates(ctx);
             string sub = ctx.S("subtype");
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
+            // Deck and pads follow the plot edges (a square plot used to get a diagonal highway).
+            YardKit.GridFrame(region, out var centre, out var axis, out var side, out float major, out float minor);
             float decay = ctx.F("decay") / 100f, graffiti = ctx.F("graffiti") / 100f, over = ctx.F("overgrowth") / 100f;
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
             bool hasGraffiti = graffiti > 0f && AssetAvailability.Has(AssetCategories.DecalGraffiti);
@@ -285,8 +293,11 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                     float sideSign = math.dot(g.Position - deck.Center, deck.Side) >= 0f ? 1f : -1f;
                     target = deck.Local(along, sideSign * (deck.HalfWidth + 2f));
                 }
-                if (!region.Contains(target) || region.CrossesBoundary(g.Position, target, true)) continue;
-                LeisureKit.Path(ctx, occ, g.Position, target, NetRole.Pathway, pathAsset);
+                if (!region.Contains(target)) continue;
+                // s9: straight in from the edge, never a leg sideways along it.
+                var route = GateApproach.ToPoint(region, g.Position, target, LeisureLayer.ApproachLength(ctx));
+                if (route == null) continue;
+                for (int i = 1; i < route.Count; i++) LeisureKit.Path(ctx, occ, route[i - 1], route[i], NetRole.Pathway, pathAsset);
             }
             if (ctx.B("fence"))
                 DecayKit.BrokenFence(ctx, occ, region, gates, ctx.F("fenceGaps") / 100f, AssetMix.One(ctx.S("fenceAsset"), AbandonedLotLayer.SiteFences), 0xFE7Du);

@@ -62,11 +62,18 @@ namespace Placemaker.Core.Layers.AddOns
         private static void Build(LayerContext ctx, Occupancy occ, float2 centre, int items, float itemRadius, float spacing,
             float cluster, string[] ids)
         {
-            if (ctx.B("surface"))
-                ctx.Surface(LayerRegion.Circle(centre, cluster, 20, Hashing.Unit(ctx.Seed)), SurfaceRole.Decorative, AssetMix.One(ctx.S("surfaceAsset")));
             // Where people come from: the nearest path, else the region centre.
             var toward = occ.Paths.Count > 0 && occ.Paths.Nearest(centre, 200f, out var onPath) >= 0 ? onPath : ctx.LayerRegion.Centroid;
             var dir = math.normalizesafe(toward - centre, new float2(0, 1));
+            if (ctx.B("surface"))
+            {
+                // Soft fall surface (bark mulch, else sand) under the equipment; a paved strip joins it to the
+                // path where the parents' benches stand.
+                ctx.Surface(LayerRegion.Circle(centre, cluster, 20, Hashing.Unit(ctx.Seed)), SurfaceRole.Decorative,
+                    AddOnAssets.Or(ctx.S("surfaceAsset"), AddOnAssets.PlaySurface), AssetCategories.SurfaceNatural);
+                if (occ.Paths.Count > 0)
+                    AddOnKit.Link(ctx, toward, centre, cluster, 1.4f, AssetMix.One("", AddOnAssets.Paving), AssetCategories.SurfacePaving, 12f);
+            }
 
             int placed = 0;
             const float golden = 2.39996323f;
@@ -87,7 +94,7 @@ namespace Placemaker.Core.Layers.AddOns
             int benches = 0;
             if (ctx.B("benches"))
             {
-                var bench = AssetMix.One(ctx.S("benchAsset"));
+                var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
                 // Two to four benches on the path-facing half of the rim, looking at the play area.
                 int count = math.clamp(items / 2, 2, 4);
                 for (int i = 0; i < count; i++)

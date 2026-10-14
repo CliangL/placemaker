@@ -41,6 +41,9 @@ namespace Placemaker.Core.Layers.Types.Golf
             return f;
         }
 
+        /// <summary>Art pass: a manicured course gets no scattered leaf/dirt decals by default (restrooms only).</summary>
+        protected override string[] DefaultFeatures => new[] { "restrooms" };
+
         protected override List<FeatureInfo> BuildFeatures()
         {
             var practice = Feature(PuttingGreenAddOn.LayerId);
@@ -111,7 +114,7 @@ namespace Placemaker.Core.Layers.Types.Golf
             Preset("parkland", ("subtype", "course"), ("holes", 9.0), ("holeLength", 180.0), ("doglegs", 40.0), ("bunkers", 2.0), ("water", 2.0),
                 ("treeDensity", 140.0), ("fairwayWidth", 30.0), ("routing", "loop"));
             Preset("links", ("subtype", "course"), ("holes", 9.0), ("holeLength", 220.0), ("doglegs", 65.0), ("bunkers", 6.0), ("water", 0.0),
-                ("treeDensity", 0.0), ("bushDensity", 90.0), ("fairwayWidth", 40.0), ("routing", "outAndBack"), ("roughLayer", 2.0));
+                ("treeDensity", 0.0), ("bushDensity", 90.0), ("fairwayWidth", 40.0), ("routing", "outAndBack"), ("roughLayer", 2.0), ("cartPaths", false));
             Preset("pitchPutt", ("subtype", "pitchPutt"), ("holes", 9.0), ("holeLength", 65.0), ("doglegs", 0.0), ("bunkers", 2.0), ("water", 1.0),
                 ("fairwayWidth", 14.0), ("greenSize", 16.0), ("teeBoxes", 1.0), ("cartPaths", false), ("treeDensity", 50.0));
             Preset("miniGolf", ("subtype", "miniGolf"), ("holes", 18.0), ("miniTheme", "adventure"), ("treeDensity", 30.0), ("bushDensity", 80.0),
@@ -160,7 +163,7 @@ namespace Placemaker.Core.Layers.Types.Golf
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var haz = new Occupancy(region, ctx.Input.Reserved, ctx.Site);   // hazards may nibble fairways, never greens/tees/paths
             var gates = Gates(ctx);
-            var pathAsset = AssetMix.One(ctx.S("pathAsset"));
+            var pathAsset = GolfAssets.PathRef(ctx.S("pathAsset"));
 
             // Clubhouse beside the main entrance; the course starts and (for loops) ends there.
             float2 home = Clubhouse(ctx, occ, gates, fmt.Disc ? 3f : 7f, fmt.Disc ? ShelterChain : ClubChain, !fmt.Disc);
@@ -194,11 +197,13 @@ namespace Placemaker.Core.Layers.Types.Golf
 
             // Holes: fairway, green, tee boxes, flags and markers.
             bool warned = false;
-            string flagCat = ctx.B("flags") ? LeisureKit.Category(ctx, ctx.S("flagAsset"), fmt.Disc ? AssetCategories.GolfBasket : AssetCategories.GolfFlag,
-                AssetCategories.GolfFlag) : null;
-            string teeCat = AssetAvailability.Has(AssetCategories.GolfTee) ? AssetCategories.GolfTee : null;
-            var fairway = AssetMix.One(ctx.S("fairwaySurface"));
-            var green = AssetMix.One(ctx.S("greenSurface"));
+            // Vanilla has no golf props: explicit stand-ins (GolfAssets) unless the player picked something.
+            var (flagAsset, flagCat) = GolfAssets.FlagProp(ctx.S("flagAsset"), fmt.Disc);
+            if (!ctx.B("flags")) flagCat = null;
+            var (teeAsset, teeCat) = GolfAssets.TeeMarkerProp();
+            var fairway = GolfAssets.FairwayRef(ctx.S("fairwaySurface"));
+            var teeTurf = GolfAssets.TeeRef(ctx.S("fairwaySurface"));
+            var green = GolfAssets.GreenRef(ctx.S("greenSurface"));
             int teeCount = fmt.Disc ? 1 : ctx.I("teeBoxes");
             foreach (var h in holes)
             {
@@ -222,23 +227,23 @@ namespace Placemaker.Core.Layers.Types.Golf
                     var c = h.Tee - d * (k * 7.5f);
                     if (k > 0 && !occ.Free(c, 3.2f, 1.5f, 0.3f)) break;
                     if (k > 0) { occ.Take(c, 3.2f, GolfRouting.TeeKind); haz.Take(c, 3.2f, GolfRouting.TeeKind); }
-                    if (fmt.Disc) ctx.Surface(LayerRegion.Rect(c, d, 2.2f, 0.9f), SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    if (fmt.Disc) ctx.Surface(LayerRegion.Rect(c, d, 2.2f, 0.9f), SurfaceRole.Paving, GolfAssets.KerbRef(), AssetCategories.SurfacePaving);
                     else
                     {
                         var tee = LayerRegion.Rect(c, d, 3f, 2.4f);
-                        ctx.Surface(tee, SurfaceRole.Grass, fairway, AssetCategories.SurfaceGrass);
+                        ctx.Surface(tee, SurfaceRole.Grass, teeTurf, AssetCategories.SurfaceGrass);
                         if (ctx.B("shapeGreens")) Pad(ctx, region, tee, c, 0.35f, ref warned);
                     }
                 }
                 if (teeCat != null)
                     for (int e = -1; e <= 1; e += 2)
                         ctx.Object(h.Tee + d * 1.5f + side * (e * (fmt.Disc ? 1.4f : 2.2f)), LeisureKit.Yaw(h.Tee, h.Tee + d), ObjectRole.Furniture,
-                            AssetMix.One(""), Hashing.Mix(hv, (uint)e + 3u), -1, teeCat);
+                            teeAsset, Hashing.Mix(hv, (uint)e + 3u), -1, teeCat);
                 if (flagCat != null)
                 {
                     float off = fmt.Disc ? 0f : spec.GreenRadius * 0.35f * Hashing.Unit(Hashing.Mix(hv, 5u));
                     float ang = Hashing.Unit(Hashing.Mix(hv, 6u)) * 6.283f;
-                    ctx.Object(h.Green + new float2(math.cos(ang), math.sin(ang)) * off, 0f, ObjectRole.Furniture, AssetMix.One(ctx.S("flagAsset")), hv, -1, flagCat);
+                    ctx.Object(h.Green + new float2(math.cos(ang), math.sin(ang)) * off, 0f, ObjectRole.Furniture, flagAsset, hv, -1, flagCat);
                 }
             }
             ctx.Check();
@@ -372,12 +377,19 @@ namespace Placemaker.Core.Layers.Types.Golf
             occ.Take(home, radius, ClubKind);
             if (!ctx.B("clubhouse")) return home;
             var facing = gates.Count > 0 ? gates[0].Position : region.Centroid;
-            string cat = LeisureKit.Category(ctx, "", chain);
-            if (cat != null) ctx.Object(home, LeisureKit.Yaw(home, facing), ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0xC1B1u), -1, cat);
+            // Vanilla has no clubhouse prop (the automatic chain ended at an outhouse): a pavilion on a
+            // paved terrace for courses and ranges, a campground shelter as a disc golf starter hut.
+            var (club, clubCat) = GolfAssets.Prop("", chain[0],
+                apron ? AssetMix.One(GolfAssets.Clubhouse, "Gazebo01", "Gazebo02") : AssetMix.One("CampgroundShelter01", "CampgroundShelter02"), AssetCategories.Shelter);
+            ctx.Object(home, LeisureKit.Yaw(home, facing), ObjectRole.Furniture, club, Hashing.Mix(ctx.Seed, 0xC1B1u), -1, clubCat);
             if (apron)
             {
                 var axis = math.normalizesafe(facing - home, new float2(0, 1));
-                ctx.Surface(LayerRegion.Rect(home, axis, radius + 1.5f, radius + 1.5f), SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+                ctx.Surface(LayerRegion.Rect(home, axis, radius + 1.5f, radius + 1.5f), SurfaceRole.Paving, GolfAssets.ApronRef(), AssetCategories.SurfacePaving);
+                // Pro shop beside the pavilion (the carts park on the other side, the entrance walk arrives in front).
+                var side0 = new float2(-axis.y, axis.x);
+                ctx.Object(home - side0 * (radius - 1f), LeisureKit.Yaw(home, facing), ObjectRole.Furniture,
+                    AssetMix.One(GolfAssets.ProShop, "Kiosk02"), Hashing.Mix(ctx.Seed, 0xC1B2u), -1, AssetCategories.Kiosk);
                 string cart = AssetAvailability.Has(AssetCategories.GolfCart) ? AssetCategories.GolfCart : null;
                 if (cart != null)
                 {
@@ -418,7 +430,8 @@ namespace Placemaker.Core.Layers.Types.Golf
         {
             var region = ctx.LayerRegion;
             bool cart = ctx.B("cartPaths") && !fmt.Disc && !fmt.Pitch;
-            var role = cart ? NetRole.PathwayWide : NetRole.Pathway;
+            // Cart paths are 3 m concrete lanes (Pavement Path), not the 8 m promenade the automatic wide walk resolves to.
+            var role = NetRole.Pathway;
             float phw = Composer.DefaultHalfWidth(role);
             float clubR = fmt.Disc ? 3f : 7f;
             int links = 0;
@@ -547,8 +560,8 @@ namespace Placemaker.Core.Layers.Types.Golf
         {
             int perHole = ctx.I("bunkers");
             if (perHole <= 0 || holes.Count == 0) return 0;
-            var sand = AssetMix.One(ctx.S("bunkerSurface"));
-            string sandCat = !string.IsNullOrEmpty(ctx.S("bunkerSurface")) || AssetAvailability.Has(AssetCategories.SurfaceSand) ? AssetCategories.SurfaceSand : AssetCategories.SurfaceNatural;
+            var sand = GolfAssets.BunkerRef(ctx.S("bunkerSurface"));
+            string sandCat = AssetCategories.SurfaceSand;
             float depth = ctx.F("bunkerDepth");
             int placed = 0;
             foreach (var h in holes)
@@ -677,12 +690,14 @@ namespace Placemaker.Core.Layers.Types.Golf
         {
             float ha = region.Area / 10000f;
             var treeIds = ctx.L("treeSpecies");
+            if (treeIds.Length == 0) treeIds = GolfAssets.Trees(ctx.S("subtype"));
             int trees = math.min(8000, (int)(ha * ctx.F("treeDensity")));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
                 LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, treeIds, 2.5f, 22f, 0.4f, 0x7E00u, reject, 1, 3);
             int bushes = math.min(8000, (int)(ha * ctx.F("bushDensity")));
-            if (bushes > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Bush, null, Keys.Category(AssetCategories.Bush)))
-                LeisureKit.Plant(ctx, occ, region, bushes, ObjectRole.Bush, null, 1.1f, 12f, 0.3f, 0xB500u, reject);
+            var bushIds = GolfAssets.Bushes(ctx.S("subtype"));
+            if (bushes > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Bush, bushIds, Keys.Category(AssetCategories.Bush)))
+                LeisureKit.Plant(ctx, occ, region, bushes, ObjectRole.Bush, bushIds, 1.1f, 12f, 0.3f, 0xB500u, reject);
         }
     }
 }

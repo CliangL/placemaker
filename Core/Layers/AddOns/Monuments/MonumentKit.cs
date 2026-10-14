@@ -59,7 +59,22 @@ namespace Placemaker.Core.Layers.AddOns.Monuments
 
         // ───────────── categories (graceful degradation) ─────────────
 
-        public static readonly string[] StatueChain = { AssetCategories.CenterpieceStatue, AssetCategories.MemorialMonument, AssetCategories.MemorialSculpture, AssetCategories.Centerpiece };
+        // Art pass a6: vanilla has no statues (centerpiece.statue held clock hands); the old tail
+        // "centerpiece" turned every statue into a fountain, scaled up to 4.5×. A figure now falls back to
+        // a sculpture, and only then to a fountain (never scaled past life size, see IsFigure).
+        public static readonly string[] StatueChain = { AssetCategories.CenterpieceStatue, AssetCategories.MemorialMonument, AssetCategories.MemorialSculpture, AssetCategories.MonumentSculpture, AssetCategories.CenterpieceFountain };
+        /// <summary>Small repeated ornaments (statue rings, wings, corners): figures, else classical urns (plant pots).</summary>
+        public static readonly string[] OrnamentChain = { AssetCategories.CenterpieceStatue, AssetCategories.MemorialSculpture, AssetCategories.Planter };
+        /// <summary>A real figure (scales well); anything else is a stand-in kept near life size.</summary>
+        public static bool IsFigure(string cat) => cat == AssetCategories.CenterpieceStatue || cat == AssetCategories.MemorialMonument || cat == AssetCategories.MemorialSculpture;
+        /// <summary>Asset and role for an ornament of category <paramref name="cat"/> (urn-like pots when no figures are installed).</summary>
+        public static AssetRef OrnamentAsset(string cat, out ObjectRole role)
+        {
+            role = cat == AssetCategories.Planter ? ObjectRole.Planter : ObjectRole.Centerpiece;
+            return cat == AssetCategories.Planter ? AssetMix.One("", "PlantPot01", "FlowerPot01") : new AssetRef("");
+        }
+        /// <summary>Living-colonnade stand-in: Lombardy-like poplars (columnar), then birches.</summary>
+        public static AssetRef ColumnTree => AssetMix.One("", "EU_PoplarTree01", "BirchTree01");
         public static readonly string[] SculptureChain = { AssetCategories.MonumentSculpture, AssetCategories.MemorialSculpture, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece };
         public static readonly string[] ObeliskChain = { AssetCategories.MonumentObelisk, AssetCategories.MemorialMonument, AssetCategories.CenterpieceStatue };
 

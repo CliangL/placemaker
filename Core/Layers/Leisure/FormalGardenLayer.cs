@@ -5,6 +5,7 @@
 // built when all four mirror images fit, so the symmetry never breaks on an irregular outline).
 
 using System.Collections.Generic;
+using Placemaker.Core.Build;
 using Placemaker.Core.Layers.AddOns.Monuments;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Park;
@@ -63,14 +64,14 @@ namespace Placemaker.Core.Layers.Leisure
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
             ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            var pts = LeisureKit.Points(gates);
+            LeisureKit.FrameToward(region, pts, out var centre, out var axis, out var side, out _, out _);
             region.DeepestPoint(out float ins, null, 12);
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
 
             // Axes (+ entrances joined straight), as the park's formal style. Thin paths (FEEDBACK-4).
-            var pts = LeisureKit.Points(gates);
             float keep = math.max(ctx.M(2f), ctx.EdgeMargin + 0.5f);
-            var graph = ParkPathStyles.Formal(region, pts, p => region.ContainsDisc(p, keep));
+            var graph = ParkPathStyles.Formal(region, pts, centre, axis, side);
             var curves = ParkPaths.Build(graph, region, false, "narrow");
             // The axes end at the round point's edge (an axis between two opposite entrances would
             // otherwise run straight across the basin).
@@ -112,7 +113,7 @@ namespace Placemaker.Core.Layers.Leisure
             var hedge = AssetMix.One(ctx.S("hedgeAsset"));
             var bush = AssetMix.One(ctx.S("bushAsset"));
             float startU = rp + walk + bl * 0.5f, startV = axisHw + walk + (ctx.B("allees") ? 5f : 0f) + bw * 0.5f;
-            int beds = 0;
+            int beds = 0, hedges = 0;
             var columns = new SortedDictionary<int, (float u, float vMax)>();
             int col = 0;
             for (float u = startU; u < ins * 4f; u += bl + walk, col++)
@@ -133,20 +134,34 @@ namespace Placemaker.Core.Layers.Leisure
                         var r = quad[m];
                         LeisureKit.TakeRect(occ, r);
                         uint vs = Hashing.Mix(ctx.Seed, 0xBED0u + (uint)beds);
+                        // Ground before props (GroundCover): the parterre is a gravel bed with a lawn panel
+                        // inside its low hedge — surfaces, not a flower every two metres.
+                        ctx.Surface(r.Ring, SurfaceRole.Paving, AssetMix.One(""), SurfaceCategories.Gravel);
+                        if (r.HalfLength > 2.2f && r.HalfWidth > 1.6f)
+                        {
+                            var panel = new OrientedRect { Center = r.Center, Axis = r.Axis, HalfLength = r.HalfLength - 1.1f, HalfWidth = r.HalfWidth - 1.1f };
+                            ctx.Surface(panel.Ring, SurfaceRole.Grass, AssetMix.One(""), AssetCategories.SurfaceGrass);
+                        }
                         if (hedgeCat != null)
                         {
                             var ring = r.Ring;
                             for (int k = 0; k < 4; k++)
-                                foreach (var p in LeisureKit.Along(ring[k], ring[(k + 1) % 4], 1.6f))
-                                    ctx.Object(p, math.atan2((ring[(k + 1) % 4] - ring[k]).x, (ring[(k + 1) % 4] - ring[k]).y), ObjectRole.Bush, hedge, vs, -1, hedgeCat);
+                                hedges += GroundCover.HedgeRow(ctx, ring[k], ring[(k + 1) % 4], hedge, hedgeCat, ObjectRole.Bush, vs);
                         }
+                        // One flowerbed in the middle of the panel (two on long beds) — the representative planting.
                         if (flowerCat != null)
-                            for (float fu = -r.HalfLength + 2f; fu <= r.HalfLength - 1.9f; fu += 2.4f)
-                                for (float fv = -r.HalfWidth + 1.6f; fv <= r.HalfWidth - 1.5f; fv += 2.2f)
-                                    ctx.Object(r.Local(fu, fv), r.Yaw, flowerCat == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter,
-                                        AssetMix.Pick(flowers, vs), vs, -1, flowerCat);
-                        if (ctx.B("topiary"))
-                            foreach (var (cu, cv) in new[] { (-1f, -1f), (1f, -1f), (1f, 1f), (-1f, 1f) })
+                        {
+                            int nf = r.HalfLength > 4.5f ? 2 : 1;
+                            for (int k = 0; k < nf; k++)
+                            {
+                                float fu = nf == 1 ? 0f : (k == 0 ? -1f : 1f) * r.HalfLength * 0.45f;
+                                ctx.Object(r.Local(fu, 0f), r.Yaw, flowerCat == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter,
+                                    AssetMix.Pick(flowers, vs), vs, -1, flowerCat);
+                            }
+                        }
+                        // Topiary on the corners of the first beds round the basin only (representative, not every bed).
+                        if (ctx.B("topiary") && col == 0)
+                            foreach (var (cu, cv) in new[] { (-1f, -1f), (1f, 1f) })
                                 ctx.Object(r.Local(cu * (r.HalfLength - 0.9f), cv * (r.HalfWidth - 0.9f)), 0f, ObjectRole.Bush, bush, Hashing.Mix(vs, 3u));
                         beds++;
                     }

@@ -5,6 +5,7 @@
 
 using System.Collections.Generic;
 using Placemaker.Core.Layers.Common;
+using Placemaker.Core.Layers.Park;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Leisure
@@ -21,7 +22,7 @@ namespace Placemaker.Core.Layers.Leisure
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature("restrooms"), Feature("shops", ("count", 1.0)), StreetShopsFeature(Area), Feature("rocks", ("size", "small"), ("clusters", 2.0)),
-            Feature("decals", ("theme", "dirt"), ("density", 0.8)), Feature("terrain", ("shape", "mounds"), ("height", 1.0)),
+            Feature("decals", ("theme", "dirt"), ("density", 0.45)), Feature("terrain", ("shape", "mounds"), ("height", 1.0)),
         };
 
         protected override void DefineControls(ControlSet c)
@@ -32,7 +33,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Toggle("doubleGates", true, ControlTier.Essential, "runs").Tip();
             c.Slider("benches", 4, 0, 12, 1, "count", ControlTier.More, "runs");
             c.Toggle("amenities", true, ControlTier.More, "runs").Tip();
-            c.Slider("shadeTrees", 20, 0, 80, 5, "perHa", ControlTier.More, "planting");
+            c.Slider("shadeTrees", 30, 0, 80, 5, "perHa", ControlTier.More, "planting");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.AssetMulti("agilityAssets", AssetCategories.DogAgility, ControlTier.More, "assets");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "assets");
@@ -55,17 +56,17 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            var fence = AssetMix.One(ctx.S("fenceAsset"));
+            var fence = AssetMix.One(ctx.S("fenceAsset"), DogArt.Fence);
 
             // Ground.
             string ground = ctx.S("ground");
-            if (ground == "grass") ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            if (ground == "grass") ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
             else if (ground == "dirt")
             {
                 string cat = LeisureKit.Category(ctx, ctx.S("groundSurface"), AssetCategories.SurfaceDirt, AssetCategories.SurfaceNatural);
-                ctx.Surface(region.Ring, SurfaceRole.Ground, AssetMix.One(ctx.S("groundSurface")), cat ?? AssetCategories.SurfaceNatural);
+                ctx.Surface(region.Ring, SurfaceRole.Ground, AssetMix.One(ctx.S("groundSurface"), DogArt.Worn), cat ?? AssetCategories.SurfaceNatural);
             }
-            else ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            else ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
 
             // Perimeter fence with openings at the entrances.
             Fence(ctx, gates, fence, 1.6f);
@@ -115,7 +116,7 @@ namespace Placemaker.Core.Layers.Leisure
             }
 
             // Seating hub(s) by the entrances.
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = AssetMix.One(ctx.S("benchAsset"), ParkArt.Benches);
             int benches = 0, wantedBenches = ctx.I("benches");
             for (int i = 0; i < hubs.Count && benches < wantedBenches; i++)
                 for (int k = 0; k < 3 && benches < wantedBenches; k++)
@@ -140,7 +141,10 @@ namespace Placemaker.Core.Layers.Leisure
                     foreach (var h in hubs)
                     {
                         var role = cat == AssetCategories.Bin ? ObjectRole.Bin : ObjectRole.Furniture;
-                        if (LeisureKit.Put(ctx, occ, h + new float2(2.5f, -2.5f), 0f, role, AssetMix.One(""), cat == AssetCategories.Bin ? null : cat, 0.6f, Hashing.Mix(ctx.Seed, 0xB1Bu + (uint)n++), 1f)) { }
+                        var amenity = cat == AssetCategories.Bin ? AssetMix.One("", ParkArt.Bins) : AssetMix.One("", DogArt.Drinking);
+                        if (LeisureKit.Put(ctx, occ, h + new float2(2.5f, -2.5f), 0f, role, amenity, cat == AssetCategories.Bin ? null : cat, 0.6f, Hashing.Mix(ctx.Seed, 0xB1Bu + (uint)n++), 1f)) { }
+                        // and a bin for the bags beside it
+                        LeisureKit.Put(ctx, occ, h + new float2(-2.5f, -2.5f), 0f, ObjectRole.Bin, AssetMix.One("", ParkArt.Bins), null, 0.5f, Hashing.Mix(ctx.Seed, 0xB1Cu + (uint)n), 1f);
                     }
                 }
             }
@@ -150,8 +154,11 @@ namespace Placemaker.Core.Layers.Leisure
             var ids = ctx.L("agilityAssets");
             if (agility > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.DogAgility, ids, Keys.Category(AssetCategories.DogAgility)))
             {
+                // Art pass (a1): the vanilla DogPark set (hoops, jumps, ramps, see-saw, platform, weave poles, tunnels)
+                // in course order; the props are small (0.6–3 m), so the oval stays compact enough to read as a course.
+                if (ids.Length == 0) ids = DogArt.Course;
                 var c = bigRun.DeepestPoint(out float ins, (q, cap) => occ.Clearance(q, cap), 14);
-                float rx = math.clamp(ins - 3f, 4f, 16f);
+                float rx = math.clamp(ins - 3f, 4f, math.min(16f, 4f + agility * 0.9f));
                 float ry = rx * 0.6f;
                 LeisureKit.Frame(bigRun, out _, out var ax, out var sd, out _, out _);
                 for (int i = 0; i < agility * 2 && props < agility; i++)
@@ -160,22 +167,27 @@ namespace Placemaker.Core.Layers.Leisure
                     var p = c + ax * math.cos(a) * rx + sd * math.sin(a) * ry;
                     var tangent = math.normalizesafe(-ax * math.sin(a) * rx + sd * math.cos(a) * ry);
                     uint v = Hashing.Mix(ctx.Seed, 0xA61u + (uint)i);
-                    if (LeisureKit.Put(ctx, occ, p, math.atan2(tangent.x, tangent.y), ObjectRole.Furniture, AssetMix.Pick(ids, v), AssetCategories.DogAgility, 1.6f, v, 1f, 0.6f))
+                    var prop = AssetMix.Pick(ids, (uint)props);   // in course order, not random
+                    if (LeisureKit.Put(ctx, occ, p, math.atan2(tangent.x, tangent.y), ObjectRole.Furniture, prop, AssetCategories.DogAgility, 1.6f, v, 1f, 0.6f))
                         props++;
                 }
                 if (ground == "mixed")
-                    ctx.Surface(LeisureKit.Blob(c, rx + 2f, Hashing.Mix(ctx.Seed, 0xD1Au), 18, 0.15f), SurfaceRole.Decorative, AssetMix.One(ctx.S("groundSurface")),
+                    ctx.Surface(LeisureKit.Blob(c, rx + 2f, Hashing.Mix(ctx.Seed, 0xD1Au), 18, 0.15f), SurfaceRole.Decorative, AssetMix.One(ctx.S("groundSurface"), DogArt.Worn),
                         AssetAvailability.Has(AssetCategories.SurfaceDirt) ? AssetCategories.SurfaceDirt : AssetCategories.SurfaceNatural);
             }
             if (ground == "mixed")
                 foreach (var h in hubs)
-                    ctx.Surface(LeisureKit.Blob(h, 5f, Hashing.Mix(ctx.Seed, (uint)(h.x * 7f)), 14, 0.2f), SurfaceRole.Decorative, AssetMix.One(ctx.S("groundSurface")),
+                    ctx.Surface(LeisureKit.Blob(h, 5f, Hashing.Mix(ctx.Seed, (uint)(h.x * 7f)), 14, 0.2f), SurfaceRole.Decorative, AssetMix.One(ctx.S("groundSurface"), DogArt.Worn),
                         AssetAvailability.Has(AssetCategories.SurfaceDirt) ? AssetCategories.SurfaceDirt : AssetCategories.SurfaceNatural);
 
             // Shade trees along the fence.
             int trees = (int)(region.Area / 10000f * ctx.F("shadeTrees"));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, ctx.L("treeSpecies"), Keys.Category(AssetCategories.Tree)))
-                LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, ctx.L("treeSpecies"), 2.5f, 15f, 0.5f, 0xD07u, p => region.BoundaryDistance(p, 12f) > 9f, 2, 3);
+                LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, ctx.L("treeSpecies").Length > 0 ? ctx.L("treeSpecies") : DogArt.Trees, 2.5f, 15f, 0.5f, 0xD07u, p => region.BoundaryDistance(p, 12f) > 9f, 2, 3);
+            // Shrubs in clumps along the fence soften the run (vanilla DogPark sets plant green bushes there).
+            int shrubs = (int)(region.Area / 10000f * 60f);
+            if (shrubs > 0 && AssetAvailability.Has(AssetCategories.Bush))
+                LeisureKit.Plant(ctx, occ, region, shrubs, ObjectRole.Bush, ParkArt.GreenShrubs, 1f, 8f, 0.4f, 0xD08u, p => region.BoundaryDistance(p, 8f) > 5f, 1, 1);
 
             // Walkable inside the fence (people walk their dogs anywhere).
             ctx.NavigationArea(region.Ring, AreaRole.PedestrianArea, new AssetRef("", "Pedestrian Area"));
@@ -183,5 +195,20 @@ namespace Placemaker.Core.Layers.Leisure
             CommonStats(ctx);
             ctx.Stat("Placemaker.Stat.AgilityProps", props, Keys.UnitCount);
         }
+    }
+
+    /// <summary>Art pass (a1): vanilla dog park set (from the game's DogPark01/02 palettes).</summary>
+    public static class DogArt
+    {
+        public static readonly string[] Course =
+        {
+            "DogParkHoop01", "DogParkJumpFence01", "DogParkRamp02", "DogParkPole01", "DogParkTube01", "DogParkSeesaw01",
+            "DogParkJumpFence02", "DogParkPlatform01", "DogParkHoop02", "DogParkTube02", "DogParkRamp01",
+        };
+        public static readonly string[] Drinking = { "DogParkDrinkingFountain01" };
+        /// <summary>A 1.2 m mesh fence (a dog-proof run), a low residential fence without it.</summary>
+        public static readonly string[] Fence = { "FenceIndustrialLow01", "FenceResidentialLow02" };
+        public static readonly string[] Worn = { "Terrain Surfaces Pack Ground gaga TTP - Soil M Surface", ParkArt.Forest };
+        public static readonly string[] Trees = { "EU_ChestnutTree01", "NA_LindenTree01", "NA_LondonPlaneTree01", "EU_PoplarTree01" };
     }
 }

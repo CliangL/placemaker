@@ -138,6 +138,7 @@ namespace Placemaker.Core.Build
                 r.Add(AssetCategories.Decal);
                 var theme = DecalTheme(name);
                 if (theme != null) r.Add(theme);
+                GroundCoverCategoryRules.ClassifyDecal(lower, r);   // farm wheel-rut decals (decal.farm, s8)
                 // Type rules may add their own decal pools (sports field lines); additive, "decal.*" only.
                 var decalExtra = new List<string>(2);
                 CategoryRules.Classify(lower, t, decalExtra);
@@ -272,7 +273,10 @@ namespace Placemaker.Core.Build
             if (isArea) return true;
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
+            // Leisure pools never take machinery ("AgricultureSprinklerSystem" as splash-pad jets).
+            if (AssetCuration.IsMachineryForLeisure(category, lower)) return false;
             // Decals: curated themes (AssetCuration) — natural park looks, never letters or road markings.
+            if (category == AssetCategories.DecalFarm) return GroundCoverCategoryRules.DecalAuto(lower);
             if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
             {
                 var decalRuled = CategoryRules.AutoEligible(category, lower, t);
@@ -495,6 +499,7 @@ namespace Placemaker.Core.Build
             if (ContainsAny(lower, "invisible", "marker") && category != AssetCategories.InvisiblePath) score -= 200;
             // Curated order: allow-listed built-ins in list order, decals by natural look (playtest 4b).
             score += AssetCuration.Score(category, name);
+            score += GroundCoverCategoryRules.Score(category, lower);
             if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
                 score += AssetCuration.DecalScore(category, name);
             return score;

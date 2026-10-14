@@ -48,7 +48,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             Feature("shops", ("count", 1.0), ("where", "entrances")),
             StreetShopsFeature(Area),
             Feature(Farmstead.ApiaryAddOn.LayerId, ("hives", 4.0)),
-            Feature("decals", ("theme", "dirt"), ("density", 2.0)),
+            Feature("decals", ("theme", "dirt"), ("density", 0.6)),   // art pass: 2.0 scattered ~170 dirt decals per 1.2 ha
         };
 
         protected override void DefineControls(ControlSet c)
@@ -130,11 +130,18 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             string kind = ctx.S("kind"), layout = ctx.S("layout");
             float hw = Composer.DefaultHalfWidth(NetRole.Pathway);
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
+            // Squarish sites: the principal axis is an arbitrary diagonal — run the spine straight in from the entrance.
+            if (gates.Count > 0 && major < minor * 1.25f)
+            {
+                axis = region.InwardNormal(gates[0].Segment);
+                side = new float2(-axis.y, axis.x);
+            }
+            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("Grass Surface 01"));
 
-            // 1. Boundary.
-            if (ctx.S("boundary") == "fence") Fence(ctx, gates, AssetMix.One(ctx.S("fenceAsset")), 2.5f);
+            // 1. Boundary: a natural hedge (hedgerow on) or a tall wooden fence — never the automatic brick wall.
+            bool hedgerow = ctx.B("hedgerow");
+            if (ctx.S("boundary") == "fence" || hedgerow) Fence(ctx, gates, AnimalParkArt.Boundary(ctx.S("fenceAsset"), hedgerow), 2.5f);
 
             // 2. Visitor hub by the main entrance (its open middle is the features' core).
             bool hubOn = ctx.B("hub") || ctx.Input.HasChildTarget(RegionTags.Core);
@@ -207,10 +214,11 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             ctx.Check();
 
             // 3b. Hedgerow inside the outline, then aviaries beside the walks (both claim space before the pens).
-            if (ctx.B("hedgerow"))
+            if (hedgerow)
             {
-                string hedgeCat = LeisureKit.Category(ctx, "", AssetCategories.Hedge, AssetCategories.Bush);
-                FarmKit.Edge(ctx, occ, region, 1.6f, 2.2f, gates, 4.5f, hedgeCat, Array.Empty<string>(), 1.0f, 0xAE06u);
+                // The hedge itself is the boundary net; loose wild shrubs in front of it give it depth
+                // (was ~190 clipped hedge pieces in a row).
+                FarmKit.Edge(ctx, occ, region, 2.2f, 6.5f, gates, 4.5f, AssetCategories.Bush, AnimalParkArt.HedgerowShrubs, 1.0f, 0xAE06u);
             }
             var hubAt = hubC; float hubKeep = hubOn ? hubR + 2.5f : 0f;
             bool InHub(float2 p, float r) => hubKeep > 0f && math.distancesq(p, hubAt) < (hubKeep + r) * (hubKeep + r);
@@ -291,13 +299,14 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             // 8. Along the walks: viewpoints facing the pens, aviaries, benches, lamps.
             Viewpoints(ctx, occ, pens, kind);
             int aviaries = aviarySpots.Count;
-            if (ctx.F("benchSpacing") > 0f) FarmKit.BesidePaths(ctx, occ, ctx.F("benchSpacing"), ObjectRole.Bench, AssetMix.One(ctx.S("benchAsset")), 1.3f, 0xBE4Cu);
+            if (ctx.F("benchSpacing") > 0f) FarmKit.BesidePaths(ctx, occ, ctx.F("benchSpacing"), ObjectRole.Bench, Bench(ctx, kind), 1.3f, 0xBE4Cu);
             if (ctx.B("lamps")) FarmKit.BesidePaths(ctx, occ, 26f, ObjectRole.Lamp, AssetMix.One(""), 0.5f, 0x1A4Bu);
             if (hubOn) occ.Take(hubC, hubR * 0.55f, 9);   // keep the hub's middle for the features
             ctx.Check();
 
             // 9. Shade trees outside the pens.
             var trees = ctx.L("treeSpecies");
+            if (trees.Length == 0) trees = AnimalParkArt.Trees(kind);
             float outside = math.max(0f, region.Area - SumArea(pens));
             int wanted = (int)(outside / 10000f * ctx.F("shadeTrees"));
             if (wanted > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, trees, Keys.Category(AssetCategories.Tree)))
@@ -310,6 +319,14 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             ctx.Stat("Placemaker.Stat.AnimalSpawners", spawners, Keys.UnitCount);
             ctx.Stat("Placemaker.Stat.Aviaries", aviaries, Keys.UnitCount);
             ctx.Plan.Facts["arena"] = hasArena ? 1 : 0;
+        }
+
+        /// <summary>Rustic campground benches on the farm walks, garden benches in the aviary garden.</summary>
+        private static AssetRef Bench(LayerContext ctx, string kind)
+        {
+            string chosen = ctx.S("benchAsset");
+            if (!string.IsNullOrEmpty(chosen)) return AssetMix.One(chosen);
+            return kind == "aviary" ? AssetMix.One("GardenBench02", "GardenBench01") : AssetMix.One("CampgroundBench01", "GardenBench01");
         }
 
         private static float SumArea(List<Pen> pens)
@@ -340,13 +357,39 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                 left -= k;
                 var reg = LayerRegion.From(space);
                 if (reg == null) continue;
-                reg.PrincipalAxes(out var o, out var ax, out _, out _);
+                reg.PrincipalAxes(out var o, out var ax, out float spanMajor, out float spanMinor);
+                // Squarish spaces have an arbitrary (often diagonal) principal axis: cut square to the longest edge
+                // instead, so pens line up with the walks and the outline.
+                if (spanMajor < spanMinor * 1.25f)
+                {
+                    float longest = 0f;
+                    for (int e = 0; e < space.Length; e++)
+                    {
+                        var d = space[(e + 1) % space.Length] - space[e];
+                        if (math.length(d) > longest) { longest = math.length(d); ax = math.normalizesafe(d, ax); }
+                    }
+                }
                 var sd = FarmKit.Perp(ax);
                 var span = FarmKit.Span(space, o, ax);
                 var lines = new List<(float2, float2)>();
-                for (int j = 1; j < k; j++)
+                // A squarish space cut into 4+ pens becomes two rows of pens either side of a fenced
+                // alley, not a stack of thin strips (art pass: 60 x 10 m "pens").
+                var cross = FarmKit.Span(space, o, sd);
+                bool twoRows = k >= 4 && spanMajor < spanMinor * 1.25f && cross.y - cross.x > 36f;
+                int strips = twoRows ? (k + 1) / 2 : k;
+                if (twoRows)
                 {
-                    float t = math.lerp(span.x, span.y, j / (float)k);
+                    float m = (cross.x + cross.y) * 0.5f;
+                    if (pond.HasValue && Poly.Contains(space, pond.Value))
+                    {
+                        float pm = math.dot(pond.Value - o, sd);
+                        if (math.abs(m - pm) < pondR + 4f) m = pm + math.sign(m - pm + 1e-3f) * (pondR + 4f);
+                    }
+                    lines.Add((o + sd * m, ax));
+                }
+                for (int j = 1; j < strips; j++)
+                {
+                    float t = math.lerp(span.x, span.y, j / (float)strips);
                     // Never cut through the pond: shift the line clear of it.
                     if (pond.HasValue && Poly.Contains(space, pond.Value))
                     {
@@ -386,11 +429,15 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
         private static int Furnish(LayerContext ctx, Occupancy occ, List<Pen> pens, string kind)
         {
             if (pens.Count == 0) return 0;
-            var penFence = AssetMix.One(ctx.S("penFenceAsset"));
+            var penFence = AnimalParkArt.PenFence(ctx.S("penFenceAsset"), kind);
             bool walkIn = ctx.B("walkIn");
-            string shelterCat = ctx.B("shelters") ? LeisureKit.Category(ctx, ctx.S("shelterAsset"), AssetCategories.AnimalParkShelter, AssetCategories.CityFarmBarn, AssetCategories.GardenShed, AssetCategories.Shelter) : null;
-            string troughCat = ctx.B("troughs") ? LeisureKit.Category(ctx, ctx.S("troughAsset"), AssetCategories.AnimalParkTrough) : null;
-            string hayCat = ctx.B("hay") ? LeisureKit.Category(ctx, ctx.S("hayAsset"), AssetCategories.AnimalParkHay, AssetCategories.CityFarmProp) : null;
+            // Installed animal-park props first, else sized vanilla stand-ins (no 19 m barns in a pen, no crates as hay).
+            var (shelterAsset, shelterCat) = AnimalParkArt.Prop(ctx.S("shelterAsset"), AssetCategories.AnimalParkShelter, AnimalParkArt.ShelterStandIn(kind), AssetCategories.Shelter);
+            if (!ctx.B("shelters")) shelterCat = null;
+            // Troughs have no vanilla stand-in: placed only when installed or picked, without a "missing" note.
+            string troughCat = ctx.B("troughs") && (!string.IsNullOrEmpty(ctx.S("troughAsset")) || AssetAvailability.Has(AssetCategories.AnimalParkTrough)) ? AssetCategories.AnimalParkTrough : null;
+            var (hayAsset, hayCat) = AnimalParkArt.Prop(ctx.S("hayAsset"), AssetCategories.AnimalParkHay, AnimalParkArt.Hay, AssetCategories.FarmHay);
+            if (!ctx.B("hay")) hayCat = null;
             string dirt = AssetAvailability.Has(AssetCategories.SurfaceDirt) ? AssetCategories.SurfaceDirt : AssetCategories.SurfaceNatural;
             bool worn = ctx.B("wornGround");
             int layer = math.clamp(ctx.I("groundLayer"), 1, 4);
@@ -398,7 +445,8 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             int perPen = ctx.B("animals") ? math.clamp(ctx.I("animalsPerPen"), 1, 6) : 0;
             float woodland = ctx.F("woodland") / 100f, shade = ctx.F("shadeTrees");
             var trees = ctx.L("treeSpecies");
-            bool treesOk = (woodland > 0f || shade > 0f) && AssetAvailability.Has(AssetCategories.Tree);
+            if (trees.Length == 0) trees = AnimalParkArt.Trees(kind);
+            bool treesOk = woodland > 0f || shade > 0f;
             int spawners = 0, patches = 0;
             float shelterR = kind == "petting" || kind == "aviary" ? 2.2f : 3.2f;
             for (int i = 0; i < pens.Count; i++)
@@ -432,7 +480,8 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                 var inward = math.normalizesafe(centroid - gate, pr.InwardNormal(gateSeg));
 
                 // Ground: worked earth in small pens, worn patches by the gate in paddocks.
-                if (kind == "petting") ctx.Surface(pen.Ring, SurfaceRole.Decorative, AssetMix.One(""), dirt);
+                // Straw-bedded petting pens (mud, then sand without the farming pack).
+                if (kind == "petting") ctx.Surface(pen.Ring, SurfaceRole.Decorative, AssetMix.One(AnimalParkArt.Straw, "EAI - Surface Pack Ground Mud Surface", "Sand Surface 02"), dirt);
                 if (worn && patches < 40)
                 {
                     var patch = LeisureKit.Blob(gate + inward * 4f, math.min(5f, math.sqrt(pr.Area) * 0.25f), Hashing.Mix(v, 5u), 12, 0.25f);
@@ -455,7 +504,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                             if (d > far && occ.Free(q, shelterR, 0.3f, 0.2f)) { far = d; back = q; }
                         }
                         if (far >= 0f)
-                            LeisureKit.Put(ctx, occ, back, LeisureKit.Yaw(back, centroid), ObjectRole.Furniture, AssetMix.One(ctx.S("shelterAsset")), shelterCat,
+                            LeisureKit.Put(ctx, occ, back, LeisureKit.Yaw(back, centroid), ObjectRole.Furniture, shelterAsset, shelterCat,
                                 shelterR, Hashing.Mix(v, 1u), 0.3f, 0.2f);
                     }
                 }
@@ -470,7 +519,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                     for (int k = 0; k < 3; k++)
                     {
                         var p = back + math.normalizesafe(centroid - back) * (shelterR + 1.6f) + FarmKit.Perp(math.normalizesafe(centroid - back)) * ((k - 1) * 1.8f);
-                        if (pr.ContainsDisc(p, 0.8f)) LeisureKit.Put(ctx, occ, p, 0f, ObjectRole.Furniture, AssetMix.One(ctx.S("hayAsset")), hayCat, 0.7f, Hashing.Mix(v, 3u + (uint)k), 0.3f, 0.1f);
+                        if (pr.ContainsDisc(p, 0.8f)) LeisureKit.Put(ctx, occ, p, Hashing.Unit(Hashing.Mix(v, 9u + (uint)k)) * 6.283f, ObjectRole.Furniture, hayAsset, hayCat, 0.9f, Hashing.Mix(v, 3u + (uint)k), 0.3f, 0.1f);
                     }
 
                 // Trees: woodland pasture (deer) or a few shade trees.
@@ -507,33 +556,31 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             var region = ctx.LayerRegion;
             var yard = FarmKit.Largest(FarmKit.Clip(LeisureKit.Blob(c, r * 0.8f, Hashing.Mix(ctx.Seed, 0x4B0u), 16, 0.12f), region.Ring, 20f));
             if (yard != null)
-            {
-                string paving = AssetAvailability.Has(AssetCategories.SurfaceNatural) ? AssetCategories.SurfaceNatural : AssetCategories.SurfacePaving;
-                ctx.Surface(yard, SurfaceRole.Ground, AssetMix.One(""), paving);
-            }
+                ctx.Surface(yard, SurfaceRole.Ground, AssetMix.One(AnimalParkArt.Yard, "Pavement Surface 02"), Placemaker.Core.Build.SurfaceCategories.Gravel);
             var toGate = math.normalizesafe(gate - c, new float2(0, -1));
             var side = FarmKit.Perp(toGate);
             uint v = Hashing.Mix(ctx.Seed, 0x4B1u);
             // Barn at the back of the hub, kiosk and picnic tables on the sides, bins by the way in.
-            string barn = LeisureKit.Category(ctx, ctx.S("shelterAsset"), AssetCategories.CityFarmBarn, AssetCategories.AnimalParkShelter, AssetCategories.Shelter);
-            if (barn != null)
-                LeisureKit.Put(ctx, occ, c - toGate * (r * 0.72f), LeisureKit.Yaw(c - toGate, c), ObjectRole.Furniture, AssetMix.One(""), barn, math.min(5f, r * 0.3f), v, 0.5f, 0.2f);
-            if (AssetAvailability.Has(AssetCategories.Kiosk))
-                LeisureKit.Put(ctx, occ, c + side * (r * 0.72f), LeisureKit.Yaw(c + side, c), ObjectRole.Furniture, AssetMix.One(""), AssetCategories.Kiosk, 2.4f, Hashing.Mix(v, 1u), 0.5f, 0.2f);
-            if (AssetAvailability.Has(AssetCategories.Picnic))
-                for (int k = 0; k < 3; k++)
-                {
-                    var p = c - side * (r * 0.7f) + toGate * ((k - 1) * 3.4f);
-                    LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, c), ObjectRole.Furniture, AssetMix.One(""), AssetCategories.Picnic, 1.4f, Hashing.Mix(v, 2u + (uint)k), 0.5f, 0.2f);
-                }
+            // Barn at the back of the hub when a real one fits (vanilla barns are 15-20 m), else a farm shed.
+            var back = c - toGate * (r * 0.72f);
+            bool barn = r >= 16f && LeisureKit.Put(ctx, occ, c - toGate * (r - 9.5f), LeisureKit.Yaw(c - toGate, c), ObjectRole.Furniture,
+                AssetMix.One("Barn03", "Barn01"), AssetCategories.CityFarmBarn, 9.5f, v, 0.5f, 0.2f);
+            if (!barn)
+                LeisureKit.Put(ctx, occ, back, LeisureKit.Yaw(c - toGate, c), ObjectRole.Furniture, AssetMix.One("ToolShed03", "FirewoodShelter02"), AssetCategories.GardenShed,
+                    2.6f, v, 0.5f, 0.2f);
+            LeisureKit.Put(ctx, occ, c + side * (r * 0.72f), LeisureKit.Yaw(c + side, c), ObjectRole.Furniture, AssetMix.One("Kiosk01", "Kiosk02"), AssetCategories.Kiosk, 2.4f, Hashing.Mix(v, 1u), 0.5f, 0.2f);
+            for (int k = 0; k < 3; k++)
+            {
+                var p = c - side * (r * 0.7f) + toGate * ((k - 1) * 3.4f);
+                LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, c), ObjectRole.Furniture, AnimalParkArt.PicnicTable, AssetCategories.CafeSeating, 1.4f, Hashing.Mix(v, 2u + (uint)k), 0.5f, 0.2f);
+            }
             for (int k = -1; k <= 1; k += 2)
                 LeisureKit.Put(ctx, occ, c + toGate * (r * 0.75f) + side * (k * 3.2f), 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(v, 9u + (uint)(k + 1)), 0.5f, 0.2f);
         }
 
         private static void Arena(LayerContext ctx, Occupancy occ, OrientedRect a)
         {
-            string sand = AssetAvailability.Has(AssetCategories.SurfaceSand) ? AssetCategories.SurfaceSand : AssetCategories.SurfaceNatural;
-            ctx.Surface(a.Ring, SurfaceRole.Ground, AssetMix.One(""), sand);
+            ctx.Surface(a.Ring, SurfaceRole.Ground, AssetMix.One(AnimalParkArt.ArenaSand, "Sand Surface 01"), AssetCategories.SurfaceSand);
             // Rail fence round the arena; the gate on the short end nearest a walk.
             var fenceRegion = LayerRegion.From(new OrientedRect { Center = a.Center, Axis = a.Axis, HalfLength = a.HalfLength + 0.4f, HalfWidth = a.HalfWidth + 0.4f }.Ring);
             if (fenceRegion != null)
@@ -545,19 +592,21 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                 var gates = new List<Gate> { new Gate { Position = gateAt, Segment = seg, T = t } };
                 foreach (var run in Fences.Runs(fenceRegion, gates, 2f))
                 {
-                    ctx.StraightNet(run.c0, run.c1, NetRole.Fence, AssetMix.One(ctx.S("penFenceAsset")));
+                    ctx.StraightNet(run.c0, run.c1, NetRole.Fence, AnimalParkArt.PenFence(ctx.S("penFenceAsset"), "horses"));
                     occ.TakeCorridor(run.c0, run.c1, 0.45f, 5);
                 }
             }
             int jumps = ctx.I("jumps");
-            if (jumps > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.AnimalParkJump, null, Keys.Category(AssetCategories.AnimalParkJump)))
+            // Show jumps: installed ones, else the dog-agility jump fence (a 1.6 m rail jump).
+            var (jumpAsset, jumpCat) = AnimalParkArt.Prop("", AssetCategories.AnimalParkJump, AnimalParkArt.Jump, AssetCategories.DogAgility);
+            if (jumps > 0)
                 for (int k = 0; k < jumps; k++)
                 {
                     // Two lines of jumps down the long sides, a figure-of-eight course.
                     int perSide = (jumps + 1) / 2;
                     float u = math.lerp(-a.HalfLength + 5f, a.HalfLength - 5f, perSide == 1 ? 0.5f : (k / 2) / (float)(perSide - 1));
                     float w = (k & 1) == 0 ? a.HalfWidth * 0.45f : -a.HalfWidth * 0.45f;
-                    LeisureKit.Put(ctx, occ, a.Local(u, w), a.Yaw + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One(""), AssetCategories.AnimalParkJump, 1.6f,
+                    LeisureKit.Put(ctx, occ, a.Local(u, w), a.Yaw + math.PI * 0.5f, ObjectRole.Furniture, jumpAsset, jumpCat, 1.6f,
                         Hashing.Mix(ctx.Seed, 0x7A3Cu + (uint)k), 0.3f, 0.3f);
                 }
             ctx.AddRegion(a.Ring, "arena", EnclosureTag);
@@ -569,8 +618,9 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             if (wanted <= 0 || occ.Paths.Count == 0 || pens.Count == 0) return;
             var order = new List<Pen>(pens);
             order.Sort((a, b) => b.Region.Area.CompareTo(a.Region.Area));
-            var bench = AssetMix.One(ctx.S("benchAsset"));
-            int placed = 0; bool lookout = kind == "deer" && AssetAvailability.Has(AssetCategories.Lookout);
+            var bench = Bench(ctx, kind);
+            // The deer park hide is a small open shelter: the catalog's "lookouts" are 30-55 m towers.
+            int placed = 0; bool lookout = kind == "deer";
             for (int i = 0; placed < wanted && i < order.Count * 3; i++)
             {
                 var pen = order[i % order.Count];
@@ -581,7 +631,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                 if (lookout)
                 {
                     var lp = onPath + toPen * -1f * (Composer.DefaultHalfWidth(NetRole.Pathway) + 3.4f);
-                    if (LeisureKit.Put(ctx, occ, lp, LeisureKit.Yaw(lp, probe), ObjectRole.Furniture, AssetMix.One(""), AssetCategories.Lookout, 2.6f,
+                    if (LeisureKit.Put(ctx, occ, lp, LeisureKit.Yaw(lp, probe), ObjectRole.Furniture, AnimalParkArt.Hide, AssetCategories.Shelter, 2.6f,
                         Hashing.Mix(ctx.Seed, 0x100Cu + (uint)i), 0.5f, 0.3f)) { placed++; lookout = false; continue; }
                 }
                 var side = FarmKit.Perp(toPen);
@@ -602,9 +652,8 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             int wanted = ctx.I("aviaries");
             var spots = new List<float2>();
             if (wanted <= 0) return spots;
-            string chosen = ctx.S("aviaryAsset");
-            if (!AssetAvailability.Require(ctx.Plan, AssetCategories.AnimalParkAviary, new[] { chosen }, Keys.Category(AssetCategories.AnimalParkAviary))) return spots;
-            var asset = AssetMix.One(chosen);
+            // Installed aviaries, else an open garden pavilion (bird spawners live in the aviary pens).
+            var (asset, aviaryCat) = AnimalParkArt.Prop(ctx.S("aviaryAsset"), AssetCategories.AnimalParkAviary, AnimalParkArt.Aviary, AssetCategories.Shelter);
             float r = AviaryRadius;
             bool flowers = kind == "aviary" && AssetAvailability.Has(AssetCategories.Flowerbed);
             int placed = 0, k = 0;
@@ -622,7 +671,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                         if (avoid(p, r) || !occ.Free(p, r, 0.8f, 0.3f)) p = onPath - n * sg * (w.halfWidth + r + 0.6f);
                         if (avoid(p, r) || !occ.Free(p, r, 0.8f, 0.3f)) continue;
                         uint v = Hashing.Mix(ctx.Seed, 0xA71Au + (uint)k);
-                        ctx.Object(p, LeisureKit.Yaw(p, onPath), ObjectRole.Furniture, asset, v, -1, AssetCategories.AnimalParkAviary);
+                        ctx.Object(p, LeisureKit.Yaw(p, onPath), ObjectRole.Furniture, asset, v, -1, aviaryCat);
                         occ.Take(p, r, 1);
                         placed++; spots.Add(p);
                         if (!flowers) continue;

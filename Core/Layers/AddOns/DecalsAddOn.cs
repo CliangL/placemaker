@@ -67,7 +67,14 @@ namespace Placemaker.Core.Layers.AddOns
             var occ = Occupancy(ctx);
             bool pavedRegion = ctx.S("ground") == "paved" || (ctx.S("ground") == "auto" && HasTag(ctx.Input, RegionTags.Paved, RegionTags.Lot));
             bool lawnOnly = ctx.S("ground") == "lawn";
-            int wanted = math.min(3000, (int)math.round(region.Area / 100f * ctx.F("density")));
+            // Density counts decals of ~2 m. Leaf and dirt decals are 6 m squares (12 m in some packs):
+            // the count shrinks with the typical footprint and no two decals stack closer than most of
+            // their size (2026-10-13 playtest: "decals too dense", they read as a carpet of squares).
+            float size = TypicalSize(theme);
+            float scale = math.min(1f, 5f / (size * size));
+            int wanted = math.min(3000, (int)math.round(region.Area / 100f * ctx.F("density") * scale));
+            float spacing = theme == "paving" || theme == "markings" ? 0f : size * 0.8f;
+            var placedAt = new List<float2>();
             float clustering = ctx.F("clustering") / 100f;
             region.PrincipalAxes(out var centre, out var axis, out _, out _);
             float axisYaw = math.atan2(axis.x, axis.y);
@@ -130,11 +137,32 @@ namespace Placemaker.Core.Layers.AddOns
                     default: ok = true; break;
                 }
                 if (!ok) continue;
+                if (spacing > 0f)
+                {
+                    bool crowded = false;
+                    foreach (var q in placedAt) if (math.distancesq(q, p) < spacing * spacing) { crowded = true; break; }
+                    if (crowded) continue;
+                    placedAt.Add(p);
+                }
                 ctx.Object(p, yaw, ObjectRole.Decal, AssetMix.Pick(ids, v), v, -1, category);
                 placed++;
             }
             if (placed == 0) ctx.Issue(IssueSeverity.Info, "Placemaker.AddOn.Decals.Issue.NoGround");
             ctx.Stat("Placemaker.Stat.Decals", placed, Keys.UnitCount);
+        }
+
+        /// <summary>Typical edge length (m) of a theme's decals in the real catalog (vanilla + common packs).</summary>
+        public static float TypicalSize(string theme)
+        {
+            switch (theme)
+            {
+                case "leaves": case "dirt": return 6f;
+                case "paving": return 4f;
+                case "puddles": return 3f;
+                case "cracks": return 2.5f;
+                case "graffiti": return 2f;
+                default: return 1.5f;
+            }
         }
 
         private static bool HasTag(AreaInput input, params string[] tags)

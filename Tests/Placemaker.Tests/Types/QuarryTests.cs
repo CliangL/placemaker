@@ -146,7 +146,8 @@ namespace Placemaker.Tests.Types
             var flooded = Plan("flooded", ring);
             // Working: machines, stockpiles, mud everywhere; old flooded quarry: lookout, overgrowth, no machines.
             Assert.True(dig.Objects.Count(o => o.Category == AssetCategories.ConstructionMachine) >= 5);
-            Assert.True(dig.Objects.Count(o => o.Category == AssetCategories.ConstructionPile) >= 6);
+            // Art pass: automatic stockpiles are real 9 × 15 m bulk heaps, one per two of the old truck-load cones.
+            Assert.True(dig.Objects.Count(o => o.Category == AssetCategories.ConstructionPile) >= 4);
             Assert.True(dig.Objects.Count(o => o.Role == ObjectRole.Decal) > flooded.Objects.Count(o => o.Role == ObjectRole.Decal));
             Assert.True(dig.Paint.Count >= 4);
             Assert.DoesNotContain(flooded.Objects, o => o.Category == AssetCategories.ConstructionMachine);

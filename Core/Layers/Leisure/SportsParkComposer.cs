@@ -814,6 +814,8 @@ namespace Placemaker.Core.Layers.Leisure
                 if (_hasPlaza && math.distance(g.Position, _main.Position) < 0.5f && _spine.Count > 0 && _loopSegs.Count == 0) continue;
                 _region.ClosestOnBoundary(g.Position, out int seg, out _);
                 var inward = _region.InwardNormal(seg);
+                // Straight in along the edge normal first (GateApproach, as every park path builder does).
+                if (Approach(g.Position, _loopSegs.Count > 0 ? _loopSegs : _walks)) continue;
                 if (_loopSegs.Count > 0 && NearestOn(_loopSegs, g.Position, out var foot) && math.distance(foot, g.Position) < _belt * 3f + 8f
                     && !_region.CrossesBoundary(g.Position, foot, true) && !HitsItems(g.Position, foot, 0.8f))
                     Walk(g.Position, foot, NetRole.Pathway);
@@ -833,6 +835,16 @@ namespace Placemaker.Core.Layers.Leisure
                 var fence = AssetMix.One(ctx.S("fenceAsset"));
                 foreach (var run in Fences.Runs(_region, _gates, 3.75f)) ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
             }
+        }
+
+        /// <summary>The shared gate approach (s9): straight in along the edge normal, then a gentle leg to the network.</summary>
+        private bool Approach(float2 gate, List<(float2 a, float2 b)> network)
+        {
+            if (network.Count == 0) return false;
+            var route = GateApproach.Route(_region, gate, new List<(float2, float2)>(network), math.min(_belt + 4f, 18f), (p, q) => ClearPath(p, q, false));
+            if (route == null || route.Count < 2) return route != null;
+            for (int i = 1; i < route.Count; i++) Walk(route[i - 1], route[i], NetRole.Pathway);
+            return true;
         }
 
         /// <summary>A gate without a loop joins the nearest reachable walk: straight, or in through the belt and along the field axes.</summary>

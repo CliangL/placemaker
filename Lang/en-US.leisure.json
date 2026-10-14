@@ -256,7 +256,7 @@
   "Placemaker.Plaza.centerKind.fountain": "Fountain",
   "Placemaker.Plaza.centerKind.statue": "Statue",
   "Placemaker.Plaza.pattern": "Paving pattern",
-  "Placemaker.Plaza.pattern.Tooltip": "Paving decals laid in a grid, along the border or scattered.",
+  "Placemaker.Plaza.pattern.Tooltip": "A second stone laid in bands: a grid, a line inside the border, or scattered large slabs.",
   "Placemaker.Plaza.pattern.none": "None",
   "Placemaker.Plaza.pattern.grid": "Grid",
   "Placemaker.Plaza.pattern.border": "Border",

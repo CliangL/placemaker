@@ -131,7 +131,7 @@ namespace Placemaker.Tests
         {
             foreach (var ring in new[] { TestKit.Rect(250, 200), L(6f) })
             {
-                var plan = TestKit.Plan("park", TestKit.Input(ring, Bag(("pathStyle", style)), seed: 5, site: TestKit.RoadAlongBottom(250)));
+                var plan = TestKit.Plan("park", TestKit.Entered("park", TestKit.Input(ring, Bag(("pathStyle", style)), seed: 5, site: TestKit.RoadAlongBottom(250))));
                 Assert.DoesNotContain(plan.Issues, i => i.Key == "Placemaker.Park.Issue.PathStyleFallback");
                 Assert.True(plan.Nets.Count(n => n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide) >= 4, style);
                 // Entrances are joined: some path end lies on the road side.
@@ -467,8 +467,12 @@ namespace Placemaker.Tests
             Assert.Equal(5, dog.Nets.Count(n => n.Role == NetRole.Fence));
             var twoZones = Std("dogRun", ("smallDogs", true));
             Assert.Equal(7, twoZones.Nets.Count(n => n.Role == NetRole.Fence));
-            // Splash pad: jets all inside the pad.
-            var pad = Std("splashPad");
+            // Splash pad: by default a deck round a low fountain (no farm sprinklers); chosen jets all inside the pad.
+            var deckPad = Std("splashPad");
+            var fountain = deckPad.Objects.Single(o => o.Role == ObjectRole.Centerpiece);
+            Assert.DoesNotContain(deckPad.Objects, o => o.Category == AssetCategories.WaterJets);
+            Assert.True(math.distance(fountain.Position.xz, Poly.Centroid(Ring2(deckPad.Surfaces[0].Ring))) < 0.5f);
+            var pad = Std("splashPad", ("jetAsset", "SplashJet01"));
             float r = (float)pad.Facts["padRadius"];
             var jets = pad.Objects.Where(o => o.Category == AssetCategories.WaterJets).ToList();
             Assert.True(jets.Count >= 6);

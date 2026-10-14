@@ -298,13 +298,17 @@ namespace Placemaker.Core.Layers.AddOns
                 float2[] ring = layout == "ring"
                     ? Disc(site.Center, math.min(site.HalfLength, site.HalfWidth) - 0.5f)
                     : LayerRegion.Rect(site.Center, site.Axis, site.HalfLength - 0.5f, site.HalfWidth - 0.5f);
-                Pad(ctx, ring, SurfaceRole.Ground, ctx.S("surfaceAsset"), AssetCategories.SurfaceNatural);
+                // Fine gravel floor (the station set's natural ground); it reaches the place edge where the path arrives.
+                ctx.Surface(ring, SurfaceRole.Ground, AddOnAssets.Or(ctx.S("surfaceAsset"), AddOnAssets.FineGravel), AssetCategories.SurfaceNatural);
             }
             int placed = 0;
             foreach (var (p, yaw) in spots)
             {
-                uint v = Hashing.Mix(ctx.Seed, (uint)placed * 7919u + 3u);
-                if (Put(ctx, occ, p, yaw, ObjectRole.Furniture, AssetMix.Pick(ids, v), AssetCategories.SportsFitness, 1.2f, v)) placed++;
+                // Every station a different machine: the fitness pool only knows the chin-up bar, so the
+                // automatic default is the curated vanilla GymPark set, dealt round in order.
+                uint v = (uint)placed;
+                var station = AddOnAssets.PickOr(ids, AddOnAssets.Fitness, ids != null && ids.Length > 0 ? Hashing.Mix(ctx.Seed, (uint)placed * 7919u + 3u) : v);
+                if (Put(ctx, occ, p, yaw, ObjectRole.Furniture, station, AssetCategories.SportsFitness, 1.2f, Hashing.Mix(ctx.Seed, (uint)placed * 7919u + 3u))) placed++;
             }
             int benches = 0;
             if (ctx.B("benches"))

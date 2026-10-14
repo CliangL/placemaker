@@ -29,15 +29,16 @@ namespace Placemaker.Core.Layers.AddOns
         {
             if (!AssetAvailability.Require(ctx.Plan, AssetCategories.Kiosk, new[] { ctx.S("asset") }, Keys.Category(AssetCategories.Kiosk))) return;
             var occ = Occupancy(ctx);
-            var asset = AssetMix.One(ctx.S("asset"));
-            float radius = AssetMix.FootprintRadius(ctx.Site, asset, 2.5f);
+            var asset = AddOnAssets.Or(ctx.S("asset"), AddOnAssets.Kiosks);
+            float radius = AddOnAssets.Radius(ctx.Site, ctx.S("asset"), AddOnAssets.Kiosks, 2.5f);
+            var paving = AssetMix.One("", AddOnAssets.Paving);
             int wanted = ctx.I("count");
             bool benches = ctx.B("benches");
             float reserve = radius + (benches ? 3f : 0.5f);
             float minDistance = math.max(12f, math.sqrt(ctx.LayerRegion.Area) / (wanted + 1));
             var spots = Spread(occ, reserve, wanted, Spots.Preference.NearBoundary, ctx.Seed, minDistance);
             var centre = ctx.LayerRegion.Centroid;
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = AddOnAssets.Or(ctx.S("benchAsset"), AddOnAssets.Bench);
             int placed = 0, seats = 0;
             foreach (var p in spots)
             {
@@ -47,9 +48,12 @@ namespace Placemaker.Core.Layers.AddOns
                 ctx.Object(p, yaw, ObjectRole.Furniture, asset, v, -1, AssetCategories.Kiosk);
                 occ.Take(p, radius, 0);
                 placed++;
-                if (!benches) continue;
                 var fwd = math.normalizesafe(centre - p, new float2(0, 1));
                 var side = new float2(-fwd.y, fwd.x);
+                // A paved stand: the kiosk at the back, its benches at the front, all on one slab.
+                AddOnKit.Pave(ctx, LayerRegion.Rect(p + fwd * (benches ? 1.6f : 0.6f), side, radius + 1.4f, radius + (benches ? 2.8f : 1.4f)), SurfaceRole.Paving, paving, AssetCategories.SurfacePaving);
+                AddOnKit.LinkToPath(ctx, occ, p + fwd * 1.6f, radius + 1.6f, 1.3f, paving, AssetCategories.SurfacePaving, 10f);
+                if (!benches) continue;
                 for (int k = -1; k <= 1; k += 2)
                 {
                     var b = p + fwd * (radius + 2f) + side * (k * 1.8f);

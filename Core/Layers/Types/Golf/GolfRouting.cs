@@ -106,6 +106,24 @@ namespace Placemaker.Core.Layers.Types.Golf
                     if (!occ.Free(tee, 3f, 3f + spec.EdgeMargin * 0.5f, 0.5f)) continue;
                     Evaluate(region, occ, tee, prevDir, target, wantDogleg, progress, home, scale, spec, i, ref best);
                 }
+                // Dead end next to the last green (boxed in by earlier holes or a corner): look further
+                // afield before giving up — a longer walk to the next tee beats a 3-hole "course" on a
+                // site with room for nine (art pass: 8 ha routed only 3 of 9 holes).
+                if (best.Score == float.MinValue)
+                {
+                    var from = holes.Count > 0 ? holes[holes.Count - 1].Green : home;
+                    foreach (float r in new[] { 45f, 70f, 100f, 140f, 200f })
+                    {
+                        for (int k = 0; k < 16; k++)
+                        {
+                            float a = k * math.PI / 8f + r * 0.01f;
+                            var tee = from + new float2(math.cos(a), math.sin(a)) * r;
+                            if (!region.Contains(tee) || !occ.Free(tee, 3f, 3f + spec.EdgeMargin * 0.5f, spec.Gap)) continue;
+                            Evaluate(region, occ, tee, prevDir, target, wantDogleg, progress, home, scale, spec, i, ref best);
+                        }
+                        if (best.Score != float.MinValue) break;
+                    }
+                }
                 if (best.Score == float.MinValue) break;
                 var hole = Make(best, i + 1, spec);
                 holes.Add(hole);

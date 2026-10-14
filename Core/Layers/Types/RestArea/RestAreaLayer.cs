@@ -188,13 +188,14 @@ namespace Placemaker.Core.Layers.Types.Transport
             ctx.Check();
 
             // ── 8. Path furniture ──
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = RestAreaArt.Bench(ctx);
             PathBenches(ctx, occ, 45f, bench, 0xBE00u);
-            if (ctx.B("lamps")) PathLamps(ctx, occ, ctx.Raw("lampSpacing"), AssetMix.One(ctx.S("lampAsset")), 0x1A00u);
+            if (ctx.B("lamps")) PathLamps(ctx, occ, ctx.Raw("lampSpacing"), RestAreaArt.Lamp(ctx), 0x1A00u);
 
             // ── 9. Trees: a belt along the outline (screen) and shade clumps ──
             var treeIds = ctx.L("treeSpecies");
-            bool canTrees = AssetAvailability.Has(AssetCategories.Tree) || treeIds.Length > 0;
+            if (treeIds.Length == 0) treeIds = RestAreaArt.Trees;
+            bool canTrees = true;
             if (canTrees)
             {
                 if (ctx.B("screen") && style != "overlook")
@@ -268,16 +269,15 @@ namespace Placemaker.Core.Layers.Types.Transport
             float yawIn = LeisureKit.Yaw(hub.Center, hub.Center - inward);   // facing the car park
             if (ok)
             {
-                ctx.Surface(hub.Ring, SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+                ctx.Surface(hub.Ring, SurfaceRole.Paving, RestAreaArt.Court, AssetCategories.SurfacePaving);
                 float hl = hub.HalfLength, hw = hub.HalfWidth;
 
                 // Restroom block in a back corner.
                 if (ctx.B("restrooms") && !ctx.Input.HasChild("restrooms"))
                 {
-                    string cat = LeisureKit.Category(ctx, "", AssetCategories.Restroom);
-                    if (cat != null)
-                        foreach (float side in new[] { -1f, 1f })
-                            if (LeisureKit.Put(ctx, occ, hub.Local(side * (hl - 4f), hw - 3.5f), yawIn, ObjectRole.Furniture, AssetMix.One(""), cat, 3.2f, Hashing.Mix(seed, 1u), 0.3f, 0.2f, 0))
+                    string cat = AssetCategories.Restroom;
+                    foreach (float side in new[] { -1f, 1f })
+                            if (LeisureKit.Put(ctx, occ, hub.Local(side * (hl - 4f), hw - 3.5f), yawIn, ObjectRole.Furniture, RestAreaArt.Restroom, cat, 3.2f, Hashing.Mix(seed, 1u), 0.3f, 0.2f, 0))
                             { restrooms++; break; }
                 }
 
@@ -286,20 +286,21 @@ namespace Placemaker.Core.Layers.Types.Transport
                 for (float u = -hl + 2f; u <= hl - 2f; u += 3f) row.Add(hub.Local(u, hw - 1.6f));
                 row.Sort((a, b) => math.distancesq(a, hub.Center).CompareTo(math.distancesq(b, hub.Center)));
                 int wantK = ctx.I("kiosks");
-                string kcat = wantK > 0 ? LeisureKit.Category(ctx, ctx.S("kioskAsset"), AssetCategories.Kiosk) : null;
+                string kcat = wantK > 0 ? AssetCategories.Kiosk : null;
                 if (kcat != null)
                     foreach (var p in row)
                     {
                         if (kiosks >= wantK) break;
-                        if (LeisureKit.Put(ctx, occ, p, yawIn, ObjectRole.Furniture, AssetMix.One(ctx.S("kioskAsset")), kcat, 2.2f, Hashing.Mix(seed, 10u + (uint)kiosks), 0.3f, 0.3f, 0)) kiosks++;
+                        if (LeisureKit.Put(ctx, occ, p, yawIn, ObjectRole.Furniture, RestAreaArt.Kiosk(ctx), kcat, 2.2f, Hashing.Mix(seed, 10u + (uint)kiosks), 0.3f, 0.3f, 0)) kiosks++;
                     }
                 int wantV = ctx.I("vending");
-                string vcat = wantV > 0 ? LeisureKit.Category(ctx, "", AssetCategories.Vending, AssetCategories.Kiosk) : null;
+                string vcat = wantV > 0 ? AssetCategories.Vending : null;
                 if (vcat != null)
                     foreach (var p in row)
                     {
                         if (vend >= wantV) break;
-                        if (LeisureKit.Put(ctx, occ, p, yawIn, ObjectRole.Furniture, AssetMix.One(""), vcat, 0.9f, Hashing.Mix(seed, 20u + (uint)vend), 0.3f, 0.2f, 0)) vend++;
+                        uint vv = Hashing.Mix(seed, 20u + (uint)vend);
+                        if (LeisureKit.Put(ctx, occ, p, yawIn, ObjectRole.Furniture, AssetMix.Pick(RestAreaArt.Vending, vv), vcat, 0.9f, vv, 0.3f, 0.2f, 0)) vend++;
                     }
 
                 // Truck stop fuel island on the car park side; EV lounge tables.
@@ -323,19 +324,18 @@ namespace Placemaker.Core.Layers.Types.Transport
                 // Map board by the walk-in point, benches along the front, bins at the corners, lamps.
                 if (ctx.B("signs"))
                 {
-                    string scat = LeisureKit.Category(ctx, "", AssetCategories.Wayfinding);
-                    if (scat != null)
-                        foreach (float side in new[] { 1f, -1f })
-                            if (LeisureKit.Put(ctx, occ, hub.Local(side * 3.2f, -hw + 1.2f), yawIn, ObjectRole.Furniture, AssetMix.One(""), scat, 0.6f, Hashing.Mix(seed, 50u), 0.2f, 0.2f)) { signs++; break; }
+                    // Map board by the walk-in point (a park info board, not a road sign).
+                    foreach (float side in new[] { 1f, -1f })
+                        if (LeisureKit.Put(ctx, occ, hub.Local(side * 3.2f, -hw + 1.2f), yawIn, ObjectRole.Furniture, RestAreaArt.MapBoard, AssetCategories.Wayfinding, 1.0f, Hashing.Mix(seed, 50u), 0.2f, 0.2f)) { signs++; break; }
                 }
-                var bench = AssetMix.One(ctx.S("benchAsset"));
+                var bench = RestAreaArt.Bench(ctx);
                 for (float u = -hl + 2.5f; u <= hl - 2.5f; u += 4.5f)
                     LeisureKit.Put(ctx, occ, hub.Local(u, -hw + 2.6f), yawIn + math.PI, ObjectRole.Bench, bench, null, 1.0f, Hashing.Mix(seed, 60u + (uint)(u * 10f)));
                 foreach (var (u, v) in new[] { (-hl + 1f, -hw + 1f), (hl - 1f, -hw + 1f) })
                     LeisureKit.Put(ctx, occ, hub.Local(u, v), 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.4f, Hashing.Mix(seed, 70u), 0.2f, 0.1f);
                 if (ctx.B("lamps"))
                     foreach (var (u, v) in new[] { (-hl + 0.8f, hw - 0.8f), (hl - 0.8f, hw - 0.8f), (-hl + 0.8f, 0f), (hl - 0.8f, 0f) })
-                        LeisureKit.Put(ctx, occ, hub.Local(u, v), 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset")), null, 0.4f, Hashing.Mix(seed, 80u), 0.2f, 0.1f);
+                        LeisureKit.Put(ctx, occ, hub.Local(u, v), 0f, ObjectRole.Lamp, RestAreaArt.Lamp(ctx), null, 0.4f, Hashing.Mix(seed, 80u), 0.2f, 0.1f);
                 // The hub court stays clear of trees and picnic spots.
                 foreach (var p in new[] { hub.Local(-hl * 0.5f, 0f), hub.Local(hl * 0.5f, 0f), hub.Center })
                     occ.Take(p, math.max(hw, hl * 0.5f), 2);
@@ -345,16 +345,15 @@ namespace Placemaker.Core.Layers.Types.Transport
             // No room for a court: facilities stand beside the paths, nearest the walk-in first.
             if (ctx.B("restrooms") && !ctx.Input.HasChild("restrooms"))
             {
-                string cat = LeisureKit.Category(ctx, "", AssetCategories.Restroom);
-                if (cat != null)
-                    foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 3.2f, 6f, 1f), 6, 10f, true))
-                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(""), cat, 3.2f, Hashing.Mix(seed, 1u), 3.2f, 0.2f, 0)) { restrooms++; break; }
+                string cat = AssetCategories.Restroom;
+                foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 3.2f, 6f, 1f), 6, 10f, true))
+                        if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, RestAreaArt.Restroom, cat, 3.2f, Hashing.Mix(seed, 1u), 3.2f, 0.2f, 0)) { restrooms++; break; }
             }
             int want = ctx.I("kiosks") + ctx.I("vending");
-            string any = want > 0 ? LeisureKit.Category(ctx, ctx.S("kioskAsset"), AssetCategories.Kiosk) : null;
+            string any = want > 0 ? AssetCategories.Kiosk : null;
             if (any != null)
                 foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 2f, 5f, 0.8f), want, 6f, true))
-                    if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, AssetMix.One(ctx.S("kioskAsset")), any, 2f, Hashing.Mix(seed, 90u + (uint)kiosks), 2f, 0.2f, 0)) kiosks++;
+                    if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Furniture, RestAreaArt.Kiosk(ctx), any, 2f, Hashing.Mix(seed, 90u + (uint)kiosks), 2f, 0.2f, 0)) kiosks++;
         }
 
         // ───────────── dog walk ─────────────
@@ -367,7 +366,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             avoid.Add(c);
             // Gate faces the nearest path.
             var dir = NearestOnPaths(occ, c, out var foot) && math.distance(foot, c) > 0.5f ? math.normalizesafe(foot - c) : math.normalizesafe(ctx.LayerRegion.Centroid - c, new float2(0, 1));
-            var fence = AssetMix.One(ctx.S("fenceAsset"));
+            var fence = RestAreaArt.DogFence(ctx);
             foreach (var run in Fences.Ring(c, r, 14, dir, 2.5f)) ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
             string amen = LeisureKit.Category(ctx, "", AssetCategories.DogAmenity, AssetCategories.Bin);
             if (amen != null) LeisureKit.Put(ctx, occ, c + dir * (r - 2.5f) + new float2(-dir.y, dir.x) * 2f, 0f, ObjectRole.Furniture, AssetMix.One(""), amen, 0.5f, Hashing.Mix(seed, 1u), 0.2f, 0.2f);
@@ -379,7 +378,7 @@ namespace Placemaker.Core.Layers.Types.Transport
                     var p = c + new float2(math.cos(a), math.sin(a)) * r * 0.45f;
                     LeisureKit.Put(ctx, occ, p, a, ObjectRole.Furniture, AssetMix.One(""), agility, 1.2f, Hashing.Mix(seed, 2u + (uint)i), 0.2f, 0.3f);
                 }
-            LeisureKit.Put(ctx, occ, c - dir * (r - 3f), LeisureKit.Yaw(c - dir * (r - 3f), c), ObjectRole.Bench, AssetMix.One(ctx.S("benchAsset")), null, 1.0f, Hashing.Mix(seed, 9u));
+            LeisureKit.Put(ctx, occ, c - dir * (r - 3f), LeisureKit.Yaw(c - dir * (r - 3f), c), ObjectRole.Bench, RestAreaArt.Bench(ctx), null, 1.0f, Hashing.Mix(seed, 9u));
             occ.Take(c, r + 0.5f, 2);
             // Branch path from the gate to the spine.
             var gate = c + dir * (r + 1.6f);
@@ -393,12 +392,11 @@ namespace Placemaker.Core.Layers.Types.Transport
         {
             uint seed = Hashing.Mix(ctx.Seed, 0x7100u);
             var outward = math.normalizesafe(at - from, new float2(0, 1));
-            ctx.Surface(LayerRegion.Circle(at, 6f, 16), SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
-            string look = LeisureKit.Category(ctx, "", AssetCategories.Lookout, AssetCategories.Shelter);
-            if (look != null)
-                LeisureKit.Put(ctx, occ, at + outward * 2.5f, LeisureKit.Yaw(at, at + outward), ObjectRole.Furniture, AssetMix.One(""), look, 2.2f, Hashing.Mix(seed, 1u), 0.5f, 0.3f, 0);
+            ctx.Surface(LayerRegion.Circle(at, 6f, 16), SurfaceRole.Paving, RestAreaArt.Court, AssetCategories.SurfacePaving);
+            // A viewing pavilion: the catalog's "lookouts" are 30-55 m towers that would swallow the platform.
+            LeisureKit.Put(ctx, occ, at + outward * 2.5f, LeisureKit.Yaw(at, at + outward), ObjectRole.Furniture, RestAreaArt.ViewShelter, AssetCategories.Lookout, 2.2f, Hashing.Mix(seed, 1u), 0.5f, 0.3f, 0);
             int n = ctx.I("viewBenches");
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = RestAreaArt.Bench(ctx);
             float baseA = math.atan2(outward.y, outward.x);
             for (int i = 0; i < n; i++)
             {
@@ -438,16 +436,13 @@ namespace Placemaker.Core.Layers.Types.Transport
         private static int Picnic(LayerContext ctx, Occupancy occ, List<float2> avoid)
         {
             int tables = 0;
-            bool canTables = AssetAvailability.Require(ctx.Plan, AssetCategories.Picnic, new[] { ctx.S("tableAsset") }, Keys.Category(AssetCategories.Picnic));
-            if (!canTables) return 0;
-            var table = AssetMix.One(ctx.S("tableAsset"));
+            var table = RestAreaArt.Table(ctx);
             int wantShelters = ctx.I("shelters");
             if (wantShelters > 0)
             {
-                string cat = LeisureKit.Category(ctx, ctx.S("shelterAsset"), AssetCategories.Shelter);
-                if (cat != null)
+                string cat = AssetCategories.Shelter;
                 {
-                    var asset = AssetMix.One(ctx.S("shelterAsset"));
+                    var asset = RestAreaArt.Shelter(ctx);
                     int n = 0;
                     foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 4.5f, 8f, 1.2f), wantShelters, 25f, false))
                     {
@@ -464,9 +459,11 @@ namespace Placemaker.Core.Layers.Types.Transport
                 }
             }
             int wanted = ctx.I("groups"), perGroup = ctx.I("tables");
-            string grill = ctx.B("grills") ? LeisureKit.Category(ctx, "", AssetCategories.CampingFire, AssetCategories.Picnic) : null;
+            // Grills, not camp fires (the automatic camp-fire pool resolved to makeshift tents).
+            string grill = ctx.B("grills") ? AssetCategories.Picnic : null;
             var treeIds = ctx.L("treeSpecies");
-            bool canTrees = AssetAvailability.Has(AssetCategories.Tree) || treeIds.Length > 0;
+            if (treeIds.Length == 0) treeIds = RestAreaArt.Trees;
+            bool canTrees = true;
             var spots = new List<float2>(avoid);
             for (int g = 0; g < wanted; g++)
             {
@@ -480,7 +477,7 @@ namespace Placemaker.Core.Layers.Types.Transport
                     var p = c + new float2(math.cos(a), math.sin(a)) * (perGroup == 1 ? 0f : 2.6f);
                     if (LeisureKit.Put(ctx, occ, p, a + 1.57f, ObjectRole.Furniture, table, AssetCategories.Picnic, 1.3f, Hashing.Mix(v, (uint)k), 0.5f, 0.2f)) tables++;
                 }
-                if (grill != null) LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 3.4f), math.sin(phase + 3.4f)) * 4.6f, phase, ObjectRole.Furniture, AssetMix.One(""), grill, 0.8f, Hashing.Mix(v, 50u));
+                if (grill != null) LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 3.4f), math.sin(phase + 3.4f)) * 4.6f, phase, ObjectRole.Furniture, RestAreaArt.Grill, grill, 0.8f, Hashing.Mix(v, 50u));
                 LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 2.2f), math.sin(phase + 2.2f)) * 4.4f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(v, 51u));
                 if (canTrees) LeisureKit.Put(ctx, occ, c + new float2(math.cos(phase + 1.2f), math.sin(phase + 1.2f)) * 6.2f, phase, ObjectRole.Tree, AssetMix.Pick(treeIds, v), null, 2.5f, Hashing.Mix(v, 52u), 1f, 0.3f, 3, 3);
             }

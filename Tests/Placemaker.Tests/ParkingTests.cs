@@ -281,7 +281,9 @@ namespace Placemaker.Tests
             Assert.Equal(10, p.Facts["parking.fee"]);
             Assert.Single(p.Areas);
             Assert.Equal(AreaRole.Lot, p.Areas[0].Role);
-            Assert.Contains(p.Surfaces, s => s.Role == SurfaceRole.Asphalt && s.Asset.Id == "Pavement Surface 01");
+            // Art pass: modded asphalt first, PLT's vanilla pavement as the fallback.
+            Assert.Contains(p.Surfaces, s => s.Role == SurfaceRole.Asphalt && s.Asset.Id == "EAI - Surface Pack Concrete Asphalt 001 Surface"
+                && s.Asset.Fallbacks.Contains("Pavement Surface 01"));
             Assert.Contains(p.Surfaces, s => s.Role == SurfaceRole.Grass && s.Asset.Id == "Grass Surface 01");
             Assert.All(p.Surfaces, s => Assert.True(SurfaceAcceptance.IsAccepted(s.Ring.Select(q => q.xz).ToArray())));
             Assert.Contains(p.Regions, g => g.Tags.Contains(RegionTags.Lot) && g.Key.StartsWith("lot:"));

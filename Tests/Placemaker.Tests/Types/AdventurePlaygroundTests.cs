@@ -283,11 +283,13 @@ namespace Placemaker.Tests.Types
             Assert.Contains(toddler.Nets, n => n.Role == NetRole.Fence);
 
             var water = P("water");
-            Assert.True(Cat(water, AssetCategories.WaterJets) >= 10, "jets " + Cat(water, AssetCategories.WaterJets));
+            // Art pass (a1): small fountains on the splash pad, spaced by their real footprint; never the agricultural "water.jets".
+            Assert.True(Cat(water, AssetCategories.CenterpieceFountain) >= 3, "splash fountains " + Cat(water, AssetCategories.CenterpieceFountain));
+            Assert.Equal(0, Cat(water, AssetCategories.WaterJets));
             Assert.True(water.Surfaces.Count(s => s.Role == SurfaceRole.Water) >= 3, "splash pad plus stepping pools");
 
             var nature = P("nature");
-            Assert.True(Cat(nature, AssetCategories.PlayNature) >= 8, "logs " + Cat(nature, AssetCategories.PlayNature));
+            Assert.True(Cat(nature, AssetCategories.PlayNature) >= 3, "logs (whole ~10 m trunks) " + Cat(nature, AssetCategories.PlayNature));
             Assert.True(Cat(nature, AssetCategories.Rock) >= 6, "rocks " + Cat(nature, AssetCategories.Rock));
             Assert.NotEmpty(nature.Terraform);
             Assert.True(nature.Objects.Count(o => o.Role == ObjectRole.Tree) > adventure.Objects.Count(o => o.Role == ObjectRole.Tree), "nature trees");

@@ -3,6 +3,7 @@
 // without paths, along the outline. Optional cafe seating beside each stand. Category kiosk
 // (cafe seating: seating.cafe, else picnic tables, else benches).
 
+using System;
 using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
 
@@ -39,7 +40,9 @@ namespace Placemaker.Core.Layers.AddOns
             var ids = ctx.L("assets");
             if (!AssetAvailability.Require(ctx.Plan, AssetCategories.Kiosk, ids, Keys.Category(AssetCategories.Kiosk))) return;
             var occ = Occupancy(ctx);
-            float radius = AssetMix.MaxFootprint(ctx.Site, ids, 2.5f);
+            bool chosen = ids != null && Array.Exists(ids, id => !string.IsNullOrEmpty(id));
+            float radius = chosen ? AssetMix.MaxFootprint(ctx.Site, ids, 2.5f) : AddOnAssets.Radius(ctx.Site, "", AddOnAssets.Kiosks, 2.5f);
+            var paving = AssetMix.One("", AddOnAssets.Paving);
             int wanted = ctx.I("count");
             string where = ctx.S("where");
             bool seating = ctx.B("seating");
@@ -59,8 +62,13 @@ namespace Placemaker.Core.Layers.AddOns
             {
                 uint v = Hashing.Mix(ctx.Seed, (uint)placed + 1u);
                 float yaw = LeisureKit.Yaw(a.Position, a.Toward);
-                if (!LeisureKit.Put(ctx, occ, a.Position, yaw, ObjectRole.Furniture, AssetMix.Pick(ids, v), AssetCategories.Kiosk, radius, v, 0.5f, 0.3f, 0)) continue;
+                if (!LeisureKit.Put(ctx, occ, a.Position, yaw, ObjectRole.Furniture, AddOnAssets.PickOr(ids, AddOnAssets.Kiosks, v), AssetCategories.Kiosk, radius, v, 0.5f, 0.3f, 0)) continue;
                 placed++;
+                // One slab from the path edge under the stand and its seats: the stall opens onto the walk.
+                var back = math.normalizesafe(a.Position - a.Toward, new float2(0, 1));
+                float depth = math.distance(a.Position, a.Toward) + radius + 0.8f;
+                float halfLen = radius + 0.8f + (seatCat != null ? 2.6f : 0f);
+                AddOnKit.Pave(ctx, LayerRegion.Rect(a.Toward + back * depth * 0.5f, a.Tangent, halfLen, depth * 0.5f), SurfaceRole.Paving, paving, AssetCategories.SurfacePaving);
                 if (seatCat == null) continue;
                 // Two seats beside the stand, along the path, facing it.
                 for (int k = -1; k <= 1; k += 2)

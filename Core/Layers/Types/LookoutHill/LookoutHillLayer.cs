@@ -73,7 +73,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
 
             c.Choice("viewpoint", "tower", ControlTier.Essential, "summit", "plaza", "tower", "pavilion", "cairn", "none").Tip();
             c.Slider("summitBenches", 6, 0, 16, 1, "count", ControlTier.More, "summit");
-            c.Slider("telescopes", 2, 0, 6, 1, "count", ControlTier.More, "summit").Tip();
+            c.Slider("telescopes", 0, 0, 6, 1, "count", ControlTier.More, "summit").Tip();   // 0: no vanilla telescope exists (art pass a3)
             c.Toggle("summitPaint", true, ControlTier.More, "summit").Tip();
             c.Slider("paintLayer", 1, 1, 4, 1, "count", ControlTier.More, "summit").When("summitPaint=true");
 
@@ -102,7 +102,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             Preset("sledding", ("subtype", "sledding"), ("height", 14.0), ("shape", "dome"), ("summitAt", "far"), ("plateau", 8.0), ("maxSlope", 30.0),
                 ("pathStyle", "switchback"), ("viewpoint", "pavilion"), ("treeDensity", 70.0), ("treeLine", 100.0), ("summitBenches", 4.0), ("telescopes", 0.0));
             Preset("viewpointMound", ("subtype", "viewpointMound"), ("height", 8.0), ("shape", "cone"), ("plateau", 5.0), ("pathStyle", "spiral"),
-                ("viewpoint", "plaza"), ("telescopes", 3.0), ("summitBenches", 6.0), ("treeDensity", 40.0), ("treeLine", 30.0), ("roughness", 10.0));
+                ("viewpoint", "plaza"), ("telescopes", 0.0), ("summitBenches", 8.0), ("treeDensity", 40.0), ("treeLine", 30.0), ("roughness", 10.0));
             Preset("terraces", ("subtype", "terraces"), ("height", 16.0), ("shape", "terraced"), ("levels", 4.0), ("plateau", 12.0),
                 ("pathStyle", "switchback"), ("pathWidth", "wide"), ("viewpoint", "plaza"), ("summitBenches", 10.0), ("treeDensity", 50.0), ("lamps", true));
             Preset("kiteHill", ("subtype", "kiteHill"), ("height", 12.0), ("shape", "dome"), ("plateau", 14.0), ("pathStyle", "direct"),
@@ -153,7 +153,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             // ── Summit ──
             if (plaza)
             {
-                ctx.Surface(LayerRegion.Circle(summit, summitR, 24), SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+                ctx.Surface(LayerRegion.Circle(summit, summitR, 24), SurfaceRole.Paving, AssetMix.Pick(sub == "terraces" ? TerracePaving : SummitPaving, 0u), AssetCategories.SurfacePaving);
                 SummitDressing(ctx, occ, new Occupancy(region, ctx.Input.Reserved, ctx.Site), summit, summitR);
             }
             if (ctx.B("summitPaint"))
@@ -164,8 +164,8 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             if (run) RunDressing(ctx, occ, region, runA, runB);
             if (spec.Shape == HillShape.Terraced) TerraceBenches(ctx, occ, field, spec);
             if (sub == "kiteHill") Kites(ctx, occ, field, summit);
-            if (ctx.I("restSpots") > 0 && pathLen > 0f) PathBenches(ctx, occ, pathLen / ctx.I("restSpots") / ctx.Scale, AssetMix.One(""), 0xBE60u);
-            if (ctx.B("lamps")) PathLamps(ctx, occ, 22f, AssetMix.One(""), 0x1A60u);
+            if (ctx.I("restSpots") > 0 && pathLen > 0f) PathBenches(ctx, occ, pathLen / ctx.I("restSpots") / ctx.Scale, BenchFor(ctx), 0xBE60u);
+            if (ctx.B("lamps")) PathLamps(ctx, occ, 22f, AssetMix.Pick(Lamps, 0u), 0x1A60u);
             ctx.Check();
 
             // ── Planting below the tree line ──
@@ -173,12 +173,13 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             Func<float2, bool> reject = p => field.OffsetAt(p) > treeTop || math.distance(p, summit) < summitR + 4f;
             float ha = region.Area / 10000f;
             var treeIds = ctx.L("treeSpecies");
+            if (treeIds.Length == 0 && AssetAvailability.Has(AssetCategories.Tree)) treeIds = TreesFor(sub);
             int trees = math.min(10000, (int)(ha * ctx.F("treeDensity")));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
                 LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, treeIds, 2.5f, 24f, 0.35f, 0x7F00u, reject, 1, 3);
             int bushes = math.min(10000, (int)(ha * ctx.F("bushDensity")));
             if (bushes > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Bush, null, Keys.Category(AssetCategories.Bush)))
-                LeisureKit.Plant(ctx, occ, region, bushes, ObjectRole.Bush, null, 1.1f, 12f, 0.3f, 0xB600u, reject);
+                LeisureKit.Plant(ctx, occ, region, bushes, ObjectRole.Bush, Bushes, 1.1f, 12f, 0.3f, 0xB600u, reject);
             ctx.Check();
 
             // ── Regions, heights, stats ──
@@ -285,13 +286,15 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
         {
             uint v = Hashing.Mix(ctx.Seed, 0x5077u);
             // Centrepiece: tower, pavilion or cairn.
-            string[] chain;
+            // Art pass a3: the lookout pool is a 56 m fire-station upgrade and a 32 m water-tower deck, so the
+            // "tower" is the tall open gazebo, the pavilion a timber shelter, and the cairn is built from stones.
+            string[] chain; AssetRef centre;
             switch (ctx.S("viewpoint"))
             {
-                case "tower": chain = new[] { AssetCategories.Lookout, AssetCategories.Shelter }; break;
-                case "pavilion": chain = new[] { AssetCategories.Shelter, AssetCategories.Stage }; break;
-                case "cairn": chain = new[] { AssetCategories.CenterpieceStatue, AssetCategories.Rock }; break;
-                default: chain = null; break;
+                case "tower": chain = new[] { AssetCategories.Shelter }; centre = new AssetRef("", "Gazebo03", "Gazebo02"); break;
+                case "pavilion": chain = new[] { AssetCategories.Shelter }; centre = new AssetRef("", "CampgroundShelter02", "Gazebo01"); break;
+                case "cairn": chain = new[] { AssetCategories.Rock }; centre = new AssetRef("", "Boulder03", "Boulder07"); break;
+                default: chain = null; centre = default; break;
             }
             float centreR = 0f;
             if (chain != null)
@@ -300,7 +303,19 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 if (cat != null && res.Free(summit, math.min(r * 0.45f, 3.5f), 0.5f, 0.2f) && !occ.Paths.Overlaps(summit, math.min(r * 0.45f, 3.5f), 0.2f))
                 {
                     centreR = math.min(r * 0.45f, 3.5f);
-                    ctx.Object(summit, Hashing.Unit(v) * 6.283f, ObjectRole.Furniture, AssetMix.One(""), v, -1, cat);
+                    var o = ctx.Object(summit, Hashing.Unit(v) * 6.283f, ObjectRole.Furniture, centre, v, -1, cat);
+                    if (ctx.S("viewpoint") == "cairn")
+                    {
+                        // A cairn: one weathered boulder, small stones heaped round its foot.
+                        o.Scale = 0.55f;
+                        for (int k = 0; k < 9; k++)
+                        {
+                            float a = k * 0.698f + Hashing.Unit(Hashing.Mix(v, (uint)k + 70u)) * 0.4f;
+                            var s = ctx.Object(summit + new float2(math.cos(a), math.sin(a)) * (1.5f + 0.4f * Hashing.Unit(Hashing.Mix(v, (uint)k + 90u))), a,
+                                ObjectRole.Furniture, new AssetRef("", "Rock08", "Rock01"), Hashing.Mix(v, (uint)k + 80u), -1, AssetCategories.Rock);
+                            s.Scale = 0.8f + 0.5f * Hashing.Unit(Hashing.Mix(v, (uint)k + 95u));
+                        }
+                    }
                 }
             }
             // Benches on the rim looking out, telescopes between them.
@@ -312,7 +327,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             {
                 float a = phase + i * 2f * math.PI / benches;
                 var p = summit + new float2(math.cos(a), math.sin(a)) * rim;
-                if (Spot(ctx, occ, res, p, LeisureKit.Yaw(summit, p), ObjectRole.Bench, null, 1.0f, Hashing.Mix(v, 10u + (uint)i))) placedAt.Add(p);
+                if (Spot(ctx, occ, res, p, LeisureKit.Yaw(summit, p), ObjectRole.Bench, null, 1.0f, Hashing.Mix(v, 10u + (uint)i), BenchFor(ctx))) placedAt.Add(p);
             }
             string scope = scopes > 0 ? LeisureKit.Category(ctx, "", AssetCategories.HillTelescope) : null;
             if (scope != null)
@@ -320,18 +335,41 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 {
                     float a = phase + (i + 0.5f) * 2f * math.PI / math.max(1, scopes);
                     var p = summit + new float2(math.cos(a), math.sin(a)) * math.max(centreR + 1.2f, r - 0.8f);
-                    Spot(ctx, occ, res, p, LeisureKit.Yaw(summit, p), ObjectRole.Furniture, scope, 0.5f, Hashing.Mix(v, 40u + (uint)i));
+                    Spot(ctx, occ, res, p, LeisureKit.Yaw(summit, p), ObjectRole.Furniture, scope, 0.5f, Hashing.Mix(v, 40u + (uint)i), AssetMix.One(""));
                 }
         }
 
         /// <summary>Puts an object on the summit plaza (inside the reserved plaza disc, clear of what is already there).</summary>
-        private static bool Spot(LayerContext ctx, Occupancy occ, Occupancy res, float2 p, float yaw, ObjectRole role, string cat, float radius, uint v)
+        private static bool Spot(LayerContext ctx, Occupancy occ, Occupancy res, float2 p, float yaw, ObjectRole role, string cat, float radius, uint v, AssetRef asset)
         {
             foreach (var o in ctx.Plan.Objects)
                 if (math.distancesq(o.Position.xz, p) < (radius + 1.1f) * (radius + 1.1f)) return false;
             if (occ.Paths.Overlaps(p, radius, 0.2f) || !res.Free(p, radius, radius, 0.2f)) return false;
-            ctx.Object(p, yaw, role, AssetMix.One(""), v, -1, cat);
+            ctx.Object(p, yaw, role, asset, v, -1, cat);
             return true;
+        }
+
+        // ───────────── art direction (art pass a3) ─────────────
+        private static readonly string[] SummitPaving = { "Pavement Surface 01", "Pavement Surface 02" };
+        private static readonly string[] TerracePaving = { "Tiles Surface 01", "Pavement Surface 02" };
+        private static readonly string[] Lamps = { "LightpolePark03", "EU_LightpolePark03" };
+        private static readonly string[] Bushes = { "GreenBushWild01", "GreenBushWildAdult01", "FlowerBushWild01", "GreenBushWild02" };
+        private static readonly string[] Blankets = { "PicnicBlanket01", "PicnicBlanket02", "PicnicBlanket03", "PicnicBlanket04", "PicnicBlanket05" };
+
+        private static AssetRef BenchFor(LayerContext ctx) => ctx.S("subtype") == "terraces"
+            ? AssetMix.Pick(new[] { "GardenBench01", "GardenBench02" }, 0u)
+            : AssetMix.Pick(new[] { "Pack10-Bench01", "Pack10-Bench03" }, 0u);
+
+        private static string[] TreesFor(string sub)
+        {
+            switch (sub)
+            {
+                case "sledding": return new[] { "SpruceTree01", "PineTree01", "BirchTree01", "EuropeanSpruce01" };
+                case "terraces": return new[] { "NA_LindenTree01", "NA_LondonPlaneTree01" };
+                case "kiteHill": return new[] { "OakTree01", "EU_ChestnutTree01" };
+                case "viewpointMound": return new[] { "NA_LindenTree01", "OakTree01", "BirchTree01" };
+                default: return new[] { "OakTree01", "PineTree01", "EU_ChestnutTree01", "BirchTree01" };
+            }
         }
 
         private bool SledRun(LayerContext ctx, Occupancy occ, LayerRegion region, float2 summit, float summitR, List<Gate> gates, out float2 a, out float2 b)
@@ -396,7 +434,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             for (int e = -1; e <= 1; e += 2)
             {
                 var p = b - d * 4f + side * (e * (hw + 3f));
-                LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, b - d * 4f), ObjectRole.Bench, AssetMix.One(""), null, 1.3f, Hashing.Mix(ctx.Seed, 0xBE8u + (uint)(e + 1)), 0.5f, 0.3f);
+                LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, b - d * 4f), ObjectRole.Bench, BenchFor(ctx), null, 1.3f, Hashing.Mix(ctx.Seed, 0xBE8u + (uint)(e + 1)), 0.5f, 0.3f);
             }
         }
 
@@ -417,7 +455,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                     foreach (var q in chosen) if (math.distance(q, p) < 16f) { far = false; break; }
                     if (!far) continue;
                     var down = -math.normalizesafe(field.OffsetGradient(p));
-                    if (LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, p + down), ObjectRole.Bench, AssetMix.One(""), null, 1.3f,
+                    if (LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, p + down), ObjectRole.Bench, BenchFor(ctx), null, 1.3f,
                         Hashing.Mix(ctx.Seed, 0x7E2u + (uint)placed), 1f, 0.3f)) { chosen.Add(p); placed++; }
                 }
             }
@@ -428,8 +466,6 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
         {
             int n = ctx.I("kites");
             if (n <= 0) return;
-            string kite = LeisureKit.Category(ctx, "", AssetCategories.HillKite);
-            if (kite == null) return;
             var pts = new List<float2>();
             for (float lvl = 0.75f; lvl >= 0.35f && pts.Count < 200; lvl -= 0.1f) pts.AddRange(field.Contour(field.Peak * lvl, field.Peak * 0.05f));
             var chosen = new List<float2>();
@@ -438,9 +474,12 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 var p = pts[(int)(Hashing.Mix(ctx.Seed, (uint)i + 0x417Eu) % (uint)pts.Count)];
                 bool far = true;
                 foreach (var q in chosen) if (math.distance(q, p) < 12f) { far = false; break; }
-                if (far && LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(summit, p), ObjectRole.Furniture, AssetMix.One(""), kite, 1f,
+                if (far && LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(summit, p), ObjectRole.Furniture, AssetMix.Pick(Blankets, (uint)chosen.Count), AssetCategories.Picnic, 1.3f,
                     Hashing.Mix(ctx.Seed, 0x41E0u + (uint)chosen.Count), 1f, 0.5f)) chosen.Add(p);
             }
+            // Kite flyers' camp on the flanks: picnic blankets facing the summit. No vanilla kite or windsock exists
+            // (and the game skips unresolved props), so the flanks get blankets only (art pass a3).
+
         }
 
         /// <summary>Puts everything the layer planned onto the raised ground.</summary>

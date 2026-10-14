@@ -163,7 +163,7 @@ namespace Placemaker.Tests
                 ["sportsPark"] = new[] { AssetCategories.SportsGoal, AssetCategories.SportsBasketball, AssetCategories.SportsTennis },
                 ["dogPark"] = new[] { AssetCategories.DogAgility },
                 ["picnicGrounds"] = new[] { AssetCategories.Picnic, AssetCategories.Shelter },
-                ["natureReserve"] = new[] { AssetCategories.Lookout },
+                ["natureReserve"] = new[] { AssetCategories.Shelter },   // automatic lookout = timber shelter (no vanilla tower)
                 ["formalGarden"] = new[] { AssetCategories.Hedge, AssetCategories.CenterpieceFountain },
                 ["communityGarden"] = new[] { AssetCategories.GardenCrop, AssetCategories.GardenShed },
                 ["marketSquare"] = new[] { AssetCategories.MarketStall },
@@ -283,7 +283,8 @@ namespace Placemaker.Tests
         [Fact]
         public void ShopsStandNearEntrancesBesidePaths()
         {
-            var plan = Compose(With("park", "shops"), TestKit.Rect(200, 150), TestKit.RoadAlongBottom(200));
+            var site = TestKit.RoadAlongBottom(200);
+            var plan = Compose(TestKit.Entered(With("park", "shops"), TestKit.Rect(200, 150), site), TestKit.Rect(200, 150), site);
             var park = plan.Layers.Single(l => l.GeneratorId == "park");
             var shops = plan.Layers.Single(l => l.GeneratorId == "shops");
             var stands = shops.Objects.Where(o => o.Category == AssetCategories.Kiosk).ToList();
@@ -325,7 +326,8 @@ namespace Placemaker.Tests
         public void RestroomsByAreaNearAnEntrance()
         {
             var ring = TestKit.Rect(250, 200);
-            var plan = Compose(With("park", "restrooms"), ring, TestKit.RoadAlongBottom(250));
+            var site = TestKit.RoadAlongBottom(250);
+            var plan = Compose(TestKit.Entered(With("park", "restrooms"), ring, site), ring, site);
             var rest = plan.Layers.Single(l => l.GeneratorId == "restrooms").Objects.Where(o => o.Category == AssetCategories.Restroom).ToList();
             Assert.Equal(2, rest.Count);   // 5 ha, one per 3 ha (rounded)
             var park = plan.Layers.Single(l => l.GeneratorId == "park");
@@ -348,6 +350,44 @@ namespace Placemaker.Tests
             foreach (var p in plan.Layers.SelectMany(l => l.Paint))
                 foreach (var v in p.Ring) Assert.True(Poly.Contains(ring, v.xz), "paint outside the area");
             Assert.Contains(plan.AllIssues(), i => i.Key == TerrainPaint.PermanentKey);
+        }
+
+        [Theory]
+        [InlineData("gazebo", 0)]
+        [InlineData("gazebo", 1)]
+        [InlineData("bandstand", 2)]
+        public void BandstandAndGazeboBenchesFaceTheFocusOnPaving(string kind, int rows)
+        {
+            // In-game finding: benches round a gazebo/bandstand were loose on the lawn. Now every bench sits on
+            // the paving, faces the structure (front = +Z of RotateY(yaw)), and a gazebo ring is evenly spaced.
+            var r = With("park", "bandstand");
+            var step = FindStep(r.Root, "bandstand");
+            step.Settings.Values["kind"] = kind;
+            step.Settings.Values["rows"] = (double)rows;
+            var plan = Compose(r, TestKit.Rect(220, 160));
+            var layer = plan.Layers.Single(l => l.GeneratorId == "bandstand");
+            var focus = layer.Objects.First(o => o.Role == ObjectRole.Furniture).Position.xz;
+            var benches = layer.Objects.Where(o => o.Role == ObjectRole.Bench).ToList();
+            Assert.True(benches.Count >= 3, kind + " has " + benches.Count + " benches");
+            var paving = layer.Surfaces.Select(s => Poly.To2D(s.Ring)).ToList();
+            foreach (var b in benches)
+            {
+                var fwd = math.mul(quaternion.RotateY(b.Yaw), new float3(0, 0, 1)).xz;
+                Assert.True(math.dot(fwd, math.normalize(focus - b.Position.xz)) > 0.98f, "bench not facing the " + kind);
+                Assert.True(paving.Any(p => Poly.Contains(p, b.Position.xz)), "bench off the paving");
+            }
+            if (kind == "gazebo" && rows == 0)
+            {
+                var d = benches.Select(b => math.distance(b.Position.xz, focus)).ToList();
+                Assert.True(d.Max() - d.Min() < 0.05f, "ring benches at one radius");
+            }
+        }
+
+        private static RecipeStep FindStep(RecipeStep s, string layer)
+        {
+            if (s.Layer == layer) return s;
+            foreach (var c in s.Children) { var f = FindStep(c, layer); if (f != null) return f; }
+            return null;
         }
 
         [Fact]
@@ -480,7 +520,8 @@ namespace Placemaker.Tests
                     break;
                 case "civic":
                     Assert.Contains(plan.Objects, o => o.Category == AssetCategories.Bollard);
-                    Assert.Contains(plan.Objects, o => o.Category == AssetCategories.DecalPaving);
+                    // Art pass a2: the pattern is laid in real paving (several stones), not decals.
+                    Assert.True(plan.Surfaces.Select(x => x.Asset.Id).Distinct().Count() >= 3);
                     break;
                 case "cafe":
                     Assert.Contains(plan.Objects, o => o.Category == AssetCategories.CafeSeating);

@@ -30,7 +30,10 @@ namespace Placemaker.Core.Layers.Plaza
         /// <summary>Shapes the plaza and adds stairs and step planters. Rectangles in <paramref name="keepLevel"/> (amenities) sit on one level.</summary>
         public static int Shape(LayerContext ctx, Occupancy occ, LayerRegion region, string mode, IReadOnlyList<float2[]> keepLevel)
         {
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            // Art pass a2: the square's own edge axis (a square's principal axes are diagonal), so steps run with the paving.
+            LeisureKit.Frame(region, out var centre, out _, out _, out _, out _);
+            var axis = PlazaDressing.SquareAxis(region);
+            var side = new float2(-axis.y, axis.x);
             float minA = float.MaxValue, maxA = float.MinValue, minB = float.MaxValue, maxB = float.MinValue;
             foreach (var v in region.Ring)
             {
@@ -126,10 +129,10 @@ namespace Placemaker.Core.Layers.Plaza
             ctx.Plan.Facts["levelSteps"] = steps.Count;
 
             if (!ctx.B("levelPlanters")) return cells;
-            string cat = LeisureKit.Category(ctx, ctx.S("planterAsset"), AssetCategories.Planter, AssetCategories.Bush);
-            if (cat == null) return cells;
-            var asset = AssetMix.One(ctx.S("planterAsset"));
-            var role = cat == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter;
+            // Art pass a2: low green bushes read as a balustrade (designed default, not the planter pool),
+            // and the middle of the square stays clear for its centrepiece.
+            float keepClear = math.max(PlazaLayer.FountainClearRadius, ctx.F("centerSize") + 4f) + 5f;
+            var squareCentre = region.Centroid;
             int placed = 0;
             foreach (var (a, b) in steps)
             {
@@ -140,11 +143,12 @@ namespace Placemaker.Core.Layers.Plaza
                 for (float s = 2f; s < len - 1f; s += 4.5f)
                 {
                     var p = wa + dir * s;
-                    if (!region.ContainsDisc(p, falloff * 0.5f)) continue;
+                    if (!region.ContainsDisc(p, falloff * 0.5f) || math.distance(p, squareCentre) < keepClear) continue;
                     bool nearFlight = false;
                     foreach (var (fa, fb) in flights) if (SegmentIndex.DistSq(p, fa, fb) < 16f) { nearFlight = true; break; }
                     if (nearFlight) continue;
-                    if (LeisureKit.Put(ctx, occ, p, math.atan2(dir.x, dir.y), role, asset, cat, 0.9f, Hashing.Mix(ctx.Seed, 0x1E50u + (uint)placed), 0.5f, 0.4f))
+                    uint v = Hashing.Mix(ctx.Seed, 0x1E50u + (uint)placed);
+                    if (LeisureKit.Put(ctx, occ, p, math.atan2(dir.x, dir.y), ObjectRole.Bush, PlazaArt.Or(ctx, "planterAsset", PlazaArt.GreenBushes, v), AssetCategories.Bush, 0.8f, v, 0.5f, 0.4f))
                         placed++;
                 }
             }

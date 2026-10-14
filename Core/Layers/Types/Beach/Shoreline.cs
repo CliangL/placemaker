@@ -63,6 +63,31 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         // ───────────── analysis ─────────────
 
+        /// <summary>
+        /// The dry part of <paramref name="region"/> when the player drew over existing water (more than 2 % wet),
+        /// else the region itself. For nature types that lay out their own paths and planting (wetland, trails):
+        /// nothing of theirs belongs in a lake they were drawn across (art pass a3).
+        /// </summary>
+        public static LayerRegion DryLand(LayerContext ctx, LayerRegion region)
+        {
+            var depth = ctx.Site?.WaterDepthAt;
+            if (depth == null || region == null) return region;
+            var size = region.Max - region.Min;
+            float step = math.max(3f, math.sqrt(size.x * size.y / 2500f));
+            int wet = 0, total = 0;
+            for (float y = region.Min.y + step * 0.5f; y < region.Max.y; y += step)
+                for (float x = region.Min.x + step * 0.5f; x < region.Max.x; x += step)
+                {
+                    var p = new float2(x, y);
+                    if (!region.Contains(p)) continue;
+                    total++;
+                    if (depth(p) > WetDepth) wet++;
+                }
+            if (wet == 0 || wet < total * 0.02f) return region;
+            var land = DryPart(ctx, region, depth, step);
+            return land != null && land.Area < region.Area * 0.98f ? land : region;
+        }
+
         public static Shoreline Analyze(LayerContext ctx, LayerRegion region, string side)
         {
             var s = new Shoreline { Outline = region, Land = region };

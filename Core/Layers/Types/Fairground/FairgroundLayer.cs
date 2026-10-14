@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
+using Placemaker.Core.Layers.Plaza;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Types.Events
@@ -119,6 +120,8 @@ namespace Placemaker.Core.Layers.Types.Events
             Preset("foodTrucks", ("style", "foodTrucks"), ("layout", "court"), ("stallKind", "trucks"), ("stalls", 14.0), ("stallPitch", 8.0),
                 ("foodCourt", true), ("tables", 24.0), ("stage", true), ("stageSize", "small"), ("field", 10.0), ("rides", 0.0), ("festoons", true),
                 ("ground", "gravel"), ("fence", false), ("backstage", false), ("barrier", false), ("foh", false), ("toilets", 6.0), ("sideStreets", 1.0));
+            // A Christmas market is swept setts, not trodden earth.
+            PresetFeatures("christmas", "-decals");
         }
 
         // ───────────────────────────── planning ─────────────────────────────
@@ -132,6 +135,34 @@ namespace Placemaker.Core.Layers.Types.Events
             public float2 Dir;   // from the field towards the stage
         }
 
+        // Art pass a2: designed defaults. Automatic pools here would bring a 17 m branded marquee
+        // (events.tent), billboards (stage / kiosk), grills and picnic blankets as "tables" (picnic) and
+        // snowmen as the Christmas landmark.
+        private static readonly AssetRef Tent = new AssetRef("CampgroundShelter02", "Pergola02", "Pergola01");
+        private static readonly string[] TentStalls = { "PergolaSmall03", "PergolaSmall01", "PergolaSmall06" };
+        private static readonly AssetRef ChristmasTree = new AssetRef("SpruceTree01", "EuropeanSpruce01", "PineTree01");
+        private static readonly AssetRef Toilet = new AssetRef("PortableToilet01");
+        private static readonly string[] ShadeTrees = { "NA_LindenTree01", "EU_ChestnutTree01", "OakTree01" };
+
+        /// <summary>Paving of the site's hard pads (stage, court, rides, landmark): old-town setts at Christmas, warm sandstone elsewhere.</summary>
+        private static PavingPalette Palette(LayerContext ctx) => ctx.S("style") == "christmas" ? PavingPalettes.Cobble : PavingPalettes.Warm;
+
+        /// <summary>
+        /// A hard pad. On a paved site it joins the ground's tiling (one paved surface over another
+        /// z-fights at the overlay priority); on grass / gravel it is laid directly.
+        /// </summary>
+        private static void Pad(LayerContext ctx, PavingPlan pave, float2[] ring, AssetRef asset)
+        {
+            if (pave != null) pave.Add(ring, SurfaceRole.Plaza, asset, AssetCategories.SurfacePaving);
+            else ctx.Surface(ring, SurfaceRole.Paving, asset, AssetCategories.SurfacePaving);
+        }
+
+        private static string[] Species(LayerContext ctx)
+        {
+            var l = ctx.L("treeSpecies");
+            return l != null && l.Length > 0 ? l : ShadeTrees;
+        }
+
         protected override void PlanCore(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
@@ -139,8 +170,12 @@ namespace Placemaker.Core.Layers.Types.Events
             var gates = Gates(ctx);
             string style = ctx.S("style"), layout = ctx.S("layout");
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
+            LeisureKit.Frame(region, out var centre, out _, out _, out _, out float minor);
+            // The site's own edge axis (a square's principal axes are diagonal): streets run with the outline.
+            var axis = PlazaDressing.SquareAxis(region);
+            var side = new float2(-axis.y, axis.x);
+            var pave = ctx.S("ground") == "paved" ? new PavingPlan { Axis = axis } : null;
             Ground(ctx, region);
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
             var mainGate = gates.Count > 0 ? gates[0].Position : region.Ring[0];
             float g = math.dot(mainGate - centre, axis);
             var inDir = g > 0f ? -axis : axis;   // from the entrance end towards the far end
@@ -169,7 +204,7 @@ namespace Placemaker.Core.Layers.Types.Events
                     var innerRegion = inner.Length >= 3 && Poly.IsSimple(inner) && Poly.SignedArea(inner) > 300f ? LayerRegion.From(inner) : null;
                     if (innerRegion != null) fit = innerRegion;
                 }
-                st = PlanStage(ctx, occ, region, fit, centre, inDir, side, mainGate);
+                st = PlanStage(ctx, occ, region, fit, centre, inDir, side, mainGate, pave);
             }
             ctx.Check();
 
@@ -190,22 +225,22 @@ namespace Placemaker.Core.Layers.Types.Events
 
             // 3. Food court (dining court for the court layout).
             int tables = 0;
-            if (hasCourt) tables = FurnishCourt(ctx, occ, court, style, true);
+            if (hasCourt) tables = FurnishCourt(ctx, occ, court, style, true, pave);
             else if (ctx.B("foodCourt"))
             {
                 if (FindFoodCourt(ctx, region, occ, streets, out court))
                 {
                     hasCourt = true;
                     EventKit.TakeRectTight(occ, court, 6);
-                    tables = FurnishCourt(ctx, occ, court, style, false);
+                    tables = FurnishCourt(ctx, occ, court, style, false, pave);
                 }
                 else ctx.Issue(IssueSeverity.Info, K + "Issue.NoFoodCourt");
             }
             ctx.Check();
 
             // 4. Landmark and rides (prime spots by the paths, before the stalls fill the frontage).
-            if (ctx.B("landmark")) Landmark(ctx, occ, style);
-            int rides = Rides(ctx, occ);
+            if (ctx.B("landmark")) Landmark(ctx, occ, style, pave);
+            int rides = Rides(ctx, occ, pave);
             ctx.Check();
 
             // 5. Stalls.
@@ -219,9 +254,9 @@ namespace Placemaker.Core.Layers.Types.Events
             {
                 int n = 0;
                 foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 0.5f, 8f, 0.5f), math.clamp(streets.Count * 2 + 2, 2, 30), 25f, false))
-                    if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0xB100u + (uint)n), 0.4f, 0.2f)) n++;
+                    if (LeisureKit.Put(ctx, occ, a.Position, LeisureKit.Yaw(a.Position, a.Toward), ObjectRole.Bin, PlazaArt.Bin, null, 0.5f, Hashing.Mix(ctx.Seed, 0xB100u + (uint)n), 0.4f, 0.2f)) n++;
             }
-            PathBenches(ctx, occ, 45f, AssetMix.One(ctx.S("benchAsset")), 0xBE70u);
+            PathBenches(ctx, occ, 45f, PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0u), 0xBE70u);
             if (ctx.B("fence")) Fence(ctx, gates, AssetMix.One(ctx.S("fenceAsset")), ctx.F("gateWidth") * 0.5f);
             ctx.Check();
 
@@ -240,9 +275,17 @@ namespace Placemaker.Core.Layers.Types.Events
             }
             int trees = (int)(region.Area / 10000f * ctx.F("treeDensity"));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, ctx.L("treeSpecies"), Keys.Category(AssetCategories.Tree)))
-                LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, ctx.L("treeSpecies"), 2.5f, 20f, 0.45f, 0x7F00u,
+                LeisureKit.Plant(ctx, occ, region, trees, ObjectRole.Tree, Species(ctx), 2.5f, 20f, 0.45f, 0x7F00u,
                     p => region.BoundaryDistance(p, 30f) > 14f || (st.HasField && EventKit.InRect(st.Field, p, 2f)));
             ctx.Check();
+
+            // A paved site: the hard pads, a dark frame along the outline and the field, as one tiling.
+            if (pave != null)
+            {
+                var pal = PavingPalettes.WithField(Palette(ctx), "");
+                pave.Add(PavingShapes.Frame(region.Ring, PlazaDressing.FrameWidth(region)), SurfaceRole.Plaza, pal.Band, AssetCategories.SurfacePaving);
+                pave.Emit(ctx, region.Ring, SurfaceRole.Plaza, pal.Field, AssetCategories.SurfacePaving);
+            }
 
             // 8. Regions: the crowd field stays open (a place), the court is paved, the rest is green.
             if (st.HasField) ctx.AddRegion(st.Field.Ring, "field", FieldPlace, RegionTags.Green, RegionTags.Core);
@@ -274,8 +317,8 @@ namespace Placemaker.Core.Layers.Types.Events
             switch (ctx.S("ground"))
             {
                 case "paved":
+                    // The paving itself is laid at the end as a tiling with the pads (PavingKit).
                     ctx.NavigationArea(region.Ring, AreaRole.PedestrianArea, new AssetRef("", "Pedestrian Area", "Walking Area"));
-                    ctx.Surface(region.Ring, SurfaceRole.Plaza, asset, AssetCategories.SurfacePaving);
                     break;
                 case "gravel":
                     ctx.Surface(region.Ring, SurfaceRole.Ground, asset, AssetCategories.SurfaceNatural);
@@ -327,7 +370,7 @@ namespace Placemaker.Core.Layers.Types.Events
         /// Stage at the chosen end, searched jointly with its crowd field: the first stage spot (nearest the
         /// end) whose field fits at ≥ 70 % of the wanted size wins; otherwise the spot with the biggest field.
         /// </summary>
-        private StageSite PlanStage(LayerContext ctx, Occupancy occ, LayerRegion region, LayerRegion fit, float2 centre, float2 inDir, float2 side, float2 mainGate)
+        private StageSite PlanStage(LayerContext ctx, Occupancy occ, LayerRegion region, LayerRegion fit, float2 centre, float2 inDir, float2 side, float2 mainGate, PavingPlan pave)
         {
             var st = new StageSite();
             float2 dir;
@@ -363,10 +406,10 @@ namespace Placemaker.Core.Layers.Types.Events
             if (!found) { ctx.Issue(IssueSeverity.Info, K + "Issue.NoStage"); return st; }
             st.Ok = true; st.Stage = stage; st.Dir = dir;
             EventKit.TakeRectTight(occ, stage, 0);
-            ctx.Surface(stage.Ring, SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+            Pad(ctx, pave, stage.Ring, Palette(ctx).Band);
             float facing = math.atan2(-dir.x, -dir.y);
             string stageCat = LeisureKit.Category(ctx, ctx.S("stageAsset"), AssetCategories.Stage, AssetCategories.Shelter, AssetCategories.Centerpiece);
-            if (stageCat != null) EventKit.Place(ctx, stage.Center, facing, stageCat, AssetMix.One(ctx.S("stageAsset")), Hashing.Mix(ctx.Seed, 0x57A6u));
+            if (stageCat != null) EventKit.Place(ctx, stage.Center, facing, stageCat, PlazaArt.Or(ctx, "stageAsset", PlazaArt.Stage), Hashing.Mix(ctx.Seed, 0x57A6u));
 
             // Crowd field in front of the stage (verified exactly, shrunk further when the screen was optimistic).
             for (int k = math.min(bestScale, FieldScales.Length - 1); k < FieldScales.Length; k++)
@@ -394,7 +437,7 @@ namespace Placemaker.Core.Layers.Types.Events
                     var r = new OrientedRect { Center = c, Axis = across, HalfLength = 7f, HalfWidth = 5f };
                     if (!LeisureKit.RectFits(fit, occ, r, 0.8f)) continue;
                     EventKit.TakeRectTight(occ, r, 0);
-                    Backstage(ctx, r, stage.Center);
+                    Backstage(ctx, r, stage.Center, pave);
                     placed = true;
                     break;
                 }
@@ -424,16 +467,17 @@ namespace Placemaker.Core.Layers.Types.Events
                     if (tent != null)
                     {
                         var p = st.Field.Center - dir * (st.Field.HalfWidth * 0.25f);
-                        EventKit.Place(ctx, p, math.atan2(dir.x, dir.y), tent, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0xF0Fu));
+                        EventKit.Place(ctx, p, math.atan2(dir.x, dir.y), tent, Tent, Hashing.Mix(ctx.Seed, 0xF0Fu));
                     }
                 }
             }
             return st;
         }
 
-        private static void Backstage(LayerContext ctx, OrientedRect r, float2 stage)
+        private static void Backstage(LayerContext ctx, OrientedRect r, float2 stage, PavingPlan pave)
         {
-            ctx.Surface(r.Ring, SurfaceRole.Ground, AssetMix.One(""), AssetCategories.SurfaceNatural);
+            if (pave != null) pave.Add(r.Ring, SurfaceRole.Ground, AssetMix.One(""), AssetCategories.SurfaceNatural);
+            else ctx.Surface(r.Ring, SurfaceRole.Ground, AssetMix.One(""), AssetCategories.SurfaceNatural);
             var ring = r.Ring;
             var fence = AssetMix.One(ctx.S("fenceAsset"));
             int gateEdge = 0; float best = float.MaxValue;
@@ -560,7 +604,7 @@ namespace Placemaker.Core.Layers.Types.Events
             float l2 = math.sqrt(area * 0.6f * 1.5f), w2 = area * 0.6f / l2;
             if (Spots.Find(occ, math.sqrt(l2 * l2 + w2 * w2) * 0.5f + 1f, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, 0xC0u), out var spot, null, 0f, 1f, 1500))
             {
-                LeisureKit.Frame(region, out _, out var axis, out _, out _, out _);
+                var axis = PlazaDressing.SquareAxis(region);
                 court = new OrientedRect { Center = spot, Axis = axis, HalfLength = l2 * 0.5f, HalfWidth = w2 * 0.5f };
                 return LeisureKit.RectFits(region, occ, court, 0.5f);
             }
@@ -568,12 +612,14 @@ namespace Placemaker.Core.Layers.Types.Events
         }
 
         /// <summary>Paved court with table rows, kiosks along one long side (or a truck ring round it), string lights at the corners.</summary>
-        private static int FurnishCourt(LayerContext ctx, Occupancy occ, OrientedRect court, string style, bool truckRing)
+        private static int FurnishCourt(LayerContext ctx, Occupancy occ, OrientedRect court, string style, bool truckRing, PavingPlan pave)
         {
-            ctx.Surface(court.Ring, SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+            Pad(ctx, pave, court.Ring, Palette(ctx).Accent);
             int tables = 0;
             int wanted = ctx.I("tables");
-            string tableCat = LeisureKit.Category(ctx, "", AssetCategories.Picnic, AssetCategories.CafeSeating, AssetCategories.Bench);
+            // Table sets (the picnic pool holds grills and blankets).
+            string tableCat = LeisureKit.Category(ctx, "", AssetCategories.CafeSeating, AssetCategories.Picnic, AssetCategories.Bench);
+            var table = tableCat == AssetCategories.CafeSeating ? PlazaArt.TableSet : AssetMix.One("");
             bool kioskSide = !truckRing && court.HalfWidth > 4.5f;
             float vMax = court.HalfWidth - (kioskSide ? 4.5f : 2f), uMax = court.HalfLength - 2f;
             if (tableCat != null)
@@ -581,7 +627,7 @@ namespace Placemaker.Core.Layers.Types.Events
                     for (float u = -uMax; u <= uMax + 0.01f && tables < wanted; u += 4.5f)
                     {
                         var p = court.Local(u, v);
-                        EventKit.Place(ctx, p, court.Yaw + ((tables & 1) == 0 ? 0f : math.PI * 0.5f), tableCat, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x7AB0u + (uint)tables));
+                        EventKit.Place(ctx, p, court.Yaw + ((tables & 1) == 0 ? 0f : math.PI * 0.5f), tableCat, table, Hashing.Mix(ctx.Seed, 0x7AB0u + (uint)tables));
                         tables++;
                     }
             string vendor = style == "foodTrucks" || ctx.S("stallKind") == "trucks"
@@ -594,7 +640,7 @@ namespace Placemaker.Core.Layers.Types.Events
                 {
                     float u = -court.HalfLength + (i + 0.5f) * court.HalfLength * 2f / n;
                     var p = court.Local(u, court.HalfWidth - 2f);
-                    EventKit.Place(ctx, p, LeisureKit.Yaw(p, court.Local(u, 0f)), vendor, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x6100u + (uint)i));
+                    EventKit.Place(ctx, p, LeisureKit.Yaw(p, court.Local(u, 0f)), vendor, AssetMix.Pick(vendor == AssetCategories.Kiosk ? PlazaArt.Kiosks : PlazaArt.Carts, (uint)i), Hashing.Mix(ctx.Seed, 0x6100u + (uint)i));
                 }
             }
             string lights = ctx.B("festoons") ? EventKit.Optional("", AssetCategories.EventFestoon, AssetCategories.Lamp) : null;
@@ -602,33 +648,49 @@ namespace Placemaker.Core.Layers.Types.Events
                 foreach (var q in court.Ring)
                 {
                     var p = q + math.normalizesafe(court.Center - q) * 1f;
-                    EventKit.Place(ctx, p, 0f, lights, AssetMix.One(ctx.S("lampAsset")), Hashing.Mix(ctx.Seed, (uint)(p.x * 7f) ^ 0x1F00u));
+                    EventKit.Place(ctx, p, 0f, lights, lights == AssetCategories.Lamp ? PlazaArt.Or(ctx, "lampAsset", PlazaArt.ParkLamp) : AssetMix.One(ctx.S("lampAsset")), Hashing.Mix(ctx.Seed, (uint)(p.x * 7f) ^ 0x1F00u));
                 }
             return tables;
         }
 
         // ───────────── landmark, rides ─────────────
 
-        private static void Landmark(LayerContext ctx, Occupancy occ, string style)
+        private static void Landmark(LayerContext ctx, Occupancy occ, string style, PavingPlan pave)
         {
             string cat; float r;
+            // Designed landmarks: a tall spruce as the Christmas tree (the Christmas pool is snowmen), a
+            // grand fountain on the fair's square; a funfair keeps its ride category when one exists.
+            AssetRef asset = AssetMix.One("");
             switch (style)
             {
-                case "funfair": cat = LeisureKit.Category(ctx, "", AssetCategories.EventRide, AssetCategories.Centerpiece); r = 10f; break;
-                case "christmas": cat = LeisureKit.Category(ctx, "", AssetCategories.EventChristmas, AssetCategories.Tree, AssetCategories.Centerpiece); r = 4.5f; break;
-                default: cat = LeisureKit.Category(ctx, "", AssetCategories.Centerpiece); r = 5f; break;
+                case "funfair":
+                    cat = LeisureKit.Category(ctx, "", AssetCategories.EventRide, AssetCategories.Centerpiece); r = 10f;
+                    if (cat == AssetCategories.Centerpiece) { asset = PlazaArt.GrandFountain; r = 6f; }
+                    break;
+                case "christmas": cat = LeisureKit.Category(ctx, "", AssetCategories.Tree, AssetCategories.EventChristmas, AssetCategories.Centerpiece); r = 4.5f;
+                    if (cat == AssetCategories.Tree) asset = ChristmasTree;
+                    break;
+                default: cat = LeisureKit.Category(ctx, "", AssetCategories.Centerpiece); r = 6f; asset = PlazaArt.GrandFountain; break;
             }
             if (cat == null) return;
             if (!Spots.Find(occ, r + 1.5f, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, 0x1A4Du), out var p, null, 0f, 1f, 2000))
             { ctx.Issue(IssueSeverity.Info, K + "Issue.NoLandmark"); return; }
-            ctx.Surface(LayerRegion.Circle(p, r + 1f, 18), SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
-            var o = EventKit.Place(ctx, p, Hashing.Unit(Hashing.Mix(ctx.Seed, 0x1A4Eu)) * 6.283f, cat, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x1A4Fu));
+            Pad(ctx, pave, LayerRegion.Circle(p, r + 1f, 24), Palette(ctx).Accent);
+            var o = EventKit.Place(ctx, p, Hashing.Unit(Hashing.Mix(ctx.Seed, 0x1A4Eu)) * 6.283f, cat, asset, Hashing.Mix(ctx.Seed, 0x1A4Fu));
             if (o.Role == ObjectRole.Tree) o.Age = 3;
+            // Christmas decorations (snowmen in the vanilla set) gathered round the tree.
+            if (style == "christmas" && cat == AssetCategories.Tree)
+            {
+                string deco = EventKit.Optional("", AssetCategories.EventChristmas);
+                if (deco != null)
+                    for (int k = 0; k < 3; k++)
+                        EventKit.Place(ctx, p + EventKit.Dir(k * 2.094f + 0.5f) * (r - 0.5f), k * 2.094f + 0.5f + math.PI, deco, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x1A50u + (uint)k));
+            }
             occ.Take(p, r + 1f, 0);
             ctx.Plan.Facts["landmark"] = 1;
         }
 
-        private static int Rides(LayerContext ctx, Occupancy occ)
+        private static int Rides(LayerContext ctx, Occupancy occ, PavingPlan pave)
         {
             int wanted = ctx.I("rides");
             if (wanted <= 0) return 0;
@@ -642,9 +704,10 @@ namespace Placemaker.Core.Layers.Types.Events
             for (int i = 0; i < wanted; i++)
             {
                 uint v = Hashing.Mix(ctx.Seed, 0x21D0u + (uint)i);
-                float r = (i % 4 == 0) ? 8f : 5f + Hashing.Unit(v) * 1.5f;
+                // Real rides get big pads; the playground stand-ins (no ride installed) a pad their own size.
+                float r = cat == AssetCategories.EventRide ? ((i % 4 == 0) ? 8f : 5f + Hashing.Unit(v) * 1.5f) : 3.2f + Hashing.Unit(v) * 0.8f;
                 if (!Spots.Find(occ, r + 1.2f, Spots.Preference.NearPaths, v, out var p, spots, r * 2f + 3f, 1f, 1500)) break;
-                ctx.Surface(LayerRegion.Circle(p, r + 0.8f, 16), SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
+                Pad(ctx, pave, LayerRegion.Circle(p, r + 0.8f, 20), Palette(ctx).Field);
                 EventKit.Place(ctx, p, Hashing.Unit(v) * 6.283f, cat, AssetMix.Pick(ids, v), v);
                 occ.Take(p, r + 0.8f, 0);
                 spots.Add(p);
@@ -676,12 +739,15 @@ namespace Placemaker.Core.Layers.Types.Events
             if (wanted <= 0) return 0;
             string cat = StallCategory(ctx, style);
             if (cat == null) return 0;
-            var asset = AssetMix.One(ctx.S("stallAsset"));
             bool trucks = cat == AssetCategories.EventFoodTruck || ctx.S("stallKind") == "trucks";
+            // Designed stalls (player's choice wins): carts for trucks, small pergolas as tents, market stalls otherwise.
+            var designed = trucks ? PlazaArt.Carts : cat == AssetCategories.EventTent || ctx.S("stallKind") == "tents" ? TentStalls
+                : cat == AssetCategories.Kiosk ? PlazaArt.Kiosks : PlazaArt.Stalls;
+            AssetRef Pick(int i) => PlazaArt.Or(ctx, "stallAsset", designed, Hashing.Mix(ctx.Seed, 0x5A11u + (uint)i));
             float stallR = trucks ? 2.6f : cat == AssetCategories.EventTent ? 2.2f : 1.8f;
             float pitch = math.max(ctx.F("stallPitch"), stallR * 2f + 0.4f);
             string festoon = ctx.B("festoons") ? EventKit.Optional("", AssetCategories.EventFestoon, AssetCategories.Lamp) : null;
-            var lamp = AssetMix.One(ctx.S("lampAsset"));
+            var lamp = PlazaArt.Or(ctx, "lampAsset", PlazaArt.ParkLamp);
             int stalls = 0, slot = 0;
 
             // Food-truck ring round the dining court, facing in.
@@ -694,7 +760,7 @@ namespace Placemaker.Core.Layers.Types.Events
                     foreach (var p in LeisureKit.Along(a, b, pitch))
                     {
                         if (stalls >= wanted) break;
-                        if (EventKit.Put(ctx, occ, p, LeisureKit.Yaw(p, court.Center), cat, asset, stallR, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stalls), 0.8f, 0.3f)) stalls++;
+                        if (EventKit.Put(ctx, occ, p, LeisureKit.Yaw(p, court.Center), cat, Pick(stalls), stallR, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stalls), 0.8f, 0.3f)) stalls++;
                     }
                 }
             }
@@ -709,7 +775,7 @@ namespace Placemaker.Core.Layers.Types.Events
                     for (int k = -1; k <= 1 && stalls < wanted; k += 2)
                     {
                         var p = r.Local(0f, k * (stallR + 0.3f));
-                        EventKit.Place(ctx, p, math.atan2(r.Side.x * k, r.Side.y * k), cat, asset, Hashing.Mix(ctx.Seed, 0x5800u + (uint)stalls));
+                        EventKit.Place(ctx, p, math.atan2(r.Side.x * k, r.Side.y * k), cat, Pick(stalls), Hashing.Mix(ctx.Seed, 0x5800u + (uint)stalls));
                         stalls++;
                     }
                     if (festoon != null && i % 3 == 0)
@@ -736,7 +802,7 @@ namespace Placemaker.Core.Layers.Types.Events
                             EventKit.Put(ctx, occ, s.A + d * u + n * (sg * (Composer.DefaultHalfWidth(s.Role) + 1f)), yaw, festoon, lamp, 0.4f, Hashing.Mix(ctx.Seed, 0x1E80u + (uint)slot), 0.5f, 0.1f);
                             continue;
                         }
-                        if (EventKit.Put(ctx, occ, p, yaw, cat, asset, stallR, Hashing.Mix(ctx.Seed, 0x5900u + (uint)stalls), 0.8f, 0.3f)) stalls++;
+                        if (EventKit.Put(ctx, occ, p, yaw, cat, Pick(stalls), stallR, Hashing.Mix(ctx.Seed, 0x5900u + (uint)stalls), 0.8f, 0.3f)) stalls++;
                     }
             }
             if (stalls < wanted) ctx.Issue(IssueSeverity.Info, K + "Issue.FewerStalls", stalls, wanted);
@@ -751,7 +817,7 @@ namespace Placemaker.Core.Layers.Types.Events
             if (wanted <= 0) return 0;
             string cat = LeisureKit.Category(ctx, ctx.S("toiletAsset"), AssetCategories.EventToilet, AssetCategories.Restroom);
             if (cat == null) return 0;
-            var asset = AssetMix.One(ctx.S("toiletAsset"));
+            var asset = cat == AssetCategories.EventToilet ? PlazaArt.Or(ctx, "toiletAsset", Toilet) : AssetMix.One(ctx.S("toiletAsset"));
             bool cabins = cat == AssetCategories.EventToilet || !string.IsNullOrEmpty(ctx.S("toiletAsset"));
             int blocks = cabins ? (wanted + 7) / 8 : math.clamp((wanted + 7) / 8, 1, 3);
             var centres = new List<float2>();

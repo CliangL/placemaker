@@ -99,6 +99,11 @@ namespace Placemaker.Game.Groups.Patches
                 var temp = em.GetComponentData<Temp>(entities[i]);
                 if ((temp.m_Flags & TempFlags.Delete) != 0 && registry.IsOwnerArea(temp.m_Original)) return true;
             }
+            // A group without owner lot: bulldozing any of its objects/areas removes the whole group, so ask too.
+            using var parts = em.CreateEntityQuery(ComponentType.ReadOnly<Temp>());
+            using var temps = parts.ToComponentDataArray<Temp>(Allocator.Temp);
+            for (int i = 0; i < temps.Length; i++)
+                if ((temps[i].m_Flags & TempFlags.Delete) != 0 && registry.IsOwnerlessGroupPart(temps[i].m_Original, out _)) return true;
             return false;
         }
     }

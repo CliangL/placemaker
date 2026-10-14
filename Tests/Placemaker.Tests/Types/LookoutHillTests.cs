@@ -44,7 +44,8 @@ namespace Placemaker.Tests.Types.T04
             Assert.True(math.distance(Poly.Centroid(Poly.To2D(top.Ring)), summit) < 40f);
             AssertTerraformBlended(plan, SixHaL, site.HeightAt);
             // Everything stands on the raised ground.
-            var tower = plan.Objects.Single(o => o.Category == AssetCategories.Lookout);
+            // No vanilla lookout tower (the pool is 32-56 m buildings): the "tower" is the tall open gazebo.
+            var tower = plan.Objects.Single(o => o.Category == AssetCategories.Shelter && (o.Asset.Fallbacks ?? new string[0]).Contains("Gazebo03"));
             Assert.True(tower.Position.y - site.HeightAt(tower.Position.xz) > 10f);
         }
 
@@ -111,11 +112,12 @@ namespace Placemaker.Tests.Types.T04
         [Fact]
         public void KiteHillIsOpenWithKites()
         {
+            // Art pass a3: no vanilla kite exists, so the flanks get kite-flyers' picnic blankets; the cairn is stones.
             var kite = PlanPreset("kiteHill", SixHaL, new SiteContext());
             var hill = PlanPreset("hilltop", SixHaL, new SiteContext());
-            Assert.True(kite.Objects.Count(o => o.Category == AssetCategories.HillKite) >= 3);
+            Assert.True(kite.Objects.Count(o => o.Category == AssetCategories.Picnic && (o.Asset.Id ?? "").StartsWith("PicnicBlanket")) >= 3);
             Assert.True(TestKit.Count(kite, ObjectRole.Tree) < TestKit.Count(hill, ObjectRole.Tree));
-            Assert.Contains(kite.Objects, o => o.Category == AssetCategories.CenterpieceStatue);   // cairn
+            Assert.Contains(kite.Objects, o => o.Category == AssetCategories.Rock && (o.Asset.Fallbacks ?? new string[0]).Contains("Boulder03"));   // cairn
         }
 
         [Fact]

@@ -1,6 +1,7 @@
 // Work lights feature (construction site, quarry): floodlight towers along the edge, at the corners or
 // spread over the open ground, each with a small generator beside it.
 
+using Placemaker.Core.Layers.Types.Scrapyard;
 using System.Collections.Generic;
 using Placemaker.Core.Layers.AddOns;
 using Placemaker.Core.Layers.Common;
@@ -25,7 +26,10 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
             c.AssetMulti("lightAssets", AssetCategories.FloodLight, ControlTier.More, "lighting");
         }
 
-        protected override void PlanCore(LayerContext ctx)
+        // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
+        protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed); }
+
+        private void PlanArt(LayerContext ctx)
         {
             var occ = Occupancy(ctx);
             var region = ctx.LayerRegion;

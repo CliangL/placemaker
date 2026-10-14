@@ -44,12 +44,12 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             flags.TooltipKey = K + "Feature.flagCircle.Tooltip";
             var trees = Feature("bigtrees", ("density", 1.5));
             trees.LabelKey = K + "Feature.bigtrees";
-            var beds = Feature("flowerbeds", ("density", 6.0));
+            var beds = Feature("flowerbeds", ("density", 6.0), ("assets", (string[])ParkArt.Flowerbeds.Clone()));
             beds.LabelKey = K + "Feature.flowerbeds";
             return MonumentFeatures.With(new List<FeatureInfo>
             {
                 Feature("restrooms"), flags, trees, beds, StreetShopsFeature(Area),
-                Feature("decals", ("theme", "leaves"), ("density", 0.6)), Feature("terrain", ("shape", "flatten")),
+                Feature("decals", ("theme", "leaves"), ("density", 0.3)), Feature("terrain", ("shape", "flatten")),
             });
         }
 
@@ -170,7 +170,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 PathAsset = AssetMix.One(ctx.S("pathAsset")),
             };
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
             bool trail = ctx.S("style") == "sculpture";
             float vista = 0f;
             float2 vistaA = default, vistaB = default;
@@ -193,12 +193,12 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (lighting == "lanterns") PathLights(st, spacing, chainLow: false, pairs: true);
             else if (lighting == "bollards") PathLights(st, math.max(5f, spacing * 0.5f), chainLow: true, pairs: false);
             // FEEDBACK-4: seats and bins stand beside the path nets (never out on the lawn).
-            if (!trail) ctx.Plan.Facts["pathBenches"] = PathBenches(ctx, st.Occ, 40f, AssetMix.One(""), 0xBE7Au);
+            if (!trail) ctx.Plan.Facts["pathBenches"] = PathBenches(ctx, st.Occ, 40f, AssetMix.One("", ParkArt.Benches), 0xBE7Au);
             ctx.Plan.Facts["pathBins"] = PathBins(ctx, st.Occ, 80f, 0xB1A0u);
             ctx.Check();
 
             // Lawn trees keep the vista along the axis open (areal count: 1/scale, see docs/proposals/size.md).
-            var treeIds = ctx.L("treeSpecies");
+            var treeIds = Or(ctx.L("treeSpecies"), MemorialAssets.LawnTrees);
             float ha = region.Area / 10000f;
             int trees = math.min(3000, (int)(ha * ctx.F("lawnTrees") / ctx.Scale));
             if (trees > 0 && AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, treeIds, Keys.Category(AssetCategories.Tree)))
@@ -218,6 +218,21 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             ctx.Plan.Facts["sculptures"] = st.Sculptures;
             ctx.Plan.Facts["plaques"] = st.Plaques;
             ctx.Plan.Facts["flags"] = st.Flags;
+        }
+
+        /// <summary>The player's choice, or the art-pass default when the control is on automatic.</summary>
+        private static string[] Or(string[] chosen, string[] defaults) => chosen != null && chosen.Length > 0 ? chosen : defaults;
+
+        private static float2 LongestEdge(LayerRegion region)
+        {
+            float best = 0f; var axis = new float2(1, 0);
+            for (int i = 0; i < region.Ring.Length; i++)
+            {
+                var e = region.Ring[(i + 1) % region.Ring.Length] - region.Ring[i];
+                float l = math.length(e);
+                if (l > best) { best = l; axis = e / l; }
+            }
+            return axis;
         }
 
         private static bool LineOk(LayerRegion region, float2 a, float2 b, bool aOnEdge) =>
@@ -260,14 +275,49 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             return spur != null;
         }
 
+        /// <summary>
+        /// Entrance joined to the trunk paths straight in from the edge (GateApproach, s9): never a leg along
+        /// the outline. Falls back to the old nearest-point spur only when no inward route exists.
+        /// </summary>
+        private static void GateSpur(State st, float2 gate)
+        {
+            var spine = new List<(float2 a, float2 b)>();
+            var owners = new List<Line>();
+            foreach (var l in st.Lines)
+            {
+                if (l.IsSpur) continue;
+                for (int i = 0; i + 1 < l.Nodes.Count; i++) { spine.Add((l.Nodes[i], l.Nodes[i + 1])); owners.Add(l); }
+            }
+            var route = GateApproach.Route(st.Region, gate, spine, LeisureLayer.ApproachLength(st.Ctx));
+            if (route == null) { Spur(st, gate, NetRole.Pathway, 400f, true, GateApproach.Inward(st.Region, gate)); return; }
+            if (route.Count < 2) return;
+            var last = route[route.Count - 1];
+            Line host = null; float best = float.MaxValue;
+            foreach (var l in owners) { float d = l.Distance(last, out _, out _); if (d < best) { best = d; host = l; } }
+            if (host == null) return;
+            route[route.Count - 1] = host.Junction(last);
+            var spur = AddLine(st, NetRole.Pathway, true, route.ToArray());
+            if (spur != null) spur.IsSpur = true;
+        }
+
         // ───────────── axial composition ─────────────
 
         private bool Axial(State st, List<Gate> gates, out float2 vistaA, out float2 vistaB, out float vista)
         {
             var ctx = st.Ctx; var region = st.Region; var occ = st.Occ;
             vistaA = vistaB = default; vista = 0f;
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            // s9: the procession aims at the first entrance (axis along its edge normal, shifted through it).
+            LeisureKit.FrameToward(region, LeisureKit.Points(gates), out var centre, out var axis, out var side, out _, out _);
             if (!LeisureKit.Chord(region, centre, axis, 4f, out var a0, out var a1)) return false;
+            // Art pass (a1): the procession comes straight in from the main entrance when that axis is nearly as
+            // long — on a square site the principal axis is a diagonal, which put the monument in a corner.
+            if (gates.Count > 0)
+            {
+                region.ClosestOnBoundary(gates[0].Position, out int gs, out float gt);
+                region.PointAt(region.AlongOf(gs, gt), out _, out var inward, out _);
+                if (LeisureKit.Chord(region, centre, inward, 4f, out var g0, out var g1) && math.distance(g0, g1) >= 0.6f * math.distance(a0, a1))
+                { a0 = g0; a1 = g1; }
+            }
             var gate0 = gates.Count > 0 ? gates[0].Position : a0;
             var start = math.distance(a0, gate0) <= math.distance(a1, gate0) ? a0 : a1;
             var far = math.all(start == a0) ? a1 : a0;
@@ -276,6 +326,10 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             float chord = math.distance(start, far);
             string style = ctx.S("style");
             bool centreFocus = ctx.S("focal") == "centre" || style == "square";
+            // A second entrance at the far end of the axis would be blocked by an end monument: it moves to the centre
+            // and the axis runs on through to that entrance.
+            for (int gi = 1; gi < gates.Count && !centreFocus; gi++)
+                if (math.distance(gates[gi].Position, far) < ctx.F("forecourt") * 1.5f + 10f) centreFocus = true;
             bool squareCourt = style == "war" || style == "square";
             float fr = ctx.F("forecourt") * (style == "square" ? 1.4f : 1f);
             fr = math.min(fr, chord * (centreFocus ? 0.3f : 0.22f));
@@ -297,7 +351,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 if (h > 0f) ctx.Plan.Facts["raised"] = h;
             }
             var court = squareCourt ? LayerRegion.Rect(mon, dir, fr, fr) : LayerRegion.Circle(mon, fr, 28);
-            ctx.Surface(court, SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+            ctx.Surface(court, SurfaceRole.Plaza, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
             occ.Take(mon, courtReach, 0);
 
             // Procession: start → forecourt rim, splitting round the pool.
@@ -347,7 +401,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                     // The walk is the path net; the paved strip under it is optional (FEEDBACK-4: no painted walks).
                     var band = LayerRegion.Rect(start + dir * (axisLen * 0.5f), dir, axisLen * 0.5f, bandHalf);
                     var clipped = LeisureKit.Intersect(region, band);
-                    if (paving && clipped != null) ctx.Surface(clipped.Ring, SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    if (paving && clipped != null) ctx.Surface(clipped.Ring, SurfaceRole.Plaza, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
                     occ.TakeCorridor(start, rimIn, bandHalf, 100);
                 }
             }
@@ -366,7 +420,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                     if (math.dot(r0 - c0, nrm) > 2f && AddLine(st, mainRole, c0, r0) != null) spans.Add((c0, r0));
                     if (math.dot(c1 - r1, nrm) > 2f && AddLine(st, mainRole, r1, c1) != null) spans.Add((r1, c1));
                 }
-            foreach (var g in gates) if (math.distance(g.Position, start) > 2f) Spur(st, g.Position, NetRole.Pathway, 400f, true);
+            foreach (var g in gates) if (math.distance(g.Position, start) > 0.5f) GateSpur(st, g.Position);
             ctx.Check();
 
             Monument(st, dir, squareCourt);
@@ -386,7 +440,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         private static void Pool(State st, OrientedRect coping)
         {
             var ctx = st.Ctx;
-            ctx.Surface(coping.Ring, SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+            ctx.Surface(coping.Ring, SurfaceRole.Plaza, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
             var water = new OrientedRect { Center = coping.Center, Axis = coping.Axis, HalfLength = coping.HalfLength - 1.2f, HalfWidth = coping.HalfWidth - 1.2f };
             LeisureKit.TakeRect(st.Occ, coping);
             bool real = ctx.B("realWater");
@@ -422,7 +476,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                     int i = 0;
                     foreach (int s in new[] { -1, 1 })
                         foreach (var p in LeisureKit.Along(coping.Local(-water.HalfLength, s * (coping.HalfWidth - 0.6f)), coping.Local(water.HalfLength, s * (coping.HalfWidth - 0.6f)), step))
-                            ctx.Object(p, 0f, ObjectRole.Lamp, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x9A00u + (uint)i++), -1, cat);
+                            ctx.Object(p, 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset"), ParkArt.LowLights), Hashing.Mix(ctx.Seed, 0x9A00u + (uint)i++), -1, cat);
                 }
             }
         }
@@ -439,7 +493,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 : st.Chains.Get(ctx.S("monumentAsset").Length > 0, AssetCategories.MemorialMonument, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
             if (cat != null)
             {
-                var asset = style == "sculpture" ? AssetMix.Pick(ctx.L("sculptureAssets"), ctx.Seed) : AssetMix.One(ctx.S("monumentAsset"));
+                var asset = style == "sculpture" ? AssetMix.Pick(Or(ctx.L("sculptureAssets"), MemorialAssets.Sculptures), ctx.Seed) : AssetMix.One(ctx.S("monumentAsset"), MemorialAssets.Monuments);
                 ctx.Object(mon, faceStart, ObjectRole.Centerpiece, asset, Hashing.Mix(ctx.Seed, 0x303u), -1, cat);
             }
             float baseA = math.atan2(dir.y, dir.x);   // pointing away from the procession (behind the monument)
@@ -455,7 +509,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         float a = baseA + (flags == 1 ? 0f : (i / (flags - 1f) - 0.5f) * 2.4f);
                         var p = mon + new float2(math.cos(a), math.sin(a)) * inner;
                         if (occ.Paths.Overlaps(p, 0.5f, 0.4f)) continue;
-                        ctx.Object(p, faceStart, ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0xF1A0u + (uint)i), -1, fc);
+                        ctx.Object(p, faceStart, ObjectRole.Furniture, AssetMix.One("", MemorialAssets.Flags), Hashing.Mix(ctx.Seed, 0xF1A0u + (uint)i), -1, fc);
                         st.Flags++;
                     }
             }
@@ -474,13 +528,13 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         float a = baseA + math.PI + s * (0.55f + k * (1.3f / math.max(1, half)));
                         var p = mon + new float2(math.cos(a), math.sin(a)) * r;
                         if (occ.Paths.Overlaps(p, 0.6f, 0.4f)) continue;
-                        ctx.Object(p, LeisureKit.Yaw(p, mon) + math.PI, ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(ctx.Seed, 0x91A0u + (uint)i), -1, pc);
+                        ctx.Object(p, LeisureKit.Yaw(p, mon) + math.PI, ObjectRole.Furniture, AssetMix.One("", MemorialAssets.Plaques), Hashing.Mix(ctx.Seed, 0x91A0u + (uint)i), -1, pc);
                         st.Plaques++;
                     }
                 }
             }
             // Benches on the forecourt's sides, looking at the monument.
-            var bench = AssetMix.One("");
+            var bench = AssetMix.One("", ParkArt.Benches);
             int nb = style == "square" ? 8 : 2;
             for (int i = 0; i < nb; i++)
             {
@@ -500,7 +554,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         float a = baseA + math.PI * 0.25f + i * math.PI * 0.5f;
                         var p = mon + new float2(math.cos(a), math.sin(a)) * math.min(3f, fr * 0.4f);
                         if (occ.Paths.Overlaps(p, 0.4f, 0.4f)) continue;
-                        ctx.Object(p, 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset")),
+                        ctx.Object(p, 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset"), ParkArt.LowLights),
                             Hashing.Mix(ctx.Seed, 0x0A00u + (uint)i), -1, lc);
                     }
                 if (ctx.S("lighting") == "lanterns")
@@ -509,30 +563,34 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         float a = baseA + math.PI * 0.25f + i * math.PI * 0.5f;
                         var p = mon + new float2(math.cos(a), math.sin(a)) * (squareCourt ? fr * 1.3f : fr - 0.6f);
                         if (!occ.Paths.Overlaps(p, 0.4f, 0.4f))
-                            ctx.Object(p, 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset")), Hashing.Mix(ctx.Seed, 0x0A10u + (uint)i));
+                            ctx.Object(p, 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset"), ParkArt.ParkLamps), Hashing.Mix(ctx.Seed, 0x0A10u + (uint)i));
                     }
             }
             // Flower ring (poppies for a war memorial) just outside the forecourt.
             if (ctx.B("flowerRing"))
             {
-                string fc = st.Chains.Get(false, AssetCategories.Flowerbed, AssetCategories.Bush);
+                // Art pass (a1): a wreath of flowering shrubs (vanilla FlowerBushWild, poppies when the player has them),
+                // spaced by their real ~1.6 m footprint; 2.5 m flowerbed tiles overlapped each other on the curve.
+                string fc = st.Chains.Get(false, AssetCategories.Bush, AssetCategories.Flowerbed);
                 if (fc != null)
                 {
-                    float r = (squareCourt ? fr * 1.42f : fr) + 1.6f;
-                    int n = math.clamp((int)(2f * math.PI * r / 2.4f), 8, 80);
+                    var wreath = style == "war" ? MemorialAssets.Poppies : MemorialAssets.WreathShrubs;
+                    float r = (squareCourt ? fr * 1.42f : fr) + 1.4f;
+                    int n = math.clamp((int)(2f * math.PI * r / 1.9f), 8, 120);
                     for (int i = 0; i < n; i++)
                     {
                         float a = i * 2f * math.PI / n;
                         var p = mon + new float2(math.cos(a), math.sin(a)) * r;
-                        LeisureKit.Put(ctx, occ, p, a, fc == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter, AssetMix.One(""), fc, 0.9f,
-                            Hashing.Mix(ctx.Seed, 0xF100u + (uint)i), 0.5f, 0.1f);
+                        uint v = Hashing.Mix(ctx.Seed, 0xF100u + (uint)i);
+                        LeisureKit.Put(ctx, occ, p, a, fc == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter, fc == AssetCategories.Bush ? AssetMix.Pick(wreath, v) : AssetMix.One("", ParkArt.Flowerbeds), fc, 0.8f,
+                            v, 0.5f, 0.1f);
                     }
                 }
             }
             // A monument square: a formal ring of trees round the paved court.
             if (style == "square")
             {
-                var treeIds = ctx.L("treeSpecies");
+                var treeIds = Or(ctx.L("treeSpecies"), MemorialAssets.Avenue);
                 float r = fr * 1.42f + 5f;
                 int n = math.clamp((int)(2f * math.PI * r / math.max(6f, ctx.F("treeSpacing"))), 6, 40);
                 for (int i = 0; i < n; i++)
@@ -548,7 +606,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         private static void Allees(State st, List<(float2 a, float2 b)> spans, float offset)
         {
             var ctx = st.Ctx;
-            var treeIds = ctx.L("treeSpecies");
+            var treeIds = Or(ctx.L("treeSpecies"), MemorialAssets.Avenue);
             float step = ctx.F("treeSpacing");
             int i = 0;
             foreach (var (a, b) in spans)
@@ -612,12 +670,12 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (hedgeCat != null)
             {
                 var ring = r.Ring;
-                var hedge = AssetMix.One(ctx.S("hedgeAsset"));
+                var hedge = AssetMix.One(ctx.S("hedgeAsset"), ParkArt.HighHedge);
                 for (int k = 0; k < 4; k++)
                 {
                     var e0 = ring[k]; var e1 = ring[(k + 1) % 4];
                     float yaw = LeisureKit.Yaw(e0, e1);
-                    foreach (var p in LeisureKit.Along(e0, e1, 1.6f))
+                    foreach (var p in LeisureKit.Along(e0, e1, hedgeCat == AssetCategories.Hedge ? 4.1f : 1.6f))   // hedge pieces are ~4.1 m long
                     {
                         if (math.distance(p, opening) < 2.0f) continue;
                         ctx.Object(p, yaw, ObjectRole.Bush, hedge, v, -1, hedgeCat);
@@ -637,7 +695,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 }
                 content = cycle[(index / 2) % cycle.Length];
             }
-            var bench = AssetMix.One("");
+            var bench = AssetMix.One("", ParkArt.Benches);
             float hw = r.HalfWidth;
             float pathHw = Composer.DefaultHalfWidth(NetRole.Pathway);
             const float benchSide = 2.9f;   // walk half width + bench footprint, from the walk's centre line
@@ -672,18 +730,18 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         ctx.Object(p, LeisureKit.Yaw(p, r.Local(0f, towardAxis * seatV)), ObjectRole.Bench, bench, Hashing.Mix(v, (uint)(sgn + 3)));
                     }
                     string pc = CategoryChains.Quiet(AssetCategories.MemorialPlaque);
-                    if (pc != null) { ctx.Object(back, LeisureKit.Yaw(back, opening), ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(v, 9u), -1, pc); st.Plaques++; }
+                    if (pc != null) { ctx.Object(back, LeisureKit.Yaw(back, opening), ObjectRole.Furniture, AssetMix.One("", MemorialAssets.Plaques), Hashing.Mix(v, 9u), -1, pc); st.Plaques++; }
                     break;
                 }
                 case "flowers":
                 {
                     string fc = st.Chains.Get(false, AssetCategories.Flowerbed, AssetCategories.Bush);
                     if (fc != null)
-                        for (float fu = -r.HalfLength + 2.2f; fu <= r.HalfLength - 2.1f; fu += 2.4f)
-                            for (float fv = -r.HalfWidth + 2.2f; fv <= r.HalfWidth - 2.1f; fv += 2.4f)
+                        for (float fu = -r.HalfLength + 2.2f; fu <= r.HalfLength - 2.1f; fu += 2.9f)
+                            for (float fv = -r.HalfWidth + 2.2f; fv <= r.HalfWidth - 2.1f; fv += 2.9f)
                             {
                                 if (math.abs(fu) < pathHw + 0.7f) continue;   // the walk through the middle
-                                ctx.Object(r.Local(fu, fv), r.Yaw, fc == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter, AssetMix.One(""), Hashing.Mix(v, (uint)(fu * 10f + fv * 100f + 1000f)), -1, fc);
+                                ctx.Object(r.Local(fu, fv), r.Yaw, fc == AssetCategories.Bush ? ObjectRole.Bush : ObjectRole.Planter, AssetMix.One("", ParkArt.Flowerbeds), Hashing.Mix(v, (uint)(fu * 10f + fv * 100f + 1000f)), -1, fc);
                             }
                     // The bench closes the walk at the back, looking down it to the opening.
                     var seat = r.Local(0f, -towardAxis * (hw - 1.3f));
@@ -693,10 +751,10 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 case "sculpture":
                 {
                     string sc = st.Chains.Get(ctx.L("sculptureAssets").Length > 0, AssetCategories.MemorialSculpture, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
-                    if (ctx.B("paving")) ctx.Surface(LayerRegion.Circle(centre, math.min(2.4f, r.HalfWidth - 1.5f), 16), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+                    if (ctx.B("paving")) ctx.Surface(LayerRegion.Circle(centre, math.min(2.4f, r.HalfWidth - 1.5f), 16), SurfaceRole.Plaza, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
                     if (sc != null)
                     {
-                        ctx.Object(centre, LeisureKit.Yaw(centre, opening), ObjectRole.Centerpiece, AssetMix.Pick(ctx.L("sculptureAssets"), v), v, -1, sc);
+                        ctx.Object(centre, LeisureKit.Yaw(centre, opening), ObjectRole.Centerpiece, AssetMix.Pick(Or(ctx.L("sculptureAssets"), MemorialAssets.Sculptures), v), v, -1, sc);
                         st.Sculptures++;
                     }
                     var p = r.Local(benchSide, towardAxis * seatV);
@@ -705,7 +763,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 }
                 default:   // a single specimen tree, two benches beside the walk looking at it
                 {
-                    var treeIds = ctx.L("treeSpecies");
+                    var treeIds = Or(ctx.L("treeSpecies"), MemorialAssets.SpecimenTrees);
                     ctx.Object(centre, 0f, ObjectRole.Tree, AssetMix.Pick(treeIds, v), v, 3);
                     foreach (int sgn in new[] { -1, 1 })
                     {
@@ -721,7 +779,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 string lc = st.Chains.Get(false, AssetCategories.LampLow, AssetCategories.Lamp);
                 if (lc != null)
                     foreach (int sgn in new[] { -1, 1 })
-                        ctx.Object(opening + r.Axis * (sgn * 2.1f) - r.Side * towardAxis * 0.8f, 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset")), Hashing.Mix(v, (uint)(sgn + 21)), -1, lc);
+                        ctx.Object(opening + r.Axis * (sgn * 2.1f) - r.Side * towardAxis * 0.8f, 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset"), ParkArt.LowLights), Hashing.Mix(v, (uint)(sgn + 21)), -1, lc);
             }
             st.Rooms++;
         }
@@ -739,7 +797,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (Spots.Find(occ, fr + 1f, Spots.Preference.NearPaths, Hashing.Mix(ctx.Seed, 0xF0Cu), out var mon, null, 0f, 2f, 2500))
             {
                 st.Monument = mon; st.Forecourt = fr;
-                ctx.Surface(LayerRegion.Circle(mon, fr, 24), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
+                ctx.Surface(LayerRegion.Circle(mon, fr, 24), SurfaceRole.Plaza, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
                 occ.Take(mon, fr, 0);
                 var dir = new float2(0, 1);
                 if (occ.Paths.Nearest(mon, 500f, out var foot) >= 0)
@@ -757,7 +815,8 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (ctx.B("pool"))
             {
                 float w = ctx.F("poolWidth"), len = math.clamp(math.sqrt(region.Area) * ctx.F("poolLength") / 100f, 8f, 60f);
-                LeisureKit.Frame(region, out _, out var axis, out _, out _, out _);
+                LeisureKit.Frame(region, out _, out var axis, out _, out float major, out float minor);
+                if (minor > major * 0.85f) axis = LongestEdge(region);   // square to the street, not diagonal
                 bool placed = false;
                 for (int i = 0; i < 4 && !placed; i++, len *= 0.8f)
                 {
@@ -785,32 +844,39 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                     {
                         if (!occ.Free(an.Position, 3.6f, 4.2f, 0.3f)) continue;
                         uint v = Hashing.Mix(ctx.Seed, 0x5C00u + (uint)i++);
-                        if (ctx.B("paving")) ctx.Surface(LayerRegion.Circle(an.Position, 2.2f, 14), SurfaceRole.Plaza, AssetMix.One(""), AssetCategories.SurfacePaving);
-                        ctx.Object(an.Position, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Centerpiece, AssetMix.Pick(ids, v), v, -1, sc);
+                        if (ctx.B("paving")) ctx.Surface(LayerRegion.Circle(an.Position, 2.2f, 14), SurfaceRole.Plaza, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
+                        ctx.Object(an.Position, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Centerpiece, AssetMix.Pick(Or(ids, MemorialAssets.Sculptures), v), v, -1, sc);
                         st.Sculptures++;
                         if (hedgeCat != null)
                         {
                             var away = math.normalizesafe(an.Position - an.Toward);
                             float a0 = math.atan2(away.y, away.x);
-                            for (int k = -3; k <= 3; k++)
+                            // Art pass (a1): three ~4 m hedge pieces laid along the arc (tangent), not seven fanned radially
+                            // through each other; plain shrubs keep the old tight arc.
+                            bool pieces = hedgeCat == AssetCategories.Hedge;
+                            float rad = pieces ? 3.6f : 3.2f, stepA = pieces ? 4.1f / 3.6f : 0.32f;
+                            int half = pieces ? 1 : 3;
+                            for (int k = -half; k <= half; k++)
                             {
-                                float a = a0 + k * 0.32f;
-                                var p = an.Position + new float2(math.cos(a), math.sin(a)) * 3.2f;
-                                ctx.Object(p, a, ObjectRole.Bush, AssetMix.One(ctx.S("hedgeAsset")), v, -1, hedgeCat);
+                                float a = a0 + k * stepA;
+                                var p = an.Position + new float2(math.cos(a), math.sin(a)) * rad;
+                                var tangent = new float2(-math.sin(a), math.cos(a));
+                                ctx.Object(p, pieces ? math.atan2(tangent.x, tangent.y) : a, ObjectRole.Bush,
+                                    pieces ? AssetMix.One(ctx.S("hedgeAsset"), ParkArt.HighHedge) : AssetMix.Pick(ParkArt.GreenShrubs, v), v, -1, hedgeCat);
                             }
                         }
                         occ.Take(an.Position, 3.6f, 2);
                         if (ctx.S("lighting") == "uplights")
                         {
                             string lc = st.Chains.Get(false, AssetCategories.LampLow, AssetCategories.Lamp);
-                            if (lc != null) ctx.Object(math.lerp(an.Position, an.Toward, 0.45f), 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset")), Hashing.Mix(v, 3u), -1, lc);
+                            if (lc != null) ctx.Object(math.lerp(an.Position, an.Toward, 0.45f), 0f, ObjectRole.Lamp, AssetMix.One(ctx.S("lampAsset"), ParkArt.LowLights), Hashing.Mix(v, 3u), -1, lc);
                         }
                     }
                     if (st.Sculptures < want) ctx.Issue(IssueSeverity.Info, K + "Issue.FewerSculptures", st.Sculptures, want);
                 }
             }
             // Benches along the trail between the sculptures.
-            PathBenches(ctx, occ, 45f, AssetMix.One(""), 0xBE77u);
+            PathBenches(ctx, occ, 45f, AssetMix.One("", ParkArt.Benches), 0xBE77u);
         }
 
         // ───────────── edges & lights ─────────────
@@ -820,9 +886,9 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             var ctx = st.Ctx; var region = st.Region;
             string cat = st.Chains.Get(ctx.S("hedgeAsset").Length > 0, AssetCategories.Hedge, AssetCategories.Bush);
             if (cat == null) return;
-            var hedge = AssetMix.One(ctx.S("hedgeAsset"));
+            var hedge = AssetMix.One(ctx.S("hedgeAsset"), ParkArt.HighHedge);
             int n = 0;
-            for (float s = 0.8f; s < region.Perimeter && n < 4000; s += 1.7f)
+            for (float s = 0.8f; s < region.Perimeter && n < 4000; s += cat == AssetCategories.Hedge ? 4.1f : 1.7f)
             {
                 var e = region.PointAt(s, out var t, out var inward, out _);
                 var p = e + inward * 1.1f;
@@ -841,7 +907,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             var ctx = st.Ctx;
             string cat = chainLow ? st.Chains.Get(false, AssetCategories.LampLow, AssetCategories.Lamp) : null;
             if (chainLow && cat == null) return;
-            var lamp = AssetMix.One(ctx.S("lampAsset"));
+            var lamp = AssetMix.One(ctx.S("lampAsset"), chainLow ? ParkArt.LowLights : ParkArt.ParkLamps);
             int n = 0;
             int k = 0;
             foreach (var (p, nrm, hw) in PathWalk.Every(st.Occ, interval))

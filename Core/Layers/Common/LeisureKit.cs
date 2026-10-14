@@ -70,6 +70,44 @@ namespace Placemaker.Core.Layers.Common
             if (region.Contains(mid)) centre = mid;
         }
 
+        /// <summary>
+        /// Frame for axial layouts that aims at the entrances (s9): the main axis runs along the inward normal of
+        /// the first gate when the outline is near-square (else it stays the long axis), and both axes shift
+        /// sideways (up to a quarter of the span) so they pass through the first gate facing them. Without
+        /// gates, the plain Frame.
+        /// </summary>
+        public static void FrameToward(LayerRegion region, IReadOnlyList<float2> gates, out float2 centre, out float2 axis, out float2 side,
+            out float majorSpan, out float minorSpan)
+        {
+            Frame(region, out centre, out axis, out side, out majorSpan, out minorSpan);
+            if (gates == null || gates.Count == 0) return;
+            var n0 = GateApproach.Inward(region, gates[0]);
+            if (minorSpan >= majorSpan * 0.75f && math.abs(math.dot(n0, side)) > math.abs(math.dot(n0, axis)))
+            {
+                var t = axis; axis = side; side = -t;
+                var s = majorSpan; majorSpan = minorSpan; minorSpan = s;
+            }
+            // Shift each axis line through the first gate facing it (gate normal along that axis).
+            bool shiftedMain = false, shiftedCross = false;
+            foreach (var g in gates)
+            {
+                var n = GateApproach.Inward(region, g);
+                var d = g - centre;
+                if (!shiftedMain && math.abs(math.dot(n, axis)) > 0.85f)
+                {
+                    float off = math.dot(d, side);
+                    if (math.abs(off) <= minorSpan * 0.25f && region.Contains(centre + side * off)) { centre += side * off; }
+                    shiftedMain = true;
+                }
+                else if (!shiftedCross && math.abs(math.dot(n, side)) > 0.85f)
+                {
+                    float off = math.dot(d, axis);
+                    if (math.abs(off) <= majorSpan * 0.25f && region.Contains(centre + axis * off)) { centre += axis * off; }
+                    shiftedCross = true;
+                }
+            }
+        }
+
         /// <summary>True when the rectangle (plus margin) lies inside the region and is free in the occupancy.</summary>
         public static bool RectFits(LayerRegion region, Occupancy occ, OrientedRect r, float margin, float gap = 0.3f)
         {

@@ -62,6 +62,7 @@ namespace Placemaker.Tests
             s.Values["arrangement"] = new[] { "bush", "bench", "lamp:MyLamp", "bench", "bush" };
             s.Values["arrangementMode"] = mode;
             s.Values["furniture"] = 8.0;
+            s.Values["treeLayout"] = "none"; s.Values["beds"] = 0.0;   // the arrangement alone (no allée benches, no bed bushes)
             var input = TestKit.Input(Square, s);
             input.Reserved.AddDisc(new float2(10, 10), 4f, "Tree");
             var plan = TestKit.Plan("plaza", input);

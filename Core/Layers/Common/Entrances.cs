@@ -363,8 +363,14 @@ namespace Placemaker.Core.Layers.Common
                 gates.Add(new Gate { Position = p, Segment = seg, T = t, AttachId = -1, Kind = k });
             }
             if (gates.Count == 0)
+            {
+                // s9: no entrance placed yet (Build is blocked until one is). The suggestions still shape the
+                // layout (so placing them changes little), but never attach to a road; LayerBase trims the path
+                // ends at the outline back inside (TrimUnplacedEntrances), so the paths stay internal.
                 foreach (var m in SuggestTyped(input, region, wanted, kinds))
                     gates.Add(new Gate { Position = m.Position.xz, Segment = m.RingSegment, T = m.RingT, AttachId = -1, Suggested = true, Kind = m.Kind });
+                return gates;
+            }
             for (int i = 0; i < gates.Count; i++)
             {
                 var g = gates[i];
@@ -373,6 +379,9 @@ namespace Placemaker.Core.Layers.Common
             }
             return gates;
         }
+
+        /// <summary>How far inside the outline paths stop while no entrance is placed (m).</summary>
+        public static float UnplacedInset => math.max(Layout.M(8f, 5f), Layout.EdgeMargin + 4f);
 
         /// <summary>
         /// Suggested entrances with kinds picked from the net each one faces: bike paths and roads with bike

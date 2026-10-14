@@ -81,7 +81,10 @@ namespace Placemaker.Core.Layers.AddOns
                     float ga = baseAngle + (g == 0 ? 0f : math.PI * (0.7f + 0.6f * Hashing.Unit(gs)) + g * 0.9f);
                     float gd = R * (g == 0 ? 0.15f + 0.2f * Hashing.Unit(Hashing.Mix(gs, 1u)) : 0.45f + 0.25f * Hashing.Unit(Hashing.Mix(gs, 1u)));
                     var anchor = c + new float2(math.cos(ga), math.sin(ga)) * gd;
-                    rocks += Group(ctx, occ, region, anchor, groups[g], g == 0 ? 1f : 0.75f, rockR, ids, gs);
+                    // Art pass a6: the automatic rock pool is all 1 m stones; the main huddle of a medium or
+                    // large outcrop leans on a real vanilla boulder (4–5 m), so the outcrop has a mass.
+                    bool boulder = g == 0 && ids.Length == 0 && ctx.S("size") != "small";
+                    rocks += Group(ctx, occ, region, anchor, groups[g], g == 0 ? 1f : 0.75f, rockR, ids, gs, boulder);
                 }
 
                 // A few low plants at the rim (odd count, irregular).
@@ -103,23 +106,41 @@ namespace Placemaker.Core.Layers.AddOns
         /// One huddle: a big anchor stone and smaller stones leaning on it from one side (an arc, not a
         /// ring), sizes falling off. Returns how many rocks were placed.
         /// </summary>
-        private static int Group(LayerContext ctx, Occupancy occ, LayerRegion region, float2 anchor, int count, float sizeK, float rockR, string[] ids, uint seed)
+        private static readonly string[] Boulders = { "Boulder01", "Boulder02", "Boulder03", "Boulder04", "Boulder05", "Boulder06", "Boulder07", "Boulder08" };
+
+        private static int Group(LayerContext ctx, Occupancy occ, LayerRegion region, float2 anchor, int count, float sizeK, float rockR, string[] ids, uint seed,
+            bool boulder = false)
         {
             int placed = 0;
             float anchorScale = (1.5f + 0.5f * Hashing.Unit(seed)) * sizeK;
+            // A boulder anchor is ~2.4 m in radius at scale 1 (rocks ~0.6 m); the stones lean on its flank.
+            float boulderScale = 0.6f + 0.3f * Hashing.Unit(Hashing.Mix(seed, 9u));
+            float boulderR = 2.4f * boulderScale;
             float side = Hashing.Unit(Hashing.Mix(seed, 2u)) * 6.283f;
             for (int i = 0; i < count; i++)
             {
                 uint v = Hashing.Mix(seed, (uint)i * 7919u + 13u);
                 float scale;
                 float2 p;
-                if (i == 0) { scale = anchorScale; p = anchor; }
+                if (i == 0 && boulder)
+                {
+                    if (region == null || !region.ContainsDisc(anchor, boulderR) || !occ.Free(anchor, boulderR, 0.3f, 0.05f)) { boulder = false; scale = anchorScale; p = anchor; }
+                    else
+                    {
+                        var b = ctx.Object(anchor, Hashing.Unit(Hashing.Mix(v, 5u)) * 6.283f, ObjectRole.Furniture, AssetMix.Pick(Boulders, v), v, -1, AssetCategories.Rock);
+                        b.Scale = boulderScale;
+                        occ.Take(anchor, boulderR, 2);
+                        placed++;
+                        continue;
+                    }
+                }
+                else if (i == 0) { scale = anchorScale; p = anchor; }
                 else
                 {
                     // Descending sizes with jitter; placed against the anchor within a ~220° arc.
                     scale = math.max(0.45f, anchorScale * (0.75f - 0.07f * i) * (0.8f + 0.4f * Hashing.Unit(v)));
                     float a = side + (Hashing.Unit(Hashing.Mix(v, 1u)) - 0.5f) * 3.8f;
-                    float d = rockR * (anchorScale * 0.7f + scale * 0.6f) * (0.85f + 0.45f * Hashing.Unit(Hashing.Mix(v, 2u)));
+                    float d = (boulder ? boulderR + rockR * scale * 0.6f + 0.4f : rockR * (anchorScale * 0.7f + scale * 0.6f)) * (0.85f + 0.45f * Hashing.Unit(Hashing.Mix(v, 2u)));
                     if (i > 4) d *= 1.5f;   // the last pebbles trail away from the huddle
                     p = anchor + new float2(math.cos(a), math.sin(a)) * d;
                 }

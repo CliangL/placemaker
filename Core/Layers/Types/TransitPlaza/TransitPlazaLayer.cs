@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
+using Placemaker.Core.Layers.Plaza;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Types.Transport
@@ -108,6 +109,14 @@ namespace Placemaker.Core.Layers.Types.Transport
 
         private enum Bay { Bus = 0, Taxi = 1, DropOff = 2 }
 
+        // Art pass a2: designed defaults. The automatic pools are unusable here: transport.bikeRack holds
+        // 40 m bicycle parking halls, transport.shelter is empty (→ pergolas), transport.sign holds a 7 m
+        // tram shelter. Racks and bike shelters are the vanilla parking props; shelters the stop shelters.
+        private static readonly AssetRef BusShelter = new AssetRef("EU_BusStop02", "NA_BusStop02", "TramStation Shelter");
+        private static readonly AssetRef TaxiShelter = new AssetRef("EU_TaxiStop02", "NA_TaxiStop02", "EU_BusStop02");
+        private static readonly string[] Racks = { "BikeRack01", "BikeRack02", "BikeRack03" };
+        private static readonly string[] BikeShelters = { "BicycleShelter01", "BicycleShelter02", "BicycleShelter03" };
+
         protected override void PlanCore(LayerContext ctx)
         {
             var full = ctx.LayerRegion;
@@ -172,31 +181,41 @@ namespace Placemaker.Core.Layers.Types.Transport
             ctx.Check();
 
             // ── Forecourt paving ──
-            var pavingAsset = AssetMix.One(ctx.S("pavingAsset"), "Pavement Surface 01");
+            // Art pass a2: the forecourt is laid in concrete blocks, framed in dark slabs, with a light
+            // platform strip along the kerb, a rondel round the focal point, tree pits and a bike floor
+            // (PavingKit tiling, emitted at the end once everything that cuts into it is known).
+            var palette = PavingPalettes.WithField(PavingPalettes.Transit, ctx.S("pavingAsset"));
+            var pave = new PavingPlan { Axis = t };
             ctx.NavigationArea(plazaRing, AreaRole.PedestrianArea, new AssetRef("", "Pedestrian Area", "Walking Area"));
-            ctx.Surface(plazaRing, SurfaceRole.Plaza, pavingAsset, AssetCategories.SurfacePaving);
             var plazaRegion = LayerRegion.From(plazaRing) ?? region;
+            if (placedBus + placedTaxi + placedDrop > 0)
+                pave.Add(TransportKit.FrameRect(fa, t, n, k0, k1, kerbDepth, kerbDepth + 3f), SurfaceRole.Plaza, palette.Accent, AssetCategories.SurfacePaving);
 
             // Focal point on the axis from the middle of the kerb inwards.
             float uc = (k0 + k1) * 0.5f;
             var focal = fa + t * uc + n * (kerbDepth + math.max(8f, (vMax - kerbDepth) * 0.45f));
             if (!plazaRegion.ContainsDisc(focal, 6f) || occ.Clearance(focal, 6f) < 5f) focal = plazaRegion.DeepestPoint(out _, (q, cap) => occ.Clearance(q, cap), 14);
-            bool centre = ctx.B("centrepiece") || style == "forecourt";
+            bool centre = (ctx.B("centrepiece") || style == "forecourt" || style == "bikeHub") && PlazaArt.Available(ctx, "", AssetCategories.Centerpiece, AssetCategories.CenterpieceStatue);
             if (centre)
             {
-                string cat = LeisureKit.Category(ctx, "", AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
-                if (cat != null) LeisureKit.Put(ctx, occ, focal, LeisureKit.Yaw(focal, focal - n), ObjectRole.Centerpiece, AssetMix.One(""), cat, 2.5f, Hashing.Mix(ctx.Seed, 0xCE1u), 1f, 0.3f, 0);
+                // The bicycle sculpture: a station forecourt's landmark and a bike hub's mascot.
+                var focalAsset = style == "forecourt" ? new AssetRef("BicycleStatue01", "LargeFountain02") : PlazaArt.Sculpture;
+                if (LeisureKit.Put(ctx, occ, focal, LeisureKit.Yaw(focal, focal - n), ObjectRole.Centerpiece, focalAsset, AssetCategories.Centerpiece, 3f, Hashing.Mix(ctx.Seed, 0xCE1u), 1f, 0.3f, 0))
+                    ctx.Plan.Facts["focal"] = 1;
             }
             occ.Take(focal, 5f, 2);   // the focal space stays open (the fountain feature lands here)
+            var phase = math.atan2(t.y, t.x);
+            pave.Add(PavingShapes.Polygon(focal, 6.5f, 40, phase), SurfaceRole.Plaza, palette.Accent, AssetCategories.SurfacePaving);
+            pave.Add(PavingShapes.Annulus(focal, 6.5f, 1f), SurfaceRole.Plaza, palette.Band, AssetCategories.SurfacePaving);
             ctx.Check();
 
             // ── Bikes ──
-            int racks = BikeRows(ctx, occ, region, fa, t, n, uc, kerbDepth);
+            int racks = BikeRows(ctx, occ, region, fa, t, n, uc, kerbDepth, pave, palette);
             ctx.Check();
 
             // ── Trees ──
             var trees = new List<float2>();
-            Trees(ctx, occ, plazaRegion, region, fa, t, n, trees);
+            Trees(ctx, occ, plazaRegion, region, fa, t, n, trees, pave);
             ctx.Check();
 
             // ── Benches, signs, kiosks, lamps, bins ──
@@ -204,6 +223,11 @@ namespace Placemaker.Core.Layers.Types.Transport
             Signs(ctx, occ, gates, focal, t);
             Kiosks(ctx, occ);
             if (ctx.B("lamps")) Lamps(ctx, occ, region, fa, t, n);
+
+            // Ground last: pits under the paved trees, the frame, the field.
+            foreach (var tr in trees) pave.Add(LayerRegion.Rect(tr, t, 1.1f, 1.1f), SurfaceRole.Plaza, palette.Inlay, AssetCategories.SurfacePaving);
+            pave.Add(PavingShapes.Frame(plazaRing, PlazaDressing.FrameWidth(plazaRegion)), SurfaceRole.Plaza, palette.Band, AssetCategories.SurfacePaving);
+            pave.Emit(ctx, plazaRing, SurfaceRole.Plaza, palette.Field, AssetCategories.SurfacePaving);
 
             ctx.AddRegion(plazaRing, "paved", RegionTags.Paved);
             ctx.AddRegion(LayerRegion.Circle(focal, 5f, 20), "core", RegionTags.Core, RegionTags.Paved);
@@ -265,9 +289,10 @@ namespace Placemaker.Core.Layers.Types.Transport
             var facing = LeisureKit.Yaw(float2.zero, -n);   // platform furniture faces the kerb
             string marks = AssetAvailability.Has(AssetCategories.DecalMarkings) ? AssetCategories.DecalMarkings : null;
             if (marks == null) AssetAvailability.Require(ctx.Plan, AssetCategories.DecalMarkings, null, Keys.Category(AssetCategories.DecalMarkings));
-            string shelter = ctx.B("bayShelters") ? LeisureKit.Category(ctx, ctx.S("shelterAsset"), AssetCategories.TransportShelter, AssetCategories.Shelter) : null;
-            string sign = LeisureKit.Category(ctx, ctx.S("signAsset"), AssetCategories.Wayfinding);
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            // Designed shelters/signs are explicit: categories only label them (never an empty pool's fallback).
+            string shelter = ctx.B("bayShelters") && PlazaArt.Available(ctx, "shelterAsset", AssetCategories.TransportShelter, AssetCategories.Shelter) ? AssetCategories.TransportShelter : null;
+            string sign = PlazaArt.Available(ctx, "signAsset", AssetCategories.Wayfinding) ? AssetCategories.Wayfinding : null;
+            var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.ModernBenches, 0);
             uint seed = Hashing.Mix(ctx.Seed, 0xBA70u);
             var prev = (Bay)(-1);
             int index = 0;
@@ -296,17 +321,17 @@ namespace Placemaker.Core.Layers.Types.Transport
                     case Bay.Bus:
                         placedBus++;
                         if (shelter != null)
-                            LeisureKit.Put(ctx, occ, platform, facing, ObjectRole.Furniture, AssetMix.One(ctx.S("shelterAsset")), shelter, 2.0f, Hashing.Mix(v, 3u), 0.3f, 0.2f, 0);
+                            LeisureKit.Put(ctx, occ, platform, facing, ObjectRole.Furniture, PlazaArt.Or(ctx, "shelterAsset", BusShelter), shelter, 2.0f, Hashing.Mix(v, 3u), 0.3f, 0.2f, 0);
                         else LeisureKit.Put(ctx, occ, platform, facing, ObjectRole.Bench, bench, null, 1.0f, Hashing.Mix(v, 3u));
-                        if (sign != null) LeisureKit.Put(ctx, occ, fa + t * (u + len - 1.2f) + n * (depth + 0.9f), facing, ObjectRole.Furniture, AssetMix.One(ctx.S("signAsset")), sign, 0.4f, Hashing.Mix(v, 4u), 0.2f, 0.2f);
+                        if (sign != null) LeisureKit.Put(ctx, occ, fa + t * (u + len - 1.2f) + n * (depth + 0.9f), facing, ObjectRole.Furniture, PlazaArt.Or(ctx, "signAsset", PlazaArt.Signpost), sign, 0.4f, Hashing.Mix(v, 4u), 0.2f, 0.2f);
                         break;
                     case Bay.Taxi:
                         placedTaxi++;
                         if (prev != Bay.Taxi)
                         {
-                            if (sign != null) LeisureKit.Put(ctx, occ, fa + t * (u + 0.8f) + n * (depth + 0.9f), facing, ObjectRole.Furniture, AssetMix.One(ctx.S("signAsset")), sign, 0.4f, Hashing.Mix(v, 5u), 0.2f, 0.2f);
+                            if (sign != null) LeisureKit.Put(ctx, occ, fa + t * (u + 0.8f) + n * (depth + 0.9f), facing, ObjectRole.Furniture, PlazaArt.Or(ctx, "signAsset", PlazaArt.Signpost), sign, 0.4f, Hashing.Mix(v, 5u), 0.2f, 0.2f);
                             if (shelter != null && ctx.I("taxis") >= 4)
-                                LeisureKit.Put(ctx, occ, fa + t * (u + 3f) + n * (depth + 2.2f), facing, ObjectRole.Furniture, AssetMix.One(ctx.S("shelterAsset")), shelter, 2.0f, Hashing.Mix(v, 6u), 0.3f, 0.2f, 0);
+                                LeisureKit.Put(ctx, occ, fa + t * (u + 3f) + n * (depth + 2.2f), facing, ObjectRole.Furniture, PlazaArt.Or(ctx, "shelterAsset", TaxiShelter), shelter, 2.0f, Hashing.Mix(v, 6u), 0.3f, 0.2f, 0);
                         }
                         break;
                     default:
@@ -319,100 +344,130 @@ namespace Placemaker.Core.Layers.Types.Transport
             }
 
             // Bollards along the platform edge keep cars on the lay-by.
-            if (ctx.B("bollards"))
+            if (ctx.B("bollards") && PlazaArt.Available(ctx, "bollardAsset", AssetCategories.Bollard))
             {
-                string bol = LeisureKit.Category(ctx, ctx.S("bollardAsset"), AssetCategories.Bollard);
-                if (bol != null)
-                {
-                    int i = 0;
-                    for (float b = k0 + 0.5f; b <= k1 - 0.5f; b += 2.5f)
-                        LeisureKit.Put(ctx, occ, fa + t * b + n * (depth + 0.45f), 0f, ObjectRole.Furniture, AssetMix.One(ctx.S("bollardAsset")), bol, 0.25f, Hashing.Mix(seed, 0x800u + (uint)i++), 0.1f, 0.15f);
-                }
+                int i = 0;
+                for (float b = k0 + 0.5f; b <= k1 - 0.5f; b += 2.5f)
+                    LeisureKit.Put(ctx, occ, fa + t * b + n * (depth + 0.45f), 0f, ObjectRole.Furniture, PlazaArt.Or(ctx, "bollardAsset", PlazaArt.Bollard), AssetCategories.Bollard, 0.25f, Hashing.Mix(seed, 0x800u + (uint)i++), 0.1f, 0.15f);
             }
         }
 
         // ───────────── bikes ─────────────
 
-        private static int BikeRows(LayerContext ctx, Occupancy occ, LayerRegion region, float2 fa, float2 t, float2 n, float uc, float kerbDepth)
+        private static int BikeRows(LayerContext ctx, Occupancy occ, LayerRegion region, float2 fa, float2 t, float2 n, float uc, float kerbDepth,
+            PavingPlan pave, PavingPalette palette)
         {
             int want = ctx.I("bikeRacks");
-            if (want <= 0) return 0;
-            string cat = LeisureKit.Category(ctx, ctx.S("bikeRackAsset"), AssetCategories.BikeRack);
-            if (cat == null) return 0;
+            if (want <= 0 || !PlazaArt.Available(ctx, "bikeRackAsset", AssetCategories.BikeRack)) return 0;
+            bool sheltered = ctx.B("bikeShelters") && AssetAvailability.Has(AssetCategories.Shelter);
+            bool chosen = !string.IsNullOrEmpty(ctx.S("bikeRackAsset"));
+            // A row: five racks 1.6 m apart, or two bike shelters end to end (each holds its own racks).
             const int perRow = 5;
             int rows = (want + perRow - 1) / perRow;
-            // Rows start at the kerb side so bikes are parked where people arrive.
-            var centre = fa + t * uc + n * (kerbDepth + 6f);
-            var packed = LeisureKit.Pack(region, occ, centre, t, 7f, 2.6f, 2.5f, 3f, rows, 0.8f, false, true);
-            string shelter = ctx.B("bikeShelters") ? LeisureKit.Category(ctx, ctx.S("shelterAsset"), AssetCategories.Shelter) : null;
-            var asset = AssetMix.One(ctx.S("bikeRackAsset"));
+            var centre = fa + t * uc + n * (kerbDepth + 8f);
+            var packed = LeisureKit.Pack(region, occ, centre, t, 8.4f, 2.8f, 2.4f, 3f, rows, 1.2f, false, true);
             int placed = 0, row = 0;
             foreach (var r in packed)
             {
                 uint v = Hashing.Mix(ctx.Seed, 0xB1C0u + (uint)row++);
-                if (shelter != null) ctx.Object(r.Center, r.Yaw, ObjectRole.Furniture, AssetMix.One(ctx.S("shelterAsset")), v, -1, shelter);
+                pave.Add(new OrientedRect { Center = r.Center, Axis = r.Axis, HalfLength = r.HalfLength + 0.8f, HalfWidth = r.HalfWidth + 0.8f }.Ring,
+                    SurfaceRole.Plaza, palette.Inlay, AssetCategories.SurfacePaving);
+                if (sheltered && !chosen)
+                {
+                    foreach (float side in new[] { -1f, 1f })
+                    {
+                        if (placed >= want) break;
+                        ctx.Object(r.Local(side * 2.1f, 0f), r.Yaw, ObjectRole.Furniture, AssetMix.Pick(BikeShelters, v), Hashing.Mix(v, (uint)(side + 2)), -1, AssetCategories.Shelter);
+                        placed += perRow / 2 + 1;
+                    }
+                    continue;
+                }
                 for (int k = 0; k < perRow && placed < want; k++)
                 {
-                    ctx.Object(r.Local(-2.6f + k * 1.3f, 0f), r.Yaw + 1.5708f, ObjectRole.Furniture, asset, Hashing.Mix(v, (uint)k), -1, cat);
+                    var asset = PlazaArt.Or(ctx, "bikeRackAsset", Racks, v);
+                    ctx.Object(r.Local(-3.2f + k * 1.6f, 0f), r.Yaw + 1.5708f, ObjectRole.Furniture, asset, Hashing.Mix(v, (uint)k), -1, AssetCategories.BikeRack);
                     placed++;
                 }
             }
-            if (ctx.B("bikeService") && packed.Count > 0)
+            placed = System.Math.Min(placed, want);
+            if (ctx.B("bikeService") && packed.Count > 0 && PlazaArt.Available(ctx, "", AssetCategories.Kiosk))
             {
-                string svc = LeisureKit.Category(ctx, "", AssetCategories.Kiosk);
                 var r0 = packed[0];
-                if (svc != null)
-                    foreach (float side in new[] { 1f, -1f })
-                        if (LeisureKit.Put(ctx, occ, r0.Local(side * (r0.HalfLength + 2.6f), 0f), r0.Yaw, ObjectRole.Furniture, AssetMix.One(""), svc, 1.8f, Hashing.Mix(ctx.Seed, 0xB5EFu), 0.3f, 0.3f, 0)) break;
+                foreach (float side in new[] { 1f, -1f })
+                    if (LeisureKit.Put(ctx, occ, r0.Local(side * (r0.HalfLength + 2.8f), 0f), r0.Yaw, ObjectRole.Furniture, PlazaArt.Or(ctx, "", PlazaArt.Kiosks, 1u), AssetCategories.Kiosk, 2.2f,
+                        Hashing.Mix(ctx.Seed, 0xB5EFu), 0.3f, 0.3f, 0)) break;
             }
             return placed;
         }
 
         // ───────────── trees ─────────────
 
-        private static void Trees(LayerContext ctx, Occupancy occ, LayerRegion plaza, LayerRegion region, float2 fa, float2 t, float2 n, List<float2> placed)
+        private static void Trees(LayerContext ctx, Occupancy occ, LayerRegion plaza, LayerRegion region, float2 fa, float2 t, float2 n, List<float2> placed, PavingPlan pave)
         {
             string layout = ctx.S("treeLayout");
             if (layout == "none") return;
             bool planters = ctx.B("planters");
             var ids = ctx.L("treeSpecies");
-            if (!planters && !AssetAvailability.Has(AssetCategories.Tree) && ids.Length == 0)
-            {
-                AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, null, Keys.Category(AssetCategories.Tree));
-                return;
-            }
+            if (ids == null || ids.Length == 0) ids = PlazaArt.PlaneTrees;
             var role = planters ? ObjectRole.Planter : ObjectRole.Tree;
-            float r = planters ? 1.2f : 2.2f;
-            void Try(float2 p, uint salt)
+            float r = planters ? 1.2f : 2.4f;
+            float edge = PlazaDressing.FrameWidth(plaza) + 1.2f;
+            bool Try(float2 p, uint salt, bool pit)
             {
-                if (!plaza.Contains(p)) return;
+                if (!plaza.ContainsDisc(p, edge)) return false;
                 uint v = Hashing.Mix(ctx.Seed, salt);
-                if (LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, role, planters ? AssetMix.One("") : AssetMix.Pick(ids, v), null, r, v, 1.2f, 0.4f, 3, planters ? -1 : 2))
-                    placed.Add(p);
+                if (!LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, role, planters ? PlazaArt.Or(ctx, "", PlazaArt.Pots, v) : AssetMix.Pick(ids, v), planters ? AssetCategories.Planter : null, r, v, 1.2f, 0.4f, 3, planters ? -1 : 2))
+                    return false;
+                if (pit && !planters) placed.Add(p);
+                return true;
             }
             if (layout == "islands")
             {
-                int count = math.clamp((int)(plaza.Area / 700f), 1, 40);
+                // Planted islands: a lawn disc with three trees and a bench either side looking out.
+                int count = math.clamp((int)(plaza.Area / 900f), 1, 12);
                 var avoid = new List<float2>();
                 for (int i = 0; i < count; i++)
                 {
-                    if (!Spots.Find(occ, 5f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x15A0u + (uint)i), out var c, avoid, 14f, 1f, budget: 900)) break;
+                    if (!Spots.Find(occ, 6.5f, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x15A0u + (uint)i), out var c, avoid, 18f, edge, budget: 900)) break;
                     avoid.Add(c);
+                    pave.Add(PavingShapes.Polygon(c, 4.6f, 28), SurfaceRole.Grass, new AssetRef("", PavingPalettes.VGrass), AssetCategories.SurfaceGrass);
                     float ph = Hashing.Unit(Hashing.Mix(ctx.Seed, 0x15B0u + (uint)i)) * 6.283f;
-                    for (int k = 0; k < 3; k++)
-                        Try(c + new float2(math.cos(ph + k * 2.094f), math.sin(ph + k * 2.094f)) * 2.8f, 0x15C0u + (uint)(i * 4 + k));
-                    // A bench ring around each island.
+                    Try(c, 0x15C0u + (uint)i, false);
+                    for (int k = 0; k < 5; k++)
+                    {
+                        float a = ph + k * 1.2566f;
+                        uint bv = Hashing.Mix(ctx.Seed, 0x15C8u + (uint)(i * 8 + k));
+                        ctx.Object(c + new float2(math.cos(a), math.sin(a)) * 3.2f, a, ObjectRole.Bush, AssetMix.Pick(PlazaArt.CityBushes, bv), bv, -1, AssetCategories.Bush);
+                    }
+                    occ.Take(c, 4.8f, 3);
                     for (int k = 0; k < 2; k++)
                     {
                         float a = ph + 1.05f + k * 3.14f;
-                        var p = c + new float2(math.cos(a), math.sin(a)) * 5.6f;
-                        LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(c, p), ObjectRole.Bench, AssetMix.One(ctx.S("benchAsset")), null, 1.0f, Hashing.Mix(ctx.Seed, 0x15D0u + (uint)(i * 2 + k)));
+                        var dir = new float2(math.cos(a), math.sin(a));
+                        LeisureKit.Put(ctx, occ, c + dir * 6.2f, LeisureKit.Yaw(c, c + dir), ObjectRole.Bench, PlazaArt.Or(ctx, "benchAsset", PlazaArt.ModernBenches, 0), null, 1.0f, Hashing.Mix(ctx.Seed, 0x15D0u + (uint)(i * 2 + k)));
                     }
                 }
                 return;
             }
-            float along = layout == "rows" ? 8f : ctx.F("treeSpacing");
-            float across = layout == "rows" ? 18f : ctx.F("treeSpacing");
+            // Trees are real size: their spacing is never shrunk by the layout scale (a 6 m grid was a forest).
+            if (layout == "rows")
+            {
+                // Allées: two rows down each side of the forecourt, away from the street, trees 9 m apart.
+                float ru0 = float.MaxValue, ru1 = float.MinValue, rv = 0f;
+                foreach (var p in plaza.Ring)
+                {
+                    float u = math.dot(p - fa, t), v = math.dot(p - fa, n);
+                    ru0 = math.min(ru0, u); ru1 = math.max(ru1, u); rv = math.max(rv, v);
+                }
+                int k = 0;
+                foreach (float off in new[] { edge + 3f, edge + 10f })
+                    foreach (float u in new[] { ru0 + off, ru1 - off })
+                        for (float v = 9f; v < rv - edge - 2f; v += 9f)
+                            Try(fa + t * u + n * v, 0x7600u + (uint)k++, true);
+                return;
+            }
+            float along = math.max(10f, ctx.Raw("treeSpacing"));
+            float across = layout == "rows" ? 18f : math.max(10f, ctx.Raw("treeSpacing"));
             // Lattice in the frontage frame; rows (allées) run away from the street.
             float uMin = float.MaxValue, uMax = float.MinValue, vMax = 0f;
             foreach (var p in plaza.Ring)
@@ -421,14 +476,21 @@ namespace Placemaker.Core.Layers.Types.Transport
                 uMin = math.min(uMin, u); uMax = math.max(uMax, u); vMax = math.max(vMax, v);
             }
             float uc = (uMin + uMax) * 0.5f;
+            float concourse = math.max(10f, (uMax - uMin) * 0.2f);
+            float belt = layout == "rows" ? 14f : 26f;
             int i0 = (int)math.floor((uMin - uc) / across) - 1, i1 = (int)math.ceil((uMax - uc) / across) + 1;
             int count2 = 0;
             for (int iu = i0; iu <= i1; iu++)
-                for (float v = along * 0.5f + 4f; v < vMax; v += along)
+                for (float v = along * 0.5f + 8f; v < vMax; v += along)
                 {
                     if (count2++ > 4000) return;
                     float u = uc + (iu + 0.5f) * across;
-                    Try(fa + t * u + n * v, 0x7700u + (uint)count2);
+                    // The concourse from the kerb to the focal point stays open; the trees frame it as
+                    // bosques on both sides and a belt along the back, never an orchard over the square.
+                    if (math.abs(u - uc) < concourse && v < vMax - 16f) continue;
+                    var p = fa + t * u + n * v;
+                    if (plaza.BoundaryDistance(p, belt + 1f) > belt) continue;
+                    Try(p, 0x7700u + (uint)count2, true);
                 }
         }
 
@@ -437,10 +499,10 @@ namespace Placemaker.Core.Layers.Types.Transport
         private static int Benches(LayerContext ctx, Occupancy occ, float2 fa, float2 t, float2 n, float k0, float k1, float depth, List<float2> trees, float2 focal)
         {
             int want = ctx.I("benches");
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.ModernBenches, 0);
             int n0 = Count(ctx.Plan, ObjectRole.Bench), placed = 0;
             uint seed = Hashing.Mix(ctx.Seed, 0xBE70u);
-            var bin = AssetMix.One("");
+            var bin = PlazaArt.Bin;
             // Facing the focal point, round it.
             for (int i = 0; i < 6 && placed < want; i++)
             {
@@ -469,9 +531,9 @@ namespace Placemaker.Core.Layers.Types.Transport
         {
             int want = ctx.I("signs");
             if (want <= 0) return;
-            string cat = LeisureKit.Category(ctx, ctx.S("signAsset"), AssetCategories.Wayfinding);
-            if (cat == null) return;
-            var asset = AssetMix.One(ctx.S("signAsset"));
+            if (!PlazaArt.Available(ctx, "signAsset", AssetCategories.Wayfinding)) return;
+            string cat = AssetCategories.Wayfinding;
+            var asset = PlazaArt.Or(ctx, "signAsset", PlazaArt.Signpost);
             int placed = 0;
             var spots = new List<float2> { focal + t * 8f, focal - t * 8f };
             foreach (var g in gates)
@@ -488,21 +550,21 @@ namespace Placemaker.Core.Layers.Types.Transport
         {
             int want = ctx.I("kiosks");
             if (want <= 0) return;
-            string cat = LeisureKit.Category(ctx, "", AssetCategories.Kiosk);
-            if (cat == null) return;
+            if (!PlazaArt.Available(ctx, "", AssetCategories.Kiosk)) return;
+            string cat = AssetCategories.Kiosk;
             var avoid = new List<float2>();
             for (int i = 0; i < want; i++)
             {
                 if (!Spots.Find(occ, 2.4f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x4100u + (uint)i), out var p, avoid, 20f, 1f, budget: 900)) break;
                 avoid.Add(p);
-                LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, ctx.LayerRegion.Centroid), ObjectRole.Furniture, AssetMix.One(""), cat, 2.2f, Hashing.Mix(ctx.Seed, 0x4200u + (uint)i), 0.5f, 0.3f, 0);
+                LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, ctx.LayerRegion.Centroid), ObjectRole.Furniture, AssetMix.Pick(PlazaArt.Kiosks, (uint)i), cat, 2.6f, Hashing.Mix(ctx.Seed, 0x4200u + (uint)i), 0.5f, 0.3f, 0);
             }
         }
 
         private static void Lamps(LayerContext ctx, Occupancy occ, LayerRegion region, float2 fa, float2 t, float2 n)
         {
-            float s = ctx.F("lampSpacing");
-            var lamp = AssetMix.One(ctx.S("lampAsset"));
+            float s = math.max(12f, ctx.Raw("lampSpacing"));
+            var lamp = PlazaArt.Or(ctx, "lampAsset", PlazaArt.StreetLamp);
             float uMin = float.MaxValue, uMax = float.MinValue, vMax = 0f;
             foreach (var p in region.Ring)
             {
