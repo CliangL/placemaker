@@ -1,7 +1,7 @@
 {
   "Placemaker.Waterfront.Name": "Waterfront",
   "Placemaker.Recipe.Waterfront": "Waterfront",
-  "Placemaker.Recipe.Waterfront.Description": "A promenade along the water's edge: railings, lamps and benches facing the water, steps down, piers, kiosks and a tree row.",
+  "Placemaker.Recipe.Waterfront.Description": "A designed edge to the water, fitted to the terrain: a quay, walkway quay, boardwalk or natural bank at the water, a smooth embankment up to one level promenade with benches facing the water, lamps, planted beds and trees, piers from landings, step flights down to the river. Cliffs stay natural, with a cliff-top walk.",
 
   "Placemaker.UI.Group.waterfront": "Waterfront",
   "Placemaker.UI.Group.promenade": "Promenade",
@@ -10,7 +10,7 @@
   "Placemaker.UI.Group.harbor": "Harbor life",
 
   "Placemaker.Waterfront.style": "Waterfront type",
-  "Placemaker.Waterfront.style.Tooltip": "Promenade, pier & boardwalk, harbor walk, river steps or fishing spot.",
+  "Placemaker.Waterfront.style.Tooltip": "Promenade boardwalk, pier park, harbour quay, river steps or natural bank: each sets the water edge, the promenade and the planting.",
   "Placemaker.Waterfront.style.promenade": "Promenade",
   "Placemaker.Waterfront.style.pier": "Pier",
   "Placemaker.Waterfront.style.harbor": "Harbor",
@@ -25,9 +25,9 @@
   "Placemaker.Waterfront.waterSide.south": "South",
   "Placemaker.Waterfront.waterSide.west": "West",
   "Placemaker.Waterfront.promWidth": "Promenade width",
-  "Placemaker.Waterfront.promWidth.Tooltip": "Depth of the promenade from the water's edge. From about 11 m benches fit between the edge and the walk.",
+  "Placemaker.Waterfront.promWidth.Tooltip": "Distance from the water to the promenade (on a harbour quay: the depth of the paved apron behind the quay).",
   "Placemaker.Waterfront.railings": "Railings",
-  "Placemaker.Waterfront.railings.Tooltip": "Railings along the edge, open where steps and piers meet it.",
+  "Placemaker.Waterfront.railings.Tooltip": "Railings along the walk only where the ground beside it really drops (quays and piers bring their own).",
   "Placemaker.Waterfront.surface": "Surface",
   "Placemaker.Waterfront.surface.Tooltip": "Ground of the promenade band.",
   "Placemaker.Waterfront.surface.paved": "Paved",
@@ -50,7 +50,7 @@
   "Placemaker.Waterfront.riprap": "Rock edge",
   "Placemaker.Waterfront.riprap.Tooltip": "Rocks along the waterline (riprap), for a natural bank.",
   "Placemaker.Waterfront.steps": "Steps down",
-  "Placemaker.Waterfront.steps.Tooltip": "Stepped terraces down towards the water (permanent terrain change): a few spots, or along the whole edge like river ghats.",
+  "Placemaker.Waterfront.steps.Tooltip": "Paved step flights cut from the promenade down to the walkway quay or the water (permanent terrain change): a few spots, or regularly along the whole edge.",
   "Placemaker.Waterfront.steps.none": "None",
   "Placemaker.Waterfront.steps.spots": "Spots",
   "Placemaker.Waterfront.steps.continuous": "Continuous",
@@ -91,11 +91,11 @@
   "Placemaker.Waterfront.shoreTexture.dirt": "Dirt",
   "Placemaker.Waterfront.shoreTexture.none": "None",
 
-  "Placemaker.Waterfront.Preset.promenade": "Promenade",
-  "Placemaker.Waterfront.Preset.pier": "Pier & boardwalk",
-  "Placemaker.Waterfront.Preset.harbor": "Harbor walk",
+  "Placemaker.Waterfront.Preset.promenade": "Promenade boardwalk",
+  "Placemaker.Waterfront.Preset.pier": "Pier park",
+  "Placemaker.Waterfront.Preset.harbor": "Harbour quay",
   "Placemaker.Waterfront.Preset.riverSteps": "River steps",
-  "Placemaker.Waterfront.Preset.fishing": "Fishing spot",
+  "Placemaker.Waterfront.Preset.fishing": "Natural bank",
 
   "Placemaker.Waterfront.Issue.PiersNeedWater": "Piers need water inside the area: draw the outline out over the water.",
 
@@ -104,5 +104,20 @@
   "Placemaker.Stat.FishingSpots": "Fishing spots",
 
   "Placemaker.Feature.cafeTerrace": "Cafe terrace",
-  "Placemaker.Feature.flowerbeds": "Flower beds"
+  "Placemaker.Feature.flowerbeds": "Flower beds",
+  "Placemaker.Waterfront.edge": "Water edge",
+  "Placemaker.Waterfront.edge.Tooltip": "What meets the water: a wide quay (stone wall, deck above the water), a walkway quay, a timber boardwalk just off the bank, or a natural bank graded into the water. Automatic picks by type.",
+  "Placemaker.Waterfront.edge.auto": "Automatic",
+  "Placemaker.Waterfront.edge.quay": "Wide quay",
+  "Placemaker.Waterfront.edge.walkway": "Walkway quay",
+  "Placemaker.Waterfront.edge.boardwalk": "Boardwalk",
+  "Placemaker.Waterfront.edge.bank": "Natural bank",
+  "Placemaker.Waterfront.deckHeight": "Deck height",
+  "Placemaker.Waterfront.deckHeight.Tooltip": "Height of the quay or boardwalk deck above the water. The land behind a quay is filled to this level (permanent).",
+  "Placemaker.Waterfront.quayAsset": "Quay type",
+  "Placemaker.Waterfront.boardwalkAsset": "Boardwalk type",
+  "Placemaker.Waterfront.beds": "Planted beds",
+  "Placemaker.Waterfront.beds.Tooltip": "Beds of low flowering shrubs in the bays behind the promenade.",
+  "Placemaker.Category.net.quay": "pedestrian quays",
+  "Placemaker.Category.net.pier": "piers and boardwalks"
 }

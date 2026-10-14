@@ -23,6 +23,9 @@ namespace Placemaker.Core.Layers.Types.Beach
 {
     public enum ShoreMode { Edge = 0, Inside = 1, Assumed = 2 }
 
+    /// <summary>(s20) The bank rising from the water: low (a beach can meet the water), a bank (sculpt a slope or a quay), a cliff (leave it).</summary>
+    public enum ShoreKind { Low = 0, Bank = 1, Cliff = 2 }
+
     public sealed class Shoreline
     {
         public const string NoWaterKey = "Placemaker.Shore.Issue.NoWater";
@@ -52,6 +55,9 @@ namespace Placemaker.Core.Layers.Types.Beach
         private readonly SegmentIndex _chain = new SegmentIndex(8f);
         private readonly SegmentIndex _other = new SegmentIndex(8f);
         private Func<float2, float> _depthAt = _ => 0f;
+        private Func<float2, float> _ground = _ => 0f;
+        /// <summary>(s20) The water level is trusted for the waterline (heights below it, next to water, are wet).</summary>
+        private bool _levelWaterline;
 
         /// <summary>Distance from the shore polyline (capped).</summary>
         public float Depth(float2 p, float cap = 2000f) => _chain.Clearance(p, cap);
@@ -59,13 +65,88 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// <summary>Distance to the outline away from the water (where terrain must blend back), capped.</summary>
         public float EdgeDistance(float2 p, float cap = 2000f) => _other.Count == 0 ? cap : _other.Clearance(p, cap);
 
-        public bool IsWet(float2 p) => _depthAt(p) > WetDepth;
+        /// <summary>
+        /// (s20) Under water at p. The game's water snapshot is a coarse grid (8–16 m, bilinear), so its zero line can
+        /// sit a whole cell off the real shore. The terrain grid is finer, so near water (any depth in the snapshot)
+        /// the ground below the water LEVEL decides; deep snapshot water is always wet, a dry snapshot always dry.
+        /// </summary>
+        public bool IsWet(float2 p) => Wet(_depthAt, _ground, WaterLevel, _levelWaterline, p);
+        /// <summary>(s20) The water level agrees with the terrain (dry ground lies above it): heights may be compared with it.</summary>
+        public bool LevelTrusted => _levelWaterline;
+
+        private static bool Wet(Func<float2, float> depth, Func<float2, float> ground, float level, bool useLevel, float2 p)
+        {
+            float d = depth(p);
+            if (!useLevel) return d > WetDepth;
+            if (d > 0.6f) return true;
+            if (d <= 1e-4f) return false;
+            return ground(p) < level - 0.02f;
+        }
+
+        /// <summary>
+        /// Robust water surface height around the region: the median of ground + depth over clearly wet samples
+        /// (depth &gt; 0.3 m, so the snapshot's blurred margin does not bias it). NaN when no water.
+        /// </summary>
+        public static float RobustLevel(LayerContext ctx, LayerRegion region, float margin, out bool consistent)
+        {
+            consistent = false;
+            if (region == null) return float.NaN;
+            return RobustLevel(ctx.Site, region.Min - margin, region.Max + margin, out consistent);
+        }
+
+        /// <summary>The same over a box of a site (callers without a layer context: the decal dressing pass).</summary>
+        public static float RobustLevel(SiteContext site, float2 min, float2 max, out bool consistent)
+        {
+            consistent = false;
+            var depth = site?.WaterDepthAt;
+            if (depth == null) return float.NaN;
+            Func<float2, float> H = site.HeightAt ?? (_ => 0f);
+            float step = math.max(3f, math.sqrt((max.x - min.x) * (max.y - min.y) / 3000f));
+            var levels = new List<float>();
+            var dry = new List<float>();
+            for (float y = min.y + step * 0.5f; y < max.y; y += step)
+                for (float x = min.x + step * 0.5f; x < max.x; x += step)
+                {
+                    var p = new float2(x, y);
+                    float d = depth(p);
+                    if (d > 0.3f) levels.Add(H(p) + d);
+                    // Dry ground next to clearly wet water (within ~10 m) tells whether the heights agree with the level.
+                    else if (d <= 1e-4f && (depth(p + new float2(10f, 0f)) > 0.3f || depth(p - new float2(10f, 0f)) > 0.3f || depth(p + new float2(0f, 10f)) > 0.3f || depth(p - new float2(0f, 10f)) > 0.3f)) dry.Add(H(p));
+                }
+            if (levels.Count == 0) return float.NaN;
+            levels.Sort();
+            float level = levels[levels.Count / 2];
+            // Trust heights only when the dry ground mostly lies above the water (a fixture or a stale snapshot may not).
+            int below = 0;
+            foreach (var h in dry) if (h < level - 0.05f) below++;
+            consistent = dry.Count == 0 || below <= dry.Count * 0.2f;
+            return level;
+        }
+
+        /// <summary>
+        /// (s20) A water test for anything that is not a shore layer (decal dressing): the robust level and, where the
+        /// heights agree with it, the given ground (e.g. the ground after the plan's terraform: a carved beach face is under
+        /// water, so wet-sand bands follow the REAL, final waterline). Null when the site has no water.
+        /// </summary>
+        public static Func<float2, bool> WetTest(SiteContext site, float2 min, float2 max, Func<float2, float> ground)
+        {
+            var depth = site?.WaterDepthAt;
+            if (depth == null) return null;
+            float level = RobustLevel(site, min, max, out bool consistent);
+            if (!math.isfinite(level)) return null;
+            var g = ground ?? site.HeightAt;
+            return p => Wet(depth, g, level, consistent, p);
+        }
 
         /// <summary>Signed distance from the shore polyline: negative on the water side of the land (foreshore).</summary>
         public float SignedDepth(float2 p, float cap = 2000f)
         {
             float d = Depth(p, cap);
-            return Land.Contains(p) ? d : -d;
+            if (Land.Contains(p)) return d;
+            // (s20) Outside the land: on the water side only when it lies seaward of the nearest shore point (a point beyond
+            // the outline away from the water, e.g. an entrance on the back edge, is inland).
+            var q = Nearest(p, out var inw, out _);
+            return math.dot(p - q, inw) >= -0.01f ? d : -d;
         }
 
         // ───────────── foreshore (s13) ─────────────
@@ -74,28 +155,24 @@ namespace Placemaker.Core.Layers.Types.Beach
         public List<float2> Waterline = new List<float2>();
 
         /// <summary>
-        /// The strip between the land's shore edge and the real water, outside the land, so sand can actually meet
-        /// the water: a player never draws exactly on the waterline, and the gap (often a steep grassy/rocky bank) is
-        /// what made the beach look unfinished. Every chain point probes seawards (1 m steps, up to
-        /// <paramref name="reach"/> m) for the first wet sample; the strip ends <paramref name="intoWater"/> m past
-        /// it. No water found (assumed shore) or farther than <paramref name="reach"/> → no strip there. Simple CCW
-        /// rings (overlapping the land by 0.3 m so no sliver gap remains); also fills <see cref="Waterline"/>.
+        /// The strip between the land's shore edge and the real water, outside the land, reaching
+        /// <paramref name="intoWater"/> m past the waterline, so sand and the graded slope actually meet (and go
+        /// under) the water: a player never draws exactly on the waterline. Uses the measured waterline (Gap, s20);
+        /// points without water within <paramref name="reach"/> m, or rejected by <paramref name="include"/> (cliffs),
+        /// get no strip. Simple CCW rings (overlapping the land by 0.3 m); also fills <see cref="Waterline"/>.
         /// </summary>
-        public List<float2[]> Foreshore(float reach, float intoWater)
+        public List<float2[]> Foreshore(float reach, float intoWater, Func<int, bool> include = null)
         {
             var result = new List<float2[]>();
             Waterline = new List<float2>();
-            if (Chain == null || Chain.Length < 2 || Mode == ShoreMode.Assumed) return result;
+            if (Chain == null || Chain.Length < 2 || Mode == ShoreMode.Assumed || Gap == null) return result;
             int n = Chain.Length;
             var w = new float[n];
             bool any = false;
             for (int i = 0; i < n; i++)
             {
-                var o = -Inward[i];
-                w[i] = -1f;
-                for (float r = 0.5f; r <= reach; r += 1f)
-                    if (IsWet(Chain[i] + o * r)) { w[i] = r; break; }
-                if (w[i] >= 0f) { any = true; Waterline.Add(Chain[i] + o * w[i]); }
+                w[i] = math.isfinite(Gap[i]) && Gap[i] <= reach && (include == null || include(i)) ? Gap[i] : -1f;
+                if (w[i] >= 0f) { any = true; Waterline.Add(Chain[i] - Inward[i] * w[i]); }
             }
             if (!any) return result;
             // Smooth the widths (only between found points) so the strip edge is calm.
@@ -170,8 +247,13 @@ namespace Placemaker.Core.Layers.Types.Beach
         {
             var s = new Shoreline { Outline = region, Land = region };
             if (ctx.Site?.WaterDepthAt != null) s._depthAt = ctx.Site.WaterDepthAt;
-            var depth = s._depthAt;
+            s._ground = ctx.H;
             bool auto = string.IsNullOrEmpty(side) || side == "auto";
+            // s20: one robust water level (median of clearly wet samples around the area, not the mean over the
+            // blurred margin) and, when the ground agrees with it, a waterline read from the terrain heights.
+            s.WaterLevel = RobustLevel(ctx, region, 40f, out bool consistent);
+            s._levelWaterline = math.isfinite(s.WaterLevel) && consistent;
+            Func<float2, float> depth = p => s.IsWet(p) ? 1f : 0f;
 
             // 1. Water inside the outline: keep the dry part.
             var size = region.Max - region.Min;
@@ -185,11 +267,10 @@ namespace Placemaker.Core.Layers.Types.Beach
                     var p = new float2(x, y);
                     if (!region.Contains(p)) continue;
                     total++;
-                    float d = depth(p);
-                    if (d > WetDepth) { wet++; level += ctx.H(p) + d; }
+                    if (s.IsWet(p)) { wet++; level += ctx.H(p) + s._depthAt(p); }
                 }
             }
-            if (wet > 0) s.WaterLevel = (float)(level / wet);
+            if (wet > 0 && !math.isfinite(s.WaterLevel)) s.WaterLevel = (float)(level / wet);
             if (wet > 0 && wet >= total * 0.02f)
             {
                 var land = DryPart(ctx, region, depth, step);
@@ -216,11 +297,11 @@ namespace Placemaker.Core.Layers.Types.Beach
                 outN[i] = new float2(dir.y, -dir.x);
                 len[i] = math.distance(a, b);
                 var m = (a + b) * 0.5f;
-                foreach (float reach in new[] { 1.5f, 5f, 12f })
+                foreach (float reach in new[] { 1.5f, 5f, 12f, 22f, 34f })
                 {
                     var q = m + outN[i] * reach;
-                    float d = depth(q);
-                    if (d > WetDepth) { wetEdge[i] = true; wetCount++; wetLevel += ctx.H(q) + d; wetLen += len[i]; break; }
+                    float d = s._depthAt(q);
+                    if (s.IsWet(q)) { wetEdge[i] = true; wetCount++; wetLevel += ctx.H(q) + d; wetLen += len[i]; break; }
                 }
             }
             if (wetCount > 0 && float.IsNaN(s.WaterLevel)) s.WaterLevel = (float)(wetLevel / wetCount);
@@ -318,9 +399,182 @@ namespace Placemaker.Core.Layers.Types.Beach
                     if (s.Land.Contains(p)) md = math.max(md, s.Depth(p));
                 }
             s.MaxDepth = md;
+            s.MeasureWaterline(ctx);
             ctx.Plan.Facts["shoreLength"] = s.Length;
             ctx.Plan.Facts["shoreMode"] = (int)s.Mode;
+            ctx.Plan.Facts["shoreCliffShare"] = s.CliffShare;
+            ctx.Plan.Facts["shoreWaterline"] = s.HasWaterline ? 1 : 0;
             return s;
+        }
+
+        // ───────────── the real waterline and the bank profile (s20) ─────────────
+
+        /// <summary>How far past the land's shore edge the real water is searched for (m).</summary>
+        public const float MaxGap = 45f;
+
+        /// <summary>Per chain point: distance from the land's shore edge out to the real waterline (m, smoothed); NaN = no water found.</summary>
+        public float[] Gap;
+        /// <summary>Per chain point: what the bank rising from the water is like there.</summary>
+        public ShoreKind[] Kinds;
+        /// <summary>Length shares of cliff and low shore along the chain.</summary>
+        public float CliffShare, LowShare;
+        public bool HasWaterline;
+
+        /// <summary>
+        /// Finds the real waterline in front of every chain point (probe seawards, then bisect the wet/dry change) and
+        /// classifies the bank behind it from the terrain profile: low (beach-able), bank, or cliff. Players never draw
+        /// exactly on the water, and the old 12 m probe plus the 16 m water grid left beaches 10–25 m short of it.
+        /// </summary>
+        private void MeasureWaterline(LayerContext ctx)
+        {
+            int n = Chain.Length;
+            Gap = new float[n];
+            Kinds = new ShoreKind[n];
+            for (int k = 0; k < n; k++)
+            {
+                Gap[k] = float.NaN;
+                if (Mode == ShoreMode.Assumed) continue;
+                var o = -Inward[k];
+                if (IsWet(Chain[k] + o * 0.25f)) { Gap[k] = 0f; continue; }
+                float prev = 0f;
+                for (float r = 1f; r <= MaxGap; r += 1f)
+                {
+                    if (!IsWet(Chain[k] + o * r)) { prev = r; continue; }
+                    float lo = prev, hi = r;
+                    for (int it = 0; it < 5; it++)
+                    {
+                        float mid = (lo + hi) * 0.5f;
+                        if (IsWet(Chain[k] + o * mid)) hi = mid; else lo = mid;
+                    }
+                    Gap[k] = (lo + hi) * 0.5f;
+                    break;
+                }
+            }
+            // Smooth the found gaps along the chain (a coarse snapshot gives a ragged line).
+            for (int pass = 0; pass < 3; pass++)
+            {
+                var t = (float[])Gap.Clone();
+                for (int k = 0; k < n; k++)
+                {
+                    if (!math.isfinite(Gap[k])) continue;
+                    float sum = Gap[k] * 2f, c = 2f;
+                    for (int d = -2; d <= 2; d++)
+                    {
+                        if (d == 0) continue;
+                        int m = k + d;
+                        if (Closed) m = (m + n) % n;
+                        if (m < 0 || m >= n || !math.isfinite(Gap[m])) continue;
+                        sum += Gap[m]; c += 1f;
+                    }
+                    t[k] = sum / c;
+                }
+                Gap = t;
+            }
+            float cliff = 0f, low = 0f, total = 0f;
+            for (int k = 0; k < n; k++)
+            {
+                HasWaterline |= math.isfinite(Gap[k]);
+                Kinds[k] = Classify(ctx, WaterPointAt(k), Inward[k]);
+            }
+            // Majority filter (±2 points ≈ ±6 m) so a single odd sample does not flip the kind.
+            var kinds = (ShoreKind[])Kinds.Clone();
+            for (int k = 0; k < n; k++)
+            {
+                var votes = new int[3];
+                for (int d = -2; d <= 2; d++)
+                {
+                    int m = math.clamp(k + d, 0, n - 1);
+                    votes[(int)Kinds[m]]++;
+                }
+                int best = (int)Kinds[k];
+                for (int v = 0; v < 3; v++) if (votes[v] > votes[best]) best = v;
+                kinds[k] = (ShoreKind)best;
+            }
+            Kinds = kinds;
+            for (int k = 0; k + 1 < n; k++)
+            {
+                float l = Along[k + 1] - Along[k];
+                total += l;
+                if (Kinds[k] == ShoreKind.Cliff) cliff += l;
+                if (Kinds[k] == ShoreKind.Low) low += l;
+            }
+            CliffShare = total > 0f ? cliff / total : 0f;
+            LowShare = total > 0f ? low / total : 0f;
+        }
+
+        /// <summary>Bank profile from the waterline inland: rise within 12 / 24 m and the steepest 4 m stretch.</summary>
+        private ShoreKind Classify(LayerContext ctx, float2 w, float2 inw)
+        {
+            float l0 = math.isfinite(WaterLevel) ? WaterLevel : ctx.H(w);
+            float rise12 = 0f, rise24 = 0f, steep = 0f;
+            float prev = ctx.H(w);
+            for (float t = 2f; t <= 24f; t += 2f)
+            {
+                float h = ctx.H(w + inw * t);
+                if (t <= 12f) rise12 = math.max(rise12, h - l0);
+                rise24 = math.max(rise24, h - l0);
+                if (t >= 4f) steep = math.max(steep, (h - ctx.H(w + inw * (t - 4f))) / 4f);
+                prev = h;
+            }
+            if (rise12 >= 5f || (steep >= 0.9f && rise24 >= 4f)) return ShoreKind.Cliff;
+            if (rise24 >= 2.5f || steep >= 0.35f) return ShoreKind.Bank;
+            return ShoreKind.Low;
+        }
+
+        private float2 WaterPointAt(int k) => Chain[k] - Inward[k] * (math.isfinite(Gap[k]) ? Gap[k] : 0f);
+
+        private int Segment(float s, out float t)
+        {
+            s = math.clamp(s, 0f, Length);
+            int k = 0;
+            while (k < Chain.Length - 2 && Along[k + 1] < s) k++;
+            float seg = math.max(1e-5f, Along[k + 1] - Along[k]);
+            t = math.saturate((s - Along[k]) / seg);
+            return k;
+        }
+
+        /// <summary>Distance from the land's shore edge to the real water at arc length s (0 where unknown).</summary>
+        public float GapAt(float s)
+        {
+            if (Gap == null) return 0f;
+            int k = Segment(s, out float t);
+            float a = math.isfinite(Gap[k]) ? Gap[k] : 0f, b = math.isfinite(Gap[k + 1]) ? Gap[k + 1] : a;
+            if (!math.isfinite(Gap[k])) a = b;
+            return math.lerp(a, b, t);
+        }
+
+        public ShoreKind KindAt(float s)
+        {
+            if (Kinds == null) return ShoreKind.Low;
+            int k = Segment(s, out float t);
+            return t < 0.5f ? Kinds[k] : Kinds[k + 1];
+        }
+
+        /// <summary>
+        /// Signed distance from the REAL waterline (positive inland, negative out over the water): the land's shore
+        /// distance plus the gap to the water in front of it. Beach and waterfront profiles are laid out by this.
+        /// </summary>
+        public float FromWater(float2 p)
+        {
+            var q = Nearest(p, out var inw, out float along);
+            float d = math.distance(p, q);
+            return (Land.Contains(p) || math.dot(p - q, inw) >= -0.01f ? d : -d) + GapAt(along);
+        }
+
+        /// <summary>The real waterline point in front of arc length s.</summary>
+        public float2 WaterAt(float s, out float2 inward)
+        {
+            var c = At(s, out inward, out _);
+            return c - inward * GapAt(s);
+        }
+
+        /// <summary>The real waterline as a polyline (resampled ~2 m), or the chain when no water was found.</summary>
+        public float2[] WaterEdge(float spacing = 2f)
+        {
+            int steps = math.max(1, (int)math.ceil(Length / spacing));
+            var pts = new float2[steps + 1];
+            for (int i = 0; i <= steps; i++) pts[i] = WaterAt(Length * i / steps, out _);
+            return pts;
         }
 
         /// <summary>
@@ -474,6 +728,150 @@ namespace Placemaker.Core.Layers.Types.Beach
                 else { Flush(); havePrev = false; }
             }
             Flush();
+            return result;
+        }
+
+        /// <summary>
+        /// (s20) Lines parallel to the REAL waterline at <paramref name="dw"/> m inland of it (FromWater): pieces inside the
+        /// land (margin) and not closer to another part of the water; smoothed, resampled at ~spacing. Beach and waterfront
+        /// rows are measured from the water, not from wherever the player's outline happens to run. A negative margin: the
+        /// line need not lie on the land (quays and boardwalks at the water; the reject predicate decides).
+        /// </summary>
+        public List<float2[]> OffsetFromWater(float dw, float margin, float minLength, float spacing = 4f, Func<float2, bool> reject = null)
+        {
+            var result = new List<float2[]>();
+            float stepS = math.max(1.5f, math.min(spacing, 3f));
+            int steps = math.max(1, (int)math.ceil(Length / stepS));
+            // 1. The raw parallel curve over the whole shore; 2. loops cut out (an offset wider than a bend's radius
+            // folds over itself — playtest 28's "eye" island); 3. smoothed; 4. split where it leaves the land or is
+            // rejected, short interruptions bridged so a walk stays ONE line.
+            var raw = new List<float2>(steps + 1);
+            for (int i = 0; i <= steps; i++)
+            {
+                var w = WaterAt(Length * i / steps, out var inw);
+                raw.Add(w + inw * dw);
+            }
+            var line = RemoveLoops(raw);
+            line = new List<float2>(Smooth(line, 4));
+            line = RemoveLoops(line);
+            var ok = new bool[line.Count];
+            for (int i = 0; i < line.Count; i++)
+                ok[i] = (margin < 0f || Land.ContainsDisc(line[i], margin)) && FromWater(line[i]) >= dw * 0.6f - 1f - math.max(0f, -dw) * 0.5f && (reject == null || !reject(line[i]));
+            // Bridge gaps of up to ~9 m whose chord stays inside the land.
+            for (int i = 0; i < line.Count; i++)
+            {
+                if (ok[i] || i == 0 || !ok[i - 1]) continue;
+                int j = i;
+                while (j < line.Count && !ok[j]) j++;
+                if (j >= line.Count) break;
+                float gap = 0f;
+                for (int k = i; k <= j; k++) gap += math.distance(line[k - 1], line[k]);
+                if (gap <= 9f && (margin < 0f || !Land.CrossesBoundary(line[i - 1], line[j], false) && Land.ContainsDisc(math.lerp(line[i - 1], line[j], 0.5f), margin * 0.5f)))
+                    for (int k = i; k < j; k++) ok[k] = true;
+                i = j;
+            }
+            var run = new List<float2>();
+            void Flush()
+            {
+                if (run.Count >= 2)
+                {
+                    var sm = Smooth(run, 2);
+                    float l = 0; for (int i = 1; i < sm.Length; i++) l += math.distance(sm[i - 1], sm[i]);
+                    if (l >= minLength) result.Add(Poly.ResamplePolyline(sm, spacing));
+                }
+                run.Clear();
+            }
+            for (int i = 0; i < line.Count; i++)
+            {
+                if (ok[i] && margin >= 0f && run.Count > 0 && Land.CrossesBoundary(run[run.Count - 1], line[i], false)) Flush();
+                if (ok[i]) run.Add(line[i]); else Flush();
+            }
+            Flush();
+            return result;
+        }
+
+        /// <summary>
+        /// (s20) Cuts the loops out of a polyline: wherever two non-adjacent segments cross, the points between are dropped
+        /// and the crossing point kept. A parallel offset of a tight bend never folds into an "eye" island again.
+        /// </summary>
+        public static List<float2> RemoveLoops(IReadOnlyList<float2> pts)
+        {
+            var p = new List<float2>(pts);
+            for (int guard = 0; guard < 64; guard++)
+            {
+                bool cut = false;
+                for (int i = 0; i + 1 < p.Count && !cut; i++)
+                    for (int j = p.Count - 2; j > i + 1; j--)
+                    {
+                        if (!Poly.SegmentIntersection(p[i], p[i + 1], p[j], p[j + 1], out var x, out _, out _)) continue;
+                        p.RemoveRange(i + 1, j - i);
+                        p.Insert(i + 1, x);
+                        cut = true;
+                        break;
+                    }
+                if (!cut) break;
+            }
+            return p;
+        }
+
+        /// <summary>(s20) Number of crossings between non-adjacent segments of a polyline (0 = simple).</summary>
+        public static int SelfIntersections(IReadOnlyList<float2> p)
+        {
+            int n = 0;
+            for (int i = 0; i + 1 < p.Count; i++)
+                for (int j = i + 2; j + 1 < p.Count; j++)
+                    if (Poly.SegmentsIntersect(p[i], p[i + 1], p[j], p[j + 1])) n++;
+            return n;
+        }
+
+        /// <summary>(s20) The land between dw0 and dw1 m from the real waterline (StripFromWater ∩ land), simple CCW pieces.</summary>
+        public List<float2[]> BandFromWater(float dw0, float dw1)
+        {
+            var result = new List<float2[]>();
+            foreach (var strip in StripFromWater(dw0, dw1, 0f, -1f, 4f))
+                try
+                {
+                    foreach (var r in Poly.Boolean(new[] { (IReadOnlyList<float2>)strip }, new[] { (IReadOnlyList<float2>)Land.Ring }, BoolOp.Intersection, FillRule.Positive))
+                        foreach (var piece in Poly.CutHoles(r, 0.5f))
+                        {
+                            var clean = Poly.Clean(piece, 0.3f);
+                            if (clean.Length >= 3 && Poly.Area(clean) > 8f) result.Add(clean);
+                        }
+                }
+                catch (Exception) { }
+            return result;
+        }
+
+        /// <summary>
+        /// (s20) The strip between dw0 and dw1 m from the real waterline (negative = out over the water), NOT clipped to
+        /// the land: one simple ring per run of stations [fromAlong, toAlong]. Callers clip (paint reaches into the water).
+        /// </summary>
+        public List<float2[]> StripFromWater(float dw0, float dw1, float fromAlong = 0f, float toAlong = -1f, float step = 2f)
+        {
+            var result = new List<float2[]>();
+            if (toAlong < 0f) toAlong = Length;
+            if (dw1 <= dw0 + 0.5f || toAlong - fromAlong < 1f) return result;
+            int steps = math.max(2, (int)math.ceil((toAlong - fromAlong) / math.max(1f, step)));
+            var outer = new List<float2>(steps + 1);
+            var inner = new List<float2>(steps + 1);
+            for (int i = 0; i <= steps; i++)
+            {
+                var w = WaterAt(fromAlong + (toAlong - fromAlong) * i / steps, out var inw);
+                outer.Add(w + inw * dw0);
+                inner.Add(w + inw * dw1);
+            }
+            var ring = new List<float2>(outer);
+            for (int i = inner.Count - 1; i >= 0; i--) ring.Add(inner[i]);
+            try
+            {
+                foreach (var r in Poly.UnionAll(new[] { (IReadOnlyList<float2>)Poly.Clean(ring, 0.3f) }))
+                    foreach (var piece in Poly.CutHoles(r, 0.5f))
+                    {
+                        var clean = Poly.Clean(piece, 0.3f);
+                        if (clean.Length >= 3 && Poly.Area(clean) > 8f) result.Add(clean);
+                    }
+            }
+            catch (Exception) { }
             return result;
         }
 

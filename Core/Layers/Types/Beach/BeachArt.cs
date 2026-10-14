@@ -33,6 +33,13 @@ namespace Placemaker.Core.Layers.Types.Beach
         public static readonly string[] Lamps = { "LightpolePark02", "LightpolePark01" };
         public static readonly string[] Bins = { "Trashbin02", "Trashbin01" };
 
+        /// <summary>(s20) Railings along real drops (cliff-top walks, lookouts): low concrete with a metal rail, never the 2 m pool fence.</summary>
+        public static readonly string[] Railings = { "EU_FenceResidentialLow05", "EU_FenceResidentialLow01" };
+        /// <summary>(s20) Lookout landings on a cliff top.</summary>
+        public static readonly string[] Lookout = { "Pavement Surface 02", "Tiles Surface 01", "Pavement Surface 01" };
+        /// <summary>(s20) Sand fences (off by default): vanilla has no timber sand fence; the plainest low fence net.</summary>
+        public static readonly string[] SandFence = { "EU_FenceResidentialLow01", "EU_FenceResidentialLow03" };
+
         /// <summary>Marram-like low green clumps on the dunes (no flowers: dunes read as one grey-green mass).</summary>
         public static readonly string[] DuneGrass = { "GreenBushWildChild01", "GreenBushWildTeen01", "FlowerBushWildChild02" };
         public static readonly string[] Shrubs = { "GreenBushWild01", "GreenBushWildAdult01", "FlowerBushWild01" };

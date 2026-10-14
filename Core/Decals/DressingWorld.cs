@@ -29,6 +29,7 @@ namespace Placemaker.Core.Decals
         /// <summary>Zoning cutouts (Cutouts.Of): no decal reaches into one.</summary>
         public readonly List<float2[]> Cutouts;
         private readonly Grid _treeGrid = new Grid(8f), _segGrid = new Grid(8f), _polyGrid = new Grid(16f);
+        private readonly Func<float2, bool> _wet;
 
         private static readonly string[] ConiferWords = { "pine", "spruce", "fir", "conifer", "cedar", "larch", "cypress", "yew", "hemlock", "juniper", "thuja" };
 
@@ -76,6 +77,13 @@ namespace Placemaker.Core.Decals
                 }
                 foreach (var t in l.Terraform)
                     if (t?.Ring != null && t.Ring.Length >= 3 && !float.IsNaN(t.WaterLevel)) AddPoly(Geometry.Poly.To2D(t.Ring), GroundKind.Water);
+            }
+            if (Root != null && site?.WaterDepthAt != null)
+            {
+                var tf = new List<PlannedTerraform>();
+                foreach (var l in plan.Layers) if (l?.Terraform != null) tf.AddRange(l.Terraform);
+                var ground = TerrainField.FromTerraform(tf, site.HeightAt) ?? site.HeightAt;
+                try { _wet = Layers.Types.Beach.Shoreline.WetTest(site, Root.Min - 40f, Root.Max + 40f, ground); } catch (Exception) { _wet = null; }
             }
         }
 
@@ -184,6 +192,8 @@ namespace Placemaker.Core.Decals
 
         public bool IsWater(float2 p)
         {
+            // s20: the real, final waterline (terrain vs the robust water level, after the plan's terraform).
+            if (_wet != null) { try { if (_wet(p)) return true; } catch (Exception) { } return InPoly(p, GroundKind.Water); }
             if (Site?.WaterDepthAt != null)
             {
                 float d;

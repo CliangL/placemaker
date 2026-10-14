@@ -263,6 +263,35 @@ namespace Placemaker.Gallery
                 }
         }
 
+        /// <summary>(s20) Averaged output colour at a world point (A = 0 outside the canvas).</summary>
+        public Rgba SampleWorld(float2 w)
+        {
+            var p = P(w);
+            int x0 = (int)math.floor(p.x / _ss) * _ss, y0 = (int)math.floor(p.y / _ss) * _ss;
+            if (x0 < 0 || y0 < 0 || x0 + _ss > _w || y0 + _ss > _h) return default;
+            float r = 0, g = 0, b = 0;
+            for (int dy = 0; dy < _ss; dy++)
+                for (int dx = 0; dx < _ss; dx++)
+                {
+                    int i = ((y0 + dy) * _w + x0 + dx) * 3;
+                    r += _px[i]; g += _px[i + 1]; b += _px[i + 2];
+                }
+            float inv = 1f / (_ss * _ss);
+            return new Rgba(r * inv, g * inv, b * inv, 1f);
+        }
+
+        /// <summary>(s20) Writes one output pixel (all its supersamples), y = 0 at the top.</summary>
+        public void SetPixel(int x, int y, Rgba c)
+        {
+            if (x < 0 || y < 0 || x >= W || y >= H) return;
+            for (int dy = 0; dy < _ss; dy++)
+                for (int dx = 0; dx < _ss; dx++)
+                {
+                    int i = ((y * _ss + dy) * _w + x * _ss + dx) * 3;
+                    _px[i] = c.R; _px[i + 1] = c.G; _px[i + 2] = c.B;
+                }
+        }
+
         public void SavePng(string path)
         {
             var raw = new byte[H * (W * 3 + 1)];

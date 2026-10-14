@@ -385,6 +385,8 @@ namespace Placemaker.Game.Overlay
         /// <summary>(s13) Texture paint preview: coarse strength bands per (material layer, level), from Core PaintRaster.</summary>
         private readonly Dictionary<int, List<float3[]>> _paintGroups = new Dictionary<int, List<float3[]>>();
         private const int PaintLevels = 4;
+        /// <summary>(s20) Outline of the sloped (sculpted) terraform cells: one boundary instead of a dashed grid.</summary>
+        private readonly List<(float3 a, float3 b)> _slopedEdges = new List<(float3 a, float3 b)>();
 
         private void DrawPlan(OverlayRenderSystem.Buffer buffer, float w, PreviewDetail detail)
         {
@@ -407,6 +409,11 @@ namespace Placemaker.Game.Overlay
                 _surfaceGroups.Clear();
                 _areaGroups.Clear();
                 BuildPaintPreview(plan);
+                _slopedEdges.Clear();
+                var sloped = new List<PlannedTerraform>();
+                foreach (var l in plan.Layers)
+                    if (l?.Terraform != null) foreach (var t in l.Terraform) if (t != null && t.Sloped) sloped.Add(t);
+                if (sloped.Count > 0) _slopedEdges.AddRange(TerraformSurface.BoundaryEdges(sloped));
                 BuildZoneCellPreview(plan);
                 foreach (var l in plan.Layers)
                 {
@@ -484,10 +491,12 @@ namespace Placemaker.Game.Overlay
             {
                 if (l == null) continue;
                 foreach (var t in l.Terraform)
-                    if (t?.Ring != null) Ring(buffer, t.Ring, t.Permanent ? Warning : new Color(0.4f, 0.7f, 1f, 0.8f), w, dashed: true);
+                    if (t?.Ring != null && !t.Sloped) Ring(buffer, t.Ring, t.Permanent ? Warning : new Color(0.4f, 0.7f, 1f, 0.8f), w, dashed: true);
                 foreach (var z in l.Zoning)
                     if (z != null) Ring(buffer, new[] { z.A, z.B, z.C, z.D }, new Color(0.5f, 1f, 0.5f, 0.6f * alpha), w * 0.6f);
             }
+            foreach (var (a, b) in _slopedEdges)
+                buffer.DrawDashedLine(Warning, new Line3.Segment(a, b), w, w * 4f, w * 3f);
             foreach (var issue in plan.AllIssues())
             {
                 if (issue?.At == null) continue;

@@ -78,8 +78,11 @@ namespace Placemaker.Core.Build
         /// rule as TerraformDabs.Merge / TerrainField). Outside the union of rings the ground blends
         /// back to the original over <paramref name="bank"/> metres (smoothstep). Null when nothing
         /// valid is given. The cell grows when the area would exceed <paramref name="maxCells"/>.
+        /// (s20) <paramref name="vertexHeights"/>: optional, parallel to <paramref name="items"/>; a non-null entry makes
+        /// that item SLOPED (target per texel = TerraformSurface mean-value interpolation of the ring's vertex heights).
         /// </summary>
-        public static TerraformRaster Build(IReadOnlyList<(float2[] ring, float target, int layer)> items, float cell, float bank, int maxCells = 1 << 22)
+        public static TerraformRaster Build(IReadOnlyList<(float2[] ring, float target, int layer)> items, float cell, float bank, int maxCells = 1 << 22,
+            IReadOnlyList<float[]> vertexHeights = null, Func<float2, float> original = null)
         {
             if (items == null || items.Count == 0 || !(cell > 0.05f)) return null;
             var order = new List<int>();
@@ -108,10 +111,18 @@ namespace Placemaker.Core.Build
             r0.Target = new float[n];
             r0.Weight = new float[n];
             for (int i = 0; i < n; i++) r0.Target[i] = float.NaN;
+            var slopedTex = new bool[n];
             // 1) Inside: later items overwrite.
             foreach (int k in order)
             {
                 var ring = items[k].ring;
+                var vh = vertexHeights != null && k < vertexHeights.Count ? vertexHeights[k] : null;
+                float3[] ring3 = null;
+                if (vh != null && vh.Length == ring.Length)
+                {
+                    ring3 = new float3[ring.Length];
+                    for (int v = 0; v < ring.Length; v++) ring3[v] = new float3(ring[v].x, vh[v], ring[v].y);
+                }
                 float2 a = ring[0], b = ring[0];
                 foreach (var p in ring) { a = math.min(a, p); b = math.max(b, p); }
                 int x0 = math.max(0, (int)math.floor((a.x - min.x) / cell)), x1 = math.min(r0.Width - 1, (int)math.ceil((b.x - min.x) / cell));
@@ -121,7 +132,8 @@ namespace Placemaker.Core.Build
                         if (ReservedSpace.PointInPolygon(r0.Center(x, y), ring))
                         {
                             int i = y * r0.Width + x;
-                            r0.Target[i] = items[k].target;
+                            r0.Target[i] = ring3 != null ? TerraformSurface.At(ring3, r0.Center(x, y)) : items[k].target;
+                            slopedTex[i] = ring3 != null;
                             r0.Weight[i] = 1f;
                         }
             }
@@ -135,7 +147,7 @@ namespace Placemaker.Core.Build
                     {
                         int i = y * r0.Width + x;
                         if (r0.Weight[i] >= 1f) continue;
-                        float best = float.MaxValue, bestT = float.NaN;
+                        float best = float.MaxValue, bestT = float.NaN; int bestJ = -1;
                         for (int dy = -reach; dy <= reach; dy++)
                         {
                             int yy = y + dy;
@@ -148,11 +160,15 @@ namespace Placemaker.Core.Build
                                 if (r0.Weight[j] < 1f) continue;
                                 // Distance to the inside texel's edge (half a cell nearer than its centre).
                                 float d = math.max(0f, math.sqrt(dx * dx + dy * dy) * cell - 0.5f * cell);
-                                if (d < best) { best = d; bestT = r0.Target[j]; }
+                                if (d < best) { best = d; bestT = r0.Target[j]; bestJ = j; }
                             }
                         }
                         if (best > bank || !math.isfinite(bestT)) continue;
                         float s = math.saturate(best / bank);
+                        // (s20) Around a SLOPED patch the bank carries its change (target − ground), not its absolute height: on a
+                        // slope the nearest texel's height belongs to another level and made a lip.
+                        if (original != null && bestJ >= 0 && slopedTex[bestJ])
+                            bestT = original(r0.Center(x, y)) + (bestT - original(r0.Center(bestJ % r0.Width, bestJ / r0.Width)));
                         target[i] = bestT;
                         r0.Weight[i] = 1f - s * s * (3f - 2f * s);
                     }

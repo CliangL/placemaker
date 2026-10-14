@@ -491,3 +491,53 @@ road block at all (a lane-less inner court) — not needed by any current type (
 75. Leisure, park coverage (wellbeing up to +20), land value from attractiveness and tourist destinations all need a
     pathfinding source/target: a Building with a road connection. A lot has none (targets = 0, silently ignored).
 76. Vanilla park upkeep = price / 5 per month; attractiveness ≈ 1.9 × (area/1000 m²)^0.85 for ordinary parks.
+
+## Quays, piers and sculpted shores (s20, decompiled 1.6.2f1)
+
+Sources: `Game.Prefabs.Bridge` / `BridgeBuildStyle`, `NetInitializeSystem` (Bridge handling ~2312–2358), `Game.Tools.CourseSplitSystem`
+(`CalculateElevation` ~3581, `LimitElevation` ~3833), `NetCompositionHelpers.GetElevationFlags`, `NetToolSystem.SnapShoreline` (~1811,
+1891–1898, 6351), `Game.Net.ValidationHelpers.CheckSurface` (~1601), `TerrainSystem` (net terrain clip ~1131, raised sides ~1484),
+the player's catalog dump.
+
+77. **A quay is an ordinary net with a Bridge component in the Quay build style.** `NetInitializeSystem` gives every Bridge prefab
+    StraightEdges|StraightEnds|RequireElevated|SymmetricalEdges|SmoothSlopes; for `BridgeBuildStyle.Quay` it adds `ElevatedIsRaised`,
+    clears `RequireElevated`, sets `PlacementFlags.ShoreLine` and `m_MinWaterElevation = Bridge.m_ElevationOnWater`. Vanilla
+    pedestrian quays (PathwayPrefab, category `net.pathway`): **QuaySmall01/02** "Narrow Quay With Pedestrian Path" (3 m, cost 0.5),
+    **QuaySmallWide01/02** "Wide Quay with Pedestrian Path" (8 m, 0.75), QuaySmallWithBikeLanes01/02 (8 m, bike); road quays
+    QuayMedium01 (16 m) and QuayLarge01 (24 m). "Quay01" / "RetainingWall01" are road UPGRADES (fence category, not walks).
+    Leisure piers: LeisurePier01Small01 / Medium01 / Large01 (3 / 7 / 9 m, cost 1–1.75), elevated decks with pillars
+    (Pier01Pillar01/02 props, 3.7/8.5 m wide).
+78. **The wall side is automatic, not the drawing direction.** `CourseSplitSystem.CalculateElevation` samples the terrain at ±half
+    width (x = left, y = right of the course); side elevation = deck height − terrain there. With ShoreLine a side whose water depth
+    ≥ the elevation limit is forced to at least that limit; `GetElevationFlags` turns a side elevation ≥ limit into
+    `CompositionFlags.Side.Raised` — the quay wall (with ElevatedIsRaised even "elevated" heights become Raised on both sides).
+    So: lay the quay along the waterline with its deck above the water and the land behind it at deck height → a wall in the water,
+    none on the land side. The hand tool snaps to the shoreline and sets y = water surface + max(elevation, m_MinWaterElevation);
+    Placemaker places the course itself (explicit heights, FollowTerrain = false) at water level + "Deck height" (default 1.5 m,
+    harbour 1.8 m, river 0.9 m) and fills the land behind to that level (sculpt).
+79. **Terrain:** no quay-specific terraform; the generic net terrain clip/flatten applies, and on a Raised side the upper terrain
+    bound is disabled (the ground beyond the wall is not flattened up to the deck). Raised lanes go into a separate height pass
+    (probably why quay walls hold water back). **Placement:** `CheckSurface` raises InWater only for nets that are exactly OnGround
+    (ShoreLine excluded) — a quay may stand over water; NoWater only applies to Floating nets; nothing requires water (on dry land it
+    simply gets no raised side). No maximum wall height was found (`LimitElevation` clamps to PlaceableNetData.m_ElevationRange).
+80. **Connecting:** quays are PathwayPrefab nets and join normal paths at nodes. Placemaker emits the quay as Bézier pieces
+    (category `net.quay`, Core/Layers/Types/Waterfront/QuayCategories) and lets the composer's PathJoins split it where a link or a
+    pier ends on it; piers start ON the quay deck (a junction), boardwalk links end on a levelled landing at the bank foot with a short
+    timber stub to the boardwalk.
+81. **Curation:** new net categories `net.quay` (pathway nets named *quay*, bike variants never automatic) and `net.pier`
+    (pathway nets named *pier/boardwalk/jetty*, not pillars; marina packs never automatic), both falling back to `net.pathway`.
+    The automatic ground walk (`AutoAssets.PickWalk`) still never picks a quay, pier or bridge.
+
+**Sculpted terrain (s20).** Every terraform polygon used to be levelled to one height; ShoreTerrain emitted 6 m flat cells, so banks
+were staircases and accesses made cones (playtests 30–34). `PlannedTerraform.Sloped` (appended) makes a patch carry its target in
+the ring's vertex heights; `Core/Build/TerraformSurface` interpolates them (mean-value coordinates: exact at vertices, linear on edges,
+so neighbouring quads that share corners are continuous). `TerraformRaster.Build` takes the vertex heights (and the original ground:
+the 4 m bank around a sloped patch carries its CHANGE, not its absolute height, which made lips on slopes); TerrainField, SiteSafety
+cuts, the overlay (one dashed outline instead of a grid) and the gallery read them. `Core/Layers/Common/Sculpt` is the node grid that
+produces them; `TerrainSurvey` classifies slopes (flat < 5 %, gentle < 15 %, steep < 45 %, cliff above); `Types/Beach/ShoreGround`
+is the water types' terrain step (real waterline, bank kind, sculpt, pads, benches, ramps, earthwork limits, resnap).
+**Waterline:** the game's water snapshot was sampled on 16 m cells (now 8 m) and interpolated, so its zero line sat up to a cell off.
+`Shoreline` now takes the robust water level (median of ground + depth where depth > 0.3 m) and, when the dry ground next to the
+water lies above it, decides wet/dry by the finer terrain heights; the waterline in front of every station is found by probing and
+bisection up to 45 m past the outline. Unverified in game: the raster's per-texel MVC on twisted quads, quay walls forming from
+explicit-height courses exactly as with the hand tool, the boardwalk (LeisurePier) running parallel to and close over the shore.

@@ -701,6 +701,14 @@ namespace Placemaker.Core
         /// <summary>Optional water source after terraform (lake). NaN = none.</summary>
         public float WaterLevel = float.NaN;
         public float3 WaterAnchor;
+        /// <summary>
+        /// (s20, appended) A sloped patch: the target ground is the surface through the ring's vertex heights
+        /// (Ring[i].y, mean-value interpolation — bilinear-like on a quad, exact on a triangle, linear along every
+        /// edge), not one flat level. Sculpted terrain (Common/Sculpt) emits a grid of sloped quads whose shared
+        /// corners carry the same height, so the result is continuous: no terraced steps. TargetHeight stays the
+        /// centre height for legacy readers. See Core/Build/TerraformSurface.
+        /// </summary>
+        public bool Sloped;
     }
 
     /// <summary>
