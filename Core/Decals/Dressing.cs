@@ -73,12 +73,8 @@ namespace Placemaker.Core.Decals
             DecalPools.EnsureRegistered();
             foreach (var s0 in dress.Values) if (s0 != null) s0.MainTaken = false;
 
-            // Master amount below 100 % thins what the layers placed themselves; 0 removes every decorative decal.
-            foreach (var l in plan.Layers)
-            {
-                if (l == null || !dress.TryGetValue(l, out var s) || s == null || s.Master >= 1f) continue;
-                report.Removed += ThinLayerDecals(l, s.Master);
-            }
+            // (s23) The Decals amount drives this pass only. Decals a type draws as part of its own look (construction mud,
+            // quarry ruts, abandoned-lot graffiti) follow that type's own controls; decals are opt-in (default 0).
 
             if (!DecalPools.PacksAvailable())
             {

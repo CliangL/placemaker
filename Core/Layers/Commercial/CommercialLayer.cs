@@ -30,7 +30,7 @@ namespace Placemaker.Core.Layers.Commercial
             Feature("decals", ("theme", "cracks"), ("ground", "paved"), ("density", 0.4)), Feature("terrain", ("shape", "flatten")),
         };
 
-        protected override string[] DefaultFeatures => new[] { "decals" };
+        protected override string[] DefaultFeatures => new string[0];
 
         /// <summary>Zone type, plot depth and the parking options shared by every commercial type.</summary>
         protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "")
