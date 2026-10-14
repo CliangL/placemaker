@@ -505,15 +505,15 @@ namespace Placemaker.Core.Layers.Park
                         var a = anchors[i]; var b = anchors[j];
                         if (a.Curve == b.Curve) continue;
                         float d = math.distance(a.P, b.P);
-                        if (d < 25f || d > 110f) continue;
+                        if (d < 25f || d > 160f) continue;
                         var dir = (b.P - a.P) / d;
-                        if (math.abs(math.dot(dir, a.Tan)) > 0.8f || math.abs(math.dot(dir, b.Tan)) > 0.8f) continue;
+                        if (math.abs(math.dot(dir, a.Tan)) > 0.87f || math.abs(math.dot(dir, b.Tan)) > 0.87f) continue;
                         var mid = (a.P + b.P) * 0.5f;
                         float clear = s.Occ.Corridors.Clearance(mid, 40f);
                         if (clear < 12f) continue;
                         float score = clear * math.min(d, 70f) / 70f * (0.85f + 0.3f * Hashing.Unit(Hashing.Mix(seed, (uint)(i * 7919 + j))));
                         if (score <= bestScore) continue;
-                        if (!LineClear(s, reserved, okPoint, a.P, b.P, hw + 0.5f, 3f)) continue;
+                        if (!LineClear(s, reserved, okPoint, a.P, b.P, hw + 0.5f, 6f)) continue;
                         bestScore = score; bi = i; bj = j;
                     }
                 if (bi < 0) break;
@@ -611,6 +611,12 @@ namespace Placemaker.Core.Layers.Park
                 // Long runs are cut to a walkable trail (≤ ~160 m) centred on the run.
                 var run = run0;
                 if (run.Count > 28) run = run.GetRange((run.Count - 28) / 2, 28);
+                // One bend every ~18 m: each vertex becomes a net node, and a trail is a few long curves.
+                var thin = new List<float2>();
+                for (int i = 0; i < run.Count; i += 3) thin.Add(run[i]);
+                if ((run.Count - 1) % 3 != 0) thin.Add(run[run.Count - 1]);
+                run = thin;
+                if (run.Count < 3) continue;
                 uint rs = Hashing.Mix(seed, (uint)made);
                 var pts = new List<float2>();
                 for (int i = 0; i < run.Count; i++)
@@ -635,7 +641,7 @@ namespace Placemaker.Core.Layers.Park
                     for (int i = 0; i < anchors.Count; i++)
                     {
                         float d = math.distance(anchors[i].P, end);
-                        if (d < bd && LineClear(s, reserved, okPoint, end, anchors[i].P, hw, 2.5f)) { bd = d; best = i; }
+                        if (d < bd && LineClear(s, reserved, okPoint, end, anchors[i].P, hw, 5f)) { bd = d; best = i; }
                     }
                     if (best >= 0) { segs.Add(end); segs.Add(anchors[best].P); joins.Add((anchors[best], end)); }
                 }

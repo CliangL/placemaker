@@ -164,7 +164,9 @@ namespace Placemaker.Core.Layers.AddOns.Ground
                 foreach (float shrink in new[] { 1f, 0.7f, 0.5f })
                 {
                     float r = math.max(2.5f, baseR * KindScale(kind) * shrink);
-                    float margin = r * (1f + rough) + blend * 0.5f + 0.5f;
+                    // The core (surface, full paint) stays clear of everything; the soft outer ring may fade over a path edge.
+                    float core = r * (1f + rough);
+                    float margin = r * (1f + math.min(0.5f, rough * 1.3f)) + blend * 0.75f + 0.5f;
                     float2 spot = default;
                     switch (arrange)
                     {
@@ -173,52 +175,52 @@ namespace Placemaker.Core.Layers.AddOns.Ground
                             // Evenly along the long axis, alternating sides: a designed sweep through the park.
                             float u = kinds.Count == 1 ? 0.5f : (i + 0.5f) / kinds.Count;
                             var basePt = centre + axis * (u - 0.5f) * major * 0.8f + side * minor * 0.18f * ((i & 1) == 0 ? 1f : -1f);
-                            ok = TryNear(place, basePt, r, margin, seed, out spot);
+                            ok = TryNear(place, basePt, r, core, margin, seed, out spot);
                             break;
                         }
                         case "cluster":
                         {
                             if (!haveFocal)
                             {
-                                ok = Spots.Find(place, r * 0.85f, Spots.Preference.Centre, seed, out spot, taken, 0f, margin);
+                                ok = Spots.Find(place, core, Spots.Preference.Centre, seed, out spot, taken, 0f, margin);
                                 if (ok) { focal = spot; haveFocal = true; }
                                 break;
                             }
                             // Touching the patches already placed, on a ring around the focal patch.
-                            float ring = result[0].R + r * 0.9f + (result.Count > 3 ? r * 0.9f : 0f);
+                            float ring = (result[0].R + r) * (1f + rough) + 0.3f + (result.Count > 3 ? r * 1.6f : 0f);
                             for (int a = 0; a < 16 && !ok; a++)
                             {
                                 float ang = Hashing.Unit(seed) * 6.283f + a * 6.283f / 16f;
                                 var q = focal + new float2(math.cos(ang), math.sin(ang)) * ring;
-                                if (place.Free(q, r * 0.8f, margin, 0.2f) && FarFrom(result, q, r, 0.75f)) { spot = q; ok = true; }
+                                if (place.Free(q, core, margin, 0.1f) && FarFrom(result, q, r, 0.75f)) { spot = q; ok = true; }
                             }
                             break;
                         }
                         case "edges":
-                            ok = Spots.Find(place, r * 0.85f, Spots.Preference.NearBoundary, seed, out spot, taken, r * 2.2f, margin);
+                            ok = Spots.Find(place, core, Spots.Preference.NearBoundary, seed, out spot, taken, r * 2.2f, margin);
                             break;
                         default:
-                            ok = Spots.Find(place, r * 0.85f, Spots.Preference.Open, seed, out spot, taken, r * 2.5f, margin);
+                            ok = Spots.Find(place, core, Spots.Preference.Open, seed, out spot, taken, r * 2.5f, margin);
                             break;
                     }
                     if (ok && !FarFrom(result, spot, r, arrange == "cluster" ? 0.75f : 1.1f)) ok = false;
                     if (!ok) continue;
                     result.Add(new Patch { Kind = kind, C = spot, R = r, Seed = seed });
                     taken.Add(spot);
-                    place.Take(spot, r * 0.85f, 3);
+                    place.Take(spot, core, 3);
                     break;
                 }
             }
             return result;
         }
 
-        private static bool TryNear(Occupancy place, float2 p, float r, float margin, uint seed, out float2 spot)
+        private static bool TryNear(Occupancy place, float2 p, float r, float core, float margin, uint seed, out float2 spot)
         {
             for (int k = 0; k < 14; k++)
             {
                 float a = Hashing.Unit(Hashing.Mix(seed, (uint)k)) * 6.283f;
                 var q = k == 0 ? p : p + new float2(math.cos(a), math.sin(a)) * r * 0.4f * k;
-                if (place.Free(q, r * 0.85f, margin, 0.3f)) { spot = q; return true; }
+                if (place.Free(q, core, margin, 0.3f)) { spot = q; return true; }
             }
             spot = p;
             return false;
