@@ -46,7 +46,7 @@ namespace Placemaker.Core.Build
 
     public static class AssetHeuristics
     {
-        private static readonly string[] PlanterNames = { "planter", "flowerpot", "flower pot", "plantbox", "plant box", "pot0", "potted" };
+        private static readonly string[] PlanterNames = { "planter", "flowerpot", "flower pot", "plantpot", "plant pot", "plantbox", "plant box", "potted" };   // not "pot0": "ParkMaintenanceDepot01"
 
         public static bool ContainsAny(string value, params string[] parts)
         {
@@ -59,6 +59,16 @@ namespace Placemaker.Core.Build
         /// planter candidate). Empty list = not useful to Placemaker.
         /// </summary>
         public static List<string> Classify(string name, AssetTraits t)
+        {
+            var r = ClassifyRaw(name, t);
+            // Type rules and the general heuristics may add the same category twice ("tree" from the
+            // farm rules and again here): duplicates doubled items in the automatic pools (playtest 4b).
+            for (int i = r.Count - 1; i >= 0; i--)
+                if (r[i] == null || r.IndexOf(r[i]) != i) r.RemoveAt(i);
+            return r;
+        }
+
+        private static List<string> ClassifyRaw(string name, AssetTraits t)
         {
             var r = new List<string>(2);
             if (string.IsNullOrWhiteSpace(name)) return r;
@@ -146,7 +156,10 @@ namespace Placemaker.Core.Build
             {
                 if (ContainsAny(lower, PlanterNames)) { r.Add(AssetCategories.Planter); return r; }
                 if (ContainsAny(lower, "flowerbed", "flower bed")) { r.Add(AssetCategories.Flowerbed); return r; }
-                if ((t & AssetTraits.Tree) != 0)
+                // Vanilla shrubs are tree prefabs too ("GreenBushWild01", "FlowerBushWild02"): a plant
+                // named bush/shrub (or a "…Wild" flower) without "tree" is a bush, never a tree (playtest 4b).
+                bool shrub = !lower.Contains("tree") && (ContainsAny(lower, "bush", "shrub") || (lower.Contains("wild") && (t & AssetTraits.Tree) != 0));
+                if ((t & AssetTraits.Tree) != 0 && !shrub)
                 {
                     if (ContainsAny(lower, "stump", "dead", "fallen", "log")) return r;
                     r.Add(AssetCategories.Tree);
@@ -178,7 +191,7 @@ namespace Placemaker.Core.Build
             if ((t & AssetTraits.ExerciseActivity) != 0) { r.Add(AssetCategories.Sports); return r; }
             if (ContainsAny(lower, "campfire", "camp fire", "firepit", "fire pit", "bonfire"))
             { r.Add(AssetCategories.Camping); r.Add(AssetCategories.CampingFire); return r; }
-            if (ContainsAny(lower, "tent", "caravan", "camper"))
+            if (AssetCuration.HasWord(name, "tent", "tents", "caravan", "camper", "campervan"))   // words: "EU_DoNotEnter01" is no tent
             { r.Add(AssetCategories.Camping); r.Add(AssetCategories.CampingPitch); return r; }
             if (ContainsAny(lower, "camping")) { r.Add(AssetCategories.Camping); return r; }
             if (ContainsAny(lower, "kiosk", "food stand", "foodstand", "ice cream", "icecream", "hotdog", "vendor", "stall", "foodtruck", "food truck"))
@@ -254,6 +267,16 @@ namespace Placemaker.Core.Build
             if (isArea) return true;
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
+            // Decals: curated themes (AssetCuration) — natural park looks, never letters or road markings.
+            if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
+                return AssetCuration.DecalAutoEligible(category, name);
+            // Built-in prop names are CamelCase without spaces; "HighSchool03 Rooftop Garden" or
+            // "TrainStation02 Ticket Machines" are building extensions that only look like props (4b).
+            if ((t & AssetTraits.Vanilla) != 0 && name.IndexOf(' ') >= 0) return false;
+            // Core categories: vanilla allow-lists, modded name fallbacks minus known mismatches.
+            var curated = AssetCuration.AutoEligible(category, name, t);
+            if (curated == false) return false;
+            if (curated == true && (t & AssetTraits.Vanilla) != 0) return true;
             var ruled = CategoryRules.AutoEligible(category, lower, t);
             if (ruled.HasValue) return ruled.Value;
             if (LeisureHeuristics.AutoEligible(category, lower, out bool leisure)) return leisure;
@@ -261,14 +284,6 @@ namespace Placemaker.Core.Build
                 && category != AssetCategories.ParkingDecal && category != AssetCategories.Charger) return false;
             if (category == AssetCategories.ParkingDecal || category == AssetCategories.Charger || category.StartsWith("object.", StringComparison.Ordinal))
                 return true;   // functional parking/road objects: classified by sub lanes / names already
-            if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
-            {
-                // Themed pools take everything of their theme; the general pool only texture-like decals.
-                if (ContainsAny(lower, "random", "placeholder", "test", "chirper", "logo", "advert")) return false;
-                if (category != AssetCategories.Decal) return true;
-                var theme = DecalTheme(name);
-                return theme != AssetCategories.DecalMarkings && theme != AssetCategories.DecalGraffiti;
-            }
             if (ContainsAny(lower, AutoExcludedNames)) return false;
             if (ContainsAny(lower, AutoExcludedFor(category))) return false;
             switch (category)
@@ -297,13 +312,7 @@ namespace Placemaker.Core.Build
         /// skate/dog/gym parks, water parks, schools) bring signs, stands and equipment that do not belong
         /// in an ordinary park.
         /// </summary>
-        public static bool IsGeneralParkPalette(string paletteOrParkName)
-        {
-            if (string.IsNullOrEmpty(paletteOrParkName)) return false;
-            var lower = paletteOrParkName.ToLowerInvariant();
-            return !ContainsAny(lower, "sport", "skate", "dog", "gym", "water", "school", "university", "college",
-                "stadium", "arena", "zoo", "farm", "cemetery", "golf", "beach", "marina", "harbor", "harbour", "landmark");
-        }
+        public static bool IsGeneralParkPalette(string paletteOrParkName) => AssetCuration.IsGeneralParkPalette(paletteOrParkName);
 
         /// <summary>Name split into lower-case words at camel-case, digit and punctuation boundaries.</summary>
         public static List<string> Words(string name)
@@ -355,22 +364,11 @@ namespace Placemaker.Core.Build
 
         /// <summary>Shrubs in a concrete box / pot (vanilla "GreenBushCity01", "FlowerBushCity02", "PlantPot01").</summary>
         public static bool IsPlanterBoxName(string lower) =>
-            ContainsAny(lower, PlanterNames) || ContainsAny(lower, "bushcity", "bush city", "box", "planter", "pot0", "potted");
+            ContainsAny(lower, PlanterNames) || ContainsAny(lower, "bushcity", "bush city", "citybush", "city bush", "gardenbed", "garden bed", "box", "planter", "potted");
 
         /// <summary>Theme sub-category of a decal by name (null = no theme; still in "decal").</summary>
-        public static string DecalTheme(string name)
-        {
-            var lower = (name ?? "").ToLowerInvariant();
-            if (ContainsAny(lower, "graffiti", "mural")) return AssetCategories.DecalGraffiti;
-            if (ContainsAny(lower, "leaf", "leaves", "foliage", "petal", "needles", "twig")) return AssetCategories.DecalLeaves;
-            if (ContainsAny(lower, "crack", "pothole", "patch")) return AssetCategories.DecalCracks;
-            if (ContainsAny(lower, "puddle", "wet", "water")) return AssetCategories.DecalPuddles;
-            if (ContainsAny(lower, "dirt", "mud", "dust", "stain", "oil", "soil", "sand", "grime", "rust", "leak")) return AssetCategories.DecalDirt;
-            if (ContainsAny(lower, "paving", "pavement", "tile", "brick", "cobble", "pattern", "manhole", "drain", "grate")) return AssetCategories.DecalPaving;
-            if (ContainsAny(lower, "marking", "line", "arrow", "stripe", "number", "alphabet", "text", "crosswalk", "zebra", "icon",
-                "parking", "court", "field", "letter")) return AssetCategories.DecalMarkings;
-            return null;
-        }
+        /// <summary>Theme sub-category of a decal by name (null = no theme; still in "decal"). Word-based, last theme word wins (AssetCuration).</summary>
+        public static string DecalTheme(string name) => AssetCuration.DecalTheme(name);
 
         public static string SurfaceKind(string lower)
         {
@@ -482,6 +480,10 @@ namespace Placemaker.Core.Build
                     break;
             }
             if (ContainsAny(lower, "invisible", "marker") && category != AssetCategories.InvisiblePath) score -= 200;
+            // Curated order: allow-listed built-ins in list order, decals by natural look (playtest 4b).
+            score += AssetCuration.Score(category, name);
+            if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
+                score += AssetCuration.DecalScore(category, name);
             return score;
         }
 

@@ -50,6 +50,9 @@ namespace Placemaker.Core.Build
         /// <summary>Largest number of distinct automatic assets in a variety category per step.</summary>
         public const int MaxVariety = 6;
 
+        /// <summary>Fewest palette items a variety category needs before the palette replaces the pool.</summary>
+        public const int MinPaletteVariety = 3;
+
         /// <summary>True when every automatic object of this category in a step is the same prefab.</summary>
         public static bool IsUniform(string category) => category == null || (!VarietyCategories.Contains(category) && !VarietyRegistry.Contains(category));
 
@@ -112,7 +115,9 @@ namespace Placemaker.Core.Build
                     {
                         var ok = new List<string>(items.Count);
                         foreach (var id in items) if (!string.IsNullOrEmpty(id) && (exists == null || exists(id))) ok.Add(id);
-                        if (ok.Count > 0) list = ok;
+                        // A variety category needs a real mix: a palette with one birch would plant a
+                        // monoculture (playtest 4b), so thin palettes defer to the curated pool.
+                        if (ok.Count >= (IsUniform(category) ? 1 : MinPaletteVariety)) list = ok;
                     }
                 }
                 list = list ?? Pool(category);

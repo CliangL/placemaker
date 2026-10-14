@@ -165,22 +165,13 @@ namespace Placemaker.Game.Assets
                 ? list : NoNames;
 
         /// <summary>Sort key of an automatic candidate: lower tier first, then higher score, then name.</summary>
-        private (int tier, int score) AutoRank(string category, CatalogItem it, bool vanilla)
-        {
-            int score = AssetHeuristics.DefaultScore(category, it.Id, it.Info.NetWidth);
-            int tier = vanilla ? 0 : 1;
-            // Fences: a network fence is one continuous, corner-joined fence — always before prop pieces.
-            if (category == AssetCategories.Fence && !EntityManager.HasComponent<NetData>(it.Prefab)) tier += 2;
-            return (tier, score);
-        }
+        // Ranking lives in Core (AutoPoolRanking) so the curation test replays exactly the game's order.
+        private PoolCandidate Candidate(string category, CatalogItem it) =>
+            new PoolCandidate(it.Id, IsVanilla(it),
+                category == AssetCategories.Fence && EntityManager.HasComponent<NetData>(it.Prefab), it.Info.NetWidth);
 
-        private int CompareAuto(string category, CatalogItem a, CatalogItem b)
-        {
-            var ra = AutoRank(category, a, IsVanilla(a)); var rb = AutoRank(category, b, IsVanilla(b));
-            if (ra.tier != rb.tier) return ra.tier.CompareTo(rb.tier);
-            if (ra.score != rb.score) return rb.score.CompareTo(ra.score);
-            return string.CompareOrdinal(a.Id, b.Id);
-        }
+        private int CompareAuto(string category, CatalogItem a, CatalogItem b) =>
+            AutoPoolRanking.Compare(category, Candidate(category, a), Candidate(category, b));
 
         private static bool IsVanilla(CatalogItem it) => it.Tags != null && Array.IndexOf(it.Tags, "source:vanilla") >= 0;
         private static bool IsAutoFor(CatalogItem it, string category) => it.Tags != null && Array.IndexOf(it.Tags, "auto:" + category) >= 0;
@@ -199,16 +190,9 @@ namespace Placemaker.Game.Assets
                 if (ranked.Count > 0) defaults[kv.Key] = ranked[0].Prefab;
                 if (eligible.Count == 0) continue;
                 // Vanilla only when vanilla has something: modded items join a pool only if no vanilla exists.
-                bool anyVanilla = false;
-                foreach (var it in ranked) if (IsVanilla(it)) { anyVanilla = true; break; }
-                var names = new List<string>();
-                foreach (var it in ranked)
-                {
-                    if (anyVanilla && !IsVanilla(it) && !(kv.Key == AssetCategories.Fence && EntityManager.HasComponent<NetData>(it.Prefab))) continue;
-                    names.Add(it.Id);
-                    if (names.Count >= AutoPoolSize) break;
-                }
-                pools[kv.Key] = names;
+                var cands = new List<PoolCandidate>(eligible.Count);
+                foreach (var it in eligible) cands.Add(Candidate(kv.Key, it));
+                pools[kv.Key] = AutoPoolRanking.Build(kv.Key, cands, AutoPoolSize);
             }
 
             // Palette index: palette → category → eligible items (same ranking).

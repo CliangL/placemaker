@@ -25,7 +25,7 @@ namespace Placemaker.Tests
         {
             ["palette:CityPark01"] = new Dictionary<string, string[]>
             {
-                [AssetCategories.Tree] = new[] { "Linden", "Elm" },
+                [AssetCategories.Tree] = new[] { "Linden", "Elm", "Ash" },
                 [AssetCategories.Bench] = new[] { "CityBench" },
             },
             ["palette:PocketPark02"] = new Dictionary<string, string[]>
@@ -180,7 +180,7 @@ namespace Placemaker.Tests
         [InlineData(AssetCategories.Decoration, "SportParkScoreboard01", false)]
         [InlineData(AssetCategories.Decoration, "ParkInfosign01", false)]
         [InlineData(AssetCategories.Decoration, "DogParkPlatform01", false)]
-        [InlineData(AssetCategories.Rock, "ParkBoulder01", true)]
+        [InlineData(AssetCategories.Rock, "Rock12", true)]
         [InlineData(AssetCategories.Decoration, "ConstructionCone01", false)]
         [InlineData(AssetCategories.Fence, "EU_FenceResidentialPieceLow01", true)]
         [InlineData(AssetCategories.Fence, "FenceIndustrialPieceLow01", false)]
@@ -188,7 +188,15 @@ namespace Placemaker.Tests
         [InlineData(AssetCategories.Fence, "ConstructionBarrierFence", false)]
         [InlineData(AssetCategories.Lamp, "LightpolePark01", true)]
         [InlineData(AssetCategories.Centerpiece, "DogParkDrinkingFountain01", false)]
-        [InlineData(AssetCategories.Centerpiece, "FountainPlaza01", true)]
+        [InlineData(AssetCategories.Centerpiece, "SmallFountain02", true)]
+        [InlineData(AssetCategories.Centerpiece, "WallFountain01", false)]          // needs a wall (playtest 4b)
+        [InlineData(AssetCategories.Bench, "OutdoorSofa01", false)]
+        [InlineData(AssetCategories.Bench, "HighSchool03 Rooftop Garden", false)]   // building extension with a bench activity
+        [InlineData(AssetCategories.Bush, "GardenBed01WideHigh", false)]          // raised bed = planter box
+        [InlineData(AssetCategories.Planter, "GardenBed01WideHigh", true)]
+        [InlineData(AssetCategories.Lamp, "DrivewayLight01", false)]
+        [InlineData(AssetCategories.Kiosk, "PierKiosk01", false)]
+        [InlineData(AssetCategories.Tree, "CoconutPalmTree01", false)]
         public void AutomaticEligibilityByName(string category, string name, bool eligible)
         {
             Assert.Equal(eligible, AssetHeuristics.AutoEligible(category, name, Prop));
@@ -200,8 +208,8 @@ namespace Placemaker.Tests
             Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Bench, "GardenBench01", Prop | AssetTraits.BrandObject));
             Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Bench, "GardenBench01", Prop | AssetTraits.WallOrHanging));
             Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Bin, "TrashBin01", Prop | AssetTraits.NetAttached));
-            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Lamp, "Streetlight01", Prop | AssetTraits.NetAttached));
-            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Bench, "Parkbank Holz", Prop | AssetTraits.BenchActivity));
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Lamp, "LightpolePark01", Prop | AssetTraits.NetAttached));
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Bench, "Parkbank Holz", (Prop & ~AssetTraits.Vanilla) | AssetTraits.BenchActivity));
             Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Fence, "Wooden Fence", AssetTraits.Net | AssetTraits.NetFence));
             Assert.True(AssetHeuristics.AutoEligible(AssetCategories.SurfaceGrass, "Grass 01", AssetTraits.Surface));
             // Exercise equipment is sports, not a bench or decoration.
@@ -268,9 +276,9 @@ namespace Placemaker.Tests
             Assert.Contains(AssetCategories.DecalMarkings, AssetHeuristics.Classify("AlphabetDecalA", decal));
             Assert.Contains(AssetCategories.DecalGraffiti, AssetHeuristics.Classify("Graffiti03", decal));
             Assert.Empty(AssetHeuristics.Classify("Graffiti03", Prop));           // not a decal mesh: still excluded
-            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Decal, "OilStain01", decal));
+            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.Decal, "MudDecal01", decal));
             Assert.False(AssetHeuristics.AutoEligible(AssetCategories.Decal, "AlphabetDecalA", decal));
-            Assert.True(AssetHeuristics.AutoEligible(AssetCategories.DecalMarkings, "AlphabetDecalA", decal));
+            Assert.False(AssetHeuristics.AutoEligible(AssetCategories.DecalMarkings, "AlphabetDecalA", decal));   // letters never automatic (4b)
         }
 
         [Fact]
