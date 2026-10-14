@@ -528,7 +528,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 int n = 0;
                 for (int r = 0; r < rows; r++)
                 {
-                    float d = dLand + 2f + r * 6f;
+                    float d = dLand + 3f + r * 6f;   // crown (2.4) + gap clear of the walk edge
                     foreach (var line in shore.Offset(d, 2.5f, 8f, 2f))
                     {
                         float len = Shoreline.LengthOf(line);

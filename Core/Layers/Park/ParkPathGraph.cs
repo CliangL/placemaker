@@ -162,7 +162,7 @@ namespace Placemaker.Core.Layers.Park
             }
             int components = Components(adjacency);
             int loops = Math.Max(0, Edges.Count - Nodes.Count + components);
-            score += Math.Abs(loops - wantedLoops) * (loops < wantedLoops ? 80.0 : 35.0);   // a missing loop is worse than an extra one
+            score += Math.Abs(loops - wantedLoops) * (loops < wantedLoops ? 250.0 : 35.0);   // a missing loop is worse than an extra one
             score += CoveragePenalty(region);
             return score;
         }

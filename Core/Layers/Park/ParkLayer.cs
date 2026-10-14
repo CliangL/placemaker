@@ -327,6 +327,7 @@ namespace Placemaker.Core.Layers.Park
                 if (pathStyle == "garden") { graph = ParkPathStyles.Meander(graph, gatePoints, ctx.M(6.5f), ctx.M(18f), pathSeed, okPoint); curved = true; }
                 else if (pathStyle == "curvy") { graph = ParkPathStyles.Meander(graph, gatePoints, ctx.M(5f), ctx.M(34f), pathSeed, okPoint); curved = true; }
                 s.Graph = graph;
+                ctx.Plan.Facts["graphLength"] = graph?.TotalLength ?? 0;
                 s.Curves = ParkPaths.Build(s.Graph, region, curved, widthMode);
                 if (math.any(avenueA != avenueB)) WidenAvenue(s.Curves, avenueA, avenueB, widthMode);
                 if (plaza.Length >= 3)
@@ -578,7 +579,7 @@ namespace Placemaker.Core.Layers.Park
                         float d = dest.Distance(p);
                         if (d < bestD) { bestD = d; bestCurve = i; bestT = k / 32f; q = p; }
                     }
-                if (bestCurve < 0 || bestD <= 3.5f) continue;
+                if (bestCurve < 0 || bestD <= 1f) continue;   // a short connector still counts: the feature's own walk starts at its end
                 var end = dest.Rim(q);
                 bool ok = true;
                 for (int k = 1; k < 10 && ok; k++)

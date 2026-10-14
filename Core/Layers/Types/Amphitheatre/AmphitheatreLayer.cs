@@ -826,10 +826,11 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
                 string cat = LeisureKit.Category(ctx, "", style == "meadow" ? AssetCategories.EventFoodTruck : AssetCategories.Kiosk, AssetCategories.Kiosk);
                 if (cat != null)
                 {
-                    float r = outer + 2.8f;
                     int placed = 0;
-                    for (int i = 0; i < kiosks * 3 && placed < kiosks; i++)
+                    // Just outside the rim; further out when the (real-width) promenade takes that ring.
+                    for (int i = 0; i < kiosks * 9 && placed < kiosks; i++)
                     {
+                        float r = outer + 2.8f + (i / (kiosks * 3)) * 2.5f;
                         float f = kiosks == 1 && i == 0 ? 0.7f : -0.85f + 1.7f * ((i * 0.618034f) % 1f);
                         var p = b.Straight ? b.F + b.D * r + b.Perp * (f * (r * b.Tan + 3f)) : b.F + EventKit.Dir(b.Base + f * half) * r;
                         if (EventKit.Put(ctx, occ, p, LeisureKit.Yaw(p, b.F), cat, AssetMix.One(""), 2f, Hashing.Mix(ctx.Seed, 0x6170u + (uint)i), 0.8f, 0.3f)) placed++;

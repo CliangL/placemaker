@@ -474,6 +474,7 @@ namespace Placemaker.Core.Layers.Common
         {
             var p = end.xz;
             float inside = region.Contains(p) ? region.BoundaryDistance(p, hw + 1f) : -region.BoundaryDistance(p, 50f);
+            if (inside > 0.5f) return end;   // only ends ON (or beyond) the outline: entrances, edge-to-edge walks
             float need = hw - inside;
             if (need <= 0.05f) return end;
             var toward = math.lengthsq(control.xz - p) > 0.01f ? control.xz : other.xz;

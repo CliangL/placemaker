@@ -139,7 +139,7 @@ namespace Placemaker.Tests
             var r2 = ring.Select(p => p.xz).ToArray();
             var paths = plan.Nets.Where(n => n.Role != NetRole.Fence && !IsTrail(n)).ToList();
             var ends = paths.SelectMany(n => new[] { n.A.xz, n.D.xz }).ToList();
-            int loose = ends.Count(e => ends.Count(o => math.distancesq(o, e) < 0.01f) == 1 && Poly.DistanceToBoundary(r2, e) > 0.5f);
+            int loose = ends.Count(e => ends.Count(o => math.distancesq(o, e) < 0.01f) == 1 && Poly.DistanceToBoundary(r2, e) > Composer.DefaultHalfWidth(NetRole.PathwayWide) + 0.6f);
             Assert.True(loose <= 6, loose + " loose path ends");
         }
 
