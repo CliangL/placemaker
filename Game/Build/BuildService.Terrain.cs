@@ -16,6 +16,7 @@ using Game.Simulation;
 using Game.Tools;
 using Placemaker.Core;
 using Placemaker.Core.Build;
+using Placemaker.Core.Geometry;
 using Placemaker.Game.Groups;
 using Unity.Collections;
 using Unity.Entities;
@@ -510,7 +511,31 @@ namespace Placemaker.Game.Build
         {
             int emitted = 0, missing = 0;
             var missingIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var w in _work.Zoning)
+            if (_refreshedZoning != null)
+            {
+                // (s26) Quads re-snapped to the live blocks: the zone prefab per zone id comes from the planned work items.
+                var prefabs = new Dictionary<string, Entity>(StringComparer.Ordinal);
+                foreach (var w in _work.Zoning)
+                {
+                    var id = _request.Plan.Layers[w.Layer].Zoning[w.Index].ZoneId ?? "";
+                    if (prefabs.ContainsKey(id)) continue;
+                    var pf = PrefabOf(w);
+                    if (pf != Entity.Null && EntityManager.HasComponent<ZoneData>(pf)) prefabs[id] = pf;
+                }
+                foreach (var q in _refreshedZoning)
+                {
+                    if (!prefabs.TryGetValue(q.ZoneId ?? "", out var prefab)) { missing++; missingIds.Add(q.ZoneId ?? ""); continue; }
+                    var c = q.Corners;
+                    float3 P(float2 v) => new float3(v.x, Height(v), v.y);
+                    var def = NewDefinition();
+                    EntityManager.AddComponentData(def, new CreationDefinition { m_Prefab = prefab });
+                    EntityManager.AddComponentData(def, new Zoning { m_Position = new Quad3(P(c[0]), P(c[1]), P(c[2]), P(c[3])), m_Flags = ZoningFlags.Zone | ZoningFlags.Marquee });
+                    EntityManager.AddComponent<Updated>(def);
+                    NoteUsed(prefab);
+                    emitted++;
+                }
+            }
+            else foreach (var w in _work.Zoning)
             {
                 var z = _request.Plan.Layers[w.Layer].Zoning[w.Index];
                 var prefab = PrefabOf(w);
@@ -587,11 +612,14 @@ namespace Placemaker.Game.Build
             deps.Complete();
             var results = new NativeList<Entity>(64, Allocator.Temp);
             int zoned = 0, empty = 0, blocked = 0, hidden = 0, found = 0;
+            var causes = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var examples = new List<string>();
             try
             {
                 var it = new ZoneBlockIterator { Bounds = new Bounds2(min - 60f, max + 60f), Results = results };
                 tree.Iterate(ref it);
                 var state = new int[planned.Count];   // 0 none, 1 hidden, 2 blocked, 3 empty, 4 zoned (best wins)
+                var where = new (Entity block, int2 cell, float off)[planned.Count];
                 var seen = new HashSet<Entity>();
                 for (int i = 0; i < results.Length; i++)
                 {
@@ -607,25 +635,97 @@ namespace Placemaker.Game.Build
                             var at = global::Game.Zones.ZoneUtils.GetCellPosition(block, new int2(x, y)).xz;
                             for (int k = 0; k < planned.Count; k++)
                             {
-                                if (math.distancesq(at, planned[k]) > 4f) continue;
+                                float d2 = math.distancesq(at, planned[k]);
+                                if (d2 > 4f) continue;
                                 var cell = cells[x + y * block.m_Size.x];
                                 int st = (cell.m_State & global::Game.Zones.CellFlags.Blocked) != 0 ? 2
                                     : (cell.m_State & global::Game.Zones.CellFlags.Visible) == 0 ? 1
                                     : cell.m_Zone.Equals(global::Game.Zones.ZoneType.None) ? 3 : 4;
-                                state[k] = math.max(state[k], st);
+                                if (st > state[k]) { state[k] = st; where[k] = (e, new int2(x, y), math.sqrt(d2)); }
                             }
                         }
                 }
-                foreach (var st in state)
+                for (int k = 0; k < planned.Count; k++)
                 {
+                    int st = state[k];
                     if (st > 0) found++;
-                    if (st == 4) zoned++; else if (st == 3) empty++; else if (st == 2) blocked++; else if (st == 1) hidden++;
+                    if (st == 4) zoned++; else if (st == 3) empty++; else if (st == 1) hidden++;
+                    else if (st == 2)
+                    {
+                        blocked++;
+                        string why = BlockedCause(where[k].block, where[k].cell);
+                        causes.TryGetValue(why, out int n);
+                        causes[why] = n + 1;
+                        if (examples.Count < 6) examples.Add($"{why} at ({planned[k].x:F0}, {planned[k].y:F0}) row {where[k].cell.y}, {where[k].off:F1} m off plan");
+                    }
                 }
             }
             finally { results.Dispose(); }
             string msg = $"Placemaker zoning: group {_groupId}: zoned {zoned} of {planned.Count} cutout cell(s) ({_zoningEmitted} quad(s)); "
                 + $"empty {empty}, blocked {blocked}, hidden {hidden}, not found {planned.Count - found}.";
             if (zoned < planned.Count) Mod.Log.Warn(msg); else Mod.Log.Info(msg);
+            if (blocked > 0)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var kv in causes) sb.Append(sb.Length > 0 ? ", " : "").Append(kv.Key).Append(" x").Append(kv.Value);
+                Mod.Log.Warn($"Placemaker zoning: blocked cutout cells by cause: {sb}. e.g. {string.Join("; ", examples)}.");
+            }
+        }
+
+        /// <summary>
+        /// (s26) What blocks a live cell (mirrors Game.Zones.CellBlockJobs): one of our zone block lots, one of the
+        /// build's nets, only the CleanBlockedCells rules (a blocked cell nearer the road / row 0 behind a blocked row
+        /// 1), another physical lot, else a city net or object.
+        /// </summary>
+        private string BlockedCause(Entity blockEntity, int2 xy)
+        {
+            if (blockEntity == Entity.Null || !EntityManager.Exists(blockEntity)) return "unknown";
+            var block = EntityManager.GetComponentData<global::Game.Zones.Block>(blockEntity);
+            var cells = EntityManager.GetBuffer<global::Game.Zones.Cell>(blockEntity, true);
+            var centre = global::Game.Zones.ZoneUtils.GetCellPosition(block, xy).xz;
+            float2 d = block.m_Direction, r = new float2(d.y, -d.x);
+            var sq = new[] { centre + (d + r) * 3.98f, centre + (d - r) * 3.98f, centre - (d + r) * 3.98f, centre - (d - r) * 3.98f };
+            foreach (var ring in _blockerRings)
+                if (ObstacleCut.Overlaps(sq, ring)) return "our zone block lot";
+            var plan = _request.Plan;
+            foreach (var l in plan.Layers)
+            {
+                if (l == null) continue;
+                foreach (var n in l.Nets)
+                {
+                    if (n == null || n.Role == NetRole.Fence) continue;
+                    float hw = Composer.DefaultHalfWidth(n.Role);
+                    for (int i = 0; i <= 16; i++)
+                    {
+                        var p = Composer.Bezier(n.A, n.B, n.C, n.D, i / 16f).xz;
+                        if (Poly.Contains(sq, p) || Poly.DistanceToBoundary(sq, p) < hw)
+                            return "our " + n.Role + " net" + (string.IsNullOrEmpty(n.Asset.Id) ? "" : " " + n.Asset.Id);
+                    }
+                }
+            }
+            if (xy.y > 0 && (cells[xy.x + (xy.y - 1) * block.m_Size.x].m_State & global::Game.Zones.CellFlags.Blocked) != 0)
+                return "behind a blocked cell (row " + (xy.y - 1) + ")";
+            if (xy.y == 0 && block.m_Size.y > 1 && (cells[xy.x + block.m_Size.x].m_State & global::Game.Zones.CellFlags.Blocked) != 0)
+                return "row 0 with row 1 blocked";
+            var query = EntityManager.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Areas.Area>(), ComponentType.ReadOnly<global::Game.Areas.Node>(),
+                ComponentType.ReadOnly<global::Game.Prefabs.PrefabRef>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+            using (var areas = query.ToEntityArray(Allocator.Temp))
+                for (int i = 0; i < areas.Length; i++)
+                {
+                    var a = areas[i];
+                    var prefab = EntityManager.GetComponentData<global::Game.Prefabs.PrefabRef>(a).m_Prefab;
+                    if (!EntityManager.HasComponent<global::Game.Prefabs.AreaGeometryData>(prefab)) continue;
+                    var gd = EntityManager.GetComponentData<global::Game.Prefabs.AreaGeometryData>(prefab);
+                    if ((gd.m_Flags & global::Game.Areas.GeometryFlags.PhysicalGeometry) == 0) continue;
+                    var nodes = EntityManager.GetBuffer<global::Game.Areas.Node>(a, true);
+                    if (nodes.Length < 3) continue;
+                    var ring = new float2[nodes.Length];
+                    for (int j = 0; j < ring.Length; j++) ring[j] = nodes[j].m_Position.xz;
+                    if (!ObstacleCut.Overlaps(sq, ring)) continue;
+                    bool ours = EntityManager.HasComponent<PlacemakerMember>(a);
+                    return (ours ? "our lot " : "lot ") + _prefabs.GetPrefabName(prefab);
+                }
+            return "a city net or object";
         }
     }
 }

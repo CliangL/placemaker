@@ -440,6 +440,14 @@ namespace Placemaker.Game.Assets
             var summary = new StringBuilder();
             foreach (var kv in _byCategory) summary.Append(kv.Key).Append('=').Append(kv.Value.Count).Append(' ');
             Mod.Log.Info($"Placemaker asset catalog v{_version}: {summary}({failed} skipped)");
+            // (s26) Which lane roads carry zone blocks (shops must front one that does).
+            {
+                var zb = new System.Text.StringBuilder();
+                foreach (var id in new[] { "Alley", "Pedestrian Street", "Pedestrian Street Small", "Small Road", "Gravel Road" })
+                    if (_infoMap.TryGetValue(id, out var ri))
+                        zb.Append(zb.Length > 0 ? ", " : "").Append(id).Append(ri.ZoneBlocks == 1 ? " yes" : ri.ZoneBlocks == 2 ? " NO" : " ?");
+                if (zb.Length > 0) Mod.Log.Info("Placemaker zone blocks by road: " + zb + ".");
+            }
         }
 
         /// <summary>
@@ -612,6 +620,9 @@ namespace Placemaker.Game.Assets
                 info.Cost = EntityManager.GetComponentData<PlaceableObjectData>(e).m_ConstructionCost;
             if (EntityManager.HasComponent<NetGeometryData>(e))
                 info.NetWidth = EntityManager.GetComponentData<NetGeometryData>(e).m_DefaultWidth;
+            // (s26) Does the road carry zone blocks (BlockSystem.CreateBlocks needs RoadData.m_ZoneBlockPrefab)?
+            if (EntityManager.HasComponent<global::Game.Prefabs.RoadData>(e))
+                info.ZoneBlocks = EntityManager.GetComponentData<global::Game.Prefabs.RoadData>(e).m_ZoneBlockPrefab != Entity.Null ? (byte)1 : (byte)2;
             if (EntityManager.HasComponent<PlaceableNetData>(e))
             {
                 // Nets are charged per rounded 8 m cell, max(1, round(len/8)) (NetUtils.GetConstructionCost); the UI's

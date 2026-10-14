@@ -43,7 +43,7 @@ namespace Placemaker.Core.Layers.Commercial
         protected override void Compose(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
         {
             var r = runs[0];
-            float h = Mall.AlleyHalf;
+            var (laneAsset, h) = Mall.ShopLane(ctx);
             int cells = Cells(ctx);
             float d = cells * Mall.Cell;
             float w = ctx.Raw("courtWidth"), depth = ctx.Raw("courtDepth");
@@ -63,7 +63,7 @@ namespace Placemaker.Core.Layers.Commercial
                 break;
             }
             float l = c - w * 0.5f - h, rr = c + w * 0.5f + h;   // leg centre lines
-            var lane = mall.AddLane(r.At(l, 0f), -r.In, new[] { r.At(l, depth + h), r.At(rr, depth + h) }, r.At(rr, 0f), -r.In, NetRole.Alley, Mall.AlleyAsset, h);
+            var lane = mall.AddLane(r.At(l, 0f), -r.In, new[] { r.At(l, depth + h), r.At(rr, depth + h) }, r.At(rr, 0f), -r.In, NetRole.Alley, laneAsset, h);
             if (lane == null)
             {
                 mall.ShopRow(r, from, to, 0f, cells);

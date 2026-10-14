@@ -51,8 +51,119 @@ namespace Placemaker.Game.Build
         private bool HasBlockers =>
             BlockZoning && !LooseBuild && _groupId != 0 && _request?.Plan?.ZoneBlockers != null && _request.Plan.ZoneBlockers.Count > 0;
 
-        /// <summary>The step after the main Apply settled: blockers, then zoning, then finish.</summary>
+        /// <summary>(s26) Zoning quads recomputed against the live blocks after Apply (null = use the plan's).</summary>
+        private List<ZoneGuard.ZoningQuad> _refreshedZoning;
+        /// <summary>Frames after the main Apply before the live zone blocks are read (split edges get new blocks, cells re-checked).</summary>
+        private const int ZoneRefreshFrames = 40;
+
+        private bool GuardsZoning =>
+            BlockZoning && !LooseBuild && _groupId != 0 && _request?.Plan?.Footprints != null && _request.Plan.Footprints.Count > 0
+            && (_request.Plan.ZoneQuads.Count > 0 || _request.Plan.ZoneBlockers.Count > 0);
+
+        /// <summary>The step after the main Apply settled: refresh against the live blocks, blockers, zoning, finish.</summary>
         private void GoAfterApply()
+        {
+            _refreshedZoning = null;
+            if (GuardsZoning) { Go(Step.ZoneRefresh); return; }
+            ContinueAfterApply();
+        }
+
+        /// <summary>
+        /// (s26) The build's paths split the streets' edges at their entrances; the game rebuilds those edges' zone
+        /// blocks with cells shifted along the road. Re-snap cutouts and blockers to the live cells (ZoneGuard.Refresh).
+        /// </summary>
+        private void DoZoneRefresh(int frame)
+        {
+            if (frame - _stepFrame < ZoneRefreshFrames) return;
+            var plan = _request.Plan;
+            try
+            {
+                float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
+                foreach (var f in plan.Footprints) foreach (var p in f) { min = math.min(min, p); max = math.max(max, p); }
+                var grids = new List<Placemaker.Core.ZoneGrid>();
+                Placemaker.Game.Preview.SiteCapture.CaptureZoneBlocks(EntityManager, World.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>(), min - 60f, max + 60f, grids);
+                var before = new List<float2>();
+                foreach (var c in plan.ZoneCells) if (c.State == ZoneCellState.Zoned) before.Add(0.25f * (c.A + c.B + c.C + c.D));
+                _heightsValid = false;
+                var refreshed = ZoneGuard.Refresh(plan, grids, p => Height(p));
+                if (refreshed != null)
+                {
+                    _refreshedZoning = refreshed;
+                    int after = 0, moved = 0;
+                    foreach (var c in plan.ZoneCells)
+                    {
+                        if (c.State != ZoneCellState.Zoned) continue;
+                        after++;
+                        var centre = 0.25f * (c.A + c.B + c.C + c.D);
+                        bool same = false;
+                        foreach (var b in before) if (math.distancesq(b, centre) < 0.25f) { same = true; break; }
+                        if (!same) moved++;
+                    }
+                    int ours = 0;
+                    foreach (var g in grids) if (g.Ours) ours++;
+                    Mod.Log.Info($"Placemaker zoning refresh: {grids.Count} live zone block(s) ({ours} of the build's own roads); {after} cutout cell(s) (planned {before.Count}), "
+                        + $"{moved} on a moved grid (road edges split by the build), {refreshed.Count} zoning quad(s).");
+                    // Which road each plot zones from (playtest: shops grew facing the street behind the plaza's lane).
+                    for (int i = 0; i < refreshed.Count && i < 40; i++)
+                    {
+                        var c = Poly.Centroid(refreshed[i].Corners);
+                        Mod.Log.Info($"Placemaker zoning: plot {i} at ({c.x:F0}, {c.y:F0}) zones from {RoadOfCell(c)}.");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker zoning refresh failed (using the plan's cells): " + e.Message);
+                _refreshedZoning = null;
+            }
+            ContinueAfterApply();
+        }
+
+        /// <summary>(s26) The road whose live zone block holds the cell at <paramref name="p"/> (prefab name, ours or the city's).</summary>
+        private string RoadOfCell(float2 p)
+        {
+            var search = World.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>();
+            var tree = search.GetSearchTree(true, out var deps);
+            deps.Complete();
+            var results = new Unity.Collections.NativeList<Entity>(16, Unity.Collections.Allocator.Temp);
+            try
+            {
+                var it = new ZoneBlockIterator { Bounds = new Colossal.Mathematics.Bounds2(p - 1f, p + 1f), Results = results };
+                tree.Iterate(ref it);
+                string fallback = "no zone block";
+                for (int i = 0; i < results.Length; i++)
+                {
+                    var e = results[i];
+                    if (!EntityManager.HasComponent<global::Game.Zones.Block>(e) || EntityManager.HasComponent<Deleted>(e) || EntityManager.HasComponent<Temp>(e)) continue;
+                    var b = EntityManager.GetComponentData<global::Game.Zones.Block>(e);
+                    var q = global::Game.Zones.ZoneUtils.CalculateCorners(b);
+                    if (!Poly.Contains(new[] { q.a, q.b, q.c, q.d }, p)) continue;
+                    string road = "a road";
+                    if (EntityManager.HasComponent<global::Game.Common.Owner>(e))
+                    {
+                        var owner = EntityManager.GetComponentData<global::Game.Common.Owner>(e).m_Owner;
+                        if (owner != Entity.Null && EntityManager.Exists(owner) && EntityManager.HasComponent<global::Game.Prefabs.PrefabRef>(owner))
+                            road = "'" + _prefabs.GetPrefabName(EntityManager.GetComponentData<global::Game.Prefabs.PrefabRef>(owner).m_Prefab) + "'"
+                                + (EntityManager.HasComponent<PlacemakerMember>(owner) ? " (built by Placemaker)" : " (city)");
+                    }
+                    // Prefer the block whose cell there is visible (the one the game zones).
+                    var cells = EntityManager.GetBuffer<global::Game.Zones.Cell>(e, true);
+                    bool visible = false;
+                    for (int k = 0; k < cells.Length && k < b.m_Size.x * b.m_Size.y; k++)
+                    {
+                        int x = k % b.m_Size.x, y = k / b.m_Size.x;
+                        if (math.distancesq(global::Game.Zones.ZoneUtils.GetCellPosition(b, new int2(x, y)).xz, p) > 32f) continue;
+                        if ((cells[k].m_State & global::Game.Zones.CellFlags.Visible) != 0) { visible = true; break; }
+                    }
+                    if (visible) return road;
+                    fallback = road + " (hidden there)";
+                }
+                return fallback;
+            }
+            finally { results.Dispose(); }
+        }
+
+        private void ContinueAfterApply()
         {
             if (HasBlockers)
             {
@@ -82,7 +193,7 @@ namespace Placemaker.Game.Build
             GoZoning();
         }
 
-        private void GoZoning() => Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
+        private void GoZoning() => Go((_refreshedZoning != null ? _refreshedZoning.Count : _work.Zoning.Count) > 0 ? Step.ZoningWait : Step.Finish);
 
         private void ResetZoneBlock()
         {

@@ -29,6 +29,23 @@ namespace Placemaker.Core.Layers.Commercial
         private const long SyntheticBase = -700000;
 
         public static AssetRef AlleyAsset => new AssetRef(StreetShops.AlleyAsset, StreetShops.AlleyFallback);
+
+        /// <summary>
+        /// (s26) The lane shops FRONT: zoned plots need the lane's zone blocks. The vanilla Alley is used when it carries
+        /// zone blocks (or nobody knows: tests, older catalogs); when the game's catalog says it has none
+        /// (AssetInfo.ZoneBlocks = 2), the Two-Lane Road (16 m) — playtest s26: every shop grew off the street behind
+        /// the plaza, none off its alley ring. Service lanes behind shops keep <see cref="AlleyAsset"/>.
+        /// </summary>
+        public static (AssetRef asset, float half) ShopLane(LayerContext ctx)
+        {
+            var assets = ctx?.Site?.Assets;
+            if (assets != null && assets.TryGetValue(StreetShops.AlleyAsset, out var alley) && alley.ZoneBlocks == 2)
+            {
+                float w = assets.TryGetValue(StreetShops.AlleyFallback, out var road) && road.NetWidth > 0.5f ? road.NetWidth : 16f;
+                return (new AssetRef(StreetShops.AlleyFallback), w * 0.5f);
+            }
+            return (AlleyAsset, AlleyHalf);
+        }
         public static AssetRef PedestrianStreet => new AssetRef("Pedestrian Street", "Pedestrian Street Small", StreetShops.AlleyAsset);
         public static AssetRef PedestrianStreetSmall => new AssetRef("Pedestrian Street Small", "Pedestrian Street", StreetShops.AlleyAsset);
 

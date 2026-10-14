@@ -289,7 +289,10 @@ namespace Placemaker.Game.Preview
         /// (s19) Zone blocks of existing roads around the area (Game.Zones.Block): ZoneGuard snaps the build's zoning
         /// to their cells and blocks the others under the build. Geometry only (cells are 8 m, see Core ZoneGuard).
         /// </summary>
-        private void CaptureZoneBlocks(float2 min, float2 max, List<ZoneGrid> into)
+        private void CaptureZoneBlocks(float2 min, float2 max, List<ZoneGrid> into) => CaptureZoneBlocks(_em, _zoneSearch, min, max, into);
+
+        /// <summary>(s26) Same capture for the build (live blocks after Apply: split edges have new blocks).</summary>
+        public static void CaptureZoneBlocks(EntityManager _em, global::Game.Zones.SearchSystem _zoneSearch, float2 min, float2 max, List<ZoneGrid> into)
         {
             if (_zoneSearch == null) return;
             var tree = _zoneSearch.GetSearchTree(true, out var deps);
@@ -326,7 +329,13 @@ namespace Placemaker.Game.Preview
                             }
                         }
                     }
-                    into.Add(new ZoneGrid { Position = b.m_Position.xz, Direction = b.m_Direction, Size = b.m_Size, Cells = cells });
+                    bool ours = false;
+                    if (_em.HasComponent<global::Game.Common.Owner>(e))
+                    {
+                        var owner = _em.GetComponentData<global::Game.Common.Owner>(e).m_Owner;
+                        ours = owner != Entity.Null && _em.Exists(owner) && _em.HasComponent<Placemaker.Game.Groups.PlacemakerMember>(owner);
+                    }
+                    into.Add(new ZoneGrid { Position = b.m_Position.xz, Direction = b.m_Direction, Size = b.m_Size, Cells = cells, Ours = ours });
                 }
             }
             catch (Exception ex)

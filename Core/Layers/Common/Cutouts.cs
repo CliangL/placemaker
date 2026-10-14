@@ -79,8 +79,30 @@ namespace Placemaker.Core.Layers.Common
                 if (l == null || l.GeneratorId == ZoningLayer) continue;
                 // ── objects: footprint (roughly) must stay off the cutout ──
                 changed += l.Objects.RemoveAll(o => o != null && In(o.Position.xz, Pad(o.Role)));
-                // ── nets: keep only the stretches outside ──
-                changed += ClipNets(l, In);
+                // ── nets: keep only the stretches outside. (s26) Never roads/lanes: a cutout faces them, and a lane cut
+                // by a zoned cell reaching across it ended in dead-end caps and let the street behind zone the plots. ──
+                var roads = new List<PlannedNet>();
+                foreach (var n in l.Nets) if (n != null && Build.ZoneBlockPredictor.Zones(n.Role)) roads.Add(n);
+                if (roads.Count == 0) changed += ClipNets(l, In);
+                else
+                {
+                    var keep = l.Nets;
+                    var tmp = new AreaPlan { GeneratorId = l.GeneratorId };
+                    foreach (var n in keep) if (!roads.Contains(n)) tmp.Nets.Add(n);
+                    int c = ClipNets(tmp, In);
+                    if (c > 0)
+                    {
+                        changed += c;
+                        var old = new List<PlannedNet>(keep);
+                        var rebuilt = new List<PlannedNet>(roads);
+                        rebuilt.AddRange(tmp.Nets);
+                        // Objects attached by index follow their net (a clipped net keeps its object; a removed one drops it).
+                        foreach (var o in l.Objects)
+                            if (o.AttachedNet >= 0) o.AttachedNet = o.AttachedNet < old.Count ? rebuilt.IndexOf(old[o.AttachedNet]) : -1;
+                        l.Nets.Clear();
+                        l.Nets.AddRange(rebuilt);
+                    }
+                }
                 // ── ground: surfaces and areas minus the cutouts ──
                 changed += ClipRings(l.Surfaces, s => s.Ring, (s, ring) => new PlannedSurface { Ring = ring, Role = s.Role, Asset = s.Asset, Category = s.Category }, cuts);
                 changed += ClipRings(l.Areas, a => a.Ring, (a, ring) => new PlannedArea { Ring = ring, Role = a.Role, Asset = a.Asset }, cuts);

@@ -1,4 +1,5 @@
 {
+  "Placemaker.Issue.CutoutNotZonable": "A shop plot faces no road the game zones from. It is left to the park.",
   "Placemaker.Issue.BuildingsKept": "{0} buildings are in the way. They are kept: nothing is built on their lots.",
   "Placemaker.Issue.BuildingsLeftOut": "{0} parts were left out or cut back to keep clear of existing buildings.",
   "Placemaker.Problem.OnlyBuildings": "Only things the brush rules keep off are under the paint (buildings, other builds, zoning, water). Paint somewhere else, or change the rules.",

@@ -67,7 +67,7 @@ namespace Placemaker.Game.Build
         private enum Step
         {
             Idle, Prepare, WaitReplaced, ActivateTool, Terraform, Paint, EmitNets, EmitRest, WaitTemps, Validate,
-            ResetForRetry, OwnerLot, Apply, Settle, ZoneBlock, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
+            ResetForRetry, OwnerLot, Apply, Settle, ZoneRefresh, ZoneBlock, ZoningWait, ZoningEmit, ZoningApply, Finish, Cleanup,
         }
 
         private ToolSystem _toolSystem;
@@ -309,6 +309,7 @@ namespace Placemaker.Game.Build
                     case Step.OwnerLot: DoOwnerLot(frame); break;
                     case Step.Apply: DoApply(); break;
                     case Step.Settle: DoSettle(frame); break;
+                    case Step.ZoneRefresh: DoZoneRefresh(frame); break;
                     case Step.ZoneBlock: DoZoneBlock(frame); break;
                     case Step.ZoningWait: if (frame - _stepFrame >= ZoningWaitFrames) Go(Step.ZoningEmit); break;
                     case Step.ZoningEmit: DoZoningEmit(); break;
