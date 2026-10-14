@@ -26,10 +26,34 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
         /// <summary>Working-face cut: sector direction, half angle (rad) and how much lower the sector stays (0..1).</summary>
         public float2 CutDir;
         public float CutHalfAngle, CutDepth;
+        /// <summary>Optional ellipse: long axis and its stretch (≥ 1; Radius is the short half axis).</summary>
+        public float2 Axis;
+        public float Ratio;
+
+        /// <summary>Normalised-ellipse distance from the centre (equals metres along the short axis).</summary>
+        public float Distance(float2 p)
+        {
+            var d = p - Center;
+            if (Ratio <= 1.01f || math.lengthsq(Axis) < 1e-6f) return math.length(d);
+            var ax = math.normalize(Axis);
+            float u = math.dot(d, ax) / Ratio, v = math.dot(d, new float2(-ax.y, ax.x));
+            return math.sqrt(u * u + v * v);
+        }
+
+        /// <summary>True when p lies within the given fraction of the mound's footprint.</summary>
+        public bool Covers(float2 p, float fraction = 1f) => Distance(p) < Radius * fraction;
+
+        /// <summary>Point on the footprint at a fraction of the radius in direction <paramref name="dir"/> (unit).</summary>
+        public float2 At(float2 dir, float fraction)
+        {
+            // Solve |dir·t| in ellipse space for the boundary distance.
+            float unit = Distance(Center + dir);
+            return Center + dir * (Radius * fraction / math.max(1e-4f, unit));
+        }
 
         public float Offset(float2 p)
         {
-            float r = math.distance(p, Center);
+            float r = Distance(p);
             if (r >= Radius || Radius <= 0f) return 0f;
             float t = r / Radius;
             float k = t <= Flat ? 1f : 1f - YardKit.Smooth(Flat, 1f, t);
@@ -53,6 +77,9 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
     {
         public const int KindHaul = 6;
         public const int KindStuff = 2;
+
+        /// <summary>Feature with its own label key (for shared add-ons whose generic label is not in the language files).</summary>
+        public static FeatureInfo Labelled(FeatureInfo f, string labelKey) { f.LabelKey = labelKey; return f; }
 
         public static float Smooth(float e0, float e1, float x)
         {

@@ -43,7 +43,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
         {
             Feature(JunkPilesAddOn.LayerId), Feature("skipRow"),
             Feature("decals", ("theme", "dirt"), ("density", 1.5), ("clustering", 70.0)),
-            Feature("rocks", ("size", "small"), ("clusters", 3.0)), Feature("bigtrees", ("density", 1.0)),
+            Feature("rocks", ("size", "small"), ("clusters", 3.0)), YardKit.Labelled(Feature("bigtrees", ("density", 1.0)), "Placemaker.Scrapyard.Feature.bigtrees"),
             StreetShopsFeature(Area),
         };
 
