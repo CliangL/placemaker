@@ -117,8 +117,9 @@ namespace Placemaker.Tests
         [Fact]
         public void Fixture_reproduces_the_playtest_without_the_road_check()
         {
-            // Without the captured roads the inner road's block zones its column across the curved road (the bug).
-            var r = Run(Grids(), nets: false);
+            // Without the captured roads the inner road's block zones its column across the curved road (the bug; since
+            // s26 the curved road's own blocks win the cutout first, so the crossing block is run on its own here).
+            var r = Run(new List<ZoneGrid> { Grids()[0] }, nets: false);
             Assert.Contains(r.Cells, c => c.State == ZoneCellState.Zoned && DistanceToRoad(Poly.Centroid(new[] { c.A, c.B, c.C, c.D })) < 0f);
         }
 

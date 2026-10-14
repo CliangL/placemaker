@@ -71,11 +71,13 @@ namespace Placemaker.Core.Layers.Commercial
             if (s1 - s0 < 50f) return false;
             int cells = Cells(ctx), aisles = Mall.Aisles(ctx.S("lotSize"));
             float reach = mall.Reach(r, s0, s1);
-            while (aisles > 0 && Mall.LotDepth(aisles) + 2 * Mall.AlleyHalf + cells * Mall.Cell > reach - 1f)
+            // (s26) The shops front this lane (across it from the lot): it must carry zone blocks.
+            var (laneAsset, h) = Mall.ShopLane(ctx);
+            while (aisles > 0 && Mall.LotDepth(aisles) + 2 * h + cells * Mall.Cell > reach - 1f)
                 if (cells > 2) cells--; else aisles--;
             if (aisles == 0) return false;
-            float lt = Mall.LotDepth(aisles), h = Mall.AlleyHalf;
-            var lane = mall.AddLane(r.At(s0 + h, 0f), -r.In, new[] { r.At(s0 + h, lt + h), r.At(s1 - h, lt + h) }, r.At(s1 - h, 0f), -r.In, NetRole.Alley, Mall.AlleyAsset, h);
+            float lt = Mall.LotDepth(aisles);
+            var lane = mall.AddLane(r.At(s0 + h, 0f), -r.In, new[] { r.At(s0 + h, lt + h), r.At(s1 - h, lt + h) }, r.At(s1 - h, 0f), -r.In, NetRole.Alley, laneAsset, h);
             if (lane == null) return false;
             var entrances = new List<(float2, string)>();
             LotEntrances(entrances, r, s0 + 2 * h, s1 - 2 * h, 0f, "entrance");

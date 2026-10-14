@@ -877,6 +877,11 @@ namespace Placemaker.Gallery
                     cv.FillPolygon(q, Rgba.Hex("#8fb4e8", 0.75f));
                     cv.StrokePolyline(q, cv.Px(1f), Rgba.Hex("#3d6db5"), closed: true);
                 }
+            // (s26) The cells ZoneGuard zones (snapped to the roads' blocks, incl. the predicted blocks of the lanes this
+            // build adds): what the game will zone, one outline per cell.
+            if (plan.ZoneCells != null)
+                foreach (var c in plan.ZoneCells.Where(c => c.State == Placemaker.Core.Build.ZoneCellState.Zoned))
+                    cv.StrokePolyline(new[] { c.A, c.B, c.C, c.D }, cv.Px(0.8f), Rgba.Hex("#1f4f99", 0.8f), closed: true);
             foreach (var l in plan.Layers.Where(l => l != null))
                 foreach (var g in l.Regions)
                     if (g?.Ring != null && g.Tags != null && g.Tags.Contains("shops"))

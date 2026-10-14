@@ -99,6 +99,10 @@ namespace Placemaker.Core
         /// cells under a road are Blocked. ZoneGuard never zones those.
         /// </summary>
         public byte[] Cells;
+        /// <summary>(s26, appended) Predicted from a road this build adds (Build/ZoneBlockPredictor), not captured.</summary>
+        public bool Predicted;
+        /// <summary>(s26, appended) A live block of a road this build built (its lanes): preferred like a predicted one.</summary>
+        public bool Ours;
 
         public const byte CellVisible = 1, CellBlocked = 2;
     }
@@ -170,6 +174,8 @@ namespace Placemaker.Core
         public float Cost;
         /// <summary>Monthly upkeep in the same units as Cost. 0 = none/unknown.</summary>
         public float Upkeep;
+        /// <summary>(s26, appended) Roads: 1 = the prefab carries zone blocks (RoadData.m_ZoneBlockPrefab), 2 = it does not, 0 = unknown.</summary>
+        public byte ZoneBlocks;
     }
 
     /// <summary>A user-placed marker on the outline (entrance, access point, exit…).</summary>

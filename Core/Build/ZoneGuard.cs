@@ -41,6 +41,13 @@ namespace Placemaker.Core.Build
         public float2[] Clipped;
     }
 
+    /// <summary>(s26) A cutout quad as planned (before ZoneGuard snapped it to the captured cells).</summary>
+    public struct ZoneQuad
+    {
+        public float2[] Quad;
+        public string ZoneId;
+    }
+
     public static class ZoneGuard
     {
         /// <summary>Game setting "Keep zoned buildings off builds" (default on). Off = the s14 behaviour (no blockers, quads as planned).</summary>
@@ -149,8 +156,39 @@ namespace Placemaker.Core.Build
                     owners.Add((l, z));
                 }
             }
+            plan.ZoneQuads.Clear();
+            for (int i = 0; i < quads.Count; i++) plan.ZoneQuads.Add(new ZoneQuad { Quad = quads[i], ZoneId = ids[i] });
+            // (s26) Roads this build adds get the zone blocks the game will give them (cutouts facing a lane snap to
+            // them); the build's own nets block the cells under them (and the game every cell behind).
+            var grids = new List<ZoneGrid>();
+            if (site?.ZoneGrids != null) grids.AddRange(site.ZoneGrids);
+            grids.AddRange(PredictedGrids(plan, site));
+            var own = OwnNets(plan, site);
             Result r;
-            try { r = Compute(plan.Footprints, quads, ids, plan.Protected, site?.ZoneGrids, site?.NearbyNets); }
+            try
+            {
+                r = Compute(plan.Footprints, quads, ids, plan.Protected, grids, site?.NearbyNets, true, own);
+                // (s26) A plot no road block reaches (blocks exist around it: we know the grid) is not a cutout: it
+                // would be drawn floating and never zone. Say so and plan again without it — its land is blocked
+                // like the rest of the build.
+                bool dropped = false;
+                for (int i = quads.Count - 1; i >= 0; i--)
+                {
+                    if (r.Snapped[i] || !Knowable(quads[i], site, grids)) continue;
+                    var c = Poly.Centroid(quads[i]);
+                    // A plot facing two roads gets a quad per road; the one the other road's cells already cover is
+                    // simply redundant.
+                    bool covered = false;
+                    foreach (var sq in r.ZonedSquares) if (Poly.Contains(quads[i], Poly.Centroid(sq))) { covered = true; break; }
+                    if (!covered)
+                        plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = NotZonableKey, At = new float3(c.x, site?.HeightAt?.Invoke(c) ?? 0f, c.y) });
+                    owners[i].layer.Zoning.Remove(owners[i].z);
+                    quads.RemoveAt(i); ids.RemoveAt(i); owners.RemoveAt(i);
+                    plan.ZoneQuads.RemoveAt(i);
+                    dropped = true;
+                }
+                if (dropped) r = Compute(plan.Footprints, quads, ids, plan.Protected, grids, site?.NearbyNets, true, own);
+            }
             catch (Exception)
             {
                 // Never fail a plan over the guard: build as before (no blockers, quads unchanged).
@@ -200,14 +238,161 @@ namespace Placemaker.Core.Build
             }
         }
 
+        /// <summary>(s26) Issue: a planned plot faces no road's zone block (no cell of it can be zoned).</summary>
+        public const string NotZonableKey = "Placemaker.Issue.CutoutNotZonable";
+
+        /// <summary>Zone blocks the game will give the roads this plan adds (both sides of every road-class net).</summary>
+        public static List<ZoneGrid> PredictedGrids(ComposedPlan plan, SiteContext site)
+        {
+            var r = new List<ZoneGrid>();
+            if (plan?.Layers == null) return r;
+            foreach (var l in plan.Layers)
+            {
+                if (l == null) continue;
+                foreach (var n in l.Nets)
+                {
+                    if (n == null || !ZoneBlockPredictor.Zones(n.Role)) continue;
+                    if (site?.Assets != null && !string.IsNullOrEmpty(n.Asset.Id) && site.Assets.TryGetValue(n.Asset.Id, out var ai) && ai.ZoneBlocks == 2) continue;
+                    foreach (var g in ZoneBlockPredictor.Blocks(n.A, n.B, n.C, n.D, NetWidth(n, site)))
+                    {
+                        var p = g;
+                        p.Predicted = true;
+                        r.Add(p);
+                    }
+                }
+            }
+            return r;
+        }
+
+        /// <summary>Width of a planned net: the catalog's, else the known vanilla road of its asset (or fallbacks), else the role default.</summary>
+        public static float NetWidth(PlannedNet n, SiteContext site)
+        {
+            var ids = new List<string>();
+            if (!string.IsNullOrEmpty(n.Asset.Id)) ids.Add(n.Asset.Id);
+            if (n.Asset.Fallbacks != null) foreach (var f in n.Asset.Fallbacks) if (!string.IsNullOrEmpty(f)) ids.Add(f);
+            if (site?.Assets != null)
+                foreach (var id in ids)
+                    if (site.Assets.TryGetValue(id, out var ai) && ai.NetWidth > 0.5f) return ai.NetWidth;
+            foreach (var id in ids)
+            {
+                var k = Layers.Roads.RoadRoles.Find(id);
+                if (k != null) return k.Width;
+            }
+            return Composer.DefaultHalfWidth(n.Role) * 2f;
+        }
+
+        /// <summary>The plan's ground nets (paths, lanes, aisles; not fences) as polylines with their half width.</summary>
+        public static List<(float2[] line, float half)> OwnNets(ComposedPlan plan, SiteContext site)
+        {
+            var r = new List<(float2[], float)>();
+            if (plan?.Layers == null) return r;
+            foreach (var l in plan.Layers)
+            {
+                if (l == null) continue;
+                foreach (var n in l.Nets)
+                {
+                    if (n == null || n.Role == NetRole.Fence) continue;
+                    var line = new float2[9];
+                    for (int i = 0; i <= 8; i++) line[i] = Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f).xz;
+                    r.Add((line, NetWidth(n, site) * 0.5f));
+                }
+            }
+            return r;
+        }
+
+        /// <summary>
+        /// Do we know the cells this plot could get? Yes when a captured block reaches near it, or when only a road
+        /// of this build (predicted blocks) is near and no existing road is (whose blocks were not captured).
+        /// </summary>
+        private static bool Knowable(float2[] quad, SiteContext site, List<ZoneGrid> grids)
+        {
+            var captured = new List<ZoneGrid>(); var predicted = new List<ZoneGrid>();
+            foreach (var g in grids) (g.Predicted ? predicted : captured).Add(g);
+            if (NearAnyGrid(quad, captured)) return true;
+            if (!NearAnyGrid(quad, predicted)) return false;
+            var c = Poly.Centroid(quad);
+            var nets = site?.NearbyNets;
+            if (nets != null)
+                foreach (var n in nets)
+                {
+                    if (n.Category != NetCategory.Road) continue;
+                    for (int i = 0; i <= 8; i++)
+                        if (math.distance(Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f).xz, c) < n.Width * 0.5f + 6 * Cell) return false;
+                }
+            return true;
+        }
+
+        private static bool NearAnyGrid(float2[] quad, List<ZoneGrid> grids)
+        {
+            var c = Poly.Centroid(quad);
+            foreach (var g in grids)
+            {
+                float reach = math.length((float2)g.Size) * Cell * 0.5f + 2f * Cell;
+                if (math.distance(g.Position, c) < reach) return true;
+            }
+            return false;
+        }
+
+        // ───────────────────────── s26: refresh against the live blocks after the build ─────────────────────────
+
+        /// <summary>One zoning quad to paint after the refresh.</summary>
+        public struct ZoningQuad
+        {
+            public float2[] Corners;
+            public string ZoneId;
+        }
+
+        /// <summary>
+        /// (s26) Playtest: "zoned 4 of 16 cutout cell(s) … blocked 12". The plan snaps cutouts and blockers to the zone
+        /// blocks captured at design time — but the build's park paths connect to the streets and SPLIT their edges;
+        /// the game then rebuilds the blocks of both pieces with cells aligned to the new edge ends, a metre or two off
+        /// the captured grid. The blockers (0.5 m clear of the OLD cells) overlapped the new cells and blocked them;
+        /// only a cutout on an edge no path touched survived. After the main Apply the game layer captures the live
+        /// blocks (cell flags included: our paths now block their cells for real) and calls this: blockers, zoning
+        /// quads and the preview cells are recomputed from the original cutout quads (<see cref="ComposedPlan.ZoneQuads"/>).
+        /// Updates plan.ZoneBlockers / plan.ZoneCells; returns the quads to zone (null = nothing to refresh).
+        /// </summary>
+        public static List<ZoningQuad> Refresh(ComposedPlan plan, IReadOnlyList<ZoneGrid> liveGrids, Func<float2, float> heightAt = null)
+        {
+            if (plan == null || !Enabled || plan.Footprints == null || plan.Footprints.Count == 0 || liveGrids == null) return null;
+            var quads = new List<float2[]>();
+            var ids = new List<string>();
+            foreach (var q in plan.ZoneQuads)
+                if (q.Quad != null && q.Quad.Length >= 3) { quads.Add(q.Quad); ids.Add(q.ZoneId ?? ""); }
+            Result r;
+            try { r = Compute(plan.Footprints, quads, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false); }
+            catch (Exception) { return null; }
+            var zoning = new List<ZoningQuad>();
+            foreach (var zr in r.Zoning) zoning.Add(new ZoningQuad { Corners = zr.Corners, ZoneId = ids[zr.Quad] });
+            for (int i = 0; i < quads.Count; i++)
+                if (!r.Snapped[i]) zoning.Add(new ZoningQuad { Corners = quads[i], ZoneId = ids[i] });
+            plan.ZoneBlockers.Clear();
+            plan.ZoneBlockers.AddRange(r.Blockers);
+            plan.ZoneCells.Clear();
+            var h = heightAt ?? (_ => 0f);
+            foreach (var c in r.Cells)
+            {
+                var m = c;
+                m.Height = h(0.25f * (c.A + c.B + c.C + c.D));
+                plan.ZoneCells.Add(m);
+            }
+            return zoning;
+        }
+
         // ───────────────────────── the computation (pure, tested) ─────────────────────────
 
         /// <summary>
         /// Which cells of the captured road blocks are zoned or blocked for a build footprint, its zoning quads and
         /// the existing building lots, and the blocker rings that make the game block exactly the others.
         /// </summary>
+        /// <param name="ownBlockedOpen">
+        /// True (design time): a cell the game blocks INSIDE the footprint counts as usable (the build being edited
+        /// blocks its own land; it is removed first). False (s26, after the build's Apply): the build's own paths now
+        /// block their cells for real, so a blocked cell is closed wherever it is.
+        /// </param>
         public static Result Compute(IReadOnlyList<float2[]> footprints, IReadOnlyList<float2[]> quads, IReadOnlyList<string> zoneIds,
-            IReadOnlyList<float2[]> protectedLots, IReadOnlyList<ZoneGrid> grids, IReadOnlyList<NearbyNet> nets = null)
+            IReadOnlyList<float2[]> protectedLots, IReadOnlyList<ZoneGrid> grids, IReadOnlyList<NearbyNet> nets = null, bool ownBlockedOpen = true,
+            IReadOnlyList<(float2[] line, float half)> ownNets = null)
         {
             var result = new Result();
             quads = quads ?? Array.Empty<float2[]>();
@@ -230,6 +415,44 @@ namespace Placemaker.Core.Build
                     float reach = math.length((float2)g.Size) * Cell * 0.5f + Cell;
                     if (g.Position.x + reach < fmin.x || g.Position.y + reach < fmin.y || g.Position.x - reach > fmax.x || g.Position.y - reach > fmax.y) continue;
                     gridList.Add(g);
+                }
+            // (s26) The road a plot faces zones it: blocks are tried in the order of the shallowest row at which they
+            // reach a cutout (the facing road's row 0/1 before the 4th row of a street behind), captured before
+            // predicted, then capture order. Playtest: shops grew off the street BEHIND the plaza's lane.
+            if (gridList.Count > 1 && quads.Count > 0)
+            {
+                var rank = new int[gridList.Count];
+                for (int gi = 0; gi < gridList.Count; gi++)
+                {
+                    var g = gridList[gi];
+                    int best = 99;
+                    for (int x = 0; x < g.Size.x && best > 0; x++)
+                        for (int y = 0; y < math.min(g.Size.y, best); y++)
+                        {
+                            var c = CellCentre(g, x, y);
+                            bool hit = false;
+                            foreach (var q in quads) if (q != null && q.Length >= 3 && Poly.Contains(q, c)) { hit = true; break; }
+                            if (hit) { best = y; break; }
+                        }
+                    // Ties (a plot touching both a street and our lane) go to the build's own roads: the plot was
+                    // planned to face its lane.
+                    rank[gi] = best * 4 + (g.Predicted || g.Ours ? 0 : 1);
+                }
+                var order = new List<int>();
+                for (int i = 0; i < gridList.Count; i++) order.Add(i);
+                order.Sort((a, b) => rank[a] != rank[b] ? rank[a].CompareTo(rank[b]) : a.CompareTo(b));
+                var sorted = new List<ZoneGrid>(gridList.Count);
+                foreach (int i in order) sorted.Add(gridList[i]);
+                gridList = sorted;
+            }
+            var own = new List<(float2[] line, float half, float2 min, float2 max)>();
+            if (ownNets != null)
+                foreach (var (line, half) in ownNets)
+                {
+                    if (line == null || line.Length < 2 || !(half > 0f)) continue;
+                    float2 lo = new float2(float.MaxValue), hi = new float2(float.MinValue);
+                    foreach (var p in line) { lo = math.min(lo, p); hi = math.max(hi, p); }
+                    own.Add((line, half, lo - half - Cell, hi + half + Cell));
                 }
             var zoned = new List<bool[]>(gridList.Count);          // per grid: [y * Sx + x]
             var zoneQuad = new List<int[]>(gridList.Count);
@@ -255,7 +478,7 @@ namespace Placemaker.Core.Build
                     int reach = sy;
                     for (int y = 0; y < sy; y++)
                     {
-                        if (!CellOpen(g, x, y, feet, roads)) { reach = y; break; }
+                        if (!CellOpen(g, x, y, ownBlockedOpen ? feet : null, roads) || UnderOwnNet(g, x, y, own)) { reach = y; break; }
                         open[y * sx + x] = true;
                     }
                     var inQuad = new int[sy];
@@ -278,6 +501,10 @@ namespace Placemaker.Core.Build
                         }
                     }
                     if (first < 0) continue;
+                    // (s26) A column zones ONE plot: its rows end where the first plot ends (a plot behind it, facing
+                    // another road, is not reached through the first — that made cutouts "cut into each other").
+                    deepest = first;
+                    while (deepest + 1 < reach && inQuad[deepest + 1] == inQuad[first]) deepest++;
                     // Rows 0 ... deepest, at least MinRows; the land in front of the first quad row must be outside the
                     // footprint (the strip between the outline and the road), never park; a building lot ends the run.
                     int last = math.min(reach - 1, math.max(deepest, MinRows - 1));
@@ -295,8 +522,9 @@ namespace Placemaker.Core.Build
                     bool taken = false;
                     for (int y = 0; y <= end && !taken; y++)
                     {
-                        var c = CellCentre(g, x, y);
-                        foreach (var sq in columnSquares) if (Poly.Contains(sq, c)) { taken = true; break; }
+                        // (s26) Any overlap, not only a centre inside: blocks of two roads at a corner cross at angles.
+                        var mine = CellSquare(g, x, y, -0.5f);
+                        foreach (var sq in columnSquares) if (ObstacleCut.Overlaps(mine, sq)) { taken = true; break; }
                     }
                     if (taken) continue;
                     for (int y = 0; y <= end; y++)
@@ -325,7 +553,8 @@ namespace Placemaker.Core.Build
                     if (depth == 0) { x++; continue; }
                     int q = zq[x];
                     int x1 = x;
-                    while (x1 + 1 < sx && Depth(z, sx, sy, x1 + 1) == depth && SameZone(ZoneOf(zoneIds, zq[x1 + 1]), ZoneOf(zoneIds, q))) x1++;
+                    // (s26) One rect per plot (quad): the build logs and checks each plot on its own.
+                    while (x1 + 1 < sx && Depth(z, sx, sy, x1 + 1) == depth && zq[x1 + 1] == q) x1++;
                     result.Zoning.Add(new ZonedRect { Quad = q, Corners = CellRect(g, x, x1, 0, depth - 1, -QuadShrink) });
                     for (int xx = x; xx <= x1; xx++)
                         for (int y = 0; y < depth; y++) result.ZonedSquares.Add(CellSquare(g, xx, y));
@@ -459,6 +688,41 @@ namespace Placemaker.Core.Build
             return r;
         }
 
+        /// <summary>
+        /// (s26) True when one of the build's own nets (paths, lanes: ground nets block the cells under them, and every
+        /// cell behind) overlaps the cell square (shrunk 0.02 m, as the game tests it).
+        /// </summary>
+        private static bool UnderOwnNet(ZoneGrid g, int x, int y, List<(float2[] line, float half, float2 min, float2 max)> own)
+        {
+            if (own == null || own.Count == 0) return false;
+            var c = CellCentre(g, x, y);
+            float2 d = math.normalizesafe(g.Direction), r = Right(d);
+            const float h = Cell * 0.5f - 0.02f;
+            foreach (var n in own)
+            {
+                if (c.x < n.min.x || c.y < n.min.y || c.x > n.max.x || c.y > n.max.y) continue;
+                for (int i = 0; i + 1 < n.line.Length; i++)
+                    if (SegmentSquareDistance(n.line[i], n.line[i + 1], c, d, r, h) < n.half - 0.05f) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Distance from a segment to an oriented square (centre c, axes d / r, half size h); 0 when they touch.</summary>
+        private static float SegmentSquareDistance(float2 a, float2 b, float2 c, float2 d, float2 r, float h)
+        {
+            // Local coordinates of the segment; distance from a point to the square = length of the outside excess.
+            float2 la = new float2(math.dot(a - c, r), math.dot(a - c, d)), lb = new float2(math.dot(b - c, r), math.dot(b - c, d));
+            float best = float.MaxValue;
+            int steps = math.clamp((int)math.ceil(math.distance(la, lb) / 0.5f), 1, 400);
+            for (int k = 0; k <= steps; k++)
+            {
+                var p = math.lerp(la, lb, k / (float)steps);
+                var e = math.max(math.abs(p) - h, 0f);
+                best = math.min(best, math.length(e));
+            }
+            return best;
+        }
+
         /// <summary>True when the cell centre lies on a captured road (within its half width + <see cref="RoadCellReach"/>).</summary>
         private static bool OnRoad(List<RoadBand> roads, float2 c)
         {
@@ -498,7 +762,7 @@ namespace Placemaker.Core.Build
             byte f = cells[i];
             bool visible = (f & ZoneGrid.CellVisible) != 0, blocked = (f & ZoneGrid.CellBlocked) != 0;
             if (!blocked) return visible;
-            return InAny(feet, c);
+            return feet != null && InAny(feet, c);
         }
 
         /// <summary>The part of <paramref name="sq"/> inside the footprints (one ring): the square itself when wholly inside, null when (almost) outside.</summary>

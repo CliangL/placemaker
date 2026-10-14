@@ -105,6 +105,8 @@ namespace Placemaker.Core
         public List<float2[]> ZoneBlockers = new List<float2[]>();
         /// <summary>(s19) Zone cells of existing roads the build zones or blocks (preview). Set by Compose.</summary>
         public List<Build.ZoneCellMark> ZoneCells = new List<Build.ZoneCellMark>();
+        /// <summary>(s26) The cutout quads before snapping (ZoneGuard.Refresh re-snaps them to the live blocks after Apply).</summary>
+        public List<Build.ZoneQuad> ZoneQuads = new List<Build.ZoneQuad>();
         /// <summary>(s22) Height change of the terraform as a heat map over the area (preview / legend). Set by Compose; null = none.</summary>
         public Build.TerrainHeat TerrainHeat;
 
