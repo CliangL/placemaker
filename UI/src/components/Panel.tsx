@@ -9,7 +9,7 @@
 // shows an obvious "Show options" button.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import classNames from "classnames";
-import { Stage, StepView, Summary, ToolState } from "../contract";
+import { PROTOCOL, Stage, StepView, Summary, ToolState } from "../contract";
 import { act, useCatalog, useDesign, useManaged, useSummary, useToolState } from "../lib/bindings";
 import { area as fmtArea, compactMoney, formatValue } from "../lib/format";
 import { useT } from "../lib/l10n";
@@ -19,7 +19,7 @@ import { Tip, TipDirection, TipDirectionContext } from "../lib/tips";
 import { statIcon } from "../lib/icons";
 import { walk } from "../lib/schema";
 import { requestReveal } from "../lib/reveal";
-import { AreaReadout, AreaStage, modeOptions } from "../stages/AreaStage";
+import { AreaReadout, AreaStage, modeAvailability, modeOptions } from "../stages/AreaStage";
 import { DesignStage, markerLabel } from "../stages/DesignStage";
 import { BuildingStage, ReviewStage } from "../stages/ReviewStage";
 import { ManageStage } from "../stages/ManageStage";
@@ -521,6 +521,21 @@ const Hints = ({ state }: { state: ToolState }) => {
     );
 };
 
+/**
+ * (s15) The game reloads Placemaker.mjs from disk but loads the DLL only at start: after an update the panel can
+ * talk to an older (or newer) DLL until the game restarts. Then buttons for new things do nothing — say so.
+ */
+const VersionNotice = ({ state }: { state: ToolState }) => {
+    const { t } = useT();
+    if (!state.open || state.protocol === PROTOCOL) return null;
+    return (
+        <div className={s.versionNotice} data-testid="version-notice" data-protocol={state.protocol ?? "none"}>
+            <Icon name="info" size={12} tint="warn" />
+            <div className={s.versionText}>{t("Placemaker.UI.Version.Mismatch", "Restart the game: Placemaker's files were updated while it was running.")}</div>
+        </div>
+    );
+};
+
 const MarkerBanner = ({ state, root }: { state: ToolState; root: StepView | null }) => {
     const { t, tl } = useT();
     if (!state.markerMode) return null;
@@ -554,7 +569,7 @@ export const PlacemakerPanel = () => {
     const summary = useSummary();
     const managed = useManaged();
     const rtl = useRtl();
-    const { t } = useT();
+    const { t, tl } = useT();
     const [picker, setPicker] = useState<PickerRequest | null>(null);
     // Each open is a fresh card (its hover preview ends when it is replaced).
     const pickerSerial = useRef(0);
@@ -756,8 +771,11 @@ export const PlacemakerPanel = () => {
                                                     <Segmented
                                                         iconOnly
                                                         value={state.areaMode}
-                                                        onChange={(v) => act.setAreaMode(v as any)}
-                                                        options={modeOptions(t)}
+                                                        onChange={(v) => modeAvailability(state, v, t, tl).enabled && act.setAreaMode(v as any)}
+                                                        options={modeOptions(t).map((o) => {
+                                                            const av = modeAvailability(state, o.value, t, tl);
+                                                            return av.enabled ? o : { ...o, description: av.reason + " — " + o.description };
+                                                        })}
                                                         testId="area-mode-compact"
                                                     />
                                                 ) : (
@@ -783,6 +801,7 @@ export const PlacemakerPanel = () => {
                                                 <StageBar state={state} />
                                             </ErrorBoundary>
                                         )}
+                                        <VersionNotice state={state} />
                                         <MarkerBanner state={state} root={design.root} />
                                         <div className={s.bodyWrap} data-testid="panel-body">
                                             <div className={s.body} key={state.stage}>

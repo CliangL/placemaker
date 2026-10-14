@@ -341,8 +341,25 @@ namespace Placemaker.Core
         public List<ControlOption> Options = new List<ControlOption>();
         public string AssetCategory = "";            // for Asset/AssetMulti/Arrangement
         public string[] MarkerKinds = Array.Empty<string>();
-        /// <summary>Show only when another control has a value, e.g. "fence=true" or "angleMode=fixed".</summary>
+        /// <summary>
+        /// The control applies only when another control has a value, e.g. "fence=true" or "angleMode=fixed"
+        /// ("a|b" alternatives, "!=" negation, several joined with "&amp;"). s15: while it does not apply the UI
+        /// shows the control GREYED OUT with a reason ("Only when Fence is on") instead of hiding it — unless
+        /// <see cref="HideWhenOff"/> is set. Older UIs hide it (additive change).
+        /// </summary>
         public string VisibleWhen = "";
+        /// <summary>
+        /// (s15) Exception to disable-with-reason: hide the control while <see cref="VisibleWhen"/> is false. Only
+        /// for sets where greyed controls would bury the useful ones (e.g. Roads' per-pattern essentials).
+        /// </summary>
+        public bool HideWhenOff;
+        /// <summary>(s15) Optional condition (VisibleWhen syntax) for the control to be ENABLED; false = shown greyed with a reason.</summary>
+        public string EnabledWhen = "";
+        /// <summary>
+        /// (s15) Localisation key of the greyed-out reason ("Only for Alley layout"). Empty = the UI words it from
+        /// the condition ("Only when Layout is Alley").
+        /// </summary>
+        public string DisabledReasonKey = "";
         /// <summary>Changing this control keeps the current seed/layout (true) or needs a full re-plan (false). Hint for preview cost.</summary>
         public bool Cheap;
         /// <summary>
@@ -423,6 +440,29 @@ namespace Placemaker.Core
         public string[] Options = Array.Empty<string>();
         /// <summary>Tooltip key ("" = none).</summary>
         public string TooltipKey = "";
+    }
+
+    /// <summary>(s15) Something the player can see but not use right now, and why (shown greyed with this reason).</summary>
+    public sealed class Unavailable
+    {
+        /// <summary>Control id of the step, or "feature:&lt;layerId&gt;" for a built-in feature toggle.</summary>
+        public string Id = "";
+        public string ReasonKey = "";
+        public object[] ReasonArgs = Array.Empty<object>();
+
+        public const string FeaturePrefix = "feature:";
+        public static string Feature(string layerId) => FeaturePrefix + layerId;
+    }
+
+    /// <summary>
+    /// (s15, optional) A layer whose controls or features depend on the AREA (not on other values — that is
+    /// <see cref="ControlSchema.VisibleWhen"/>): e.g. "Needs a street edge", "Area too small". Cheap, main
+    /// thread, called when the outline or the step's settings change (never per frame). Anything listed is
+    /// shown greyed out with the reason instead of being hidden.
+    /// </summary>
+    public interface IHasAvailability
+    {
+        void Unavailable(AreaInput input, List<Unavailable> into);
     }
 
     /// <summary>Optional: Fill layers that offer built-in features implement this too.</summary>

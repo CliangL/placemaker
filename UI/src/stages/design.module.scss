@@ -400,3 +400,12 @@
     @include border(1rem, $c-warning);
     background-color: rgba(255, 181, 71, 0.12);
 }
+
+// s15 — a feature that does not fit this area: listed, greyed, its switch takes no clicks (reason in the tooltip).
+.featureBlocked {
+    opacity: 0.5;
+}
+
+.featureSwitchOff {
+    pointer-events: none;
+}

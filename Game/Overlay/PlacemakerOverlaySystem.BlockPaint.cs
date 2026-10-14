@@ -54,7 +54,8 @@ namespace Placemaker.Game.Overlay
         private void DrawBlockPaintMode(OverlayRenderSystem.Buffer buffer, float w, AreaShape shape)
         {
             var cur = _tool.BlockPaintCurrent;
-            bool selecting = _tool.Stage == ToolStage.Area || _tool.Painting;
+            // s15: shading and hover outline only while the brush is live (Area stage, over the world, no markers).
+            bool selecting = _tool.BrushLive;
             if (cur != null)
             {
                 // Open-land fallback: no block line; the shading shows the roads/obstacles near the brush.
@@ -73,7 +74,7 @@ namespace Placemaker.Game.Overlay
             }
 
             var hover = _tool.HoverFace;
-            if (hover?.Area != null && !_tool.Painting && _tool.Stage != ToolStage.Building)
+            if (hover?.Area != null && !_tool.Painting && _tool.BrushLive)
                 Ring(buffer, hover.Area.Ring, HoverBlock, w * 0.7f, dashed: true);
 
             var mask = _tool.BlockPaintMask;
@@ -96,7 +97,7 @@ namespace Placemaker.Game.Overlay
             else Ring(buffer, shape.Ring, Outline, w);
 
             var c = _tool.Erasing ? Erase : Brush;
-            DrawBrushCursor(buffer, w, _tool.Painting ? c : new Color(c.r, c.g, c.b, 0.2f));
+            if (_tool.BrushLive) DrawBrushCursor(buffer, w, _tool.Painting ? c : new Color(c.r, c.g, c.b, 0.2f));
         }
     }
 }

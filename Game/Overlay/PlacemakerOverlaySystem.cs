@@ -328,7 +328,7 @@ namespace Placemaker.Game.Overlay
                 }
             }
             else Ring(buffer, shape.Ring, Outline, w);
-            DrawBrushCursor(buffer, w, _tool.Painting ? Brush : new Color(Brush.r, Brush.g, Brush.b, 0.2f));
+            if (_tool.BrushLive) DrawBrushCursor(buffer, w, _tool.Painting ? Brush : new Color(Brush.r, Brush.g, Brush.b, 0.2f));
         }
 
         private void DrawBrushCursor(OverlayRenderSystem.Buffer buffer, float w, Color c)

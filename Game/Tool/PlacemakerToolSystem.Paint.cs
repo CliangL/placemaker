@@ -25,6 +25,12 @@ namespace Placemaker.Game.Tool
         public BrushMask Paint => _paint;
         public bool Painting => _gesture == Gesture.Paint || _gesture == Gesture.Erase;
 
+        /// <summary>
+        /// (s15) The brush takes input and its cursor / Block paint shading are drawn: Area stage, brush mode, tool
+        /// active, not placing markers, mouse over the world — or a stroke still running (Core/Tool/BrushCursor).
+        /// </summary>
+        public bool BrushLive => BrushCursor.Live(IsActive, _stage, _mode, _markerKind != null, _in.OverWorld, Painting);
+
         /// <summary>Plain Paint cuts building lots out of its outline (Options, default on).</summary>
         public bool PaintAvoidsBuildings => _settings == null || _settings.PaintAvoidBuildings;
 

@@ -7,6 +7,13 @@
 
 export const GROUP = "Placemaker";
 
+/**
+ * (s15) UI ↔ DLL contract version; C# sends it as state.protocol (Core/Tool/UiModels.Protocol). Bump both
+ * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
+ * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
+ */
+export const PROTOCOL = 15;
+
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
 /** Workflow stages. The player can always click back to an earlier stage; nothing is lost. */
@@ -86,6 +93,10 @@ export interface ToolState {
   previewMode?: "sketch" | "ghost";
   /** True while the ghost is being (re)built after a change. */
   ghostPending?: boolean;
+  /** (s15) Contract version of the DLL (see PROTOCOL); absent = older than s15. */
+  protocol?: number;
+  /** (s15) Every selection mode the DLL handles, and whether it can be used now (absent = older DLL). */
+  areaModes?: { mode: AreaMode; enabled: boolean; reason?: LocText }[];
   /** Rough planning progress 0..1 while planning (updated ~10 Hz). */
   planningProgress?: number;
 }
@@ -103,7 +114,14 @@ export interface Control {
   options?: { value: string; label: string; icon?: string; tooltip?: string }[];
   assetCategory?: string;
   markerKinds?: string[];
-  visibleWhen?: string;     // "otherId=value"
+  /** Applies only when "otherId=value" (s15: shown greyed out with a reason while it does not, unless hideWhenOff). */
+  visibleWhen?: string;
+  /** (s15) Hide instead of greying out while visibleWhen is false (the documented exceptions). */
+  hideWhenOff?: boolean;
+  /** (s15) Enabled only when (visibleWhen syntax); otherwise shown greyed out with disabledReason. */
+  enabledWhen?: string;
+  /** (s15) Localisation key of the greyed-out reason; absent = worded from the condition. */
+  disabledReason?: string;
   cheap?: boolean;
   /** Default value (for per-control reset). */
   default?: SettingValue;
@@ -160,6 +178,8 @@ export interface FeatureView {
   /** Additive (FEEDBACK-4b #8): did the enabled feature fit in the latest plan? Absent = not known yet
    *  (no plan, feature off, or a stale plan that has not run it). */
   status?: FeatureFit;
+  /** (s15) The feature cannot be used for this area, and why (toggle shown greyed out; turning it off still works). */
+  disabled?: LocText;
 }
 
 /** Fit of an enabled feature in the latest plan (C# UiModels.FeatureFit). */
@@ -196,6 +216,8 @@ export interface StepView {
   overrides: Record<string, StepView>;
   /** Regions this step produced in the latest plan (for "then fill blocks with…" and per-region overrides). */
   regions: { key: string; tags: string[]; areaM2: number }[];
+  /** (s15) Controls that do not apply to the current area: control id → why (shown greyed out). */
+  disabled?: Record<string, LocText>;
 }
 
 /** design — the recipe being edited. */

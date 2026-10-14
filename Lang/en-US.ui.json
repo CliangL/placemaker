@@ -248,5 +248,15 @@
   "Placemaker.UI.Undo": "Undo",
   "Placemaker.UI.UndoWhat": "Undo: {0}",
   "Placemaker.UI.UnknownControl": "Unsupported",
+  "Placemaker.UI.Version.Mismatch": "Restart the game: Placemaker's files were updated while it was running.",
+  "Placemaker.UI.Why.BlockPaintOnly": "Only for Block paint. Paint keeps off buildings (Options).",
+  "Placemaker.UI.Why.NotNow": "Not available with the current settings",
+  "Placemaker.UI.Why.Or": " or ",
+  "Placemaker.UI.Why.RestartForMode": "Restart the game to use this: Placemaker was updated while the game was running.",
+  "Placemaker.UI.Why.SquareBrush": "Only for the square brush",
+  "Placemaker.UI.Why.WhenIs": "Only when {0} is {1}",
+  "Placemaker.UI.Why.WhenNot": "Not when {0} is {1}",
+  "Placemaker.UI.Why.WhenOff": "Only when {0} is off",
+  "Placemaker.UI.Why.WhenOn": "Only when {0} is on",
   "Placemaker.UI.X": "English"
 }

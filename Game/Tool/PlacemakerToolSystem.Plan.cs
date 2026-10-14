@@ -311,6 +311,24 @@ namespace Placemaker.Game.Tool
         }
 
         /// <summary>Readiness per step path for the design view (missing = ready).</summary>
+        private Dictionary<string, Dictionary<string, LocText>> _unavailable = new Dictionary<string, Dictionary<string, LocText>>();
+        private int _unavailableRevision = -1;
+
+        /// <summary>
+        /// (s15) Controls / features that do not apply to the current AREA, with the reason (Core/Tool/Availability):
+        /// sent with the design so the panel greys them out instead of hiding them. Recomputed when the inputs
+        /// change, never during a brush stroke.
+        /// </summary>
+        public Dictionary<string, Dictionary<string, LocText>> Unavailability()
+        {
+            if (_unavailableRevision == _inputRevision) return _unavailable;
+            if (Painting && _unavailableRevision >= 0) return _unavailable;
+            _unavailableRevision = _inputRevision;
+            try { _unavailable = Availability.For(_recipe, _shape, _siteCache, GeneratorRegistry.Get); }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: availability check failed: " + e.Message); _unavailable = new Dictionary<string, Dictionary<string, LocText>>(); }
+            return _unavailable;
+        }
+
         public Dictionary<string, UiModels.StepStatus> StepStatuses()
         {
             Unready();

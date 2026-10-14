@@ -72,11 +72,13 @@ namespace Placemaker.Game.Tool
                     }
                     break;
                 case SelectionMode.Paint:
+                    if (_stage != ToolStage.Area) break;   // s15: the brush only works in the Area stage
                     h.Add(new HintInfo("Placemaker.Hint.PaintPaint"));
                     h.Add(new HintInfo("Placemaker.Hint.PaintErase"));
                     if (_brushSquare) h.Add(new HintInfo("Placemaker.Hint.PaintRotate", "Shift"));
                     break;
                 case SelectionMode.BlockPaint:
+                    if (_stage != ToolStage.Area) break;
                     var rules = BrushRules;
                     h.Add(new HintInfo(!rules.Roads ? "Placemaker.Hint.PaintPaint" : !BlockPaintHasTarget ? "Placemaker.Hint.BlockPaintStart" : "Placemaker.Hint.BlockPaintPaint"));
                     h.Add(new HintInfo("Placemaker.Hint.BlockPaintErase"));
