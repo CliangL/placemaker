@@ -287,17 +287,19 @@ const FeatureRow = ({ catalog, design, state, parent, f }: { catalog: Catalog; d
     const child = f.enabled ? featureStep(design.root, parent, f) : null;
     const own = f.options ?? [];
     const tip = f.tooltip ? t(f.tooltip, "") : "";
-    const foldable = f.enabled && !!(child || own.length);
     // Collapsed by default once enabled; remembered per parent layer + feature (FEEDBACK-4b #7).
     const [open, setOpen] = useOpen("feature:" + parent.layer + ">" + f.layer, false);
+    // One-line summary of its visible options; none visible → nothing to fold (no empty body).
+    const parts: string[] = [];
+    if (f.enabled && own.length) parts.push(controlsSummary(parent, layerOf(catalog, parent.layer), t, assetName, own));
+    if (child) parts.push(controlsSummary(child, layerOf(catalog, child.layer), t, assetName));
+    const filled = parts.filter((p) => p);
+    const foldable = f.enabled && filled.length > 0;
     const shown = foldable && open;
     let summary = "";
     if (foldable && !open) {
-        const parts: string[] = [];
-        if (own.length) parts.push(controlsSummary(parent, layerOf(catalog, parent.layer), t, assetName, own));
-        if (child) parts.push(controlsSummary(child, layerOf(catalog, child.layer), t, assetName));
-        const real = parts.filter((p) => p && p !== t("Placemaker.UI.Picker.Auto", "Automatic"));
-        summary = (real.length ? real : parts.filter((p) => p)).join(" · ");
+        const real = filled.filter((p) => p !== t("Placemaker.UI.Picker.Auto", "Automatic"));
+        summary = (real.length ? real : filled).join(" · ");
     }
     const fit = f.enabled ? f.status : undefined;
     const bad = fit && fit.kind !== "ok";
