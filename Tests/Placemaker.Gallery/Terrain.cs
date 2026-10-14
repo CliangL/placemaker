@@ -97,7 +97,7 @@ namespace Placemaker.Gallery
     /// </summary>
     public static class SlopeSites
     {
-        public static readonly string[] Kinds = { "gentle", "cross", "steep", "hilly" };
+        public static readonly string[] Kinds = { "gentle", "cross", "steep", "hilly", "rough", "roughhill" };
 
         public static Func<float2, float> Ground(float3[] ring, string kind)
         {
@@ -112,6 +112,17 @@ namespace Placemaker.Gallery
                 case "steep": return p => 0.08f * ((p.x - xMin) * 0.6f + (p.y - zMin) * 0.8f) + 1f * (ValueNoise.Clumps(p, 32f, 25u) - 0.5f);
                 // Rolling ±2 m swells over a 3 % tilt.
                 case "hilly": return p => 0.03f * (p.x - xMin) + 2f * math.sin((p.x - xMin) / 23f) * math.cos((p.y - zMin) / 31f);
+                // (s31) The playtest: rolling noise of a few metres (±2 m swells at ~24 m, ±0.6 m bumps at ~9 m).
+                case "rough": return p => 4f * (ValueNoise.Clumps(p, 24f, 31u) - 0.5f) + 1.2f * (ValueNoise.Clumps(p, 9f, 37u) - 0.5f);
+                // (s31) The same bumps on a 5 m hill with a 2 % tilt.
+                case "roughhill":
+                {
+                    float xMax = ring.Max(q => q.x), zMax = ring.Max(q => q.z);
+                    var top = new float2((xMin + xMax) * 0.55f, (zMin + zMax) * 0.5f);
+                    float sig = math.max(xMax - xMin, zMax - zMin) * 0.33f;
+                    return p => 0.02f * (p.x - xMin) + 5f * math.exp(-math.lengthsq(p - top) / (2f * sig * sig))
+                        + 3f * (ValueNoise.Clumps(p, 22f, 41u) - 0.5f) + 1f * (ValueNoise.Clumps(p, 8f, 43u) - 0.5f);
+                }
                 default: return _ => 0f;
             }
         }

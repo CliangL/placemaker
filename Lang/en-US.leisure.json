@@ -100,6 +100,8 @@
   "Placemaker.AddOn.Terrain.Preset.flat": "Flat",
   "Placemaker.AddOn.Terrain.Issue.NoRoads": "Berms: no road next to the area, so they follow the whole edge.",
   "Placemaker.AddOn.Terrain.Issue.Nothing": "The ground already has this shape: nothing to change.",
+  "Placemaker.AddOn.Terrain.Issue.RoughGround": "The ground here is already bumpy: no extra mounds or hills were added.",
+  "Placemaker.AddOn.Terrain.Issue.ScaledBack": "The ground here is already uneven: the mounds or hills were made lower.",
   "Placemaker.AddOn.Decals.Name": "Decals",
   "Placemaker.AddOn.Decals.theme": "Theme",
   "Placemaker.AddOn.Decals.theme.leaves": "Leaves",

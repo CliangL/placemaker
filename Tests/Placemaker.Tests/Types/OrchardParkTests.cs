@@ -40,10 +40,11 @@ namespace Placemaker.Tests.Types
             var ring = FarmTypeChecks.FiveHa;
             var plan = FarmTypeChecks.Compose(r, ring, site);
             Assert.True(string.IsNullOrEmpty(FarmTypeChecks.Errors(plan)), FarmTypeChecks.Errors(plan));
-            var terrain = plan.Layers.Single(l => l.GeneratorId == "terrain");
-            Assert.NotEmpty(terrain.Terraform);
+            // (s31) The terrain feature's change is part of the one graded field the site harmony pass emits (on the type's own plan).
+            var all = plan.Layers.SelectMany(l => l.Terraform).Where(t => !math.isfinite(t.WaterLevel)).ToList();
+            Assert.NotEmpty(all);
             var r2 = Poly.To2D(ring);
-            foreach (var t in terrain.Terraform)
+            foreach (var t in all)
             {
                 var c = Poly.Centroid(Poly.To2D(t.Ring));
                 float d = Poly.DistanceToBoundary(r2, c);

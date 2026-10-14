@@ -45,6 +45,14 @@ namespace Placemaker.Core.Layers.Common
         public List<(float2 a, float2 b)> Frontage;
         /// <summary>Cells whose centre this rejects are left untouched (e.g. a pond basin).</summary>
         public Func<float2, bool> Skip;
+        /// <summary>
+        /// (s31) Shape on a fine node grid emitted as SLOPED quads (Common/Sculpt): a continuous surface instead of 12 m
+        /// level cells (inside the union of level cells the build's raster has no bank, so neighbours at different levels
+        /// were vertical steps — the "curtains" of the playtest).
+        /// </summary>
+        public bool Sloped;
+        /// <summary>(s31, optional) 0..1 per point, multiplies the change (decorative shapes fade out near paths and furniture).</summary>
+        public Func<float2, float> Weight;
 
         public static TerrainMode Parse(string s)
         {
@@ -100,6 +108,7 @@ namespace Placemaker.Core.Layers.Common
         {
             var result = new TerrainResult { HeightAfter = ctx.H };
             if (spec.Mode == TerrainMode.None || region == null) return result;
+            if (spec.Sloped) return ShapeSloped(ctx, region, spec);
             float cell = math.max(DefaultCell, math.sqrt(region.Area / MaxCells));
             int nx = math.max(1, (int)math.ceil((region.Max.x - region.Min.x) / cell));
             int ny = math.max(1, (int)math.ceil((region.Max.y - region.Min.y) / cell));
@@ -265,6 +274,81 @@ namespace Placemaker.Core.Layers.Common
                 ctx.Plan.Facts["terrainMaxLower"] = -minO;
             }
             return result;
+        }
+
+        /// <summary>
+        /// (s31) The same shapes on a node grid (≥ 4 m) emitted as sloped quads: mounds and hills are smooth landforms,
+        /// terraces and bowls get ramps no steeper than the max slope instead of cliffs, and the change dies out towards
+        /// the outline over the falloff (never steeper than the max slope there either).
+        /// </summary>
+        private static TerrainResult ShapeSloped(LayerContext ctx, LayerRegion region, TerrainSpec spec)
+        {
+            float cell = math.max(4f, math.sqrt(region.Area / 12000f));
+            float mean = MeanHeight(ctx, region);
+            float falloff = math.max(cell, spec.Falloff);
+            region.DeepestPoint(out float inscribed, null, 12);
+            inscribed = math.max(1f, inscribed);
+            float height = math.max(0f, spec.Height);
+            var sc = Sculpt.Over(ctx, region, null, cell, spec.Skip);
+            var s = spec;
+            sc.Shape((p, h0, cur) =>
+            {
+                float d = region.BoundaryDistance(p, inscribed + 1f);
+                float blend = Smooth(0f, falloff, d);
+                float target = Target(s, p, h0, d, mean, inscribed, falloff, DefaultCell, height, ref blend);
+                float w = s.Weight != null ? math.saturate(s.Weight(p)) : 1f;
+                return h0 + (target - h0) * blend * w;
+            });
+            float slope = math.max(0.05f, spec.MaxSlopePct / 100f);
+            sc.LimitGrade(slope);
+            sc.CapToBorder(slope);
+            var r = sc.Emit(ctx, new[] { region.Ring });
+            return r;
+        }
+
+        private static float Target(TerrainSpec spec, float2 c, float h0, float d, float mean, float inscribed, float falloff, float cell, float height, ref float blend)
+        {
+            switch (spec.Mode)
+            {
+                case TerrainMode.Mounds:
+                {
+                    float n = ValueNoise.Clumps(c, math.max(8f, spec.Scale), spec.Seed);
+                    float hump = math.pow(math.saturate((n - 0.45f) / 0.55f), 1.5f);
+                    return h0 + height * math.saturate(hump * 1.6f);
+                }
+                case TerrainMode.Hills:
+                    return h0 + height * ValueNoise.Clumps(c, math.max(12f, spec.Scale), spec.Seed);
+                case TerrainMode.Terraces:
+                {
+                    int levels = math.clamp(spec.Levels, 2, 4);
+                    float band = math.max(cell, (inscribed - falloff * 0.5f) / levels);
+                    int k = math.min(levels - 1, (int)math.floor(math.max(0f, d - falloff * 0.5f) / band));
+                    float step = height / math.max(1, levels - 1);
+                    return mean + (spec.Down ? -1f : 1f) * step * k;
+                }
+                case TerrainMode.Sunken:
+                    return mean - height * Smooth(falloff * 0.5f, falloff * 0.5f + cell * 1.5f, d);
+                case TerrainMode.Raised:
+                    return mean + height * Smooth(falloff * 0.5f, falloff * 0.5f + cell * 1.5f, d);
+                case TerrainMode.Bowl:
+                {
+                    float rows = math.max(2f, spec.RowSpacing);
+                    float r = math.distance(c, spec.Focal);
+                    float k = math.floor(r / rows);
+                    return mean + math.min(height, k * rows * 0.35f);
+                }
+                case TerrainMode.Berms:
+                {
+                    float w = math.max(6f, spec.Scale);
+                    float df = spec.Frontage != null && spec.Frontage.Count > 0 ? StreetFrontage.DistanceToFrontage(c, spec.Frontage, w * 3f) : d;
+                    float x = df / w;
+                    blend = Smooth(0f, cell * 0.5f, d);
+                    return h0 + height * math.saturate(1f - math.abs(x - 0.5f) * 2f);
+                }
+                case TerrainMode.Flatten:
+                    return mean;
+                default: return h0;
+            }
         }
 
         private static float Smooth(float e0, float e1, float x)
