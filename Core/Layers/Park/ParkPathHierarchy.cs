@@ -115,18 +115,24 @@ namespace Placemaker.Core.Layers.Park
             problem = null;
             var result = new List<PathCurve>();
             var region = s.LayerRegion;
-            if (s.Gates.Count < 2) { problem = "Placemaker.Park.Issue.BikeNeedsTwoEntrances"; return result; }
-            // The two entrances farthest apart: a through-route, not a loop.
+            // Playtest 4b: the route connects the BIKE entrances (player markers, or hints from bike-friendly
+            // frontage); it never invents entries of its own.
+            var bikeGates = new List<int>();
+            for (int i = 0; i < s.Gates.Count; i++) if (s.Gates[i].Kind == EntranceKinds.Bike) bikeGates.Add(i);
+            if (bikeGates.Count == 0) { problem = "Placemaker.Park.Issue.NoBikeEntrances"; return result; }
+            if (bikeGates.Count < 2) { problem = "Placemaker.Park.Issue.BikeNeedsTwoEntrances"; return result; }
+            // The two bike entrances farthest apart: a through-route, not a loop.
             int ga = -1, gb = -1; float far = 0f;
-            for (int i = 0; i < s.Gates.Count; i++)
-                for (int j = i + 1; j < s.Gates.Count; j++)
+            foreach (int i in bikeGates)
+                foreach (int j in bikeGates)
                 {
+                    if (j <= i) continue;
                     float d = math.distance(s.Gates[i].Position, s.Gates[j].Position);
                     if (d > far) { far = d; ga = i; gb = j; }
                 }
             if (ga < 0 || far < 40f) { problem = "Placemaker.Park.Issue.BikeNeedsTwoEntrances"; return result; }
-            var entryA = BikeEntry(ctx, s, s.Gates[ga], s.Gates[gb].Position, okPoint);
-            var entryB = BikeEntry(ctx, s, s.Gates[gb], s.Gates[ga].Position, okPoint);
+            var entryA = s.Gates[ga];
+            var entryB = s.Gates[gb];
 
             // Footpath geometry the route keeps away from.
             var foot = new SegmentIndex(8f);
@@ -200,9 +206,6 @@ namespace Placemaker.Core.Layers.Park
             Func<float2, bool> ok = p => Clear(s, reserved, okPoint, p, halfW + 0.5f) && FootClear(foot, p, gap * 0.5f, entryA.Position, entryB.Position);
             var simple = Simplify(pts, h * 0.9f, ok);
 
-            // Its own two gates (indices appended to the park's gate list so Emit attaches them to the road).
-            int gi = s.Gates.Count;
-            s.Gates.Add(entryA); s.Gates.Add(entryB);
             var segs = new List<float2>();
             for (int i = 1; i < simple.Count; i++) { segs.Add(simple[i - 1]); segs.Add(simple[i]); }
             var graph = ParkPathGraph.FromSegments(segs, new List<float2> { entryA.Position, entryB.Position });
@@ -210,8 +213,8 @@ namespace Placemaker.Core.Layers.Park
             {
                 c.Tier = PathTier.Bike; c.Kind = PathEdgeKind.Primary; c.Role = NetRole.PathwayWide;
                 c.HalfWidth = Composer.DefaultHalfWidth(NetRole.PathwayWide);
-                if (c.GateA >= 0) c.GateA += gi;
-                if (c.GateD >= 0) c.GateD += gi;
+                if (c.GateA >= 0) c.GateA = c.GateA == 0 ? ga : gb;
+                if (c.GateD >= 0) c.GateD = c.GateD == 0 ? ga : gb;
                 result.Add(c);
             }
             return result;
@@ -220,28 +223,71 @@ namespace Placemaker.Core.Layers.Park
         private static bool FootClear(SegmentIndex foot, float2 p, float r, float2 ea, float2 eb) =>
             math.distance(p, ea) < 12f || math.distance(p, eb) < 12f || !foot.Overlaps(p, r * 0.5f);
 
-        /// <summary>A gate for the bike route beside an entrance (offset along the edge, away from the footpath gate).</summary>
-        private static Gate BikeEntry(LayerContext ctx, ParkSite s, Gate near, float2 other, Func<float2, bool> okPoint)
+        /// <summary>
+        /// Entrances no path reaches yet get a straight link to the nearest path: a service entrance a
+        /// service track (gravel, wide), a bike entrance without a route a bike path, anything else a thin
+        /// path. Hosts are split at the junction. Links that would leave the park are skipped.
+        /// </summary>
+        public static void ConnectLooseGates(LayerContext ctx, ParkSite s)
         {
-            var region = s.LayerRegion;
-            region.ClosestOnBoundary(near.Position, out int seg, out float t);
-            float along = region.AlongOf(seg, t);
-            Gate best = near; float bestScore = float.MinValue;
-            foreach (float sign in new[] { 1f, -1f })
+            if (s.Curves.Count == 0) return;
+            var used = new HashSet<int>();
+            foreach (var c in s.Curves) { if (c.GateA >= 0) used.Add(c.GateA); if (c.GateD >= 0) used.Add(c.GateD); }
+            int tracks = 0;
+            for (int gi = 0; gi < s.Gates.Count; gi++)
             {
-                var p = region.PointAt(along + sign * BikeEntryOffset, out _, out var inward, out int ps);
-                if (!okPoint(p + inward * 5f)) continue;
-                float score = -math.distance(p, other) * 0.01f;
-                foreach (var g in s.Gates) score += math.min(20f, math.distance(g.Position, p));
-                if (score <= bestScore) continue;
-                bestScore = score;
-                var closest = region.ClosestOnBoundary(p, out int cs, out float ct);
-                best = new Gate { Position = closest, Segment = cs, T = ct, AttachId = -1, Suggested = near.Suggested };
+                if (used.Contains(gi)) continue;
+                var g = s.Gates[gi];
+                var link = Link(s, g.Position);
+                if (link == null) continue;
+                string kind = EntranceKinds.Normalize(g.Kind);
+                var role = kind == EntranceKinds.Service || kind == EntranceKinds.Bike || kind == EntranceKinds.Main ? NetRole.PathwayWide : NetRole.Pathway;
+                link.Role = role; link.HalfWidth = Composer.DefaultHalfWidth(role);
+                link.Tier = kind == EntranceKinds.Service ? PathTier.Service : kind == EntranceKinds.Bike ? PathTier.Bike : PathTier.Main;
+                link.Kind = PathEdgeKind.Secondary;
+                link.GateA = gi;
+                s.Curves.Add(link);
+                ParkPaths.Index(new List<PathCurve> { link }, s.Occ.Corridors, PathCorridorKind);
+                if (kind == EntranceKinds.Service) tracks++;
             }
-            if (best.Position.Equals(near.Position)) return near;
-            Entrances.Attach(ctx.Input, ref best);
-            return best;
+            if (tracks > 0) ctx.Plan.Facts["serviceTracks"] = tracks;
         }
+
+        /// <summary>Straight curve from <paramref name="from"/> to the nearest path point (splitting that path), or null.</summary>
+        private static PathCurve Link(ParkSite s, float2 from)
+        {
+            int bestCurve = -1; float bestT = 0f, bestD = float.MaxValue; float2 q = from;
+            for (int i = 0; i < s.Curves.Count; i++)
+                for (int k = 0; k <= 32; k++)
+                {
+                    var p = s.Curves[i].Point(k / 32f);
+                    float d = math.distancesq(p, from);
+                    if (d < bestD) { bestD = d; bestCurve = i; bestT = k / 32f; q = p; }
+                }
+            if (bestCurve < 0 || bestD < 1f) return null;
+            float len = math.sqrt(bestD);
+            for (int k = 1; k < 10; k++)
+            {
+                var p = math.lerp(from, q, k / 10f);
+                if (math.distance(p, from) > 2f && !s.LayerRegion.ContainsDisc(p, 1f)) return null;
+                if (s.InLake(p, 1.5f)) return null;
+            }
+            var host = s.Curves[bestCurve];
+            if (bestT > 0.05f && bestT < 0.95f)
+            {
+                var first = ParkPlaces.Sub(host, 0f, bestT);
+                var second = ParkPlaces.Sub(host, bestT, 1f);
+                first.GateD = -1; second.GateA = -1;
+                s.Curves[bestCurve] = first;
+                s.Curves.Add(second);
+                q = first.D;
+            }
+            else q = bestT <= 0.05f ? host.A : host.D;
+            var c = new PathCurve { A = from, B = math.lerp(from, q, 1f / 3f), C = math.lerp(from, q, 2f / 3f), D = q, GateD = -1 };
+            ParkPaths.Sample(c);
+            return len > 0.5f ? c : null;
+        }
+
 
         private static int NearestValid(float2 p, bool[] valid, Func<int, float2> cell, int n, float reach)
         {

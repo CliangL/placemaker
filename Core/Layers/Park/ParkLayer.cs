@@ -130,7 +130,7 @@ namespace Placemaker.Core.Layers.Park
             c.Choice("desireLines", "none", ControlTier.More, "paths", "none", "worn", "paved").Tip();
             c.Slider("desireCount", 3, 1, 8, 1, "count", ControlTier.More, "paths");
             c.Slider("desireLayer", 1, 1, 4, 1, "count", ControlTier.More, "paths").When("desireLines=worn").Tip();
-            c.Markers("entrances", ControlTier.More, EntranceKind).Tip();
+            EntranceKinds.WithOptions(c.Markers("entrances", ControlTier.More, EntranceKinds.Park), EntranceKinds.Park).Tip();
             c.Slider("bushDensity", 43, 0, 250, 1, "perHa", ControlTier.More, "planting");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.AssetMulti("bushSpecies", AssetCategories.Bush, ControlTier.More, "planting");
@@ -215,11 +215,85 @@ namespace Placemaker.Core.Layers.Park
         {
             var region = LayerRegion.From(input?.Shape?.Ring);
             if (region == null) return new List<EdgeMarker>();
-            return Entrances.Suggest(input, region, EntranceKind, Entrances.WantedByArea(region.Area));
+            return Entrances.SuggestTyped(input, region, Entrances.WantedByArea(region.Area), EntranceKinds.Park);
         }
 
-        /// <summary>Always ready: without player entrances the plan uses suggested ones (never block the player).</summary>
-        public override Readiness CheckReady(AreaInput input) => new Readiness { Ready = true };
+        /// <summary>Playtest 4b: the player places the entrances (suggestions are only hints) — at least one.</summary>
+        public override Readiness CheckReady(AreaInput input) => Entrances.RequireTyped(input, EntranceKinds.Park);
+
+        /// <summary>
+        /// Walk gates first (pedestrian, main, and bike gates when no bike route will take them), then the
+        /// bike gates the route serves, then service gates. <paramref name="walkCount"/> = number of walk gates.
+        /// </summary>
+        public static List<Gate> OrderGates(List<Gate> all, bool bikeRoute, out int walkCount)
+        {
+            int bikes = 0;
+            foreach (var g in all) if (g.Kind == EntranceKinds.Bike) bikes++;
+            bool routeTakesBikes = bikeRoute && bikes >= 2;
+            var walk = new List<Gate>(); var bike = new List<Gate>(); var service = new List<Gate>();
+            foreach (var g in all)
+            {
+                if (g.Kind == EntranceKinds.Service) service.Add(g);
+                else if (g.Kind == EntranceKinds.Bike && routeTakesBikes) bike.Add(g);
+                else walk.Add(g);
+            }
+            // Only bike entrances: people walk in through them too (the walk shares the bike gates).
+            if (walk.Count == 0 && bike.Count > 0) { walk.AddRange(bike); bike.Clear(); }
+            walkCount = walk.Count;
+            walk.AddRange(bike);
+            walk.AddRange(service);
+            return walk;
+        }
+
+        /// <summary>Entrance kind drives the path: from a main entrance a wide walk, from the others a thin path.</summary>
+        private static void GatePathWidths(ParkSite s, string widthMode)
+        {
+            foreach (var c in s.Curves)
+            {
+                string ka = c.GateA >= 0 && c.GateA < s.Gates.Count ? s.Gates[c.GateA].Kind : null;
+                string kd = c.GateD >= 0 && c.GateD < s.Gates.Count ? s.Gates[c.GateD].Kind : null;
+                if (ka == null && kd == null) continue;
+                var role = ka == EntranceKinds.Main || kd == EntranceKinds.Main || widthMode == "wide" ? NetRole.PathwayWide : NetRole.Pathway;
+                c.Role = role; c.HalfWidth = Composer.DefaultHalfWidth(role);
+                if (role == NetRole.PathwayWide) c.Kind = PathEdgeKind.Primary;
+            }
+        }
+
+        /// <summary>Grand entrance: a pair of planters and (with lamps on) a pair of lamps flanking each main gate's path.</summary>
+        private static void GatewayProps(LayerContext ctx, ParkSite s)
+        {
+            var region = s.LayerRegion;
+            float hw = Composer.DefaultHalfWidth(NetRole.PathwayWide);
+            var planter = AssetMix.One("");
+            int made = 0;
+            for (int gi = 0; gi < s.Gates.Count; gi++)
+            {
+                var g = s.Gates[gi];
+                if (g.Kind != EntranceKinds.Main) continue;
+                region.ClosestOnBoundary(g.Position, out int seg, out float t);
+                region.PointAt(region.AlongOf(seg, t), out var tangent, out var inward, out _);
+                foreach (float side in new[] { -1f, 1f })
+                {
+                    uint v = Hashing.Mix(ctx.Seed, 0x6A7Eu + (uint)gi * 2u + (side > 0 ? 1u : 0u));
+                    var pp = g.Position + inward * 1.6f + tangent * side * (hw + 1.4f);
+                    float yaw = math.atan2(inward.x, inward.y);
+                    if (region.ContainsDisc(pp, 0.8f) && !s.Occ.Corridors.Overlaps(pp, 0.8f))
+                    {
+                        ctx.Object(pp, yaw, ObjectRole.Planter, planter, v);
+                        s.Occ.Take(pp, 1f, 2);
+                        made++;
+                    }
+                    var lp = g.Position + inward * 4.5f + tangent * side * (hw + 1f);
+                    if (ctx.B("lamps") && region.ContainsDisc(lp, 0.5f) && !s.Occ.Corridors.Overlaps(lp, 0.3f))
+                    {
+                        s.Items.Add(new ParkItem { Kind = ParkItemKind.Lamp, Position = lp, Yaw = yaw, Radius = ParkPlanting.LampRadius, Variant = v, Age = -1 });
+                        s.Occ.Take(lp, ParkPlanting.LampRadius, 2);
+                        made++;
+                    }
+                }
+            }
+            if (made > 0) ctx.Plan.Facts["gatewayProps"] = made;
+        }
 
         /// <summary>The plaza rule described by the park's plaza options.</summary>
         public static PlaceRule PlazaRule(SettingsBag s) => new PlaceRule
@@ -236,7 +310,10 @@ namespace Placemaker.Core.Layers.Park
             var style = ParkStyle.Get(ctx.S("style"));
             string pathMode = ctx.S("paths");
             int wantedGates = Entrances.WantedByArea(region.Area);
-            var gates = Entrances.Resolve(ctx.Input, region, EntranceKind, wantedGates);
+            var tiers = PathHierarchyOptions.From(ctx.Settings);
+            // Typed entrances (pedestrian, bike, main, service): walk gates first (the main walk's gate
+            // indices), then bike gates the bike route serves on its own, then service gates.
+            var gates = OrderGates(Entrances.ResolveTyped(ctx.Input, region, wantedGates, EntranceKinds.Park), tiers.Bike, out int walkCount);
 
             // 0. Places carved out for features (only when a child will fill them).
             float2[] plaza = Array.Empty<float2>();
@@ -272,7 +349,6 @@ namespace Placemaker.Core.Layers.Park
             bool pondFeature = ctx.Input.HasChildTarget(PondPlace);
             bool lakeFirst = (pathStyle == "lakeside" || pathStyle == "boardwalk") && (pondFeature || ctx.B("lake"));
             string widthMode = ctx.S("pathWidth");
-            var tiers = PathHierarchyOptions.From(ctx.Settings);
             if (pathStyle == "woodlandTrail" && widthMode == "mixed") widthMode = "narrow";
             float2 avenueA = float2.zero, avenueB = float2.zero;
             if (lakeFirst) s.Lake = PlanLake(ctx, s, plaza);
@@ -284,7 +360,7 @@ namespace Placemaker.Core.Layers.Park
             {
                 s.Gates = gates;
                 var gatePoints = new List<float2>();
-                foreach (var g in s.Gates) gatePoints.Add(g.Position);
+                for (int gi = 0; gi < walkCount; gi++) gatePoints.Add(s.Gates[gi].Position);
                 uint pathSeed = Hashing.Mix(ctx.Seed, 0xA11u);
                 // Formal parks are axial by definition; every other style follows the toggle.
                 bool curved = ctx.B("curvedPaths") && !style.Formal;
@@ -327,6 +403,7 @@ namespace Placemaker.Core.Layers.Park
                 s.Graph = graph;
                 s.Curves = ParkPaths.Build(s.Graph, region, curved, widthMode);
                 if (math.any(avenueA != avenueB)) WidenAvenue(s.Curves, avenueA, avenueB, widthMode);
+                GatePathWidths(s, widthMode);
                 if (plaza.Length >= 3)
                 {
                     s.Curves = ParkPlaces.ClipAndConnect(s.Curves, plaza, region, out int joins);
@@ -335,6 +412,8 @@ namespace Placemaker.Core.Layers.Park
                 ParkPaths.Index(s.Curves, s.Occ.Corridors, 100);
                 // Path hierarchy on top of the main walk (bike route, small paths, dirt trails).
                 if (tiers.AnyNets) ParkPathHierarchy.AddTiers(ctx, s, tiers, okPoint);
+                // Bike gates no route serves and service gates get a short link to the network.
+                ParkPathHierarchy.ConnectLooseGates(ctx, s);
             }
             ctx.Check();
 
@@ -392,6 +471,7 @@ namespace Placemaker.Core.Layers.Park
             ctx.Check();
 
             // 4. Furniture first so planting keeps clear of it (ParkManager ordering).
+            GatewayProps(ctx, s);
             float per100 = ctx.F("furniture");
             if (per100 > 0f && s.Curves.Count > 0)
             {
@@ -452,6 +532,11 @@ namespace Placemaker.Core.Layers.Park
             ctx.Stat(Keys.StatBins, s.Count(ParkItemKind.Bin), Keys.UnitCount);
             ctx.Plan.Facts["parkArea"] = region.Area;
             ctx.Plan.Facts["entrances"] = gates.Count;
+            foreach (var k in EntranceKinds.Park)
+            {
+                int n = 0; foreach (var g in gates) if (g.Kind == k) n++;
+                if (n > 0) ctx.Plan.Facts[k + "Entrances"] = n;
+            }
             if (plaza.Length >= 3) ctx.Plan.Facts["plazaArea"] = Poly.Area(plaza);
         }
 
@@ -658,7 +743,7 @@ namespace Placemaker.Core.Layers.Park
                 switch (tier)
                 {
                     case PathTier.Bike: return bike;
-                    case PathTier.Trail: return trail;
+                    case PathTier.Trail: case PathTier.Service: return trail;
                     case PathTier.Small: case PathTier.Desire: return smallRef;
                     default: return main;
                 }

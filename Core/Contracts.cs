@@ -67,6 +67,8 @@ namespace Placemaker.Core
         public NetCategory Category;
         public bool HasSidewalk;
         public bool IsOneWay;
+        /// <summary>Carries bicycles on their own lane: a bike path, a pathway with bike lanes or a road with bike lanes.</summary>
+        public bool HasBikeLane;
     }
 
     public enum NetCategory { Road = 0, Pathway = 1, Track = 2, Other = 3 }
