@@ -328,7 +328,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// is levelled across and graded linearly from the ground at the gate to the walk's planned height at the
         /// junction, so a connector never runs over humps or makes cones. Returns the route (null when none).
         /// </summary>
-        public List<float2> Connect(Occupancy occ, float2 gate, IReadOnlyList<(float2 a, float2 b)> spine, NetRole role, AssetRef asset)
+        public List<float2> Connect(Occupancy occ, float2 gate, IReadOnlyList<(float2 a, float2 b)> spine, NetRole role, AssetRef asset, float landing = 0f)
         {
             var ctx = Ctx;
             var route = GateApproach.Route(ctx.LayerRegion, gate, spine, Leisure.LeisureLayer.ApproachLength(ctx));
@@ -384,11 +384,16 @@ namespace Placemaker.Core.Layers.Types.Beach
                 var pts = Poly.ResamplePolyline(route, 2f);
                 var along = ProfileAlong(pts, hw, 10f, TerrainSurvey.RampGrade, 0.3f);
                 float total = Shoreline.LengthOf(pts);
-                float a0 = along(0f), a1 = along(total);
-                Func<float, float> prof = s => along(s) + math.lerp(ha - a0, hb - a1, math.saturate(s / math.max(1f, total)));
+                // (s30) The last <landing> metres (across a promenade band) stay level at the walk's height: the ramp ends at the
+                // band's edge instead of tilting the band beside the junction.
+                float rampLen = math.max(1f, total - math.min(landing, total * 0.6f));
+                float a0 = along(0f), a1 = along(rampLen);
+                Func<float, float> prof = s => s >= rampLen ? hb : along(s) + math.lerp(ha - a0, hb - a1, math.saturate(s / rampLen));
                 float dev = 0f, run = 0f;
                 for (int i = 0; i < pts.Length; i++) { if (i > 0) run += math.distance(pts[i - 1], pts[i]); dev = math.max(dev, math.abs(prof(run) - H(pts[i]))); }
-                Sculpt.Corridor(pts, prof, hw + 0.4f, math.clamp(dev / 0.16f, 4f, 20f));
+                // (s30) Level across well past the path edges: on the 2–4 m node grid a strip only 0.4 m wider than the path kept a
+                // cross slope under it, and a net flattens its own width, leaving a lip along its edge.
+                Sculpt.Corridor(pts, prof, hw + 1.5f, math.clamp(dev / 0.16f, 4f, 20f));
             }
             for (int i = 1; i < route.Count; i++) LeisureKit.Path(ctx, occ, route[i - 1], route[i], role, asset);
             return route;
@@ -417,7 +422,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         /// Every walk reachable from an entrance: each gate joins its nearest walk; a walk no gate reached (a beach walk
         /// beside a cliff-top walk) gets its own connector from the nearest gate when that can stay under ~15 %.
         /// </summary>
-        public void ConnectAll(Occupancy occ, IReadOnlyList<float2> gates, IReadOnlyList<float2[]> lines, NetRole role, AssetRef asset)
+        public void ConnectAll(Occupancy occ, IReadOnlyList<float2> gates, IReadOnlyList<float2[]> lines, NetRole role, AssetRef asset, float landing = 0f)
         {
             if (gates.Count == 0 || lines.Count == 0) return;
             var spines = new List<List<(float2, float2)>>();
@@ -441,7 +446,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             {
                 int bi = -1; float bd = float.MaxValue;
                 for (int i = 0; i < spines.Count; i++) { float d = Dist(gt, spines[i], out _); if (d < bd) { bd = d; bi = i; } }
-                var r = bi >= 0 ? Connect(occ, gt, all, role, asset) : null;
+                var r = bi >= 0 ? Connect(occ, gt, all, role, asset, landing) : null;
                 if (r == null) continue;
                 reached[bi] = true;
                 routes.Add(r);
@@ -466,7 +471,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                 float hf = H(from), ht = H(to);
                 if (math.abs(hf - ht) / best > TerrainSurvey.RampGrade) continue;
                 if (Ctx.LayerRegion.CrossesBoundary(from, to, true)) continue;
-                Sculpt.Corridor(new[] { from, to }, s => math.lerp(hf, ht, math.saturate(s / best)), hw + 0.4f, 5f);
+                Sculpt.Corridor(new[] { from, to }, s => math.lerp(hf, ht, math.saturate(s / best)), hw + 1.5f, 5f);
                 LeisureKit.Path(Ctx, occ, from, to, role, asset);
                 reached[i] = true;
             }
@@ -490,6 +495,27 @@ namespace Placemaker.Core.Layers.Types.Beach
             }
             return runs;
         }
+        /// <summary>
+        /// (s30) Emits a sculpt whose targets are ONE designed field (ShoreWalk): no smoothing, grade relaxation or earthwork
+        /// clamps after the layout was placed on it (each of those bent the level band under a walk into a cross slope and
+        /// left pads and benches at different heights from the ground beside them — the in-game curtains). Only the cap to
+        /// the locked border is re-applied (pads placed later may have pushed against it).
+        /// </summary>
+        public TerrainResult FinishField(float borderGrade)
+        {
+            Sculpt.CapToBorder(borderGrade);
+            var e = Sculpt.Measure();
+            Ctx.Plan.Facts["earthMaxCut"] = e.MaxCut;
+            Ctx.Plan.Facts["earthMaxFill"] = e.MaxFill;
+            Ctx.Plan.Facts["earthCut"] = e.CutVolume;
+            Ctx.Plan.Facts["earthFill"] = e.FillVolume;
+            Ctx.Plan.Facts["terrainRoughness"] = Sculpt.Roughness();
+            Result = Sculpt.Emit(Ctx, Clips);
+            Sculpt.Resnap(Ctx);
+            DropTiltedFurniture();
+            return Result;
+        }
+
         /// <summary>
         /// Emits the sculpt: earthwork limits (an Info issue when they bound the design), grade relaxation, the sloped
         /// patches clipped to land ∪ foreshore, then every object/net/surface of the plan onto the new ground.
