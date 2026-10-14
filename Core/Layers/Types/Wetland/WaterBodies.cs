@@ -25,6 +25,22 @@ namespace Placemaker.Core.Layers.Types.Wetland
         public float Level;
         public float Area;
         public readonly List<float2[]> Islands = new List<float2[]>();
+        private bool _deepKnown;
+        private float2 _deep;
+        private float _inner;
+
+        /// <summary>The point farthest from the shore (cached) and its distance.</summary>
+        public float2 Deepest(out float inner)
+        {
+            if (!_deepKnown)
+            {
+                var shape = LayerRegion.From(Ring);
+                _deep = shape != null ? shape.DeepestPoint(out _inner, null, 12) : Poly.Centroid(Ring);
+                _deepKnown = true;
+            }
+            inner = _inner;
+            return _deep;
+        }
 
         public Pond(float2[] ring)
         {
@@ -60,9 +76,118 @@ namespace Placemaker.Core.Layers.Types.Wetland
         /// <summary>Causeway strips and platforms kept dry inside the ponds (CCW rings).</summary>
         public readonly List<float2[]> Dry = new List<float2[]>();
 
+        // Raster of the open water with a chamfer distance transform (Freeze): the thousands of planting
+        // and free-space queries then cost one lookup instead of polygon tests. ±half a cell accurate.
+        private bool[] _wet;
+        private float[] _dist;
+        private float2 _origin;
+        private float _cell;
+        private int _nx, _ny;
+
+        /// <summary>Builds the water raster over <paramref name="region"/>; call after the ponds and islands are final.</summary>
+        public void Freeze(LayerRegion region)
+        {
+            const float pad = 4f;
+            var size = region.Max - region.Min + 2f * pad;
+            _cell = math.max(1.25f, math.sqrt(size.x * size.y / 250000f));
+            _origin = region.Min - pad;
+            _nx = math.max(1, (int)math.ceil(size.x / _cell));
+            _ny = math.max(1, (int)math.ceil(size.y / _cell));
+            var wet = new bool[_nx * _ny];
+            foreach (var pond in Ponds)
+            {
+                Fill(wet, pond.Ring, true);
+                foreach (var isl in pond.Islands) Fill(wet, isl, false);
+            }
+            _dist = Chamfer(wet, true);     // dry cells: distance to the water
+            _shore = Chamfer(wet, false);   // wet cells: distance to dry land
+            _wet = wet;
+        }
+
+        private float[] _shore;
+
+        /// <summary>Chamfer (1, √2) distance from every cell to the nearest seed cell (wet == seedWet), in metres to the seed's edge.</summary>
+        private float[] Chamfer(bool[] wet, bool seedWet)
+        {
+            const float inf = 1e9f, diag = 1.41421356f;
+            var d = new float[wet.Length];
+            for (int i = 0; i < d.Length; i++) d[i] = wet[i] == seedWet ? 0f : inf;
+            for (int y = 0; y < _ny; y++)
+                for (int x = 0; x < _nx; x++)
+                {
+                    int i = y * _nx + x;
+                    float v = d[i];
+                    if (x > 0) v = math.min(v, d[i - 1] + 1f);
+                    if (y > 0)
+                    {
+                        v = math.min(v, d[i - _nx] + 1f);
+                        if (x > 0) v = math.min(v, d[i - _nx - 1] + diag);
+                        if (x + 1 < _nx) v = math.min(v, d[i - _nx + 1] + diag);
+                    }
+                    d[i] = v;
+                }
+            for (int y = _ny - 1; y >= 0; y--)
+                for (int x = _nx - 1; x >= 0; x--)
+                {
+                    int i = y * _nx + x;
+                    float v = d[i];
+                    if (x + 1 < _nx) v = math.min(v, d[i + 1] + 1f);
+                    if (y + 1 < _ny)
+                    {
+                        v = math.min(v, d[i + _nx] + 1f);
+                        if (x + 1 < _nx) v = math.min(v, d[i + _nx + 1] + diag);
+                        if (x > 0) v = math.min(v, d[i + _nx - 1] + diag);
+                    }
+                    d[i] = v;
+                }
+            // Cell-centre distances → distance to the seed region's edge (half a cell nearer).
+            for (int i = 0; i < d.Length; i++) d[i] = d[i] == 0f ? 0f : math.max(0f, d[i] * _cell - _cell * 0.5f);
+            return d;
+        }
+
+        /// <summary>Inside open water: distance to the nearest dry land (frozen raster); 0 on land.</summary>
+        public float ShoreDistance(float2 p)
+        {
+            int ci = CellIndex(p);
+            return ci >= 0 ? _shore[ci] : 0f;
+        }
+
+        private void Fill(bool[] grid, float2[] ring, bool value)
+        {
+            Poly.Bounds(ring, out var mn, out var mx);
+            int y0 = math.max(0, (int)math.floor((mn.y - _origin.y) / _cell)), y1 = math.min(_ny - 1, (int)math.ceil((mx.y - _origin.y) / _cell));
+            var xs = new List<float>();
+            for (int iy = y0; iy <= y1; iy++)
+            {
+                float py = _origin.y + (iy + 0.5f) * _cell;
+                xs.Clear();
+                for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+                {
+                    var a = ring[i]; var b = ring[j];
+                    if ((a.y > py) != (b.y > py)) xs.Add(a.x + (py - a.y) * (b.x - a.x) / (b.y - a.y));
+                }
+                xs.Sort();
+                for (int k = 0; k + 1 < xs.Count; k += 2)
+                {
+                    int x0 = math.max(0, (int)math.ceil((xs[k] - _origin.x) / _cell - 0.5f));
+                    int x1 = math.min(_nx - 1, (int)math.floor((xs[k + 1] - _origin.x) / _cell - 0.5f));
+                    for (int ix = x0; ix <= x1; ix++) grid[iy * _nx + ix] = value;
+                }
+            }
+        }
+
+        private int CellIndex(float2 p)
+        {
+            if (_wet == null) return -1;
+            int x = (int)math.floor((p.x - _origin.x) / _cell), y = (int)math.floor((p.y - _origin.y) / _cell);
+            return x < 0 || y < 0 || x >= _nx || y >= _ny ? -1 : y * _nx + x;
+        }
+
         /// <summary>True when p lies in open water (not on an island), or within <paramref name="margin"/> of it.</summary>
         public bool InWater(float2 p, float margin = 0f)
         {
+            int ci = CellIndex(p);
+            if (ci >= 0) return _wet[ci] || (margin > 0f && _dist[ci] < margin);
             foreach (var pond in Ponds)
             {
                 if (!pond.Near(p, margin)) continue;
@@ -94,6 +219,8 @@ namespace Placemaker.Core.Layers.Types.Wetland
         /// <summary>Distance to the nearest shore (0 inside water), capped.</summary>
         public float Distance(float2 p, float cap)
         {
+            int ci = CellIndex(p);
+            if (ci >= 0) return math.min(cap, _dist[ci]);
             float best = cap;
             foreach (var pond in Ponds)
             {
@@ -125,6 +252,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
         public int Grow(LayerContext ctx, Occupancy occ, GrowSpec spec, uint seed, Func<float2, bool> forbidden = null)
         {
             var region = occ.LayerRegion;
+            _wet = null;
             var rng = Hashing.Rng(seed, 0x9E7Du);
             var blobs = new List<Blob>();
             foreach (var p in Ponds) blobs.Add(new Blob { C = (p.Min + p.Max) * 0.5f, R = math.cmax(p.Max - p.Min) * 0.5f, Pond = -1 });
@@ -231,7 +359,8 @@ namespace Placemaker.Core.Layers.Types.Wetland
             try { merged = Poly.UnionAll(blobs); } catch (Exception) { return null; }
             if (merged.Count == 0 || merged[0].Outer == null || merged[0].Outer.Length < 3) return null;
             var outer = merged[0].Outer;   // largest; enclosed dry pockets become water (they are tiny)
-            var smooth = Poly.Clean(Poly.Chaikin(outer, 2), 0.4f);
+            // Chaikin multiplies vertices; simplify back (≈0.25 m tolerance) so shore queries stay cheap.
+            var smooth = Poly.Clean(Poly.Simplify(Poly.Chaikin(outer, 2), 0.25f), 0.4f);
             var ring = smooth.Length >= 3 && Poly.IsSimple(smooth) ? smooth : Poly.Clean(outer, 0.4f);
             if (ring.Length < 3 || Poly.Area(ring) < 20f || !Poly.IsSimple(ring)) return null;
             return Poly.EnsureCcw(ring);
@@ -245,50 +374,65 @@ namespace Placemaker.Core.Layers.Types.Wetland
         /// Adds up to <paramref name="count"/> islands over the ponds (largest pond first, round robin),
         /// each keeping an open channel to the shore and clear of crossings. Returns how many were added.
         /// </summary>
-        public int AddIslands(int count, float channel, float maxRadius, uint seed, SegmentIndex crossings)
+        public int AddIslands(LayerRegion region, int count, float channel, float maxRadius, uint seed, SegmentIndex crossings)
         {
             int added = 0;
             if (count <= 0 || Ponds.Count == 0) return 0;
+            if (_wet == null) Freeze(region);
             var order = new List<Pond>(Ponds);
             order.Sort((a, b) => b.Area.CompareTo(a.Area));
+            // Room per grid point (distance to the shore and the crossings), computed once per pond.
+            var room = new List<List<(float2 p, float room)>>();
+            foreach (var pond in order) room.Add(Room(pond, channel, crossings));
+            _wet = null;
             for (int round = 0; round < count && added < count; round++)
             {
                 bool any = false;
-                foreach (var pond in order)
+                for (int k = 0; k < order.Count; k++)
                 {
                     if (added >= count) break;
-                    if (!AddIsland(pond, channel, maxRadius, Hashing.Mix(seed, (uint)(round * 17 + added)), crossings)) continue;
+                    if (!AddIsland(order[k], room[k], channel, maxRadius, Hashing.Mix(seed, (uint)(round * 17 + added)))) continue;
                     added++; any = true;
                 }
                 if (!any) break;
             }
+            Freeze(region);
             return added;
         }
 
-        private static bool AddIsland(Pond pond, float channel, float maxRadius, uint seed, SegmentIndex crossings)
+        private const float IslandJitter = 0.22f;
+
+        private List<(float2, float)> Room(Pond pond, float channel, SegmentIndex crossings)
         {
-            const float jitter = 0.22f;
-            float step = math.max(1.5f, math.sqrt(pond.Area / 900f));
-            float best = 0f; float2 at = default;
+            var r = new List<(float2, float)>();
+            float step = math.max(2f, math.sqrt(pond.Area / 600f));
             for (float y = pond.Min.y + step * 0.5f; y < pond.Max.y; y += step)
                 for (float x = pond.Min.x + step * 0.5f; x < pond.Max.x; x += step)
                 {
                     var p = new float2(x, y);
-                    if (!Poly.Contains(pond.Ring, p)) continue;
-                    float room = Poly.DistanceToBoundary(pond.Ring, p) - channel;
+                    float room = ShoreDistance(p) - channel;
+                    if (room < 2.2f || !Poly.Contains(pond.Ring, p)) continue;
                     if (crossings != null && crossings.Count > 0) room = math.min(room, crossings.Clearance(p, room + 1f) - 2f);
-                    foreach (var isl in pond.Islands)
-                    {
-                        var ic = Poly.Centroid(isl);
-                        float ir = math.sqrt(Poly.Area(isl) / math.PI) * (1f + jitter);
-                        room = math.min(room, math.distance(p, ic) - ir - channel);
-                    }
-                    float r = math.min(maxRadius, room / (1f + jitter));
-                    r += Hashing.Unit(Hashing.Mix(seed, (int)(x * 3f), (int)(y * 3f))) * 0.05f;
-                    if (r > best) { best = r; at = p; }
+                    if (room >= 2.2f) r.Add((p, room));
                 }
+            return r;
+        }
+
+        private static bool AddIsland(Pond pond, List<(float2 p, float room)> cells, float channel, float maxRadius, uint seed)
+        {
+            float best = 0f; float2 at = default;
+            var centres = new List<(float2 c, float r)>();
+            foreach (var isl in pond.Islands) centres.Add((Poly.Centroid(isl), math.sqrt(Poly.Area(isl) / math.PI) * (1f + IslandJitter)));
+            foreach (var (p, shore) in cells)
+            {
+                float room = shore;
+                foreach (var (ic, ir) in centres) room = math.min(room, math.distance(p, ic) - ir - channel);
+                float r = math.min(maxRadius, room / (1f + IslandJitter));
+                r += Hashing.Unit(Hashing.Mix(seed, (int)(p.x * 3f), (int)(p.y * 3f))) * 0.05f;
+                if (r > best) { best = r; at = p; }
+            }
             if (best < 2.2f) return false;
-            var blob = Poly.EnsureCcw(LeisureKit.Blob(at, best, seed, 12, jitter));
+            var blob = Poly.EnsureCcw(LeisureKit.Blob(at, best, seed, 12, IslandJitter));
             if (!Poly.IsSimple(blob)) return false;
             pond.Islands.Add(blob);
             return true;
@@ -305,9 +449,8 @@ namespace Placemaker.Core.Layers.Types.Wetland
         {
             spur = false;
             var region = occ.LayerRegion;
-            var shape = LayerRegion.From(pond.Ring);
-            if (shape == null) return null;
-            var c = shape.DeepestPoint(out float inner, null, 12);
+            var c = pond.Deepest(out float inner);
+            if (inner <= 0f) return null;
             float reach = math.length(pond.Max - pond.Min) + 2f;
             float phase = Hashing.Unit(seed) * math.PI;
             List<float2> best = null; float bestScore = float.MaxValue; bool bestSpur = false;
@@ -360,7 +503,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
                 var q = shore + dir * t;
                 if (!region.ContainsDisc(q, 1.5f)) return false;
                 if (t > 1.5f && InWater(q)) return false;
-                if (occ.Paths.Nearest(q, 1.5f, out var f) >= 0)
+                if (occ.Paths.Clearance(q, 1.6f) < 1.5f && occ.Paths.Nearest(q, 1.5f, out var f) >= 0)
                 {
                     foot = f; length = t;
                     return true;

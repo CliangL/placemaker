@@ -40,8 +40,15 @@ namespace Placemaker.Core.Layers.Types.Wetland
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature(WildlifeHabitatAddOn.LayerId), Feature("picnic", ("groups", 2.0), ("tables", 2.0)), Feature("restrooms", ("byArea", true), ("haEach", 6.0)),
-            Feature("kiosk", ("count", 1.0)), Feature("rocks", ("clusters", 3.0), ("size", "small")), Feature("decals", ("theme", "puddles"), ("density", 1.0)),
+            KioskFeature(), Feature("rocks", ("clusters", 3.0), ("size", "small")), Feature("decals", ("theme", "puddles"), ("density", 1.0)),
         };
+
+        internal static FeatureInfo KioskFeature()
+        {
+            var f = Feature("kiosk", ("count", 1.0));
+            f.LabelKey = "Placemaker.AddOn.Kiosk.Name";
+            return f;
+        }
 
         protected override void DefineControls(ControlSet c)
         {
@@ -161,6 +168,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
                 spec.PathMargin = 2f; spec.MinRadius = 2.5f; spec.BlobRadius = math.max(3f, blob * 0.6f); spec.EdgeMargin = math.max(5f, spec.EdgeMargin * 0.8f);
                 water.Grow(ctx, occ, spec, Hashing.Mix(ctx.Seed, 0x9014u));
             }
+            water.Freeze(region);
             if (water.Ponds.Count == 0) ctx.Issue(IssueSeverity.Info, "Placemaker.Wetland.Issue.NoRoom");
             else if (water.Ponds.Count < ponds) ctx.Issue(IssueSeverity.Info, "Placemaker.Wetland.Issue.FewerPonds", water.Ponds.Count, ponds);
             ctx.Check();
@@ -174,7 +182,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
             var order = new List<Pond>(water.Ponds);
             order.Sort((a, b) => b.Area.CompareTo(a.Area));
             var crossed = new List<float2>();
-            for (int i = 0, k = 0; k < wantedCrossings && i < order.Count * 2; i++)
+            for (int i = 0, k = 0; k < wantedCrossings && i < order.Count + wantedCrossings; i++)
             {
                 var pond = order[i % order.Count];
                 if (pond.Area < 120f) continue;
@@ -206,7 +214,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
             ctx.Check();
 
             // 4. Islands, clear of the crossings; then the basins.
-            int islands = water.AddIslands(ctx.I("islands"), subtype == "birdReserve" ? 5f : 4f, subtype == "birdReserve" ? 9f : 6f, Hashing.Mix(ctx.Seed, 0x15A7u), crossings);
+            int islands = water.AddIslands(region, ctx.I("islands"), subtype == "birdReserve" ? 5f : 4f, subtype == "birdReserve" ? 9f : 6f, Hashing.Mix(ctx.Seed, 0x15A7u), crossings);
             bool shelf = ctx.B("shelf");
             int basins = water.EmitBasins(ctx, depth, math.min(0.35f, depth * 0.5f), shelf ? math.clamp(ctx.F("reedBelt") * 0.6f, 1.5f, 4f) : 0f);
             if (basins > 0) ctx.Issue(IssueSeverity.Warning, PermanentKey);
