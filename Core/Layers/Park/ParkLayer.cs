@@ -76,7 +76,7 @@ namespace Placemaker.Core.Layers.Park
             StreetShopsFeature("Park"),
             new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
             new FeatureInfo { Layer = "ground", LabelKey = "Placemaker.Feature.ground", TooltipKey = "Placemaker.Feature.ground.Tooltip" },
-            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Bag(("theme", "leaves"), ("density", 1.5)), DefaultOn = true },
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Bag(("theme", "leaves"), ("density", 0.6)), DefaultOn = true },
             new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.terrain", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Bag(("shape", "mounds"), ("height", 2.0)) },
             // g2: on by default, idle unless the area is partly in (or along) water.
             ShoreKit.Feature(("style", "auto")),

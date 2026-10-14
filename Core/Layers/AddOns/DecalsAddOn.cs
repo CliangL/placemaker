@@ -26,8 +26,9 @@ namespace Placemaker.Core.Layers.AddOns
         protected override void DefineControls(ControlSet c)
         {
             c.Choice("theme", "leaves", ControlTier.Essential, "decals", Themes);
-            c.Slider("density", 2, 0.2, 10, 0.2, "per100m2", ControlTier.Essential, "decals").Tip();
-            c.Slider("clustering", 50, 0, 100, 5, "%", ControlTier.Essential, "decals").Tip();
+            // Playtest 4b: subtle by default (decals are on in most types now) — a sprinkle, not a carpet.
+            c.Slider("density", 0.6, 0.2, 10, 0.2, "per100m2", ControlTier.Essential, "decals").Tip();
+            c.Slider("clustering", 70, 0, 100, 5, "%", ControlTier.Essential, "decals").Tip();
             c.Choice("ground", "auto", ControlTier.More, "decals", "auto", "paved", "lawn").Tip();
             c.AssetMulti("assets", AssetCategories.Decal, ControlTier.More, "decals");
             c.RandomRange("density", 0.6, 3);
@@ -95,6 +96,14 @@ namespace Placemaker.Core.Layers.AddOns
                     if (Hashing.Unit(Hashing.Mix(clump, (int)(p.x * 11f), (int)(p.y * 5f))) > chance) continue;
                 }
                 if (occ.Discs.Overlaps(p, 0.6f, 0.1f) || occ.HitsPolygon(p, 0.3f) || !region.ContainsDisc(p, 0.3f)) continue;
+                if (theme == "leaves" || theme == "dirt")
+                {
+                    // Leaves and dirt gather along path edges and round trees, benches and lamps; open lawn
+                    // gets only a rare one (playtest 4b: no uniform carpets of decal squares).
+                    float near = math.min(occ.Corridors.Clearance(p, 4f), occ.Discs.Clearance(p, 4f));
+                    float gather = near < 4f ? 1f - math.max(0f, near) / 6f : 0.1f;
+                    if (Hashing.Unit(Hashing.Mix(v, 0x6A7u)) > gather) continue;
+                }
                 // On a path/aisle: well inside it (the reserved corridors approximate curves by chords).
                 bool onCorridor = occ.Corridors.Clearance(p, 1f) < -0.6f;
                 bool paved = pavedRegion || onCorridor;

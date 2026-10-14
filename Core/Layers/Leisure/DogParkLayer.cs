@@ -21,7 +21,7 @@ namespace Placemaker.Core.Layers.Leisure
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
             Feature("restrooms"), Feature("shops", ("count", 1.0)), StreetShopsFeature(Area), Feature("rocks", ("size", "small"), ("clusters", 2.0)),
-            Feature("decals", ("theme", "dirt"), ("density", 2.0)), Feature("terrain", ("shape", "mounds"), ("height", 1.0)),
+            Feature("decals", ("theme", "dirt"), ("density", 0.8)), Feature("terrain", ("shape", "mounds"), ("height", 1.0)),
         };
 
         protected override void DefineControls(ControlSet c)
