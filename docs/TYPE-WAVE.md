@@ -67,3 +67,30 @@ Builder 11 (park & plaza depth): more path styles (≥ 6 new: riverside meander,
 woodland trail, boardwalk loop, promenade avenue…), more park presets (≥ 6 new subtypes: Victorian park, English
 landscape, Modern minimal, Wildflower meadow, Urban pocket, Riverside park…), plaza: more levels/terrace variants,
 and anything the previous rounds left shallow. Owns Core/Layers/Park, Core/Layers/Plaza, Core/Layers/AddOns only.
+
+## Additions (user, same day) — read these too
+
+- **Beach (5a) must go further:** beach types (sandy, rocky/pebble, river, cove, volleyball), a back path behind the
+  beach with showers/changing huts/benches, the player chooses which side faces the water (auto from WaterDepthAt
+  or a "Water side" choice), and the beach should *carve* the terrain (gentle slope down to the waterline, dunes
+  behind) to look stunning. Rocky beach: rock clusters, pebble paint, tide-pool hollows.
+- **New builder 12:** **logisticsYard** (group "industrial") — "like a parking lot but not for cars": crate/shipment
+  loading yard, pallet storage, container stacks, lumber yard, storage yard, truck loading bays (paved areas +
+  markings decals), small industrial props/sheds/buildings-as-props; aisles in a grid like parking.
+  And **hikingTrail** (group "nature") — trail through the area (contour-following, switchbacks), trailheads with
+  parking/sign/map board, rest spots, viewpoints, footbridges over water, forest/meadow/ridge/canyon variants.
+- **New builder 13:** **farmstead** (group "farms") — a whole farm: fields by crop, farmyard with barns/silos props,
+  tracks, hedgerows, pond, livestock paddocks (coordinate with animalPark ideas but self-contained), and
+  **orchardPark** (group "parks") — orchard as a public park: fruit-tree grids with mown paths, blossom meadow,
+  picnic under trees, cider stand, beehives.
+- **Builder 11 (park & plaza depth) also adds features:** volleyball sand pit, basketball half-court, table tennis,
+  outdoor chess, fitness stations, splash pad, bandstand/gazebo, dog run, community noticeboard — each with
+  "Path to it" and placement position (centre/edge/near entrance/corner).
+
+## More ideas for later waves (lead's list)
+Allotment terraces on slopes · river walk with stepping stones · mountain bike skills park · BMX track · pump track ·
+equestrian centre · tree-top adventure trail · urban beach on a plaza · pop-up market lot · food-truck court ·
+car boot sale field · drive-in cinema lot · airfield-style kite field · campus quad · school sports field ·
+botanical glasshouse court · sculpture walk · night market · festival camping · storage depot · salt/sand depot ·
+snow dump · substation yard · rail yard sidings (props only) · harbour crate quay · boatyard (boats on stands) ·
+fishing harbour quay · lighthouse point · cliff walk · picnic peninsula · bird island
