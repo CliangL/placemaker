@@ -166,7 +166,7 @@ namespace Placemaker.Core
             // cutouts and building lots are enforced, so those rules apply to decals too.
             Decals.Dressing.Apply(result, area, site, dress, cancel);
             // s14: zoning cutouts stay empty whatever a feature placed (Layers/Common/Cutouts.cs).
-            Layers.Common.Cutouts.Enforce(result);
+            Layers.Common.Cutouts.Enforce(result, area?.Ring != null && area.Ring.Length >= 3 ? new[] { area.Ring2D() } : null);
             // (s15) Never build on existing buildings: drop / cut whatever would touch a building lot.
             Build.SiteSafety.Apply(result, area, site);
             // (s19) Road zone cells under the build are blocked outside the zoning; the zoning snaps to the cells.
