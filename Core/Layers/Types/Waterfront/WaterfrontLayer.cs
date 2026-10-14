@@ -40,10 +40,15 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 Layer = BeachBarAddOn.LayerId, LabelKey = "Placemaker.Feature.cafeTerrace",
                 Preset = ParkLayer.Bag(("tables", 8.0), ("umbrellas", false)),
             },
+            // Area-wide features run on the dry land only ("core"): on the whole outline they planted picnic
+            // shelters and trees in the water and puddle decals on it (art pass a3).
             Feature("restrooms"), Feature("shops", ("count", 2.0), ("where", "paths")), StreetShopsFeature(Area),
-            CoreFeature("playground", ("size", "small")), Feature("picnic"), Feature("fountain"), Feature("flowerbeds"),
-            Feature("bigtrees"), Feature("decals", ("theme", "puddles")),
+            CoreFeature("playground", ("size", "small")), CoreFeature("picnic"), CoreFeature("fountain"), CoreFeature("flowerbeds"),
+            CoreFeature("bigtrees"), CoreFeature("decals", ("theme", "puddles")),
         };
+
+        /// <summary>Flower beds and a few big trees on the lawn; no picnic shelters or puddle decals by default.</summary>
+        protected override string[] DefaultFeatures => new[] { "flowerbeds", "bigtrees" };
 
         protected override void DefineControls(ControlSet c)
         {
@@ -99,11 +104,12 @@ namespace Placemaker.Core.Layers.Types.Waterfront
 
         protected override void DefinePresets()
         {
-            Preset("promenade", ("style", "promenade"), ("promWidth", 12.0), ("surface", "paved"), ("steps", "spots"), ("stepCount", 2.0), ("trees", "row"), ("piers", 1.0));
+            Preset("promenade", ("style", "promenade"), ("promWidth", 12.0), ("surface", "paved"), ("steps", "spots"), ("stepCount", 2.0), ("trees", "row"), ("piers", 1.0),
+                ("backdrop", "park"));   // art pass a3: a planted park behind the walk instead of an empty lawn
             Preset("pier", ("style", "pier"), ("promWidth", 9.0), ("pathWidth", "narrow"), ("surface", "none"), ("steps", "none"), ("piers", 3.0), ("pierLength", 50.0),
-                ("pierHeads", true), ("nautical", true), ("trees", "none"), ("benchSpacing", 12.0), ("backdrop", "lawn"));
-            Preset("harbor", ("style", "harbor"), ("promWidth", 18.0), ("railings", false), ("moorings", true), ("nautical", true), ("kiosks", 3.0),
-                ("lampSpacing", 15.0), ("trees", "row"), ("treeSpacing", 16.0), ("piers", 2.0), ("steps", "spots"), ("stepCount", 1.0), ("backdrop", "none"));
+                ("pierHeads", true), ("nautical", true), ("trees", "none"), ("benchSpacing", 12.0), ("backdrop", "park"));
+            Preset("harbor", ("style", "harbor"), ("promWidth", 30.0), ("railings", false), ("moorings", true), ("nautical", true), ("kiosks", 3.0),
+                ("lampSpacing", 15.0), ("trees", "row"), ("treeSpacing", 16.0), ("piers", 2.0), ("steps", "spots"), ("stepCount", 1.0), ("backdrop", "lawn"));
             Preset("riverSteps", ("style", "riverSteps"), ("promWidth", 14.0), ("railings", false), ("steps", "continuous"), ("stepLevels", 4.0), ("trees", "double"),
                 ("backdrop", "park"), ("lampSpacing", 25.0), ("piers", 0.0));
             Preset("fishing", ("style", "fishing"), ("promWidth", 8.0), ("surface", "gravel"), ("pathWidth", "narrow"), ("railings", false), ("riprap", true),
@@ -248,11 +254,11 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             {
                 case "paved":
                     if (AssetAvailability.Require(ctx.Plan, AssetCategories.SurfacePaving, new[] { ctx.S("surfaceAsset") }, Keys.Category(AssetCategories.SurfacePaving)))
-                        foreach (var ring in shore.Band(0f, w.P)) ctx.Surface(ring, SurfaceRole.Paving, AssetMix.One(ctx.S("surfaceAsset")), AssetCategories.SurfacePaving);
+                        foreach (var ring in shore.Band(0f, w.P)) ctx.Surface(ring, SurfaceRole.Paving, AssetMix.Pick(WaterfrontArt.Or(ctx.S("surfaceAsset"), WaterfrontArt.Paving(ctx.S("style"))), 0u), AssetCategories.SurfacePaving);
                     break;
                 case "gravel":
                     if (AssetAvailability.Require(ctx.Plan, AssetCategories.SurfaceNatural, null, Keys.Category(AssetCategories.SurfaceNatural)))
-                        foreach (var ring in shore.Band(0f, w.P)) ctx.Surface(ring, SurfaceRole.Ground, AssetMix.One(""), AssetCategories.SurfaceNatural);
+                        foreach (var ring in shore.Band(0f, w.P)) ctx.Surface(ring, SurfaceRole.Ground, new AssetRef("", "Forestry Surface 01"), AssetCategories.SurfaceNatural);
                     break;
                 case "grass":
                     foreach (var ring in shore.Band(0f, w.P)) ctx.Surface(ring, SurfaceRole.Grass, AssetMix.One(""));
@@ -321,10 +327,15 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 if (len < 8f || !wet) continue;
                 var end = p0 + dir * len;
                 float deck = math.max(ctx.H(p0), (math.isfinite(shore.WaterLevel) ? shore.WaterLevel : ctx.H(p0)) + deckAbove);
-                // Land stub from the promenade walk to the pier root.
-                var walk = p0 + inw * w.DPath;
-                if (w.Shore.Land.Contains(walk)) LeisureKit.Path(ctx, w.Occ, walk, p0 + inw * 0.3f, NetRole.Pathway, asset);
-                Deck(ctx, p0 + inw * 0.3f, end, deck, asset);
+                // Land stub from the promenade walk to a ramp foot inland; the ramp (not following the ground)
+                // climbs from the ground there to the deck at the waterline, so the stub, ramp and deck share
+                // nodes at the same height instead of meeting with a step (art pass a3).
+                float rampRun = math.clamp((deck - ctx.H(p0)) / 0.08f, 3f, math.max(3f, w.DPath - 1f));
+                var foot = p0 + inw * rampRun;
+                var walk = p0 + inw * math.max(w.DPath, rampRun + 1f);
+                if (w.Shore.Land.Contains(walk)) LeisureKit.Path(ctx, w.Occ, walk, foot, NetRole.Pathway, asset);
+                Ramp(ctx, foot, ctx.H(foot), p0, deck, asset);
+                Deck(ctx, p0, end, deck, asset);
                 float total = len;
                 if (heads)
                     foreach (float sgn in new[] { 1f, -1f })
@@ -336,6 +347,17 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 w.Piers++;
                 w.PierLength += total;
             }
+        }
+
+        /// <summary>Straight course from (a, ya) to (b, yb), not following the ground (pier approach ramp).</summary>
+        private static void Ramp(LayerContext ctx, float2 a, float ya, float2 b, float yb, AssetRef asset)
+        {
+            float3 A = new float3(a.x, ya, a.y), D = new float3(b.x, yb, b.y);
+            ctx.Plan.Nets.Add(new PlannedNet
+            {
+                A = A, B = math.lerp(A, D, 1f / 3f), C = math.lerp(A, D, 2f / 3f), D = D,
+                Role = NetRole.Pathway, Asset = asset, FollowTerrain = false,
+            });
         }
 
         /// <summary>A pier course over the water: level deck, not following the seabed.</summary>
@@ -356,7 +378,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             var ctx = w.Ctx; var shore = w.Shore; var occ = w.Occ;
             if (ctx.B("railings"))
             {
-                var asset = AssetMix.One(ctx.S("railingAsset"));
+                var asset = AssetMix.Pick(WaterfrontArt.Or(ctx.S("railingAsset"), WaterfrontArt.Railings), 0u);
                 var run = new List<float2>();
                 void Flush()
                 {
@@ -398,7 +420,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                     {
                         if (w.InGap(s, 1.5f)) continue;
                         var c = shore.At(s, out var inw, out _);
-                        if (LeisureKit.Put(ctx, occ, c + inw * 0.9f, Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), cat, 0.4f, Hashing.Mix(ctx.Seed, 0x3009u + (uint)w.Moorings), 0.4f, 0.1f))
+                        if (LeisureKit.Put(ctx, occ, c + inw * 0.9f, Yaw(-inw), ObjectRole.Furniture, AssetMix.Pick(WaterfrontArt.Moorings, 0u), cat, 0.4f, Hashing.Mix(ctx.Seed, 0x3009u + (uint)w.Moorings), 0.4f, 0.1f))
                             w.Moorings++;
                     }
             }
@@ -422,8 +444,8 @@ namespace Placemaker.Core.Layers.Types.Waterfront
         {
             var ctx = w.Ctx; var shore = w.Shore; var occ = w.Occ;
             bool wide = w.DPath - w.Hw >= 4.05f;   // room for benches between the edge and the walk
-            var bench = AssetMix.One(ctx.S("benchAsset"));
-            var lamp = AssetMix.One(ctx.S("lampAsset"));
+            var bench = AssetMix.Pick(WaterfrontArt.Or(ctx.S("benchAsset"), WaterfrontArt.Benches), 0u);
+            var lamp = AssetMix.Pick(WaterfrontArt.Or(ctx.S("lampAsset"), WaterfrontArt.Lamps), 0u);
             float benchSpacing = ctx.F("benchSpacing"), lampSpacing = ctx.F("lampSpacing");
             if (benchSpacing > 0f)
                 for (float s = benchSpacing * 0.5f; s < shore.Length; s += benchSpacing)
@@ -437,7 +459,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                         !LeisureKit.Put(ctx, occ, land, Yaw(-inw), ObjectRole.Bench, bench, null, 1.3f, v, 0.4f, 0.2f)) continue;
                     w.Benches++;
                     if (w.Benches % 3 == 0)
-                        LeisureKit.Put(ctx, occ, c + inw * (w.DPath + w.Hw + 1f) + tan * 1.5f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(v, 1u), 0.4f, 0.2f);
+                        LeisureKit.Put(ctx, occ, c + inw * (w.DPath + w.Hw + 1f) + tan * 1.5f, 0f, ObjectRole.Bin, AssetMix.Pick(WaterfrontArt.Bins, 0u), null, 0.5f, Hashing.Mix(v, 1u), 0.4f, 0.2f);
                 }
             if (lampSpacing > 0f)
                 for (float s = lampSpacing * 0.25f; s < shore.Length; s += lampSpacing)
@@ -457,9 +479,9 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                         if (w.InGap(s, 3f)) continue;
                         var c = shore.At(s, out var inw, out var tan);
                         // A life ring by the edge, an anchor and crates on the land side of the walk.
-                        LeisureKit.Put(ctx, occ, c + inw * 1.6f, Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), cat, 0.5f, Hashing.Mix(ctx.Seed, 0xA9C0u + (uint)(s * 3f)), 0.3f, 0.15f);
+                        LeisureKit.Put(ctx, occ, c + inw * 1.6f, Yaw(-inw), ObjectRole.Furniture, AssetMix.Pick(WaterfrontArt.Nautical, 0u), cat, 0.5f, Hashing.Mix(ctx.Seed, 0xA9C0u + (uint)(s * 3f)), 0.3f, 0.15f);
                         var land = c + inw * (w.DPath + w.Hw + 2.5f);
-                        LeisureKit.Put(ctx, occ, land, Yaw(tan), ObjectRole.Furniture, AssetMix.One(""), cat, 1.4f, Hashing.Mix(ctx.Seed, 0xA9D0u + (uint)(s * 3f)), 0.5f, 0.2f);
+                        LeisureKit.Put(ctx, occ, land, Yaw(tan), ObjectRole.Furniture, AssetMix.Pick(WaterfrontArt.Nautical, 0u), cat, 1.4f, Hashing.Mix(ctx.Seed, 0xA9D0u + (uint)(s * 3f)), 0.5f, 0.2f);
                         if (AssetAvailability.Has(AssetCategories.Decoration))
                             LeisureKit.Put(ctx, occ, land + tan * 3f, Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), AssetCategories.Decoration, 0.9f, Hashing.Mix(ctx.Seed, 0xA9E0u + (uint)(s * 3f)), 0.5f, 0.2f);
                     }
@@ -480,7 +502,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 bool any = false;
                 // The rod at the edge, a seat beside it facing the water, a bin every other spot.
                 if (cat != null) any |= LeisureKit.Put(ctx, occ, c + inw * 1.5f + tan * 0.9f, Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), cat, 0.6f, v, 0.3f, 0.1f);
-                any |= LeisureKit.Put(ctx, occ, c + inw * 1.7f - tan * 1.1f, Yaw(-inw), ObjectRole.Bench, AssetMix.One(ctx.S("benchAsset")), null, 1.1f, Hashing.Mix(v, 1u), 0.3f, 0.1f);
+                any |= LeisureKit.Put(ctx, occ, c + inw * 1.7f - tan * 1.1f, Yaw(-inw), ObjectRole.Bench, AssetMix.Pick(WaterfrontArt.Or(ctx.S("benchAsset"), WaterfrontArt.AnglerBenches), 0u), null, 1.1f, Hashing.Mix(v, 1u), 0.3f, 0.1f);
                 if ((w.Fishing & 1) == 0) LeisureKit.Put(ctx, occ, c + inw * 1.6f + tan * 2.9f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(v, 2u), 0.3f, 0.1f);
                 if (!any) continue;
                 w.Fishing++;
@@ -507,7 +529,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                             var c = shore.At(s + off, out var inw, out var tan);
                             var k = c + inw * (dLand + 4f);
                             uint v = Hashing.Mix(ctx.Seed, 0x6170u + (uint)w.Kiosks);
-                            if (!LeisureKit.Put(ctx, occ, k, Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), cat, 2.5f, v, 0.8f, 0.3f)) continue;
+                            if (!LeisureKit.Put(ctx, occ, k, Yaw(-inw), ObjectRole.Furniture, AssetMix.Pick(WaterfrontArt.Kiosks, (uint)w.Kiosks), cat, 2.5f, v, 0.8f, 0.3f)) continue;
                             w.Kiosks++;
                             if (seats != null)
                                 for (int t = 0; t < 4; t++)
@@ -520,7 +542,9 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                     }
             }
             string trees = ctx.S("trees");
-            var ids = ctx.L("treeSpecies");
+            // One species per row: an avenue reads as planted, not as a sample of the tree pool.
+            bool picked = ctx.L("treeSpecies").Length > 0;
+            var ids = WaterfrontArt.Or(ctx.L("treeSpecies"), WaterfrontArt.Trees(ctx.S("style")));
             if (trees != "none" && (ids.Length > 0 || AssetAvailability.Has(AssetCategories.Tree)))
             {
                 float spacing = ctx.F("treeSpacing");
@@ -536,7 +560,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                         {
                             var p = Shoreline.PointOn(line, s, out _);
                             uint v = Hashing.Mix(ctx.Seed, 0x7EE0u + (uint)n);
-                            if (LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ids, v), null, 2.4f, v, 1f, 0.3f, 3, 2 + (int)(v % 2u)))
+                            if (LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ids, picked ? v : (uint)r), null, 2.4f, v, 1f, 0.3f, 3, 2 + (int)(v % 2u)))
                                 n++;
                         }
                     }
@@ -548,7 +572,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
         {
             var ctx = w.Ctx; var shore = w.Shore;
             if (ctx.S("backdrop") != "park") return;
-            var ids = ctx.L("treeSpecies");
+            var ids = WaterfrontArt.Or(ctx.L("treeSpecies"), WaterfrontArt.Trees(ctx.S("style")));
             if (ids.Length == 0 && !AssetAvailability.Has(AssetCategories.Tree)) return;
             float from = math.max(w.P, w.DPath + w.Hw) + 14f;
             foreach (var ring in shore.Band(from, shore.MaxDepth + 20f))
@@ -556,7 +580,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 var band = LayerRegion.From(ring);
                 if (band == null) continue;
                 LeisureKit.Plant(ctx, w.Occ, band, (int)(band.Area / 10000f * 30f), ObjectRole.Tree, ids, 2.5f, 24f, 0.25f, 0x7EF0u, null, 1, 3);
-                LeisureKit.Plant(ctx, w.Occ, band, (int)(band.Area / 10000f * 40f), ObjectRole.Bush, null, 1f, 14f, 0.2f, 0xB0F0u, null);
+                LeisureKit.Plant(ctx, w.Occ, band, (int)(band.Area / 10000f * 40f), ObjectRole.Bush, WaterfrontArt.Shrubs, 1f, 14f, 0.2f, 0xB0F0u, null);
             }
         }
     }
