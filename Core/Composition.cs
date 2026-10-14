@@ -80,6 +80,11 @@ namespace Placemaker.Core
     {
         public List<AreaPlan> Layers = new List<AreaPlan>();
         public List<PlanIssue> Issues = new List<PlanIssue>();
+        /// <summary>
+        /// Set by Build/Declutter once the objects were fitted with real footprints (runs once per plan,
+        /// right after automatic assets are resolved; preview, price and build then agree).
+        /// </summary>
+        public bool Decluttered;
 
         public bool HasErrors
         {
