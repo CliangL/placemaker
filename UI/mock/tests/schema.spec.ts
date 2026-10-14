@@ -54,9 +54,11 @@ test("visibleWhen, lock indicator, reset-to-default, randomize keeps locked valu
     await open(page);
     await design(page, "park");
     await unfold(page, "water");
-    await expect(page.getByTestId("control-lakeSize")).toHaveCount(0);
+    // s15: a control that does not apply is shown greyed out with the reason, not hidden
+    await expect(page.getByTestId("control-lakeSize")).toHaveAttribute("data-disabled", "true");
     await page.getByTestId("toggle-lake").click();
     await expect(page.getByTestId("control-lakeSize")).toBeVisible();
+    await expect(page.getByTestId("control-lakeSize")).not.toHaveAttribute("data-disabled", "true");
 
     // no reset/lock until the player changes a value
     await expect(page.getByTestId("reset-pathWidth")).toHaveCount(0);

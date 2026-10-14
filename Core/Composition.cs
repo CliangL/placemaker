@@ -85,6 +85,11 @@ namespace Placemaker.Core
         /// right after automatic assets are resolved; preview, price and build then agree).
         /// </summary>
         public bool Decluttered;
+        /// <summary>
+        /// (s15) Existing building lots / footprints nothing planned may touch (Build/SiteSafety). Set by
+        /// Compose from the site; Declutter re-checks objects against it after nudging them.
+        /// </summary>
+        public List<float2[]> Protected = new List<float2[]>();
 
         public bool HasErrors
         {
@@ -141,6 +146,8 @@ namespace Placemaker.Core
             Layers.Common.PathJoins.JoinAll(result);
             // s14: zoning cutouts stay empty whatever a feature placed (Layers/Common/Cutouts.cs).
             Layers.Common.Cutouts.Enforce(result);
+            // (s15) Never build on existing buildings: drop / cut whatever would touch a building lot.
+            Build.SiteSafety.Apply(result, area, site);
             return result;
         }
 

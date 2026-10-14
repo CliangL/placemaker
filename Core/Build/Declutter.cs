@@ -210,6 +210,21 @@ namespace Placemaker.Core.Build
         /// </summary>
         public static Report Run(ComposedPlan plan, IReadOnlyDictionary<string, AssetInfo> assets)
         {
+            bool first = plan != null && !plan.Decluttered;
+            var report = RunInner(plan, assets);
+            // (s15) Nudged objects, and objects whose real footprint is only known now, must still keep
+            // off existing buildings (SiteSafety).
+            if (first && assets != null && plan.Protected != null && plan.Protected.Count > 0)
+            {
+                int dropped = SiteSafety.FilterObjects(plan, assets);
+                if (dropped > 0)
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = SiteSafety.IssueLeftOut, Args = new object[] { dropped } });
+            }
+            return report;
+        }
+
+        private static Report RunInner(ComposedPlan plan, IReadOnlyDictionary<string, AssetInfo> assets)
+        {
             var report = new Report();
             if (plan?.Layers == null || assets == null || plan.Decluttered) { report.Skipped = true; return report; }
             plan.Decluttered = true;

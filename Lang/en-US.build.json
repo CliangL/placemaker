@@ -80,5 +80,7 @@
   "Placemaker.Issue.Declutter.Tree": "{0} trees didn't fit and were left out.",
   "Placemaker.Issue.Declutter.Bush": "{0} bushes or hedge pieces didn't fit and were left out.",
   "Placemaker.Issue.Declutter.Planter": "{0} planters didn't fit and were left out.",
-  "Placemaker.Issue.Declutter.Decal": "{0} ground decals didn't fit and were left out."
+  "Placemaker.Issue.Declutter.Decal": "{0} ground decals didn't fit and were left out.",
+  "Placemaker.Build.WouldDemolish": "The game would have removed existing buildings for this build, so it stopped. Nothing was built.",
+  "Placemaker.Build.BuildingsKept": "Built. {0} existing buildings stood in the way; the parts touching them were left out, the buildings stay."
 }

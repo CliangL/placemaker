@@ -548,3 +548,26 @@
     min-width: 0;
     justify-content: space-between;
 }
+
+// s15 — disabled with reason: shown, greyed, not clickable; the reason is in the tooltip.
+.modeOff {
+    opacity: 0.4;
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.06);
+    }
+}
+
+.rowOff {
+    opacity: 0.45;
+}
+
+.offInner {
+    @include col;
+    pointer-events: none;
+}
+
+.fillCell {
+    @include col;
+    flex: 1 1 auto;
+    min-width: 0;
+}

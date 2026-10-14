@@ -238,6 +238,9 @@ namespace Placemaker.Core.Layers.Roads
                 Id = id, Kind = kind, Tier = tier, Group = group,
                 LabelKey = Label(labelId), TooltipKey = Tooltip(labelId),
                 VisibleWhen = visibleWhen ?? "",
+                // s15: the per-pattern essentials stay hidden for the other patterns (greyed they would bury the
+                // few that apply); every other condition is shown greyed with its reason.
+                HideWhenOff = (visibleWhen ?? "").StartsWith("pattern=", System.StringComparison.Ordinal),
             };
         }
 

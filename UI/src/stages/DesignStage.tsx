@@ -283,13 +283,16 @@ const FitIcon = ({ t, fit, layer }: { t: TFunc; fit: FeatureFit; layer: string }
 const FeatureRow = ({
     catalog, design, state, parent, f, cols = 1,
 }: { catalog: Catalog; design: DesignState; state: ToolState; parent: StepView; f: FeatureView; cols?: number }) => {
-    const { t } = useT();
+    const { t, tl } = useT();
     const assetName = useAssetName();
     const layer = layerOf(catalog, f.layer);
     const name = f.label ? t(f.label, layerName(t, layer)) : layerName(t, layer);
+    // s15: a feature that cannot be used for this area stays listed, greyed out with the reason; an enabled one can still be turned off.
+    const why = f.disabled ? tl(f.disabled) : "";
+    const blocked = !!why && !f.enabled;
     const child = f.enabled ? featureStep(design.root, parent, f) : null;
     const own = f.options ?? [];
-    const tip = f.tooltip ? t(f.tooltip, "") : "";
+    const tip = [why, f.tooltip ? t(f.tooltip, "") : ""].filter(Boolean).join(" — ");
     // Collapsed by default once enabled; remembered per parent layer + feature (FEEDBACK-4b #7).
     const [open, setOpen] = useOpen("feature:" + parent.layer + ">" + f.layer, false);
     // One-line summary of its visible options; none visible → nothing to fold (no empty body).
@@ -327,13 +330,15 @@ const FeatureRow = ({
     );
     return (
         <div
-            className={classNames(s.feature, { [s.featureOn]: f.enabled, [s.featureOpen]: shown, [s.featureCell]: cols > 1 })}
+            className={classNames(s.feature, { [s.featureOn]: f.enabled, [s.featureOpen]: shown, [s.featureCell]: cols > 1, [s.featureBlocked]: blocked })}
             // Grid (wide panel): a cell per feature; one whose options are open spans the whole row.
             style={cols > 1 ? { width: shown ? "100%" : 100 / cols + "%" } : undefined}
             data-testid={`feature-${f.layer}`}
             data-enabled={f.enabled ? "true" : "false"}
             data-open={shown ? "true" : "false"}
             data-fit={fit?.kind ?? ""}
+            data-disabled={why ? "true" : undefined}
+            data-reason={why || undefined}
         >
             <div className={s.featureHead}>
                 {foldable ? (
@@ -354,7 +359,13 @@ const FeatureRow = ({
                     <div className={s.featureFold}>{head}</div>
                 )}
                 {fit ? <FitIcon t={t} fit={fit} layer={f.layer} /> : null}
-                <Switch on={f.enabled} onChange={(v) => act.setFeature(parent.path, f.layer, v)} testId={`feature-toggle-${f.layer}`} />
+                <Tip title={name} description={why || undefined}>
+                    <div>
+                        <div className={blocked ? s.featureSwitchOff : undefined}>
+                            <Switch on={f.enabled} onChange={(v) => (!v || !blocked) && act.setFeature(parent.path, f.layer, v)} testId={`feature-toggle-${f.layer}`} />
+                        </div>
+                    </div>
+                </Tip>
             </div>
             {bad ? (
                 <Tip title={fitLabel(t, fit!)} description={detail || undefined}>
