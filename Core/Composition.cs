@@ -107,6 +107,11 @@ namespace Placemaker.Core
         public List<Build.ZoneCellMark> ZoneCells = new List<Build.ZoneCellMark>();
         /// <summary>(s22) Height change of the terraform as a heat map over the area (preview / legend). Set by Compose; null = none.</summary>
         public Build.TerrainHeat TerrainHeat;
+        /// <summary>
+        /// (s31) The outline each fill/split step planned in (its AreaShape), by plan. Not persisted. Build/SiteHarmony grades
+        /// the land of the layers that take part (parks, leisure types) and leaves the rest alone.
+        /// </summary>
+        public Dictionary<AreaPlan, float2[]> FillRings = new Dictionary<AreaPlan, float2[]>();
 
         public bool HasErrors
         {
@@ -167,6 +172,9 @@ namespace Placemaker.Core
             Decals.Dressing.Apply(result, area, site, dress, cancel);
             // s14: zoning cutouts stay empty whatever a feature placed (Layers/Common/Cutouts.cs).
             Layers.Common.Cutouts.Enforce(result, area?.Ring != null && area.Ring.Length >= 3 ? new[] { area.Ring2D() } : null);
+            // (s31) Site harmony: one graded ground for everything planned. Paths level across and smooth along, pads and hard
+            // surfaces flat, decorative mounds kept off them, all terraform merged into one smooth field (no curtains).
+            Build.SiteHarmony.Apply(result, area, site, cancel);
             // (s15) Never build on existing buildings: drop / cut whatever would touch a building lot.
             Build.SiteSafety.Apply(result, area, site);
             // (s19) Road zone cells under the build are blocked outside the zoning; the zoning snaps to the cells.
@@ -231,6 +239,7 @@ namespace Placemaker.Core
             plan.StepPath = path + "@" + regionKey;
             plan.Seed = input.Seed;
             result.Layers.Add(plan);
+            if (gen.Kind != LayerKind.AddOn && shape?.Ring != null && shape.Ring.Length >= 3) result.FillRings[plan] = shape.Ring2D();
             // (s19) The land this build occupies as one place: the region of the top-most non-loose fill/split.
             if (!covered && gen.Kind != LayerKind.AddOn && !GeneratorRegistry.IsLoose(gen.Id) && shape?.Ring != null && shape.Ring.Length >= 3)
             {
