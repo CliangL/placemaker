@@ -34,7 +34,7 @@ export function modeOptions(t: TFunc) {
             title: t("Placemaker.UI.Mode.BlockPaint", "Block paint"),
             description: t(
                 "Placemaker.UI.Mode.BlockPaintTip",
-                "Paint inside one block: the brush stops at its roads and skips zoned cells, buildings and other areas. Right mouse or Shift erases."
+                "Paint; roads stop the brush at the curb (in a closed block it stays in that block), and it skips zoned cells, buildings and other areas. Right mouse or Shift erases."
             ),
         },
         {
@@ -58,7 +58,7 @@ const HOWTO: Record<string, [string, string]> = {
     draw: ["Placemaker.UI.Area.HowDraw", "Click corners; click the first to finish"],
     block: ["Placemaker.UI.Area.HowBlock", "Click a block; Shift+click adds more"],
     paint: ["Placemaker.UI.Area.HowPaint", "Paint with left mouse; right erases"],
-    blockPaint: ["Placemaker.UI.Area.HowBlockPaint", "Paint inside a block; roads and zoning stop the brush"],
+    blockPaint: ["Placemaker.UI.Area.HowBlockPaint", "Paint; roads and zoning stop the brush"],
     perimeter: ["Placemaker.UI.Area.HowPerimeter", "Click intersections around the area"],
 };
 

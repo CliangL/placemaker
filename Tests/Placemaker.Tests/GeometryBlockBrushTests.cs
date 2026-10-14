@@ -278,6 +278,97 @@ namespace Placemaker.Tests
             }
         }
 
+        // ───────────── open-land fallback (no closed block) ─────────────
+
+        private static Placemaker.Core.NearbyNet Road(float2 a, float2 b, float width = 12f) => new Placemaker.Core.NearbyNet
+        {
+            A = new float3(a.x, 0, a.y), B = new float3(math.lerp(a, b, 1f / 3f).x, 0, math.lerp(a, b, 1f / 3f).y),
+            C = new float3(math.lerp(a, b, 2f / 3f).x, 0, math.lerp(a, b, 2f / 3f).y), D = new float3(b.x, 0, b.y),
+            Width = width, Category = Placemaker.Core.NetCategory.Road,
+        };
+
+        private static List<IReadOnlyList<float2>> Footprints(params Placemaker.Core.NearbyNet[] nets) =>
+            Placemaker.Core.Tool.AreaClip.Corridors(nets, new float2(-1000), new float2(1000), 0f);
+
+        [Fact]
+        public void Open_PaintAlongAStraightRoad_NeverCrossesAndSnapsToItsEdge()
+        {
+            var road = Footprints(Road(new float2(-400, 0), new float2(400, 0)));   // edges at z = ±6
+            var bb = BlockBrush.Open(new float2(-100, 12), road);
+            Assert.True(bb.IsOpen);
+            Assert.False(bb.Full);
+            var m = Paint(bb);
+            m.Stamp(new float2(-100, 12), 15f, false);
+            m.Stroke(new float2(-100, 12), new float2(100, 12), 15f, false);   // brush reaches z = -3
+            Assert.False(m.IsPaintedAt(new float2(0, 0)));
+            Assert.False(m.IsPaintedAt(new float2(0, -2)));
+            var o = bb.Outline(m);
+            Assert.NotNull(o);
+            G.AssertSimpleCcw(o.Ring);
+            Assert.True(o.Ring.All(p => p.y >= 6f - 0.05f), G.Dump(o.Ring));
+            foreach (var c in road) Assert.True(OverlapArea(o.Ring, c.ToArray()) < 0.5f);
+            var onEdge = o.Ring.Where(p => math.abs(p.y - 6f) < 0.05f).Select(p => p.x).ToList();
+            Assert.True(onEdge.Count >= 2 && onEdge.Max() - onEdge.Min() > 150f, G.Dump(o.Ring));
+            Assert.True(SurfaceAcceptance.IsAccepted(o.Ring));
+        }
+
+        [Fact]
+        public void Open_StrokeDraggedAcrossARoad_StaysOnItsStartingSide()
+        {
+            var road = Footprints(Road(new float2(-400, 0), new float2(400, 0)));
+            var bb = BlockBrush.Open(new float2(0, 40), road);
+            var m = Paint(bb);
+            m.Stamp(new float2(0, 40), 10f, false);
+            m.Stroke(new float2(0, 40), new float2(0, -40), 10f, false);
+            m.Stroke(new float2(0, -40), new float2(60, -40), 10f, false);
+            Assert.False(m.IsPaintedAt(new float2(0, -40)));
+            Assert.False(m.IsPaintedAt(new float2(60, -40)));
+            Assert.True(m.IsPaintedAt(new float2(0, 30)));
+            var o = bb.Outline(m, 50f);
+            Assert.NotNull(o);
+            Assert.True(o.Ring.All(p => p.y > 5.9f), G.Dump(o.Ring));
+        }
+
+        [Fact]
+        public void Open_DeadEndRoad_PaintWrapsAroundItsEnd()
+        {
+            var road = Footprints(Road(new float2(0, -400), new float2(0, 100)));   // dead end at z = 100
+            var bb = BlockBrush.Open(new float2(25, 50), road);
+            var m = Paint(bb);
+            m.Stamp(new float2(25, 50), 15f, false);
+            m.Stroke(new float2(25, 50), new float2(0, 135), 15f, false);
+            m.Stroke(new float2(0, 135), new float2(-25, 50), 15f, false);
+            Assert.True(m.IsPaintedAt(new float2(-25, 50)));        // reached around the end: same side
+            Assert.False(m.IsPaintedAt(new float2(0, 90)));         // never on the road
+            var o = bb.Outline(m);
+            Assert.NotNull(o);
+            G.AssertSimpleCcw(o.Ring);
+            foreach (var c in road) Assert.True(OverlapArea(o.Ring, c.ToArray()) < 0.5f, $"overlaps road by {OverlapArea(o.Ring, c.ToArray()):F1} m²");
+            Assert.Contains(o.Ring, p => p.x < -10f);
+            Assert.Contains(o.Ring, p => p.x > 10f);
+        }
+
+        [Fact]
+        public void Open_StartingOnTheRoad_HasNothingToPaint()
+        {
+            var bb = BlockBrush.Open(new float2(0, 0), Footprints(Road(new float2(-400, 0), new float2(400, 0))));
+            Assert.True(bb.Full);
+        }
+
+        [Fact]
+        public void Open_WithoutRoads_AvoidsTheSameObstaclesAsABlock()
+        {
+            var lot = Rect(-10, -10, 10, 10);
+            var bb = BlockBrush.Open(new float2(-40, 0), new[] { lot }, BrushMask.DefaultCellSize, p => p.x > 60f);
+            var m = Paint(bb);
+            m.Stamp(new float2(0, 0), 50f, false);
+            Assert.False(m.IsPaintedAt(new float2(0, 0)));
+            Assert.False(m.IsPaintedAt(new float2(70, 0)));
+            var o = bb.Outline(m);
+            Assert.NotNull(o);
+            Assert.True(OverlapArea(o.Ring, lot) < 0.5f);
+        }
+
         [Fact]
         public void BlockPaintMode_RoundTripsAndComparesFaces()
         {

@@ -85,13 +85,36 @@ namespace Placemaker.Core.Geometry
         /// <summary>Obstacles that touch the block (CCW).</summary>
         public IReadOnlyList<float2[]> Obstacles => _obstacles;
         /// <summary>Cells that may be painted (centre inside the block and outside every obstacle).</summary>
-        public BrushMask Allowed { get; }
+        public BrushMask Allowed { get; private set; }
+        /// <summary>Open-land fallback (no closed block): Block is a square work box, roads are obstacles.</summary>
+        public bool IsOpen { get; private set; }
         /// <summary>Nothing in this block can be painted (all zoned / built / under water, or no block).</summary>
         public bool Full => Allowed.IsEmpty;
         /// <summary>Gap (m) between paint and the curb/an obstacle that is closed by pulling the edge onto it.</summary>
         public float SnapDistance => 1.5f * CellSize;
 
         public bool Contains(float2 p) => Block.Length >= 3 && Poly.Contains(Block, p);
+
+        /// <summary>Half side (m) of the open-land work box around the first stroke.</summary>
+        public const float OpenHalfSize = 300f;
+
+        /// <summary>
+        /// Fallback where the cursor is not inside a closed block (open land, dead-end roads, unfinished
+        /// grids): a square work box around <paramref name="centre"/> with the road footprints passed in as
+        /// obstacles (with the lots, zoning, areas), restricted to the side of the roads the stroke starts
+        /// on — the allowed cells 4-connected to <paramref name="centre"/>, so a stroke dragged across a
+        /// road never paints the far side. <see cref="Full"/> when the centre itself cannot be painted.
+        /// </summary>
+        public static BlockBrush Open(float2 centre, IEnumerable<IReadOnlyList<float2>> obstacles,
+            float cellSize = BrushMask.DefaultCellSize, Func<float2, bool> blockedAt = null, float halfSize = OpenHalfSize)
+        {
+            halfSize = math.max(10f, halfSize);
+            var box = new[] { centre + new float2(-halfSize, -halfSize), centre + new float2(halfSize, -halfSize),
+                              centre + new float2(halfSize, halfSize), centre + new float2(-halfSize, halfSize) };
+            var b = new BlockBrush(box, obstacles, cellSize, blockedAt) { IsOpen = true };
+            b.Allowed = b.Allowed.ConnectedComponent(centre);
+            return b;
+        }
 
         /// <summary>True if the cell under p may be painted.</summary>
         public bool CanPaintAt(float2 p) => Allowed.IsPaintedAt(p);
