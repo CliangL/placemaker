@@ -76,6 +76,44 @@ namespace Placemaker.Game.Build
             {
                 Mod.Log.Warn("Placemaker: applying park attractiveness failed (build kept): " + e.Message);
             }
+            RequestParkCompanion(rec, stats);
+        }
+
+        /// <summary>
+        /// (s17) The companion park building at the best road frontage (Economy/ParkCompanionSystem). The lot keeps
+        /// attractiveness until the companion exists (it then takes over); without a frontage the lot keeps it for good.
+        /// </summary>
+        private void RequestParkCompanion(GroupRecord rec, ParkStatsResult stats)
+        {
+            try
+            {
+                var companions = World.GetOrCreateSystemManaged<Economy.ParkCompanionSystem>();
+                if (!companions.Available) return;
+                var outline = BuildOutline();
+                if (outline == null) return;
+                var ring3 = new float3[outline.Length];
+                for (int i = 0; i < outline.Length; i++) ring3[i] = new float3(outline[i].x, 0f, outline[i].y);
+                var nets = new Preview.SiteCapture(EntityManager, World).NetsAround(ring3, 30f);
+                var objects = new System.Collections.Generic.List<float2>();
+                var paths = new System.Collections.Generic.List<(float2, float2, float)>();
+                ParkCompanionPlanner.Obstacles(_request.Plan, objects, paths);
+                var site = ParkCompanionPlanner.Find(outline, nets, objects, paths);
+                ParkStatsEstimator.WithCompanion(stats, true, site);
+                if (!site.Found)
+                {
+                    NoteSkip("Placemaker.Build.NoRoadEdge", null, IssueSeverity.Info, 0);
+                    Mod.Log.Info($"Placemaker: group {_groupId} has no road frontage for a park companion; only attractiveness applies.");
+                    return;
+                }
+                string name = ParkStatsEstimator.KeyOf(stats).Name;
+                companions.Request(_groupId, name, site.Position, site.Yaw);
+                rec.ParkStats.Applied[ParkStatIds.Companion] = 0;   // requested; 1 once it exists
+                Mod.Log.Info($"Placemaker: group {_groupId} park companion '{name}' requested at {site.Position}.");
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker: park companion not requested (build kept, attractiveness stays on the lot): " + e.Message);
+            }
         }
 
         /// <summary>

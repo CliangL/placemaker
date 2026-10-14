@@ -240,7 +240,7 @@ namespace Placemaker.Game.UI
             var failure = _tool.BuildFailure;
             bool ack = _tool.PermanentAcknowledged;
             string stamp = _tool.PlanRevision + "|" + _tool.PlanStale + "|" + afford + "|" + _tool.FeedbackVersion + "|" + (failure?.Key ?? "") + "|"
-                + (Services.Assets?.Version ?? -1) + "|" + _tool.AssetsResolvedStamp + "|" + ack + "|" + _tool.GhostDropped + "|" + _tool.ParkStatsVersion;
+                + (Services.Assets?.Version ?? -1) + "|" + _tool.AssetsResolvedStamp + "|" + ack + "|" + _tool.GhostDropped + "|" + _tool.ParkStatsVersion + "|" + global::Placemaker.Game.Economy.ParkCompanionSystem.Enabled;
             if (stamp == _summaryStamp) return;
             _summaryStamp = stamp;
             var input = new SummaryInput
@@ -252,7 +252,14 @@ namespace Placemaker.Game.UI
                 CanAfford = afford,
                 PermanentAcknowledged = ack,
                 AreaM2 = _tool.Plan != null ? _tool.AreaM2 : 0,
+                ParkCompanion = global::Placemaker.Game.Economy.ParkCompanionSystem.Enabled && global::Placemaker.Game.Build.BuildService.ApplyParkStats,
             };
+            if (input.ParkCompanion && _tool.Plan != null)
+            {
+                _tool.ParkSite(out var outline, out var roads);
+                input.Outline = outline;
+                input.Roads = roads;
+            }
             foreach (var n in _tool.BuildNotes) input.ExtraIssues.Add(n);
             var clipIssue = _tool.ClipIssue;
             if (clipIssue != null) input.ExtraIssues.Add(clipIssue);

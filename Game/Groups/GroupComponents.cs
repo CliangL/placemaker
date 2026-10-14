@@ -57,6 +57,8 @@ namespace Placemaker.Game.Groups
         OwnerArea = 8,
         /// <summary>(s19) Invisible physical "Placemaker Zone Block" lot: blocks the road zone cells under the build.</summary>
         ZoneBlocker = 9,
+        /// <summary>(s17) Hidden 1-cell park building carrying the build's park stats (Economy/ParkCompanionSystem).</summary>
+        ParkCompanion = 10,
     }
 
     /// <summary>The group record. Lives on a headless entity together with <see cref="PlacemakerGroupBlob"/>.</summary>

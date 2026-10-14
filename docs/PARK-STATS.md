@@ -220,7 +220,7 @@ to drop it, switch the setting off and load once (or bulldoze the build) before 
 the mod removes lot and value. Builds made before s17 have no stats (receipt v1 still decodes; older Placemaker
 versions ignore the appended v2 block).
 
-**Full park stats (recommended next step, not done): a companion park building.** Leisure, coverage/wellbeing, land
+**Full park stats: a companion park building (implemented after approval; docs/proposals/s17.md lists risks and in-game checks).** Leisure, coverage/wellbeing, land
 value and real upkeep all key off a `Building` with a road connection. The robust route is the one the parking
 companion already uses (`Economy/ParkingCompanionSystem`): per build, place one small, unobtrusive service building
 cloned at runtime from a vanilla park prefab (Tiny Park / Small Park: `ParkData`, `CoverageData`,

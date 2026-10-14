@@ -363,6 +363,9 @@ export interface ParkStatsView {
   leisureType: "park" | "beach";
   /** "Keep within vanilla range" (default true). */
   keepVanilla: boolean;
+  /** s17 companion park building: "yes" = every stat is real (hidden park building at the road edge), "noRoad" = the
+   *  setting is on but no road frontage was found (only attractiveness applies), "off" = setting off (attractiveness only). */
+  companion?: "yes" | "noRoad" | "off";
   /** Quality multiplier 0.55–2 (trees, water, landmarks, amenities, play, seating). */
   quality: number;
   stats: ParkStatView[];

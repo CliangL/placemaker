@@ -36,6 +36,8 @@ test("park stats: suggested, override, clamp to vanilla range, reset", async ({ 
     await expect(attr).not.toHaveText("");
     await expect(page.getByTestId("park-stat-attractiveness")).toContainText("In game");
     await expect(page.getByTestId("park-stat-leisure")).toContainText("Shown only");
+    // the mock site has no roads: no frontage for the companion park building
+    await expect(page.getByTestId("park-stats-no-road")).toBeVisible();
     await page.getByTestId("park-stat-attractiveness-how-toggle").click();
     await expect(page.getByTestId("park-stat-attractiveness-how")).toContainText("Similar to");
     await panelShot(page, "panel-park-stats");

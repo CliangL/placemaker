@@ -26,6 +26,8 @@ namespace Placemaker.Core.Build
 
         /// <summary>ParkStatsRecord.Applied key: attractiveness as set on the owner lot (after the terrain bonus), absent = not applied.</summary>
         public const string InGameAttractiveness = "attractiveness.inGame";
+        /// <summary>ParkStatsRecord.Applied key: 1 once the companion park building exists (it carries every stat).</summary>
+        public const string Companion = "companion";
 
         /// <summary>Display order. Save format: never rename an id.</summary>
         public static readonly string[] All = { Attractiveness, Leisure, Range, Capacity, Entertainment, Upkeep };
@@ -214,9 +216,15 @@ namespace Placemaker.Core.Build
         public List<KeyValuePair<VanillaPark, double>> Similar = new List<KeyValuePair<VanillaPark, double>>();
     }
 
+    /// <summary>(s17) Does the build get a companion park building (all stats real) or only lot attractiveness?</summary>
+    public enum ParkCompanionState { Off = 0, Yes = 1, NoRoad = 2 }
+
     public sealed class ParkStatsResult
     {
         public bool Applicable;
+        /// <summary>Companion building state (set by <see cref="ParkStatsEstimator.WithCompanion"/>; Off = lot attractiveness only).</summary>
+        public ParkCompanionState Companion;
+        public ParkCompanionSite Site;
         public ParkStatsKind Kind;
         public LeisureKind LeisureType = LeisureKind.CityPark;
         public bool KeepVanilla = true;
@@ -353,6 +361,27 @@ namespace Placemaker.Core.Build
             r.Stats.Add(upkeep);
             foreach (var st in r.Stats) st.Formula.Add(new LocText("Placemaker.ParkStats.F.Band", Fmt(st.BandMin), Fmt(st.BandMax)));
             return r;
+        }
+
+        /// <summary>
+        /// Marks which stats reach the game: all of them with a companion building, else attractiveness only (on the
+        /// owner lot). <paramref name="enabled"/> = setting "Real park stats (companion building)".
+        /// </summary>
+        public static ParkStatsResult WithCompanion(ParkStatsResult r, bool enabled, ParkCompanionSite site)
+        {
+            if (r == null || !r.Applicable) return r;
+            r.Site = site;
+            r.Companion = !enabled ? ParkCompanionState.Off : site.Found ? ParkCompanionState.Yes : ParkCompanionState.NoRoad;
+            foreach (var s in r.Stats) s.Applied = r.Companion == ParkCompanionState.Yes || s.Id == ParkStatIds.Attractiveness;
+            return r;
+        }
+
+        /// <summary>Prefab key of the companion for these (final) values.</summary>
+        public static ParkPrefabKey KeyOf(ParkStatsResult r)
+        {
+            var values = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var s in r.Stats) values[s.Id] = s.Value;
+            return ParkPrefabKey.From(values, r.LeisureType == LeisureKind.CityBeach);
         }
 
         private static ParkStatEstimate Make(string id, double raw, ParkStatsInput input, ParkStatsSettings settings, bool applied)

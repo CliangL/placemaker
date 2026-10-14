@@ -82,6 +82,11 @@ namespace Placemaker.Core.Tool
         public List<PlanIssue> ExtraIssues = new List<PlanIssue>();
         /// <summary>(s17) Selected area in m² (park stats scale with it). 0 = the plan's outline is unknown: no park stats.</summary>
         public double AreaM2;
+        /// <summary>(s17) Setting "Real park stats (companion building)".</summary>
+        public bool ParkCompanion;
+        /// <summary>(s17) Outline (XZ) and the nets around it, to find the companion's road frontage. Null = none.</summary>
+        public IReadOnlyList<float2> Outline;
+        public IReadOnlyList<NearbyNet> Roads;
     }
 
     public static class UiModels
@@ -778,7 +783,21 @@ namespace Placemaker.Core.Tool
                 Placemaker.Core.Build.ParkStatsResult stats = null;
                 try { stats = Placemaker.Core.Build.ParkStatsEstimator.Estimate(Placemaker.Core.Build.ParkStatsInput.From(plan, s.AreaM2, s.Recipe), s.Recipe.ParkStats); }
                 catch (Exception) { stats = null; }
-                if (stats != null && stats.Applicable) o.Set("parkStats", ParkStats(stats));
+                if (stats != null && stats.Applicable)
+                {
+                    var site = new Placemaker.Core.Build.ParkCompanionSite { ReasonKey = Placemaker.Core.Build.ParkCompanionPlanner.NoRoadKey };
+                    if (s.ParkCompanion)
+                        try
+                        {
+                            var objs = new List<float2>();
+                            var paths = new List<(float2, float2, float)>();
+                            Placemaker.Core.Build.ParkCompanionPlanner.Obstacles(plan, objs, paths);
+                            site = Placemaker.Core.Build.ParkCompanionPlanner.Find(s.Outline, s.Roads, objs, paths);
+                        }
+                        catch (Exception) { }
+                    Placemaker.Core.Build.ParkStatsEstimator.WithCompanion(stats, s.ParkCompanion, site);
+                    o.Set("parkStats", ParkStats(stats));
+                }
             }
             return o;
         }
@@ -790,6 +809,8 @@ namespace Placemaker.Core.Tool
                 .Set("kind", r.Kind.ToString().ToLowerInvariant())
                 .Set("leisureType", r.LeisureType == Placemaker.Core.Build.LeisureKind.CityBeach ? "beach" : "park")
                 .Set("keepVanilla", r.KeepVanilla)
+                .Set("companion", r.Companion == Placemaker.Core.Build.ParkCompanionState.Yes ? "yes"
+                    : r.Companion == Placemaker.Core.Build.ParkCompanionState.NoRoad ? "noRoad" : "off")
                 .Set("quality", Math.Round(r.Quality, 2));
             var arr = JsonValue.Arr();
             foreach (var st in r.Stats)

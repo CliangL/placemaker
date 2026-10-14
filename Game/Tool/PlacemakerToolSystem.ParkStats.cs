@@ -5,6 +5,7 @@ using System;
 using System.Globalization;
 using Placemaker.Core;
 using Placemaker.Core.Build;
+using Unity.Mathematics;
 
 namespace Placemaker.Game.Tool
 {
@@ -35,6 +36,15 @@ namespace Placemaker.Game.Tool
             _parkStatsVersion++;
             Commit(label, coalesce);
             return true;
+        }
+
+        /// <summary>(s17) Outline and nearby nets for the companion's road frontage in Review (null without a shape).</summary>
+        public void ParkSite(out float2[] outline, out System.Collections.Generic.List<NearbyNet> roads)
+        {
+            outline = null; roads = null;
+            if (_shape?.Ring == null || _shape.Ring.Length < 3) return;
+            outline = Placemaker.Core.Geometry.Poly.To2D(_shape.Ring);
+            try { roads = _site.NetsAround(_shape.Ring, 30f); } catch (Exception) { roads = null; }
         }
 
         /// <summary>UI: the player set a park stat (number as JSON or plain text).</summary>

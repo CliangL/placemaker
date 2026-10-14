@@ -92,6 +92,12 @@ export const ParkStatsSection = ({ ps, pending }: { ps: ParkStatsView; pending: 
                         : t("Placemaker.UI.ParkStats.Park", "Park leisure")}
                 </div>
             </div>
+            {ps.companion === "noRoad" ? (
+                <div className={s.warn} data-testid="park-stats-no-road">
+                    <Icon name="info" size={12} tint="warn" />
+                    <div className={s.warnText}>{t("Placemaker.UI.ParkStats.NoRoad", "No road edge: only attractiveness applies.")}</div>
+                </div>
+            ) : null}
             {outside ? (
                 <div className={s.warn} data-testid="park-stats-outside">
                     <Icon name="warning" size={12} tint="warn" />
@@ -104,7 +110,9 @@ export const ParkStatsSection = ({ ps, pending }: { ps: ParkStatsView; pending: 
                 <StatRow key={st.id} st={st} keepVanilla={ps.keepVanilla} />
             ))}
             <div className={s.note}>
-                {t("Placemaker.UI.ParkStats.Note", "Attractiveness reaches the game now. The others are saved with the build for when it gets a park building.")}
+                {ps.companion === "yes"
+                    ? t("Placemaker.UI.ParkStats.NoteCompanion", "A small hidden park building at the road edge carries these stats, like a vanilla park.")
+                    : t("Placemaker.UI.ParkStats.Note", "Only attractiveness reaches the game here. The others are saved with the build.")}
             </div>
         </Collapsible>
     );
@@ -133,7 +141,7 @@ const StatRow = ({ st, keepVanilla }: { st: ParkStatView; keepVanilla: boolean }
                     title={
                         st.applied
                             ? t("Placemaker.UI.ParkStats.Applied.Tip", "The game uses this value for the build.")
-                            : t("Placemaker.UI.ParkStats.Shown.Tip", "Needs a real park building; saved with the build for later.")
+                            : t("Placemaker.UI.ParkStats.Shown.Tip", "Needs the companion park building (road edge and setting); saved with the build.")
                     }
                 >
                     <div className={classNames(s.tag, { [s.tagOn]: st.applied })}>

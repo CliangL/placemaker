@@ -90,7 +90,7 @@ namespace Placemaker.Game.Tool
                 nameof(PlacemakerSettings.DefaultParkingFee), nameof(PlacemakerSettings.ExperimentalParkingCompanion), nameof(PlacemakerSettings.CompanionUpkeepFactor),
                 nameof(PlacemakerSettings.ClearExistingTreesAndProps), nameof(PlacemakerSettings.RecoverRejectedPieces), nameof(PlacemakerSettings.OverlayPavedSurfaces),
                 nameof(PlacemakerSettings.ChargeNetConstruction), nameof(PlacemakerSettings.SelectAsOneThing), nameof(PlacemakerSettings.ConfirmBulldoze),
-                nameof(PlacemakerSettings.ApplyParkStats),
+                nameof(PlacemakerSettings.ApplyParkStats), nameof(PlacemakerSettings.RealParkStats),
             })
             {
                 r[s.GetOptionLabelLocaleID(p)] = T("Placemaker.Settings." + p, p);

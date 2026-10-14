@@ -370,6 +370,9 @@ namespace Placemaker.MockHost
             JsonNode parkStats = null;
             var stats = Placemaker.Core.Build.ParkStatsEstimator.Estimate(
                 Placemaker.Core.Build.ParkStatsInput.From(plan, Pricing.PolygonArea(shape.Ring), recipe), recipe.ParkStats);
+            // No nearby roads in the mock site: the companion has no frontage, like a build without a road edge.
+            Placemaker.Core.Build.ParkStatsEstimator.WithCompanion(stats, true,
+                Placemaker.Core.Build.ParkCompanionPlanner.Find(Placemaker.Core.Geometry.Poly.To2D(shape.Ring), site.NearbyNets));
             if (stats.Applicable) parkStats = JsonNode.Parse(Placemaker.Core.Tool.UiModels.ParkStats(stats).ToString());
 
 
