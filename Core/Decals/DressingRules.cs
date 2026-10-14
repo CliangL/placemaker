@@ -705,7 +705,9 @@ namespace Placemaker.Core.Decals
             const float step = 2.5f;
             var size = reg.Max - reg.Min;
             if (size.x * size.y / (step * step) > 60000f) return;
-            bool beachy = c.S.LayerId == "beach" || c.S.LayerId == "waterfront";
+            // s30: a waterfront is not sand by default (playtest 57: pale sand and wet-sand blotches on the promenade paving);
+            // only a beach is, elsewhere only ground painted or surfaced as sand.
+            bool beachy = c.S.LayerId == "beach";
             // Cheap probe first: no water anywhere near the step (10 m grid) → no shore.
             bool any = false;
             for (float y = reg.Min.y - 4f; y <= reg.Max.y + 4f && !any; y += 10f)
@@ -739,8 +741,8 @@ namespace Placemaker.Core.Decals
                     bool sand = beachy || g == GroundKind.Sand;
                     if (sand)
                     {
-                        if (Ctx.Roll(h, 0.6f * aWrack)) c.Emit(p + w * (dWater - 1.2f), Ctx.Yaw(t), DecalPools.WetSand, 2.5f, Ctx.H2(h, 1));
-                        if (Ctx.Roll(Ctx.H2(h, 2), 0.4f * aWrack)) c.Emit(p - w * (1f + 2f * Ctx.U(Ctx.H2(h, 3))), Ctx.Yaw(t), DecalPools.Beach, 2.3f, Ctx.H2(h, 4));
+                        if (Ctx.Roll(h, 0.6f * aWrack)) c.Emit(p + w * (dWater - 1.2f), Ctx.Yaw(t), DecalPools.WetSand, 2.5f, Ctx.H2(h, 1), ForbidPaved);
+                        if (Ctx.Roll(Ctx.H2(h, 2), 0.4f * aWrack)) c.Emit(p - w * (1f + 2f * Ctx.U(Ctx.H2(h, 3))), Ctx.Yaw(t), DecalPools.Beach, 2.3f, Ctx.H2(h, 4), ForbidPaved);
                         if (Ctx.Roll(Ctx.H2(h, 5), 0.08f * aLitter)) c.Emit(p - w * (2f + 3f * Ctx.U(Ctx.H2(h, 6))), Ctx.RandomYaw(Ctx.H2(h, 7)), AssetCategories.DecalLitter, 1.4f, Ctx.H2(h, 8));
                         if (Ctx.Roll(Ctx.H2(h, 9), 0.05f * aWrack)) c.Emit(p - w * (2f + 4f * Ctx.U(Ctx.H2(h, 10))), Ctx.Yaw(w), DecalPools.Footprints, 1.2f, Ctx.H2(h, 11));
                     }
