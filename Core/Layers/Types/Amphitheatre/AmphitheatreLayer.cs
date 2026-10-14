@@ -93,7 +93,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         protected override void DefinePresets()
         {
             Preset("classic", ("style", "classic"), ("rows", 10.0), ("span", 160.0), ("terrain", "dig"), ("rowDepth", 1.8), ("rise", 0.45),
-                ("seats", "benches"), ("aisles", 4.0), ("rowShape", "arc"), ("seatGround", "paved"), ("stageKind", "stage"), ("stageSize", 7.0),
+                ("seats", "benches"), ("seatSpacing", 2.5), ("aisles", 3.0), ("rowShape", "arc"), ("seatGround", "paved"), ("stageKind", "stage"), ("stageSize", 7.0),
                 ("orchestra", true), ("backdrop", true), ("kiosks", 1.0));
             Preset("cinema", ("style", "cinema"), ("rows", 10.0), ("span", 70.0), ("terrain", "build"), ("rowDepth", 3.2), ("rise", 0.3),
                 ("seats", "deckchairs"), ("seatSpacing", 2.0), ("aisles", 2.0), ("rowShape", "straight"), ("seatGround", "grass"), ("stageKind", "screen"),
@@ -747,21 +747,44 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             radius = math.max(0.4f, math.min(radius, b.RowDepth * 0.5f - 0.1f));   // neighbouring rows must not block each other
             float spacing = math.max(ctx.F("seatSpacing"), radius * 2f + 0.2f);
             int seats = 0;
+            var aisles = AisleAngles(ctx, b);
+            float clear = Composer.DefaultHalfWidth(NetRole.Pathway) + radius + 0.2f;
             for (int k = 0; k < b.Rows; k++)
             {
                 float r = b.R0 + (k + 0.5f) * b.RowDepth;
-                var pts = new List<float2>();
-                if (b.Straight)
-                {
-                    float w = r * b.Tan;
-                    int n = math.max(1, (int)math.floor(2f * w / spacing));
-                    for (int i = 0; i < n; i++) pts.Add(b.F + b.D * r + b.Perp * (-w + (i + 0.5f) * 2f * w / n));
-                }
+                // Row as a line coordinate s (arc length, or lateral offset for straight rows), split into
+                // sections between the aisles; seats spread evenly inside each section.
+                float s0, s1;
+                if (b.Straight) { s1 = r * b.Tan; s0 = -s1; }
+                else if (b.Full) { s0 = 0f; s1 = 2f * math.PI * r; }
+                else { s0 = -b.Half * r; s1 = b.Half * r; }
+                var cuts = new List<float>();
+                foreach (float a in aisles) cuts.Add(b.Straight ? r * math.tan(a) : a * r);
+                cuts.Sort();
+                var sections = new List<float2>();
+                if (b.Full && cuts.Count > 0)
+                    for (int i = 0; i < cuts.Count; i++)
+                    {
+                        float a0 = cuts[i] + clear, a1 = (i + 1 < cuts.Count ? cuts[i + 1] : cuts[0] + s1) - clear;
+                        if (a1 > a0) sections.Add(new float2(a0, a1));
+                    }
                 else
                 {
-                    float sweep = 2f * b.Half;
-                    int n = math.max(1, (int)math.floor(sweep * r / spacing));
-                    for (int i = 0; i < n; i++) pts.Add(b.F + EventKit.Dir(b.Base - b.Half + (i + 0.5f) * sweep / n) * r);
+                    float from = s0 + radius * 0.5f;
+                    foreach (float c in cuts) { if (c - clear > from) sections.Add(new float2(from, c - clear)); from = c + clear; }
+                    if (s1 - radius * 0.5f > from) sections.Add(new float2(from, s1 - radius * 0.5f));
+                }
+                var pts = new List<float2>();
+                foreach (var sec in sections)
+                {
+                    float len = sec.y - sec.x;
+                    if (len < radius * 2f) continue;
+                    int n = math.max(1, (int)math.floor(len / spacing));
+                    for (int i = 0; i < n; i++)
+                    {
+                        float s = sec.x + (i + 0.5f) * len / n;
+                        pts.Add(b.Straight ? b.F + b.D * r + b.Perp * s : b.F + EventKit.Dir(b.Base + s / r) * r);
+                    }
                 }
                 foreach (var p in pts)
                 {
