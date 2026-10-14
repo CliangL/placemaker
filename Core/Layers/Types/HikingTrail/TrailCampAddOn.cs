@@ -43,15 +43,23 @@ namespace Placemaker.Core.Layers.Types.Hiking
             int placed = 0;
             if (ctx.B("fire"))
             {
-                string fire = LeisureKit.Category(ctx, "", AssetCategories.CampingFire, AssetCategories.Camping);
-                if (fire != null && LeisureKit.Put(ctx, occ, c, 0f, ObjectRole.Furniture, AssetMix.One(""), fire, 1f, Hashing.Mix(ctx.Seed, 1u), 0.5f))
+                // No vanilla fire pit (the camping fallback is a tent): a ring of small stones (art pass a3).
+                if (AssetAvailability.Has(AssetCategories.Rock) && occ.Free(c, 1.3f, 0.5f, 0.2f))
                 {
+                    for (int k = 0; k < 7; k++)
+                    {
+                        float a = k * 0.8976f;
+                        var o = ctx.Object(c + new float2(math.cos(a), math.sin(a)) * 0.85f, a, ObjectRole.Furniture,
+                            new AssetRef("", "Rock05", "Rock12", "Rock21"), Hashing.Mix(ctx.Seed, 60u + (uint)k), -1, AssetCategories.Rock);
+                        o.Scale = 0.55f;
+                    }
+                    occ.Take(c, 1.3f, 1);
                     placed++;
                     for (int k = 0; k < 2; k++)
                     {
                         float a = k * math.PI + 0.6f;
                         var p = c + new float2(math.cos(a), math.sin(a)) * 2.8f;
-                        if (LeisureKit.Put(ctx, occ, p, Facing(p, c), ObjectRole.Bench, AssetMix.One(""), null, 1.1f, Hashing.Mix(ctx.Seed, 2u + (uint)k), 0.5f, 0.2f)) placed++;
+                        if (LeisureKit.Put(ctx, occ, p, Facing(p, c), ObjectRole.Bench, new AssetRef("", "CampgroundBench01", "CampgroundBench02"), null, 1.1f, Hashing.Mix(ctx.Seed, 2u + (uint)k), 0.5f, 0.2f)) placed++;
                     }
                 }
             }
@@ -63,7 +71,7 @@ namespace Placemaker.Core.Layers.Types.Hiking
             {
                 string sh = LeisureKit.Category(ctx, "", AssetCategories.Shelter);
                 var p = c + new float2(0f, -R * 0.75f);
-                if (sh != null && LeisureKit.Put(ctx, occ, p, Facing(p, c), ObjectRole.Furniture, AssetMix.One(""), sh, 2.4f, Hashing.Mix(ctx.Seed, 9u), 0.5f)) placed++;
+                if (sh != null && LeisureKit.Put(ctx, occ, p, Facing(p, c), ObjectRole.Furniture, new AssetRef("", "CampgroundShelter02", "CampgroundShelter01"), sh, 2.4f, Hashing.Mix(ctx.Seed, 9u), 0.5f)) placed++;
             }
             if (placed == 0) NoSpace(ctx, "Placemaker.AddOn.TrailCamp.Name");
             ctx.Stat("Placemaker.Stat.CampPitches", pitches, Keys.UnitCount);

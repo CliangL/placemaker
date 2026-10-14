@@ -92,22 +92,35 @@ namespace Placemaker.Tests.Types
         }
 
         [Fact]
-        public void BoardwalksCrossTheWaterOnDryCauseways()
+        public void BoardwalksBridgeTheWaterAndJoinTheTrails()
         {
+            // Art pass a3: boardwalks are decks over open water (FollowTerrain=false, clear of the water level),
+            // not causeways cutting the pond, and every bank end meets another path at the same height.
             var plan = PlanPreset(Id, "reedMarsh", SixHaL, TestKit.RoadAlongBottom(293));
             Assert.True(plan.Facts["boardwalkLength"] > 20, "no boardwalk");
-            var basinRings = plan.Terraform.Where(t => !float.IsNaN(t.WaterLevel)).Select(t => Poly.To2D(t.Ring)).ToList();
+            var basins = plan.Terraform.Where(t => !float.IsNaN(t.WaterLevel)).ToList();
             var ponds = plan.Regions.Where(r => r.Tags.Contains(WetlandLayer.WaterPlace)).Select(r => Poly.To2D(r.Ring)).ToList();
+            var paths = plan.Nets.Where(n => n.Role == NetRole.Pathway).ToList();
             int overWater = 0;
-            foreach (var n in plan.Nets.Where(n => n.Role == NetRole.Pathway))
+            foreach (var n in paths)
             {
                 var mid = Composer.Bezier(n.A, n.B, n.C, n.D, 0.5f).xz;
                 if (!ponds.Any(p => Poly.Contains(p, mid))) continue;
                 overWater++;
-                // The ground under a boardwalk is never lowered.
-                Assert.DoesNotContain(basinRings, r => Poly.Contains(r, mid) && Poly.DistanceToBoundary(r, mid) > 0.5f);
+                Assert.False(n.FollowTerrain, "a boardwalk over water must not follow the pond bed");
+                float level = basins.Where(b => Poly.Contains(Poly.To2D(b.Ring), mid)).Select(b => b.WaterLevel).DefaultIfEmpty(float.NaN).Max();
+                if (!float.IsNaN(level)) Assert.True(Composer.Bezier(n.A, n.B, n.C, n.D, 0.5f).y >= level + 0.3f, $"deck {n.A.y:0.00} too close to the water {level:0.00}");
             }
             Assert.True(overWater > 0, "no path segment lies over the water");
+            // Elevated pieces are connected: each end is shared with another path at the same height (spur tips excepted).
+            int loose = 0, ends = 0;
+            foreach (var n in paths.Where(n => !n.FollowTerrain))
+                foreach (var e in new[] { n.A, n.D })
+                {
+                    ends++;
+                    if (!paths.Any(o => o != n && (math.distance(o.A, e) < 0.05f || math.distance(o.D, e) < 0.05f))) loose++;
+                }
+            Assert.True(loose * 4 <= ends, $"{loose} of {ends} boardwalk ends are not joined");
         }
 
         [Fact]
@@ -116,7 +129,8 @@ namespace Placemaker.Tests.Types
             var plan = PlanPreset(Id, "birdReserve", SixHaL, TestKit.RoadAlongBottom(293));
             Assert.True(plan.Facts["islands"] >= 2, "islands " + plan.Facts["islands"]);
             Assert.True(plan.Facts["hides"] >= 2, "hides " + plan.Facts["hides"]);
-            Assert.Contains(plan.Objects, o => o.Category == AssetCategories.Lookout);
+            // No vanilla lookout tower: the automatic lookout is an open gazebo by the water.
+            Assert.Contains(plan.Objects, o => o.Category == AssetCategories.Shelter && (o.Asset.Id ?? "").StartsWith("Gazebo"));
             Assert.Contains(plan.Nets, n => n.Role == NetRole.Fence);
             // Islands stay wild: no path ends on them, and they are not dug out.
             var park = PlanPreset(Id, "wetlandPark", SixHaL, TestKit.RoadAlongBottom(293));

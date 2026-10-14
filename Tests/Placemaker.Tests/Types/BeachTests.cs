@@ -80,15 +80,15 @@ namespace Placemaker.Tests.Types
             var plan = PlanPreset("beach", Preset("sandy"), FiveHa, SeaSouth(0.02f));
             Assert.DoesNotContain(plan.Issues, i => i.Key == "Placemaker.Shore.Issue.NoWater");
             Assert.Equal(250, plan.Facts["shoreLength"], 0);
-            // Back path parallel to the water near the beach depth (30 m).
+            // Back path parallel to the water near the beach depth (60 m since the art pass).
             var paths = plan.Nets.Where(n => n.Role == NetRole.Pathway).ToList();
-            Assert.Contains(paths, n => math.abs(n.A.z - 30f) < 2f && math.abs(n.D.z - 30f) < 2f && math.abs(n.A.x - n.D.x) > 5f);
+            Assert.Contains(paths, n => math.abs(n.A.z - 60f) < 2f && math.abs(n.D.z - 60f) < 2f && math.abs(n.A.x - n.D.x) > 5f);
             // Umbrellas and lifeguards on the sand between the water and the path; huts behind it.
             var umbrellas = plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella).ToList();
             Assert.NotEmpty(umbrellas);
-            Assert.All(umbrellas, o => Assert.InRange(o.Position.z, 2f, 30f));
+            Assert.All(umbrellas, o => Assert.InRange(o.Position.z, 2f, 60f));
             Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachLifeguard), o => Assert.InRange(o.Position.z, 4f, 15f));
-            Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachHut), o => Assert.True(o.Position.z > 30f));
+            Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachHut), o => Assert.True(o.Position.z > 60f));
             // Umbrellas face the sea (yaw ≈ π: towards −Z).
             Assert.All(umbrellas, o => Assert.True(math.cos(o.Yaw) < -0.7f, "umbrella yaw " + o.Yaw));
             // Showers at the bottom of the beach accesses.
@@ -103,7 +103,7 @@ namespace Placemaker.Tests.Types
             var input = TestKit.Input(FiveHa, Preset("sandy").Values.Clone(), 3, null, TestKit.RoadAlongBottom(250));
             var plan = TestKit.Plan("beach", input);
             Assert.Contains(plan.Issues, i => i.Key == "Placemaker.Shore.Issue.NoWater" && i.Severity == IssueSeverity.Info);
-            Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella), o => Assert.True(o.Position.z > 140f));
+            Assert.All(plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella), o => Assert.True(o.Position.z > 200f - 61f));
             // Explicit east.
             var east = Preset("sandy").Values.Clone();
             east.Values["waterSide"] = "east";
@@ -111,7 +111,7 @@ namespace Placemaker.Tests.Types
             Assert.DoesNotContain(plan.Issues, i => i.Key == "Placemaker.Shore.Issue.NoWater");
             var u = plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella).ToList();
             Assert.NotEmpty(u);
-            Assert.All(u, o => Assert.True(o.Position.x > 250f - 31f));
+            Assert.All(u, o => Assert.True(o.Position.x > 250f - 61f));
         }
 
         [Fact]
@@ -168,7 +168,7 @@ namespace Placemaker.Tests.Types
             var cove = P("cove");
             Assert.Contains(cove.Objects, o => o.Category == AssetCategories.Rock && o.Position.x < 25f);
             Assert.Contains(cove.Objects, o => o.Category == AssetCategories.Rock && o.Position.x > 225f);
-            Assert.Contains(cove.Objects, o => o.Category == AssetCategories.CampingFire);
+            Assert.True(cove.Facts["firePits"] >= 1, "stone fire rings");   // built from small rocks: no vanilla fire pit
             Assert.True(cove.Objects.Count(o => o.Role == ObjectRole.Tree) > P("sandy").Objects.Count(o => o.Role == ObjectRole.Tree));
 
             var river = P("river");
@@ -176,7 +176,8 @@ namespace Placemaker.Tests.Types
             Assert.Contains(river.Surfaces, s => s.Role == SurfaceRole.Grass);
 
             var resort = P("resort");
-            Assert.True(resort.Objects.Count(o => o.Category == AssetCategories.BeachHut) > 20, "a row of beach huts");
+            Assert.DoesNotContain(resort.Objects, o => o.Category == AssetCategories.BeachHut);   // no vanilla beach hut (pool = a 40 m building)
+            Assert.Contains(resort.Surfaces, s => s.Role == SurfaceRole.Grass);
             Assert.True(resort.Objects.Count(o => o.Category == AssetCategories.BeachUmbrella) > P("sandy").Objects.Count(o => o.Category == AssetCategories.BeachUmbrella));
 
             var sandy = P("sandy");

@@ -269,18 +269,57 @@ namespace Placemaker.Core.Layers.Leisure
             Preset("open", ("treeDensity", 30.0), ("bushDensity", 40.0), ("secondPath", false));
         }
 
+        // Art pass a3: a greenway is a shared walk-and-cycle spine (vanilla path with bike lanes) under an
+        // avenue of one species, a quieter footpath beside it joined at both ends, copses and meadow around.
+        private static readonly string[] GreenwayAvenue = { "NA_LindenTree01", "NA_LondonPlaneTree01" };
+        private static readonly string[] GreenwayTrees = { "OakTree01", "EU_ChestnutTree01", "NA_LindenTree01", "BirchTree01" };
+        private static readonly string[] GreenwayBushes = { "GreenBushWild01", "GreenBushWildAdult01", "FlowerBushWild01", "FlowerBushWild02" };
+        private static readonly string[] GreenwayBenches = { "Pack10-Bench01", "Pack10-Bench03" };
+        private static readonly string[] GreenwayLamps = { "LightpolePark01", "EU_LightpolePark01" };
+        private static readonly string[] GreenwayBins = { "Trashbin01", "Trashbin02" };
+
         protected override void PlanCore(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
-            NaturalPaths(ctx, occ, gates, 0, 4f, 40f, "narrow", AssetMix.One(ctx.S("pathAsset")));
+            ctx.Surface(region.Ring, SurfaceRole.Grass, new AssetRef("", "Grass Surface 01"));
+            string picked = ctx.S("pathAsset");
+            var spineAsset = string.IsNullOrEmpty(picked) ? new AssetRef("", "PedestrianPathWithBikeLanes") : AssetMix.One(picked);
+            var spine = NaturalPaths(ctx, occ, gates, 0, 4f, 40f, string.IsNullOrEmpty(picked) ? "wide" : "narrow", spineAsset);
+            var footAsset = string.IsNullOrEmpty(picked) ? new AssetRef("", "Pavement Path") : AssetMix.One(picked);
             LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
-            if (ctx.B("secondPath") && minor > 28f && LeisureKit.Chord(region, centre + side * (minor * 0.28f), axis, 4f, out var a, out var b))
-                LeisureKit.Path(ctx, occ, a, b, NetRole.Pathway, AssetMix.One(ctx.S("pathAsset")));
+            if (ctx.B("secondPath")) Footpath(ctx, occ, region, spine, footAsset);   // fits itself (needs ~40 m of run)
+            // Avenue: one species both sides of the spine at a steady rhythm.
+            if (ctx.F("treeDensity") > 0f && AssetAvailability.Has(AssetCategories.Tree))
+            {
+                float spacing = ctx.M(16f), hw = Composer.DefaultHalfWidth(string.IsNullOrEmpty(picked) ? NetRole.PathwayWide : NetRole.Pathway);
+                var avenue = AssetMix.Pick(GreenwayAvenue, 0u);
+                int n = 0;
+                foreach (var c in spine)
+                {
+                    float acc = spacing * 0.5f;
+                    for (int i = 1; i < c.Samples.Length; i++)
+                    {
+                        var p0 = c.Samples[i - 1]; var p1 = c.Samples[i];
+                        float len = math.distance(p0, p1);
+                        if (len < 1e-3f) continue;
+                        var dir = (p1 - p0) / len; var nrm = new float2(-dir.y, dir.x);
+                        for (; acc <= len; acc += spacing)
+                        {
+                            var p = p0 + dir * acc;
+                            bool nearGate = false;
+                            foreach (var g in gates) if (math.distance(g.Position, p) < 10f) { nearGate = true; break; }
+                            if (nearGate) continue;
+                            foreach (float s in new[] { 1f, -1f })
+                                if (LeisureKit.Put(ctx, occ, p + nrm * s * (hw + 3.2f), 0f, ObjectRole.Tree, avenue, null, 2.4f, Hashing.Mix(ctx.Seed, 0xA7E0u + (uint)n++), 1f, 0.3f, 3, 3)) { }
+                        }
+                        acc -= len;
+                    }
+                }
+            }
             // Rest stops.
-            var bench = AssetMix.One(""); int stops = 0;
+            var bench = AssetMix.Pick(GreenwayBenches, 0u); int stops = 0;
             foreach (var an in PathAnchors.Pick(PathAnchors.Beside(occ, 3f, 8f, 0.6f), 200, ctx.F("restStops"), false))
             {
                 var t = an.Tangent;
@@ -288,17 +327,73 @@ namespace Placemaker.Core.Layers.Leisure
                 var seat = an.Position - away * 1.7f;   // seats at the path edge (the anchor disc reaches 3 m out)
                 bool ok = LeisureKit.Put(ctx, occ, seat + t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5700u + (uint)stops));
                 LeisureKit.Put(ctx, occ, seat - t * 1.4f, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Bench, bench, null, 1.2f, Hashing.Mix(ctx.Seed, 0x5780u + (uint)stops));
-                LeisureKit.Put(ctx, occ, seat - t * 3.2f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5800u + (uint)stops));
-                LeisureKit.Put(ctx, occ, an.Position + away * 4f, 0f, ObjectRole.Tree, AssetMix.One(""), null, 2.4f, Hashing.Mix(ctx.Seed, 0x5880u + (uint)stops), 1f, 0.3f, 3, 3);
+                LeisureKit.Put(ctx, occ, seat - t * 3.2f, 0f, ObjectRole.Bin, AssetMix.Pick(GreenwayBins, 0u), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5800u + (uint)stops));
+                LeisureKit.Put(ctx, occ, an.Position + away * 4f, 0f, ObjectRole.Tree, AssetMix.Pick(GreenwayTrees, (uint)stops), null, 2.4f, Hashing.Mix(ctx.Seed, 0x5880u + (uint)stops), 1f, 0.3f, 3, 3);
                 if (ok) stops++;
             }
-            if (ctx.B("lamps")) PathLamps(ctx, occ, 25f, AssetMix.One(""), 0x1A7u);
+            if (ctx.B("lamps")) PathLamps(ctx, occ, 25f, AssetMix.Pick(GreenwayLamps, 0u), 0x1A7u);
             float ha = region.Area / 10000f;
-            LeisureKit.Plant(ctx, occ, region, (int)(ha * ctx.F("treeDensity")), ObjectRole.Tree, null, 2.4f, 18f, 0.35f, 0x7E7u);
-            LeisureKit.Plant(ctx, occ, region, (int)(ha * ctx.F("bushDensity")), ObjectRole.Bush, null, 1f, 8f, 0.3f, 0xB07u);
+            // Copses in the meadow: strong clumping (low floor) so trees gather instead of dotting the lawn evenly.
+            LeisureKit.Plant(ctx, occ, region, (int)(ha * ctx.F("treeDensity")), ObjectRole.Tree, GreenwayTrees, 2.4f, 22f, 0.15f, 0x7E7u);
+            LeisureKit.Plant(ctx, occ, region, (int)(ha * ctx.F("bushDensity")), ObjectRole.Bush, GreenwayBushes, 1f, 10f, 0.15f, 0xB07u);
             EmitGreenRegions(ctx, occ, 80f);
             CommonStats(ctx);
             ctx.Plan.Facts["restStops"] = stops;
+        }
+
+        /// <summary>
+        /// The quiet footpath: the spine offset sideways (towards the side with more room), kept inside, emitted as
+        /// short straight pieces and joined to the spine at both ends (the old straight chord along the principal
+        /// axis ran diagonally across square sites and never met the spine, art pass a3).
+        /// </summary>
+        private static void Footpath(LayerContext ctx, Occupancy occ, LayerRegion region, List<PathCurve> spine, AssetRef asset)
+        {
+            // The spine comes as several curves (split at junctions): order all their samples along the walk's
+            // overall direction (first to last sample of the network) into one polyline.
+            var all = new List<float2>();
+            foreach (var c in spine) all.AddRange(c.Samples);
+            if (all.Count < 2) return;
+            float2 from = all[0], to = all[0]; float far = -1f;
+            foreach (var p in all) { float d = math.distancesq(p, all[0]); if (d > far) { far = d; to = p; } }
+            far = -1f;
+            foreach (var p in all) { float d = math.distancesq(p, to); if (d > far) { far = d; from = p; } }
+            var dirAll = math.normalizesafe(to - from);
+            all.Sort((x, y) => math.dot(x - from, dirAll).CompareTo(math.dot(y - from, dirAll)));
+            var mainLine = Geometry.Poly.ResamplePolyline(all.ToArray(), 4f);
+            float off = ctx.M(32f, 12f), keep = math.max(ctx.EdgeMargin + 3f, 4f);
+            List<float2> Side(float sgn)
+            {
+                var pts = new List<float2>();
+                var s = mainLine;
+                var cur = new List<float2>();
+                for (int i = 0; i < s.Length; i++)
+                {
+                    var d = math.normalizesafe(s[math.min(s.Length - 1, i + 1)] - s[math.max(0, i - 1)]);
+                    var p = s[i] + new float2(-d.y, d.x) * (sgn * off);
+                    if (region.ContainsDisc(p, keep) && occ.Paths.Clearance(p, off) > off * 0.6f) cur.Add(p);
+                    else { if (cur.Count > pts.Count) pts = cur; cur = new List<float2>(); }   // longest continuous run
+                }
+                if (cur.Count > pts.Count) pts = cur;
+                return pts;
+            }
+            var l = Side(1f); var r = Side(-1f);
+            var run = l.Count >= r.Count ? l : r;
+            if (run.Count < 3) return;
+            var line = Geometry.Poly.ResamplePolyline(run.ToArray(), ctx.M(16f, 6f));
+            if (line.Length < 2 || PolylineLength(line) < ctx.M(40f, 20f)) return;
+            var ends = new[] { line[0], line[line.Length - 1] };
+            var feet = new float2[2];
+            for (int e = 0; e < 2; e++) feet[e] = occ.Paths.Nearest(ends[e], 200f, out var f) >= 0 ? f : ends[e];
+            for (int i = 1; i < line.Length; i++) LeisureKit.Path(ctx, occ, line[i - 1], line[i], NetRole.Pathway, asset);
+            for (int e = 0; e < 2; e++)
+                if (math.distance(feet[e], ends[e]) > 2f && !region.CrossesBoundary(ends[e], feet[e], true)) LeisureKit.Path(ctx, occ, feet[e], ends[e], NetRole.Pathway, asset);
+        }
+
+        private static float PolylineLength(float2[] line)
+        {
+            float l = 0f;
+            for (int i = 1; i < line.Length; i++) l += math.distance(line[i - 1], line[i]);
+            return l;
         }
     }
 

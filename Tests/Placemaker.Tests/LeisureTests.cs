@@ -160,7 +160,7 @@ namespace Placemaker.Tests
                 ["sportsPark"] = new[] { AssetCategories.SportsGoal, AssetCategories.SportsBasketball, AssetCategories.SportsTennis },
                 ["dogPark"] = new[] { AssetCategories.DogAgility },
                 ["picnicGrounds"] = new[] { AssetCategories.Picnic, AssetCategories.Shelter },
-                ["natureReserve"] = new[] { AssetCategories.Lookout },
+                ["natureReserve"] = new[] { AssetCategories.Shelter },   // automatic lookout = timber shelter (no vanilla tower)
                 ["formalGarden"] = new[] { AssetCategories.Hedge, AssetCategories.CenterpieceFountain },
                 ["communityGarden"] = new[] { AssetCategories.GardenCrop, AssetCategories.GardenShed },
                 ["marketSquare"] = new[] { AssetCategories.MarketStall },

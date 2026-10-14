@@ -35,16 +35,21 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
+            // Area-wide features run on the dry land only ("core" = the largest free piece of shore.Land):
+            // on the whole outline they planted picnic shelters and trees in the water (art pass a3).
             Feature(BeachBarAddOn.LayerId), Feature("restrooms"), Feature("shops", ("count", 2.0), ("where", "paths")), StreetShopsFeature(Area),
-            CoreFeature("playground", ("size", "small")), Feature("picnic"), Feature("rocks", ("size", "medium")),
-            Feature("bigtrees"), Feature("decals", ("theme", "dirt")),
+            CoreFeature("playground", ("size", "small")), CoreFeature("picnic"), CoreFeature("rocks", ("size", "medium")),
+            CoreFeature("bigtrees"), CoreFeature("decals", ("theme", "dirt")),
         };
+
+        /// <summary>Restrooms only: picnic shelters and dirt decals made the sand read as a lawn (art pass a3).</summary>
+        protected override string[] DefaultFeatures => new[] { "restrooms" };
 
         protected override void DefineControls(ControlSet c)
         {
             c.Choice("style", "sandy", ControlTier.Essential, "beach", Styles).Tip();
             c.Choice("waterSide", "auto", ControlTier.Essential, "beach", Shoreline.Sides).Tip();
-            c.Slider("beachDepth", 30, 12, 80, 2, "m", ControlTier.Essential, "beach").Layout(8).Tip();
+            c.Slider("beachDepth", 60, 12, 80, 2, "m", ControlTier.Essential, "beach").Layout(8).Tip();
             c.Slider("umbrellas", 35, 0, 120, 5, "perHa", ControlTier.Essential, "beach").Tip();
             c.Choice("layout", "scattered", ControlTier.Essential, "beach", "scattered", "rows").Tip();
 
@@ -71,7 +76,7 @@ namespace Placemaker.Core.Layers.Types.Beach
 
             c.Toggle("showers", true, ControlTier.More, "amenities").Tip();
             c.Choice("huts", "few", ControlTier.More, "amenities", "none", "few", "row").Tip();
-            c.Slider("lifeguards", 2, 0, 8, 1, "count", ControlTier.More, "amenities");
+            c.Slider("lifeguards", 0, 0, 8, 1, "count", ControlTier.More, "amenities");
             c.Slider("kiosks", 1, 0, 6, 1, "count", ControlTier.More, "amenities");
             c.Slider("courts", 0, 0, 8, 1, "count", ControlTier.More, "amenities").Tip();
             c.Toggle("boats", false, ControlTier.More, "amenities").Tip();
@@ -92,7 +97,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             c.Fixed("waterSide");
             c.Fixed("carve");
             c.Fixed("paintLayer");
-            c.RandomRange("beachDepth", 20, 45);
+            c.RandomRange("beachDepth", 36, 70);
             c.RandomRange("umbrellas", 10, 60);
             c.RandomRange("courts", 0, 2);
             c.RandomRange("rockClusters", 0, 4);
@@ -103,17 +108,21 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         protected override void DefinePresets()
         {
-            Preset("sandy", ("style", "sandy"), ("umbrellas", 35.0), ("layout", "scattered"), ("backdrop", "dunes"), ("huts", "few"), ("lifeguards", 2.0));
-            Preset("resort", ("style", "sandy"), ("umbrellas", 80.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "row"), ("pathWidth", "wide"),
-                ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 3.0), ("slope", 3.0), ("treeDensity", 25.0));
+            // Art pass a3: the sand is the subject, so every style gets a deep beach (beachDepth is a layout distance:
+            // 60 → 30 m at the default layout size). No lifeguards/huts: no vanilla asset exists for either.
+            Preset("sandy", ("style", "sandy"), ("beachDepth", 60.0), ("umbrellas", 45.0), ("layout", "scattered"), ("backdrop", "dunes"), ("huts", "none"),
+                ("lifeguards", 0.0), ("duneDepth", 24.0), ("grassDensity", 70.0), ("treeDensity", 40.0), ("kiosks", 1.0));
+            Preset("resort", ("style", "sandy"), ("beachDepth", 56.0), ("umbrellas", 115.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "none"), ("pathWidth", "wide"),
+                ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 0.0), ("slope", 3.0), ("treeDensity", 30.0));
             Preset("rocky", ("style", "rocky"), ("umbrellas", 5.0), ("sandSurface", false), ("paintLayer", 3.0), ("backdrop", "none"), ("huts", "none"),
-                ("lifeguards", 0.0), ("kiosks", 0.0), ("rockClusters", 8.0), ("tidePools", 5.0), ("beachDepth", 24.0), ("slope", 8.0), ("treeDensity", 10.0));
-            Preset("river", ("style", "river"), ("beachDepth", 16.0), ("wetBand", 3.0), ("slope", 3.0), ("umbrellas", 10.0), ("backdrop", "lawn"),
+                ("lifeguards", 0.0), ("kiosks", 0.0), ("rockClusters", 8.0), ("tidePools", 5.0), ("beachDepth", 36.0), ("slope", 8.0), ("treeDensity", 30.0),
+                ("benchSpacing", 30.0));
+            Preset("river", ("style", "river"), ("beachDepth", 30.0), ("wetBand", 3.0), ("slope", 3.0), ("umbrellas", 10.0), ("backdrop", "lawn"),
                 ("treeDensity", 35.0), ("boats", true), ("lifeguards", 0.0), ("huts", "none"), ("accessSpacing", 40.0));
-            Preset("cove", ("style", "cove"), ("beachDepth", 22.0), ("umbrellas", 6.0), ("backdrop", "woods"), ("treeDensity", 60.0), ("fires", true),
+            Preset("cove", ("style", "cove"), ("beachDepth", 44.0), ("umbrellas", 6.0), ("backdrop", "woods"), ("treeDensity", 75.0), ("fires", true),
                 ("lifeguards", 0.0), ("huts", "none"), ("kiosks", 0.0), ("lamps", false), ("rockClusters", 3.0), ("boats", true));
-            Preset("volleyball", ("style", "volleyball"), ("beachDepth", 40.0), ("courts", 4.0), ("umbrellas", 12.0), ("lifeguards", 1.0), ("kiosks", 2.0),
-                ("huts", "few"), ("pathWidth", "wide"), ("backdrop", "lawn"));
+            Preset("volleyball", ("style", "volleyball"), ("beachDepth", 70.0), ("courts", 4.0), ("umbrellas", 25.0), ("accessSpacing", 120.0), ("lifeguards", 0.0), ("kiosks", 2.0),
+                ("huts", "none"), ("pathWidth", "wide"), ("backdrop", "lawn"), ("treeDensity", 30.0));
         }
 
         protected override int WantedEntrances(LayerRegion region) => math.min(4, Entrances.WantedByArea(region.Area));
@@ -234,7 +243,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                         TerrainPaint.Patch(ctx, ring, ctx.I("paintLayer"), 0.6f, 4f);
             }
             if (ctx.B("sandSurface") && AssetAvailability.Require(ctx.Plan, AssetCategories.SurfaceSand, new[] { ctx.S("sandAsset") }, Keys.Category(AssetCategories.SurfaceSand)))
-                foreach (var ring in band) ctx.Surface(ring, SurfaceRole.Ground, AssetMix.One(ctx.S("sandAsset")), AssetCategories.SurfaceSand);
+                foreach (var ring in band) ctx.Surface(ring, SurfaceRole.Ground, AssetMix.Pick(BeachArt.Or(ctx.S("sandAsset"), BeachArt.Sand), 0u), AssetCategories.SurfaceSand);
             if (ctx.S("backdrop") == "lawn")
                 foreach (var ring in shore.Band(top + b.Hw + 0.8f, shore.MaxDepth + 20f))
                     ctx.Surface(ring, SurfaceRole.Grass, AssetMix.One(""));
@@ -324,7 +333,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             if (cat == null) return;
             float dc = math.clamp((b.Wet + b.D) * 0.5f, b.Wet + 6f, b.D - 6f);
             if (dc < b.Wet + 5f) { ctx.Issue(IssueSeverity.Info, "Placemaker.Beach.Issue.NoCourtSpace"); return; }
-            int tries = wanted * 3;
+            int tries = wanted * 8;   // fine stations: courts are 18 m long, coarse ones skipped every other gap (art pass a3)
             var stations = shore.Stations(tries, 12f);
             for (int i = 0; i < stations.Count && b.Courts < wanted; i++)
             {
@@ -333,7 +342,10 @@ namespace Placemaker.Core.Layers.Types.Beach
                 if (!LeisureKit.RectFits(shore.Land, b.Occ, rect, 0.5f)) continue;
                 LeisureKit.TakeRect(b.Occ, rect);
                 uint v = Hashing.Mix(ctx.Seed, 0xC0u + (uint)i);
-                ctx.Object(rect.Center, rect.Yaw, ObjectRole.Furniture, AssetMix.One(""), v, -1, cat);
+                // No vanilla volleyball net: the tennis net at 0.7 scale (9.2 m) spans the 10 m court, facing
+                // along it (yaw = court axis puts the net's long local x across the court). Art pass a3.
+                var net = ctx.Object(rect.Center, rect.Yaw, ObjectRole.Furniture, new AssetRef("", "TennisNet01"), v, -1, cat);
+                net.Scale = 0.7f;
                 if (!ctx.B("sandSurface") && AssetAvailability.Has(AssetCategories.SurfaceSand))
                     ctx.Surface(rect.Ring, SurfaceRole.Ground, AssetMix.One(""), AssetCategories.SurfaceSand);
                 b.Courts++;
@@ -430,7 +442,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             var ctx = b.Ctx; var shore = b.Shore;
             int wanted = ctx.I("lifeguards");
             if (wanted <= 0) return;
-            string cat = LeisureKit.Category(ctx, "", AssetCategories.BeachLifeguard, AssetCategories.Lookout);
+            string cat = LeisureKit.Category(ctx, "", AssetCategories.BeachLifeguard);
             if (cat == null) return;
             foreach (float s in shore.Stations(wanted, 10f))
             {
@@ -494,8 +506,9 @@ namespace Placemaker.Core.Layers.Types.Beach
             string umbrella = LeisureKit.Category(ctx, ctx.S("umbrellaAsset"), AssetCategories.BeachUmbrella, AssetCategories.CafeSeating);
             if (umbrella == null) return;
             string lounger = LeisureKit.Category(ctx, ctx.S("loungerAsset"), AssetCategories.BeachLounger, AssetCategories.Bench);
-            var uAsset = AssetMix.One(ctx.S("umbrellaAsset"));
-            var lAsset = AssetMix.One(ctx.S("loungerAsset"));
+            var uIds = BeachArt.Or(ctx.S("umbrellaAsset"), BeachArt.Umbrellas);
+            var lIds = BeachArt.Or(ctx.S("loungerAsset"), BeachArt.Loungers);
+            uint setPick = Hashing.Mix(ctx.Seed, 0x5E75u);
             float d0 = b.Wet + 2.5f, d1 = b.D - (b.HasPath ? b.Hw + 2.5f : 1.5f);
             if (d1 <= d0) return;
             int wanted = (int)math.round(density * shore.Length * (d1 - d0) / 10000f);
@@ -518,6 +531,8 @@ namespace Placemaker.Core.Layers.Types.Beach
                     var q = p + tan * side * 1.4f + toWater * (k == 2 ? 2f : 0.6f);
                     if (lounger != null && occ.Free(q, 0.8f, 0.4f, 0.1f)) spots.Add(q);
                 }
+                // One umbrella colour and one lounger model per set; sets vary along the beach.
+                var uAsset = AssetMix.Pick(uIds, Hashing.Mix(setPick, v)); var lAsset = AssetMix.Pick(lIds, Hashing.Mix(setPick, v + 1u));
                 ctx.Object(p, Yaw(toWater) + jitter, ObjectRole.Furniture, uAsset, v, -1, umbrella);
                 occ.Take(p, 1.2f, 1);
                 b.Umbrellas++;
@@ -566,8 +581,8 @@ namespace Placemaker.Core.Layers.Types.Beach
         {
             var ctx = b.Ctx; var shore = b.Shore;
             if (!ctx.B("fires")) return;
-            string cat = LeisureKit.Category(ctx, "", AssetCategories.CampingFire, AssetCategories.Camping);
-            if (cat == null) return;
+            // No vanilla fire pit, and the camping fallback is makeshift tents: build the ring from small rocks instead.
+            if (!AssetAvailability.Has(AssetCategories.Rock)) return;
             int wanted = math.clamp((int)(shore.Length / 60f), 1, 4);
             float d = math.clamp((b.Wet + b.D) * 0.55f, b.Wet + 4f, b.D - 4f);
             foreach (float s in shore.Stations(wanted, 10f, 0.75f))
@@ -575,15 +590,22 @@ namespace Placemaker.Core.Layers.Types.Beach
                 var p = shore.At(s, out var inw, out _);
                 var c = p + inw * d;
                 if (!b.Occ.Free(c, 3.6f, 0.8f, 0.3f)) continue;
+                // A ring of small beach stones, rough campground benches around it.
                 uint v = Hashing.Mix(ctx.Seed, 0xF1E0u + (uint)b.Fires);
-                ctx.Object(c, 0f, ObjectRole.Furniture, AssetMix.One(""), v, -1, cat);
-                b.Occ.Take(c, 1f, 1);
+                for (int k = 0; k < 7; k++)
+                {
+                    float a = k * 0.8976f + Hashing.Unit(Hashing.Mix(v, (uint)k + 50u)) * 0.3f;
+                    var o = ctx.Object(c + new float2(math.cos(a), math.sin(a)) * 0.85f, a, ObjectRole.Furniture,
+                        new AssetRef("", "Rock05", "Rock12", "Rock21"), Hashing.Mix(v, (uint)k + 60u), -1, AssetCategories.Rock);
+                    o.Scale = 0.55f;
+                }
+                b.Occ.Take(c, 1.3f, 1);
                 float phase = Hashing.Unit(v) * 6.283f;
                 for (int k = 0; k < 3; k++)
                 {
                     float a = phase + k * 2.094f;
                     var q = c + new float2(math.cos(a), math.sin(a)) * 2.7f;
-                    LeisureKit.Put(ctx, b.Occ, q, LeisureKit.Yaw(q, c), ObjectRole.Bench, AssetMix.One(""), null, 1.1f, Hashing.Mix(v, (uint)k), 0.5f, 0.1f);
+                    LeisureKit.Put(ctx, b.Occ, q, LeisureKit.Yaw(q, c), ObjectRole.Bench, new AssetRef("", "CampgroundBench01", "CampgroundBench02"), null, 1.1f, Hashing.Mix(v, (uint)k), 0.5f, 0.1f);
                 }
                 b.Fires++;
             }
@@ -609,12 +631,12 @@ namespace Placemaker.Core.Layers.Types.Beach
                         shore.Nearest(p, out var inw, out _);
                         var q = p - inw * (b.Hw + 1.7f);
                         uint v = Hashing.Mix(ctx.Seed, 0xBE00u + (uint)benches + (uint)li * 1000u);
-                        if (!LeisureKit.Put(ctx, b.Occ, q, Yaw(-inw), ObjectRole.Bench, AssetMix.One(""), null, 1.3f, v, 0.5f, 0.2f)) continue;
+                        if (!LeisureKit.Put(ctx, b.Occ, q, Yaw(-inw), ObjectRole.Bench, AssetMix.Pick(BeachArt.Benches, 0u), null, 1.3f, v, 0.5f, 0.2f)) continue;
                         benches++;
                         if ((benches & 1) == 0)
                         {
                             var tan = new float2(inw.y, -inw.x);
-                            LeisureKit.Put(ctx, b.Occ, q + tan * 2.3f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(v, 1u), 0.4f, 0.2f);
+                            LeisureKit.Put(ctx, b.Occ, q + tan * 2.3f, 0f, ObjectRole.Bin, AssetMix.Pick(BeachArt.Bins, 0u), null, 0.5f, Hashing.Mix(v, 1u), 0.4f, 0.2f);
                         }
                     }
                 if (lamps)
@@ -622,7 +644,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                     {
                         var p = Shoreline.PointOn(line, s, out _);
                         shore.Nearest(p, out var inw, out _);
-                        if (LeisureKit.Put(ctx, b.Occ, p + inw * (b.Hw + 1f), 0f, ObjectRole.Lamp, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x1A00u + (uint)lampsN), 0.4f, 0.2f))
+                        if (LeisureKit.Put(ctx, b.Occ, p + inw * (b.Hw + 1f), 0f, ObjectRole.Lamp, AssetMix.Pick(BeachArt.Lamps, 0u), null, 0.5f, Hashing.Mix(ctx.Seed, 0x1A00u + (uint)lampsN), 0.4f, 0.2f))
                             lampsN++;
                     }
             }
@@ -655,7 +677,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                 foreach (float along in new[] { 6f, -6f, 12f, -12f })
                 {
                     var q = p + inw * (b.Hw + 4f) + tan * along;
-                    if (LeisureKit.Put(ctx, b.Occ, q, Yaw(-inw), ObjectRole.Furniture, AssetMix.One(""), kcat, 2.5f, Hashing.Mix(ctx.Seed, 0x6105u + (uint)b.Kiosks), 0.8f, 0.3f))
+                    if (LeisureKit.Put(ctx, b.Occ, q, Yaw(-inw), ObjectRole.Furniture, AssetMix.Pick(BeachArt.Kiosks, (uint)b.Kiosks), kcat, 2.5f, Hashing.Mix(ctx.Seed, 0x6105u + (uint)b.Kiosks), 0.8f, 0.3f))
                     { b.Kiosks++; break; }
                 }
             }
@@ -702,8 +724,8 @@ namespace Placemaker.Core.Layers.Types.Beach
             string backdrop = ctx.S("backdrop");
             float behind = b.D + (b.HasPath ? b.Hw + 2.2f : 1.5f);
             float duneEnd = behind + ctx.F("duneDepth");
-            var trees = ctx.L("treeSpecies");
-            var grass = ctx.L("grassSpecies");
+            var trees = BeachArt.Or(ctx.L("treeSpecies"), BeachArt.Trees(b.Style, backdrop));
+            var grass = BeachArt.Or(ctx.L("grassSpecies"), backdrop == "dunes" ? BeachArt.DuneGrass : BeachArt.Shrubs);
             bool canTrees = trees.Length > 0 || AssetAvailability.Has(AssetCategories.Tree);
             float treeDensity = ctx.F("treeDensity");
 

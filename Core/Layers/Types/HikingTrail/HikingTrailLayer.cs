@@ -34,11 +34,12 @@ namespace Placemaker.Core.Layers.Types.Hiking
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
+            // Picnic, rocks and leaf decals in the glades ("core"), not across the whole outline (and any lake in it).
             CoreFeature(TrailCampAddOn.LayerId),
-            Feature("picnic", ("groups", 2.0), ("tables", 2.0)),
-            Feature("rocks", ("clusters", 4.0), ("size", "medium")),
+            CoreFeature("picnic", ("groups", 2.0), ("tables", 2.0)),
+            CoreFeature("rocks", ("clusters", 4.0), ("size", "medium")),
             Feature("restrooms", ("count", 1.0), ("byArea", false)),
-            Feature("decals", ("theme", "leaves"), ("density", 2.0), ("ground", "lawn")),
+            CoreFeature("decals", ("theme", "leaves"), ("density", 2.0), ("ground", "lawn")),
         };
 
         protected override void DefineControls(ControlSet c)
@@ -91,8 +92,9 @@ namespace Placemaker.Core.Layers.Types.Hiking
         protected override void DefinePresets()
         {
             Preset("forestTrail", ("landscape", "forest"), ("route", "loop"), ("treeDensity", 300.0), ("bushDensity", 100.0), ("wander", 50.0), ("viewpoints", 1.0));
-            Preset("meadowWalk", ("landscape", "meadow"), ("route", "loop"), ("treeDensity", 12.0), ("bushDensity", 50.0), ("wander", 70.0), ("maxGrade", 8.0),
-                ("trailWidth", "wide"), ("restSpacing", 150.0), ("wornTrail", true), ("viewpoints", 2.0));
+            // Art pass a3: trails are narrow everywhere ("wide" is the 8 m urban walk, never a hiking trail).
+            Preset("meadowWalk", ("landscape", "meadow"), ("route", "loop"), ("treeDensity", 12.0), ("bushDensity", 70.0), ("wander", 70.0), ("maxGrade", 8.0),
+                ("trailWidth", "narrow"), ("restSpacing", 150.0), ("wornTrail", true), ("viewpoints", 2.0));
             Preset("ridgeHike", ("landscape", "ridge"), ("route", "through"), ("treeDensity", 50.0), ("bushDensity", 40.0), ("maxGrade", 14.0),
                 ("viewpoints", 4.0), ("rocks", 5.0), ("terrainDepth", 3.0));
             Preset("canyonTrail", ("landscape", "canyon"), ("route", "through"), ("treeDensity", 40.0), ("bushDensity", 90.0), ("maxGrade", 12.0),
@@ -100,8 +102,38 @@ namespace Placemaker.Core.Layers.Types.Hiking
             Preset("summitClimb", ("landscape", "ridge"), ("route", "summit"), ("treeDensity", 120.0), ("maxGrade", 8.0), ("lookoutTower", true),
                 ("viewpoints", 3.0), ("restSpacing", 160.0));
             Preset("lakeshoreLoop", ("landscape", "lakeshore"), ("route", "loop"), ("treeDensity", 90.0), ("bushDensity", 120.0), ("restSpacing", 160.0),
-                ("viewpoints", 3.0), ("trailWidth", "wide"));
+                ("viewpoints", 3.0), ("trailWidth", "narrow"));
         }
+
+        // ───────────── art direction (art pass a3) ─────────────
+        // Explicit vanilla species and furniture per landscape while the asset controls are automatic. The lookout
+        // pool is a 56 m fire-station upgrade and a 32 m water-tower deck, so towers/viewpoints never use it: the
+        // "tower" is an open timber shelter on the viewpoint, the viewpoint itself benches and a map board.
+
+        private static string[] Trees(string landscape)
+        {
+            switch (landscape)
+            {
+                case "meadow": return new[] { "OakTree01", "NA_LindenTree01", "EU_ChestnutTree01" };
+                case "ridge": return new[] { "PineTree01", "SpruceTree01", "BirchTree01" };
+                case "canyon": return new[] { "PineTree01", "OakTree01", "BirchTree01" };
+                case "lakeshore": return new[] { "EU_AlderTree01", "BirchTree01", "EU_PoplarTree01", "OakTree01" };
+                default: return new[] { "OakTree01", "SpruceTree01", "EU_ChestnutTree01", "PineTree01", "BirchTree01" };
+            }
+        }
+
+        private static string[] Bushes(string landscape) => landscape == "meadow"
+            ? new[] { "FlowerBushWild01", "FlowerBushWild02", "FlowerBushWildChild02", "GreenBushWildChild01" }
+            : new[] { "GreenBushWild01", "GreenBushWild02", "GreenBushWildAdult01", "GreenBushWildTeen01" };
+
+        private static readonly string[] TrailBenches = { "CampgroundBench01", "CampgroundBench02" };
+        private static readonly string[] TrailBins = { "Trashbin01", "Trashbin04" };
+        private static readonly string[] MapBoards = { "ParkInfosign03", "ParkInfosign01" };
+        private static readonly string[] Waymarks = { "ParkSignpost01", "ParkSignpost02" };
+        private static readonly string[] Shelters = { "CampgroundShelter02", "CampgroundShelter01" };
+        private static readonly string[] PicnicTables = { "CampgroundTableset01", "CampgroundTableset02" };
+
+        private static AssetRef Bench(LayerContext ctx) => AssetMix.Pick(ctx.S("benchAsset").Length > 0 ? new[] { ctx.S("benchAsset") } : TrailBenches, 0u);
 
         // ───────────── planning ─────────────
 
@@ -352,7 +384,15 @@ namespace Placemaker.Core.Layers.Types.Hiking
         {
             var ctx = t.Ctx; var grid = t.Grid;
             var asset = AssetMix.One(ctx.S("trailAsset"));
-            var bridgeAsset = AssetMix.One(ctx.S("bridgeAsset"), "Wooden Pedestrian Bridge", "Pedestrian Bridge");
+            var bridgeAsset = AssetMix.One(ctx.S("bridgeAsset"), "Wooden Pedestrian Bridge", "Pedestrian Bridge", "Arc Pedestrian Bridge");
+            // Deck height at a route vertex: the ground on a bank, else 1 m over the water surface (a vertex can lie
+            // in the stream; using the bed height there put the footbridge under water, art pass a3).
+            var depthAt = ctx.Site?.WaterDepthAt;
+            float DeckY(float2 p)
+            {
+                float d = depthAt != null ? depthAt(p) : 0f;
+                return d > TrailGrid.WetDepth ? ctx.H(p) + d + 1f : ctx.H(p);
+            }
             var gateAt = new Dictionary<long, Gate>();
             foreach (var line in t.Lines)
             {
@@ -368,7 +408,8 @@ namespace Placemaker.Core.Layers.Types.Hiking
                     {
                         // Footbridge: straight, level between the banks, not following the terrain (or the water).
                         net = ctx.StraightNet(a, b, t.Role, bridgeAsset);
-                        float ha = ctx.H(a), hb = ctx.H(b);
+                        float ha = DeckY(a), hb = DeckY(b);
+                        net.A.y = ha; net.D.y = hb;
                         net.B.y = math.lerp(ha, hb, 1f / 3f); net.C.y = math.lerp(ha, hb, 2f / 3f);
                         net.FollowTerrain = false;
                         t.Bridges++;
@@ -483,7 +524,8 @@ namespace Placemaker.Core.Layers.Types.Hiking
             if (mode == "none") return;
             int count = mode == "all" ? gates.Count : math.min(1, gates.Count);
             string sign = ctx.B("mapBoard") ? SignCategory(ctx) : null;
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = Bench(ctx);
+            var boards = ctx.L("signAssets").Length > 0 ? ctx.L("signAssets") : MapBoards;
             for (int gi = 0; gi < count; gi++)
             {
                 var g = gates[gi];
@@ -509,7 +551,9 @@ namespace Placemaker.Core.Layers.Types.Hiking
                         bool asphalt = ctx.S("trailheadGround") == "asphalt";
                         ctx.Surface(r.Ring, asphalt ? SurfaceRole.Asphalt : SurfaceRole.Ground, AssetMix.One(""), asphalt ? AssetCategories.SurfaceAsphalt : AssetCategories.SurfaceNatural);
                         LeisureKit.TakeRect(t.Occ, r, 6);
-                        string marks = AssetAvailability.Has(AssetCategories.DecalMarkings) ? AssetCategories.DecalMarkings : null;
+                        // Bay markings only on an asphalt lot: a gravel trailhead is a field car park, and road
+                        // markings never go into leisure places (art pass a3).
+                        string marks = asphalt && AssetAvailability.Has(AssetCategories.DecalMarkings) ? AssetCategories.DecalMarkings : null;
                         if (marks != null)
                             for (int row = 0; row < (two ? 2 : 1); row++)
                             {
@@ -526,11 +570,11 @@ namespace Placemaker.Core.Layers.Types.Hiking
                 // Map board, bench and bin on the other side of the entry.
                 var basePt = g.Position + n * 5f - tg * side * (t.Hw + 1.4f);
                 if (sign != null)
-                    LeisureKit.Put(ctx, t.Occ, basePt, LeisureKit.Yaw(basePt, basePt + tg * side), ObjectRole.Furniture, AssetMix.Pick(ctx.L("signAssets"), (uint)gi), sign, 0.6f,
+                    LeisureKit.Put(ctx, t.Occ, basePt, LeisureKit.Yaw(basePt, basePt + tg * side), ObjectRole.Furniture, AssetMix.Pick(boards, 0u), sign, 0.6f,
                         Hashing.Mix(ctx.Seed, 0x5160u + (uint)gi), 0.5f, 0.2f);
                 var bp = basePt + n * 3f - tg * side * 0.6f;
                 LeisureKit.Put(ctx, t.Occ, bp, LeisureKit.Yaw(bp, bp + tg * side), ObjectRole.Bench, bench, null, 1.3f, Hashing.Mix(ctx.Seed, 0x5161u + (uint)gi), 0.5f, 0.2f);
-                LeisureKit.Put(ctx, t.Occ, basePt - n * 1.8f - tg * side * 0.6f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5162u + (uint)gi), 0.5f, 0.2f);
+                LeisureKit.Put(ctx, t.Occ, basePt - n * 1.8f - tg * side * 0.6f, 0f, ObjectRole.Bin, AssetMix.Pick(TrailBins, 0u), null, 0.5f, Hashing.Mix(ctx.Seed, 0x5162u + (uint)gi), 0.5f, 0.2f);
             }
         }
 
@@ -580,8 +624,9 @@ namespace Placemaker.Core.Layers.Types.Hiking
             }
             cand.Sort((a, b) => b.score.CompareTo(a.score));
             var chosen = new List<float>();
-            var bench = AssetMix.One(ctx.S("benchAsset"));
-            string scope = LeisureKit.Category(ctx, "", AssetCategories.Lookout, AssetCategories.Shelter);
+            var bench = Bench(ctx);
+            string scope = LeisureKit.Category(ctx, "", AssetCategories.Shelter);
+            string board = SignCategory(ctx);
             foreach (var (i, _) in cand)
             {
                 if (t.Views >= wanted) break;
@@ -593,13 +638,16 @@ namespace Placemaker.Core.Layers.Types.Hiking
                 var nn = new float2(-dir.y, dir.x) * side;
                 var centre = p + nn * (t.Hw + 4.2f);
                 if (!t.Occ.Free(centre, 3.4f, 4.3f, 0.2f)) continue;
+                // Never out on the water: the platform and its seats stand on the bank (art pass a3).
+                if (Wet(ctx, centre - nn * 4.5f, centre + nn * 4.5f) || Wet(ctx, centre - new float2(nn.y, -nn.x) * 4.5f, centre + new float2(nn.y, -nn.x) * 4.5f)) continue;
                 bool isTower = tower && t.Views == 0 && scope != null;
                 uint v = Hashing.Mix(ctx.Seed, 0x7140u + (uint)i);
-                ctx.Surface(LeisureKit.Blob(centre, 3.8f, v, 12, 0.15f), SurfaceRole.Decorative, AssetMix.One(""), AssetCategories.SurfaceNatural);
+                ctx.Surface(LeisureKit.Blob(centre, 3.8f, v, 12, 0.15f), SurfaceRole.Decorative, new AssetRef("", "Forestry Surface 01"), AssetCategories.SurfaceNatural);
                 if (isTower)
                 {
-                    float r = AssetMix.FootprintRadius(ctx.Site, AssetMix.One(""), 3.2f);
-                    ctx.Object(centre, LeisureKit.Yaw(centre, centre + nn), ObjectRole.Furniture, AssetMix.One(""), v, -1, scope);
+                    var shelter = AssetMix.Pick(Shelters, 0u);
+                    float r = AssetMix.FootprintRadius(ctx.Site, shelter, 3.2f);
+                    ctx.Object(centre, LeisureKit.Yaw(centre, centre + nn), ObjectRole.Furniture, shelter, v, -1, scope);
                     t.Occ.Take(centre, r, 0);
                 }
                 else
@@ -610,8 +658,9 @@ namespace Placemaker.Core.Layers.Types.Hiking
                         var bp = centre + tg * (k * 1.5f) - nn * 0.4f;
                         ctx.Object(bp, LeisureKit.Yaw(bp, bp + nn), ObjectRole.Bench, bench, Hashing.Mix(v, (uint)k + 3u));
                     }
-                    if (scope == AssetCategories.Lookout && AssetAvailability.Has(AssetCategories.Lookout))
-                        ctx.Object(centre + nn * 1.8f, LeisureKit.Yaw(centre, centre + nn), ObjectRole.Furniture, AssetMix.One(""), Hashing.Mix(v, 9u), -1, AssetCategories.Lookout);
+                    // A low map board at the back of the viewpoint, facing the view (what you look at is named).
+                    if (board != null)
+                        ctx.Object(centre - nn * 2.2f, LeisureKit.Yaw(centre, centre + nn), ObjectRole.Furniture, new AssetRef("", "ParkInfosign01", "ParkInfosign03"), Hashing.Mix(v, 9u), -1, board);
                     t.Occ.Take(centre, 3.4f, 0);
                 }
                 chosen.Add(s);
@@ -624,7 +673,7 @@ namespace Placemaker.Core.Layers.Types.Hiking
             var ctx = t.Ctx;
             float spacing = ctx.F("restSpacing");
             if (spacing <= 0f || t.Samples.Count == 0) return;
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = Bench(ctx);
             string picnic = ctx.B("picnicTables") ? LeisureKit.Category(ctx, "", AssetCategories.Picnic) : null;
             int si = 0;
             for (float target = spacing * 0.6f; target < t.Length - 20f; target += spacing)
@@ -644,11 +693,12 @@ namespace Placemaker.Core.Layers.Types.Hiking
                     if (!LeisureKit.Put(ctx, t.Occ, bp, LeisureKit.Yaw(bp, bp + nn), ObjectRole.Bench, bench, null, 1.3f, v, 0.8f, 0.2f)) continue;
                     placed = true;
                     t.Rests++;
-                    LeisureKit.Put(ctx, t.Occ, p + nn * (t.Hw + 1.2f) + dir * 2.4f, 0f, ObjectRole.Bin, AssetMix.One(""), null, 0.5f, Hashing.Mix(v, 1u), 0.8f, 0.2f);
+                    LeisureKit.Put(ctx, t.Occ, p + nn * (t.Hw + 1.2f) + dir * 2.4f, 0f, ObjectRole.Bin, AssetMix.Pick(TrailBins, 0u), null, 0.5f, Hashing.Mix(v, 1u), 0.8f, 0.2f);
                     if (picnic != null)
                     {
                         var pp = p + nn * (t.Hw + 4.6f) - dir * 2.5f;
-                        LeisureKit.Put(ctx, t.Occ, pp, LeisureKit.Yaw(pp, pp + dir), ObjectRole.Furniture, AssetMix.One(""), picnic, 1.4f, Hashing.Mix(v, 2u), 0.8f, 0.2f);
+                        // A timber picnic table (the picnic pool is blankets and grills).
+                        LeisureKit.Put(ctx, t.Occ, pp, LeisureKit.Yaw(pp, pp + dir), ObjectRole.Furniture, AssetMix.Pick(PicnicTables, 0u), picnic, 1.4f, Hashing.Mix(v, 2u), 0.8f, 0.2f);
                     }
                 }
             }
@@ -661,7 +711,7 @@ namespace Placemaker.Core.Layers.Types.Hiking
             if (every <= 0f) return;
             string cat = SignCategory(ctx);
             if (cat == null) return;
-            var ids = ctx.L("signAssets");
+            var ids = ctx.L("signAssets").Length > 0 ? ctx.L("signAssets") : Waymarks;
             int si = 0, n = 0;
             for (float target = every * 0.5f; target < t.Length - 10f; target += every)
             {
@@ -689,7 +739,7 @@ namespace Placemaker.Core.Layers.Types.Hiking
             bool camp = ctx.Input.HasChild(TrailCampAddOn.LayerId), picnic = ctx.Input.HasChild("picnic");
             int extra = (camp ? 1 : 0) + (picnic ? 1 : 0);
             var avoid = new List<float2>();
-            var bench = AssetMix.One(ctx.S("benchAsset"));
+            var bench = Bench(ctx);
             for (int i = 0; i < wanted + extra; i++)
             {
                 // Feature glades first and big enough for their contents (a camp of 8 pitches needs ~13 m).
@@ -763,6 +813,8 @@ namespace Placemaker.Core.Layers.Types.Hiking
                 }
             };
             var treeIds = ctx.L("treeSpecies"); var bushIds = ctx.L("bushSpecies");
+            if (treeIds.Length == 0 && AssetAvailability.Has(AssetCategories.Tree)) treeIds = Trees(landscape);
+            if (bushIds.Length == 0 && AssetAvailability.Has(AssetCategories.Bush)) bushIds = Bushes(landscape);
             int trees = math.min(12000, (int)(ha * ctx.F("treeDensity")));
             int bushes = math.min(12000, (int)(ha * ctx.F("bushDensity")));
             float clump = landscape == "meadow" ? 40f : landscape == "forest" ? 24f : 18f;

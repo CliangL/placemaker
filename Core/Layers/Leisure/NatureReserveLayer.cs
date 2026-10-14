@@ -25,7 +25,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("treeDensity", 220, 60, 450, 10, "perHa", ControlTier.Essential, "planting").Tip();
+            c.Slider("treeDensity", 220, 20, 450, 10, "perHa", ControlTier.Essential, "planting").Tip();
             c.Slider("bushDensity", 140, 0, 400, 10, "perHa", ControlTier.Essential, "planting");
             c.Slider("clearings", 2, 0, 8, 1, "count", ControlTier.Essential, "trails").Tip();
             c.Toggle("lookout", true, ControlTier.Essential, "trails").Tip();
@@ -45,17 +45,48 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefinePresets()
         {
-            Preset("forest", ("treeDensity", 300.0), ("bushDensity", 120.0), ("clearings", 2.0));
-            Preset("heath", ("treeDensity", 80.0), ("bushDensity", 300.0), ("clearings", 4.0));
-            Preset("wildwood", ("treeDensity", 420.0), ("bushDensity", 200.0), ("clearings", 1.0), ("benches", 0.5));
+            Preset("forest", ("treeDensity", 260.0), ("bushDensity", 120.0), ("clearings", 2.0));
+            Preset("heath", ("treeDensity", 20.0), ("bushDensity", 340.0), ("clearings", 3.0), ("lookout", true));
+            Preset("wildwood", ("treeDensity", 380.0), ("bushDensity", 200.0), ("clearings", 1.0), ("benches", 0.5), ("lookout", false));
         }
+
+        // ───────────── art direction (art pass a3) ─────────────
+        // Explicit vanilla species per character, used while the species controls are on automatic. Presets only
+        // set densities, so the character follows the density: open heath (≤ 80 trees/ha) is birch and pine over
+        // heather-like flowering scrub; dense wildwood (≥ 340) is old oak/spruce/alder; in between a mixed forest.
+
+        private static string Character(LayerContext ctx)
+        {
+            float t = ctx.F("treeDensity");
+            return t <= 80f ? "heath" : t >= 340f ? "wildwood" : "forest";
+        }
+
+        private static string[] Trees(string character)
+        {
+            switch (character)
+            {
+                case "heath": return new[] { "BirchTree01", "PineTree01", "BirchTree01" };
+                case "wildwood": return new[] { "OakTree01", "EuropeanSpruce01", "EU_AlderTree01", "NA_HickoryTree01", "OakTree01" };
+                default: return new[] { "OakTree01", "EU_ChestnutTree01", "NA_LindenTree01", "SpruceTree01", "BirchTree01" };
+            }
+        }
+
+        private static string[] Bushes(string character) => character == "heath"
+            ? new[] { "FlowerBushWild01", "FlowerBushWild02", "FlowerBushWildElderly01", "GreenBushWildChild01" }
+            : new[] { "GreenBushWild01", "GreenBushWild02", "GreenBushWildAdult01", "GreenBushWildElderly01" };
+
+        /// <summary>Open timber shelter as the automatic lookout (the lookout pool is 32-56 m buildings).</summary>
+        private static readonly string[] Lookouts = { "CampgroundShelter02", "CampgroundShelter01" };
+        private static readonly string[] Benches = { "CampgroundBench01", "CampgroundBench02" };
+        /// <summary>Fallen trunks (vanilla 10 m logs) lying in the wood.</summary>
+        private static readonly string[] Logs = { "Log01", "Log02", "Log04", "Log05", "Log07", "Log08" };
 
         protected override void PlanCore(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            // No lawn surface: a reserve stands on natural ground (a mown grass texture under a forest read as a park).
             int loops = math.max(1, ParkPathPlanner.LoopsByArea(region.Area));
             NaturalPaths(ctx, occ, gates, loops, 7f, 15f, "narrow", AssetMix.One(ctx.S("trailAsset")), region.Area > 20000f);
             ctx.Check();
@@ -63,10 +94,11 @@ namespace Placemaker.Core.Layers.Leisure
             // Lookout beside the trail at the highest point.
             if (ctx.B("lookout"))
             {
-                string cat = LeisureKit.Category(ctx, ctx.S("lookoutAsset"), AssetCategories.Lookout, AssetCategories.Shelter);
+                bool picked = !string.IsNullOrEmpty(ctx.S("lookoutAsset"));
+                string cat = picked ? AssetCategories.Lookout : LeisureKit.Category(ctx, "", AssetCategories.Shelter);
                 if (cat != null)
                 {
-                    var asset = AssetMix.One(ctx.S("lookoutAsset"));
+                    var asset = picked ? AssetMix.One(ctx.S("lookoutAsset")) : AssetMix.Pick(Lookouts, 0u);
                     float r = AssetMix.FootprintRadius(ctx.Site, asset, 4f);
                     var anchors = PathAnchors.Beside(occ, r, 8f, 1.2f);
                     ctx.Plan.Facts["lookoutAnchors"] = anchors.Count;
@@ -83,7 +115,7 @@ namespace Placemaker.Core.Layers.Leisure
 
             // Clearings: open meadows with a bench, kept free of trees.
             var clearings = new List<(float2 c, float r)>();
-            var bench = AssetMix.One("");
+            var bench = AssetMix.Pick(Benches, 0u);
             for (int i = 0; i < ctx.I("clearings"); i++)
             {
                 float r = 9f + 6f * Hashing.Unit(Hashing.Mix(ctx.Seed, (uint)i + 0xC1Eu));
@@ -100,7 +132,10 @@ namespace Placemaker.Core.Layers.Leisure
             ctx.Check();
 
             // Dense planting: trees in clumps of mixed age, an understorey of bushes.
+            string character = Character(ctx);
             var treeIds = ctx.L("treeSpecies"); var bushIds = ctx.L("bushSpecies");
+            if (treeIds.Length == 0 && AssetAvailability.Has(AssetCategories.Tree)) treeIds = Trees(character);
+            if (bushIds.Length == 0 && AssetAvailability.Has(AssetCategories.Bush)) bushIds = Bushes(character);
             float ha = region.Area / 10000f;
             int trees = math.min(12000, (int)(ha * ctx.F("treeDensity")));
             int bushes = math.min(12000, (int)(ha * ctx.F("bushDensity")));
@@ -117,11 +152,36 @@ namespace Placemaker.Core.Layers.Leisure
                 foreach (var s in Spread(occ, 3f, n, 0x5A3u, 30f))
                     ctx.Object(s, 0f, ObjectRole.AnimalSpawner, new AssetRef("", "Forest Animal Spawner"), Hashing.Mix(ctx.Seed, (uint)(s.x * 3f)));
             }
+            // Deadwood: fallen trunks in the wood (not in clearings or on trails), more in the wildwood.
+            int logs = character == "wildwood" ? (int)(ha * 6f) : character == "forest" ? (int)(ha * 3f) : 0;
+            for (int i = 0, tries = 0; i < logs && tries < logs * 12; tries++)
+            {
+                uint v = Hashing.Mix(ctx.Seed, 0x1065u + (uint)tries);
+                var p = region.Min + new float2(Hashing.Unit(v), Hashing.Unit(Hashing.Mix(v, 1u))) * (region.Max - region.Min);
+                float yaw = Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f;
+                var along = new float2(math.sin(yaw), math.cos(yaw));
+                if (!region.ContainsDisc(p, 6f) || !occ.Free(p, 1.2f, 0f, 0.2f) || !occ.Free(p + along * 3.5f, 0.8f, 0f, 0.2f) || !occ.Free(p - along * 3.5f, 0.8f, 0f, 0.2f)) continue;
+                var o = ctx.Object(p, yaw, ObjectRole.Furniture, AssetMix.Pick(Logs, v), v, -1, AssetCategories.PlayNature);
+                o.Scale = 0.7f + 0.3f * Hashing.Unit(Hashing.Mix(v, 3u));
+                occ.TakeCorridor(p - along * 3.6f, p + along * 3.6f, 0.6f, 5);
+                i++;
+            }
             if (ctx.B("forestFloor"))
             {
-                // Paint the woodland floor in the big gaps between clearings (interior only).
-                var inset = region.InsetVertices(math.min(12f, math.sqrt(region.Area) * 0.08f));
-                if (Geometry.Poly.IsSimple(inset) && Geometry.Poly.SignedArea(inset) > 200f) TerrainPaint.Patch(ctx, inset, ctx.I("floorLayer"), 0.7f, 6f);
+                // Woodland floor painted in soft organic patches through the wood (one rectangle inset from the outline
+                // read as a hard-edged slab, art pass a3); clearings stay green.
+                int patches = math.clamp((int)(ha * 5f), 3, 40);
+                for (int i = 0; i < patches; i++)
+                {
+                    uint v = Hashing.Mix(ctx.Seed, 0xF100u + (uint)i);
+                    float r = 8f + 7f * Hashing.Unit(v);
+                    var c = region.Min + new float2(Hashing.Unit(Hashing.Mix(v, 1u)), Hashing.Unit(Hashing.Mix(v, 2u))) * (region.Max - region.Min);
+                    if (!region.ContainsDisc(c, r + 2f)) continue;
+                    bool inClearing = false;
+                    foreach (var cl in clearings) if (math.distance(cl.c, c) < cl.r + r * 0.5f) { inClearing = true; break; }
+                    if (inClearing) continue;
+                    TerrainPaint.Patch(ctx, LeisureKit.Blob(c, r, Hashing.Mix(v, 3u), 14, 0.3f), ctx.I("floorLayer"), character == "heath" ? 0.45f : 0.7f, 6f);
+                }
             }
 
             // Clearings are the regions features use (core = the largest).
