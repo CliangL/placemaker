@@ -142,7 +142,7 @@ namespace Placemaker.Core.Layers.AddOns
             if (r < 2.5f) { NoSpace(ctx, NameKey); return; }
             var deck = AddOnAssets.Or(ctx.S("padAsset"), AddOnAssets.SplashDeck);
             ctx.Surface(Disc(site.Center, r), SurfaceRole.Decorative, deck, AssetCategories.SurfacePaving);
-            AddOnKit.Link(ctx, Monuments.MonumentKit.Entry(occ, site, toward), site.Center, r, 1.2f, deck, AssetCategories.SurfacePaving, 20f);
+            if (occ.Paths.Count > 0) AddOnKit.Link(ctx, Monuments.MonumentKit.Entry(occ, site, toward), site.Center, r, 1.2f, deck, AssetCategories.SurfacePaving, 20f);
             int placed = 0;
             if (jets)
             {
@@ -270,7 +270,7 @@ namespace Placemaker.Core.Layers.AddOns
             if (ctx.B("paving"))
             {
                 ctx.Surface(Disc(focal, forecourt), SurfaceRole.Paving, paving, AssetCategories.SurfacePaving);
-                AddOnKit.Link(ctx, arrival, focal, forecourt, 1.4f, paving, AssetCategories.SurfacePaving, 30f);
+                if (occ.Paths.Count > 0) AddOnKit.Link(ctx, arrival, focal, forecourt, 1.4f, paving, AssetCategories.SurfacePaving, 30f);
             }
             if (!Put(ctx, occ, focal, math.atan2(facing.x, facing.y), ObjectRole.Furniture, asset, cat, sr, Hashing.Mix(ctx.Seed, 0xBA0u)))
             { NoSpace(ctx, NameKey); return; }

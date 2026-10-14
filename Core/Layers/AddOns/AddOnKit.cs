@@ -38,9 +38,19 @@ namespace Placemaker.Core.Layers.AddOns
             return Pave(ctx, LayerRegion.Rect(mid, dir, math.distance(a, b) * 0.5f, halfWidth), SurfaceRole.Paving, asset, category);
         }
 
-        /// <summary>A surface clipped to the layer's region (pads near the outline never spill onto the street).</summary>
+        /// <summary>The host region is already paved (a plaza, a lot): no extra pads or links.</summary>
+        public static bool OnPaving(LayerContext ctx)
+        {
+            var tags = ctx.Input.RegionTags;
+            if (tags == null) return false;
+            foreach (var t in tags) if (t == RegionTags.Paved || t == RegionTags.Lot) return true;
+            return false;
+        }
+
+        /// <summary>A surface clipped to the layer's region (pads near the outline never spill onto the street). Skipped on paved hosts.</summary>
         public static bool Pave(LayerContext ctx, float2[] ring, SurfaceRole role, AssetRef asset, string category)
         {
+            if (OnPaving(ctx)) return false;
             var region = ctx.LayerRegion.Ring;
             bool inside = true;
             foreach (var p in ring) if (!Poly.Contains(region, p)) { inside = false; break; }
