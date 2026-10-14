@@ -11,7 +11,7 @@ namespace Placemaker.Core.Decals
     public static class DecalLook
     {
         /// <summary>Opacity tiers in percent (100 = the original prefab).</summary>
-        public static readonly int[] Tiers = { 20, 35, 50, 100 };
+        public static readonly int[] Tiers = { 10, 15, 25, 35, 50, 100 };
 
         /// <summary>Nearest tier (percent) of an opacity 0..1.</summary>
         public static int Tier(float opacity)

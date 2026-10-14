@@ -114,7 +114,7 @@ namespace Placemaker.Core.Decals
                 var p = o.Position.xz;
                 uint h = c.H(i, 11);
                 // A grown tree drops a litter bed about its crown; young ones and shrubs a little.
-                float expected = tree ? 2.1f * math.clamp(crown / 3.6f, 0.5f, 1.6f) : 0.3f;
+                float expected = tree ? 1.0f * math.clamp(crown / 3.6f, 0.5f, 1.4f) : 0.12f;   // s28: sparser
                 int n = Ctx.Count(h, expected * leaves);
                 for (int k = 0; k < n; k++)
                 {
@@ -237,7 +237,7 @@ namespace Placemaker.Core.Decals
                         if (gap > math.radians(150f)) continue;   // a straight-through side has no corner to cut
                         var bis = math.normalizesafe(d1 + d2, Perp(d1));
                         uint hk = Ctx.H2(h, k);
-                        if (Ctx.Roll(hk, 0.6f * aWear))
+                        if (Ctx.Roll(hk, 0.35f * aWear))   // s28: fewer
                             c.Emit(J + bis * (hw + 1.2f), Ctx.Yaw(Perp(bis)), DecalPools.Wear, 2.6f, Ctx.H2(hk, 1), ForbidPaved);
                     }
                     if (Ctx.Roll(Ctx.H2(h, 40), 0.35f * aCrack))
@@ -248,7 +248,7 @@ namespace Placemaker.Core.Decals
                     // An entrance: trodden verges on both sides, dirt and leaves carried onto the path.
                     var t = -ends[i].dir; var nrm = Perp(t);
                     for (int side = -1; side <= 1; side += 2)
-                        if (Ctx.Roll(Ctx.H2(h, 50 + side), 0.7f * aWear))
+                        if (Ctx.Roll(Ctx.H2(h, 50 + side), 0.4f * aWear))   // s28: fewer
                             c.Emit(J + nrm * side * (hw + 0.9f) + t * 1.5f, Ctx.Yaw(t), DecalPools.Wear, 2.7f, Ctx.H2(h, 52 + side), ForbidPaved);
                     if (Ctx.Roll(Ctx.H2(h, 55), 0.4f * aLeaves))
                         c.Emit(J + t * 2.5f, Ctx.Yaw(t), DecalPools.LeavesEdge, 2.0f, Ctx.H2(h, 56));

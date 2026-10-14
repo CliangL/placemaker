@@ -28,6 +28,10 @@ namespace Placemaker.Core.Decals
         /// <summary>Per family amount (0..3); 0 for families the type does not have.</summary>
         public readonly float[] Amount = new float[FamilyCount];
         public string LayerId = "";
+        /// <summary>(s28) Terrain-paint ground wear (worn verges, patches, edge variation), 0..3; independent of decal packs.</summary>
+        public float PaintWear = 1f;
+        /// <summary>(s28) Faint dirt desire lines where people cut corners and walk to features across the lawn.</summary>
+        public bool DesirePaths = true;
         /// <summary>Outline of the fill step (open-ground scatter and shore sampling stay inside it). Null = the whole area.</summary>
         public Unity.Mathematics.float2[] Ring;
         /// <summary>Set by the pass when the step's own plan was dressed (open-ground scatter runs once per step).</summary>
@@ -146,6 +150,8 @@ namespace Placemaker.Core.Decals
     {
         public const string AmountId = "dressAmount";
         public const string StyleId = "dressStyle";
+        public const string PaintWearId = "dressPaintWear";
+        public const string DesirePathsId = "dressDesirePaths";
         public const string Group = "decals";
         public const string KeyPrefix = "Placemaker.Dress.";
         public static readonly string[] Styles = { "clean", "livedIn", "gritty" };
@@ -188,6 +194,14 @@ namespace Placemaker.Core.Decals
             foreach (var s in Styles)
                 style.Options.Add(new ControlOption { Value = s, LabelKey = KeyPrefix + StyleId + "." + s, TooltipKey = KeyPrefix + StyleId + "." + s + ".Tooltip" });
             list.Add(style);
+            // s28: ground wear painted into the terrain texture (permanent, like all Placemaker paint).
+            list.Add(Slider(PaintWearId, 100, Group));
+            list.Add(new ControlSchema
+            {
+                Id = DesirePathsId, Kind = ControlKind.Toggle, Tier = ControlTier.More, Group = Group, Default = p.Style != DressStyle.Clean,
+                LabelKey = KeyPrefix + DesirePathsId, TooltipKey = KeyPrefix + DesirePathsId + ".Tooltip",
+                EnabledWhen = PaintWearId + "!=0", DisabledReasonKey = KeyPrefix + DesirePathsId + ".Off",
+            });
             foreach (var f in p.Families)
             {
                 string group = Group;
@@ -229,6 +243,8 @@ namespace Placemaker.Core.Decals
             s.Master = Pct(values, AmountId);
             s.Style = ParseStyle(values?.S(StyleId, null), p.Style);
             foreach (var f in p.Families) s.Amount[(int)f] = Pct(values, FamilyId(f));
+            s.PaintWear = Pct(values, PaintWearId);
+            s.DesirePaths = values == null ? p.Style != DressStyle.Clean : values.B(DesirePathsId, p.Style != DressStyle.Clean);
             return s;
         }
 

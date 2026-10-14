@@ -16,9 +16,11 @@ namespace Placemaker.Tests
     public class DecalArtTests
     {
         [Theory]
-        [InlineData(0.2f, 20)]
-        [InlineData(0.25f, 20)]
-        [InlineData(0.3f, 35)]
+        [InlineData(0.1f, 10)]
+        [InlineData(0.12f, 10)]
+        [InlineData(0.15f, 15)]
+        [InlineData(0.25f, 25)]
+        [InlineData(0.28f, 25)]
         [InlineData(0.45f, 50)]
         [InlineData(0.8f, 100)]
         [InlineData(1f, 100)]
@@ -27,14 +29,14 @@ namespace Placemaker.Tests
         [Fact]
         public void MostDecalsAreFaintSandStaysStrongMarkingsFull()
         {
-            Assert.InRange(DecalPools.Opacity(DecalPools.Sand), 0.3f, 0.5f);   // sand dust a touch stronger, still subtle
+            Assert.Equal(0.25f, DecalPools.Opacity(DecalPools.Sand));   // sand dust a touch stronger, still subtle (s28)
             foreach (var c in new[] { DecalPools.Stain, DecalPools.Tyre, AssetCategories.DecalLeaves, AssetCategories.DecalCracks, DecalPools.Moss, DecalPools.Patch })
-                Assert.True(DecalPools.Opacity(c) <= 0.25f, c + " " + DecalPools.Opacity(c));
+                Assert.True(DecalPools.Opacity(c) <= 0.15f, c + " " + DecalPools.Opacity(c));
             Assert.Equal(1f, DecalLook.OpacityOf(new PlannedObject { Role = ObjectRole.Decal, Category = AssetCategories.DecalFieldLine }));
             Assert.Equal(1f, DecalLook.OpacityOf(new PlannedObject { Role = ObjectRole.Bench }));
             int faint = DecalPools.All.Count(c => DecalPools.Opacity(c) <= 0.35f);
             Assert.True(faint * 2 > DecalPools.All.Count(), "most pools are ~80 % transparent");
-            Assert.All(DecalPools.All, c => Assert.True(DecalPools.Opacity(c) <= 0.35f, c));
+            Assert.All(DecalPools.All, c => Assert.True(DecalPools.Opacity(c) <= 0.25f, c));
         }
 
         [Theory]
@@ -62,9 +64,9 @@ namespace Placemaker.Tests
             var rule = new DecalDressingRules();
             const AssetTraits decal = AssetTraits.StaticObject | AssetTraits.HasMesh | AssetTraits.DecalMesh;
             Assert.Equal(false, rule.AutoEligible(AssetCategories.DecalLeaves, "g87 trash decals dirty pack leaf g87 leaf 03 decal", decal));
-            Assert.Null(rule.AutoEligible(AssetCategories.DecalLeaves, "fallen leaves decals leaf dead leaves2 yellow light decal", decal));
+            Assert.Null(rule.AutoEligible(AssetCategories.DecalLeaves, "fallen leaves decals leaf dead leaves8 brown light decal", decal));
             // A decal that does not project onto terrain is never an automatic ground decal.
-            Assert.Equal(false, rule.AutoEligible(AssetCategories.DecalLeaves, "fallen leaves decals leaf dead leaves2 yellow light decal", decal | AssetTraits.WallOrHanging));
+            Assert.Equal(false, rule.AutoEligible(AssetCategories.DecalLeaves, "fallen leaves decals leaf dead leaves8 brown light decal", decal | AssetTraits.WallOrHanging));
         }
 
         private static readonly DesignEditor Editor = new DesignEditor(GeneratorRegistry.Get);

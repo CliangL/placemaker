@@ -50,6 +50,8 @@ namespace Placemaker.Core.Decals
             public DecalEdge[] Edges = { DecalEdge.Soft };
             /// <summary>(s23) Opacity the decal is drawn with (runtime clone tier, DecalLook).</summary>
             public float Opacity = 0.2f;
+            /// <summary>(s28) Ground the pool's decals lie on: an automatic pick must match its colour (DecalColours).</summary>
+            public HostTone Host = HostTone.Lawn;
         }
 
         private static readonly Dictionary<string, Spec> Specs = Build();
@@ -59,32 +61,42 @@ namespace Placemaker.Core.Decals
             var d = new Dictionary<string, Spec>(StringComparer.Ordinal);
             void Add(string c, string parent, float max, float typical, params DecalFamily[] f) =>
                 d[c] = new Spec { Category = c, Parent = parent, MaxFootprint = max, Typical = typical, Families = f };
-            Add(LeavesEdge, AssetCategories.DecalLeaves, 8f, 6f, DecalFamily.LeafEdge);
-            Add(Mulch, AssetCategories.DecalLeaves, 6f, 3f, DecalFamily.Mulch);
-            Add(Moss, Wear, 7f, 2.5f, DecalFamily.Moss, DecalFamily.Overgrowth);
-            Add(Wear, AssetCategories.DecalDirt, 7f, 4f, DecalFamily.Dirt, DecalFamily.Dust);
-            Add(Mud, Wear, 14f, 8f, DecalFamily.Mud, DecalFamily.Dust);
-            Add(Sand, Wear, 12f, 6f, DecalFamily.Sand, DecalFamily.Dust);
-            Add(WetSand, Wet, 12f, 4f, DecalFamily.WetSand);
-            Add(Wet, AssetCategories.DecalPuddles, 10f, 4f, DecalFamily.Wet);
-            Add(Rocks, Wear, 10f, 3f, DecalFamily.Rocks, DecalFamily.Rubble);
-            Add(Stain, AssetCategories.DecalDirt, 7f, 4f, DecalFamily.Stain);
-            Add(Oil, Stain, 6f, 2.5f, DecalFamily.Oil, DecalFamily.Leak);
-            Add(Patch, AssetCategories.DecalCracks, 5f, 2f, DecalFamily.Patch);
-            Add(Tyre, Stain, 12f, 5f, DecalFamily.Tyre);
-            Add(Glass, AssetCategories.DecalLitter, 3f, 1f, DecalFamily.Glass);
-            Add(Beach, Sand, 9f, 1.5f, DecalFamily.BeachWrack, DecalFamily.PalmLitter);
+            // s28: no fallback parents — a broader pool would bring back colours that do not match the host (an empty pool
+            // places nothing). "Wear" on a lawn is grass-tone wear (moss, wet grass), never brown dirt.
+            Add(LeavesEdge, null, 8f, 6f, DecalFamily.LeafEdge);
+            Add(Mulch, null, 6f, 3f, DecalFamily.Mulch);
+            Add(Moss, null, 7f, 2.5f, DecalFamily.Moss, DecalFamily.Overgrowth);
+            Add(Wear, null, 10f, 4f, DecalFamily.Dirt, DecalFamily.Dust, DecalFamily.Moss, DecalFamily.Wet);
+            Add(Mud, null, 14f, 8f, DecalFamily.Mud, DecalFamily.Dust, DecalFamily.Dirt);
+            Add(Sand, null, 12f, 6f, DecalFamily.Sand, DecalFamily.Dust);
+            Add(WetSand, null, 32f, 6f, DecalFamily.WetSand);
+            Add(Wet, null, 10f, 4f, DecalFamily.Wet);
+            Add(Rocks, null, 10f, 3f, DecalFamily.Rocks, DecalFamily.Rubble);
+            Add(Stain, null, 10f, 4f, DecalFamily.Stain, DecalFamily.Dust);
+            Add(Oil, null, 6f, 2.5f, DecalFamily.Oil, DecalFamily.Leak, DecalFamily.Stain);
+            Add(Patch, null, 5f, 2f, DecalFamily.Patch);
+            Add(Tyre, null, 12f, 5f, DecalFamily.Tyre);
+            Add(Glass, null, 3f, 1f, DecalFamily.Glass);
+            Add(Beach, null, 9f, 1.5f, DecalFamily.BeachWrack, DecalFamily.PalmLitter);
             Add(Footprints, null, 1.5f, 0.3f, DecalFamily.Footprint);
+            void Host(HostTone t, params string[] cs) { foreach (var c in cs) d[c].Host = t; }
+            Host(HostTone.Lawn, LeavesEdge, Moss, Wear);
+            Host(HostTone.Dirt, Mulch, Mud, Rocks);
+            Host(HostTone.Sand, Sand, WetSand, Beach, Footprints);
+            Host(HostTone.Paving, Wet, Stain, Glass);
+            Host(HostTone.Asphalt, Oil, Patch, Tyre);
             // (s23 art pass, user: "most ~80 % transparent; the sand ones are fine"): opacity and edge class per pool.
             void Look(string c, float opacity, params DecalEdge[] edges) { d[c].Opacity = opacity; d[c].Edges = edges; }
             const DecalEdge So = DecalEdge.Soft, It = DecalEdge.Item, Sh = DecalEdge.Shaped;
             // s23 second look (user: "poop all over the floor"): everything faint; sand dust only slightly stronger.
-            Look(LeavesEdge, 0.2f, Sh); Look(Mulch, 0.2f, So); Look(Moss, 0.2f, So); Look(Wear, 0.2f, So); Look(Mud, 0.2f, So);
-            Look(Sand, 0.35f, So); Look(WetSand, 0.35f, So, Sh); Look(Wet, 0.3f, So); Look(Rocks, 0.35f, So, It); Look(Stain, 0.2f, So);
-            Look(Oil, 0.2f, So, Sh); Look(Patch, 0.2f, Sh); Look(Tyre, 0.2f, Sh); Look(Glass, 0.2f, It); Look(Beach, 0.2f, It, Sh);
-            Look(Footprints, 0.2f, Sh);
+            // s28 (user: "much, much, much more transparent would solve everything"): 10–15 %, sand dust and wet sand 25 %.
+            Look(LeavesEdge, 0.1f, Sh); Look(Mulch, 0.1f, So); Look(Moss, 0.1f, So); Look(Wear, 0.15f, So); Look(Mud, 0.1f, So);
+            Look(Sand, 0.25f, So); Look(WetSand, 0.25f, So, Sh); Look(Wet, 0.1f, So); Look(Rocks, 0.15f, So, It); Look(Stain, 0.1f, So);
+            Look(Oil, 0.1f, So, Sh); Look(Patch, 0.1f, Sh); Look(Tyre, 0.1f, Sh); Look(Glass, 0.15f, It); Look(Beach, 0.15f, It, Sh);
+            Look(Footprints, 0.1f, Sh);
             d[Tyre].MinFootprint = 1.5f;
             d[Oil].MinFootprint = 0.8f;
+            d[Stain].MinFootprint = 1.5f;
             d[Wear].MinFootprint = 1.5f;
             d[Mud].MinFootprint = 2f;
             return d;
@@ -107,12 +119,12 @@ namespace Placemaker.Core.Decals
         /// <summary>(s23) Look of the older theme pools when dressing or the Decals feature uses them.</summary>
         private static readonly Dictionary<string, (float opacity, DecalEdge[] edges)> ThemeLook = new Dictionary<string, (float, DecalEdge[])>(StringComparer.Ordinal)
         {
-            [AssetCategories.DecalLeaves] = (0.2f, new[] { DecalEdge.Soft, DecalEdge.Item }),
-            [AssetCategories.DecalDirt] = (0.35f, new[] { DecalEdge.Soft }),
-            [AssetCategories.DecalCracks] = (0.2f, new[] { DecalEdge.Shaped }),
-            [AssetCategories.DecalPuddles] = (0.35f, new[] { DecalEdge.Shaped, DecalEdge.Soft }),
-            [AssetCategories.DecalLitter] = (0.3f, new[] { DecalEdge.Item }),
-            [AssetCategories.DecalGraffiti] = (0.35f, new[] { DecalEdge.Shaped }),
+            [AssetCategories.DecalLeaves] = (0.15f, new[] { DecalEdge.Soft, DecalEdge.Item }),
+            [AssetCategories.DecalDirt] = (0.15f, new[] { DecalEdge.Soft }),
+            [AssetCategories.DecalCracks] = (0.1f, new[] { DecalEdge.Shaped }),
+            [AssetCategories.DecalPuddles] = (0.15f, new[] { DecalEdge.Shaped, DecalEdge.Soft }),
+            [AssetCategories.DecalLitter] = (0.15f, new[] { DecalEdge.Item }),
+            [AssetCategories.DecalGraffiti] = (0.15f, new[] { DecalEdge.Shaped }),
         };
 
         /// <summary>(s23) Opacity a decorative decal of this category is drawn with; 1 for functional/unknown categories.</summary>
@@ -129,6 +141,18 @@ namespace Placemaker.Core.Decals
             if (category == null) return null;
             if (Specs.TryGetValue(category, out var s)) return s.Edges;
             return ThemeLook.TryGetValue(category, out var t) ? t.edges : null;
+        }
+
+        /// <summary>(s28) Host ground of the theme pools (null = no colour rule: graffiti, markings, paving patterns).</summary>
+        public static HostTone? ThemeHost(string category)
+        {
+            switch (category)
+            {
+                case AssetCategories.DecalLeaves: return HostTone.Lawn;
+                case AssetCategories.DecalDirt: return HostTone.Dirt;
+                case AssetCategories.DecalCracks: case AssetCategories.DecalPuddles: case AssetCategories.DecalLitter: return HostTone.Paving;
+                default: return null;
+            }
         }
 
         public static IEnumerable<string> All => Specs.Keys;
@@ -187,6 +211,8 @@ namespace Placemaker.Core.Decals
             var spec = DecalCatalog.Describe(name);
             if (spec.Functional || Array.IndexOf(s.Families, spec.Family) < 0) return false;
             if (Array.IndexOf(s.Edges, spec.Edge) < 0) return false;   // s23: hard rectangles never; shaped only where placed
+            // s28: soft colour filter, drops only clear clashes with the host ground (dark brown/orange on lawn or paving).
+            if (!DecalColours.NoClash(name, s.Host)) return false;
             // s23: sand dust is a pale dust, never red; leaf litter only the light, scattered and unsaturated ones.
             if (category == Sand && lower.Contains("red")) return false;
             if (category == Footprints) return false;   // footprint trails read as dark blobs from any camera height
@@ -269,7 +295,10 @@ namespace Placemaker.Core.Decals
                 if (edges == null || string.IsNullOrEmpty(lower)) return null;
                 // s23: dressing leaf litter is the light/scattered kind in brown, yellow or green (dense "medium" piles and red
                 // read as dark clumps or orange confetti in game).
-                if (category == AssetCategories.DecalLeaves && AssetHeuristics.ContainsAny(lower, "medium", "lined", "red")) return false;
+                // s28: theme pools match their host colour too (leaves on lawn, dirt on soil, cracks/puddles/litter on paving).
+                var themeHost = DecalPools.ThemeHost(category);
+                if (themeHost.HasValue && !DecalColours.NoClash(lower, themeHost.Value)) return false;
+                if (category == AssetCategories.DecalLeaves && AssetHeuristics.ContainsAny(lower, "medium", "lined", "red", "yellow")) return false;   // s28: brown/green only
                 return Array.IndexOf(edges, DecalCatalog.Describe(lower).Edge) >= 0 ? (bool?)null : false;
             }
             return DecalPools.Eligible(category, lower);
