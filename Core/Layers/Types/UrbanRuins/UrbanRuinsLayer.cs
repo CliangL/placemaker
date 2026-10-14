@@ -85,7 +85,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
             c.AssetMulti("weedAssets", AssetCategories.RuinsWeeds, ControlTier.More, "assets");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.RandomRange("skateItems", 4, 16);

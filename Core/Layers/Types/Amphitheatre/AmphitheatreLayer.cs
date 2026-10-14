@@ -80,7 +80,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "assets");
             c.Asset("seatSurface", AssetCategories.SurfacePaving, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.RandomRange("rows", 4, 12);

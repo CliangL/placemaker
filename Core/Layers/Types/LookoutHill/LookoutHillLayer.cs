@@ -85,7 +85,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             c.Slider("runWidth", 26, 10, 60, 2, "m", ControlTier.Essential, "sledding").When("subtype=sledding").Tip();
             c.Toggle("runOut", true, ControlTier.More, "sledding").When("subtype=sledding").Tip();
             c.Slider("kites", 5, 0, 12, 1, "count", ControlTier.Essential, "kites").When("subtype=kiteHill").Tip();
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.Fixed("subtype");

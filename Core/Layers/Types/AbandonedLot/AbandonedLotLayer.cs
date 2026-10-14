@@ -22,6 +22,9 @@ namespace Placemaker.Core.Layers.Types.Ruins
     [AreaGenerator(310, Group = "industrial")]
     public sealed class AbandonedLotLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public static readonly string[] Subtypes = { "overgrown", "rubbleField", "demolished", "squatterCamp", "fencedWasteland" };
 
         /// <summary>Vanilla industrial fences (prefab names = their UI icon names); automatic otherwise.</summary>
@@ -81,7 +84,7 @@ namespace Placemaker.Core.Layers.Types.Ruins
             c.AssetMulti("shelterAssets", AssetCategories.RuinsShelter, ControlTier.More, "camp");
 
             c.AssetMulti("junkAssets", AssetCategories.RuinsJunk, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.RandomRange("foundations", 0, 2);

@@ -88,7 +88,7 @@ namespace Placemaker.Core.Layers.Types.Wetland
 
             c.Toggle("fence", false, ControlTier.More, "boundary");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("waterCover", 20, 50);
             c.RandomRange("depth", 0.6, 2);

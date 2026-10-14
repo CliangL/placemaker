@@ -87,7 +87,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             c.Asset("shelterAsset", AssetCategories.Shelter, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("equipment", 8, 28);
             c.RandomRange("benches", 4, 16);

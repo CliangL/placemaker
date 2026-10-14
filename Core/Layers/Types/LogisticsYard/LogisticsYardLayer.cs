@@ -26,6 +26,9 @@ namespace Placemaker.Core.Layers.Types.Logistics
     [AreaGenerator(260, Group = "industrial")]
     public sealed class LogisticsYardLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public const string LayerId = "logisticsYard";
         public static readonly string[] Styles = { "containers", "pallets", "crates", "lumber", "bulk", "mixed" };
 
@@ -89,7 +92,7 @@ namespace Placemaker.Core.Layers.Types.Logistics
             c.Asset("lampAsset", AssetCategories.FloodLight, ControlTier.More, "assets");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "assets");
             c.Asset("groundSurface", AssetCategories.SurfaceAny, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("aisleWidth", 6, 10);
             c.RandomRange("fill", 50, 90);

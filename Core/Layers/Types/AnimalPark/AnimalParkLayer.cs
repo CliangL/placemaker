@@ -88,7 +88,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "assets");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("pens", 2, 7);
             c.RandomRange("aviaries", 0, 4);

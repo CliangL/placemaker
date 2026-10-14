@@ -22,6 +22,9 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
     [AreaGenerator(72, Group = "industrial")]
     public sealed class ConstructionSiteLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public const string LayerId = "constructionSite";
         public const string WorksPlace = "place:works";
         public static readonly string[] Subtypes = { "foundation", "roadworks", "compound", "demolition", "earthworks" };
@@ -81,7 +84,7 @@ namespace Placemaker.Core.Layers.Types.ConstructionSite
             c.AssetMulti("pileAssets", AssetCategories.ConstructionPile, ControlTier.More, "assets");
             c.AssetMulti("barrierAssets", AssetCategories.ConstructionBarrier, ControlTier.More, "assets");
             c.Asset("groundSurface", AssetCategories.SurfaceNatural, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("depth", 3, 9);
             c.RandomRange("piles", 6, 20);

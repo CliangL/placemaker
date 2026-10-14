@@ -20,6 +20,9 @@ namespace Placemaker.Core.Layers.Types.Transport
     [AreaGenerator(91, Group = "transport")]
     public sealed class TransitPlazaLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         protected override string Area => "TransitPlaza";
         public override string Id => "transitPlaza";
         public override string Icon => "Media/Game/Icons/BusShelter.svg";
@@ -82,7 +85,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "assets");
             c.Asset("bollardAsset", AssetCategories.Bollard, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("lotShare", 0, 40);
             c.RandomRange("bikeRacks", 0, 20);

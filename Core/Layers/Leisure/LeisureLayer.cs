@@ -49,12 +49,28 @@ namespace Placemaker.Core.Layers.Leisure
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
         {
             var region = LayerRegion.From(input?.Shape?.Ring);
-            return region == null ? new List<EdgeMarker>() : Entrances.Suggest(input, region, EntranceKind, WantedEntrances(region));
+            if (region == null) return new List<EdgeMarker>();
+            return TypedEntrances ? Entrances.SuggestTyped(input, region, WantedEntrances(region), EntranceKinds.Leisure)
+                : Entrances.Suggest(input, region, EntranceKind, WantedEntrances(region));
         }
 
-        public override Readiness CheckReady(AreaInput input) => new Readiness { Ready = true };
+        /// <summary>
+        /// Park-like types use typed entrances (pedestrian, bike, main — EntranceKinds) and need at least one
+        /// placed by the player (playtest 4b); vehicle/industrial sites keep the plain "entrance" and never block.
+        /// </summary>
+        protected virtual bool TypedEntrances => true;
 
-        protected List<Gate> Gates(LayerContext ctx) => Entrances.Resolve(ctx.Input, ctx.LayerRegion, EntranceKind, WantedEntrances(ctx.LayerRegion));
+        /// <summary>The "entrances" Markers control with the kinds this type uses.</summary>
+        protected ControlSchema EntranceMarkers(ControlSet c) => TypedEntrances
+            ? EntranceKinds.WithOptions(c.Markers("entrances", ControlTier.More, EntranceKinds.Leisure), EntranceKinds.Leisure)
+            : c.Markers("entrances", ControlTier.More, EntranceKind);
+
+        public override Readiness CheckReady(AreaInput input) =>
+            TypedEntrances ? Entrances.RequireTyped(input, EntranceKinds.Leisure) : new Readiness { Ready = true };
+
+        protected List<Gate> Gates(LayerContext ctx) => TypedEntrances
+            ? Entrances.ResolveTyped(ctx.Input, ctx.LayerRegion, WantedEntrances(ctx.LayerRegion), EntranceKinds.Leisure)
+            : Entrances.Resolve(ctx.Input, ctx.LayerRegion, EntranceKind, WantedEntrances(ctx.LayerRegion));
 
         /// <summary>Lawns between everything taken (FreeSpace), largest tagged core; whole region when nothing is free.</summary>
         protected static void EmitGreenRegions(LayerContext ctx, Occupancy occ, float minArea = 150f)

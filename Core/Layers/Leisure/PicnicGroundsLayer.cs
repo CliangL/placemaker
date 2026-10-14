@@ -36,7 +36,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Slider("treeDensity", 20, 0, 80, 5, "perHa", ControlTier.More, "planting");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("groups", 5, 16);
             c.Fixed("facilities");

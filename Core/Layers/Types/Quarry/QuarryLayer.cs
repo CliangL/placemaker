@@ -26,6 +26,9 @@ namespace Placemaker.Core.Layers.Types.Quarry
     [AreaGenerator(73, Group = "industrial")]
     public sealed class QuarryLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public const string LayerId = "quarry";
         public const string PitPlace = "place:pit";
         public const string LakeIssue = "Placemaker.Quarry.Issue.LakePermanent";
@@ -85,7 +88,7 @@ namespace Placemaker.Core.Layers.Types.Quarry
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "assets");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "assets");
             c.Asset("roadSurface", AssetCategories.SurfaceNatural, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("levels", 2, 5);
             c.RandomRange("benchHeight", 3, 7);

@@ -95,7 +95,7 @@ namespace Placemaker.Core.Layers.Types.Golf
             c.Asset("bunkerSurface", AssetCategories.SurfaceSand, ControlTier.More, "assets");
             c.Asset("flagAsset", AssetCategories.GolfFlag, ControlTier.More, "assets");
             c.Asset("netAsset", AssetCategories.Fence, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
 
             c.Fixed("subtype");

@@ -32,6 +32,9 @@ namespace Placemaker.Core.Layers.Types.Farmstead
     [AreaGenerator(131, Group = "farms")]
     public sealed class FarmsteadLayer : LeisureLayer
     {
+        /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
+        protected override bool TypedEntrances => false;
+
         public const string YardTag = "farmyard";
         public const string FieldTag = "field";
         public const string FieldPlace = "place:field";
@@ -114,7 +117,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             c.Slider("pondSize", 30, 12, 80, 2, "m", ControlTier.More, "water").When("pond=true").Tip();
             c.Choice("pondAt", "lowest", ControlTier.More, "water", "lowest", "nearYard", "far").When("pond=true").Tip();
 
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
 
             c.RandomRange("fieldSize", 0.6, 2.5);
             c.RandomRange("yardSize", 5, 12);

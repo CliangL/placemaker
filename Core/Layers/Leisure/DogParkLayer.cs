@@ -38,7 +38,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("groundSurface", AssetCategories.SurfaceDirt, ControlTier.More, "assets");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("agility", 3, 8);
         }

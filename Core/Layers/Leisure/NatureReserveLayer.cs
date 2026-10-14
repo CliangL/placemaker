@@ -37,7 +37,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Slider("floorLayer", 1, 1, 4, 1, "count", ControlTier.More, "planting").When("forestFloor=true");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             c.AssetMulti("bushSpecies", AssetCategories.Bush, ControlTier.More, "planting");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("treeDensity", 120, 300);
             c.Fixed("forestFloor");

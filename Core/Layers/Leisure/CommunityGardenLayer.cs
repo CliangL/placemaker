@@ -37,7 +37,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Toggle("fence", true, ControlTier.More, "boundary");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("plotWidth", 4, 8);
             c.RandomRange("plotDepth", 8, 14);

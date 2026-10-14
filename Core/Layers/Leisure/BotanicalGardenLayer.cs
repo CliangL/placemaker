@@ -40,7 +40,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.AssetMulti("bushSpecies", AssetCategories.Bush, ControlTier.More, "collections");
             c.Choice("pathWidth", "narrow", ControlTier.More, "layout", "narrow", "mixed", "wide");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "layout");
-            c.Markers("entrances", ControlTier.More, EntranceKind);
+            EntranceMarkers(c);
             c.Toggle("lamps", true, ControlTier.More, "furniture");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "furniture");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "furniture").When("lamps=true");
