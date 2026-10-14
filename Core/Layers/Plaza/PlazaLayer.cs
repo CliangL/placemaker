@@ -46,6 +46,15 @@ namespace Placemaker.Core.Layers.Plaza
         public static readonly string[] Hosted = { "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "noticeboard", "volleyball",
             "bigStatue", "obelisk", "triumphalArch", "sculptureWalk", "terraceGarden", "folly" };
         protected override bool HostsStreetShops => true;
+
+        /// <summary>(s18) A micro or small square stays a square: street shops would carve most of it away.</summary>
+        protected override bool StreetShopsFit(LayerContext ctx)
+        {
+            LeisureKit.FocalPoint(ctx.LayerRegion, out float inscribed);
+            if (!PlazaTiers.IsCompact(PlazaTiers.Of(ctx.LayerRegion.Area, inscribed))) return true;
+            ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.TooSmall");
+            return false;
+        }
         public override float MinArea => 60f;
 
         private static readonly FeatureInfo[] FeatureList = WithAmenities(new[]
@@ -56,7 +65,9 @@ namespace Placemaker.Core.Layers.Plaza
             {
                 Layer = "fountain", LabelKey = "Placemaker.Plaza.Feature.fountain", TooltipKey = "Placemaker.Plaza.Feature.fountain.Tooltip",
                 // The plaza lays the rondel itself (paving tiling): no apron surface on top of it.
-                Preset = Park.ParkLayer.Bag(("size", "large"), ("asset", "LargeFountain02"), ("apron", false), ("benches", 8.0), ("lamps", true), ("planters", false)), DefaultOn = true,
+                // s18: automatic asset (the large kit starts with LargeFountain02) so a small square gets a fountain that
+                // fits, centred on its focal point; the square lights itself (no second lamp ring).
+                Preset = Park.ParkLayer.Bag(("size", PlazaTiers.FountainSize), ("apron", false), ("benches", 6.0), ("lamps", false), ("planters", false)), DefaultOn = true,
             },
             // Art pass a2: the square plants its own trees (treeLayout: allée / bosque / groves) — the scattered
             // feature trees are opt-in.
@@ -113,8 +124,11 @@ namespace Placemaker.Core.Layers.Plaza
         {
             c.Asset("centerpiece", AssetCategories.Centerpiece, ControlTier.Essential, "centre");
             c.Choice("centerMode", "single", ControlTier.Essential, "centre", "single", "mirrored", "axis", "none");
+            // s18: the palette chooser heads the ground section; "surface" (the field) and the role controls override it.
+            GroundPalettes.DefineControls(c, "ground", "surface");
             c.Asset("surface", AssetCategories.SurfacePaving, ControlTier.Essential, "ground");
-            c.Choice("paveStyle", "auto", ControlTier.Essential, "ground", "auto", "civic", "warm", "garden", "modern", "cobble").Tip();
+            // Pre-s18 paving style: kept (save format) but hidden; an old save's style still plans while the palette is Automatic.
+            c.Choice("paveStyle", "auto", ControlTier.Essential, "ground", "auto", "civic", "warm", "garden", "modern", "cobble").Tip().When("palette=legacy");
             c.Slider("furniture", 0, 0, 24, 1, "count", ControlTier.Essential, "furniture").Tip();
             c.RandomRange("furniture", 2, 16);
 
@@ -186,39 +200,39 @@ namespace Placemaker.Core.Layers.Plaza
 
         protected override void DefinePresets()
         {
-            // Art pass a2: each preset is a designed square — its paving (paveStyle palette + pattern), its
+            // Art pass a2: each preset is a designed square — its paving (s18: its ground palette + pattern), its
             // focal point, its planting and seating that faces that focal point (see PlazaDressing).
-            Preset("civic", ("paveStyle", "civic"), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 8.0),
+            Preset("civic", ("palette", GroundPalettes.Classic), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 8.0),
                 ("arrangement", new[] { "bench" }), ("arrangementMode", "center"), ("arrangementGap", 5.0), ("treeLayout", "grid"), ("pattern", "border"),
                 ("lighting", "feature"), ("bollards", true), ("planters", 0.0), ("beds", 0.0));
-            Preset("fountain", ("paveStyle", "warm"), ("centerMode", "single"), ("centerSize", 9.0), ("centerKind", "fountain"), ("furniture", 0.0),
+            Preset("fountain", ("palette", GroundPalettes.Sandstone), ("centerMode", "single"), ("centerSize", 9.0), ("centerKind", "fountain"), ("furniture", 0.0),
                 ("pattern", "scatter"), ("beds", 4.0), ("treeLayout", "edge"), ("lighting", "feature"), ("planters", 8.0));
-            Preset("market", ("paveStyle", "cobble"), ("centerMode", "none"), ("furniture", 0.0), ("stalls", 18.0), ("cafe", 2.0), ("treeLayout", "edge"),
+            Preset("market", ("palette", GroundPalettes.Cobble), ("centerMode", "none"), ("furniture", 0.0), ("stalls", 18.0), ("cafe", 2.0), ("treeLayout", "edge"),
                 ("pattern", "none"), ("beds", 0.0), ("shade", 0.0));
-            Preset("garden", ("paveStyle", "garden"), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "any"), ("furniture", 0.0),
+            Preset("garden", ("palette", GroundPalettes.Garden), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "any"), ("furniture", 0.0),
                 ("lawns", 30.0), ("beds", 2.0), ("treeLayout", "edge"), ("border", "grass"), ("pattern", "none"));
-            Preset("sunken", ("paveStyle", "garden"), ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 0.0), ("levels", "sunken"), ("levelHeight", 2.0),
+            Preset("sunken", ("palette", GroundPalettes.Garden), ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 0.0), ("levels", "sunken"), ("levelHeight", 2.0),
                 ("lawns", 25.0), ("beds", 0.0), ("planters", 0.0), ("treeLayout", "edge"), ("centerKind", "fountain"), ("pattern", "none"));
-            Preset("amphitheatre", ("paveStyle", "civic"), ("centerMode", "none"), ("furniture", 0.0), ("amphitheatre", true), ("rows", 6.0), ("shade", 0.0),
+            Preset("amphitheatre", ("palette", GroundPalettes.Classic), ("centerMode", "none"), ("furniture", 0.0), ("amphitheatre", true), ("rows", 6.0), ("shade", 0.0),
                 ("treeLayout", "edge"), ("lighting", "feature"), ("pattern", "none"), ("beds", 2.0));
-            Preset("terraced", ("paveStyle", "modern"), ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 0.0), ("levels", "terracedUp"), ("levelCount", 3.0),
+            Preset("terraced", ("palette", GroundPalettes.Modern), ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 0.0), ("levels", "terracedUp"), ("levelCount", 3.0),
                 ("levelHeight", 2.5), ("beds", 4.0), ("treeLayout", "edge"), ("centerKind", "statue"), ("pattern", "none"));
-            Preset("cafe", ("paveStyle", "warm"), ("centerMode", "single"), ("centerSize", 3.0), ("centerKind", "fountain"), ("furniture", 0.0), ("cafe", 6.0),
+            Preset("cafe", ("palette", GroundPalettes.BrickStone), ("centerMode", "single"), ("centerSize", 3.0), ("centerKind", "fountain"), ("furniture", 0.0), ("cafe", 6.0),
                 ("shade", 2.0), ("planters", 0.0), ("pattern", "grid"), ("games", true), ("jets", false), ("treeLayout", "edge"), ("beds", 0.0));
             // Round 5: architectural level variants (PlazaLevels) and two classic squares.
-            Preset("splitLevel", ("paveStyle", "modern"), ("centerMode", "single"), ("centerSize", 3.0), ("furniture", 0.0), ("levels", "split"), ("levelHeight", 1.5),
+            Preset("splitLevel", ("palette", GroundPalettes.Modern), ("centerMode", "single"), ("centerSize", 3.0), ("furniture", 0.0), ("levels", "split"), ("levelHeight", 1.5),
                 ("levelPlanters", true), ("treeLayout", "edge"), ("pattern", "border"), ("beds", 2.0));
-            Preset("cascade", ("paveStyle", "modern"), ("centerMode", "axis"), ("centerSize", 3.0), ("centerSpacing", 18.0), ("centerKind", "fountain"),
+            Preset("cascade", ("palette", GroundPalettes.Modern), ("centerMode", "axis"), ("centerSize", 3.0), ("centerSpacing", 18.0), ("centerKind", "fountain"),
                 ("furniture", 6.0), ("arrangement", new[] { "bench" }), ("arrangementMode", "center"), ("arrangementGap", 4.0), ("levels", "cascade"),
                 ("levelCount", 4.0), ("levelHeight", 1.0), ("levelPlanters", true), ("beds", 0.0), ("treeLayout", "edge"), ("pattern", "none"));
-            Preset("podium", ("paveStyle", "modern"), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 8.0),
+            Preset("podium", ("palette", GroundPalettes.Modern), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 8.0),
                 ("arrangement", new[] { "bench" }), ("arrangementMode", "center"), ("arrangementGap", 6.0), ("levels", "podium"),
                 ("levelHeight", 1.5), ("levelPlanters", true), ("lighting", "feature"), ("bollards", true), ("pattern", "grid"), ("beds", 0.0), ("treeLayout", "edge"));
-            Preset("sunkenCourt", ("paveStyle", "modern"), ("centerMode", "single"), ("centerSize", 3.0), ("centerKind", "fountain"), ("furniture", 0.0), ("levels", "sunkenCourt"),
+            Preset("sunkenCourt", ("palette", GroundPalettes.Modern), ("centerMode", "single"), ("centerSize", 3.0), ("centerKind", "fountain"), ("furniture", 0.0), ("levels", "sunkenCourt"),
                 ("levelHeight", 2.0), ("levelPlanters", true), ("cafe", 3.0), ("shade", 0.0), ("treeLayout", "grid"), ("pattern", "none"), ("beds", 0.0));
-            Preset("piazza", ("paveStyle", "warm"), ("centerMode", "single"), ("centerSize", 6.0), ("centerKind", "fountain"), ("furniture", 0.0),
+            Preset("piazza", ("palette", GroundPalettes.Sandstone), ("centerMode", "single"), ("centerSize", 6.0), ("centerKind", "fountain"), ("furniture", 0.0),
                 ("pattern", "grid"), ("cafe", 4.0), ("bollards", true), ("lighting", "feature"), ("treeLayout", "none"), ("planters", 0.0), ("beds", 0.0));
-            Preset("green", ("paveStyle", "garden"), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 0.0), ("lawns", 40.0),
+            Preset("green", ("palette", GroundPalettes.Garden), ("centerMode", "single"), ("centerSize", 4.0), ("centerKind", "statue"), ("furniture", 0.0), ("lawns", 40.0),
                 ("beds", 0.0), ("treeLayout", "edge"), ("border", "grass"), ("pattern", "none"));
 
             // Playtest 4b: presets look complete. On top of the DefaultOn fountain each square turns on what
@@ -294,26 +308,35 @@ namespace Placemaker.Core.Layers.Plaza
             pave.Axis = axis;
             ctx.Check();
             bool fountainChild = ctx.Input.HasChild("fountain");
+            // s18: size tier from the real area and the largest inscribed circle; the focal point (incentre of a
+            // triangle) is where the fountain add-on lands and where the square centres its composition.
+            var focal = LeisureKit.FocalPoint(region, out float inscribed);
+            var tier = PlazaTiers.Of(region.Area, inscribed);
+            if (PlazaTiers.IsCompact(tier))
+            {
+                PlanCompact(ctx, occ, region, gates, gatePoints, palette, pave, axis, tier, fountainChild);
+                return;
+            }
 
             // Big elements first (they claim space the furniture arrangement then works around).
             PlazaDressing.Border(ctx, region, pave);
             var amenities = PlaceAmenities(ctx, occ, region, gatePoints);
             var amenityRings = amenities.ConvertAll(a => a.rect.Ring);
+            if (amenityRings.Count > 0) focal = LeisureKit.FocalPoint(region, AsReserved(amenityRings), out _);   // the ground the fountain child sees
             if (PlazaLevels.Handles(ctx.S("levels"))) PlazaLevels.Shape(ctx, occ, region, ctx.S("levels"), amenityRings);
             else PlazaDressing.Levels(ctx, occ, region, gates);
             PlazaDressing.Amphitheatre(ctx, occ, region, fountainChild || ctx.S("centerMode") != "none", math.max(FountainClearRadius, ctx.F("centerSize")) + 3f);
-            PlazaDressing.Pool(ctx, occ, region, region.Centroid, fountainChild || ctx.S("centerMode") != "none" ? math.max(FountainClearRadius, ctx.F("centerSize")) : 0f, pave, palette);
+            PlazaDressing.Pool(ctx, occ, region, focal, fountainChild || ctx.S("centerMode") != "none" ? math.max(FountainClearRadius, ctx.F("centerSize")) : 0f, pave, palette);
             PlazaDressing.Stalls(ctx, occ, region, pave, palette);
             ctx.Check();
 
             // The entrance axes stay open (they are the processional ways to the centre).
             bool axes = ctx.S("centerMode") != "none" || fountainChild;
-            var centroid = region.Centroid;
-            if (axes && region.Contains(centroid))
+            if (axes && region.Contains(focal))
                 foreach (var g in gates)
                 {
-                    var dir = math.normalizesafe(centroid - g.Position);
-                    float len = math.distance(centroid, g.Position) - math.max(FountainClearRadius, ctx.F("centerSize")) - 5f
+                    var dir = math.normalizesafe(focal - g.Position);
+                    float len = math.distance(focal, g.Position) - math.max(FountainClearRadius, ctx.F("centerSize")) - 5f
                         - (ctx.S("centerMode") == "axis" || ctx.S("centerMode") == "mirrored" ? ctx.F("centerSpacing") : 0f);
                     if (len > 2f) occ.TakeCorridor(g.Position, g.Position + dir * len, 1.8f, 2);
                 }
@@ -328,11 +351,15 @@ namespace Placemaker.Core.Layers.Plaza
             float centerRadius = math.max(ctx.F("centerSize"), AssetMix.FootprintRadius(ctx.Site, centerAsset, 0f));
             // A fountain feature takes the centre: keep it clear (the add-on places the fountain itself).
             bool fountainFeature = ctx.Input.HasChild("fountain");
+            // s18: the rondel is laid to the fountain the add-on will really build on the focal point (its size
+            // shrinks to fit), so pad and fountain agree instead of a fountain straddling the pad's edge.
+            float fountainApron = 0f, fountainPad = 0f;
             if (fountainFeature)
             {
                 mode = CenterMode.Single;
-                region.DeepestPoint(out float inscribed, null, 12);
-                centerRadius = math.max(centerRadius, math.min(FountainClearRadius, inscribed * 0.6f));
+                fountainApron = FountainAddOn.PredictApron(ctx.Site, region.BoundaryDistance(focal), PlazaTiers.FountainSize, true, out float basin, out bool alone);
+                fountainPad = fountainApron <= 0f ? 0f : alone ? basin + 1.2f : fountainApron - 0.4f;
+                centerRadius = fountainApron > 0f ? fountainApron - 0.3f : math.min(FountainClearRadius, inscribed * 0.6f);
             }
             var items = ParseArrangement(ctx);
             var layout = PlazaPlanner.Generate(region, occ, gatePoints, new PlazaPlanner.Options
@@ -340,6 +367,7 @@ namespace Placemaker.Core.Layers.Plaza
                 CenterMode = mode, CenterRadius = centerRadius, CenterSpacing = ctx.F("centerSpacing"),
                 ArrangementMode = ctx.S("arrangementMode") == "edges" ? ArrangementMode.AlongEdges : ArrangementMode.AroundCenter,
                 ArrangementGap = ctx.F("arrangementGap"), Groups = ctx.I("furniture"), Arrangement = items,
+                PreferredCenter = focal, KeepClear = fountainApron > 0f ? fountainApron + 1.0f : 0f,
             });
             if (layout.CenterpieceDropped && !fountainFeature) ctx.Issue(IssueSeverity.Info, "Placemaker.Plaza.Issue.CenterpieceDoesNotFit");
             ctx.Check();
@@ -357,8 +385,9 @@ namespace Placemaker.Core.Layers.Plaza
                 }
             else
             {
-                occ.Take(layout.Center, centerRadius, 0);
-                rondel = centerRadius - 1f;
+                // The fountain's seating ring and the reserved discs of everything placed here stay clear of each other.
+                occ.Take(layout.Center, fountainApron > 0f ? fountainApron + 0.9f : centerRadius, 0);
+                rondel = fountainApron > 0f ? fountainPad : centerRadius - 1f;
             }
             // A civic centre is framed by flags on the rondel's diagonals.
             if (centerKind == "statue" && layout.Centerpieces.Count == 1 && !fountainFeature)
@@ -388,7 +417,7 @@ namespace Placemaker.Core.Layers.Plaza
             PlazaDressing.PerformanceSpot(ctx, occ, region);
             PlazaDressing.Jets(ctx, occ);
             // One family of lamps: an arrangement lamp the player named lights the whole square.
-            var lampDesigned = palette.Id == "modern" ? PlazaArt.ModernLamp : PlazaArt.ParkLamp;
+            var lampDesigned = palette.Id == GroundPalettes.Modern ? PlazaArt.ModernLamp : PlazaArt.ParkLamp;
             foreach (var it in items) if (it.Kind == "lamp" && !string.IsNullOrEmpty(it.Asset.Id)) { lampDesigned = it.Asset; break; }
             PlazaDressing.Lighting(ctx, occ, region, gates, layout.Center, rondel, lampDesigned);
             PlazaDressing.Bollards(ctx, occ, region, gates);
@@ -429,9 +458,67 @@ namespace Placemaker.Core.Layers.Plaza
             ctx.Plan.Facts["accessPoints"] = gates.Count;
         }
 
+        /// <summary>
+        /// (s18) Micro and small squares: one clear idea (PlazaCompact) — field, one border band, a focal piece that
+        /// fits with its pad and seating, lamps on the edge rhythm. Big-square elements (lawns, beds, rings, axes,
+        /// grids, amphitheatre, pool) are left out; activities the player asked for (stalls, cafe, shade) and
+        /// amenities still come, each only where it fits.
+        /// </summary>
+        private void PlanCompact(LayerContext ctx, Occupancy occ, LayerRegion region, List<Gate> gates, List<float2> gatePoints, PavingPalette palette,
+            PavingPlan pave, float2 axis, PlazaTier tier, bool fountainChild)
+        {
+            var amenityRings = PlaceAmenities(ctx, occ, region, gatePoints).ConvertAll(a => a.rect.Ring);
+            // The focal composition first: levels, bowl and stalls work round it (the fountain must find its pad free).
+            var r = PlazaCompact.Plan(ctx, occ, region, gates, pave, palette, tier, fountainChild, axis, AsReserved(amenityRings));
+            if (PlazaLevels.Handles(ctx.S("levels"))) PlazaLevels.Shape(ctx, occ, region, ctx.S("levels"), amenityRings, NetRole.Pathway);
+            else PlazaDressing.Levels(ctx, occ, region, gates, NetRole.Pathway);
+            if (tier == PlazaTier.Small)
+                PlazaDressing.Amphitheatre(ctx, occ, region, false, 0f);   // the amphitheatre square keeps its bowl where one fits
+            PlazaDressing.Stalls(ctx, occ, region, pave, palette);
+            ctx.Check();
+            PlazaDressing.Shade(ctx, occ);
+            PlazaDressing.Cafe(ctx, occ);
+            ctx.Check();
+
+            if (ctx.B("paving")) pave.Emit(ctx, region.Ring, SurfaceRole.Plaza, palette.Field, AssetCategories.SurfacePaving);
+            else if (pave.Count > 0) pave.Emit(ctx, region.Ring, SurfaceRole.Plaza, palette.Field, AssetCategories.SurfacePaving, false);
+            foreach (var g in gates)
+            {
+                var inward = region.InwardNormal(g.Segment);
+                ctx.Object(g.Position, math.atan2(inward.x, inward.y), ObjectRole.AccessPoint, new AssetRef("", "Pedestrian Access Location"), 0);
+            }
+            if (ctx.B("fence"))
+            {
+                var fence = AssetMix.One(ctx.S("fenceAsset"));
+                foreach (var run in Fences.Runs(region, gates, 3f))
+                    ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fence);
+            }
+
+            ctx.AddRegion(region.Ring, "paved", RegionTags.Paved);
+            if (r.CoreRadius >= 4f) ctx.AddRegion(LayerRegion.Circle(r.Focal, r.CoreRadius, 24), "core", RegionTags.Core, RegionTags.Paved);
+            var strips = region.BoundaryStrips(math.min(4f, PlazaTiers.BandWidth(tier, 99f) + 2f), math.clamp((int)math.round(region.Perimeter / 200f), 2, 6));
+            for (int i = 0; i < strips.Count; i++) ctx.AddRegion(strips[i], "edge:" + i, RegionTags.Edge, RegionTags.Paved);
+
+            ctx.Stat(Keys.StatArea, Math.Round(region.Area), Keys.UnitM2);
+            ctx.Stat(Keys.StatFountains, fountainChild ? 0 : CountRole(ctx.Plan, ObjectRole.Centerpiece), Keys.UnitCount);
+            ctx.Stat(Keys.StatBenches, CountRole(ctx.Plan, ObjectRole.Bench), Keys.UnitCount);
+            ctx.Stat(Keys.StatLamps, CountRole(ctx.Plan, ObjectRole.Lamp), Keys.UnitCount);
+            ctx.Stat(Keys.StatTrees, CountRole(ctx.Plan, ObjectRole.Tree), Keys.UnitCount);
+            ctx.Plan.Facts["accessPoints"] = gates.Count;
+        }
+
         /// <summary>Tree species per paving character: planes on civic squares, chestnuts on warm ones, mixed in gardens.</summary>
-        private static string[] TreeSpecies(PavingPalette p) =>
-            p.Id == "garden" ? PlazaArt.GardenTrees : p.Id == "warm" || p.Id == "cobble" ? PlazaArt.ChestnutTrees : p.Id == "modern" ? PlazaArt.LimeTrees : PlazaArt.PlaneTrees;
+        private static ReservedSpace AsReserved(List<float2[]> rings)
+        {
+            var r = new ReservedSpace();
+            r.Polygons.AddRange(rings);
+            return r;
+        }
+
+        internal static string[] TreeSpecies(PavingPalette p) =>
+            p.Id == GroundPalettes.Garden ? PlazaArt.GardenTrees
+            : p.Id == GroundPalettes.Sandstone || p.Id == GroundPalettes.Terracotta || p.Id == GroundPalettes.Cobble || p.Id == GroundPalettes.BrickStone ? PlazaArt.ChestnutTrees
+            : p.Id == GroundPalettes.Modern ? PlazaArt.LimeTrees : PlazaArt.PlaneTrees;
 
         private static bool InPlace(AreaInput input)
         {

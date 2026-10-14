@@ -20,43 +20,38 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Plaza
 {
-    /// <summary>Four stones of one square: the field, the framing bands, the light accent, the dark inlay.</summary>
-    public sealed class PavingPalette
-    {
-        public string Id;
-        public AssetRef Field, Band, Accent, Inlay;
-    }
-
+    /// <summary>
+    /// The art-pass palettes other paved types still use (market square, transit plaza, fairground,
+    /// amphitheatre). Plazas use the player-facing <see cref="GroundPalettes"/> (s18); ids live in
+    /// <see cref="GroundSurfaces"/>.
+    /// </summary>
     public static class PavingPalettes
     {
-        private const string G87 = "G87 Urban Surfaces Paving Pack ";
-        private const string Eai = "EAI - Surface Pack ";
+        public const string SlabGrey = GroundSurfaces.SlabGrey;
+        public const string SlabBeige = GroundSurfaces.SlabBeige;
+        public const string SlabWhite = GroundSurfaces.SlabWhite;
+        public const string SlabBlack = GroundSurfaces.SlabBlack;
+        public const string ClayD = GroundSurfaces.ClayD;
+        public const string ClayF = GroundSurfaces.ClayF;
+        public const string ClayH = GroundSurfaces.ClayH;
+        public const string Setts = GroundSurfaces.Setts;
+        public const string WarmCobble = GroundSurfaces.WarmCobble;
+        public const string ArcCobble = GroundSurfaces.ArcCobble;
+        public const string CrazyPaving = GroundSurfaces.CrazyPaving;
+        public const string DarkFlags = GroundSurfaces.DarkFlags;
+        public const string LargeSlabs = GroundSurfaces.LargeSlabs;
+        public const string LargeSlabsDark = GroundSurfaces.LargeSlabsDark;
+        public const string Blocks = GroundSurfaces.Blocks;
+        public const string GreyStone = GroundSurfaces.GreyStone;
+        public const string Herringbone = GroundSurfaces.Herringbone;
+        public const string Hexagonal = GroundSurfaces.Hexagonal;
+        public const string Polished = GroundSurfaces.Polished;
+        public const string RedBrick = GroundSurfaces.RedBrick;
+        public const string WalkingStone = GroundSurfaces.WalkingStone;
 
-        public const string SlabGrey = G87 + "Tiles G87 Paving Slab A Grey Surface";
-        public const string SlabBeige = G87 + "Tiles G87 Paving Slab A Beige Surface";
-        public const string SlabWhite = G87 + "Tiles G87 Paving Slab A White Surface";
-        public const string SlabBlack = G87 + "Tiles G87 Paving Slab B Black Surface";
-        public const string ClayD = G87 + "Brick G87 Clay Paver D Surface";
-        public const string ClayF = G87 + "Brick G87 Clay Paver F Surface";
-        public const string ClayH = G87 + "Brick G87 Clay Paver H Surface";
-        public const string Setts = G87 + "Pavement G87 Cobble Natural Stone 02 Surface";
-        public const string WarmCobble = G87 + "Pavement G87 Cobble Natural Stone 03 Surface";
-        public const string ArcCobble = G87 + "Pavement G87 Cobble Natural Stone 04 Surface";
-        public const string CrazyPaving = G87 + "Pavement G87 Cobble Natural Stone 07 Surface";
-        public const string DarkFlags = G87 + "Pavement G87 Cobble Natural Stone 08 Surface";
-        public const string LargeSlabs = G87 + "Concrete G87 Regular Blocks 13 Surface";
-        public const string LargeSlabsDark = G87 + "Concrete G87 Regular Blocks 14 Surface";
-        public const string Blocks = G87 + "Concrete G87 Regular Blocks 12 Surface";
-        public const string GreyStone = Eai + "Tiles Grey Paving Stone Surface";
-        public const string Herringbone = Eai + "Tiles Herringbone Grey Paving Stone 001 Surface";
-        public const string Hexagonal = Eai + "Tiles Hexagonal Dark Grey Paving Stone Surface";
-        public const string Polished = Eai + "Concrete Polished Concrete Surface";
-        public const string RedBrick = Eai + "Brick Red Brick Surface";
-        public const string WalkingStone = Eai + "Tiles Grey Walking stone Surface";
-
-        public const string VTilesLight = "Tiles Surface 01", VTilesWarm = "Tiles Surface 02", VTilesDark = "Tiles Surface 03";
-        public const string VConcrete = "Concrete Surface 01", VConcretePale = "Concrete Surface 02", VAsphalt = "Pavement Surface 01";
-        public const string VGrass = "Grass Surface 01";
+        public const string VTilesLight = GroundSurfaces.VTilesLight, VTilesWarm = GroundSurfaces.VTilesWarm, VTilesDark = GroundSurfaces.VTilesDark;
+        public const string VConcrete = GroundSurfaces.VConcrete, VConcretePale = GroundSurfaces.VConcretePale, VAsphalt = GroundSurfaces.VAsphalt;
+        public const string VGrass = GroundSurfaces.VGrass;
 
         private static AssetRef R(string id, params string[] fallbacks) => new AssetRef(id, fallbacks);
 
@@ -110,7 +105,9 @@ namespace Placemaker.Core.Layers.Plaza
         public static PavingPalette WithField(PavingPalette p, string chosen)
         {
             if (string.IsNullOrEmpty(chosen)) return p;
-            return new PavingPalette { Id = p.Id, Field = new AssetRef(chosen, p.Field.Id), Band = p.Band, Accent = p.Accent, Inlay = p.Inlay };
+            var c = p.Clone();
+            c.Field = new AssetRef(chosen, p.Field.Id);
+            return c;
         }
     }
 
@@ -171,11 +168,14 @@ namespace Placemaker.Core.Layers.Plaza
                 foreach (var c in claimed)
                     if (c.min.x <= mx.x && c.max.x >= mn.x && c.min.y <= mx.y && c.max.y >= mn.y) clip.Add(c.r);
                 var part = clip.Count == 0 ? inside : Poly.Boolean(inside, clip, BoolOp.Difference);
-                n += EmitRegions(ctx, part, e.Role, e.Asset, e.Category);
-                foreach (var r in inside)
+                // s18: only what was really laid is claimed. A piece too small or too thin to lay (a sliver
+                // between two bands) stays unclaimed, so the field paves it instead of leaving bare ground.
+                var laid = new List<float2[]>();
+                n += EmitRegions(ctx, part, e.Role, e.Asset, e.Category, MinPiece, MinPieceWidth, laid);
+                foreach (var ring in laid)
                 {
-                    Poly.Bounds(r.Outer, out var rmn, out var rmx);
-                    claimed.Add((r, rmn, rmx));
+                    Poly.Bounds(ring, out var rmn, out var rmx);
+                    claimed.Add((new Region(ring), rmn, rmx));
                 }
             }
             if (!emitField) return n;
@@ -183,9 +183,12 @@ namespace Placemaker.Core.Layers.Plaza
             foreach (var c in claimed) all.Add(c.r);
             var whole = new Region(Poly.EnsureCcw((float2[])outline.Clone()));
             var rest = all.Count == 0 ? new List<Region> { whole } : Poly.Boolean(new[] { whole }, all, BoolOp.Difference);
-            n += EmitRegions(ctx, rest, fieldRole, field, fieldCategory);
+            n += EmitRegions(ctx, rest, fieldRole, field, fieldCategory, 2.0f, 0.5f, null);
             return n;
         }
+
+        /// <summary>Smallest design piece (m²) / mean width (m) that is laid; smaller ones go to the field (s18: no slivers).</summary>
+        public const float MinPiece = 2.5f, MinPieceWidth = 0.55f;
 
         private static void Bounds(List<Region> regions, out float2 mn, out float2 mx)
         {
@@ -197,18 +200,25 @@ namespace Placemaker.Core.Layers.Plaza
             }
         }
 
-        private int EmitRegions(LayerContext ctx, List<Region> regions, SurfaceRole role, AssetRef asset, string category)
+        private int EmitRegions(LayerContext ctx, List<Region> regions, SurfaceRole role, AssetRef asset, string category, float minArea, float minWidth, List<float2[]> laid)
         {
             int n = 0;
             foreach (var r in regions)
             {
-                if (r == null || r.Outer == null || r.Area < 1.5f) continue;
+                if (r == null || r.Outer == null || r.Area < minArea) continue;
                 foreach (var ring in OpenHoles(r))
                 {
                     if (ring == null || ring.Length < 3) continue;
                     float area = Poly.Area(ring);
-                    if (area < 1.5f || Poly.MeanWidth(ring) < 0.35f) continue;
-                    if (ctx.Surface(ring, role, asset, category)) n++;
+                    if (area < minArea || Poly.MeanWidth(ring) < minWidth) continue;
+                    // CS2 acceptance may split a ring (thin necks of an arc cut by a walk): judge the pieces it keeps.
+                    foreach (var acc in SurfaceAcceptance.MakeAcceptable2D(ring))
+                    {
+                        if (acc == null || acc.Length < 3) continue;
+                        var piece = acc;
+                        if (Poly.Area(piece) < minArea * 0.6f || Poly.MeanWidth(piece) < minWidth * 0.6f) continue;
+                        if (ctx.Surface(piece, role, asset, category)) { n++; laid?.Add(piece); }
+                    }
                 }
             }
             return n;

@@ -93,3 +93,11 @@ formalGarden, plaza, marketSquare, greenwayPark, amphitheatre:
 - greenwayPark: seats at the path edge; lamps every N m along chained curve segments (no lamp per sample segment).
 - Remaining "off-path" counts on plaza / marketSquare / amphitheatre are seats on paving or in seating rows (expected).
 - plaza default still under-dressed; marketSquare tree ring hugs the outline (next pass).
+
+## s18 — plaza sizes and palettes
+
+Checked: `--only plaza --shapes triangle,sliver,square,l --areas 0.02,0.03,0.05,0.15,0.6,1.5 --no-features [--no-shops] [--palettes]`.
+Micro/small squares are one idea (field + band + focal pad, bench ring, corner trees or a strip allée, edge lamps); the
+fountain sits on the pad's centre. Known: field pieces show thin seam lines in the render where the field is split
+round holes (same stone in game); street shops (on by default) still take most of a medium square on a site with
+streets on every side; the sunken-court level and the fountain are not concentric on medium squares.
