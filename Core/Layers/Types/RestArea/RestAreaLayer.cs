@@ -136,12 +136,13 @@ namespace Placemaker.Core.Layers.Types.Transport
                     if (restRegion != null)
                     {
                         ctx.LayerRegion = restRegion;
-                        walkIn = restRegion.ClosestOnBoundary(g0.Position + inward * depth, out _, out _);
+                        walkIn = TransportKit.FreeEdgePoint(restRegion, g0.Position + inward * depth, ctx.Plan, 3.5f);
                     }
                 }
             }
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
+            if (lot != null) TransportKit.Occupy(occ, ctx.Plan);
             ctx.Check();
 
             // ── 2. Far point: viewpoint / end of the spine ──
@@ -162,8 +163,6 @@ namespace Placemaker.Core.Layers.Types.Transport
                 if (region.BoundaryDistance(g, 2f) > 1.5f) continue;
                 if (NearestOnPaths(occ, g, out var foot)) TransportKit.Route(ctx, occ, g, foot, pathAsset);
             }
-            // The car park counts as taken from here on (paths may start right at its edge).
-            if (lot != null) TransportKit.Occupy(occ, ctx.Plan);
             ctx.Check();
 
             // ── 4. Amenity hub at the walk-in point ──
@@ -449,7 +448,8 @@ namespace Placemaker.Core.Layers.Types.Transport
                     int n = 0;
                     foreach (var a in PathAnchors.Pick(PathAnchors.Beside(occ, 4.5f, 8f, 1.2f), wantShelters, 25f, false))
                     {
-                        if (!occ.Free(a.Position, 4.5f, 0.5f, 0.3f)) continue;
+                        if (!occ.Free(a.Position, 4.5f, 3f, 0.3f)) continue;
+                        if (!ctx.LayerRegion.ContainsDisc(a.Position + a.Tangent * 1.5f, 1f) || !ctx.LayerRegion.ContainsDisc(a.Position - a.Tangent * 1.5f, 1f)) continue;
                         uint v = Hashing.Mix(ctx.Seed, 0x5E10u + (uint)n);
                         float yaw = LeisureKit.Yaw(a.Position, a.Toward);
                         ctx.Object(a.Position, yaw, ObjectRole.Furniture, asset, v, -1, cat);

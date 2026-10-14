@@ -22,6 +22,7 @@ namespace Placemaker.Core.Layers.Types.Transport
         /// <summary>The cut used (reaches past the host outline), so host − cut is exactly the rest.</summary>
         public float2[] Cut;
         public int Stalls, EvStalls;
+        /// <summary>Lot trees, bushes and lanterns (dropped where a host footpath starts at the lot edge).</summary>
         public readonly List<PlannedObject> Plants = new List<PlannedObject>();
     }
 
@@ -111,7 +112,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             var lot = new SubLot { Ring = ring, Cut = cut, Stalls = stalls, EvStalls = ev };
             foreach (var o in sub.Objects)
             {
-                if (o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush) lot.Plants.Add(o);
+                if (o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush || o.Role == ObjectRole.Lamp) lot.Plants.Add(o);
                 plan.Objects.Add(o);
             }
             foreach (var i in sub.Issues)
@@ -140,7 +141,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             if (lot == null || lot.Plants.Count == 0 || occ.Paths.Count == 0) return;
             foreach (var o in lot.Plants)
             {
-                float r = o.Role == ObjectRole.Tree ? 2.7f : 1.4f;
+                float r = o.Role == ObjectRole.Tree ? 2.7f : o.Role == ObjectRole.Bush ? 1.4f : 0.8f;
                 if (occ.Paths.Overlaps(o.Position.xz, r, 0.3f)) plan.Objects.Remove(o);
             }
         }
@@ -198,10 +199,36 @@ namespace Placemaker.Core.Layers.Types.Transport
             for (int i = 1; i < k; i++)
             {
                 var p = math.lerp(a, b, i / (float)k);
-                if (occ.Discs.Overlaps(p, 1f, 0f)) return false;
+                // Paths start at an edge point chosen free (FreeEdgePoint); its own neighbourhood is not tested.
+                if (math.distance(p, a) > 3f && occ.Discs.Overlaps(p, 1f, 0f)) return false;
                 if (occ.HitsPolygon(p, 1f)) return false;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Outline point of <paramref name="region"/> nearest <paramref name="target"/> with no tall lot object
+        /// (tree, bush, lantern, charger) within <paramref name="clear"/> metres: where a footpath can leave the car park.
+        /// </summary>
+        public static float2 FreeEdgePoint(LayerRegion region, float2 target, AreaPlan plan, float clear)
+        {
+            var p0 = region.ClosestOnBoundary(target, out int seg, out float t);
+            float along0 = region.AlongOf(seg, t);
+            bool Free(float2 p)
+            {
+                foreach (var o in plan.Objects)
+                    if ((o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush || o.Role == ObjectRole.Lamp || o.Role == ObjectRole.Charger)
+                        && math.distancesq(o.Position.xz, p) < clear * clear) return false;
+                return true;
+            }
+            if (Free(p0)) return p0;
+            for (float d = 1.5f; d < math.min(40f, region.Perimeter * 0.5f); d += 1.5f)
+                foreach (float s in new[] { 1f, -1f })
+                {
+                    var p = region.PointAt(along0 + s * d, out _, out _, out _);
+                    if (Free(p)) return p;
+                }
+            return p0;
         }
 
         /// <summary>Point of the region farthest from <paramref name="from"/> with at least <paramref name="clearance"/> free around it.</summary>
