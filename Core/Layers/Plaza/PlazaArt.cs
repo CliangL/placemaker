@@ -46,6 +46,19 @@ namespace Placemaker.Core.Layers.Plaza
         public static readonly AssetRef Signpost = R("ParkSignpost02", "ParkSignpost01", "ParkSignpost03");
         public static readonly AssetRef Vending = R("VendingMachine01", "NewspaperVendingMachine01");
 
+        /// <summary>
+        /// Whether a designed element may be placed: always when the player chose an asset, else only
+        /// when one of its categories has installed items (a player without them gets the usual
+        /// "no assets" info instead of a designer's pick that may not exist either).
+        /// </summary>
+        public static bool Available(LayerContext ctx, string control, params string[] categories)
+        {
+            if (!string.IsNullOrEmpty(control) && !string.IsNullOrEmpty(ctx.S(control))) return true;
+            foreach (var c in categories) if (AssetAvailability.Has(c)) return true;
+            AssetAvailability.Require(ctx.Plan, categories[0], null, Keys.Category(categories[0]));
+            return false;
+        }
+
         /// <summary>The player's asset when one is chosen, else the designed default.</summary>
         public static AssetRef Or(LayerContext ctx, string control, AssetRef designed)
         {

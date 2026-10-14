@@ -147,11 +147,17 @@ namespace Placemaker.Core.Layers.Plaza
             _elements.Add(new Element { Rings = ccw, Role = role, Asset = asset, Category = category });
         }
 
+        /// <summary>Direction the field's openings are split along (the square's own axis): seams run with the paving.</summary>
+        public float2 Axis = new float2(1f, 0f);
+
         /// <summary>Emits the tiling: every element clipped to the outline minus earlier claims, then the field. Returns surfaces emitted.</summary>
         public int Emit(LayerContext ctx, float2[] outline, SurfaceRole fieldRole, AssetRef field, string fieldCategory = null, bool emitField = true)
         {
             int n = 0;
-            var claimed = new List<Region>();
+            // Claims are kept as separate regions (never unioned): a difference against overlapping clip
+            // rings is the same under the non-zero rule, and only claims whose bounds meet the element
+            // take part — this keeps a square with 60 tree pits well inside the planning budget.
+            var claimed = new List<(Region r, float2 min, float2 max)>();
             var outlineList = new[] { (IReadOnlyList<float2>)outline };
             foreach (var e in _elements)
             {
@@ -160,24 +166,44 @@ namespace Placemaker.Core.Layers.Plaza
                 try { inside = Poly.Boolean(e.Rings, outlineList, BoolOp.Intersection); }
                 catch (Exception) { continue; }
                 if (inside.Count == 0) continue;
-                var part = claimed.Count == 0 ? inside : Poly.Boolean(inside, claimed, BoolOp.Difference);
+                Bounds(inside, out var mn, out var mx);
+                var clip = new List<Region>();
+                foreach (var c in claimed)
+                    if (c.min.x <= mx.x && c.max.x >= mn.x && c.min.y <= mx.y && c.max.y >= mn.y) clip.Add(c.r);
+                var part = clip.Count == 0 ? inside : Poly.Boolean(inside, clip, BoolOp.Difference);
                 n += EmitRegions(ctx, part, e.Role, e.Asset, e.Category);
-                claimed = claimed.Count == 0 ? inside : Poly.Boolean(claimed, inside, BoolOp.Union);
+                foreach (var r in inside)
+                {
+                    Poly.Bounds(r.Outer, out var rmn, out var rmx);
+                    claimed.Add((r, rmn, rmx));
+                }
             }
             if (!emitField) return n;
-            var rest = claimed.Count == 0 ? new List<Region> { new Region(Poly.EnsureCcw((float2[])outline.Clone())) }
-                : Poly.Boolean(new[] { new Region(Poly.EnsureCcw((float2[])outline.Clone())) }, claimed, BoolOp.Difference);
+            var all = new List<Region>(claimed.Count);
+            foreach (var c in claimed) all.Add(c.r);
+            var whole = new Region(Poly.EnsureCcw((float2[])outline.Clone()));
+            var rest = all.Count == 0 ? new List<Region> { whole } : Poly.Boolean(new[] { whole }, all, BoolOp.Difference);
             n += EmitRegions(ctx, rest, fieldRole, field, fieldCategory);
             return n;
         }
 
-        private static int EmitRegions(LayerContext ctx, List<Region> regions, SurfaceRole role, AssetRef asset, string category)
+        private static void Bounds(List<Region> regions, out float2 mn, out float2 mx)
+        {
+            mn = new float2(float.MaxValue); mx = new float2(float.MinValue);
+            foreach (var r in regions)
+            {
+                Poly.Bounds(r.Outer, out var a, out var b);
+                mn = math.min(mn, a); mx = math.max(mx, b);
+            }
+        }
+
+        private int EmitRegions(LayerContext ctx, List<Region> regions, SurfaceRole role, AssetRef asset, string category)
         {
             int n = 0;
             foreach (var r in regions)
             {
                 if (r == null || r.Outer == null || r.Area < 1.5f) continue;
-                foreach (var ring in Poly.CutHoles(r))
+                foreach (var ring in OpenHoles(r))
                 {
                     if (ring == null || ring.Length < 3) continue;
                     float area = Poly.Area(ring);
@@ -186,6 +212,48 @@ namespace Placemaker.Core.Layers.Plaza
                 }
             }
             return n;
+        }
+
+        /// <summary>
+        /// Hole-free rings for a region: one straight cut along <see cref="Axis"/> through each row of
+        /// openings (a row of tree pits costs one cut, not one per pit), the generic seams for the rest.
+        /// </summary>
+        private List<float2[]> OpenHoles(Region r)
+        {
+            var result = new List<float2[]>();
+            if (!r.HasHoles) { result.Add(Poly.EnsureCcw(r.Outer)); return result; }
+            var axis = math.normalizesafe(Axis, new float2(1f, 0f));
+            var side = new float2(-axis.y, axis.x);
+            var rows = new List<float>();
+            foreach (var h in r.Holes) rows.Add(math.dot(Poly.Centroid(h), side));
+            rows.Sort();
+            var cuts = new List<float>();
+            foreach (var v in rows) if (cuts.Count == 0 || v - cuts[cuts.Count - 1] > 0.6f) cuts.Add(v);
+            Poly.Bounds(r.Outer, out var mn, out var mx);
+            float reach = math.length(mx - mn) + 10f;
+            var c0 = (mn + mx) * 0.5f;
+            var pieces = new List<Region> { r };
+            foreach (var v in cuts)
+            {
+                var basePt = c0 + side * (v - math.dot(c0, side));
+                var line = new[] { basePt - axis * reach, basePt + axis * reach };
+                var next = new List<Region>();
+                foreach (var p in pieces)
+                {
+                    if (!p.HasHoles) { next.Add(p); continue; }
+                    List<Region> split;
+                    try { split = Poly.Split(p, line); }
+                    catch (Exception) { split = null; }
+                    if (split == null || split.Count == 0) next.Add(p); else next.AddRange(split);
+                }
+                pieces = next;
+            }
+            foreach (var p in pieces)
+            {
+                if (p.HasHoles) result.AddRange(Poly.CutHoles(p));
+                else result.Add(Poly.EnsureCcw(p.Outer));
+            }
+            return result;
         }
     }
 

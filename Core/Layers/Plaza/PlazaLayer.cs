@@ -291,6 +291,7 @@ namespace Placemaker.Core.Layers.Plaza
             var palette = PlazaDressing.Palette(ctx);
             var pave = new PavingPlan();
             var axis = PlazaDressing.SquareAxis(region);
+            pave.Axis = axis;
             ctx.Check();
             bool fountainChild = ctx.Input.HasChild("fountain");
 

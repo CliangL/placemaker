@@ -147,7 +147,7 @@ namespace Placemaker.Core.Layers.Plaza
             switch (ctx.S("pattern"))
             {
                 case "grid":
-                    pave.Add(PavingShapes.Grid(region, centre, axis, math.max(7f, ctx.M(16f)), 0.7f), SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving);
+                    pave.Add(PavingShapes.Grid(region, centre, axis, math.max(10f, ctx.M(24f)), 0.8f), SurfaceRole.Plaza, p.Band, AssetCategories.SurfacePaving);
                     break;
                 case "border":
                 {
@@ -249,7 +249,8 @@ namespace Placemaker.Core.Layers.Plaza
             if (!region.ContainsDisc(focal, 3f)) { ctx.Issue(IssueSeverity.Info, K + "Issue.NoAmphitheatre"); return; }
             var centre = region.Centroid;
             float stageR = 4f;
-            ctx.Object(focal, math.atan2(inward.x, inward.y), ObjectRole.Furniture, PlazaArt.Or(ctx, "stageAsset", PlazaArt.Stage), Hashing.Mix(ctx.Seed, 0x57A6u), -1, AssetCategories.Stage);
+            if (PlazaArt.Available(ctx, "stageAsset", AssetCategories.Stage, AssetCategories.Shelter, AssetCategories.Centerpiece))
+                ctx.Object(focal, math.atan2(inward.x, inward.y), ObjectRole.Furniture, PlazaArt.Or(ctx, "stageAsset", PlazaArt.Stage), Hashing.Mix(ctx.Seed, 0x57A6u), -1, AssetCategories.Stage);
             occ.Take(focal, stageR, 0);
             int rows = ctx.I("rows");
             float r0 = stageR + 6f, spacing = 3.2f;
@@ -679,7 +680,7 @@ namespace Placemaker.Core.Layers.Plaza
         public static void Shade(LayerContext ctx, Occupancy occ)
         {
             int n = ctx.I("shade");
-            if (n <= 0) return;
+            if (n <= 0 || !PlazaArt.Available(ctx, "shelterAsset", AssetCategories.Shelter)) return;
             var spots = new List<float2>();
             for (int i = 0; i < n; i++)
             {
@@ -700,7 +701,7 @@ namespace Placemaker.Core.Layers.Plaza
         public static void Cafe(LayerContext ctx, Occupancy occ)
         {
             int n = ctx.I("cafe");
-            if (n <= 0) return;
+            if (n <= 0 || !PlazaArt.Available(ctx, "cafeAsset", AssetCategories.CafeSeating, AssetCategories.Picnic)) return;
             var region = occ.LayerRegion;
             var spots = new List<float2>();
             bool chosen = !string.IsNullOrEmpty(ctx.S("cafeAsset"));
@@ -723,7 +724,7 @@ namespace Placemaker.Core.Layers.Plaza
         public static void Stalls(LayerContext ctx, Occupancy occ, LayerRegion region, PavingPlan pave = null, PavingPalette palette = null)
         {
             int n = ctx.I("stalls");
-            if (n <= 0) return;
+            if (n <= 0 || !PlazaArt.Available(ctx, "stallAsset", AssetCategories.MarketStall, AssetCategories.Kiosk)) return;
             LeisureKit.Frame(region, out var c, out _, out _, out _, out _);
             int placed = StallBlock(ctx, occ, region, c, SquareAxis(region), n, 4.5f, "stallAsset", 0x57A0u, out var block);
             if (placed > 0 && pave != null && palette != null)
@@ -804,7 +805,7 @@ namespace Placemaker.Core.Layers.Plaza
 
         public static void Games(LayerContext ctx, Occupancy occ)
         {
-            if (!ctx.B("games")) return;
+            if (!ctx.B("games") || !PlazaArt.Available(ctx, "", AssetCategories.CafeSeating, AssetCategories.Picnic)) return;
             if (!Spots.Find(occ, 5f, Spots.Preference.NearBoundary, Hashing.Mix(ctx.Seed, 0x6A3Eu), out var c, null, 0f, 2f, budget: 1500)) return;
             for (int k = 0; k < 4; k++)
             {
@@ -858,6 +859,7 @@ namespace Placemaker.Core.Layers.Plaza
             if (!ctx.B("bollards")) return;
             var edges = StreetFrontage.Edges(region.Ring, StreetFrontage.Roads(ctx.Input));
             if (edges.Count == 0) { ctx.Issue(IssueSeverity.Info, K + "Issue.NoRoadEdge"); return; }
+            if (!PlazaArt.Available(ctx, "bollardAsset", AssetCategories.Bollard)) return;
             var asset = PlazaArt.Or(ctx, "bollardAsset", PlazaArt.Bollard);
             int n = 0;
             foreach (var (a, b) in edges)
