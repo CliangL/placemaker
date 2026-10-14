@@ -23,6 +23,10 @@ export interface PrimaryAction {
   enabled: boolean;
   /** Why disabled, shown as tooltip and inline hint. */
   reason?: LocText;
+  /** Additive (FEEDBACK-4b), action "placeMarkers" only: the step that still needs entrances and the kind to
+   *  place. Disabled ("Add at least one entrance"), yet pressing it starts placement there (C# Primary). */
+  stepPath?: string;
+  markerKind?: string;
 }
 
 export interface AreaInfo {
@@ -138,6 +142,19 @@ export interface FeatureView {
   options?: string[];
   /** On by default for new designs. */
   defaultOn?: boolean;
+  /** Additive (FEEDBACK-4b #8): did the enabled feature fit in the latest plan? Absent = not known yet
+   *  (no plan, feature off, or a stale plan that has not run it). */
+  status?: FeatureFit;
+}
+
+/** Fit of an enabled feature in the latest plan (C# UiModels.FeatureFit). */
+export interface FeatureFit {
+  /** ok = placed as asked; reduced = placed smaller / fewer / only in some places; failed = nothing placed (no room). */
+  kind: "ok" | "reduced" | "failed";
+  /** Why: the feature layer's own issue, or Placemaker.UI.Feature.NoRoom / .SomeMissing. Absent for ok. */
+  text?: LocText;
+  /** Judged from the previous plan while a new one is pending. */
+  stale?: boolean;
 }
 
 export interface StepView {

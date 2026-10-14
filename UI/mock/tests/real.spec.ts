@@ -45,6 +45,7 @@ test("real Core: shipped recipes in the Make row, real plans on the map", async 
     if (await page.getByTestId("feature-toggle-plaza").count()) {
         await page.getByTestId("feature-toggle-plaza").click();
         await waitCore(page);
+        if ((await page.getByTestId("feature-plaza").getAttribute("data-open")) !== "true") await page.getByTestId("feature-fold-plaza").click();
         await expect(page.getByTestId("feature-options-plaza").getByTestId("control-plazaShape")).toBeVisible();
         await expect(page.getByTestId("step-0").getByTestId("group-plaza")).toHaveCount(0);
     }

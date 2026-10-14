@@ -8,7 +8,7 @@
 import { useMemo } from "react";
 import { bindValue, trigger, useValue, ValueBinding } from "cs2/api";
 import {
-    AssetLists, Catalog, DesignState, GROUP, ManagedGroup, Stage, StepView, Summary, ToolState, Triggers, Values,
+    AssetLists, Catalog, DesignState, FeatureFit, GROUP, ManagedGroup, Stage, StepView, Summary, ToolState, Triggers, Values,
     AreaMode, BrushShape, SettingValue,
 } from "../contract";
 
@@ -119,6 +119,13 @@ export function normalizeDesign(raw: unknown): DesignState {
     } as DesignState;
 }
 
+/** Feature fit status (additive field): dropped unless well-formed. */
+function normalizeFit(v: unknown): FeatureFit | undefined {
+    if (!isObj(v) || (v.kind !== "ok" && v.kind !== "reduced" && v.kind !== "failed")) return undefined;
+    const text = isObj(v.text) && typeof v.text.key === "string" && v.text.key ? { key: v.text.key, args: arr<any>(v.text.args) } : undefined;
+    return { kind: v.kind, text, stale: v.stale === true || undefined };
+}
+
 function normalizeStep(s: Record<string, any>): StepView {
     const overrides: Record<string, StepView> = {};
     if (isObj(s.overrides)) for (const k of Object.keys(s.overrides)) if (isObj(s.overrides[k])) overrides[k] = normalizeStep(s.overrides[k]);
@@ -139,7 +146,7 @@ function normalizeStep(s: Record<string, any>): StepView {
         markersRequired: Number(s.markersRequired) || 0,
         features: arr<any>(s.features)
             .filter((f) => isObj(f) && typeof f.layer === "string" && f.layer)
-            .map((f) => ({ layer: String(f.layer), label: String(f.label ?? ""), icon: String(f.icon ?? ""), enabled: f.enabled === true, path: typeof f.path === "string" && f.path ? f.path : undefined, tooltip: typeof f.tooltip === "string" && f.tooltip ? f.tooltip : undefined, options: arr<any>(f.options).filter((o) => typeof o === "string"), defaultOn: f.defaultOn === true })),
+            .map((f) => ({ layer: String(f.layer), label: String(f.label ?? ""), icon: String(f.icon ?? ""), enabled: f.enabled === true, path: typeof f.path === "string" && f.path ? f.path : undefined, tooltip: typeof f.tooltip === "string" && f.tooltip ? f.tooltip : undefined, options: arr<any>(f.options).filter((o) => typeof o === "string"), defaultOn: f.defaultOn === true, status: normalizeFit(f.status) })),
         ready: s.ready !== false,
         nextStep: s.nextStep,
         children: arr<any>(s.children).filter(isObj).map(normalizeStep),

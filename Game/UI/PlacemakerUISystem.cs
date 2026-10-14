@@ -194,7 +194,7 @@ namespace Placemaker.Game.UI
             _designStamp = _tool.DesignVersion;
             _designPlanStamp = _tool.PlanRevision;
             _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan,
-                null, _tool.ActivePreset, _tool.PresetsFile).ToString());
+                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale).ToString());
         }
 
         private void PushSummary()

@@ -4,8 +4,8 @@
 // randomize (respecting locks), player recipes, built groups with manage/edit/remove.
 // It publishes exactly the six values of contract.ts and handles exactly its triggers.
 import {
-    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, RecipeInfo, SettingValue, Stage, StepView,
-    Summary, ToolState,
+    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, FeatureFit, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, RecipeInfo, SettingValue, Stage, StepView,
+    Issue, Summary, ToolState,
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
 import { addStrings } from "../cs2/l10n";
@@ -14,22 +14,6 @@ import { FAKE_FEATURES, FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, Fea
 import { composeFake, FAKE_LAYER_IDS } from "./fakePlanner";
 import { defaultSurface, surfaceColor } from "./fakeAssets";
 import { area, closestOnRing, dist, perimeter, selfIntersects, simplify, V2 } from "./geometry";
-import { GRID } from "./city";
-
-/** Midpoint of the outline edge closest to a street (≤ 30 m away), or null. */
-function suggestEntrance(ring: V2[]): V2 | null {
-    let best: { p: V2; d: number } | null = null;
-    for (let i = 0; i < ring.length; i++) {
-        const a = ring[i], b = ring[(i + 1) % ring.length];
-        if (dist(a, b) < 12) continue;
-        const m: V2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        let d = Infinity;
-        for (let k = 0; k < GRID.nx; k++) d = Math.min(d, Math.abs(m[0] - (GRID.x0 + k * GRID.dx)));
-        for (let j = 0; j < GRID.nz; j++) d = Math.min(d, Math.abs(m[1] - (GRID.z0 + j * GRID.dz)));
-        if (d <= 30 && (!best || d < best.d)) best = { p: m, d };
-    }
-    return best ? best.p : null;
-}
 import { ComposeResult, StepModel } from "./types";
 
 const EN: Record<string, string> = { ...FAKE_STRINGS };
@@ -1052,23 +1036,6 @@ export class MockBackend {
         return this.markerKindsOf(s) ? 1 : 0;
     }
 
-    /**
-     * Like C#: when a step with typed entrances has none yet, suggest real (removable) entrances on the
-     * outline edges that run next to a street. Once per outline, so removing them all sticks.
-     */
-    autoMarkers() {
-        if (!this.closed || this.ring.length < 3) return;
-        const key = JSON.stringify(this.ring);
-        for (const st of this.allSteps()) {
-            if (!st.enabled || !this.markerKindsOf(st) || st.markers.length || this.autoFor.get(st) === key) continue;
-            this.autoFor.set(st, key);
-            const best = suggestEntrance(this.ring);
-            if (best) st.markers.push({ kind: this.markerKindsOf(st)![0].kind, p: best, auto: true } as any);
-        }
-    }
-
-    private autoFor = new WeakMap<StepModel, string>();
-
     reachable(): Stage[] {
         if (this.stage === "building") return ["building"];
         const r: Stage[] = ["area"];
@@ -1095,7 +1062,9 @@ export class MockBackend {
             case "design": {
                 if (!this.root) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.NoRecipe" } };
                 const r = this.allReady();
-                if (!r.ready && r.kind) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.NeedEntrance" } };
+                // Like C# StageMachine.MarkerStep: no automatic entrances; disabled, but pressing it starts placement.
+                if (!r.ready && r.kind)
+                    return { action: "placeMarkers", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.AddEntrance" }, stepPath: r.path, markerKind: r.kind };
                 if (!r.ready) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: r.next };
                 return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: true };
             }
@@ -1104,8 +1073,11 @@ export class MockBackend {
                 const base = editing
                     ? { action: "finishEdit" as const, label: { key: "Placemaker.Primary.ApplyEdit" } }
                     : { action: "build" as const, label: { key: "Placemaker.Primary.Build", args: [this.recipeDisplayName().toLowerCase()] } };
+                const r = this.allReady();
+                if (!r.ready && r.kind)
+                    return { action: "placeMarkers", label: base.label, enabled: false, reason: { key: "Placemaker.Reason.AddEntrance" }, stepPath: r.path, markerKind: r.kind };
                 if (!summary.ready || summary.stale) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.Planning" } };
-                if (!this.allReady().ready) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.StepNotReady" } };
+                if (!r.ready) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.StepNotReady" } };
                 if (summary.issues.some((i) => i.severity === "error")) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.PlanErrors" } };
                 if (!summary.canAfford) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.NoMoney" } };
                 return { ...base, enabled: true };
@@ -1120,7 +1092,15 @@ export class MockBackend {
 
     primaryAction() {
         const p = this.primary();
-        if (!p.enabled) return;
+        if (!p.enabled) {
+            if (p.action === "placeMarkers" && !this.markerMode && p.stepPath && p.markerKind) {
+                if (this.stage === "review") this.stage = "design";
+                this.markerMode = { stepPath: p.stepPath, kind: p.markerKind };
+                this.focus = p.stepPath;
+                this.publishAll();
+            }
+            return;
+        }
         switch (p.action) {
             case "toDesign":
                 this.stage = "design";
@@ -1263,7 +1243,6 @@ export class MockBackend {
     }
 
     changed(cheap = false) {
-        this.autoMarkers();
         this.touchGhost();
         this.stale = true;
         this.schedulePlan(cheap ? 30 : 60);
@@ -1436,6 +1415,41 @@ export class MockBackend {
         };
     }
 
+    /** Tests: force a feature's fit status by feature layer id (null = computed). */
+    fitOverride: Record<string, FeatureFit | null> = {};
+
+    /** Mirrors C# UiModels.FeatureFit: did the enabled feature at childPath fit in the latest plan? */
+    featureFit(parentPath: string, childPath: string, layer: string): FeatureFit | undefined {
+        const forced = this.fitOverride[layer];
+        if (forced) return forced;
+        const p = this.plan;
+        if (!p) return undefined;
+        let parentRan = false, runs = 0, failed = 0, reduced = 0;
+        let firstFail: Issue | undefined, firstReduced: Issue | undefined;
+        const rank = { info: 0, warning: 1, error: 2 } as const;
+        for (const l of p.layers) {
+            if (l.stepPath.startsWith(parentPath + "@")) { parentRan = true; continue; }
+            if (!l.stepPath.startsWith(childPath + "@") || l.layer !== layer) continue;
+            runs++;
+            let worst: Issue | undefined;
+            for (const i of l.issues) if (!i.text.key.includes("Permanent") && (!worst || rank[i.severity] > rank[worst.severity])) worst = i;
+            const placed = l.objects.length + l.nets.length + l.surfaces.length + l.areas.length + l.terraform.length + l.zoning.length + l.regions.length > 0;
+            if (!placed || worst?.severity === "error") {
+                failed++;
+                firstFail = firstFail ?? worst;
+            } else if (worst) {
+                reduced++;
+                firstReduced = firstReduced ?? worst;
+            }
+        }
+        const stale = this.stale || undefined;
+        if (!runs) return !parentRan || this.stale ? undefined : { kind: "failed", text: { key: "Placemaker.UI.Feature.NoRoom" } };
+        if (failed === runs) return { kind: "failed", text: firstFail?.text ?? { key: "Placemaker.UI.Feature.NoRoom" }, stale };
+        if (failed) return { kind: "reduced", text: { key: "Placemaker.UI.Feature.SomeMissing", args: [runs - failed, runs] }, stale };
+        if (reduced) return { kind: "reduced", text: firstReduced!.text, stale };
+        return { kind: "ok", stale };
+    }
+
     stepView(s: StepModel, path: string): StepView {
         const overrides: Record<string, StepView> = {};
         for (const k of Object.keys(s.overrides)) overrides[k] = this.stepView(s.overrides[k], path + "/" + this.overrideIndex(s, k) + "@" + k);
@@ -1465,6 +1479,7 @@ export class MockBackend {
             return {
                 layer: f.layer, label: f.labelKey ?? "", icon: this.layer(f.layer)?.icon ?? f.layer, enabled: on, path: on ? path + "/" + i : undefined,
                 tooltip: f.tooltip || undefined, options: f.options && f.options.length ? f.options : undefined, defaultOn: !!f.defaultOn,
+                status: on ? this.featureFit(path, path + "/" + i, f.layer) : undefined,
             };
         });
         return {
