@@ -66,7 +66,7 @@ namespace Placemaker.Core.Layers.Leisure
             }
         }
 
-        protected override string[] DefaultFeatures => new[] { "pitch", "tennisCourts", "basketballCourt", "playground" };
+        protected override string[] DefaultFeatures => new[] { "pitch", "tennisCourts", "basketballCourt", "playground", "decals" };
 
         protected override List<FeatureInfo> BuildFeatures()
         {

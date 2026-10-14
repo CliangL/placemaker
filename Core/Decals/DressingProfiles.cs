@@ -177,7 +177,7 @@ namespace Placemaker.Core.Decals
             var list = new List<ControlSchema>();
             var p = DressingProfiles.For(layerId);
             if (p == null) return list;
-            var amount = Slider(AmountId, DefaultAmount, Group);   // off by default (user, 2026-10-14): decals are opt-in
+            var amount = Slider(AmountId, 100, Group);
             amount.Cheap = false;
             list.Add(amount);
             var style = new ControlSchema
@@ -226,19 +226,16 @@ namespace Placemaker.Core.Decals
             if (gen.Controls != null) foreach (var c in gen.Controls) if (c != null && c.Id == AmountId) { has = true; break; }
             if (!has) return null;
             var s = new DressSettings { LayerId = gen.Id };
-            s.Master = Pct(values, AmountId, DefaultAmount);
+            s.Master = Pct(values, AmountId);
             s.Style = ParseStyle(values?.S(StyleId, null), p.Style);
             foreach (var f in p.Families) s.Amount[(int)f] = Pct(values, FamilyId(f));
             return s;
         }
 
-        /// <summary>Default of the Decals amount: 0, decals are opt-in (user, 2026-10-14).</summary>
-        public const double DefaultAmount = 0;
-
-        private static float Pct(SettingsBag values, string id, double fallback = 100)
+        private static float Pct(SettingsBag values, string id)
         {
-            double v = values == null ? fallback : values.Num(id, fallback);
-            if (double.IsNaN(v)) v = fallback;
+            double v = values == null ? 100 : values.Num(id, 100);
+            if (double.IsNaN(v)) v = 100;
             return (float)Math.Max(0, Math.Min(300, v)) / 100f;
         }
     }

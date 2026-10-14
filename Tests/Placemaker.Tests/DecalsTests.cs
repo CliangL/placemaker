@@ -30,8 +30,6 @@ namespace Placemaker.Tests
             Editor.ApplyDefaults(r);
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
-            // Decals are opt-in (default 0): these tests switch the dressing on at 100 % unless they set it themselves.
-            r.Root.Settings.Values[DressingControls.AmountId] = 100.0;
             edit?.Invoke(r);
             uint k = 0;
             foreach (var kv in RecipePaths.Walk(r)) kv.Value.Seed = 1000u + (++k);
@@ -223,7 +221,7 @@ namespace Placemaker.Tests
         }
 
         [Fact]
-        public void DecalsAmountZeroMeansNoDressingButKeepsFeatureAndFunctionalDecals()
+        public void MasterZeroRemovesDecorativeDecalsButKeepsFunctionalOnes()
         {
             // Sports park: pitch line markings are functional decals; the decals feature adds decorative ones.
             var off = Compose(Recipe("sportsPark", 5, r =>
@@ -232,9 +230,8 @@ namespace Placemaker.Tests
                 r.Root.Settings.Values[DressingControls.AmountId] = 0.0;
             }), Site);
             var on = Compose(Recipe("sportsPark", 5, r => Editor.SetFeature(r, RecipePaths.Root, "decals", true, 99)), Site);
-            Assert.DoesNotContain(Decals(off), o => DecalPools.IsDressingPool(o.Category));   // the pass placed nothing
-            Assert.Contains(off.Layers, l => l.GeneratorId == "decals" && l.Objects.Any(o => o.Role == ObjectRole.Decal));   // the feature is the player's own choice
-            Assert.True(Decals(on).Count > Decals(off).Count);
+            Assert.Empty(Decals(off));
+            Assert.NotEmpty(Decals(on));
             Assert.Equal(Decals(on, true).Count, Decals(off, true).Count);
             Assert.Equal(on.Layers.Sum(l => l.Objects.Count(o => o.Role == ObjectRole.ParkingBay)), off.Layers.Sum(l => l.Objects.Count(o => o.Role == ObjectRole.ParkingBay)));
         }
@@ -373,7 +370,7 @@ namespace Placemaker.Tests
                 Assert.NotNull(style);
                 Assert.Equal(DressingControls.Group, amount.Group);
                 Assert.Equal(DressingControls.Group, style.Group);
-                Assert.Equal(0.0, Convert.ToDouble(amount.Default));   // opt-in
+                Assert.Equal(100.0, Convert.ToDouble(amount.Default));
                 foreach (var f in DressingProfiles.For(id).Families)
                 {
                     var c = g.Controls.FirstOrDefault(x => x.Id == DressingControls.FamilyId(f));
@@ -393,7 +390,7 @@ namespace Placemaker.Tests
         {
             var s = DressingControls.Read(GeneratorRegistry.Get("park"), new SettingsBag());
             Assert.NotNull(s);
-            Assert.Equal(0f, s.Master);   // decals are opt-in
+            Assert.Equal(1f, s.Master);
             Assert.Equal(DressStyle.LivedIn, s.Style);
             Assert.Equal(1f, s.Of(DressFamily.Trees));
             Assert.Equal(0f, s.Of(DressFamily.Works));
