@@ -109,7 +109,7 @@ namespace Placemaker.Tests.Types
                 B12Kit.Compose(B12Kit.With(Id, p.Values), B12Kit.FiveHa, B12Kit.Hilly(250));
                 sw.Stop();
                 _out.WriteLine($"{p.Id}: {sw.ElapsedMilliseconds} ms");
-                Assert.True(sw.ElapsedMilliseconds < 250, $"{p.Id} took {sw.ElapsedMilliseconds} ms for 5 ha");
+                Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), $"{p.Id} took {sw.ElapsedMilliseconds} ms for 5 ha");
             }
         }
 

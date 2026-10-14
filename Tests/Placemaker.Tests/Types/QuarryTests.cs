@@ -81,7 +81,7 @@ namespace Placemaker.Tests.Types
             Assert.Equal(TestKit.Fingerprint(a), TestKit.Fingerprint(b));
             Assert.Equal(a.Terraform.Count, b.Terraform.Count);
             _out.WriteLine($"{preset}: {sw.ElapsedMilliseconds} ms");
-            Assert.True(sw.ElapsedMilliseconds < 250, $"{preset} took {sw.ElapsedMilliseconds} ms for 5 ha");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), $"{preset} took {sw.ElapsedMilliseconds} ms for 5 ha");
         }
 
         [Theory]

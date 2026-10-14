@@ -48,7 +48,7 @@ namespace Placemaker.Tests
                 _out.WriteLine($"   PLT {f.PltStalls} stalls in {f.PltMillis:F0} ms → {r.Stalls} stalls in {r.Millis:F0} ms");
                 // the port must not lose much capacity against the shipped PLT engine
                 Assert.True(r.Stalls >= 0.9 * f.PltStalls, $"{f.Name}: {r.Stalls} stalls vs PLT {f.PltStalls}");
-                Assert.True(r.Millis < 1000, $"{f.Name}: {r.Millis:F0} ms");
+                Assert.True(r.Millis < TimingBudget.Ms(1000), $"{f.Name}: {r.Millis:F0} ms");
             }
         }
 
@@ -97,7 +97,7 @@ namespace Placemaker.Tests
             ParkingKit.Run(rect, null, m); // warm-up
             var r = ParkingKit.Run(rect, null, m);
             _out.WriteLine($"2 ha rectangle: {r.Stalls} stalls, {r.Millis:F0} ms");
-            Assert.True(r.Millis < 1000, r.Millis + " ms");
+            Assert.True(r.Millis < TimingBudget.Ms(1000), r.Millis + " ms");
 
             // worst case: 9 ha slanted L with angled stalls and medians
             var big = ParkingKit.LShapes().First(s => s.Name.StartsWith("U long") && s.Name.Contains("61deg")).Ring;
@@ -105,13 +105,13 @@ namespace Placemaker.Tests
             bag.Values["stallAngle"] = "60";
             var w = ParkingKit.Run(big, bag, new List<EdgeMarker> { ParkingKit.Marker(big, 0, 20) });
             _out.WriteLine($"worst case: {w.Stalls} stalls, {w.Millis:F0} ms");
-            Assert.True(w.Millis < 3000, w.Millis + " ms");
+            Assert.True(w.Millis < TimingBudget.Ms(3000), w.Millis + " ms");
 
             // a 25 ha lot still finishes (budget of the whole preview)
             var huge = ParkingKit.Rect(500, 500);
             var h = ParkingKit.Run(huge, null, new List<EdgeMarker> { ParkingKit.Marker(huge, 0, 250) });
             _out.WriteLine($"25 ha: {h.Stalls} stalls, {h.Millis:F0} ms");
-            Assert.True(h.Millis < 6000, h.Millis + " ms");
+            Assert.True(h.Millis < TimingBudget.Ms(6000), h.Millis + " ms");
             AssertQuality(h, "25 ha");
         }
     }

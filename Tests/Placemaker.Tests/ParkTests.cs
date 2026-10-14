@@ -113,7 +113,7 @@ namespace Placemaker.Tests
             }
             double ms = sw.Elapsed.TotalMilliseconds / runs;
             _out.WriteLine($"park 5 ha: {ms:0.0} ms");
-            Assert.True(ms < 250, $"park planning took {ms:0} ms");
+            Assert.True(ms < TimingBudget.Ms(250), $"park planning took {ms:0} ms");
         }
 
         [Fact]

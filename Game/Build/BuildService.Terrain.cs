@@ -50,14 +50,18 @@ namespace Placemaker.Game.Build
                 Go(AfterTerraform());
                 return;
             }
+            var items = new List<(float2[] ring, float target, int layer)>();
             foreach (var w in _work.Terraform)
             {
                 var t = _request.Plan.Layers[w.Layer].Terraform[w.Index];
                 if (!math.isfinite(t.TargetHeight)) continue;
                 var ring = new float2[t.Ring.Length];
                 for (int i = 0; i < ring.Length; i++) ring[i] = t.Ring[i].xz;
-                foreach (var p in TerraformDabs.Dabs(ring, BrushRadius)) _dabs.Add(new Dab { P = p, Target = t.TargetHeight });
+                items.Add((ring, t.TargetHeight, w.Layer));
             }
+            // A feature's own levelling inside a terraformed parent wins over the parent's cells there
+            // (otherwise both targets are dabbed at once and never settle).
+            foreach (var d in TerraformDabs.Merge(items, BrushRadius)) _dabs.Add(new Dab { P = d.P, Target = d.Target });
             if (_dabs.Count == 0) Go(AfterTerraform());
         }
 

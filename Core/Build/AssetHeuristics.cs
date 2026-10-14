@@ -73,6 +73,7 @@ namespace Placemaker.Core.Build
                 var s = SurfaceKind(lower);
                 if (s != null) r.Add(s);
                 LeisureHeuristics.SurfaceExtra(lower, r);
+                SurfaceCategoryRules.Classify(lower, r);   // type-defined surface kinds (rubber, bark, clay, track…)
                 return r;
             }
             if ((t & AssetTraits.SpaceArea) != 0)

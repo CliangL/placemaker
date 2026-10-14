@@ -95,6 +95,16 @@ namespace Placemaker.Core
         public bool LeftHandTraffic;
         /// <summary>Asset metadata the generator may need for footprints/spacing (keyed by AssetRef.Id).</summary>
         public Dictionary<string, AssetInfo> Assets = new Dictionary<string, AssetInfo>();
+
+        /// <summary>
+        /// (g5) Same snapshot with another ground height: the composer hands children of a terraforming
+        /// layer the ground after that layer's terraform (AreaPlan.HeightAfter). Shallow copy.
+        /// </summary>
+        public SiteContext WithHeight(Func<float2, float> heightAt) => new SiteContext
+        {
+            HeightAt = heightAt ?? HeightAt, WaterDepthAt = WaterDepthAt, NearbyNets = NearbyNets, Obstacles = Obstacles,
+            LeftHandTraffic = LeftHandTraffic, Assets = Assets,
+        };
     }
 
     /// <summary>Static facts about a game asset, resolved by the game-layer catalog.</summary>
@@ -599,6 +609,14 @@ namespace Placemaker.Core
         public List<PlanIssue> Issues = new List<PlanIssue>();
         /// <summary>Generator-specific facts the game layer needs (e.g. parking capacity for the economy companion).</summary>
         public Dictionary<string, double> Facts = new Dictionary<string, double>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// (g5, optional) Ground height after this plan's terraform. The composer passes it to the
+        /// children's SiteContext.HeightAt so features plan on the reshaped ground. Null = derived from
+        /// <see cref="Terraform"/> (each polygon levelled to its TargetHeight), else the original ground.
+        /// Not persisted.
+        /// </summary>
+        public Func<float2, float> HeightAfter;
 
         public bool HasErrors
         {

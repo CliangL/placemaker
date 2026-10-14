@@ -181,9 +181,9 @@ namespace Placemaker.Tests
         {
             var blob = G.Blob(150, 500, 0.3f, 9);
             double ms = G.BestMs(() => Poly.Offset(blob, 4f));
-            Assert.True(ms < 50, $"{ms:F1} ms");
+            Assert.True(ms < TimingBudget.Ms(50), $"{ms:F1} ms");
             double msRound = G.BestMs(() => Poly.Offset(blob, 4f, OffsetJoin.Round, 4f, 0.1f));
-            Assert.True(msRound < 50, $"round {msRound:F1} ms");
+            Assert.True(msRound < TimingBudget.Ms(50), $"round {msRound:F1} ms");
             var r = Poly.Offset(blob, 4f);
             Assert.NotEmpty(r);
             foreach (var ring in r) G.AssertSimpleCcw(ring);

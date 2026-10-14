@@ -70,7 +70,7 @@ namespace Placemaker.Tests.Types
             EventsKit.Plan(Id, EventsKit.FiveHa, Preset(preset), Sloped());
             sw.Stop();
             _out.WriteLine($"{preset}: {sw.ElapsedMilliseconds} ms");
-            Assert.True(sw.ElapsedMilliseconds < 250, $"{preset} took {sw.ElapsedMilliseconds} ms for 5 ha");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), $"{preset} took {sw.ElapsedMilliseconds} ms for 5 ha");
         }
 
         [Theory]

@@ -117,7 +117,7 @@ namespace Placemaker.Tests
             Compose(With(id), FiveHa, TestKit.RoadAlongBottom(250));
             sw.Stop();
             _out.WriteLine($"{id}: {sw.ElapsedMilliseconds} ms");
-            Assert.True(sw.ElapsedMilliseconds < 250, $"{id} took {sw.ElapsedMilliseconds} ms for 5 ha");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), $"{id} took {sw.ElapsedMilliseconds} ms for 5 ha");
         }
 
         [Theory]
@@ -472,7 +472,7 @@ namespace Placemaker.Tests
             var plan = gen.Plan(TestKit.Input(TestKit.Rect(220, 220), v), CancellationToken.None);
             sw.Stop();
             Assert.False(plan.HasErrors);
-            Assert.True(sw.ElapsedMilliseconds < 250, sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), sw.ElapsedMilliseconds + " ms");
         }
 
         // ───────────── classification ─────────────

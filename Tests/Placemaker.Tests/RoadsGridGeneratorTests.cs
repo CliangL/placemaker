@@ -1853,7 +1853,7 @@ namespace Placemaker.Tests
             stopwatch.Stop();
 
             Assert.NotEmpty(segments);
-            Assert.True(stopwatch.ElapsedMilliseconds < 1000,
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(1000),
                 $"GenerateGrid took {stopwatch.ElapsedMilliseconds}ms for a 10m spacing on 450x450m — " +
                 "likely regression to quadratic/worse complexity in crossing merging.");
         }
@@ -1881,7 +1881,7 @@ namespace Placemaker.Tests
             stopwatch.Stop();
 
             Assert.NotEmpty(segments);
-            Assert.True(stopwatch.ElapsedMilliseconds < 5000,
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(5000),
                 $"GenerateGrid took {stopwatch.ElapsedMilliseconds}ms for a 10m spacing on 2000x2000m " +
                 $"({segments.Count} segments) — this is exactly the scenario reported as freezing the game.");
         }
@@ -1916,7 +1916,7 @@ namespace Placemaker.Tests
             stopwatch.Stop();
 
             Assert.NotEmpty(segments);
-            Assert.True(stopwatch.ElapsedMilliseconds < 2000,
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(2000),
                 $"GenerateLoopGrid took {stopwatch.ElapsedMilliseconds}ms for ~49 blocks on 2000x2000m " +
                 $"({segments.Count} segments) — likely regression in SplitSegmentsAtMidSpanAttachPoints.");
         }

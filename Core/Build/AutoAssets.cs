@@ -122,6 +122,14 @@ namespace Placemaker.Core.Build
             string Pick(string step, string category, uint variation)
             {
                 var list = Candidates(step, category);
+                // An empty custom category (no "rubber" surface installed) walks to its parent (g5).
+                if (list == null || list.Count == 0)
+                    foreach (var parent in CategoryFallbacks.Chain(category))
+                    {
+                        if (parent == category) continue;
+                        list = Candidates(step, parent);
+                        if (list != null && list.Count > 0) break;
+                    }
                 if (list == null || list.Count == 0) return null;
                 if (IsUniform(category) || list.Count == 1) return list[0];
                 int n = Math.Min(list.Count, MaxVariety);

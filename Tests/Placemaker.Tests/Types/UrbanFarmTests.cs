@@ -119,11 +119,11 @@ namespace Placemaker.Tests.Types
             var none = new Dictionary<string, int>
             {
                 [AssetCategories.CityFarmVine] = 0, [AssetCategories.Hedge] = 0, [AssetCategories.Bush] = 0, [AssetCategories.CityFarmBarn] = 0,
-                [AssetCategories.CityFarmScarecrow] = 0, [AssetCategories.CityFarmBeehive] = 0, [AssetCategories.CityFarmTrellis] = 0,
+                [AssetCategories.CityFarmScarecrow] = 0, [AssetCategories.CityFarmBeehive] = 0, [AssetCategories.Beehive] = 0, [AssetCategories.CityFarmTrellis] = 0,
             };
             using (AssetAvailability.Scope(none))
             {
-                var plan = Compose(With(HoneyHivesAddOn.LayerId), FiveHa);
+                var plan = Compose(With(Placemaker.Core.Layers.Types.Farmstead.ApiaryAddOn.LayerId), FiveHa);   // honeyHives merged into apiary (g5)
                 Assert.True(string.IsNullOrEmpty(Errors(plan)), Errors(plan));
                 var s = Gen.Presets.Single(p => p.Id == "vineyard").Values.Clone();
                 var vineyard = Gen.Plan(TestKit.Input(FiveHa, s, 2), CancellationToken.None);

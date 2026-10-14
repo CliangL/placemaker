@@ -231,7 +231,7 @@ namespace Placemaker.Tests
             var blob = G.Blob(150, 500, 0.3f, 9, World);
             Assert.True(SurfaceAcceptance.IsAccepted(blob));
             double ms = G.BestMs(() => SurfaceAcceptance.IsAccepted(blob));
-            Assert.True(ms < 50, $"IsAccepted {ms:F1} ms");
+            Assert.True(ms < TimingBudget.Ms(50), $"IsAccepted {ms:F1} ms");
             double ms2 = G.BestMs(() => SurfaceAcceptance.MakeAcceptable2D(blob));
             Assert.True(ms2 < 50, $"MakeAcceptable {ms2:F1} ms");
             // Rejected 500-vertex ring (a needle injected) is rescued within budget too.

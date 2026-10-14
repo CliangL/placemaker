@@ -167,7 +167,7 @@ namespace Placemaker.Tests.Types
                 PlanPreset(layer, p, ring, TestKit.RoadAlongBottom(250));
                 sw.Stop();
                 output?.WriteLine($"{layer}/{p.Id}: {sw.ElapsedMilliseconds} ms");
-                Assert.True(sw.ElapsedMilliseconds < 250, $"{layer}/{p.Id} took {sw.ElapsedMilliseconds} ms for 5 ha");
+                Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(250), $"{layer}/{p.Id} took {sw.ElapsedMilliseconds} ms for 5 ha");
             }
         }
 

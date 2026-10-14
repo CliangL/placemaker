@@ -194,7 +194,7 @@ namespace Placemaker.Tests
                 GridGenerator.GenerateGrid(perimeter, Tree(spacing: 62f + i)); // different settings on each run
             }
             stopwatch.Stop();
-            Assert.True(stopwatch.ElapsedMilliseconds < 250, $"5 generations in {stopwatch.ElapsedMilliseconds} ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < TimingBudget.Ms(250), $"5 generations in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         [Fact]

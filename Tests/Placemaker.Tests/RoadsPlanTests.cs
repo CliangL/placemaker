@@ -529,7 +529,7 @@ namespace Placemaker.Tests
                 layer.Plan(input, CancellationToken.None);
                 sw.Stop();
                 // ARCHITECTURE budget: 250 ms in the mod (Release); the Debug test build under parallel load gets 3x.
-                Assert.True(sw.ElapsedMilliseconds < 750, $"{pat}: {sw.ElapsedMilliseconds} ms for 5 ha");
+                Assert.True(sw.ElapsedMilliseconds < TimingBudget.Ms(750), $"{pat}: {sw.ElapsedMilliseconds} ms for 5 ha");
             }
         }
 

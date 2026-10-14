@@ -4,6 +4,7 @@
 //  * farmStand  — a fruit / cider stand by the entrance or along a path: the stall, crates of produce
 //                 stacked beside it, hay bales as a counter decoration, a couple of tables.
 // Both place into free space only (Occupancy) and degrade to an Info issue when the category is empty.
+// The urban farm's "honeyHives" and "farmStall" were merged into these two (g5); the old ids are aliases.
 
 using System.Collections.Generic;
 using Placemaker.Core.Layers.AddOns;
@@ -43,7 +44,8 @@ namespace Placemaker.Core.Layers.Types.Farmstead
         protected override void PlanCore(LayerContext ctx)
         {
             var hiveAsset = AssetMix.One(ctx.S("hiveAsset"));
-            string cat = LeisureKit.Category(ctx, ctx.S("hiveAsset"), AssetCategories.Beehive);
+            // The urban farm's hive category is the fallback (honeyHives was merged into this feature).
+            string cat = LeisureKit.Category(ctx, ctx.S("hiveAsset"), AssetCategories.Beehive, AssetCategories.CityFarmBeehive);
             if (cat == null) return;
             var occ = Occupancy(ctx);
             int wanted = ctx.I("hives");
@@ -169,7 +171,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             anchors.RemoveAll(a => !occ.Free(a.Position, radius, 0.5f, 0.3f));
             var picks = PathAnchors.Pick(anchors, wanted, math.max(16f, math.sqrt(ctx.LayerRegion.Area) / (wanted + 1)), where == "entrances");
             var crateIds = ctx.L("crateAssets");
-            string crateCat = ctx.B("crates") ? LeisureKit.Category(ctx, crateIds.Length > 0 ? "x" : "", AssetCategories.FruitCrate, AssetCategories.FarmHay) : null;
+            string crateCat = ctx.B("crates") ? LeisureKit.Category(ctx, crateIds.Length > 0 ? "x" : "", AssetCategories.FruitCrate, AssetCategories.CityFarmProp, AssetCategories.FarmHay) : null;
             string hayCat = ctx.B("hay") ? LeisureKit.Category(ctx, "", AssetCategories.FarmHay) : null;
             string seatCat = ctx.B("seating") ? LeisureKit.Category(ctx, "", AssetCategories.CafeSeating, AssetCategories.Picnic, AssetCategories.Bench) : null;
             // Honey stands put a hive or two on show when the category exists.

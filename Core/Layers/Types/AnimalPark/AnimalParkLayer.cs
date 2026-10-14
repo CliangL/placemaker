@@ -43,11 +43,11 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
         {
             CoreFeature("playground"),
             CoreFeature("picnic"),
-            CoreFeature(FarmStallAddOn.LayerId),
+            CoreFeature(Farmstead.FarmStandAddOn.LayerId),
             Feature("restrooms"),
             Feature("shops", ("count", 1.0), ("where", "entrances")),
             StreetShopsFeature(Area),
-            Feature(HoneyHivesAddOn.LayerId, ("count", 4.0)),
+            Feature(Farmstead.ApiaryAddOn.LayerId, ("hives", 4.0)),
             Feature("decals", ("theme", "dirt"), ("density", 2.0)),
         };
 

@@ -46,6 +46,7 @@ namespace Placemaker.Core.Tool
             };
             var rootJson = doc["root"].IsObject ? doc["root"] : doc;
             r.Root = ReadStep(rootJson, 0);
+            Layers.Common.LayerAliases.Normalize(r.Root);   // retired layer ids → canonical (g5)
             if (string.IsNullOrEmpty(r.Root.Layer)) throw new FormatException("Recipe '" + r.Id + "' has no root layer");
             return new RecipeFile
             {
