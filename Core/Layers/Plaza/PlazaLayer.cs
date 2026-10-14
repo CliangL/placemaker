@@ -29,7 +29,8 @@ namespace Placemaker.Core.Layers.Plaza
         public override string Id => LayerId;
         public override string Icon => "Media/Game/Icons/Pathways.svg";
         public override LayerKind Kind => LayerKind.Fill;
-        public override string[] Emits => new[] { RegionTags.Paved, RegionTags.Core, RegionTags.Edge };
+        public override string[] Emits => new[] { RegionTags.Paved, RegionTags.Core, RegionTags.Edge, StreetFrontage.ShopsTag };
+        protected override bool HostsStreetShops => true;
         public override float MinArea => 60f;
 
         private static readonly FeatureInfo[] FeatureList =
@@ -43,6 +44,10 @@ namespace Placemaker.Core.Layers.Plaza
             },
             new FeatureInfo { Layer = "kiosk", LabelKey = "Placemaker.Plaza.Feature.kiosk" },
             new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Plaza.Feature.flowerbeds", Preset = Park.ParkLayer.Bag(("density", 30.0), ("nearPaths", false)) },
+            new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = Park.ParkLayer.Bag(("count", 3.0), ("where", "edges")) },
+            StreetShopsFeature("Plaza"),
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Park.ParkLayer.Bag(("theme", "cracks"), ("ground", "paved"), ("density", 0.8)) },
+            new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.flatten", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Park.ParkLayer.Bag(("shape", "flatten")) },
         };
 
         public IReadOnlyList<FeatureInfo> Features => FeatureList;
@@ -80,18 +85,69 @@ namespace Placemaker.Core.Layers.Plaza
             c.Fixed("walkable");
             c.Fixed("paving");
             c.Chance("fence", 0.35f);   // ParkManager PlazaVariantRoller.FenceChance
+
+            // Depth (round 4): levels, amphitheatre, green, water, shade, activity, identity. See PlazaDressing.
+            c.Choice("centerKind", "any", ControlTier.More, "identity", "any", "fountain", "statue").Tip();
+            c.Choice("pattern", "none", ControlTier.More, "identity", "none", "grid", "border", "scatter").Tip();
+            c.Choice("lighting", "standard", ControlTier.More, "identity", "standard", "feature").Tip();
+            c.Toggle("bollards", false, ControlTier.More, "identity").Tip();
+            c.Asset("bollardAsset", AssetCategories.Bollard, ControlTier.More, "identity").When("bollards=true");
+            c.Choice("levels", "flat", ControlTier.More, "levels", "flat", "terracedUp", "terracedDown", "sunken", "raised").Tip();
+            c.Slider("levelCount", 3, 2, 4, 1, "count", ControlTier.More, "levels");
+            c.Slider("levelHeight", 1.5, 0.5, 4, 0.5, "m", ControlTier.More, "levels").Tip();
+            c.Toggle("levelPlanters", true, ControlTier.More, "levels");
+            c.Toggle("amphitheatre", false, ControlTier.More, "amphitheatre").Tip();
+            c.Slider("rows", 4, 2, 8, 1, "count", ControlTier.More, "amphitheatre").When("amphitheatre=true");
+            c.Toggle("amphiRaise", true, ControlTier.More, "amphitheatre").When("amphitheatre=true").Tip();
+            c.Asset("stageAsset", AssetCategories.Stage, ControlTier.More, "amphitheatre");
+            c.Slider("lawns", 0, 0, 40, 5, "%", ControlTier.More, "green").Tip();
+            c.Slider("beds", 0, 0, 12, 1, "count", ControlTier.More, "green").Tip();
+            c.Slider("planters", 0, 0, 30, 1, "count", ControlTier.More, "green");
+            c.Choice("treeLayout", "none", ControlTier.More, "green", "none", "edge", "grid", "groves").Tip();
+            c.Choice("border", "none", ControlTier.More, "green", "none", "grass", "gravel").Tip();
+            c.Toggle("pool", false, ControlTier.More, "water").Tip();
+            c.Toggle("realWater", false, ControlTier.More, "water").When("pool=true").Tip();
+            c.Asset("poolSurface", AssetCategories.SurfaceWater, ControlTier.More, "water").When("pool=true");
+            c.Toggle("jets", false, ControlTier.More, "water").Tip();
+            c.Asset("jetAsset", AssetCategories.WaterJets, ControlTier.More, "water").When("jets=true");
+            c.Slider("shade", 0, 0, 6, 1, "count", ControlTier.More, "shade").Tip();
+            c.Asset("shelterAsset", AssetCategories.Shelter, ControlTier.More, "shade");
+            c.Slider("cafe", 0, 0, 8, 1, "count", ControlTier.More, "activity").Tip();
+            c.Asset("cafeAsset", AssetCategories.CafeSeating, ControlTier.More, "activity");
+            c.Slider("stalls", 0, 0, 24, 1, "count", ControlTier.More, "activity").Tip();
+            c.Asset("stallAsset", AssetCategories.MarketStall, ControlTier.More, "activity");
+            c.Toggle("games", false, ControlTier.More, "activity").Tip();
+            c.Toggle("performance", false, ControlTier.More, "activity").Tip();
+            DefineStreetShopControls(c);
+            foreach (var id in new[] { "levels", "levelCount", "levelHeight", "amphitheatre", "rows", "pool", "realWater", "jets", "stalls", "performance", "games", "bollards", "pattern", "lighting", "centerKind", "border", "treeLayout" })
+                c.Fixed(id);
+            c.RandomRange("lawns", 0, 20);
+            c.RandomRange("beds", 0, 4);
+            c.RandomRange("planters", 0, 12);
+            c.RandomRange("shade", 0, 2);
+            c.RandomRange("cafe", 0, 2);
         }
 
         protected override void DefinePresets()
         {
             Preset("civic", ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 8.0), ("arrangement", new[] { "bench", "lamp", "bench" }),
-                ("arrangementMode", "edges"), ("arrangementGap", 3.0));
+                ("arrangementMode", "edges"), ("arrangementGap", 3.0), ("centerKind", "statue"), ("treeLayout", "edge"), ("pattern", "grid"),
+                ("lighting", "feature"), ("bollards", true), ("planters", 8.0));
             Preset("fountain", ("centerMode", "single"), ("centerSize", 9.0), ("furniture", 12.0), ("arrangement", new[] { "bench", "planter", "bench" }),
-                ("arrangementMode", "center"), ("arrangementGap", 4.0));
-            Preset("market", ("centerMode", "none"), ("furniture", 16.0), ("arrangement", new[] { "kiosk", "bin", "kiosk" }),
-                ("arrangementMode", "edges"), ("arrangementGap", 2.0));
+                ("arrangementMode", "center"), ("arrangementGap", 4.0), ("centerKind", "fountain"), ("pattern", "border"), ("beds", 4.0), ("lighting", "feature"));
+            Preset("market", ("centerMode", "none"), ("furniture", 6.0), ("arrangement", new[] { "bench", "bin", "bench" }),
+                ("arrangementMode", "edges"), ("arrangementGap", 2.0), ("stalls", 14.0), ("cafe", 2.0), ("treeLayout", "edge"), ("shade", 1.0));
             Preset("garden", ("centerMode", "single"), ("centerSize", 5.0), ("furniture", 10.0),
-                ("arrangement", new[] { "bush", "bench", "tree", "bench", "bush" }), ("arrangementMode", "edges"), ("arrangementGap", 2.5));
+                ("arrangement", new[] { "bush", "bench", "tree", "bench", "bush" }), ("arrangementMode", "edges"), ("arrangementGap", 2.5),
+                ("lawns", 20.0), ("beds", 6.0), ("treeLayout", "groves"), ("border", "grass"));
+            Preset("sunken", ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 8.0), ("levels", "sunken"), ("levelHeight", 2.0),
+                ("lawns", 25.0), ("beds", 6.0), ("planters", 10.0), ("treeLayout", "groves"), ("centerKind", "fountain"));
+            Preset("amphitheatre", ("centerMode", "none"), ("furniture", 4.0), ("amphitheatre", true), ("rows", 5.0), ("shade", 2.0),
+                ("treeLayout", "edge"), ("lighting", "feature"));
+            Preset("terraced", ("centerMode", "single"), ("centerSize", 4.0), ("furniture", 8.0), ("levels", "terracedUp"), ("levelCount", 3.0),
+                ("levelHeight", 2.5), ("beds", 4.0), ("treeLayout", "grid"), ("centerKind", "statue"));
+            Preset("cafe", ("centerMode", "single"), ("centerSize", 3.0), ("furniture", 6.0), ("cafe", 5.0), ("shade", 3.0), ("planters", 12.0),
+                ("pattern", "scatter"), ("games", true), ("jets", false), ("treeLayout", "edge"));
         }
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
@@ -147,6 +203,16 @@ namespace Placemaker.Core.Layers.Plaza
             if (ctx.B("walkable")) ctx.NavigationArea(region.Ring, AreaRole.PedestrianArea, new AssetRef("", "Pedestrian Area", "Walking Area"));
             if (ctx.B("paving")) ctx.Surface(region.Ring, SurfaceRole.Plaza, AssetMix.One(ctx.S("surface"), "Pavement Surface 01"));
             ctx.Check();
+            bool fountainChild = ctx.Input.HasChild("fountain");
+
+            // Big elements first (they claim space the furniture arrangement then works around).
+            PlazaDressing.Border(ctx, region);
+            PlazaDressing.Levels(ctx, occ, region, gates);
+            PlazaDressing.Amphitheatre(ctx, occ, region, fountainChild || ctx.S("centerMode") != "none", math.max(FountainClearRadius, ctx.F("centerSize")) + 3f);
+            PlazaDressing.Pool(ctx, occ, region, region.Centroid, fountainChild || ctx.S("centerMode") != "none" ? math.max(FountainClearRadius, ctx.F("centerSize")) : 0f);
+            PlazaDressing.Stalls(ctx, occ, region);
+            PlazaDressing.Lawns(ctx, occ, region);
+            ctx.Check();
 
             // Centre + arrangement.
             var mode = ParseCenterMode(ctx.S("centerMode"));
@@ -175,14 +241,35 @@ namespace Placemaker.Core.Layers.Plaza
 
             // Emit.
             uint variant = Hashing.Mix(ctx.Seed, 0xCE47u);
+            string centerCat = PlazaDressing.CenterCategory(ctx.S("centerKind"));
+            if (centerCat != null && string.IsNullOrEmpty(ctx.S("centerpiece")) && !AssetAvailability.Has(centerCat)) centerCat = null;
             if (!fountainFeature)
                 foreach (var c in layout.Centerpieces)
-                    ctx.Object(c.Position, 0f, ObjectRole.Centerpiece, centerAsset, variant);   // one design for all: a mirrored pair matches
+                {
+                    ctx.Object(c.Position, 0f, ObjectRole.Centerpiece, centerAsset, variant, -1, centerCat);   // one design for all: a mirrored pair matches
+                    occ.Take(c.Position, c.Radius, 0);
+                }
+            else occ.Take(layout.Center, centerRadius, 0);
             foreach (var f in layout.Furniture)
             {
                 uint v = Hashing.Mix(variant, (uint)f.ArrangementId * 31u + (uint)Array.IndexOf(ItemKinds, f.Item.Kind));
                 ctx.Object(f.Position, f.Yaw, f.Item.Role, f.Item.Asset, v, f.Item.Role == ObjectRole.Tree ? 3 : -1, f.Item.Category);
+                occ.Take(f.Position, f.Item.FootprintRadius, 1);
             }
+            ctx.Check();
+
+            // Smaller dressing into what is left.
+            PlazaDressing.Trees(ctx, occ, region, gates, layout.Center, layout.CoreRadius);
+            PlazaDressing.Beds(ctx, occ);
+            PlazaDressing.EdgePlanters(ctx, occ, region, gates);
+            PlazaDressing.Shade(ctx, occ);
+            PlazaDressing.Cafe(ctx, occ);
+            PlazaDressing.Games(ctx, occ);
+            PlazaDressing.PerformanceSpot(ctx, occ, region);
+            PlazaDressing.Jets(ctx, occ);
+            PlazaDressing.Lighting(ctx, occ, region, gates, layout.Center, layout.CoreRadius);
+            PlazaDressing.Bollards(ctx, occ, region, gates);
+            PlazaDressing.Pattern(ctx, occ, region);
             foreach (var g in gates)
             {
                 var inward = region.InwardNormal(g.Segment);

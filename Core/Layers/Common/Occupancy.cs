@@ -114,13 +114,15 @@ namespace Placemaker.Core.Layers.Common
         /// deterministically. Returns false when nothing fits.
         /// </summary>
         public static bool Find(Occupancy occ, float radius, Preference pref, uint seed, out float2 spot,
-            IReadOnlyList<float2> avoid = null, float avoidDistance = 0f, float boundaryMargin = 0.5f)
+            IReadOnlyList<float2> avoid = null, float avoidDistance = 0f, float boundaryMargin = 0.5f, int budget = 0)
         {
             var region = occ.LayerRegion;
             spot = region.Centroid;
             var size = region.Max - region.Min;
             float step = math.max(1.5f, math.sqrt(size.x * size.y / 2500f));
             step = math.min(step, math.max(1.5f, radius * 0.75f));
+            // Optional candidate budget for callers that search many times (dressing, scattered features).
+            if (budget > 0) step = math.max(step, math.sqrt(size.x * size.y / budget));
             int nx = (int)math.ceil(size.x / step), ny = (int)math.ceil(size.y / step);
             if ((long)nx * ny > 10000) { step = math.sqrt(size.x * size.y / 10000f); nx = (int)math.ceil(size.x / step); ny = (int)math.ceil(size.y / step); }
             var centre = region.Centroid;

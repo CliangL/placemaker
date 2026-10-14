@@ -271,7 +271,7 @@ namespace Placemaker.Core
                 }
             }
             foreach (var o in plan.Objects)
-                reserved.AddDisc(o.Position.xz, DefaultRadius(o.Role), o.Role.ToString());
+                if (o.Role != ObjectRole.Decal) reserved.AddDisc(o.Position.xz, DefaultRadius(o.Role), o.Role.ToString());
             foreach (var a in plan.Areas)
                 if (a.Role == AreaRole.Lot)
                 {

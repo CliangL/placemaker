@@ -21,7 +21,8 @@ namespace Placemaker.Core.Layers.Park
         public override string Id => LayerId;
         public override string Icon => "Media/Game/Icons/Forest.svg";
         public override LayerKind Kind => LayerKind.Fill;
-        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core };
+        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, StreetFrontage.ShopsTag };
+        protected override bool HostsStreetShops => true;
         public override float MinArea => 600f;
 
         private static readonly FeatureInfo[] FeatureList =
@@ -29,6 +30,11 @@ namespace Placemaker.Core.Layers.Park
             new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Campground.Feature.restrooms", TooltipKey = "Placemaker.Campground.Feature.restrooms.Tooltip" },
             new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.playground", Preset = ParkLayer.Bag(("size", "small")) },
             new FeatureInfo { Layer = "picnic", Target = RegionTags.Core, LabelKey = "Placemaker.Campground.Feature.picnic", Preset = ParkLayer.Bag(("groups", 2.0), ("shelter", true)) },
+            new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = ParkLayer.Bag(("count", 1.0), ("where", "entrances")) },
+            StreetShopsFeature("Campground"),
+            new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = ParkLayer.Bag(("theme", "leaves"), ("density", 2.0)) },
+            new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.terrain", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = ParkLayer.Bag(("shape", "mounds"), ("height", 1.5)) },
         };
 
         public IReadOnlyList<FeatureInfo> Features => FeatureList;
@@ -57,6 +63,7 @@ namespace Placemaker.Core.Layers.Park
             c.RandomRange("pitchSize", 8, 13);
             c.RandomRange("treeDensity", 30, 120);
             c.Fixed("facilities");
+            DefineStreetShopControls(c);
         }
 
         protected override void DefinePresets()

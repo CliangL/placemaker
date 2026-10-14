@@ -197,14 +197,14 @@ namespace Placemaker.Core.Layers.Common
         /// Emits a surface only in a form CS2 keeps (SurfaceAcceptance). Returns false and adds a
         /// warning when the ring cannot be made acceptable — never emits something the game drops silently.
         /// </summary>
-        public bool Surface(IReadOnlyList<float2> ring, SurfaceRole role, AssetRef asset)
+        public bool Surface(IReadOnlyList<float2> ring, SurfaceRole role, AssetRef asset, string category = null)
         {
             var pieces = SurfaceAcceptance.MakeAcceptable(ring, H);
             int added = 0;
             foreach (var r in pieces)
             {
                 if (r == null || r.Length < 3 || !SurfaceAcceptance.IsAccepted(Poly.To2D(r))) continue;
-                Plan.Surfaces.Add(new PlannedSurface { Ring = r, Role = role, Asset = asset });
+                Plan.Surfaces.Add(new PlannedSurface { Ring = r, Role = role, Asset = asset, Category = category });
                 added++;
             }
             if (added == 0) Issue(IssueSeverity.Warning, Keys.SurfaceDropped);
@@ -394,8 +394,57 @@ namespace Placemaker.Core.Layers.Common
                 Input = input, LayerRegion = region, Plan = plan, Settings = Merge(input.Settings),
                 Cancel = cancel, Seed = Hashing.Mix(input.Seed == 0 ? 1u : input.Seed, Seeds.Hash(Id)),
             };
+            if (HostsStreetShops && input.HasChild(StreetShopsLayer)) CarveStreetShops(ctx, input);
             PlanCore(ctx);
             return plan;
+        }
+
+        // ───────────── "Shops along the street" (edgeZoning feature on a "shops" target) ─────────────
+
+        public const string StreetShopsLayer = "edgeZoning";
+
+        /// <summary>
+        /// True for types that offer "Shops along the street": when the edgeZoning feature is on, the
+        /// layer plans on its outline minus a band of zone cells along the road frontage (gaps at the
+        /// entrances) and hands each band piece to the feature as a "shops" region.
+        /// </summary>
+        protected virtual bool HostsStreetShops => false;
+
+        /// <summary>The host controls shown under the feature toggle (FeatureInfo.Options = ShopOptions).</summary>
+        public static readonly string[] ShopOptions = { "shopLayout", "shopDepth" };
+
+        protected static void DefineStreetShopControls(ControlSet c)
+        {
+            c.Choice("shopLayout", "band", ControlTier.More, "shops", "band", "pads").Tip();
+            c.Slider("shopDepth", 24, 8, 48, 8, "m", ControlTier.More, "shops").Tip();
+            c.Fixed("shopLayout");
+            c.Fixed("shopDepth");
+        }
+
+        /// <summary>FeatureInfo for "Shops along the street" on a host.</summary>
+        public static FeatureInfo StreetShopsFeature(string area) => new FeatureInfo
+        {
+            Layer = StreetShopsLayer, Target = StreetFrontage.ShopsTag, LabelKey = "Placemaker.Feature.streetShops",
+            TooltipKey = "Placemaker.Feature.streetShops.Tooltip", Options = ShopOptions,
+            Preset = new SettingsBag { Values = { ["depth"] = 48.0 } },
+        };
+
+        private void CarveStreetShops(LayerContext ctx, AreaInput input)
+        {
+            var region = ctx.LayerRegion;
+            var roads = StreetFrontage.Roads(input);
+            var gates = new List<float2>();
+            foreach (var m in input.Markers) gates.Add(m.Position.xz);
+            if (gates.Count == 0)
+                foreach (var m in SuggestMarkers(input)) gates.Add(m.Position.xz);
+            var bands = StreetFrontage.Bands(region, roads, ctx.F("shopDepth"), gates, ctx.S("shopLayout") == "pads");
+            if (bands.Count == 0) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.NoFrontage"); return; }
+            var carved = StreetFrontage.Carve(region, bands, MinArea);
+            var rest = carved == null ? null : Common.LayerRegion.From(carved);
+            if (rest == null) { ctx.Issue(IssueSeverity.Info, "Placemaker.Feature.streetShops.Issue.TooSmall"); return; }
+            ctx.LayerRegion = rest;
+            for (int i = 0; i < bands.Count; i++) ctx.AddRegion(bands[i], StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag);
+            ctx.Plan.Facts["shopBands"] = bands.Count;
         }
 
         protected abstract void PlanCore(LayerContext ctx);

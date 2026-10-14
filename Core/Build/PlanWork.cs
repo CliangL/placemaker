@@ -55,6 +55,7 @@ namespace Placemaker.Core.Build
                 case ObjectRole.Centerpiece: return AssetCategories.Centerpiece;
                 case ObjectRole.Furniture: return AssetCategories.Decoration;
                 case ObjectRole.FencePiece: return AssetCategories.Fence;
+                case ObjectRole.Decal: return AssetCategories.Decal;
                 case ObjectRole.ParkingBay: return AssetCategories.ParkingDecal;
                 case ObjectRole.Charger: return AssetCategories.Charger;
                 case ObjectRole.Arrow: return BuildCategories.Arrow;
@@ -66,6 +67,10 @@ namespace Placemaker.Core.Build
                 default: return AssetCategories.Decoration;
             }
         }
+
+        /// <summary>The surface's explicit category when set, else the role's default category.</summary>
+        public static string ForSurface(PlannedSurface s) =>
+            s == null ? AssetCategories.SurfaceAny : !string.IsNullOrEmpty(s.Category) ? s.Category : ForSurface(s.Role);
 
         public static string ForSurface(SurfaceRole role)
         {
@@ -170,7 +175,7 @@ namespace Placemaker.Core.Build
                     if (s?.Ring == null || s.Ring.Length < 3) continue;
                     Add(w.Surfaces, excluded, new WorkItem
                     {
-                        Kind = WorkKind.Surface, Layer = li, Index = i, Category = RoleCategories.ForSurface(s.Role), Asset = s.Asset,
+                        Kind = WorkKind.Surface, Layer = li, Index = i, Category = RoleCategories.ForSurface(s), Asset = s.Asset,
                         GeneratorId = gen, Anchor = Centroid(s.Ring),
                     });
                 }

@@ -412,12 +412,33 @@ namespace Placemaker.Game.Assets
             _infoMap = info;
             if (changed || !_ready) _version++;
             _ready = true;
+            PublishAvailability(tags);
             QueueIconWork(_byName, iconSources);
             MaybeWriteDump(true);
 
             var summary = new StringBuilder();
             foreach (var kv in _byCategory) summary.Append(kv.Key).Append('=').Append(kv.Value.Count).Append(' ');
             Mod.Log.Info($"Placemaker asset catalog v{_version}: {summary}({failed} skipped)");
+        }
+
+        /// <summary>
+        /// Tells Core which categories have automatically usable items, so layers report "no … installed"
+        /// (Info) and place nothing instead of planning objects the build would drop. Every declared
+        /// category is published, 0 when empty.
+        /// </summary>
+        private void PublishAvailability(Dictionary<string, List<string>> tags)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var f in typeof(AssetCategories).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                if (f.IsLiteral && f.GetValue(null) is string c) counts[c] = 0;
+            foreach (var kv in tags)
+                foreach (var tag in kv.Value)
+                    if (tag.StartsWith("auto:", StringComparison.Ordinal))
+                    {
+                        var c = tag.Substring(5);
+                        counts[c] = (counts.TryGetValue(c, out var n) ? n : 0) + 1;
+                    }
+            Placemaker.Core.Layers.Common.AssetAvailability.Publish(counts);
         }
 
         private int _lastSignature;

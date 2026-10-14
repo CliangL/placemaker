@@ -17,7 +17,10 @@ namespace Placemaker.Tests
     public class ParkSchemaTests
     {
         public static readonly string[] Layers =
-            { "park", "plaza", "split", "campground", "fountain", "playground", "restrooms", "picnic", "bigtrees", "flowerbeds" };
+            { "park", "plaza", "split", "campground", "fountain", "playground", "restrooms", "picnic", "bigtrees", "flowerbeds",
+              "terrain", "decals", "shops", "rocks", "kiosk",
+              "botanicalGarden", "sportsPark", "dogPark", "picnicGrounds", "natureReserve", "formalGarden", "communityGarden", "marketSquare",
+              "skatePark", "cemeteryGrounds", "greenwayPark" };
 
         public static IEnumerable<object[]> LayerIds() => Layers.Select(l => new object[] { l });
 
@@ -46,7 +49,7 @@ namespace Placemaker.Tests
             var lang = TestKit.Lang();
             var root = TestKit.RepoRoot();
             var missing = new List<string>();
-            foreach (var dir in new[] { "Park", "Plaza", "Split", "AddOns", "Common" })
+            foreach (var dir in new[] { "Park", "Plaza", "Split", "AddOns", "Common", "Leisure" })
                 foreach (var file in Directory.GetFiles(Path.Combine(root, "Core", "Layers", dir), "*.cs"))
                     foreach (Match m in Regex.Matches(File.ReadAllText(file), "\"(Placemaker\\.[A-Za-z0-9_.:]+[A-Za-z0-9])\""))
                         if (!lang.ContainsKey(m.Groups[1].Value)) missing.Add(m.Groups[1].Value + " (" + Path.GetFileName(file) + ")");
@@ -192,7 +195,9 @@ namespace Placemaker.Tests
         // ───────────── shipped recipes ─────────────
 
         public static IEnumerable<object[]> RecipeFiles() =>
-            new[] { "park.json", "plaza.json", "split-park-plaza.json", "park-with-playground.json", "campground.json" }.Select(f => new object[] { f });
+            new[] { "park.json", "plaza.json", "split-park-plaza.json", "park-with-playground.json", "campground.json",
+                "botanicalGarden.json", "sportsPark.json", "dogPark.json", "picnicGrounds.json", "natureReserve.json", "formalGarden.json",
+                "communityGarden.json", "marketSquare.json", "skatePark.json", "cemeteryGrounds.json", "greenwayPark.json" }.Select(f => new object[] { f });
 
         [Theory]
         [MemberData(nameof(RecipeFiles))]

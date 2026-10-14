@@ -75,3 +75,54 @@ nothing of that kind, as long as `AssetAvailability.Publish` reports 0 for them.
   `<kind>Asset` control (automatic when empty). `ControlSchema.AssetCategory` is empty because items mix
   categories; use `PlazaLayer.Describe(kind, …)` for the per-item category.
 * Markers: park/campground `entrance`, plaza `access`, split `split` (pairs).
+
+## E. Round 4 (LAYERS) — which element uses which category
+
+Every element below is composed from installed assets by category, with a fallback chain
+(`LeisureKit.Category`): the first category of the chain that has automatic items is used; when none
+has, the element is skipped with an Info issue ("no … installed"). Curation of the new categories
+(`Core/Build/LeisureHeuristics.cs`, decals/rocks in `AssetHeuristics`) should be refined against
+`ModsData/Placemaker/catalog-dump.json`. Subcategories are always also tagged with their parent.
+
+| Element | Category chain | Role |
+|---|---|---|
+| Food stands (shops feature, market fallback) | `kiosk` | Furniture |
+| Cafe tables, games corner | `seating.cafe` → `picnic` (→ `bench` for stand seating) | Furniture / Bench |
+| Market stalls (plaza, market square) | `kiosk.stall` → `kiosk` | Furniture |
+| Street shops / shop pads | `zone` (edgeZoning on the host's `shops` regions) | Zoning |
+| Decals feature, paving pattern, markings | `decal.<theme>` (leaves, dirt, cracks, puddles, paving, markings, graffiti) | Decal (never reserves space) |
+| Rocky outcrop | `rock`; ground under it = terrain paint (PlannedPaint, layer 1–4) | Furniture |
+| Natural ground (park), forest floor (reserve) | terrain paint | — |
+| Terrain feature, plaza levels, amphitheatre rows | PlannedTerraform cells (TerrainShaper), permanent | — |
+| Plaza centrepiece kind | `centerpiece.fountain` / `centerpiece.statue` → `centerpiece` | Centerpiece |
+| Amphitheatre / performance stage | `stage` → `shelter` → `centerpiece` | Furniture |
+| Shade (pergola, canopy, gazebo), picnic shelters | `shelter` | Furniture |
+| Reflecting pool | `surface.water` → `surface.paving` (real water opt-in, flat ground only) | Decorative surface |
+| Splash jets | `water.jets` | Furniture |
+| Lawn islands, plaza grass border | `surface.grass`; gravel border `surface.natural` | Grass / Decorative surface |
+| Edge planters, level planters | `planter` → `bush` | Planter / Bush |
+| Flower beds | `flowerbed` → `planter` | Planter |
+| Bollards | `bollard` | Furniture |
+| Glasshouse (botanical) | `garden.glasshouse` → `shelter` | Furniture |
+| Football goals / hoops / tennis nets | `sports.goal` / `sports.basketball` / `sports.tennis` → `sports` | Furniture |
+| Outdoor gym | `sports.fitness` → `sports` | Furniture |
+| Stands | `sports.stand` → `bench` | Furniture / Bench |
+| Floodlights | `lamp.flood` → `lamp` | Lamp |
+| Court / pitch surface | `surface.asphalt` / `surface.grass` | Asphalt / Grass surface |
+| Changing hut | `restroom` → `shelter` | Furniture |
+| Dog agility | `dog.agility` | Furniture |
+| Dog bins, drinking post | `dog.amenity` → `bin` | Furniture / Bin |
+| Dog run ground | `surface.dirt` → `surface.natural` | Ground / Decorative surface |
+| Picnic grills | `camping.fire` → `picnic` | Furniture |
+| Lookout | `lookout` → `shelter` | Furniture |
+| Parterre hedges, cemetery hedges | `hedge` → `bush` | Bush |
+| Allotment crops | `garden.crop` → `planter` → `bush` | Furniture / Planter / Bush |
+| Sheds, water tanks | `garden.shed` → `shelter` | Furniture |
+| Allotment plots | `surface.dirt` → `surface.natural` | Decorative surface |
+| Skate ramps | `sports.skate` | Furniture |
+| Graves | `cemetery.grave` | Furniture |
+| Cemetery memorial | `centerpiece.statue` → `shelter` → `centerpiece` | Centerpiece / Furniture |
+
+Rules kept by every type: one asset per role per build for automatic picks (AutoAssets), objects only
+in free space (Occupancy), surfaces through SurfaceAcceptance, terrain blended back to the original
+height at the outline, decals never under objects.

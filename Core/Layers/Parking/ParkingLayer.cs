@@ -13,8 +13,21 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Parking
 {
     [AreaGenerator(10)]
-    public sealed class ParkingLayer : IAreaGenerator
+    public sealed class ParkingLayer : IAreaGenerator, IHasFeatures
     {
+        /// <summary>
+        /// Round 4 features. "Shops along the street" for lots is the built-in edge zoning (zoning
+        /// controls + zoning patch markers), which already shares the frontage rules with StreetFrontage.
+        /// </summary>
+        private static readonly FeatureInfo[] FeatureList =
+        {
+            new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip",
+                Preset = Park.ParkLayer.Bag(("count", 2.0), ("where", "edges"), ("seating", false)) },
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Park.ParkLayer.Bag(("theme", "cracks"), ("ground", "paved"), ("density", 0.6)) },
+            new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.flatten", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Park.ParkLayer.Bag(("shape", "flatten")) },
+        };
+
+        public IReadOnlyList<FeatureInfo> Features => FeatureList;
         public const string LayerId = "parking";
         private const string K = "Placemaker.Parking.";
 

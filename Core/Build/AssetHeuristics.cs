@@ -72,6 +72,7 @@ namespace Placemaker.Core.Build
                 r.Add(AssetCategories.SurfaceAny);
                 var s = SurfaceKind(lower);
                 if (s != null) r.Add(s);
+                LeisureHeuristics.SurfaceExtra(lower, r);
                 return r;
             }
             if ((t & AssetTraits.SpaceArea) != 0)
@@ -131,6 +132,7 @@ namespace Placemaker.Core.Build
             // Everything below must be visible: mesh-less static objects crash when spawned mid-game.
             if ((t & AssetTraits.HasMesh) == 0) return r;
             if (ContainsAny(lower, "random", "source", "effect", "particle")) return r;
+            if (LeisureHeuristics.Classify(lower, t, r)) return r;
 
             if ((t & AssetTraits.Plant) != 0)
             {
@@ -236,6 +238,7 @@ namespace Placemaker.Core.Build
             if (isNet || isArea) return true;
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
+            if (LeisureHeuristics.AutoEligible(category, lower, out bool leisure)) return leisure;
             if ((t & AssetTraits.NetAttached) != 0 && category != AssetCategories.Lamp && category != AssetCategories.Bollard
                 && category != AssetCategories.ParkingDecal && category != AssetCategories.Charger) return false;
             if (category == AssetCategories.ParkingDecal || category == AssetCategories.Charger || category.StartsWith("object.", StringComparison.Ordinal))

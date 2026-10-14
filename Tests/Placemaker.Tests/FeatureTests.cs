@@ -50,12 +50,12 @@ namespace Placemaker.Tests
                     foreach (var kv in f.Preset.Values) Assert.Contains(fg.Controls, c => c.Id == kv.Key);
                     if (f.Target.Length > 0) Assert.Contains(f.Target, g.Emits);
                 }
-            Assert.Equal(new[] { "plaza", "playground", "pond", "picnic", "restrooms", "fountain", "bigtrees", "flowerbeds" },
+            Assert.Equal(new[] { "plaza", "playground", "pond", "picnic", "restrooms", "fountain", "bigtrees", "flowerbeds", "shops", "edgeZoning", "rocks", "decals", "terrain" },
                 Features.Of(GeneratorRegistry.Get("park")).Select(f => f.Layer).ToArray());
             Assert.Contains(Features.Of(GeneratorRegistry.Get("plaza")), f => f.Layer == "plazatrees");
             Assert.Contains(Features.Of(GeneratorRegistry.Get("plaza")), f => f.Layer == "kiosk");
             Assert.Contains(Features.Of(GeneratorRegistry.Get("roads")), f => f.Layer == "edgeZoning" && f.Target == RegionTags.Edge);
-            Assert.Equal(3, Features.Of(GeneratorRegistry.Get("campground")).Count);
+            Assert.Equal(8, Features.Of(GeneratorRegistry.Get("campground")).Count);
         }
 
         [Fact]

@@ -44,7 +44,7 @@ namespace Placemaker.Core.Layers.AddOns
                 if (!occ.Free(p, radius, 0.5f, 0.3f)) continue;
                 float yaw = Facing(p, centre);
                 uint v = Hashing.Mix(ctx.Seed, (uint)placed + 1u);
-                ctx.Object(p, yaw, ObjectRole.Furniture, asset, v);
+                ctx.Object(p, yaw, ObjectRole.Furniture, asset, v, -1, AssetCategories.Kiosk);
                 occ.Take(p, radius, 0);
                 placed++;
                 if (!benches) continue;

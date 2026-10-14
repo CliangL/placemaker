@@ -33,7 +33,8 @@ namespace Placemaker.Core.Layers.Park
         public override string Id => LayerId;
         public override string Icon => "Media/Game/Icons/ParksAndRecreation.svg";
         public override LayerKind Kind => LayerKind.Fill;
-        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, RegionTags.Edge, PlazaPlace, PondPlace };
+        public override string[] Emits => new[] { RegionTags.Green, RegionTags.Core, RegionTags.Edge, PlazaPlace, PondPlace, StreetFrontage.ShopsTag };
+        protected override bool HostsStreetShops => true;
         public override float MinArea => 150f;
 
         private static readonly FeatureInfo[] FeatureList =
@@ -43,20 +44,31 @@ namespace Placemaker.Core.Layers.Park
                 Layer = "plaza", Target = PlazaPlace, LabelKey = "Placemaker.Park.Feature.plaza",
                 TooltipKey = "Placemaker.Park.Feature.plaza.Tooltip",
                 Options = new[] { "plazaShape", "plazaAt", "plazaSize" },
-                Preset = Bag(("centerMode", "single"), ("arrangementMode", "center"), ("furniture", 6.0), ("fence", false)),
+                // A park's plaza is a small, dressed square: patterned border, planters, trees round the edge.
+                Preset = Bag(("centerMode", "single"), ("arrangementMode", "center"), ("furniture", 6.0), ("fence", false),
+                    ("pattern", "border"), ("planters", 6.0), ("treeLayout", "edge"), ("beds", 2.0), ("centerKind", "fountain")),
             },
-            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Park.Feature.playground" },
+            new FeatureInfo { Layer = "playground", Target = RegionTags.Core, LabelKey = "Placemaker.Park.Feature.playground", Options = new[] { "playgroundPath" } },
             new FeatureInfo
             {
                 Layer = "pond", Target = PondPlace, LabelKey = "Placemaker.Park.Feature.pond",
                 TooltipKey = "Placemaker.Park.Feature.pond.Tooltip", Options = new[] { "lakeSize" },
             },
-            new FeatureInfo { Layer = "picnic", LabelKey = "Placemaker.Park.Feature.picnic", Preset = Bag(("groups", 2.0)) },
-            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Park.Feature.restrooms" },
-            new FeatureInfo { Layer = "fountain", LabelKey = "Placemaker.Park.Feature.fountain", Preset = Bag(("size", "medium")) },
+            new FeatureInfo { Layer = "picnic", LabelKey = "Placemaker.Park.Feature.picnic", Preset = Bag(("groups", 2.0)), Options = new[] { "picnicPath" } },
+            new FeatureInfo { Layer = "restrooms", LabelKey = "Placemaker.Park.Feature.restrooms", Options = new[] { "restroomsPath" } },
+            new FeatureInfo { Layer = "fountain", LabelKey = "Placemaker.Park.Feature.fountain", Preset = Bag(("size", "medium")), Options = new[] { "fountainPath" } },
             new FeatureInfo { Layer = "bigtrees", LabelKey = "Placemaker.Park.Feature.bigtrees", DefaultOn = true },
             new FeatureInfo { Layer = "flowerbeds", LabelKey = "Placemaker.Park.Feature.flowerbeds" },
+            new FeatureInfo { Layer = "shops", LabelKey = "Placemaker.Feature.shops", TooltipKey = "Placemaker.Feature.shops.Tooltip", Preset = Bag(("count", 2.0), ("where", "entrances")) },
+            StreetShopsFeature("Park"),
+            new FeatureInfo { Layer = "rocks", LabelKey = "Placemaker.Feature.rocks" },
+            new FeatureInfo { Layer = "decals", LabelKey = "Placemaker.Feature.decals", Preset = Bag(("theme", "leaves"), ("density", 1.5)) },
+            new FeatureInfo { Layer = "terrain", LabelKey = "Placemaker.Feature.terrain", TooltipKey = "Placemaker.Feature.terrain.Tooltip", Preset = Bag(("shape", "mounds"), ("height", 2.0)) },
         };
+
+        /// <summary>Features that need open ground of this radius, kept clear of planting by the park ("core" = in the core lawn).</summary>
+        private static readonly (string layer, float radius, bool core)[] Destinations =
+            { ("playground", 15f, true), ("picnic", 13f, false), ("fountain", 11f, false), ("restrooms", 6f, false) };
 
         public IReadOnlyList<FeatureInfo> Features => FeatureList;
 
@@ -72,6 +84,7 @@ namespace Placemaker.Core.Layers.Park
             // Essentials first (DESIGN.md §2: style, paths, planting, furniture).
             c.Choice("style", "natural", ControlTier.Essential, "layout", "natural", "formal", "woodland", "meadow", "pocket");
             c.Choice("pathWidth", "mixed", ControlTier.Essential, "layout", "narrow", "mixed", "wide").Tip();
+            c.Choice("pathStyle", "auto", ControlTier.Essential, "layout", ParkPathStyles.Styles).Tip();
             c.Slider("treeDensity", 26, 0, 150, 1, "perHa", ControlTier.Essential, "planting").Tip();
             c.Slider("furniture", 3, 0, 10, 0.5, "per100m", ControlTier.Essential, "furniture").Tip();
             c.Asset("surface", AssetCategories.SurfaceGrass, ControlTier.Essential, "ground");
@@ -94,14 +107,22 @@ namespace Placemaker.Core.Layers.Park
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "furniture").When("lamps=true");
             c.Asset("binAsset", AssetCategories.Bin, ControlTier.More, "furniture").When("bins=true");
             c.Toggle("groundSurface", true, ControlTier.More, "ground");
+            c.Toggle("naturalGround", false, ControlTier.More, "ground").Tip();
+            c.Slider("naturalLayer", 1, 1, 4, 1, "count", ControlTier.More, "ground").When("naturalGround=true").Tip();
             c.Toggle("fence", false, ControlTier.More, "boundary");
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
 
             // Feature options (shown under their feature toggle: see Features[].Options).
             c.Choice("plazaShape", "circle", ControlTier.More, "plaza", "circle", "square", "rectangle");
             c.Choice("plazaAt", "centre", ControlTier.More, "plaza", "centre", "corner", "edge", "entrance").Tip();
-            c.Slider("plazaSize", 15, 5, 40, 1, "%", ControlTier.More, "plaza").Tip();
+            c.Slider("plazaSize", 9, 4, 40, 1, "%", ControlTier.More, "plaza").Tip();
             c.Slider("lakeSize", 70, 20, 100, 5, "%", ControlTier.More, "pond").Tip();
+            c.Toggle("playgroundPath", true, ControlTier.More, "playground").Tip();
+            c.Toggle("picnicPath", true, ControlTier.More, "picnic").Tip();
+            c.Toggle("restroomsPath", true, ControlTier.More, "restrooms").Tip();
+            c.Toggle("fountainPath", true, ControlTier.More, "fountain").Tip();
+            DefineStreetShopControls(c);
+            foreach (var id in new[] { "playgroundPath", "picnicPath", "restroomsPath", "fountainPath" }) c.Fixed(id);
 
             c.Chance("fence", 0.2f);
             c.Fixed("lakeSize");
@@ -119,13 +140,15 @@ namespace Placemaker.Core.Layers.Park
 
         protected override void DefinePresets()
         {
-            Preset("natural", ("style", "natural"), ("treeDensity", 26.0), ("bushDensity", 43.0), ("furniture", 3.0));
+            Preset("natural", ("style", "natural"), ("treeDensity", 26.0), ("bushDensity", 43.0), ("furniture", 3.0), ("pathStyle", "curvy"));
             Preset("formal", ("style", "formal"), ("pathWidth", "wide"), ("curvedPaths", false), ("treeDensity", 30.0),
-                ("bushDensity", 60.0), ("furniture", 4.5), ("paths", "network"));
+                ("bushDensity", 60.0), ("furniture", 4.5), ("paths", "network"), ("pathStyle", "formal"));
+            Preset("garden", ("style", "natural"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 70.0),
+                ("furniture", 4.0), ("pathStyle", "garden"), ("naturalGround", true));
             Preset("woodland", ("style", "woodland"), ("pathWidth", "narrow"), ("treeDensity", 80.0), ("bushDensity", 90.0),
-                ("furniture", 1.5), ("animals", true), ("lamps", false));
+                ("furniture", 1.5), ("animals", true), ("lamps", false), ("pathStyle", "garden"), ("naturalGround", true));
             Preset("meadow", ("style", "meadow"), ("pathWidth", "narrow"), ("treeDensity", 8.0), ("bushDensity", 20.0),
-                ("furniture", 2.0), ("paths", "minimal"));
+                ("furniture", 2.0), ("paths", "minimal"), ("pathStyle", "scenic"));
             Preset("pocket", ("style", "pocket"), ("treeDensity", 40.0), ("bushDensity", 60.0), ("furniture", 6.0),
                 ("paths", "minimal"));
         }
@@ -184,16 +207,50 @@ namespace Placemaker.Core.Layers.Park
                 foreach (var run in Poly.FillRuns(plaza, 3f)) s.Occ.Corridors.Add(run.a, run.b, 2f, 101);
             }
 
-            // 1. Entrances and paths (paths end at the plaza's edge instead of crossing it).
+            // 1. Entrances and paths (paths end at the plaza's edge instead of crossing it). Path styles: ParkPathStyles.
+            string pathStyle = ctx.S("pathStyle");
+            if (style.Formal && pathStyle == "auto") pathStyle = "formal";
+            bool pondFeature = ctx.Input.HasChildTarget(PondPlace);
+            bool lakeFirst = pathStyle == "lakeside" && (pondFeature || ctx.B("lake"));
+            if (lakeFirst) s.Lake = PlanLake(ctx, s, plaza);
+            var clearings = new List<(string layer, float2 c, float r)>();
+            var plazaRing = plaza;
+            Func<float2, bool> okPoint = p => region.ContainsDisc(p, 3f) && !s.InLake(p, 4f)
+                && !(plazaRing.Length >= 3 && (Poly.Contains(plazaRing, p) || ParkSite.MinDistToRing(plazaRing, p) < 3f));
             if (pathMode != "none")
             {
                 s.Gates = gates;
                 var gatePoints = new List<float2>();
                 foreach (var g in s.Gates) gatePoints.Add(g.Position);
-                var options = new ParkPathPlanner.Options { Loops = LoopsFor(pathMode, region.Area), StretchLoop = pathMode == "network" || pathMode == "auto" && region.Area > 12000f };
-                s.Graph = ParkPathPlanner.PlanBest(region, gatePoints, options, Hashing.Mix(ctx.Seed, 0xA11u), ctx.Cancel);
+                uint pathSeed = Hashing.Mix(ctx.Seed, 0xA11u);
                 // Formal parks are axial by definition; every other style follows the toggle.
                 bool curved = ctx.B("curvedPaths") && !style.Formal;
+                ParkPathGraph graph = null;
+                switch (pathStyle)
+                {
+                    case "formal": graph = ParkPathStyles.Formal(region, gatePoints, okPoint); curved = false; break;
+                    case "lakeside": graph = ParkPathStyles.Lakeside(region, s.Lake, gatePoints); break;
+                    case "scenic":
+                    {
+                        clearings = FindClearings(ctx, s, new List<LayerRegion> { region }, gatePoints);
+                        var stops = new List<(float2 c, float r)>();
+                        foreach (var cl in clearings) stops.Add((cl.c, cl.r));
+                        if (plaza.Length >= 3) stops.Add((Poly.Centroid(plaza), ParkSite.MinDistToRing(plaza, Poly.Centroid(plaza)) + 1f));
+                        if (stops.Count == 0) { var deep = region.DeepestPoint(out float ins, null, 12); if (ins > 12f) stops.Add((deep, 4f)); }
+                        graph = ParkPathStyles.Scenic(region, gatePoints, stops, pathSeed, okPoint);
+                        curved = true;
+                        break;
+                    }
+                }
+                if (graph == null || graph.IsEmpty)
+                {
+                    var options = new ParkPathPlanner.Options { Loops = LoopsFor(pathMode, region.Area), StretchLoop = pathMode == "network" || pathMode == "auto" && region.Area > 12000f };
+                    graph = ParkPathPlanner.PlanBest(region, gatePoints, options, pathSeed, ctx.Cancel);
+                    if (pathStyle == "lakeside" || pathStyle == "scenic") ctx.Issue(IssueSeverity.Info, "Placemaker.Park.Issue.PathStyleFallback");
+                }
+                if (pathStyle == "garden") { graph = ParkPathStyles.Meander(graph, gatePoints, 6.5f, 18f, pathSeed, okPoint); curved = true; }
+                else if (pathStyle == "curvy") { graph = ParkPathStyles.Meander(graph, gatePoints, 5f, 34f, pathSeed, okPoint); curved = true; }
+                s.Graph = graph;
                 s.Curves = ParkPaths.Build(s.Graph, region, curved, ctx.S("pathWidth"));
                 if (plaza.Length >= 3)
                 {
@@ -205,13 +262,9 @@ namespace Placemaker.Core.Layers.Park
             ctx.Check();
 
             // 2. Pond (permanent terraform): a "pond" feature fills the place; the old "lake" setting emits it here.
-            bool pondFeature = ctx.Input.HasChildTarget(PondPlace);
             if (pondFeature || ctx.B("lake"))
             {
-                var lake = ParkLakePlanner.Generate(region, s.Occ.Corridors, s.Gates, ctx.F("lakeSize") / 100f, Hashing.Mix(ctx.Seed, 0x1A4Eu));
-                if (lake.Length >= 3 && plaza.Length >= 3 && (Poly.Contains(plaza, Poly.Centroid(lake)) || Poly.Contains(lake, Poly.Centroid(plaza))))
-                    lake = Array.Empty<float2>();
-                s.Lake = lake;
+                if (!lakeFirst) s.Lake = PlanLake(ctx, s, plaza);
                 if (s.Lake.Length < 3) ctx.Issue(IssueSeverity.Info, "Placemaker.Park.Issue.NoRoomForLake");
                 else if (pondFeature) ctx.Plan.Facts["pondArea"] = Poly.Area(s.Lake);
                 else EmitLake(ctx, s.Lake);
@@ -220,6 +273,25 @@ namespace Placemaker.Core.Layers.Park
 
             // 3. Lawns between paths (regions) and the protected clearing on the largest one.
             var lawns = Lawns(ctx, s, plaza);
+            // 3b. Open ground for the features (playground, picnic, fountain, restrooms): found now and kept
+            // clear of furniture and planting, so the feature layers always find their spot (playtest 2: "No
+            // free space left" in an obviously open park, and "the playground does nothing").
+            int coreIndex = 0;
+            if (pathStyle != "scenic" || pathMode == "none")
+            {
+                var search = new List<LayerRegion>();
+                foreach (var l in lawns) { var lr = LayerRegion.From(l); if (lr != null) search.Add(lr); if (search.Count >= 8) break; }
+                if (search.Count == 0) search.Add(region);
+                clearings = FindClearings(ctx, s, search, s.Gates.ConvertAll(g => g.Position));
+            }
+            else
+            {
+                foreach (var cl in clearings)
+                    if (cl.layer == "playground")
+                        for (int i = 0; i < lawns.Count; i++)
+                            if (Poly.Contains(lawns[i], cl.c)) { coreIndex = i; break; }
+            }
+            if (s.Curves.Count > 0) AddSpurs(ctx, s, clearings, plaza);
             if (lawns.Count > 0 && style.ClearingFactor > 0f)
             {
                 var largest = LayerRegion.From(lawns[0]);
@@ -261,6 +333,7 @@ namespace Placemaker.Core.Layers.Park
 
             // 6. Emit everything.
             if (ctx.B("groundSurface")) ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(ctx.S("surface")));
+            if (ctx.B("naturalGround")) NaturalGround(ctx, s, lawns);
             float pathLength = ParkPaths.Emit(ctx, s.Curves, s.Gates, AssetMix.One(ctx.S("pathAsset")));
             if (ctx.B("fence"))
             {
@@ -276,7 +349,7 @@ namespace Placemaker.Core.Layers.Park
             if (plaza.Length >= 3) ctx.AddRegion(plaza, PlazaPlace, PlazaPlace, RegionTags.Paved);
             if (pondFeature && s.Lake.Length >= 3) ctx.AddRegion(s.Lake, PondPlace, PondPlace, "water");
             for (int i = 0; i < lawns.Count; i++)
-                if (i == 0) ctx.AddRegion(lawns[i], "green:0", RegionTags.Green, RegionTags.Core);
+                if (i == coreIndex) ctx.AddRegion(lawns[i], "green:" + i, RegionTags.Green, RegionTags.Core);
                 else ctx.AddRegion(lawns[i], "green:" + i, RegionTags.Green);
             var strips = region.BoundaryStrips(BeltDepth, math.clamp((int)math.round(region.Perimeter / 250f), 2, 6));
             for (int i = 0; i < strips.Count; i++) ctx.AddRegion(strips[i], "edge:" + i, RegionTags.Edge);
@@ -292,6 +365,113 @@ namespace Placemaker.Core.Layers.Park
             ctx.Plan.Facts["parkArea"] = region.Area;
             ctx.Plan.Facts["entrances"] = gates.Count;
             if (plaza.Length >= 3) ctx.Plan.Facts["plazaArea"] = Poly.Area(plaza);
+        }
+
+        private static float2[] PlanLake(LayerContext ctx, ParkSite s, float2[] plaza)
+        {
+            var lake = ParkLakePlanner.Generate(s.LayerRegion, s.Occ.Corridors, s.Gates, ctx.F("lakeSize") / 100f, Hashing.Mix(ctx.Seed, 0x1A4Eu));
+            if (lake.Length >= 3 && plaza.Length >= 3 && (Poly.Contains(plaza, Poly.Centroid(lake)) || Poly.Contains(lake, Poly.Centroid(plaza))))
+                lake = Array.Empty<float2>();
+            return lake;
+        }
+
+        /// <summary>Open ground for each enabled destination feature, searched in the given regions (largest first); taken in the park's occupancy.</summary>
+        private static List<(string layer, float2 c, float r)> FindClearings(LayerContext ctx, ParkSite s, List<LayerRegion> search, List<float2> gates)
+        {
+            var result = new List<(string layer, float2 c, float r)>();
+            var taken = new List<float2>();
+            foreach (var (layer, radius, core) in Destinations)
+            {
+                if (!ctx.Input.HasChild(layer)) continue;
+                bool found = false;
+                for (int attempt = 0; attempt < 2 && !found; attempt++)
+                {
+                    float r = attempt == 0 ? radius : radius * 0.7f;
+                    for (int ri = 0; ri < search.Count && !found; ri++)
+                    {
+                        if (core && ri > 0) break;
+                        var occ = new Occupancy(search[ri], null, ctx.Site);
+                        foreach (var seg in s.Occ.Corridors.Segments) occ.Corridors.Add(seg.A, seg.B, seg.HalfWidth, seg.Kind);
+                        foreach (var d in s.Occ.Discs.Items) occ.Discs.Add(d.P, d.R, d.Kind);
+                        var avoid = new List<float2>(gates);
+                        avoid.AddRange(taken);
+                        var pref = s.Curves.Count > 0 ? Spots.Preference.NearPaths : Spots.Preference.Open;
+                        if (!Spots.Find(occ, r, pref, Hashing.Mix(ctx.Seed, Seeds.Hash(layer)), out var c, avoid, r + 6f, 1f)) continue;
+                        if (s.InLake(c, r + 2f)) continue;
+                        s.Occ.Take(c, r, 200);
+                        taken.Add(c);
+                        result.Add((layer, c, r));
+                        found = true;
+                    }
+                }
+            }
+            ctx.Plan.Facts["featureClearings"] = result.Count;
+            return result;
+        }
+
+        /// <summary>"Path to it": a short path from the nearest path to each destination that is not already beside one.</summary>
+        private static void AddSpurs(LayerContext ctx, ParkSite s, List<(string layer, float2 c, float r)> clearings, float2[] plaza)
+        {
+            foreach (var (layer, c, r) in clearings)
+            {
+                if (!ctx.Settings.B(layer + "Path", true)) continue;
+                int bestCurve = -1; float bestT = 0f, bestD = float.MaxValue; float2 q = c;
+                for (int i = 0; i < s.Curves.Count; i++)
+                    for (int k = 0; k <= 32; k++)
+                    {
+                        var p = s.Curves[i].Point(k / 32f);
+                        float d = math.distance(p, c);
+                        if (d < bestD) { bestD = d; bestCurve = i; bestT = k / 32f; q = p; }
+                    }
+                if (bestCurve < 0 || bestD <= r + 3.5f) continue;
+                var end = c + math.normalizesafe(q - c, new float2(1, 0)) * (r + 0.5f);
+                bool ok = true;
+                for (int k = 1; k < 10 && ok; k++)
+                {
+                    var p = math.lerp(q, end, k / 10f);
+                    if (!s.LayerRegion.ContainsDisc(p, 1.5f) || s.InLake(p, 2f) || plaza.Length >= 3 && Poly.Contains(plaza, p)) ok = false;
+                    foreach (var other in clearings)
+                        if (!other.c.Equals(c) && math.distance(p, other.c) < other.r) ok = false;
+                }
+                if (!ok) continue;
+                var host = s.Curves[bestCurve];
+                float2 start;
+                if (bestT > 0.05f && bestT < 0.95f)
+                {
+                    s.Curves[bestCurve] = ParkPlaces.Sub(host, 0f, bestT);
+                    s.Curves.Add(ParkPlaces.Sub(host, bestT, 1f));
+                    start = s.Curves[bestCurve].D;
+                }
+                else start = bestT <= 0.05f ? host.A : host.D;
+                var spur = new PathCurve
+                {
+                    A = start, B = math.lerp(start, end, 1f / 3f), C = math.lerp(start, end, 2f / 3f), D = end,
+                    Role = NetRole.Pathway, HalfWidth = Composer.DefaultHalfWidth(NetRole.Pathway), Kind = PathEdgeKind.Secondary,
+                };
+                ParkPaths.Sample(spur);
+                s.Curves.Add(spur);
+                for (int i = 1; i < spur.Samples.Length; i++) s.Occ.Corridors.Add(spur.Samples[i - 1], spur.Samples[i], spur.HalfWidth, 100);
+                ctx.Plan.Facts["featureSpurs"] = (ctx.Plan.Facts.TryGetValue("featureSpurs", out var n) ? n : 0) + 1;
+            }
+        }
+
+        /// <summary>"Natural ground": a few irregular patches of painted terrain (map texture layer) in the open lawns.</summary>
+        private static void NaturalGround(LayerContext ctx, ParkSite s, List<float2[]> lawns)
+        {
+            int wanted = math.clamp((int)(s.LayerRegion.Area / 4000f), 1, 8);
+            int made = 0;
+            for (int li = 0; li < lawns.Count && made < wanted; li++)
+            {
+                var lr = LayerRegion.From(lawns[li]);
+                if (lr == null || lr.Area < 300f) continue;
+                var c = lr.DeepestPoint(out float ins, null, 12);
+                float r = math.min(ins - 2f, 4f + math.sqrt(lr.Area) * 0.12f);
+                if (r < 3f) continue;
+                uint v = Hashing.Mix(ctx.Seed, 0x6A7Du + (uint)li);
+                // Terrain paint, interior only (the blob stays inside the lawn), blended at its edge.
+                TerrainPaint.Patch(ctx, LeisureKit.Blob(c, r * 0.85f, v, 16, 0.22f), ctx.I("naturalLayer"), 0.8f + 0.2f * Hashing.Unit(v), 3f);
+                made++;
+            }
         }
 
         private static int LoopsFor(string mode, float area)
