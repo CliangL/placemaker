@@ -173,7 +173,7 @@ namespace Placemaker.Core.Layers.Parking
             // ── grading (s25): level tiers with ramps between them; everything below stands on the graded ground ──
             if (s.Grading)
             {
-                var grading = LotGrading.Grade(layout, ground, cancel, zoning.Quads.Count == 0 ? world : null);
+                var grading = LotGrading.Grade(layout, ground, cancel, zoning.Quads.Count == 0 ? world : null, roads);
                 plan.Facts["gradeTiers"] = grading.Tiers;
                 if (grading.Height != null)
                 {
@@ -185,6 +185,8 @@ namespace Placemaker.Core.Layers.Parking
                     plan.Facts["gradeMaxFill"] = grading.MaxFill;
                     plan.Facts["gradeRowGrade"] = grading.RowGrade;
                     plan.Facts["gradeMaxStep"] = grading.MaxStep;
+                    plan.Facts["gradeTies"] = grading.Ties;
+                    plan.Facts["gradeMaxTie"] = grading.MaxTie;
                     plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = Layers.Common.TerrainShaper.PermanentKey });
                     if (Math.Max(grading.MaxCut, grading.MaxFill) > 2.5f)
                         plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = K + "Issue.SteepGrade", Args = new object[] { Math.Round(Math.Max(grading.MaxCut, grading.MaxFill), 1) } });

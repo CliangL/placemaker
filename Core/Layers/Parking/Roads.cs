@@ -15,6 +15,8 @@ namespace Placemaker.Core.Layers.Parking
         public double Width;
         public bool OneWay;
         public double2[] Pts;   // samples along the Bézier
+        /// <summary>(s29) Road surface height at each sample (the captured curve, not the raw terrain).</summary>
+        public double[] H;
         public double Length;
     }
 
@@ -41,15 +43,17 @@ namespace Placemaker.Core.Layers.Parking
             {
                 if (n.Category != NetCategory.Road) continue;
                 var pts = new double2[Samples + 1];
+                var hs = new double[Samples + 1];
                 double len = 0;
                 for (int i = 0; i <= Samples; i++)
                 {
                     var p = Composer.Bezier(n.A, n.B, n.C, n.D, i / (float)Samples);
                     pts[i] = new double2(p.x, p.z);
+                    hs[i] = p.y;
                     if (i > 0) len += PGeo.Len(pts[i] - pts[i - 1]);
                 }
                 if (len < 0.5) continue;
-                list.Add(new RoadLine { Id = n.ExternalId, Width = Math.Max(0, n.Width), OneWay = n.IsOneWay, Pts = pts, Length = len });
+                list.Add(new RoadLine { Id = n.ExternalId, Width = Math.Max(0, n.Width), OneWay = n.IsOneWay, Pts = pts, H = hs, Length = len });
             }
             return list;
         }
@@ -80,6 +84,16 @@ namespace Placemaker.Core.Layers.Parking
         }
 
         /// <summary>Nearest road centreline point within maxDist.</summary>
+        /// <summary>(s29) Height of the road surface at a hit (interpolated along the samples).</summary>
+        public static double HeightAt(List<RoadLine> roads, RoadHit hit)
+        {
+            var r = roads[hit.Road];
+            if (r.H == null || r.H.Length < 2) return double.NaN;
+            double f = Math.Max(0, Math.Min(1, hit.T)) * (r.H.Length - 1);
+            int i = Math.Min(r.H.Length - 2, (int)Math.Floor(f));
+            return r.H[i] + (r.H[i + 1] - r.H[i]) * (f - i);
+        }
+
         public static bool Nearest(List<RoadLine> roads, double2 p, double maxDist, out RoadHit hit)
         {
             hit = default;

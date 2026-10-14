@@ -8,7 +8,10 @@
 // Model, in the layout's row frame (x along the rows):
 //   * A tier = the bays of the aisles that run along x (an aisle and the one or two rows it serves; overlapping
 //     y-bands merge). Every tier is ONE plane: level across the bays within MaxFall (≤ 2 %), and a cross-fall along the
-//     rows shared by the whole lot (≤ MaxRowGrade, 2 %) so the ramps between tiers stay planar.
+//     rows shared by the whole lot (≤ MaxRowGrade, 5 % since s29: rows follow the ground the streets follow) so the
+//     ramps between tiers stay planar.
+//   * (s29) Where the outline faces an existing road, the edge is tied to that road's height (the road the edge faces,
+//     not the raw terrain) and the surface bends to it over a blend as wide as a gentle ramp needs (8–30 m).
 //   * Between two tiers (medians, cross lanes, the ring road ends) the ground ramps linearly; the step between tiers is
 //     held to MaxRamp (8 %) over the gap, so cross lanes and the ring road stay drivable.
 //   * Outside the outermost tiers the tier level continues to the lot edge (ring road, perimeter planting); the
@@ -34,6 +37,9 @@ namespace Placemaker.Core.Layers.Parking
         public int Tiers;
         public float MaxCut, MaxFill, RowGrade, MaxStep;
         public int DroppedCross;
+        /// <summary>(s29) Outline points tied to an existing road's height, and the largest correction the blend applied.</summary>
+        public int Ties;
+        public float MaxTie;
     }
 
     internal static class LotGrading
@@ -41,7 +47,7 @@ namespace Placemaker.Core.Layers.Parking
         /// <summary>Largest fall across a bay (front to back) and of a tier plane across the rows.</summary>
         public const float MaxFall = 0.02f;
         /// <summary>Largest grade along the rows (cross-fall of every tier, shared by the lot).</summary>
-        public const float MaxRowGrade = 0.02f;
+        public const float MaxRowGrade = 0.05f;
         /// <summary>Largest grade of the perimeter road ramping from tier to tier (between tier middles).</summary>
         public const float MaxRamp = 0.08f;
         /// <summary>Largest grade of the planted embankment between two tiers (1 : 2.5).</summary>
@@ -52,6 +58,10 @@ namespace Placemaker.Core.Layers.Parking
         public const float Transition = 4f;
         /// <summary>Distance (m) past the row ends before the terraces start blending into the ramp.</summary>
         public const float EndClear = 2f;
+        /// <summary>(s29) Outline sampling for road ties (m), how far beside a road's edge an outline point still ties to it,
+        /// the blend width inside the lot and its cell size.</summary>
+        public const double TieStep = 2.0, TieReach = 6.0, TieBlend = 8.0, BlendCell = 2.0, TieSigma = 6.0,
+            TieBlendMax = 30.0, TieGrade = 0.025;
         /// <summary>Below this deviation from the graded surface the lot keeps its ground (m).</summary>
         public const float Tolerance = 0.15f;
         private const float Sample = 3f;
@@ -64,7 +74,9 @@ namespace Placemaker.Core.Layers.Parking
         }
 
         /// <param name="outline">World outline the grading may cover (the lot plus its setback strip); null = the lot only.</param>
-        public static GradingResult Grade(Layout layout, Func<double2, float> ground, CancellationToken cancel, IReadOnlyList<double2> outline = null)
+        /// <param name="roads">(s29) Existing roads: where one runs along the outline the graded edge meets the road's own height.</param>
+        public static GradingResult Grade(Layout layout, Func<double2, float> ground, CancellationToken cancel, IReadOnlyList<double2> outline = null,
+            List<RoadLine> roads = null)
         {
             var res = new GradingResult();
             if (layout?.Lot == null || layout.Lot.Count < 3 || ground == null) return res;
@@ -141,15 +153,49 @@ namespace Placemaker.Core.Layers.Parking
                 }
             if (pts.Count < 4) return res;
 
+            // ── (s29) ties: outline points next to an existing road take the road's height ──
+            // Playtest: a lot between two lanes met them with torn edges and slumped into a bowl. The lanes sit on their own
+            // levels (raised or cut into the terrain); the edge facing one must come out at that level, not at the raw ground.
+            var clipLocal = new List<double2>();
+            if (outline != null && outline.Count >= 3) foreach (var w in outline) clipLocal.Add(f.ToLocal(w));
+            else clipLocal.AddRange(lot);
+            var ties = new List<double3>();
+            double ccw = 0;
+            for (int i = 0, j = clipLocal.Count - 1; i < clipLocal.Count; j = i++) ccw += clipLocal[j].x * clipLocal[i].y - clipLocal[i].x * clipLocal[j].y;
+            if (roads != null && roads.Count > 0)
+                for (int e = 0; e < clipLocal.Count; e++)
+                {
+                    var a = clipLocal[e]; var b = clipLocal[(e + 1) % clipLocal.Count];
+                    double len = PGeo.Len(b - a);
+                    if (len < 0.5) continue;
+                    var dir = (b - a) / len;
+                    var inward = ccw >= 0 ? new double2(-dir.y, dir.x) : new double2(dir.y, -dir.x);
+                    int n = Math.Max(1, (int)Math.Ceiling(len / TieStep));
+                    for (int k = 0; k < n; k++)
+                    {
+                        var q = a + (b - a) * ((k + 0.5) / n);
+                        // The road this edge faces (straight out of it), not merely the nearest one: at a corner two roads
+                        // on different levels would otherwise alternate along the edge.
+                        if (!Roads.Cast(roads, f.ToWorld(q), f.DirToWorld(-inward), 40, out var hit)) continue;
+                        if (hit.Distance > roads[hit.Road].Width * 0.5 + TieReach) continue;
+                        double h = Roads.HeightAt(roads, hit);
+                        if (!double.IsNaN(h) && !double.IsInfinity(h)) ties.Add(new double3(q.x, q.y, h));
+                    }
+                }
+            res.Ties = ties.Count;
+            // The planes are fitted to the ground and (weighted) to the road edges, so the blend at the edges stays small.
+            var fit = new List<double3>(pts);
+            foreach (var t in ties) for (int k = 0; k < 4; k++) fit.Add(t);
+
             // ── one cross-fall along the rows for the whole lot (planar ramps between tiers) ──
-            double bx = Clamp(FitSlopeX(pts), MaxRowGrade);
+            double bx = Clamp(FitSlopeX(fit), MaxRowGrade);
             res.RowGrade = (float)bx;
 
             // ── a plane per tier ──
             foreach (var t in tiers)
             {
                 double sy = 0, sr = 0; int n = 0;
-                foreach (var q in pts) if (q.y >= t.Y0 - 1 && q.y <= t.Y1 + 1) { sy += q.y; sr += q.z - bx * q.x; n++; }
+                foreach (var q in fit) if (q.y >= t.Y0 - 1 && q.y <= t.Y1 + 1) { sy += q.y; sr += q.z - bx * q.x; n++; }
                 if (n == 0)
                 {
                     t.Yc = (t.Y0 + t.Y1) * 0.5;
@@ -158,7 +204,7 @@ namespace Placemaker.Core.Layers.Parking
                 }
                 t.Yc = sy / n;
                 double mr = sr / n, num = 0, den = 0;
-                foreach (var q in pts)
+                foreach (var q in fit)
                     if (q.y >= t.Y0 - 1 && q.y <= t.Y1 + 1) { double dy = q.y - t.Yc; num += dy * (q.z - bx * q.x - mr); den += dy * dy; }
                 t.By = Clamp(den > 1e-6 ? num / den : 0, MaxFall);
                 t.A = mr;
@@ -251,12 +297,62 @@ namespace Placemaker.Core.Layers.Parking
                 return Terrace(x, y) * (1 - w) + Ramp(x, y) * w;
             }
 
+            // Edge blend: the surface bends to the road heights over TieBlend metres from the tied outline points.
+            // The blend is as wide as the correction needs to stay a gentle ramp (≤ TieGrade), TieBlend at least.
+            var corr = new double[ties.Count];
+            var reach = new double[ties.Count];
+            for (int i = 0; i < ties.Count; i++)
+            {
+                corr[i] = ties[i].z - F(ties[i].x, ties[i].y);
+                reach[i] = Math.Max(TieBlend, Math.Min(TieBlendMax, 1.5 * Math.Abs(corr[i]) / TieGrade));
+            }
+            double C(double x, double y)
+            {
+                if (ties.Count == 0) return 0;
+                double sw = 0, sc = 0, sr = 0, dmin = double.MaxValue;
+                for (int i = 0; i < ties.Count; i++)
+                {
+                    double dx = x - ties[i].x, dy = y - ties[i].y, d2 = dx * dx + dy * dy;
+                    if (d2 > reach[i] * reach[i]) continue;
+                    double d = Math.Sqrt(d2);
+                    dmin = Math.Min(dmin, d);
+                    // Weighted by distance relative to the nearest tie: the field follows the edge it is closest to.
+                    double w = Math.Exp(-d2 / (2 * TieSigma * TieSigma));
+                    sw += w; sc += w * corr[i]; sr += w * reach[i];
+                }
+                if (sw <= 1e-300 || dmin == double.MaxValue) return 0;
+                double t = Math.Max(0, Math.Min(1, 1 - dmin / (sr / sw)));
+                return sc / sw * t * t * (3 - 2 * t);
+            }
+            // The blend sampled once on a BlendCell grid (bilinear between nodes): ~220 ties × thousands of lookups was 0.5 s.
+            PGeo.Bounds(clipLocal, out var gLo, out var gHi);
+            gLo -= 2 * BlendCell; gHi += 2 * BlendCell;
+            int gnx = (int)Math.Ceiling((gHi.x - gLo.x) / BlendCell) + 1, gny = (int)Math.Ceiling((gHi.y - gLo.y) / BlendCell) + 1;
+            double[] cg = null;
+            double Cg(double x, double y)
+            {
+                if (ties.Count == 0) return 0;
+                if (cg == null)
+                {
+                    cg = new double[gnx * gny];
+                    for (int j = 0; j < gny; j++)
+                        for (int i = 0; i < gnx; i++) cg[j * gnx + i] = C(gLo.x + i * BlendCell, gLo.y + j * BlendCell);
+                }
+                double fx = Math.Max(0, Math.Min(gnx - 1.000001, (x - gLo.x) / BlendCell)), fy = Math.Max(0, Math.Min(gny - 1.000001, (y - gLo.y) / BlendCell));
+                int ix = (int)fx, iy = (int)fy; double tx = fx - ix, ty = fy - iy;
+                int k = iy * gnx + ix;
+                return (cg[k] * (1 - tx) + cg[k + 1] * tx) * (1 - ty) + (cg[k + gnx] * (1 - tx) + cg[k + gnx + 1] * tx) * ty;
+            }
+            double F2(double x, double y) => F(x, y) + Cg(x, y);
+            foreach (var c in corr) res.MaxTie = (float)Math.Max(res.MaxTie, Math.Abs(c));
+
             // ── nothing to do on ground that already is the graded surface ──
             double worst = 0, cut = 0, fill = 0;
+            foreach (var t in ties) worst = Math.Max(worst, Math.Abs(t.z - ground(f.ToWorld(new double2(t.x, t.y)))));
             foreach (var q in pts)
             {
                 double raw = ground(f.ToWorld(new double2(q.x, q.y)));
-                double dz = F(q.x, q.y) - raw;
+                double dz = F2(q.x, q.y) - raw;
                 worst = Math.Max(worst, Math.Abs(dz));
                 cut = Math.Max(cut, -dz); fill = Math.Max(fill, dz);
             }
@@ -289,9 +385,6 @@ namespace Placemaker.Core.Layers.Parking
             Dedupe(ys); Dedupe(xs);
             // The graded surface reaches the outline (the setback strip too): the build's 4 m bank then starts there, not
             // under the outer row of stalls.
-            var clipLocal = new List<double2>();
-            if (outline != null && outline.Count >= 3) foreach (var w in outline) clipLocal.Add(f.ToLocal(w));
-            else clipLocal.AddRange(lot);
             var lotRing = new float2[clipLocal.Count];
             for (int i = 0; i < clipLocal.Count; i++) lotRing[i] = new float2((float)clipLocal[i].x, (float)clipLocal[i].y);
             PGeo.Bounds(clipLocal, out var clo, out var chi);
@@ -326,10 +419,38 @@ namespace Placemaker.Core.Layers.Parking
                         TargetHeight = Build.TerraformSurface.At(ring, c), Permanent = true, Sloped = true,
                     });
                 }
+            // Edge blend cells (2 m, sloped quads, after the planes so they win in the raster) where the correction matters.
+            if (ties.Count > 0)
+                for (double y = gLo.y; y < gHi.y; y += BlendCell)
+                    for (double x = gLo.x; x < gHi.x; x += BlendCell)
+                    {
+                        double cm = Math.Max(Math.Max(Math.Abs(Cg(x, y)), Math.Abs(Cg(x + BlendCell, y))), Math.Max(Math.Abs(Cg(x, y + BlendCell)), Math.Abs(Cg(x + BlendCell, y + BlendCell))));
+                        if (cm < 0.02) continue;
+                        var piece = Sculpt.ClipToRect(lotRing, new float2((float)x, (float)y), new float2((float)(x + BlendCell), (float)(y + BlendCell)));
+                        if (piece == null) continue;
+                        var clean = Poly.Clean(piece, 0.05f);
+                        if (clean.Length < 3 || Poly.Area(clean) < 0.1f) continue;
+                        var ring = new float3[clean.Length];
+                        for (int v = 0; v < clean.Length; v++)
+                        {
+                            var w = f.ToWorld(new double2(clean[v].x, clean[v].y));
+                            ring[v] = new float3((float)w.x, (float)F2(clean[v].x, clean[v].y), (float)w.y);
+                        }
+                        double signed = 0;
+                        for (int v = 0, u = ring.Length - 1; v < ring.Length; u = v++) signed += (double)ring[u].x * ring[v].z - (double)ring[v].x * ring[u].z;
+                        if (signed < 0) Array.Reverse(ring);
+                        var c = Poly.Centroid(Poly.To2D(ring));
+                        float th = Build.TerraformSurface.At(ring, c);
+                        res.Pieces.Add(new PlannedTerraform
+                        {
+                            Ring = ring, Kind = th >= ground(f.ToWorld(new double2(x + BlendCell * 0.5, y + BlendCell * 0.5))) ? TerraformKind.Raise : TerraformKind.Lower,
+                            TargetHeight = th, Permanent = true, Sloped = true,
+                        });
+                    }
             res.Height = w =>
             {
                 var l = f.ToLocal(w);
-                return PGeo.Contains(clipLocal, l) ? (float)F(l.x, l.y) : ground(w);
+                return PGeo.Contains(clipLocal, l) ? (float)F2(l.x, l.y) : ground(w);
             };
             return res;
         }
