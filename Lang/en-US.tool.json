@@ -206,6 +206,8 @@
   "Placemaker.Settings.PreviewDetail.Detailed": "Detailed",
   "Placemaker.Settings.SnapToRoadsWhenDrawing": "Snap to curbs when drawing",
   "Placemaker.Settings.SnapToRoadsWhenDrawing.Desc": "Corners snap to the edges of nearby roads. The other snapping options are in the game's snapping menu.",
+  "Placemaker.Settings.SketchSurfaceFill": "Tint planned surfaces",
+  "Placemaker.Settings.SketchSurfaceFill.Desc": "The sketch preview shades planned grass, paving and water with a faint tint. Turn off to see only their outlines.",
   "Placemaker.Settings.KeepOffExistingRoads": "Keep off existing roads",
   "Placemaker.Settings.KeepOffExistingRoads.Desc": "Drawn and painted areas stop at the edge of existing roads and sidewalks, so nothing is planned on the asphalt. Entrances move to the new edge.",
   "Placemaker.Settings.LayoutSize": "Layout size",

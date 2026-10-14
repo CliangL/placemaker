@@ -51,6 +51,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupGeneral)]
         public PreviewDetail PreviewDetail { get; set; }
 
+        /// <summary>Sketch preview: planned surfaces get a faint tint (on) or only their outline (off).</summary>
+        [SettingsUISection(SectionMain, GroupGeneral)]
+        public bool SketchSurfaceFill { get; set; }
+
         [SettingsUISection(SectionMain, GroupGeneral)]
         public bool SnapToRoadsWhenDrawing { get; set; }
 
@@ -225,6 +229,7 @@ namespace Placemaker.Game.Settings
         {
             ShowCursorTooltips = true;
             PreviewDetail = PreviewDetail.Normal;
+            SketchSurfaceFill = true;
             SnapToRoadsWhenDrawing = true;
             KeepOffExistingRoads = true;
             LayoutSize = (int)System.Math.Round(global::Placemaker.Core.SiteContext.DefaultLayoutScale * 100f);
