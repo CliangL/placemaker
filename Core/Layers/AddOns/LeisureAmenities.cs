@@ -138,7 +138,8 @@ namespace Placemaker.Core.Layers.AddOns
             float room = math.min(site.HalfLength, site.HalfWidth) - (benches ? 2.6f : 0.8f);
             float r = math.min(si == 0 ? 4f : si == 1 ? 5.5f : 7f, room);
             if (r < 2.5f) { NoSpace(ctx, NameKey); return; }
-            ctx.Surface(Disc(site.Center, r), SurfaceRole.Decorative, AssetMix.One(ctx.S("padAsset")), AssetCategories.SurfacePaving);
+            // The pad also carries the parents' bench ring (r + 1.5), so seats stand on paving, not the lawn.
+            ctx.Surface(Disc(site.Center, benches ? r + 2.4f : r), SurfaceRole.Decorative, AssetMix.One(ctx.S("padAsset")), AssetCategories.SurfacePaving);
             // Jets in a sunflower pattern: even coverage, a dense middle, nothing on the rim (splash zone).
             int wanted = ctx.I("jets");
             var asset = AssetMix.One(ctx.S("jetAsset"));
@@ -226,15 +227,25 @@ namespace Placemaker.Core.Layers.AddOns
                 focal = site.Local(e * (site.HalfLength - sr - 1.5f), 0f);
                 facing = -e * site.Axis;
             }
+            // Seating sits ON paving, never loose on the lawn (playtest 4b): a gazebo gets a bench ring at the
+            // edge of its paved circle; a bandstand's audience rows stand on a paved fan in front of it.
+            float ringR = sr + 2.2f;
+            float rowStart = gazebo ? ringR + 3.2f : sr + 5f;
+            float rowsOuter = rows > 0 ? rowStart + (rows - 1) * 3.2f + 1.4f : 0f;
             if (ctx.B("paving"))
-                ctx.Surface(Disc(focal, sr + 1.5f), SurfaceRole.Paving, AssetMix.One(ctx.S("pavingAsset")), AssetCategories.SurfacePaving);
+            {
+                var pave = AssetMix.One(ctx.S("pavingAsset"));
+                float discR = gazebo ? math.max(ringR + 1.2f, rowsOuter) : sr + 1.5f;
+                Pave(ctx, Disc(focal, discR), pave);
+                if (!gazebo && rows > 0) Pave(ctx, Fan(focal, math.atan2(facing.y, facing.x), 1.05f + 0.25f, sr + 0.5f, rowsOuter), pave);
+            }
             if (!Put(ctx, occ, focal, math.atan2(facing.x, facing.y), ObjectRole.Furniture, asset, cat, sr, Hashing.Mix(ctx.Seed, 0xBA0u)))
             { NoSpace(ctx, NameKey); return; }
             int flowers = 0;
             if (ctx.B("flowers") && AssetAvailability.Has(AssetCategories.Flowerbed))
             {
                 // A ring of beds round the plinth, open towards the audience / the path.
-                float fr = sr + 2.6f;
+                float fr = gazebo ? (rows > 0 ? rowsOuter : ringR + 1.2f) + 1.4f : sr + 2.6f;
                 int n = math.clamp((int)math.floor(2f * math.PI * fr / 3.2f), 4, 14);
                 float open = math.atan2(facing.y, facing.x);
                 for (int i = 0; i < n; i++)
@@ -248,9 +259,20 @@ namespace Placemaker.Core.Layers.AddOns
             int benches = 0;
             var bench = AssetMix.One(ctx.S("benchAsset"));
             float baseAngle = math.atan2(facing.y, facing.x);
+            if (gazebo)
+            {
+                // Benches evenly round the paving edge, seats towards the gazebo, the arrival side left open.
+                int n = math.clamp((int)math.floor(2f * math.PI * ringR / 4.2f), 3, 8);
+                for (int i = 1; i <= n; i++)
+                {
+                    float a = baseAngle + i * 2f * math.PI / (n + 1);
+                    var p = focal + new float2(math.cos(a), math.sin(a)) * ringR;
+                    if (LeisureKit.Put(ctx, occ, p, LeisureKit.Yaw(p, focal), ObjectRole.Bench, bench, null, 1.1f, Hashing.Mix(ctx.Seed, 0xBE80u + (uint)i), 0.1f, 0.1f)) benches++;
+                }
+            }
             for (int row = 0; row < rows; row++)
             {
-                float r = sr + 5f + row * 3.2f;
+                float r = rowStart + row * 3.2f;
                 float half = gazebo ? math.PI : 1.05f;   // ±60° in front of a bandstand, all round a gazebo
                 float step = 3.1f / r;
                 for (float a = -half + step * 0.5f; a <= half; a += step)
@@ -269,6 +291,28 @@ namespace Placemaker.Core.Layers.AddOns
             ctx.Stat(Keys.StatBenches, benches, Keys.UnitCount);
             ctx.Stat(Keys.StatFlowerbeds, flowers, Keys.UnitCount);
             ctx.Plan.Facts["bandstand"] = 1;
+        }
+
+        /// <summary>Paving clipped to the amenity's place (the audience fan may reach past it).</summary>
+        private static void Pave(LayerContext ctx, float2[] poly, AssetRef pave)
+        {
+            var clipped = LeisureKit.Intersect(ctx.LayerRegion, poly);
+            if (clipped != null && clipped.Area > 1f) ctx.Surface(clipped.Ring, SurfaceRole.Paving, pave, AssetCategories.SurfacePaving);
+        }
+
+        /// <summary>Annular sector (CCW) centred on <paramref name="dirAngle"/>, ±<paramref name="half"/> radians.</summary>
+        public static float2[] Fan(float2 c, float dirAngle, float half, float r0, float r1)
+        {
+            const int steps = 12;
+            var pts = new float2[2 * (steps + 1)];
+            for (int i = 0; i <= steps; i++)
+            {
+                float a = dirAngle - half + 2f * half * i / steps;
+                pts[i] = c + new float2(math.cos(a), math.sin(a)) * r1;
+                float b = dirAngle + half - 2f * half * i / steps;
+                pts[steps + 1 + i] = c + new float2(math.cos(b), math.sin(b)) * r0;
+            }
+            return pts;
         }
     }
 

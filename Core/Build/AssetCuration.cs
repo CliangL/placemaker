@@ -319,6 +319,72 @@ namespace Placemaker.Core.Build
             return s;
         }
 
+        // ───────────────────────── machinery & size sanity (in-game finding) ─────────────────────────
+
+        /// <summary>
+        /// Categories of working sites, where machines, vehicles and big structures ARE the props. Every
+        /// other (leisure / park / street furniture) category never takes machinery automatically: the
+        /// splash pad placed "AgricultureSprinklerSystem", a 16 m centre-pivot irrigation rig, as water play.
+        /// </summary>
+        private static readonly string[] WorkCategoryPrefixes =
+        {
+            "industrial", "logistics", "construction", "farm", "landfill", "scrap", "quarry", "ruins", "events", "transport",
+            "urbanfarm", "shore", "parking", "object", "net.", "surface", "area.", "zone", "decal",
+        };
+
+        public static bool IsLeisureCategory(string category)
+        {
+            if (string.IsNullOrEmpty(category)) return false;
+            foreach (var p in WorkCategoryPrefixes) if (category.StartsWith(p, StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        private static readonly string[] MachineryNames =
+        {
+            "agricultur", "tractor", "harvester", "irrigation", "pivot", "silo", "industrial", "factory", "warehouse", "crane",
+            "truck", "forklift", "trailer", "excavat", "bulldozer", "sprayer", "combine", "supermarket", "upgrade", "pillar",
+            "depot", "cargo", "container", "machinery", "generator", "pump jack", "pumpjack",
+        };
+
+        /// <summary>True when a leisure category must not take this prefab automatically (farm/industrial machinery…).</summary>
+        public static bool IsMachineryForLeisure(string category, string lower) =>
+            IsLeisureCategory(category) && AssetHeuristics.ContainsAny(lower, MachineryNames);
+
+        /// <summary>Largest sensible footprint (m) of an automatic item per category; 0 = no limit.</summary>
+        private static readonly Dictionary<string, float> MaxSize = new Dictionary<string, float>(StringComparer.Ordinal)
+        {
+            [AssetCategories.WaterJets] = 6f, [AssetCategories.Bench] = 4f, [AssetCategories.Bin] = 2f, [AssetCategories.Lamp] = 4f,
+            [AssetCategories.Bollard] = 1.5f, [AssetCategories.Bush] = 5f, [AssetCategories.Planter] = 4f, [AssetCategories.Flowerbed] = 5f,
+            [AssetCategories.Hedge] = 6f, [AssetCategories.Picnic] = 4f, [AssetCategories.Restroom] = 6f, [AssetCategories.Kiosk] = 8f,
+            [AssetCategories.MarketStall] = 10f, [AssetCategories.Centerpiece] = 14f, [AssetCategories.CenterpieceFountain] = 14f,
+            [AssetCategories.CenterpieceStatue] = 14f, [AssetCategories.Playground] = 16f, [AssetCategories.Rock] = 8f,
+            [AssetCategories.Decoration] = 6f, [AssetCategories.CafeSeating] = 5f, [AssetCategories.Shelter] = 12f,
+            [AssetCategories.Sports] = 15f, [AssetCategories.SportsGoal] = 6f, [AssetCategories.SportsBasketball] = 6f,
+            [AssetCategories.SportsFitness] = 8f, [AssetCategories.SportsSkate] = 15f, [AssetCategories.SportsTennis] = 14f,
+            [AssetCategories.DogAgility] = 8f, [AssetCategories.DogAmenity] = 3f, [AssetCategories.Lookout] = 15f,
+            [AssetCategories.Stage] = 25f, [AssetCategories.Picnic] = 4f, [AssetCategories.Camping] = 9f,
+            [AssetCategories.CampingPitch] = 9f, [AssetCategories.CampingFire] = 4f, [AssetCategories.Glasshouse] = 16f,
+            [AssetCategories.GardenShed] = 8f, [AssetCategories.GardenCrop] = 8f,
+        };
+
+        /// <summary>Size cap of a category: its own, else the nearest parent's ("play.slide" → "play"? none → "playground" for play.*).</summary>
+        public static float MaxFootprint(string category)
+        {
+            if (string.IsNullOrEmpty(category)) return 0f;
+            if (MaxSize.TryGetValue(category, out var m)) return m;
+            if (category.StartsWith("play.", StringComparison.Ordinal)) return 10f;
+            if (category.StartsWith("beach.", StringComparison.Ordinal)) return 10f;
+            int dot = category.LastIndexOf('.');
+            return dot > 0 && MaxSize.TryGetValue(category.Substring(0, dot), out m) ? m : 0f;
+        }
+
+        /// <summary>False when a known footprint is implausibly big for the category (giant bounds, buildings).</summary>
+        public static bool FitsSize(string category, float footprint)
+        {
+            float max = MaxFootprint(category);
+            return max <= 0f || footprint <= 0f || footprint <= max;
+        }
+
         // ───────────────────────── palettes ─────────────────────────
 
         /// <summary>

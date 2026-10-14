@@ -267,6 +267,8 @@ namespace Placemaker.Core.Build
             if (isArea) return true;
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
+            // Leisure pools never take machinery ("AgricultureSprinklerSystem" as splash-pad jets).
+            if (AssetCuration.IsMachineryForLeisure(category, lower)) return false;
             // Decals: curated themes (AssetCuration) — natural park looks, never letters or road markings.
             if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
                 return AssetCuration.DecalAutoEligible(category, name);

@@ -67,7 +67,7 @@ namespace Placemaker.Core.Build
             foreach (var c in ranked)
             {
                 if (anyVanilla && !c.Vanilla && !(category == AssetCategories.Fence && c.NetFence)) continue;
-                if (string.IsNullOrEmpty(c.Id) || !seen.Add(c.Id)) continue;
+                if (string.IsNullOrEmpty(c.Id) || !AssetCuration.FitsSize(category, c.Footprint) || !seen.Add(c.Id)) continue;
                 names.Add(c.Id);
                 if (names.Count >= size) break;
             }
