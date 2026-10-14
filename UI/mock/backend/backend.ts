@@ -14,22 +14,6 @@ import { FAKE_FEATURES, FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, Fea
 import { composeFake, FAKE_LAYER_IDS } from "./fakePlanner";
 import { defaultSurface, surfaceColor } from "./fakeAssets";
 import { area, closestOnRing, dist, perimeter, selfIntersects, simplify, V2 } from "./geometry";
-import { GRID } from "./city";
-
-/** Midpoint of the outline edge closest to a street (≤ 30 m away), or null. */
-function suggestEntrance(ring: V2[]): V2 | null {
-    let best: { p: V2; d: number } | null = null;
-    for (let i = 0; i < ring.length; i++) {
-        const a = ring[i], b = ring[(i + 1) % ring.length];
-        if (dist(a, b) < 12) continue;
-        const m: V2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        let d = Infinity;
-        for (let k = 0; k < GRID.nx; k++) d = Math.min(d, Math.abs(m[0] - (GRID.x0 + k * GRID.dx)));
-        for (let j = 0; j < GRID.nz; j++) d = Math.min(d, Math.abs(m[1] - (GRID.z0 + j * GRID.dz)));
-        if (d <= 30 && (!best || d < best.d)) best = { p: m, d };
-    }
-    return best ? best.p : null;
-}
 import { ComposeResult, StepModel } from "./types";
 
 const EN: Record<string, string> = { ...FAKE_STRINGS };
@@ -1052,23 +1036,6 @@ export class MockBackend {
         return this.markerKindsOf(s) ? 1 : 0;
     }
 
-    /**
-     * Like C#: when a step with typed entrances has none yet, suggest real (removable) entrances on the
-     * outline edges that run next to a street. Once per outline, so removing them all sticks.
-     */
-    autoMarkers() {
-        if (!this.closed || this.ring.length < 3) return;
-        const key = JSON.stringify(this.ring);
-        for (const st of this.allSteps()) {
-            if (!st.enabled || !this.markerKindsOf(st) || st.markers.length || this.autoFor.get(st) === key) continue;
-            this.autoFor.set(st, key);
-            const best = suggestEntrance(this.ring);
-            if (best) st.markers.push({ kind: this.markerKindsOf(st)![0].kind, p: best, auto: true } as any);
-        }
-    }
-
-    private autoFor = new WeakMap<StepModel, string>();
-
     reachable(): Stage[] {
         if (this.stage === "building") return ["building"];
         const r: Stage[] = ["area"];
@@ -1095,7 +1062,9 @@ export class MockBackend {
             case "design": {
                 if (!this.root) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.NoRecipe" } };
                 const r = this.allReady();
-                if (!r.ready && r.kind) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.NeedEntrance" } };
+                // Like C# StageMachine.MarkerStep: no automatic entrances; disabled, but pressing it starts placement.
+                if (!r.ready && r.kind)
+                    return { action: "placeMarkers", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: { key: "Placemaker.Reason.AddEntrance" }, stepPath: r.path, markerKind: r.kind };
                 if (!r.ready) return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: false, reason: r.next };
                 return { action: "toReview", label: { key: "Placemaker.Primary.Review" }, enabled: true };
             }
@@ -1104,8 +1073,11 @@ export class MockBackend {
                 const base = editing
                     ? { action: "finishEdit" as const, label: { key: "Placemaker.Primary.ApplyEdit" } }
                     : { action: "build" as const, label: { key: "Placemaker.Primary.Build", args: [this.recipeDisplayName().toLowerCase()] } };
+                const r = this.allReady();
+                if (!r.ready && r.kind)
+                    return { action: "placeMarkers", label: base.label, enabled: false, reason: { key: "Placemaker.Reason.AddEntrance" }, stepPath: r.path, markerKind: r.kind };
                 if (!summary.ready || summary.stale) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.Planning" } };
-                if (!this.allReady().ready) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.StepNotReady" } };
+                if (!r.ready) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.StepNotReady" } };
                 if (summary.issues.some((i) => i.severity === "error")) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.PlanErrors" } };
                 if (!summary.canAfford) return { ...base, enabled: false, reason: { key: "Placemaker.Reason.NoMoney" } };
                 return { ...base, enabled: true };
@@ -1120,7 +1092,15 @@ export class MockBackend {
 
     primaryAction() {
         const p = this.primary();
-        if (!p.enabled) return;
+        if (!p.enabled) {
+            if (p.action === "placeMarkers" && !this.markerMode && p.stepPath && p.markerKind) {
+                if (this.stage === "review") this.stage = "design";
+                this.markerMode = { stepPath: p.stepPath, kind: p.markerKind };
+                this.focus = p.stepPath;
+                this.publishAll();
+            }
+            return;
+        }
         switch (p.action) {
             case "toDesign":
                 this.stage = "design";
@@ -1263,7 +1243,6 @@ export class MockBackend {
     }
 
     changed(cheap = false) {
-        this.autoMarkers();
         this.touchGhost();
         this.stale = true;
         this.schedulePlan(cheap ? 30 : 60);

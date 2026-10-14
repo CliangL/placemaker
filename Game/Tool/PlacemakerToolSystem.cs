@@ -313,7 +313,11 @@ namespace Placemaker.Game.Tool
             if (!p.Enabled)
             {
                 // "Add at least one entrance": pressing anyway starts placing one on that step (FEEDBACK-4b).
-                if (p.Kind == PrimaryKind.PlaceMarkers && _markerKind == null && !string.IsNullOrEmpty(p.StepPath)) StartMarkers(p.StepPath, p.MarkerKind);
+                if (p.Kind == PrimaryKind.PlaceMarkers && _markerKind == null && !string.IsNullOrEmpty(p.StepPath))
+                {
+                    if (_stage == ToolStage.Review) SetStage(ToolStage.Design);   // Entrances live in Design
+                    StartMarkers(p.StepPath, p.MarkerKind);
+                }
                 Flash(p.Reason);
                 return;
             }

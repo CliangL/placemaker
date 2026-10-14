@@ -23,6 +23,10 @@ export interface PrimaryAction {
   enabled: boolean;
   /** Why disabled, shown as tooltip and inline hint. */
   reason?: LocText;
+  /** Additive (FEEDBACK-4b), action "placeMarkers" only: the step that still needs entrances and the kind to
+   *  place. Disabled ("Add at least one entrance"), yet pressing it starts placement there (C# Primary). */
+  stepPath?: string;
+  markerKind?: string;
 }
 
 export interface AreaInfo {

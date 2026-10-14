@@ -166,7 +166,8 @@ test("no text overflows or is cut anywhere in the panel (every stage, every type
     await expect(page.getByTestId("asset-picker")).toBeVisible();
     await noTextOverflow(page, "asset picker");
     await page.keyboard.press("Escape");
-    await page.getByTestId("marker-remove-0").click();
+    // no automatic entrances: the parking lot starts without one
+    await expect(page.getByTestId("entrance-required")).toBeVisible();
     await noTextOverflow(page, "entrance required");
     await page.getByTestId("marker-kind-exit").click();
     await noTextOverflow(page, "placing markers");

@@ -302,7 +302,7 @@ export const FAKE_STRINGS: Record<string, string> = {
     "Placemaker.At.Centre": "Centre", "Placemaker.At.Corner": "Corner", "Placemaker.At.Edge": "Edge", "Placemaker.At.Entrance": "Entrance",
     "Placemaker.Recipe.RoadsParks": "Roads + parks", "Placemaker.Recipe.ParkPlaza": "Park | plaza", "Placemaker.Recipe.NeighbourhoodPark": "Family park",
     "Placemaker.Marker.TwoWay": "Two-way", "Placemaker.Marker.Entry": "Entry only", "Placemaker.Marker.Exit": "Exit only",
-    "Placemaker.Marker.Alley": "Alley", "Placemaker.Marker.Footpath": "Footpath", "Placemaker.Reason.NeedEntrance": "Place at least one entrance",
+    "Placemaker.Marker.Alley": "Alley", "Placemaker.Marker.Footpath": "Footpath", "Placemaker.Reason.NeedEntrance": "Place at least one entrance", "Placemaker.Reason.AddEntrance": "Add at least one entrance",
     "Placemaker.Parking.PerimeterRoad": "Perimeter road", "Placemaker.Parking.ZoningEdges": "Zone the edges", "Placemaker.Parking.ZoningEdgesTip": "Zones a strip along the lot so buildings can grow next to it.",
     "Placemaker.Park.Ground": "Lawn", "Placemaker.Park.GroundTip": "Ground texture under the lawn.",
     "Placemaker.Decals.Pick": "Decals", "Placemaker.Decals.PickTip": "Leaves, cracks, puddles, markings, scattered over the ground.",

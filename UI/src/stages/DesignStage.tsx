@@ -6,11 +6,12 @@
 //   section per control group (only the first essential one open), then Features: a switch per
 //   built-in feature, whose own options fold out underneath when it is on.
 //   "Places inside": reserved slot for round 3, hidden for now.
-import React from "react";
+import React, { useRef } from "react";
 import classNames from "classnames";
 import { Catalog, DesignState, FeatureFit, FeatureView, LayerType, StepView, ToolState } from "../contract";
 import { act, playSound } from "../lib/bindings";
-import { useOpen } from "../lib/collapse";
+import { setOpen as setSectionOpen, useOpen } from "../lib/collapse";
+import { scrollToTop, useReveal } from "../lib/reveal";
 import { entityIcon, layerColor } from "../lib/icons";
 import { humanize, TFunc, useT } from "../lib/l10n";
 import { findStep, isOverridePath, layerOf, parentOf, regionLabelArgs } from "../lib/schema";
@@ -122,9 +123,17 @@ const Entrances = ({ step, layer, state }: { step: StepView; layer: LayerType; s
               .join(" · ")
         : String(have);
     const numbers = new Map<string, number>();
+    // The footer's "Add at least one entrance" leads here: open, scroll to the top, flash.
+    const foldId = layer.id + ":entrances";
+    const ref = useRef<HTMLDivElement>(null);
+    const flash = useReveal("entrances:" + step.path, () => {
+        setSectionOpen(foldId, true);
+        window.setTimeout(() => scrollToTop(ref.current), 30);
+    });
     return (
+        <div ref={ref} className={classNames(s.entrances, { [s.entrancesFlash]: flash })} data-testid={`entrances-wrap-${step.path}`} data-flash={flash ? "true" : "false"}>
         <Collapsible
-            id={layer.id + ":entrances"}
+            id={foldId}
             testId={`entrances-${step.path}`}
             title={
                 <Tip
@@ -138,13 +147,13 @@ const Entrances = ({ step, layer, state }: { step: StepView; layer: LayerType; s
             defaultOpen
         >
             {missing ? (
-                <Tip title={t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance")} description={t("Placemaker.UI.Markers.HowTo", "Choose a type, then click the outline next to a road.")}>
+                <Tip title={t("Placemaker.UI.Markers.NeedOne", "Add at least one entrance")} description={t("Placemaker.UI.Markers.HowTo", "Choose a type, then click the outline next to a road.")}>
                     <div className={s.required} data-testid="entrance-required">
                         <Icon name="warning" size={13} tint="warn" />
                         <div className={s.requiredText}>
                             {need > 1
-                                ? t("Placemaker.UI.Markers.NeedN", "Place at least {0} entrances", [need])
-                                : t("Placemaker.UI.Markers.NeedOne", "Place at least one entrance")}
+                                ? t("Placemaker.UI.Markers.NeedN", "Add at least {0} entrances", [need])
+                                : t("Placemaker.UI.Markers.NeedOne", "Add at least one entrance")}
                         </div>
                     </div>
                 </Tip>
@@ -206,6 +215,7 @@ const Entrances = ({ step, layer, state }: { step: StepView; layer: LayerType; s
                 </div>
             ) : null}
         </Collapsible>
+        </div>
     );
 };
 

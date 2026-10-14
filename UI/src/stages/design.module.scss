@@ -368,3 +368,16 @@
 .make > div + div {
     padding-left: 0;
 }
+
+// Entrances section, flashed when the footer leads the player here ("Add at least one entrance").
+.entrances {
+    @include col;
+    min-width: 0;
+    border-radius: $radius;
+    @include border(1rem, transparent);
+}
+
+.entrancesFlash {
+    @include border(1rem, $c-warning);
+    background-color: rgba(255, 181, 71, 0.12);
+}

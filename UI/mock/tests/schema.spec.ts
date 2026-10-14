@@ -146,31 +146,51 @@ test("asset picker: search, thumbnails, automatic; closes with X, Esc and a clic
     await panelShot(page, "panel-arrangement");
 });
 
-test("entrances: suggested ones appear, typed list with remove; primary blocked at zero until one is placed", async ({ page }) => {
+test("entrances: none placed automatically; disabled primary leads to the Entrances section and starts placement; typed list with remove", async ({ page }) => {
     const errors = await open(page);
     const primary = page.getByTestId("primary");
     await design(page, "parking");
-    // an outline next to a street gets a suggested (real, removable) entrance
-    const list = page.getByTestId("marker-list");
-    await expect(list.locator('[data-testid^="marker-"][data-kind]')).toHaveCount(1);
-    await expect(page.getByTestId("marker-0")).toHaveAttribute("data-kind", "entrance");
-    await expect(page.getByTestId("marker-0")).toContainText("Two-way 1");
-    await expect(page.getByTestId("entrance-required")).toHaveCount(0);
-    await expect(primary).toHaveAttribute("aria-disabled", "false");
+    // FEEDBACK-4b: no suggested entrance is placed for the player
+    await expect(page.getByTestId("marker-list")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).pm.backend.root.markers.length)).toBe(0);
+    await expect(page.getByTestId("entrance-required")).toContainText("Add at least one entrance");
+    await expect(primary).toHaveAttribute("aria-disabled", "true");
+    await expect(primary).toHaveAttribute("data-action", "placeMarkers");
+    await expect(page.getByTestId("primary-reason")).toContainText("Add at least one entrance");
     // five typed buttons, each with an icon
     for (const k of ["entrance", "entry", "exit", "alley", "footpath"]) await expect(page.getByTestId(`marker-kind-${k}`).locator("img")).toHaveCount(1);
-    await panelShot(page, "panel-entrances");
+    await panelShot(page, "panel-entrance-required");
 
-    // remove it → requirement shown, primary disabled with the reason
+    // fold the section away and scroll the panel to the bottom, then press the disabled button anyway:
+    // the section opens, scrolls into view, flashes, and placement starts with its first type
+    await page.getByTestId("entrances-0-toggle").click();
+    await expect(page.getByTestId("entrances-0")).toHaveAttribute("data-open", "false");
+    await page.getByTestId("panel-body").evaluate((el) => {
+        for (let e: HTMLElement | null = el; e; e = e.firstElementChild as HTMLElement | null) e.scrollTop = 100000;
+    });
+    await primary.click({ force: true }); // aria-disabled: Playwright would refuse a normal click
+    await expect(page.getByTestId("marker-banner")).toBeVisible();
+    expect(await page.evaluate(() => (window as any).pm.backend.markerMode)).toEqual({ stepPath: "0", kind: "entrance" });
+    await expect(page.getByTestId("entrances-0")).toHaveAttribute("data-open", "true");
+    await expect(page.getByTestId("entrances-wrap-0")).toHaveAttribute("data-flash", "true");
+    await expect(page.getByTestId("marker-kind-entrance")).toBeInViewport();
+    await panelShot(page, "panel-entrance-lead");
+    await expect(page.getByTestId("entrances-wrap-0")).toHaveAttribute("data-flash", "false", { timeout: 4000 });
+    expect(await page.evaluate(() => (window as any).pm.backend.stage)).toBe("design");
+
+    // place a two-way entrance, show it, remove it again
+    await clickWorld(page, (FIELD[0][0] + FIELD[1][0]) / 2, (FIELD[0][1] + FIELD[1][1]) / 2);
+    await expect(page.getByTestId("marker-0")).toHaveAttribute("data-kind", "entrance");
+    await expect(page.getByTestId("marker-0")).toContainText("Two-way 1");
+    await page.getByTestId("marker-done").click();
+    await expect(page.getByTestId("entrance-required")).toHaveCount(0);
+    await expect(primary).toHaveAttribute("aria-disabled", "false");
+    await panelShot(page, "panel-entrances");
     await page.getByTestId("marker-show-0").click();
     expect(await page.evaluate(() => (window as any).pm.backend.locateAt)).not.toBeNull();
     await page.getByTestId("marker-remove-0").click();
-    await expect(page.getByTestId("entrance-required")).toContainText("Place at least one entrance");
+    await expect(page.getByTestId("entrance-required")).toContainText("Add at least one entrance");
     await expect(primary).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByTestId("primary-reason")).toContainText("Place at least one entrance");
-    await primary.click({ force: true });
-    expect(await page.evaluate(() => (window as any).pm.backend.stage)).toBe("design");
-    await panelShot(page, "panel-entrance-required");
 
     // choose "Exit only", click the outline → placed with its type; Build path unblocked
     await page.getByTestId("marker-kind-exit").click();
