@@ -74,6 +74,7 @@ namespace Placemaker.Core.Layers.Park
                     float len = 0f; foreach (var c in bike) len += c.Length;
                     s.Curves = new List<PathCurve>(foot);
                     s.Curves.AddRange(bike);
+                    ParkPaths.Index(bike, s.Occ.Corridors, PathCorridorKind);
                     ctx.Plan.Facts["bikeLength"] = len;
                     ctx.Plan.Facts["bikeCrossings"] = crossings;
                     if (crossings > 0) ctx.Plan.Facts["bikeMinCrossingAngle"] = minAngle;

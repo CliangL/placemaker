@@ -32,13 +32,14 @@ namespace Placemaker.Core.Layers.Park
         /// <summary>Likely bike-path prefab names (first loaded wins).</summary>
         public static readonly string[] BikeNames =
         {
-            "Bicycle Path", "Bicycle Pathway", "Bike Path", "Bike Pathway", "Cycle Path", "Cycle Track", "Bicycle Track",
-            "Pedestrian Bicycle Path", "Shared Bicycle Path",
+            // Vanilla (Bikes update): the two-way bike path, then the pedestrian path with bike lanes.
+            "TwoWayBikePath", "PedestrianPathWithBikeLanes", "Bicycle Path", "Bike Path", "Cycle Path", "Cycle Track",
         };
 
         /// <summary>Likely dirt / gravel trail prefab names (first loaded wins).</summary>
         public static readonly string[] TrailNames =
         {
+            // No vanilla gravel footpath is known; these catch common custom names (else the pathway pool).
             "Gravel Pathway", "Gravel Path", "Dirt Path", "Dirt Pathway", "Hiking Trail", "Trail Path", "Gravel Footpath",
             "Forest Path", "Natural Path",
         };
