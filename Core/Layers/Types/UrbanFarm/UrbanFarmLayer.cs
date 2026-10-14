@@ -243,8 +243,8 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
 
             // 6. Things beside the tracks first (they claim space the crops then avoid).
             var bench = AssetMix.One(ctx.S("benchAsset"));
-            if (ctx.F("benchSpacing") > 0f) PathBenches(ctx, occ, ctx.F("benchSpacing"), bench, 0xB3C0u);
-            if (ctx.B("lamps")) PathLamps(ctx, occ, 28f, AssetMix.One(""), 0x1A30u);
+            if (ctx.F("benchSpacing") > 0f) FarmKit.BesidePaths(ctx, occ, ctx.F("benchSpacing"), ObjectRole.Bench, bench, 1.3f, 0xB3C0u);
+            if (ctx.B("lamps")) FarmKit.BesidePaths(ctx, occ, 28f, ObjectRole.Lamp, AssetMix.One(""), 0.5f, 0x1A30u);
             if (ctx.B("waterTanks")) WaterTanks(ctx, occ, fields);
             Scarecrows(ctx, occ, region, fields);
             ctx.Check();
@@ -286,9 +286,16 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                         break;
                     }
                     case "glass":
-                        FieldSurface(ctx, f.Ring, AssetCategories.SurfaceNatural);
-                        glasshouses += Glasshouses(ctx, occ, f.Ring, rowDir, density, salt);
+                    {
+                        int houses = Glasshouses(ctx, occ, f.Ring, rowDir, density, salt);
+                        glasshouses += houses;
+                        if (houses > 0) { FieldSurface(ctx, f.Ring, AssetCategories.SurfaceNatural); break; }
+                        // Too small for a glasshouse: a cold-frame bed of row crops instead of bare gravel.
+                        FieldSurface(ctx, f.Ring, AssetCategories.SurfaceDirt);
+                        string cat = LeisureKit.Category(ctx, ctx.L("cropAssets").Length > 0 ? "x" : "", AssetCategories.GardenCrop, AssetCategories.Bush);
+                        RowCrops(ctx, occ, f.Ring, rowDir, 1.4f / density * scale, 1.1f / density * scale, ctx.L("cropAssets"), cat, ref budget, salt, true, null);
                         break;
+                    }
                     case "beds":
                         beds += RaisedBeds(ctx, occ, f.Ring, rowDir, density, salt);
                         break;
@@ -425,7 +432,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
         {
             if (cat == null) return 0;
             var role = FarmKit.RoleFor(cat);
-            float radius = math.min(0.45f, step * 0.4f);
+            const float radius = 0.45f;
             int n = 0, row = 0;
             foreach (var (a, b) in FarmKit.Rows(field, dir, rowGap, 0.7f))
             {
@@ -438,12 +445,12 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
                 var asset = AssetMix.Pick(ids, rv);
                 if (postCat != null)
                     foreach (var end in new[] { a - t * 0.4f, b + t * 0.4f })
-                        if (occ.Free(end, 0.25f, 0f, 0.05f)) { ctx.Object(end, yaw, ObjectRole.Furniture, AssetMix.One(""), rv, -1, postCat); occ.Take(end, 0.25f, 1); }
+                        if (occ.Free(end, 0.45f, 0f, 0.1f)) { ctx.Object(end, yaw, ObjectRole.Furniture, AssetMix.One(""), rv, -1, postCat); occ.Take(end, 0.25f, 1); }
                 for (float s = math.min(step * 0.5f, len * 0.5f); s <= len; s += step)
                 {
                     if (budget <= 0) return n;
                     var p = a + t * s;
-                    if (!occ.Free(p, radius, 0f, 0.05f)) continue;
+                    if (!occ.Free(p, radius, 0f, 0.1f)) continue;
                     ctx.Object(p, yaw, role, asset, Hashing.Mix(rv, (uint)n), -1, cat);
                     n++; budget--;
                 }
@@ -466,7 +473,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
             }
             if (cat == AssetCategories.GardenShed) { length = 4f; width = 3f; }
             float gap = 2.4f / density;
-            var houses = LeisureKit.Pack(fr, occ, fr.Centroid, dir, length, width, gap + 1.5f, gap, 80, 0.4f);
+            var houses = FarmKit.PackRows(fr, occ, dir, length, width, gap + 1.5f, gap, 80, 0.4f, true);
             var asset = AssetMix.One(chosen);
             bool tanks = ctx.B("waterTanks") && AssetAvailability.Has(AssetCategories.GardenShed);
             for (int i = 0; i < houses.Count; i++)
@@ -504,7 +511,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
             string cat = LeisureKit.Category(ctx, chosen, AssetCategories.Planter, AssetCategories.GardenCrop);
             if (cat == null) return 0;
             float gap = 1.6f / math.max(0.6f, density);
-            var beds = LeisureKit.Pack(fr, occ, fr.Centroid, dir, 4f, 1.6f, gap, gap, 300, 0.4f);
+            var beds = FarmKit.PackRows(fr, occ, dir, 4f, 1.6f, gap, gap, 300, 0.4f, false);
             var asset = AssetMix.One(chosen);
             for (int i = 0; i < beds.Count; i++)
                 ctx.Object(beds[i].Center, beds[i].Yaw, FarmKit.RoleFor(cat), asset, Hashing.Mix(salt, (uint)i), -1, cat);

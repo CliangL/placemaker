@@ -172,6 +172,102 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
             return r;
         }
 
+        /// <summary>
+        /// Packs equal rectangles (glasshouses, raised beds, pens) in rows along <paramref name="dir"/>,
+        /// each row centred in the part of the field it crosses, so a field just long enough still gets
+        /// its full count. Checks the occupancy with its spatial index only (no global scans), so
+        /// thousands of beds stay cheap. Takes the rectangles when <paramref name="take"/>.
+        /// </summary>
+        public static List<OrientedRect> PackRows(LayerRegion field, Occupancy occ, float2 dir, float length, float width,
+            float gapAlong, float gapAcross, int max, float margin, bool take)
+        {
+            var result = new List<OrientedRect>();
+            if (field == null || max <= 0) return result;
+            var n = Perp(dir);
+            var origin = field.Centroid;
+            var spanB = Span(field.Ring, origin, n);
+            var spanA = Span(field.Ring, origin, dir);
+            float reach = (spanA.y - spanA.x) + 10f;
+            float pitchB = width + gapAcross, pitchA = length + gapAlong;
+            int rowsB = (int)math.floor((spanB.y - spanB.x - 2f * margin + gapAcross) / pitchB);
+            if (rowsB <= 0) return result;
+            float startB = (spanB.x + spanB.y) * 0.5f - (rowsB - 1) * pitchB * 0.5f;
+            float hw = width * 0.5f, hl = length * 0.5f;
+            for (int ib = 0; ib < rowsB && result.Count < max; ib++)
+            {
+                float b = startB + ib * pitchB;
+                var lo = Intervals(field.Ring, origin + n * (b - hw - margin), dir, origin, reach);
+                var hi = Intervals(field.Ring, origin + n * (b + hw + margin), dir, origin, reach);
+                foreach (var a in lo)
+                    foreach (var c in hi)
+                    {
+                        float s0 = math.max(a.x, c.x) + margin, s1 = math.min(a.y, c.y) - margin;
+                        int k = (int)math.floor((s1 - s0 + gapAlong) / pitchA);
+                        if (k <= 0) continue;
+                        float start = (s0 + s1) * 0.5f - (k - 1) * pitchA * 0.5f;
+                        for (int ia = 0; ia < k && result.Count < max; ia++)
+                        {
+                            var r = new OrientedRect { Center = origin + dir * (start + ia * pitchA) + n * b, Axis = dir, HalfLength = hl, HalfWidth = hw };
+                            if (!RectFree(field, occ, r)) continue;
+                            result.Add(r);
+                            if (take) occ.TakeCorridor(r.Local(-hl + math.min(hl, hw), 0f), r.Local(hl - math.min(hl, hw), 0f), hw, 2);
+                        }
+                    }
+            }
+            return result;
+        }
+
+        private static List<float2> Intervals(float2[] ring, float2 p, float2 dir, float2 origin, float reach)
+        {
+            var r = new List<float2>();
+            foreach (var (s0, s1) in Poly.ClipSegmentToPolygon(ring, p - dir * reach, p + dir * reach))
+            {
+                float a = math.dot(s0 - origin, dir), b = math.dot(s1 - origin, dir);
+                r.Add(new float2(math.min(a, b), math.max(a, b)));
+            }
+            return r;
+        }
+
+        private static bool RectFree(LayerRegion field, Occupancy occ, OrientedRect r)
+        {
+            foreach (var q in r.Ring) if (!field.Contains(q)) return false;
+            float step = math.max(0.8f, r.HalfWidth * 2f);
+            for (float u = -r.HalfLength + r.HalfWidth * 0.5f; u <= r.HalfLength - r.HalfWidth * 0.5f + 0.01f; u += step)
+                if (!occ.Free(r.Local(u, 0f), r.HalfWidth, 0f, 0.1f)) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Benches (or lamps) beside this layer's own paths every <paramref name="spacing"/> m, alternating
+        /// sides, facing the path. Linear in path length (PathAnchors ranks every candidate, too slow for
+        /// a grid of farm tracks).
+        /// </summary>
+        public static int BesidePaths(LayerContext ctx, Occupancy occ, float spacing, ObjectRole role, AssetRef asset, float radius, uint salt, int max = 400)
+        {
+            if (spacing <= 0.5f) return 0;
+            int n = 0, k = 0;
+            var segs = new List<SegmentIndex.Seg>(occ.Paths.Segments);
+            foreach (var s in segs)
+            {
+                if (s.Kind == Occupancy.KindReserved) continue;
+                float len = math.distance(s.A, s.B);
+                if (len < spacing * 0.5f) continue;
+                var t = (s.B - s.A) / len;
+                var nrm = Perp(t);
+                for (float along = spacing * 0.5f; along < len && n < max; along += spacing, k++)
+                {
+                    float sideSign = (k & 1) == 0 ? 1f : -1f;
+                    var onPath = s.A + t * along;
+                    var p = onPath + nrm * sideSign * (s.HalfWidth + radius + 0.35f);
+                    if (!occ.Free(p, radius, 0.3f, 0.15f)) { p = onPath - nrm * sideSign * (s.HalfWidth + radius + 0.35f); if (!occ.Free(p, radius, 0.3f, 0.15f)) continue; }
+                    ctx.Object(p, role == ObjectRole.Bench ? LeisureKit.Yaw(p, onPath) : 0f, role, asset, Hashing.Mix(ctx.Seed, salt + (uint)k));
+                    occ.Take(p, radius, 1);
+                    n++;
+                }
+            }
+            return n;
+        }
+
         /// <summary>Role that matches an asset category (so automatic resolution and footprints agree).</summary>
         public static ObjectRole RoleFor(string category)
         {
