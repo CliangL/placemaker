@@ -38,7 +38,7 @@ namespace Placemaker.Core.Layers.Types.Transport
             new FeatureInfo { Layer = "plazatrees", Target = RegionTags.Paved, LabelKey = "Placemaker.Plaza.Feature.trees" },
             new FeatureInfo { Layer = "kiosk", Target = RegionTags.Paved, LabelKey = "Placemaker.Plaza.Feature.kiosk" },
             CoreFeature("fountain", ("size", "small")),
-            Feature("flowerbeds", ("density", 20.0), ("nearPaths", false)),
+            Feature("flowerbeds", ("density", 20.0), ("nearPaths", false)).Relabel("Placemaker.Plaza.Feature.flowerbeds"),
             Feature("shops", ("count", 2.0), ("where", "edges")),
             Feature("decals", ("theme", "cracks"), ("ground", "paved"), ("density", 0.6)),
             Feature("terrain", ("shape", "flatten")),

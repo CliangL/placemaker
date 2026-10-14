@@ -25,6 +25,12 @@ namespace Placemaker.Core.Layers.Types.Transport
         public readonly List<PlannedObject> Plants = new List<PlannedObject>();
     }
 
+    public static class FeatureInfoExtensions
+    {
+        /// <summary>Uses an existing label key (the add-on keys live with the park / plaza).</summary>
+        public static FeatureInfo Relabel(this FeatureInfo f, string labelKey) { f.LabelKey = labelKey; return f; }
+    }
+
     public static class TransportKit
     {
         public const string ParkingLayerId = "parking";

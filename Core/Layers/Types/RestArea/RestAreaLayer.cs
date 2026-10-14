@@ -32,10 +32,12 @@ namespace Placemaker.Core.Layers.Types.Transport
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
-            CoreFeature("playground", ("size", "small")), Feature("shops", ("count", 1.0), ("where", "paths")), Feature("bigtrees"),
-            Feature("rocks", ("size", "small")), Feature("flowerbeds", ("density", 4.0)), Feature("decals", ("theme", "leaves")),
+            CoreFeature("playground", ("size", "small")), Feature("shops", ("count", 1.0), ("where", "paths")), Labelled(Feature("bigtrees"), "Placemaker.Park.Feature.bigtrees"),
+            Feature("rocks", ("size", "small")), Labelled(Feature("flowerbeds", ("density", 4.0)), "Placemaker.Park.Feature.flowerbeds"), Feature("decals", ("theme", "leaves")),
             Feature("terrain", ("shape", "flatten")),
         };
+
+        private static FeatureInfo Labelled(FeatureInfo f, string key) { f.LabelKey = key; return f; }
 
         protected override void DefineControls(ControlSet c)
         {
@@ -149,7 +151,10 @@ namespace Placemaker.Core.Layers.Types.Transport
             moundR = math.min(moundR, math.max(0f, occ.Clearance(far, moundR)));
 
             // ── 3. Footpath spine and side entrances ──
-            TransportKit.Route(ctx, occ, walkIn, far, pathAsset);
+            // The spine ends at the edge of the viewpoint platform, not in its middle.
+            var spineEnd = far + math.normalizesafe(walkIn - far) * 7f;
+            if (!region.ContainsDisc(spineEnd, 1f) || math.distance(walkIn, far) < 16f) spineEnd = far;
+            TransportKit.Route(ctx, occ, walkIn, spineEnd, pathAsset);
             for (int i = 1; i < gates.Count; i++)
             {
                 var g = gates[i].Position;
