@@ -134,16 +134,12 @@ namespace Placemaker.Core.Layers.Leisure
             ctx.Check();
             Dress();
             foreach (var it in _items) Amenities.Take(_occ, it.Rect, it == _terrace ? 0.3f : 0.6f, 102);
+            if (_hasPlaza) LeisureKit.TakeRect(_occ, Shrink(_plaza, 1.2f), 5);
             ctx.Check();
             Landscape();
             PathFurniture();
             ctx.Check();
             Regions();
-            if (Environment.GetEnvironmentVariable("PM_SPORTS_DEBUG") == "1")
-                Console.WriteLine($"  [{_region.Area / 10000f:0.0}ha] main={(_hasMain ? _main.Position.ToString() : "-")} plaza={_hasPlaza} spine={_spine.Count} club={(ctx.Plan.Facts.ContainsKey("clubhouse") ? 1 : 0)} terrace={(_terrace != null ? _terrace.Rect.Center.ToString() : "-")} front={_heroFront}");
-            if (Environment.GetEnvironmentVariable("PM_SPORTS_DEBUG") == "1")
-                foreach (var it in _items)
-                    Console.WriteLine($"  [{_region.Area / 10000f:0.0}ha] {it.Group} {it.Kind} c={it.Rect.Center} {it.Rect.HalfLength * 2f:0}x{it.Rect.HalfWidth * 2f:0}");
 
             int places = 0;
             foreach (var it in _items) if (it.Place) places++;
@@ -153,6 +149,7 @@ namespace Placemaker.Core.Layers.Leisure
             ctx.Plan.Facts["terrace"] = _terrace != null ? 1 : 0;
             if (_terrace != null) { ctx.Plan.Facts["terraceX"] = _terrace.Rect.Center.x; ctx.Plan.Facts["terraceZ"] = _terrace.Rect.Center.y; }
             ctx.Plan.Facts["loop"] = _loopSegs.Count > 0 ? 1 : 0;
+            ctx.Plan.Facts["spine"] = _spine.Count;
         }
 
         // ───────────────────────── frame ─────────────────────────
@@ -243,7 +240,8 @@ namespace Placemaker.Core.Layers.Leisure
             var ctx = _ctx;
             string mode = ctx.S("parking");
             var full = ctx.LayerRegion;
-            if (mode == "off" || (mode == "auto" && full.Area < 25000f)) return;
+            // "On" still needs a park big enough to give a lot away (1.5 ha); auto waits for 2.5 ha.
+            if (mode == "off" || full.Area < (mode == "auto" ? 25000f : 15000f)) return;
             var roads = StreetFrontage.Roads(ctx.Input);
             var edges = StreetFrontage.Edges(full.Ring, roads, 30f);
             if (edges.Count == 0) { if (mode == "on") ctx.Issue(IssueSeverity.Info, TransportKit.NoLotKey); return; }
@@ -569,7 +567,14 @@ namespace Placemaker.Core.Layers.Leisure
             }
             var kind = layer == "tennisCourts" ? Kind.Court : Kind.Big;
             _hero = PlaceOne(layer, kind, anchor, null, cap);
-            if (Environment.GetEnvironmentVariable("PM_SPORTS_DEBUG") == "1") Console.WriteLine($"   hero {layer} anchor={anchor} at={(_hero != null ? _hero.Rect.Center.ToString() : "-")} big={bigTotal} len={heroLen} ext={extent} gu={gu} gv={gv} cap={cap}");
+            // The chosen hero does not fit (a running track on 1 ha): the next big field takes its role.
+            if (_hero == null)
+                foreach (var f in SportsParkLayer.BigFields)
+                {
+                    if (f == layer || !Wants(f)) continue;
+                    _hero = PlaceOne(f, Kind.Big, anchor, null, cap, true, false);
+                    if (_hero != null) { layer = f; kind = Kind.Big; break; }
+                }
             if (_hero == null) return;
             Cluster(_hero, Count(layer), kind);
             // The side of the hero (group) facing the park: a long side, unless the field is nearly square.
@@ -783,7 +788,7 @@ namespace Placemaker.Core.Layers.Leisure
             if (_hasPlaza)
             {
                 ctx.Surface(_plaza.Ring, SurfaceRole.Paving, AssetMix.One(""), AssetCategories.SurfacePaving);
-                LeisureKit.TakeRect(_occ, Shrink(_plaza, 1.2f), 5);
+
             }
 
 
