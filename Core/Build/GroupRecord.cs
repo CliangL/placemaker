@@ -45,6 +45,11 @@ namespace Placemaker.Core.Build
         /// <summary>Receipt for Edit/repair. May be null when the recipe could not be stored.</summary>
         public Recipe Recipe;
         public AreaShape Area;
+        /// <summary>
+        /// (s17, receipt v2) Park stats of the build: the player's settings and the values applied in game at build
+        /// time. Null = not a park type, or built before s17.
+        /// </summary>
+        public ParkStatsRecord ParkStats;
 
         public GroupRecord Clone()
         {

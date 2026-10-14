@@ -422,6 +422,76 @@ Sources: `Game.Prefabs.BuildingInitializeSystem`, `Game.Net/Areas/Objects.Valida
     capture, or outside its margin); the work items touching them are excluded and the build retries; if none can be
     identified the build stops (`Placemaker.Build.WouldDemolish`). Clearing trees/props skips objects on building lots.
 
+## Zone cells under builds — why buildings grew over a plaza (s19, decompiled 1.6.2f1)
+
+Sources: `Game.Zones.CellBlockJobs` (BlockCellsJob: NetIterator/AreaIterator, CleanBlockedCells), `Game.Zones.ZoneUtils`,
+`Game.Prefabs.AreaInitializeSystem`, `Game.Areas/Objects.ValidationHelpers`, `Game.Tools.GenerateZonesSystem` (Marquee),
+`Game.Tools.ValidationSystem`, `Game.Tools.ApplyAreasSystem`; Platter (lucarager/CS2-Platter, MIT) for comparison.
+
+67. **What blocks a zone cell.** `BlockCellsJob` recomputes a block's cells whenever the block, a net, a lot or an object
+    near it updates: it clears Blocked/Shared/Occupied…, then sets `CellFlags.Blocked` on every cell whose quad (shrunk
+    0.02 m) intersects (a) a ground net piece whose composition has `CompositionState.BlockZone` (not tunnels; elevated
+    pieces only block via their pillars), or (b) a triangle of an **area whose PREFAB `AreaGeometryData.m_Flags` has
+    `PhysicalGeometry`**, or `ProtectedArea` with a `Native` component (map tiles of native land). Nothing else blocks:
+    buildings *occupy* cells (CellOccupyJobs, not studied further); surfaces / spaces / districts never block.
+68. **Which areas are physical.** `AreaInitializeSystem`: every prefab with `LotData` gets `PhysicalGeometry |
+    PseudoRandom`, minus PhysicalGeometry when `LotPrefab.m_AllowOverlap`. Districts, map tiles, spaces, surfaces get no
+    PhysicalGeometry in the prefab (`AreaUtils.SetCollisionFlags` adds it for Space/Surface only inside validation
+    collision checks, never in the cell jobs). **Our owner lot ("Placemaker Area") has m_AllowOverlap → not physical →
+    blocks nothing.** Plaza paving, park lawns, pedestrian/hangaround spaces → nothing. Only our ground pathway nets
+    (BlockZone) blocked cells — and only the cells under them (plus everything behind, item 69).
+69. **CleanBlockedCells.** Per column: row 0 becomes Blocked if row 1 is; then every cell behind (deeper than) a blocked
+    cell is Blocked; `ValidArea` = the bounding rect of the unblocked columns' depths; RoadLeft/RoadRight propagate along
+    blocked cells. Consequences: (a) blocking the FRONT cell of a column kills the whole column; (b) a lone zoned row 0
+    with a blocked row 1 is itself blocked — cutouts must be ≥ 2 cells deep where the land behind is blocked.
+70. **Zoning by Marquee** (`GenerateZonesSystem.MarqueeBlocks`): every block whose corner quad intersects the definition's
+    quad; a cell is taken when it is `Visible` (so not blocked) and its CENTRE is inside the quad; without
+    `ZoningFlags.Overwrite` only cells whose zone is None. Cell geometry (`ZoneUtils.GetCellPosition`): centre =
+    `m_Position + m_Direction·(size.y − 2·row − 1)·4 + Right(m_Direction)·(size.x − 2·col − 1)·4`, `Right(v) = (v.y, −v.x)`,
+    row 0 next to the road (`m_Direction` points at it), 8 m cells, ≤ 6 rows.
+71. **Diagnosis of the playtest (plaza between three streets, buildings on the paving).** The streets' blocks reach 6 cells
+    (48 m) into the block. Under the plaza nothing was physical (67/68), so every cell stayed Visible and keeps whatever zone
+    it had: the zoning the player painted over the block before placing the plaza (Marquee without Overwrite never
+    unzones), plus our own cutout quads. Spawnable buildings need only Visible zoned cells of a block → the brick
+    apartment blocks (residential/mixed: not our low-commercial cutout zone) grew over the paving, the plaza "wrapped
+    round them" because surfaces never collide with buildings (item 64). Secondary: cutout quads were not aligned with the
+    road's cell grid (cells picked by centre: a cutout could gain or lose a column), and cells in front of a cutout set
+    back from the road (outline drawn off the kerb) were never zoned, so those columns could not grow at all. Timing was
+    not the cause (zoning runs 24 frames after Apply; Marquee only needs the blocks, not the park objects).
+72. **A physical lot as zone blocker — side effects.** A physical lot takes part in validation: `Areas.ValidationHelpers`
+    reports OverlapExisting against ground nets, non-overridable objects and other lots (`ObjectIterator` ignores
+    overridable props/trees unless the area has `CanOverrideObjects`), errors for water, and gives an overlapped spawnable
+    building (Overridable|DeleteOverridden) a **Warning** → Apply deletes it. `ApplyAreasSystem` builds errored
+    temporaries (only the vanilla tools refuse to apply), `ValidationSystem` later removes the Error/Warning components
+    from permanent entities again. After it exists, NEW objects/nets the player places across it get OverlapExisting
+    (Objects/Net ValidationHelpers area iterators; expected from the code, not measured) — like a vanilla building lot. Removing the lot re-runs BlockCellsJob:
+    the cells become Visible again **with the zone they had** (blocked cells keep `m_Zone`).
+
+**Platter** (github.com/lucarager/CS2-Platter, `Platter/LICENSE.txt` = **MIT**, Luca Rager 2025; installed copy in the
+mod cache `pdx_mods/125278_49`, Harmony + its own Burst DLL, ~11 k lines C#): a parcel is a `ParcelPrefab :
+StaticObjectPrefab` (lot width × depth) owning ONE extra `Game.Zones.Block` entity (sub-block buffer `ParcelSubBlock`,
+`ParcelOwner` on the block) created by `P_ParcelUpdateSystem` with `BuildOrder 0` (wins overlaps), `ValidArea` = the lot,
+cells outside the lot `Blocked`, inside `Visible` with the pre-zone. Because the vanilla jobs assume road blocks, it runs a
+**copy of the vanilla CellCheck pipeline** after `CellCheckSystem` (`P_NewCellCheckSystem`: NormalizeParcelCells +
+CleanBlockedCells + an 845-line overlap job), re-registers vanilla SubBlock serialization, links parcels to the nearest
+road edge (`P_RoadConnectionSystem`, ≤ 8.4 m front / 7.8 m sides: buildings need a road for access), has an
+"allow spawn" toggle, an uninstall system, Harmony patches on the bulldozer and the object tool. Verdict: license-compatible
+(MIT into GPL-3.0 with attribution), but the parcel engine is large, tied to replicating vanilla cell jobs exactly, and
+depends on patches and custom serialization — too heavy and fragile to copy or depend on for "keep the park free and zone
+the cutouts". Placemaker blocks cells with a vanilla mechanism (physical lots) and zones the road cells that exist
+(`Core/Build/ZoneGuard`, `Game/Build/BuildService.ZoneBlock`). Own parcels would only be worth it for plots facing no
+road block at all (a lane-less inner court) — not needed by any current type (`docs/proposals/s19.md`).
+
+## Park stats (s17, decompiled 1.6.2f1) — details in docs/PARK-STATS.md
+
+73. Park effects live on the park BUILDING prefab (Attraction, LeisureProvider, ServiceCoverage, Park, ServiceConsumption);
+    AttractionSystem, ServiceCoverageSystem and ParkAISystem read the *prefab* data, so per-instance values need per-instance prefabs.
+74. TourismSystem sums `AttractivenessProvider` of ANY non-temp entity (Σ a²/10000 → sigmoid): a lot can carry one.
+    AttractionSystem only rewrites entities with an `UpdateFrame` (buildings), so a value on a lot stays.
+75. Leisure, park coverage (wellbeing up to +20), land value from attractiveness and tourist destinations all need a
+    pathfinding source/target: a Building with a road connection. A lot has none (targets = 0, silently ignored).
+76. Vanilla park upkeep = price / 5 per month; attractiveness ≈ 1.9 × (area/1000 m²)^0.85 for ordinary parks.
+
 ## Quays, piers and sculpted shores (s20, decompiled 1.6.2f1)
 
 Sources: `Game.Prefabs.Bridge` / `BridgeBuildStyle`, `NetInitializeSystem` (Bridge handling ~2312–2358), `Game.Tools.CourseSplitSystem`
@@ -429,7 +499,7 @@ Sources: `Game.Prefabs.Bridge` / `BridgeBuildStyle`, `NetInitializeSystem` (Brid
 1891–1898, 6351), `Game.Net.ValidationHelpers.CheckSurface` (~1601), `TerrainSystem` (net terrain clip ~1131, raised sides ~1484),
 the player's catalog dump.
 
-67. **A quay is an ordinary net with a Bridge component in the Quay build style.** `NetInitializeSystem` gives every Bridge prefab
+77. **A quay is an ordinary net with a Bridge component in the Quay build style.** `NetInitializeSystem` gives every Bridge prefab
     StraightEdges|StraightEnds|RequireElevated|SymmetricalEdges|SmoothSlopes; for `BridgeBuildStyle.Quay` it adds `ElevatedIsRaised`,
     clears `RequireElevated`, sets `PlacementFlags.ShoreLine` and `m_MinWaterElevation = Bridge.m_ElevationOnWater`. Vanilla
     pedestrian quays (PathwayPrefab, category `net.pathway`): **QuaySmall01/02** "Narrow Quay With Pedestrian Path" (3 m, cost 0.5),
@@ -437,7 +507,7 @@ the player's catalog dump.
     QuayMedium01 (16 m) and QuayLarge01 (24 m). "Quay01" / "RetainingWall01" are road UPGRADES (fence category, not walks).
     Leisure piers: LeisurePier01Small01 / Medium01 / Large01 (3 / 7 / 9 m, cost 1–1.75), elevated decks with pillars
     (Pier01Pillar01/02 props, 3.7/8.5 m wide).
-68. **The wall side is automatic, not the drawing direction.** `CourseSplitSystem.CalculateElevation` samples the terrain at ±half
+78. **The wall side is automatic, not the drawing direction.** `CourseSplitSystem.CalculateElevation` samples the terrain at ±half
     width (x = left, y = right of the course); side elevation = deck height − terrain there. With ShoreLine a side whose water depth
     ≥ the elevation limit is forced to at least that limit; `GetElevationFlags` turns a side elevation ≥ limit into
     `CompositionFlags.Side.Raised` — the quay wall (with ElevatedIsRaised even "elevated" heights become Raised on both sides).
@@ -445,16 +515,16 @@ the player's catalog dump.
     none on the land side. The hand tool snaps to the shoreline and sets y = water surface + max(elevation, m_MinWaterElevation);
     Placemaker places the course itself (explicit heights, FollowTerrain = false) at water level + "Deck height" (default 1.5 m,
     harbour 1.8 m, river 0.9 m) and fills the land behind to that level (sculpt).
-69. **Terrain:** no quay-specific terraform; the generic net terrain clip/flatten applies, and on a Raised side the upper terrain
+79. **Terrain:** no quay-specific terraform; the generic net terrain clip/flatten applies, and on a Raised side the upper terrain
     bound is disabled (the ground beyond the wall is not flattened up to the deck). Raised lanes go into a separate height pass
     (probably why quay walls hold water back). **Placement:** `CheckSurface` raises InWater only for nets that are exactly OnGround
     (ShoreLine excluded) — a quay may stand over water; NoWater only applies to Floating nets; nothing requires water (on dry land it
     simply gets no raised side). No maximum wall height was found (`LimitElevation` clamps to PlaceableNetData.m_ElevationRange).
-70. **Connecting:** quays are PathwayPrefab nets and join normal paths at nodes. Placemaker emits the quay as Bézier pieces
+80. **Connecting:** quays are PathwayPrefab nets and join normal paths at nodes. Placemaker emits the quay as Bézier pieces
     (category `net.quay`, Core/Layers/Types/Waterfront/QuayCategories) and lets the composer's PathJoins split it where a link or a
     pier ends on it; piers start ON the quay deck (a junction), boardwalk links end on a levelled landing at the bank foot with a short
     timber stub to the boardwalk.
-71. **Curation:** new net categories `net.quay` (pathway nets named *quay*, bike variants never automatic) and `net.pier`
+81. **Curation:** new net categories `net.quay` (pathway nets named *quay*, bike variants never automatic) and `net.pier`
     (pathway nets named *pier/boardwalk/jetty*, not pillars; marina packs never automatic), both falling back to `net.pathway`.
     The automatic ground walk (`AutoAssets.PickWalk`) still never picks a quay, pier or bridge.
 

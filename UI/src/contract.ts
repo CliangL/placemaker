@@ -12,7 +12,7 @@ export const GROUP = "Placemaker";
  * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
  * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
  */
-export const PROTOCOL = 15;
+export const PROTOCOL = 18;
 
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
@@ -109,9 +109,11 @@ export interface Control {
   group: string;
   label: string;            // localisation key
   tooltip?: string;         // localisation key
+  /** Additive (s16): one visible line under the label saying what the control is FOR (localisation key). */
+  description?: string;
   icon?: string;
   min?: number; max?: number; step?: number; unit?: string;
-  options?: { value: string; label: string; icon?: string; tooltip?: string }[];
+  options?: ControlOptionView[];
   assetCategory?: string;
   markerKinds?: string[];
   /** Applies only when "otherId=value" (s15: shown greyed out with a reason while it does not, unless hideWhenOff). */
@@ -125,6 +127,48 @@ export interface Control {
   cheap?: boolean;
   /** Default value (for per-control reset). */
   default?: SettingValue;
+}
+
+/** One option of a choice control. */
+export interface ControlOptionView {
+  value: string;
+  label: string;            // localisation key
+  icon?: string;
+  tooltip?: string;
+  /** Additive (s16): a visible line under the option label, e.g. "Streets: Two-Lane · Avenues: Four-Lane" (localisation key). */
+  detail?: string;
+  /** Additive (s16): a tiny generated picture of the option — stripes by role in their colours and real widths (road mixes). */
+  swatch?: SwatchStripe[];
+}
+
+/** One stripe of an option swatch (C# Core.OptionSwatch). */
+export interface SwatchStripe {
+  role: string;             // roads: "street" | "avenue" | "local" | "roundabout" | "perimeter" | "carFree"; (s18) ground palettes: "field" | "border" | "focal" | "path" | "inlay"
+  color: string;            // "#rrggbb"
+  width: number;            // real metres; draw relative to the other stripes
+  green?: boolean;          // trees / grass verges
+  bike?: boolean;           // bike lanes
+}
+
+/** Additive (s16): what an asset control really places in the latest plan ("Automatic · Two-Lane Road"). */
+export interface ResolvedAsset {
+  id: string;               // prefab name
+  name?: string;            // localised display name (absent until the game catalog knows it)
+  icon?: string;            // thumbnail url
+  /** The current layout does not use this control: id is what Automatic WOULD place (e.g. avenues in a layout without avenues). */
+  unused?: boolean;
+}
+
+/** Additive (s16): the roads a step's plan places, by role — the map legend (same colours as the preview). */
+export interface NetLegendEntry {
+  role: string;             // "street" | "avenue" | "local" | "roundabout" | "perimeter" | "carFree"
+  label: string;            // localisation key ("Placemaker.Roads.Role.street")
+  color: string;            // "#rrggbb", identical to the in-game preview line colour
+  count: number;            // segments
+  lengthM: number;          // total length, metres
+  assetId?: string;         // main prefab of the role
+  assetName?: string;       // its localised display name
+  control?: string;         // the asset control that picks this role's road
 }
 
 export interface LayerType {
@@ -216,6 +260,10 @@ export interface StepView {
   overrides: Record<string, StepView>;
   /** Regions this step produced in the latest plan (for "then fill blocks with…" and per-region overrides). */
   regions: { key: string; tags: string[]; areaM2: number }[];
+  /** Additive (s16): asset control id → the prefab the latest plan uses for it (what "Automatic" became). */
+  resolvedAssets?: Record<string, ResolvedAsset>;
+  /** Additive (s16): the plan's roads by role (only roles present), for the legend. */
+  netLegend?: NetLegendEntry[];
   /** (s15) Controls that do not apply to the current area: control id → why (shown greyed out). */
   disabled?: Record<string, LocText>;
 }
@@ -275,6 +323,52 @@ export interface Summary {
   permanent: LocText[];
   /** True once the player ticked the permanent-effects box for exactly these effects. */
   permanentAcknowledged?: boolean;
+  /** Additive (s17, docs/PARK-STATS.md): park stats of the planned build. Absent = not a park type (parking,
+   *  roads, industrial) or no plan yet. */
+  parkStats?: ParkStatsView;
+}
+
+/** s17 park stat ids (save format, never renamed). */
+export type ParkStatId = "attractiveness" | "leisure" | "coverageRange" | "coverageCapacity" | "entertainment" | "upkeep";
+
+/** One stat the player can tune in Review (C# Core/Build/ParkStats.cs ParkStatEstimate). */
+export interface ParkStatView {
+  id: ParkStatId;
+  /** What the build gets (override or suggested; clamped to [bandMin, bandMax] while keepVanilla). */
+  value: number;
+  /** Placemaker's estimate, already inside the vanilla range. */
+  suggested: number;
+  /** Range vanilla parks of a comparable size use, scaled to this size. */
+  bandMin: number;
+  bandMax: number;
+  /** Hard limits (slider range while keepVanilla is off). */
+  min: number;
+  max: number;
+  step: number;
+  unit: "count" | "money" | "";
+  /** The game uses this value for the build today (attractiveness → tourism). Others are shown and saved only. */
+  applied: boolean;
+  overridden: boolean;
+  /** The set value was outside the vanilla range and got clamped. */
+  clamped: boolean;
+  /** How it is calculated, one line each (C# LocText, numbers in args). */
+  formula: LocText[];
+  /** Comparable vanilla parks: game name key ("Assets.NAME[id]") with an English fallback, lot area and their real value. */
+  similar: { id: string; name: string; nameKey: string; areaM2: number; value: number }[];
+}
+
+export interface ParkStatsView {
+  kind: "park" | "plaza" | "playground" | "sports" | "nature";
+  /** Kind of leisure citizens get (vanilla LeisureType CityPark / CityBeach). */
+  leisureType: "park" | "beach";
+  /** "Keep within vanilla range" (default true). */
+  keepVanilla: boolean;
+  /** s17 companion park building: "yes" = every stat is real (hidden park building at the road edge), "noRoad" = the
+   *  setting is on but no road frontage was found (only attractiveness applies), "off" = setting off (attractiveness only). */
+  companion?: "yes" | "noRoad" | "off";
+  /** Quality multiplier 0.55–2 (trees, water, landmarks, amenities, play, seating). */
+  quality: number;
+  stats: ParkStatView[];
 }
 
 export interface AssetItem {
@@ -368,6 +462,10 @@ export const Triggers = {
   renamePreset: "renamePreset",             // (layerId: string, presetId: string, name: string) — custom only
   deletePreset: "deletePreset",             // (layerId: string, presetId: string) — custom: delete; overridden built-in: reset to default
   exportPresets: "exportPresets",           // () — (re)write presets.json, sets design.presetsFile
+  // s17 park stats (Review). Per build: kept with the recipe (undoable) and the build's receipt; never re-plans.
+  setParkStat: "setParkStat",               // (id: ParkStatId, valueJson: string) — override one stat
+  resetParkStat: "resetParkStat",           // (id: ParkStatId | "") — back to suggested; "" = all
+  setParkStatsKeepVanilla: "setParkStatsKeepVanilla", // (keep: boolean) — clamp to the vanilla range
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────

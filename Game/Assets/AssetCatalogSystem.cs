@@ -165,6 +165,8 @@ namespace Placemaker.Game.Assets
                 // tool's preview/price, the ghost and the build (all call this resolver) see the same objects.
                 if (!plan.Decluttered)
                 {
+                    // s21: decorative decals lie along their host (long axis = planned yaw) whatever pack resolved them.
+                    Core.Decals.DecalFit.Orient(plan, _infoMap);
                     var report = Declutter.Run(plan, _infoMap);
                     if (report.TotalDropped > 0 || report.TotalMoved > 0)
                         Mod.Log.Info("Placemaker declutter: " + report);

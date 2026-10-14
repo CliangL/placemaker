@@ -12,8 +12,12 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Leisure
 {
     [AreaGenerator(57, Group = "squares")]
-    public sealed class MarketSquareLayer : LeisureLayer
+    public sealed class MarketSquareLayer : LeisureLayer, ILinkedControls
     {
+        /// <summary>(s18) Ground palette: picking one clears the per-role surface picks; a role pick reads Custom.</summary>
+        public string[] OnValueSet(SettingsBag settings, string controlId) => GroundPalettes.OnValueSet(settings, controlId, "surface");
+        public void Derive(SettingsBag settings) => GroundPalettes.Derive(settings, "surface");
+
         /// <summary>A square with access points (not park entrances): never blocks Build.</summary>
         protected override bool TypedEntrances => false;
 
@@ -50,7 +54,8 @@ namespace Placemaker.Core.Layers.Leisure
             c.Toggle("bollards", true, ControlTier.More, "market").Tip();
             c.Asset("bollardAsset", AssetCategories.Bollard, ControlTier.More, "market").When("bollards=true");
             c.Choice("pattern", "none", ControlTier.More, "market", "none", "grid", "border", "scatter");
-            c.Asset("surface", AssetCategories.SurfacePaving, ControlTier.More, "assets");
+            GroundPalettes.DefineControls(c, "ground", "surface");
+            c.Asset("surface", AssetCategories.SurfacePaving, ControlTier.More, "ground");
             c.Asset("centerpiece", AssetCategories.Centerpiece, ControlTier.More, "assets");
             c.Asset("treeAsset", AssetCategories.Tree, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
@@ -86,7 +91,8 @@ namespace Placemaker.Core.Layers.Leisure
             // Art pass a2: an old-town square in setts (a fountain square in warm sandstone), framed in dark
             // flags, the market floor in a lighter stone, trees in pits — one paving tiling (PavingKit).
             string kind = ctx.S("centerKind");
-            var palette = PavingPalettes.WithField(kind == "fountain" ? PavingPalettes.Warm : PavingPalettes.Cobble, ctx.S("surface"));
+            // s18: the ground palette (Automatic: old-town cobbles, sandstone round a fountain — never the ochre look).
+            var palette = GroundPalettes.Resolve(ctx.Settings, kind == "fountain" ? GroundPalettes.Sandstone : GroundPalettes.Cobble, "surface");
             var pave = new PavingPlan { Axis = axis };
             var pits = new List<float2>();
 

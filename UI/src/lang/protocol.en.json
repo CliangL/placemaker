@@ -17,5 +17,6 @@
   "Placemaker.UI.Group.water": "Water",
   "Placemaker.UI.Group.edge": "Edge",
   "Placemaker.UI.Group.layout": "Layout",
-  "Placemaker.UI.Group.extras": "Extras"
+  "Placemaker.UI.Group.extras": "Extras",
+  "Placemaker.UI.Why.NotInLayout": "Not used by this layout"
 }

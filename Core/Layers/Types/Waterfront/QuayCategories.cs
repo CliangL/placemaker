@@ -1,4 +1,4 @@
-// Quay and pier nets (s20). Research: RESEARCH-NOTES-ADDENDUM "Quays" (rules 67–71).
+// Quay and pier nets (s20). Research: RESEARCH-NOTES-ADDENDUM "Quays" (rules 77–81).
 //
 // A CS2 quay is an ordinary pathway/road net with a Bridge component in the Quay build style: placement flag
 // ShoreLine, ElevatedIsRaised, and per-side elevation taken from the terrain beside the deck. Wherever the ground

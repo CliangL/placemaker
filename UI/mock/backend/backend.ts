@@ -118,6 +118,8 @@ export class MockBackend {
     preview = new Map<string, SettingValue>();
     markerMode: { stepPath: string; kind: string } | null = null;
     ackPermanent = false;
+    /** s17 park stats choices (sent to the host with each compose). */
+    parkStats: { keepVanilla: boolean; overrides: Record<string, number> } = { keepVanilla: true, overrides: {} };
     /** Player's preview choice and the stage it was made on (a new stage starts from its default again). */
     previewChoice: { mode: "sketch" | "ghost"; stage: Stage } | null = null;
     /** Real preview being rebuilt after a change (spinner on the toggle). */
@@ -716,6 +718,7 @@ export class MockBackend {
                     },
                     a[0] + "|" + a[1],
                 );
+                void this.applyLinked(step, a[1]);
                 return;
             }
             case "previewValue": {
@@ -939,6 +942,21 @@ export class MockBackend {
             case "acknowledgePermanent":
                 this.ackPermanent = !!a[0];
                 break;
+            case "setParkStat": {
+                const v = Number(JSON.parse(String(a[1] ?? "null")));
+                if (Number.isFinite(v)) this.parkStats.overrides[String(a[0])] = v;
+                this.schedulePlan(0);
+                break;
+            }
+            case "resetParkStat":
+                if (a[0]) delete this.parkStats.overrides[String(a[0])];
+                else this.parkStats.overrides = {};
+                this.schedulePlan(0);
+                break;
+            case "setParkStatsKeepVanilla":
+                this.parkStats.keepVanilla = !!a[0];
+                this.schedulePlan(0);
+                break;
             case "locate":
                 // contract: locate(x, y, z)
                 this.toast = "Camera moved there";
@@ -951,6 +969,38 @@ export class MockBackend {
     }
 
     locateAt: [number, number, number] | null = null;
+
+    /** s16: like C# UiModels.Step — an automatic asset control the plan does not use is greyed "Not used by this layout". */
+    notInLayout(s: StepModel, path: string): Record<string, LocText> | undefined {
+        const res = this.plan?.steps?.[path]?.resolvedAssets;
+        if (!res) return undefined;
+        const out: Record<string, LocText> = {};
+        for (const [id, r] of Object.entries(res)) if (r.unused && !s.values[id]) out[id] = { key: "Placemaker.UI.Why.NotInLayout" };
+        return Object.keys(out).length ? out : undefined;
+    }
+
+    /** s16: linked controls of a real layer (a road mix writes the road picks; the mix follows them), as C# DesignEditor does. */
+    async applyLinked(step: StepModel, controlId: string) {
+        if (!this.hostLayers.has(step.layer)) return;
+        try {
+            const r = await fetch("/api/linked", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ layer: step.layer, values: step.values, controlId }),
+            }).then((x) => x.json());
+            if (!r || r.error || !r.values) return;
+            let changed = false;
+            for (const [k, v] of Object.entries(r.values as Record<string, SettingValue>))
+                if (JSON.stringify(step.values[k]) !== JSON.stringify(v)) {
+                    step.values[k] = v;
+                    changed = true;
+                }
+            for (const id of (r.driven as string[]) ?? []) if (!step.locked.includes(id)) step.locked.push(id);
+            if (changed) this.changed(true);
+        } catch {
+            /* host down: no linked controls */
+        }
+    }
 
     async randomize(path: string) {
         const steps: StepModel[] = [];
@@ -1311,7 +1361,7 @@ export class MockBackend {
                 plan = await fetch("/api/compose", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ recipe: this.stepToJson(root), ring: this.ring }),
+                    body: JSON.stringify({ recipe: this.stepToJson(root), ring: this.ring, parkStats: this.parkStats }),
                 }).then((r) => r.json());
                 plan.source = "core";
                 this.hostMs = performance.now() - t0;
@@ -1525,6 +1575,9 @@ export class MockBackend {
             children: s.children.map((c, i) => this.stepView(c, path + "/" + i)),
             overrides,
             regions,
+            resolvedAssets: this.plan?.steps?.[path]?.resolvedAssets,
+            netLegend: this.plan?.steps?.[path]?.netLegend?.length ? this.plan?.steps?.[path]?.netLegend : undefined,
+            disabled: this.notInLayout(s, path),
         };
     }
 
@@ -1549,6 +1602,7 @@ export class MockBackend {
             layers: p.perLayer,
             issues,
             permanent: p.permanent,
+            parkStats: p.parkStats ?? undefined,
         };
     }
 

@@ -19,8 +19,12 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Types.Transport
 {
     [AreaGenerator(91, Group = "transport")]
-    public sealed class TransitPlazaLayer : LeisureLayer
+    public sealed class TransitPlazaLayer : LeisureLayer, ILinkedControls
     {
+        /// <summary>(s18) Ground palette: picking one clears the per-role surface picks; a role pick reads Custom.</summary>
+        public string[] OnValueSet(SettingsBag settings, string controlId) => GroundPalettes.OnValueSet(settings, controlId, "pavingAsset");
+        public void Derive(SettingsBag settings) => GroundPalettes.Derive(settings, "pavingAsset");
+
         /// <summary>Vehicle / non-park site: plain entrances, no pedestrian/bike/main kinds, never blocks Build.</summary>
         protected override bool TypedEntrances => false;
 
@@ -79,7 +83,8 @@ namespace Placemaker.Core.Layers.Types.Transport
             c.Toggle("lamps", true, ControlTier.More, "lighting");
             c.Slider("lampSpacing", 16, 10, 30, 1, "m", ControlTier.More, "lighting").Layout(8).When("lamps=true");
 
-            c.Asset("pavingAsset", AssetCategories.SurfacePaving, ControlTier.More, "assets");
+            GroundPalettes.DefineControls(c, "ground", "pavingAsset");
+            c.Asset("pavingAsset", AssetCategories.SurfacePaving, ControlTier.More, "ground");
             c.Asset("shelterAsset", AssetCategories.TransportShelter, ControlTier.More, "assets");
             c.Asset("bikeRackAsset", AssetCategories.BikeRack, ControlTier.More, "assets");
             c.Asset("signAsset", AssetCategories.Wayfinding, ControlTier.More, "assets");
@@ -184,7 +189,8 @@ namespace Placemaker.Core.Layers.Types.Transport
             // Art pass a2: the forecourt is laid in concrete blocks, framed in dark slabs, with a light
             // platform strip along the kerb, a rondel round the focal point, tree pits and a bike floor
             // (PavingKit tiling, emitted at the end once everything that cuts into it is known).
-            var palette = PavingPalettes.WithField(PavingPalettes.Transit, ctx.S("pavingAsset"));
+            // s18: ground palette, Automatic = modern concrete (a forecourt: classic stone).
+            var palette = GroundPalettes.Resolve(ctx.Settings, ctx.S("style") == "forecourt" ? GroundPalettes.Classic : GroundPalettes.Modern, "pavingAsset");
             var pave = new PavingPlan { Axis = t };
             ctx.NavigationArea(plazaRing, AreaRole.PedestrianArea, new AssetRef("", "Pedestrian Area", "Walking Area"));
             var plazaRegion = LayerRegion.From(plazaRing) ?? region;

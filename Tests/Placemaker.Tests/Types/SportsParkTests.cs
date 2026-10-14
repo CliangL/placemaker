@@ -125,7 +125,7 @@ namespace Placemaker.Tests.Types
         public void MarkingsAreWhiteFieldLinesNeverRoadOrHazardMarkings()
         {
             var plan = Compose(Preset("campus"), SixHaL, TestKit.RoadAlongBottom(293));
-            var decals = plan.Layers.Where(l => SportsParkLayer.Facilities().Contains(l.GeneratorId)).SelectMany(l => l.Objects).Where(o => o.Role == ObjectRole.Decal).ToList();
+            var decals = plan.Layers.Where(l => SportsParkLayer.Facilities().Contains(l.GeneratorId)).SelectMany(l => l.Objects).Where(o => o.Role == ObjectRole.Decal && Placemaker.Core.Decals.DecalCatalog.IsFunctionalCategory(o.Category)).ToList();   // s21: dressing adds decorative decals
             Assert.NotEmpty(decals);
             Assert.All(decals, d => Assert.True(d.Category == AssetCategories.DecalFieldLine || d.Category == AssetCategories.DecalCourtBasketball, d.Category));
             var rules = new FieldMarkingCategoryRules();

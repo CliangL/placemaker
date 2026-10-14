@@ -295,8 +295,8 @@ namespace Placemaker.Core.Build
                 {
                     if (!ObjectTouches(o, assets, p)) continue;
                     l.Objects.RemoveAt(i);
-                    r.Objects++;
-                    r.At(o.Position.xz, o.Position.y);
+                    // Decals keep off lots too, but are dressing, not something the player planned (s21): not counted.
+                    if (o.Role != ObjectRole.Decal) { r.Objects++; r.At(o.Position.xz, o.Position.y); }
                     break;
                 }
             }

@@ -25,7 +25,7 @@ namespace Placemaker.Game.UI
 
         private int _stateStamp = -1;
         private int _statePushFrame = -100;
-        private int _designStamp = -1, _designPlanStamp = -1;
+        private int _designStamp = -1, _designPlanStamp = -1, _designAssetsStamp = -1;
         private int _designPushFrame = -100;
         private string _summaryStamp;
         private int _catalogStamp = -1, _catalogGenerators = -1, _catalogPresets = -1;
@@ -102,6 +102,10 @@ namespace Placemaker.Game.UI
             Trigger<string, string>("setMarkerKind", (p, kind) => _tool.SetMarkerKind(p, kind));
             Trigger<string, double>("removeMarker", (p, i) => _tool.RemoveMarker(p, (int)Math.Round(i)));
             Trigger<string>("setPreviewMode", m => _tool.SetPreviewMode(m));
+            // s17 park stats (docs/proposals/s17.md)
+            Trigger<string, string>("setParkStat", (id, json) => _tool.SetParkStat(id, json));
+            Trigger<string>("resetParkStat", id => _tool.ResetParkStat(id));
+            Trigger<bool>("setParkStatsKeepVanilla", keep => _tool.SetParkStatsKeepVanilla(keep));
         }
 
         // Every trigger is wrapped: an exception from a UI call must never escape into the binding layer.
@@ -193,15 +197,41 @@ namespace Placemaker.Game.UI
 
         private void PushDesign()
         {
-            if (_designStamp == _tool.DesignVersion && _designPlanStamp == _tool.PlanRevision && _frame % 30 != 0) return;
+            // AssetsResolvedStamp: automatic picks are resolved a frame after the plan lands (resolvedAssets / netLegend names).
+            if (_designStamp == _tool.DesignVersion && _designPlanStamp == _tool.PlanRevision && _designAssetsStamp == _tool.AssetsResolvedStamp && _frame % 30 != 0) return;
             // While a slider drags (previewValue) the panel already shows the dragged value: push the design at
             // most every 6th frame so the drag stays smooth; endPreview bumps the version and the final state goes out.
             if (_tool.ValuePreviewActive && _designPlanStamp == _tool.PlanRevision && _frame - _designPushFrame < 6) return;
             _designPushFrame = _frame;
             _designStamp = _tool.DesignVersion;
             _designPlanStamp = _tool.PlanRevision;
+            _designAssetsStamp = _tool.AssetsResolvedStamp;
             _design.Update(UiModels.Design(_tool.CurrentRecipe, _tool.RecipeId, _tool.Modified, _tool.Focus, _tool.StepStatuses(), _tool.Plan,
-                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale, _tool.Unavailability()).ToString());
+                null, _tool.ActivePreset, _tool.PresetsFile, _tool.PlanStale, _tool.Unavailability(), AssetLabelOf).ToString());
+        }
+
+        // (s16) Prefab id → localised display name + thumbnail, for "Automatic · Two-Lane Road" and the road legend.
+        private readonly Dictionary<string, AssetLabel> _labels = new Dictionary<string, AssetLabel>(StringComparer.Ordinal);
+        private int _labelsVersion = int.MinValue;
+
+        private AssetLabel AssetLabelOf(string category, string id)
+        {
+            var catalog = Services.Assets;
+            if (string.IsNullOrEmpty(id) || catalog == null || !catalog.Ready) return null;
+            if (_labelsVersion != catalog.Version) { _labels.Clear(); _labelsVersion = catalog.Version; }
+            string key = (category ?? "") + "|" + id;
+            if (_labels.TryGetValue(key, out var hit)) return hit;
+            AssetLabel found = null;
+            try
+            {
+                var items = catalog.Items(category ?? "");
+                if (items != null)
+                    foreach (var it in items)
+                        if (it != null && it.Id == id) { found = new AssetLabel { Name = it.DisplayName ?? "", Icon = it.Icon ?? "" }; break; }
+            }
+            catch (Exception) { found = null; }
+            _labels[key] = found;
+            return found;
         }
 
         private void PushSummary()
@@ -210,7 +240,7 @@ namespace Placemaker.Game.UI
             var failure = _tool.BuildFailure;
             bool ack = _tool.PermanentAcknowledged;
             string stamp = _tool.PlanRevision + "|" + _tool.PlanStale + "|" + afford + "|" + _tool.FeedbackVersion + "|" + (failure?.Key ?? "") + "|"
-                + (Services.Assets?.Version ?? -1) + "|" + _tool.AssetsResolvedStamp + "|" + ack + "|" + _tool.GhostDropped;
+                + (Services.Assets?.Version ?? -1) + "|" + _tool.AssetsResolvedStamp + "|" + ack + "|" + _tool.GhostDropped + "|" + _tool.ParkStatsVersion + "|" + global::Placemaker.Game.Economy.ParkCompanionSystem.Enabled;
             if (stamp == _summaryStamp) return;
             _summaryStamp = stamp;
             var input = new SummaryInput
@@ -221,7 +251,15 @@ namespace Placemaker.Game.UI
                 Stale = _tool.PlanStale || (_tool.Plan == null && _tool.Planning),
                 CanAfford = afford,
                 PermanentAcknowledged = ack,
+                AreaM2 = _tool.Plan != null ? _tool.AreaM2 : 0,
+                ParkCompanion = global::Placemaker.Game.Economy.ParkCompanionSystem.Enabled && global::Placemaker.Game.Build.BuildService.ApplyParkStats,
             };
+            if (input.ParkCompanion && _tool.Plan != null)
+            {
+                _tool.ParkSite(out var outline, out var roads);
+                input.Outline = outline;
+                input.Roads = roads;
+            }
             foreach (var n in _tool.BuildNotes) input.ExtraIssues.Add(n);
             var clipIssue = _tool.ClipIssue;
             if (clipIssue != null) input.ExtraIssues.Add(clipIssue);

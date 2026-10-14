@@ -114,7 +114,7 @@ namespace Placemaker.Tests
         {
             foreach (var o in plan.Objects)
             {
-                if (o.Role == ObjectRole.AccessPoint || o.Role == ObjectRole.AnimalSpawner) continue;
+                if (o.Role == ObjectRole.AccessPoint || o.Role == ObjectRole.AnimalSpawner || o.Role == ObjectRole.Decal) continue;   // s21: decals may lie on paths
                 float r = FootprintFor(o.Role);
                 foreach (var n in plan.Nets)
                 {

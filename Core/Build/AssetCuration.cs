@@ -503,6 +503,9 @@ namespace Placemaker.Core.Build
         public static float MaxFootprint(string category)
         {
             if (string.IsNullOrEmpty(category)) return 0f;
+            // s21: decal pools are capped by what fits their hosts (Core/Decals/DecalPools).
+            float decal = Decals.DecalPools.MaxFootprint(category);
+            if (decal > 0f) return decal;
             if (MaxSize.TryGetValue(category, out var m)) return m;
             if (category.StartsWith("play.", StringComparison.Ordinal)) return 10f;
             if (category.StartsWith("beach.", StringComparison.Ordinal)) return 10f;
@@ -523,6 +526,8 @@ namespace Placemaker.Core.Build
         public static bool FitsSize(string category, float footprint)
         {
             float max = MaxFootprint(category);
+            float min = Decals.DecalPools.MinFootprint(category);
+            if (min > 0f && footprint > 0f && footprint < min) return false;
             return max <= 0f || footprint <= 0f || footprint <= max;
         }
 

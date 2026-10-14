@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import { bindValue, trigger, useValue, ValueBinding } from "cs2/api";
 import {
     AssetLists, Catalog, DesignState, FeatureFit, GROUP, ManagedGroup, Stage, StepView, Summary, ToolState, Triggers, Values,
-    AreaMode, BrushShape, SettingValue, BrushRules, LocText,
+    AreaMode, BrushShape, SettingValue, BrushRules, LocText, NetLegendEntry, ResolvedAsset,
 } from "../contract";
 
 const LOG = "[Placemaker]";
@@ -175,8 +175,39 @@ function normalizeStep(s: Record<string, any>): StepView {
         children: arr<any>(s.children).filter(isObj).map(normalizeStep),
         overrides,
         regions: arr(s.regions),
+        resolvedAssets: normalizeResolved(s.resolvedAssets),
+        netLegend: normalizeLegend(s.netLegend),
         disabled: normalizeDisabled(s.disabled),
     };
+}
+
+/** s16 additive: control id → resolved prefab; malformed entries dropped, absent when empty. */
+function normalizeResolved(v: unknown): Record<string, ResolvedAsset> | undefined {
+    if (!isObj(v)) return undefined;
+    const out: Record<string, ResolvedAsset> = {};
+    for (const k of Object.keys(v)) {
+        const r = v[k];
+        if (!isObj(r) || typeof r.id !== "string" || !r.id) continue;
+        out[k] = { id: r.id, name: typeof r.name === "string" && r.name ? r.name : undefined, icon: typeof r.icon === "string" && r.icon ? r.icon : undefined, unused: r.unused === true || undefined };
+    }
+    return Object.keys(out).length ? out : undefined;
+}
+
+/** s16 additive: road legend entries; malformed entries dropped, absent when empty. */
+function normalizeLegend(v: unknown): NetLegendEntry[] | undefined {
+    const out = arr<any>(v)
+        .filter((e) => isObj(e) && typeof e.role === "string" && e.role)
+        .map((e) => ({
+            role: String(e.role),
+            label: String(e.label ?? ""),
+            color: typeof e.color === "string" ? e.color : "#cccccc",
+            count: Number(e.count) || 0,
+            lengthM: Number(e.lengthM) || 0,
+            assetId: typeof e.assetId === "string" && e.assetId ? e.assetId : undefined,
+            assetName: typeof e.assetName === "string" && e.assetName ? e.assetName : undefined,
+            control: typeof e.control === "string" && e.control ? e.control : undefined,
+        }));
+    return out.length ? out : undefined;
 }
 
 export const EMPTY_SUMMARY: Summary = {
@@ -303,6 +334,12 @@ export const act = {
     /** Custom: delete. Saved-over built-in: reset to its shipped settings. */
     deletePreset: (layerId: string, presetId: string) => fire(Triggers.deletePreset, layerId, presetId),
     exportPresets: () => fire(Triggers.exportPresets),
+    /** s17: override one park stat for this build (undoable, no re-plan). */
+    setParkStat: (id: string, value: number) => fire(Triggers.setParkStat, id, JSON.stringify(value)),
+    /** s17: back to the suggested value; "" = every stat. */
+    resetParkStat: (id: string) => fire(Triggers.resetParkStat, id),
+    /** s17: clamp park stats to the range vanilla parks of this size use. */
+    setParkStatsKeepVanilla: (keep: boolean) => fire(Triggers.setParkStatsKeepVanilla, keep),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */

@@ -280,6 +280,7 @@ namespace Placemaker.Core.Layers.Common
         {
             _set = new ControlSet(Area);
             DefineControls(_set);
+            AddDressingControls(_set);
             _controls = _set.List;
             DefinePresets();
         }
@@ -300,12 +301,32 @@ namespace Placemaker.Core.Layers.Common
         public IReadOnlyList<PresetInfo> Presets => _presets;
 
         protected abstract void DefineControls(ControlSet c);
+
+        /// <summary>
+        /// (s21) Decal dressing controls for fill types with a dressing profile: Decals amount + Style in the "decals"
+        /// section, one amount per dressing family in the section of what it complements (Core/Decals/DressingProfiles).
+        /// </summary>
+        private void AddDressingControls(ControlSet c)
+        {
+            if (Kind != LayerKind.Fill) return;
+            var groups = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var x in c.List) if (!string.IsNullOrEmpty(x.Group)) groups.Add(x.Group);
+            foreach (var d in Decals.DressingControls.For(Id, groups.Contains))
+            {
+                if (c.List.Exists(x => x.Id == d.Id)) continue;
+                c.List.Add(d);
+                c.Fixed(d.Id);
+            }
+        }
         protected virtual void DefinePresets() { }
 
         /// <summary>Declares a preset; values not given keep the layer defaults.</summary>
         protected void Preset(string id, params (string key, object value)[] values)
         {
             var p = new PresetInfo { Id = id, LabelKey = "Placemaker." + Area + ".Preset." + id, Values = Defaults() };
+            // s21: a preset promises a look, decals included (an abandoned lot is gritty, a formal garden clean).
+            if (Control(Decals.DressingControls.StyleId) != null)
+                p.Values.Values[Decals.DressingControls.StyleId] = Decals.DressingControls.Styles[(int)Decals.DressingProfiles.StyleFor(Id, id)];
             foreach (var (k, v) in values) p.Values.Values[k] = v;
             _presets.Add(p);
         }
@@ -470,7 +491,7 @@ namespace Placemaker.Core.Layers.Common
             float unplacedInset;
             using (Common.Layout.Use(input.Site))
             {
-                var shops = HostsStreetShops && input.HasChild(StreetShopsLayer) ? CarveStreetShops(ctx, input) : null;
+                var shops = HostsStreetShops && input.HasChild(StreetShopsLayer) && StreetShopsFit(ctx) ? CarveStreetShops(ctx, input) : null;
                 PlanCore(ctx);
                 if (shops != null) FinishStreetShops(ctx, shops);
                 unplacedInset = Entrances.UnplacedInset;
@@ -662,6 +683,12 @@ namespace Placemaker.Core.Layers.Common
         /// entrances) and hands each band piece to the feature as a "shops" region.
         /// </summary>
         protected virtual bool HostsStreetShops => false;
+
+        /// <summary>
+        /// (s18) Whether this area is big enough to give land to street shops at all (a small square would be eaten
+        /// by them). Hosts that say no add their own Info issue.
+        /// </summary>
+        protected virtual bool StreetShopsFit(LayerContext ctx) => true;
 
         /// <summary>The host controls shown under the feature toggle (FeatureInfo.Options = ShopOptions).</summary>
         public static readonly string[] ShopOptions = { StreetShops.AmountId, StreetShops.LayoutId, StreetShops.DepthId };

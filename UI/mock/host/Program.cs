@@ -24,6 +24,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Placemaker.Core;
+using Placemaker.Core.Build;
+using Placemaker.Core.Layers.Roads;
 using Unity.Mathematics;
 
 namespace Placemaker.MockHost
@@ -41,6 +43,7 @@ namespace Placemaker.MockHost
             }
             root ??= FindMockRoot();
             string repo = Path.GetFullPath(Path.Combine(root, "..", ".."));
+            Api.Repo = repo;
 
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = Array.Empty<string>() });
             builder.Logging.SetMinimumLevel(LogLevel.Warning);
@@ -63,6 +66,11 @@ namespace Placemaker.MockHost
             {
                 var body = await JsonNode.ParseAsync(req.Body);
                 return Json(Api.Compose(body));
+            });
+            app.MapPost("/api/linked", async (HttpRequest req) =>
+            {
+                var body = await JsonNode.ParseAsync(req.Body);
+                return Json(Api.Linked(body));
             });
             app.MapPost("/api/randomize", async (HttpRequest req) =>
             {
@@ -200,6 +208,11 @@ namespace Placemaker.MockHost
                     ["default"] = Value(c.Default),
                 };
                 if (!string.IsNullOrEmpty(c.TooltipKey)) o["tooltip"] = c.TooltipKey;
+                if (!string.IsNullOrEmpty(c.DescriptionKey)) o["description"] = c.DescriptionKey;
+                // s15 disabled-with-reason fields, as UiModels.Control sends them.
+                if (c.HideWhenOff) o["hideWhenOff"] = true;
+                if (!string.IsNullOrEmpty(c.EnabledWhen)) o["enabledWhen"] = c.EnabledWhen;
+                if (!string.IsNullOrEmpty(c.DisabledReasonKey)) o["disabledReason"] = c.DisabledReasonKey;
                 if (!string.IsNullOrEmpty(c.Icon)) o["icon"] = c.Icon;
                 if (!string.IsNullOrEmpty(c.AssetCategory)) o["assetCategory"] = c.AssetCategory;
                 if (!string.IsNullOrEmpty(c.VisibleWhen)) o["visibleWhen"] = c.VisibleWhen;
@@ -212,6 +225,12 @@ namespace Placemaker.MockHost
                         var oo = new JsonObject { ["value"] = op.Value, ["label"] = op.LabelKey };
                         if (!string.IsNullOrEmpty(op.Icon)) oo["icon"] = op.Icon;
                         if (!string.IsNullOrEmpty(op.TooltipKey)) oo["tooltip"] = op.TooltipKey;
+                        if (!string.IsNullOrEmpty(op.DetailKey)) oo["detail"] = op.DetailKey;
+                        if (op.Swatch != null && op.Swatch.Count > 0)
+                            oo["swatch"] = new JsonArray(op.Swatch.Select(st => (JsonNode)new JsonObject
+                            {
+                                ["role"] = st.Role, ["color"] = st.Color, ["width"] = st.Width, ["green"] = st.Green, ["bike"] = st.Bike,
+                            }).ToArray());
                         opts.Add(oo);
                     }
                     o["options"] = opts;
@@ -256,12 +275,29 @@ namespace Placemaker.MockHost
         {
             var sw = Stopwatch.StartNew();
             var recipe = new Recipe { Id = "mock", Root = Step(body?["recipe"]) };
+            // s17 park stats: the player's overrides travel with each compose request.
+            if (body?["parkStats"] is JsonObject ps)
+            {
+                recipe.ParkStats = new Placemaker.Core.Build.ParkStatsSettings { KeepVanilla = ps["keepVanilla"]?.GetValue<bool>() ?? true };
+                if (ps["overrides"] is JsonObject ov)
+                    foreach (var kv in ov) if (kv.Value != null) recipe.ParkStats.Overrides[kv.Key] = kv.Value.GetValue<double>();
+            }
             var shape = new AreaShape { Ring = Ring(body?["ring"]), Source = AreaSource.Drawn };
-            var site = new SiteContext();
+            var site = new SiteContext { Assets = Fixture().items };
             ComposedPlan plan;
             using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
             {
-                try { plan = Composer.Compose(recipe, shape, site, cts.Token); }
+                try
+                {
+                    plan = Composer.Compose(recipe, shape, site, cts.Token);
+                    // s16: resolve automatic assets like the game does (fixture pools), so the panel can say what Automatic became.
+                    var fx = Fixture();
+                    AutoAssets.Resolve(plan, new AutoAssetSource
+                    {
+                        Pool = c => fx.pools.TryGetValue(c ?? "", out var l) ? l : (IReadOnlyList<string>)Array.Empty<string>(),
+                        Exists = id => fx.items.ContainsKey(id),
+                    });
+                }
                 catch (OperationCanceledException)
                 {
                     plan = new ComposedPlan();
@@ -296,7 +332,9 @@ namespace Placemaker.MockHost
                     {
                         ["role"] = n.Role.ToString(),
                         ["pts"] = new JsonArray(P(n.A), P(n.B), P(n.C), P(n.D)),
-                        ["width"] = Composer.DefaultHalfWidth(n.Role) * 2,
+                        ["width"] = !string.IsNullOrEmpty(n.Asset.Id) && site.Assets.TryGetValue(n.Asset.Id, out var ai) && ai.NetWidth > 0.5f ? ai.NetWidth : Composer.DefaultHalfWidth(n.Role) * 2,
+                        // s16: road role colour (same as the in-game preview and the panel legend); null for other nets.
+                        ["roleColor"] = RoadRoles.Of(n.Role) != null && (n.Role != NetRole.Pathway || n.Control != null) ? RoadRoles.Color(RoadRoles.Of(n.Role)) : null,
                     }).ToArray()),
                     ["objects"] = new JsonArray(l.Objects.Select(o => (JsonNode)new JsonObject
                     {
@@ -329,8 +367,36 @@ namespace Placemaker.MockHost
                 foreach (var t in l.Terraform)
                     if (t.Permanent) permanent.Add(new JsonObject { ["key"] = "Placemaker.UI.Permanent.Terraform" });
 
+            JsonNode parkStats = null;
+            var stats = Placemaker.Core.Build.ParkStatsEstimator.Estimate(
+                Placemaker.Core.Build.ParkStatsInput.From(plan, Pricing.PolygonArea(shape.Ring), recipe), recipe.ParkStats);
+            // No nearby roads in the mock site: the companion has no frontage, like a build without a road edge.
+            Placemaker.Core.Build.ParkStatsEstimator.WithCompanion(stats, true,
+                Placemaker.Core.Build.ParkCompanionPlanner.Find(Placemaker.Core.Geometry.Poly.To2D(shape.Ring), site.NearbyNets));
+            if (stats.Applicable) parkStats = JsonNode.Parse(Placemaker.Core.Tool.UiModels.ParkStats(stats).ToString());
+
+
+            // s16: per UI step path, what Automatic became and the roads by role (UiModels, as the game sends them).
+            var steps = new JsonObject();
+            foreach (var l in plan.Layers)
+            {
+                string path = l.StepPath ?? "";
+                int at = path.IndexOf('@');
+                if (at >= 0) path = path.Substring(0, at);
+                if (path.Length == 0 || steps.ContainsKey(path)) continue;
+                var gen = GeneratorRegistry.Get(l.GeneratorId);
+                Func<string, string, Placemaker.Core.Tool.AssetLabel> label = (cat, id) => new Placemaker.Core.Tool.AssetLabel { Name = RoadRoles.NameOf(id) };
+                steps[path] = new JsonObject
+                {
+                    ["resolvedAssets"] = JsonNode.Parse(Placemaker.Core.Tool.UiModels.ResolvedAssets(plan, path, gen, label).ToString()),
+                    ["netLegend"] = JsonNode.Parse(Placemaker.Core.Tool.UiModels.NetLegend(plan, path, label).ToString()),
+                };
+            }
+
             return new JsonObject
             {
+                ["steps"] = steps,
+                ["parkStats"] = parkStats,
                 ["layers"] = layers,
                 ["issues"] = Issues(plan.Issues, ""),
                 ["stats"] = Stats(plan.MergedStats()),
@@ -367,6 +433,46 @@ namespace Placemaker.MockHost
         }
 
         // ───────────── randomize / ready ─────────────
+
+        public static string Repo;
+        private static (Dictionary<string, List<string>> pools, Dictionary<string, AssetInfo> items) _fixture;
+
+        /// <summary>The gallery's catalog fixture (automatic pools + net widths), loaded once.</summary>
+        private static (Dictionary<string, List<string>> pools, Dictionary<string, AssetInfo> items) Fixture()
+        {
+            if (_fixture.items != null) return _fixture;
+            var pools = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            var items = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
+            try
+            {
+                var root = JsonNode.Parse(File.ReadAllText(Path.Combine(Repo ?? ".", "Tests", "Placemaker.Tests", "Fixtures", "catalog-bounds.json")));
+                foreach (var kv in root["pools"].AsObject()) pools[kv.Key] = kv.Value.AsArray().Select(x => (string)x).ToList();
+                foreach (var kv in root["items"].AsObject())
+                {
+                    var info = new AssetInfo { Id = kv.Key };
+                    if (kv.Value?["w"] != null) info.NetWidth = (float)(double)kv.Value["w"];
+                    items[kv.Key] = info;
+                }
+            }
+            catch (Exception) { }
+            _fixture = (pools, items);
+            return _fixture;
+        }
+
+        /// <summary>s16: linked controls (road mix) — the values after setting one control, as DesignEditor does in the game.</summary>
+        public static JsonNode Linked(JsonNode body)
+        {
+            var g = GeneratorRegistry.Get((string)body?["layer"] ?? "");
+            if (g == null) return new JsonObject { ["error"] = "unknown layer" };
+            var bag = Settings(body?["values"]);
+            var driven = Array.Empty<string>();
+            if (g is ILinkedControls linked)
+            {
+                driven = linked.OnValueSet(bag, (string)body?["controlId"] ?? "") ?? Array.Empty<string>();
+                linked.Derive(bag);
+            }
+            return new JsonObject { ["values"] = Bag(bag), ["driven"] = Arr(driven) };
+        }
 
         public static JsonNode Randomize(JsonNode body)
         {

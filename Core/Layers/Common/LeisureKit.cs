@@ -47,6 +47,67 @@ namespace Placemaker.Core.Layers.Common
             return true;
         }
 
+        /// <summary>
+        /// (s18) The natural focal point of a place: the centroid when it is (nearly) as deep as the shape
+        /// allows, else the near-deepest point closest to the centroid — the incentre of a triangle, the
+        /// middle of a long strip's medial line (its "deepest point" alone could sit anywhere along it).
+        /// Plazas centre their focal piece here and the fountain add-on looks here first, so the
+        /// fountain and the paving round it agree. <paramref name="inscribed"/> = largest inscribed radius.
+        /// </summary>
+        public static float2 FocalPoint(LayerRegion region, out float inscribed)
+        {
+            var deep = region.DeepestPoint(out inscribed, null, 32);
+            var c = region.Centroid;
+            if (inscribed <= 0f) return deep;
+            if (region.Contains(c) && region.BoundaryDistance(c, inscribed + 1f) >= inscribed * 0.92f) return c;
+            float want = inscribed * 0.92f;
+            var best = deep; float bestD = math.distance(deep, c);
+            var size = region.Max - region.Min;
+            float step = math.max(0.25f, math.cmax(size) / 64f);
+            for (float y = region.Min.y; y <= region.Max.y; y += step)
+                for (float x = region.Min.x; x <= region.Max.x; x += step)
+                {
+                    var p = new float2(x, y);
+                    float d = math.distance(p, c);
+                    if (d >= bestD || !region.Contains(p) || region.BoundaryDistance(p, want + 0.01f) < want) continue;
+                    best = p; bestD = d;
+                }
+            return best;
+        }
+
+        /// <summary>
+        /// (s18) <see cref="FocalPoint(LayerRegion, out float)"/> of what is left of <paramref name="region"/> once the
+        /// reserved polygons (places: street-shop land, amenity pads) are taken out — the same ground the parent
+        /// laid out, so a child feature and its parent agree on the focal point. Largest remaining piece wins.
+        /// </summary>
+        public static float2 FocalPoint(LayerRegion region, ReservedSpace reserved, out float inscribed)
+        {
+            if (reserved != null && reserved.Polygons.Count > 0)
+            {
+                var clips = new List<IReadOnlyList<float2>>();
+                foreach (var p in reserved.Polygons)
+                {
+                    if (p == null || p.Length < 3) continue;
+                    Poly.Bounds(p, out var mn, out var mx);
+                    if (mx.x < region.Min.x || mx.y < region.Min.y || mn.x > region.Max.x || mn.y > region.Max.y) continue;
+                    clips.Add(p);
+                }
+                if (clips.Count > 0)
+                {
+                    try
+                    {
+                        var rest = Poly.Boolean(new[] { (IReadOnlyList<float2>)region.Ring }, clips, BoolOp.Difference);
+                        Region best = null;
+                        foreach (var r in rest) if (r?.Outer != null && (best == null || r.Area > best.Area)) best = r;
+                        var lr = best != null && best.Area > region.Area * 0.05f ? LayerRegion.From(best.Outer) : null;
+                        if (lr != null) return FocalPoint(lr, out inscribed);
+                    }
+                    catch (Exception) { }
+                }
+            }
+            return FocalPoint(region, out inscribed);
+        }
+
         public static float Yaw(float2 from, float2 to)
         {
             var d = to - from;
@@ -213,6 +274,15 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>Straight path piece emitted and indexed (paths are reserved for later layers by the composer).</summary>
+        /// <summary>(s18) Whether a band of half width <paramref name="hw"/> from a to b runs over a taken disc.</summary>
+        public static bool Crosses(Occupancy occ, float2 a, float2 b, float hw)
+        {
+            int n = math.max(2, (int)math.ceil(math.distance(a, b) / math.max(0.5f, hw)));
+            for (int i = 0; i <= n; i++)
+                if (occ.Discs.Overlaps(math.lerp(a, b, i / (float)n), hw, 0f)) return true;
+            return false;
+        }
+
         public static void Path(LayerContext ctx, Occupancy occ, float2 a, float2 b, NetRole role, AssetRef asset, int kind = 100)
         {
             if (math.distance(a, b) < 1f) return;

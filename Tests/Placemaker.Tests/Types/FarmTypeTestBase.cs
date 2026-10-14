@@ -111,8 +111,8 @@ namespace Placemaker.Tests.Types
         {
             Assert.InRange(Gen.Presets.Count, 4, 6);
             Assert.Contains(Gen.Controls, c => c.Kind == ControlKind.Choice && c.Tier == ControlTier.Essential);
-            Assert.InRange(Gen.Controls.Count, 15, 40);
-            var groups = Gen.Controls.Select(c => c.Group).Where(g => g != "entrances").Distinct().Count();
+            Assert.InRange(Gen.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 40);
+            var groups = Gen.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Where(g => g != "entrances").Distinct().Count();
             Assert.InRange(groups, 4, 8);
             Assert.Equal("farms", GeneratorGroups.Of(Gen));
             // Presets differ in more than one value from each other.

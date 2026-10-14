@@ -90,9 +90,17 @@ namespace Placemaker.Core.Layers.Types.Beach
         public static float RobustLevel(LayerContext ctx, LayerRegion region, float margin, out bool consistent)
         {
             consistent = false;
-            var depth = ctx.Site?.WaterDepthAt;
-            if (depth == null || region == null) return float.NaN;
-            var min = region.Min - margin; var max = region.Max + margin;
+            if (region == null) return float.NaN;
+            return RobustLevel(ctx.Site, region.Min - margin, region.Max + margin, out consistent);
+        }
+
+        /// <summary>The same over a box of a site (callers without a layer context: the decal dressing pass).</summary>
+        public static float RobustLevel(SiteContext site, float2 min, float2 max, out bool consistent)
+        {
+            consistent = false;
+            var depth = site?.WaterDepthAt;
+            if (depth == null) return float.NaN;
+            Func<float2, float> H = site.HeightAt ?? (_ => 0f);
             float step = math.max(3f, math.sqrt((max.x - min.x) * (max.y - min.y) / 3000f));
             var levels = new List<float>();
             var dry = new List<float>();
@@ -101,9 +109,9 @@ namespace Placemaker.Core.Layers.Types.Beach
                 {
                     var p = new float2(x, y);
                     float d = depth(p);
-                    if (d > 0.3f) levels.Add(ctx.H(p) + d);
+                    if (d > 0.3f) levels.Add(H(p) + d);
                     // Dry ground next to clearly wet water (within ~10 m) tells whether the heights agree with the level.
-                    else if (d <= 1e-4f && (depth(p + new float2(10f, 0f)) > 0.3f || depth(p - new float2(10f, 0f)) > 0.3f || depth(p + new float2(0f, 10f)) > 0.3f || depth(p - new float2(0f, 10f)) > 0.3f)) dry.Add(ctx.H(p));
+                    else if (d <= 1e-4f && (depth(p + new float2(10f, 0f)) > 0.3f || depth(p - new float2(10f, 0f)) > 0.3f || depth(p + new float2(0f, 10f)) > 0.3f || depth(p - new float2(0f, 10f)) > 0.3f)) dry.Add(H(p));
                 }
             if (levels.Count == 0) return float.NaN;
             levels.Sort();
@@ -113,6 +121,21 @@ namespace Placemaker.Core.Layers.Types.Beach
             foreach (var h in dry) if (h < level - 0.05f) below++;
             consistent = dry.Count == 0 || below <= dry.Count * 0.2f;
             return level;
+        }
+
+        /// <summary>
+        /// (s20) A water test for anything that is not a shore layer (decal dressing): the robust level and, where the
+        /// heights agree with it, the given ground (e.g. the ground after the plan's terraform: a carved beach face is under
+        /// water, so wet-sand bands follow the REAL, final waterline). Null when the site has no water.
+        /// </summary>
+        public static Func<float2, bool> WetTest(SiteContext site, float2 min, float2 max, Func<float2, float> ground)
+        {
+            var depth = site?.WaterDepthAt;
+            if (depth == null) return null;
+            float level = RobustLevel(site, min, max, out bool consistent);
+            if (!math.isfinite(level)) return null;
+            var g = ground ?? site.HeightAt;
+            return p => Wet(depth, g, level, consistent, p);
         }
 
         /// <summary>Signed distance from the shore polyline: negative on the water side of the land (foreshore).</summary>

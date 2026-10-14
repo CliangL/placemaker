@@ -105,3 +105,11 @@ Looked at every beach and waterfront preset on all four shore sites (top-down + 
 - Harbour on a low shore raises the apron to deck level (1.8 m) with a long gentle bank behind: reads as a built-up quay (intended).
 - Known: terraform outlines in the top-down view show where the change exceeds 0.12 m (patchy rectangles on gentle sand); quay
   benches follow the coast's curvature (slightly rotated on bends).
+
+## s18 — plaza sizes and palettes
+
+Checked: `--only plaza --shapes triangle,sliver,square,l --areas 0.02,0.03,0.05,0.15,0.6,1.5 --no-features [--no-shops] [--palettes]`.
+Micro/small squares are one idea (field + band + focal pad, bench ring, corner trees or a strip allée, edge lamps); the
+fountain sits on the pad's centre. Known: field pieces show thin seam lines in the render where the field is split
+round holes (same stone in game); street shops (on by default) still take most of a medium square on a site with
+streets on every side; the sunken-court level and the fountain are not concentric on medium squares.
