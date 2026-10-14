@@ -223,6 +223,18 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         /// <summary>The player's choice, or the art-pass default when the control is on automatic.</summary>
         private static string[] Or(string[] chosen, string[] defaults) => chosen != null && chosen.Length > 0 ? chosen : defaults;
 
+        private static float2 LongestEdge(LayerRegion region)
+        {
+            float best = 0f; var axis = new float2(1, 0);
+            for (int i = 0; i < region.Ring.Length; i++)
+            {
+                var e = region.Ring[(i + 1) % region.Ring.Length] - region.Ring[i];
+                float l = math.length(e);
+                if (l > best) { best = l; axis = e / l; }
+            }
+            return axis;
+        }
+
         private static bool LineOk(LayerRegion region, float2 a, float2 b, bool aOnEdge) =>
             math.distance(a, b) > 1f && (aOnEdge ? region.BoundaryDistance(a, 2f) < 1.5f || region.Contains(a) : region.ContainsDisc(a, 0.3f))
             && region.ContainsDisc(b, 0.3f) && !region.CrossesBoundary(a, b, aOnEdge);
@@ -637,7 +649,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 {
                     var e0 = ring[k]; var e1 = ring[(k + 1) % 4];
                     float yaw = LeisureKit.Yaw(e0, e1);
-                    foreach (var p in LeisureKit.Along(e0, e1, 1.6f))
+                    foreach (var p in LeisureKit.Along(e0, e1, hedgeCat == AssetCategories.Hedge ? 4.1f : 1.6f))   // hedge pieces are ~4.1 m long
                     {
                         if (math.distance(p, opening) < 2.0f) continue;
                         ctx.Object(p, yaw, ObjectRole.Bush, hedge, v, -1, hedgeCat);
@@ -777,7 +789,8 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (ctx.B("pool"))
             {
                 float w = ctx.F("poolWidth"), len = math.clamp(math.sqrt(region.Area) * ctx.F("poolLength") / 100f, 8f, 60f);
-                LeisureKit.Frame(region, out _, out var axis, out _, out _, out _);
+                LeisureKit.Frame(region, out _, out var axis, out _, out float major, out float minor);
+                if (minor > major * 0.85f) axis = LongestEdge(region);   // square to the street, not diagonal
                 bool placed = false;
                 for (int i = 0; i < 4 && !placed; i++, len *= 0.8f)
                 {
@@ -812,11 +825,18 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         {
                             var away = math.normalizesafe(an.Position - an.Toward);
                             float a0 = math.atan2(away.y, away.x);
-                            for (int k = -3; k <= 3; k++)
+                            // Art pass (a1): three ~4 m hedge pieces laid along the arc (tangent), not seven fanned radially
+                            // through each other; plain shrubs keep the old tight arc.
+                            bool pieces = hedgeCat == AssetCategories.Hedge;
+                            float rad = pieces ? 3.6f : 3.2f, stepA = pieces ? 4.1f / 3.6f : 0.32f;
+                            int half = pieces ? 1 : 3;
+                            for (int k = -half; k <= half; k++)
                             {
-                                float a = a0 + k * 0.32f;
-                                var p = an.Position + new float2(math.cos(a), math.sin(a)) * 3.2f;
-                                ctx.Object(p, a, ObjectRole.Bush, AssetMix.One(ctx.S("hedgeAsset"), ParkArt.HighHedge), v, -1, hedgeCat);
+                                float a = a0 + k * stepA;
+                                var p = an.Position + new float2(math.cos(a), math.sin(a)) * rad;
+                                var tangent = new float2(-math.sin(a), math.cos(a));
+                                ctx.Object(p, pieces ? math.atan2(tangent.x, tangent.y) : a, ObjectRole.Bush,
+                                    pieces ? AssetMix.One(ctx.S("hedgeAsset"), ParkArt.HighHedge) : AssetMix.Pick(ParkArt.GreenShrubs, v), v, -1, hedgeCat);
                             }
                         }
                         occ.Take(an.Position, 3.6f, 2);
@@ -842,7 +862,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (cat == null) return;
             var hedge = AssetMix.One(ctx.S("hedgeAsset"), ParkArt.HighHedge);
             int n = 0;
-            for (float s = 0.8f; s < region.Perimeter && n < 4000; s += 1.7f)
+            for (float s = 0.8f; s < region.Perimeter && n < 4000; s += cat == AssetCategories.Hedge ? 4.1f : 1.7f)
             {
                 var e = region.PointAt(s, out var t, out var inward, out _);
                 var p = e + inward * 1.1f;
