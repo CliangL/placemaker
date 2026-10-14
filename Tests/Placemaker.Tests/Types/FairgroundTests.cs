@@ -153,7 +153,7 @@ namespace Placemaker.Tests.Types
             Assert.Equal(group, GeneratorGroups.Of(g));
             Assert.InRange(g.Presets.Count, 4, 6);
             // s12: the street-shop options (amount, layout, depth) sit under their feature toggle, not in the main list.
-            Assert.InRange(g.Controls.Count(c => System.Array.IndexOf(Placemaker.Core.Layers.Common.LayerBase.ShopOptions, c.Id) < 0), 15, 40);
+            Assert.InRange(g.Controls.Count(c => System.Array.IndexOf(Placemaker.Core.Layers.Common.LayerBase.ShopOptions, c.Id) < 0), 15, 48);   // s18: + the ground palette (chooser, hidden base, field and four role overrides)
             var groups = g.Controls.Select(c => c.Group).Distinct().ToList();
             Assert.InRange(groups.Count, 4, 8);
             Assert.Equal(g.Controls.Count, g.Controls.Select(c => c.Id).Distinct().Count());

@@ -19,8 +19,12 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Types.Amphitheatre
 {
     [AreaGenerator(81, Group = "events")]
-    public sealed class AmphitheatreLayer : LeisureLayer
+    public sealed class AmphitheatreLayer : LeisureLayer, ILinkedControls
     {
+        /// <summary>(s18) Ground palette: picking one clears the per-role surface picks; a role pick reads Custom.</summary>
+        public string[] OnValueSet(SettingsBag settings, string controlId) => GroundPalettes.OnValueSet(settings, controlId, "seatSurface");
+        public void Derive(SettingsBag settings) => GroundPalettes.Derive(settings, "seatSurface");
+
         public const string BowlPlace = Composer.PlacePrefix + "bowl";
         private const string K = "Placemaker.Amphitheatre.";
         /// <summary>Steepest terrain change allowed towards the outline (rise/run), below the 30 % the tests and the build accept.</summary>
@@ -80,7 +84,8 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("pathAsset", AssetCategories.Pathway, ControlTier.More, "assets");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "assets");
-            c.Asset("seatSurface", AssetCategories.SurfacePaving, ControlTier.More, "assets");
+            GroundPalettes.DefineControls(c, "ground", "seatSurface");
+            c.Asset("seatSurface", AssetCategories.SurfacePaving, ControlTier.More, "ground");
             EntranceMarkers(c);
             DefineStreetShopControls(c);
 
@@ -591,7 +596,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         private static void Stage(LayerContext ctx, LayerRegion region, Occupancy occ, Bowl b, string style)
         {
             var orch = EventKit.Clip(region, LayerRegion.Circle(b.F, math.max(1.5f, b.R0 - 0.5f), 24));
-            if (ctx.B("orchestra") && orch != null) ctx.Surface(orch, SurfaceRole.Paving, PlazaArt.Or(ctx, "seatSurface", PavingPalettes.Warm.Accent), AssetCategories.SurfacePaving);
+            if (ctx.B("orchestra") && orch != null) ctx.Surface(orch, SurfaceRole.Paving, Palette(ctx).Focal, AssetCategories.SurfacePaving);
             string kind = ctx.S("stageKind");
             string cat = StageCategory(ctx, kind);
             var stagePos = b.Full ? b.F : b.F - b.D * (b.R0 * (kind == "screen" ? 0.5f : 0.35f));
@@ -732,12 +737,15 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             return rings;
         }
 
+        private static PavingPalette Palette(LayerContext ctx) =>
+            GroundPalettes.Resolve(ctx.Settings, ctx.S("style") == "cinema" ? GroundPalettes.Modern : GroundPalettes.Sandstone, "seatSurface");
+
         private static void SeatSurface(LayerContext ctx, LayerRegion region, Bowl b)
         {
             string ground = ctx.S("seatGround");
             if (ground == "grass") return;
-            // Warm sandstone rows round a pale orchestra (PavingKit palette) unless the player chose a surface.
-            var asset = ground == "paved" ? PlazaArt.Or(ctx, "seatSurface", PavingPalettes.Warm.Field) : AssetMix.One("");
+            // s18: rows in the palette's field round an orchestra in its focal stone (Automatic: warm sandstone).
+            var asset = ground == "paved" ? Palette(ctx).Field : AssetMix.One("");
             foreach (var ring in BowlRings(b, b.R0, b.ROut))
             {
                 var clipped = EventKit.Clip(region, ring);

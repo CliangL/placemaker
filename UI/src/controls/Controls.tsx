@@ -233,7 +233,7 @@ const OptionCard = ({ c, o, on, commit }: { c: ControlEx; o: ControlOptionView; 
             }}
         >
             {o.swatch && o.swatch.length ? (
-                <RoadSwatch stripes={o.swatch} />
+                o.swatch.some((st) => st.role === "field") ? <PaletteSwatch stripes={o.swatch} /> : <RoadSwatch stripes={o.swatch} />
             ) : (
                 <div className={s.swatchNone}>{o.icon ? <Icon name={o.icon} size={14} tint="dim" /> : null}</div>
             )}
@@ -259,6 +259,28 @@ const OptionCard = ({ c, o, on, commit }: { c: ControlEx; o: ControlOptionView; 
  */
 /** Four border colour longhands (Gameface: no shorthands). */
 const edgeColor = (c: string): React.CSSProperties => ({ borderTopColor: c, borderRightColor: c, borderBottomColor: c, borderLeftColor: c });
+
+/**
+ * (s18) A ground palette as a tiny square: the field framed by its border band, a round focal pad in the middle,
+ * a walk from the bottom edge to the pad and dark inlay corners. Absolute-positioned divs only (Gameface).
+ */
+export const PaletteSwatch = ({ stripes, size = 34 }: { stripes: SwatchStripe[]; size?: number }) => {
+    const c = (role: string, fallback: string) => stripes.find((x) => x.role === role)?.color || fallback;
+    const band = Math.max(3, Math.round(size * 0.12));
+    const pad = Math.round(size * 0.42);
+    const walk = Math.max(3, Math.round(size * 0.14));
+    const dot = Math.max(3, Math.round(size * 0.1));
+    const abs = (style: React.CSSProperties, key: string) => <div key={key} className={s.paletteBit} style={style} />;
+    return (
+        <div className={s.swatch} style={{ width: size + "rem", height: size + "rem", backgroundColor: c("border", "#555555") }} data-testid="palette-swatch">
+            {abs({ left: band + "rem", top: band + "rem", width: size - 2 * band + "rem", height: size - 2 * band + "rem", backgroundColor: c("field", "#999999") }, "f")}
+            {abs({ left: Math.round((size - walk) / 2) + "rem", top: Math.round(size / 2) + "rem", width: walk + "rem", height: Math.round(size / 2) + "rem", backgroundColor: c("path", "#aaaaaa") }, "p")}
+            {abs({ left: Math.round((size - pad) / 2) + "rem", top: Math.round((size - pad) / 2) + "rem", width: pad + "rem", height: pad + "rem", borderRadius: Math.round(pad / 2) + "rem", backgroundColor: c("focal", "#bbbbbb") }, "c")}
+            {abs({ left: band + 1 + "rem", top: band + 1 + "rem", width: dot + "rem", height: dot + "rem", backgroundColor: c("inlay", "#444444") }, "i1")}
+            {abs({ left: size - band - 1 - dot + "rem", top: band + 1 + "rem", width: dot + "rem", height: dot + "rem", backgroundColor: c("inlay", "#444444") }, "i2")}
+        </div>
+    );
+};
 
 export const RoadSwatch = ({ stripes, size = 34 }: { stripes: SwatchStripe[]; size?: number }) => {
     const by = (role: string) => stripes.find((x) => x.role === role);

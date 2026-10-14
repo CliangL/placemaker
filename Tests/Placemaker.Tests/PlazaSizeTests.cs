@@ -220,7 +220,17 @@ namespace Placemaker.Tests
             // The schema offers them all, with their one-line description.
             var control = TestKit.Gen("plaza").Controls.Single(c => c.Id == GroundPalettes.Control);
             Assert.Equal(GroundPalettes.Values(), control.Options.Select(o => o.Value).ToArray());
-            Assert.All(control.Options, o => Assert.True(lang.ContainsKey(o.TooltipKey), o.TooltipKey));
+            Assert.All(control.Options, o => Assert.True(lang.ContainsKey(o.DetailKey), o.DetailKey));
+            // Every palette card carries its five-role swatch (s16 option cards).
+            Assert.All(control.Options.Where(o => GroundPalettes.Find(o.Value) != null), o => Assert.Equal(5, o.Swatch.Count));
+            // The other paved types offer the same chooser.
+            foreach (var type in new[] { "marketSquare", "transitPlaza", "amphitheatre", "fairground" })
+            {
+                var g = TestKit.Gen(type);
+                Assert.Contains(g.Controls, c => c.Id == GroundPalettes.Control);
+                Assert.IsAssignableFrom<ILinkedControls>(g);
+                foreach (var c in g.Controls) Assert.True(lang.ContainsKey(c.LabelKey), type + ": " + c.LabelKey);
+            }
             Assert.Equal(GroundPalettes.Automatic, control.Default);
         }
 
@@ -280,6 +290,31 @@ namespace Placemaker.Tests
             Assert.Equal(GroundPalettes.Get(GroundPalettes.Cobble).Field.Id, p.Field.Id);
             GroundPalettes.ClearOverrides(s, "surface");
             Assert.False(GroundPalettes.IsCustom(s, "surface"));
+
+            // Linked like a road mix (ILinkedControls): a role pick reads Custom and keeps the palette it started from;
+            // picking a palette clears the picks.
+            var plaza = (ILinkedControls)TestKit.Gen("plaza");
+            var b = TestKit.Gen("plaza").Defaults();
+            b.Values["palette"] = GroundPalettes.Garden;
+            plaza.OnValueSet(b, "palette");
+            b.Values[GroundPalettes.FocalControl] = "My Pad";
+            plaza.OnValueSet(b, GroundPalettes.FocalControl);
+            plaza.Derive(b);
+            Assert.Equal(GroundPalettes.Custom, b.S("palette", ""));
+            var mixed = GroundPalettes.Resolve(b, GroundPalettes.Classic, "surface");
+            Assert.Equal("My Pad", mixed.Focal.Id);
+            Assert.Equal(GroundPalettes.Get(GroundPalettes.Garden).Field.Id, mixed.Field.Id);
+            b.Values["palette"] = GroundPalettes.Modern;
+            var cleared = plaza.OnValueSet(b, "palette");
+            Assert.Contains(GroundPalettes.FocalControl, cleared);
+            plaza.Derive(b);
+            Assert.Equal(GroundPalettes.Modern, b.S("palette", ""));
+            Assert.Equal("", b.S(GroundPalettes.FocalControl, "x"));
+            // Clearing the last pick by hand returns to the palette it started from.
+            b.Values["surface"] = "Mine"; plaza.Derive(b);
+            Assert.Equal(GroundPalettes.Custom, b.S("palette", ""));
+            b.Values["surface"] = ""; plaza.Derive(b);
+            Assert.Equal(GroundPalettes.Modern, b.S("palette", ""));
 
             // The override reaches the ground.
             var plan = Compose(Shape("square", 1500f), null, b => b.Values["surface"] = "My Field");

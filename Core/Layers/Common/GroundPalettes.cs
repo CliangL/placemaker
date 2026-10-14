@@ -188,11 +188,82 @@ namespace Placemaker.Core.Layers.Common
             ch.TooltipKey = "Placemaker.Palette.Tooltip";
             foreach (var o in ch.Options)
             {
+                // s18 (on s16's option cards): the description is the card's visible line, the swatch its picture.
                 o.LabelKey = LabelKey(o.Value);
-                o.TooltipKey = DetailKey(o.Value);
+                o.DetailKey = DetailKey(o.Value);
+                var p = Find(o.Value);
+                if (p != null) o.Swatch = OptionSwatch(p);
             }
             c.Fixed(Control);
+            // The palette a Custom mix started from (written by OnValueSet / Derive); hidden, never rolled.
+            var b = c.Choice(BaseControl, Automatic, ControlTier.More, group, BaseValues()).When(Control + "=legacy");
+            b.LabelKey = "Placemaker.Palette";
+            foreach (var o in b.Options) o.LabelKey = LabelKey(o.Value);
+            c.Fixed(BaseControl);
             DefineRoleControls(c, group, overrides);
+        }
+
+        /// <summary>Hidden control: the palette a Custom mix is based on.</summary>
+        public const string BaseControl = "paletteBase";
+
+        private static string[] BaseValues()
+        {
+            var v = new string[All.Length + 1];
+            v[0] = Automatic;
+            for (int i = 0; i < All.Length; i++) v[i + 1] = All[i].Id;
+            return v;
+        }
+
+        /// <summary>Relative stripe widths of the swatch (the UI draws a tiny square: field, band round it, pad, walk, inlay).</summary>
+        public static List<OptionSwatch> OptionSwatch(PavingPalette p)
+        {
+            var list = new List<OptionSwatch>();
+            foreach (var (role, color) in Swatch(p))
+                list.Add(new OptionSwatch { Role = role, Color = color, Width = role == "field" ? 10f : role == "focal" ? 5f : role == "border" ? 1.5f : role == "path" ? 2f : 0.8f });
+            return list;
+        }
+
+        /// <summary>
+        /// (ILinkedControls.OnValueSet for palette-aware layers) Picking a palette starts from its own stones: the role
+        /// overrides are cleared and it becomes the base. Returns the ids written.
+        /// </summary>
+        public static string[] OnValueSet(SettingsBag s, string controlId, string fieldControl)
+        {
+            if (s == null || controlId != Control) return Array.Empty<string>();
+            string id = s.S(Control, Automatic);
+            if (id == Custom) return Array.Empty<string>();
+            var ids = new List<string>(ClearOverrides(s, fieldControl));
+            s.Values[BaseControl] = Find(id) != null ? id : Automatic;
+            ids.Add(BaseControl);
+            return ids.ToArray();
+        }
+
+        /// <summary>
+        /// (ILinkedControls.Derive) The chooser reads what the ground is: Custom while any role is overridden (remembering
+        /// the palette it started from), else that palette / Automatic.
+        /// </summary>
+        public static void Derive(SettingsBag s, string fieldControl)
+        {
+            if (s == null) return;
+            string id = s.S(Control, Automatic);
+            bool overridden = IsOverridden(s, fieldControl);
+            if (overridden && id != Custom)
+            {
+                s.Values[BaseControl] = Find(id) != null ? id : Automatic;
+                s.Values[Control] = Custom;
+            }
+            else if (!overridden && id == Custom)
+            {
+                string b = s.S(BaseControl, Automatic);
+                s.Values[Control] = Find(b) != null ? b : Automatic;
+            }
+        }
+
+        private static bool IsOverridden(SettingsBag s, string fieldControl)
+        {
+            foreach (var id in new[] { fieldControl, BorderControl, FocalControl, PathControl, InlayControl })
+                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(s.S(id, ""))) return true;
+            return false;
         }
 
         /// <summary>Per-role override controls (empty = from the palette).</summary>
@@ -213,6 +284,7 @@ namespace Placemaker.Core.Layers.Common
         public static PavingPalette Resolve(SettingsBag s, string autoId, string fieldControl)
         {
             string id = s?.S(Control, Automatic) ?? Automatic;
+            if (id == Custom) id = s.S(BaseControl, Automatic);   // a Custom mix keeps the stones of the palette it started from
             var basis = Find(id) ?? Find(autoId) ?? Default;
             var p = basis.Clone();
             if (s == null) return p;
@@ -246,8 +318,9 @@ namespace Placemaker.Core.Layers.Common
         /// <summary>What the chooser should show: the chosen palette, Automatic, or Custom when a role was overridden.</summary>
         public static string Displayed(SettingsBag s, string fieldControl)
         {
-            if (IsCustom(s, fieldControl)) return Custom;
+            if (s != null && IsOverridden(s, fieldControl)) return Custom;
             string id = s?.S(Control, Automatic) ?? Automatic;
+            if (id == Custom) id = s.S(BaseControl, Automatic);
             return Find(id) != null ? id : Automatic;
         }
 

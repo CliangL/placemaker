@@ -19,7 +19,7 @@ using Random = Unity.Mathematics.Random;
 namespace Placemaker.Core.Layers.Plaza
 {
     [AreaGenerator(20)]
-    public sealed class PlazaLayer : LayerBase, IHasFeatures
+    public sealed class PlazaLayer : LayerBase, IHasFeatures, ILinkedControls
     {
         public const string LayerId = "plaza";
         public const string AccessKind = "access";
@@ -46,6 +46,11 @@ namespace Placemaker.Core.Layers.Plaza
         public static readonly string[] Hosted = { "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "noticeboard", "volleyball",
             "bigStatue", "obelisk", "triumphalArch", "sculptureWalk", "terraceGarden", "folly" };
         protected override bool HostsStreetShops => true;
+
+        /// <summary>(s18) Picking a palette clears the per-role surface picks (like a road mix writes its roads).</summary>
+        public string[] OnValueSet(SettingsBag settings, string controlId) => GroundPalettes.OnValueSet(settings, controlId, "surface");
+        /// <summary>(s18) The palette reads Custom while a role is overridden.</summary>
+        public void Derive(SettingsBag settings) => GroundPalettes.Derive(settings, "surface");
 
         /// <summary>(s18) A micro or small square stays a square: street shops would carve most of it away.</summary>
         protected override bool StreetShopsFit(LayerContext ctx)

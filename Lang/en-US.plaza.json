@@ -13,7 +13,7 @@
   "Placemaker.Plaza.furniture.Tooltip": "How many times the furniture arrangement is placed. Around the centre they come in facing pairs.",
   "Placemaker.Plaza.centerSize": "Centerpiece size",
   "Placemaker.Plaza.centerSize.Tooltip": "Space kept free around the centerpiece (radius). Raise it for a bigger fountain.",
-  "Placemaker.Plaza.centerSpacing": "Centerpiece spacing",
+  "Placemaker.Plaza.centerSpacing": "Spacing",
   "Placemaker.Plaza.arrangement": "Arrangement",
   "Placemaker.Plaza.arrangement.Tooltip": "Up to five items placed side by side, for example bench – lamp – bench.",
   "Placemaker.Plaza.arrangementMode": "Furniture placement",
