@@ -753,7 +753,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             if (per100 <= 0f) return;
             var ctx = y.Ctx;
             int total = (int)(y.Region.Area / 100f * per100);
-            string dirt = YardKit.CatQuiet(AssetCategories.DecalDirt, AssetCategories.Decal);
+            string dirt = YardKit.CatQuiet(AssetCategories.DecalLitter, AssetCategories.DecalDirt, AssetCategories.Decal);
             string puddle = YardKit.CatQuiet(AssetCategories.DecalPuddles, AssetCategories.DecalDirt);
             string crack = YardKit.CatQuiet(AssetCategories.DecalCracks, AssetCategories.DecalDirt);
             if (dirt == null && puddle == null) { AssetAvailability.Require(ctx.Plan, AssetCategories.DecalDirt, null, Keys.Category(AssetCategories.DecalDirt)); return; }

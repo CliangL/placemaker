@@ -444,6 +444,12 @@ namespace Placemaker.Gallery
                         cv.DashedPolyline(Close(t.Ring.Select(p => p.xz).ToArray()), cv.Px(1.2f), 3f, 2f, t.Permanent ? Rgba.Hex("#d08a00") : Rgba.Hex("#4f86c6"));
             }
 
+            // Terrain paint (rocky outcrops, natural ground): grey-brown, alpha by brush strength.
+            foreach (var l in plan.Layers.Where(l => l != null))
+                foreach (var p in l.Paint)
+                    if (p?.Ring != null && p.Ring.Length >= 3)
+                        cv.FillPolygon(p.Ring.Select(v => v.xz).ToArray(), Rgba.Hex("#8a8172", 0.15f + 0.45f * p.Strength));
+
             // Nets: edges at real width first (so junctions merge), then fill, then a thin centre line.
             var nets = plan.Layers.Where(l => l != null).SelectMany(l => l.Nets).Where(n => n != null).ToList();
             var polylines = nets.Select(n => (n, pts: Flatten(n), hw: HalfWidth(n, cat))).ToList();

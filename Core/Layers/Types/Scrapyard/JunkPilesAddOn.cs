@@ -61,7 +61,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             var spots = Spread(occ, R + 1f, ctx.I("piles"), Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x7A4Bu), R * 3f);
             int items = 0, piles = 0;
             bool mixed = ctx.S("mix") == "mixed";
-            string dirt = YardKit.CatQuiet(AssetCategories.DecalDirt, AssetCategories.Decal);
+            string dirt = YardKit.CatQuiet(AssetCategories.DecalLitter, AssetCategories.DecalDirt, AssetCategories.Decal);
             foreach (var c in spots)
             {
                 uint s = Hashing.Mix(ctx.Seed, (uint)piles * 613u + 5u);

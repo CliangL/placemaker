@@ -101,6 +101,7 @@ namespace Placemaker.Core.Build
             { AssetCategories.SurfaceSand, AssetCategories.SurfaceNatural },
             { SurfaceCategories.Gravel, AssetCategories.SurfaceNatural },
             { SurfaceCategories.Rock, AssetCategories.SurfaceNatural },
+            { AssetCategories.DecalLitter, AssetCategories.DecalDirt },
             // Park path tiers (g3): custom bike / trail nets fall back to the footpath pool.
             { "net.bike", AssetCategories.Pathway },
             { "net.trail", AssetCategories.Pathway },
