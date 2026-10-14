@@ -16,6 +16,7 @@
 
 using System.Collections.Generic;
 using Placemaker.Core.Geometry;
+using Placemaker.Core.Layers.AddOns.Monuments;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
 using Placemaker.Core.Layers.Park;
@@ -45,11 +46,11 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             trees.LabelKey = K + "Feature.bigtrees";
             var beds = Feature("flowerbeds", ("density", 6.0));
             beds.LabelKey = K + "Feature.flowerbeds";
-            return new List<FeatureInfo>
+            return MonumentFeatures.With(new List<FeatureInfo>
             {
                 Feature("restrooms"), flags, trees, beds, StreetShopsFeature(Area),
                 Feature("decals", ("theme", "leaves"), ("density", 0.6)), Feature("terrain", ("shape", "flatten")),
-            };
+            });
         }
 
         protected override void DefineControls(ControlSet c)

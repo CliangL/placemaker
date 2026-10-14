@@ -42,7 +42,8 @@ namespace Placemaker.Core.Layers.Plaza
         }
 
         /// <summary>Amenities a plaza offers (round 5): the hard-surface ones — no dog run on a square.</summary>
-        public static readonly string[] Hosted = { "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "noticeboard", "volleyball" };
+        public static readonly string[] Hosted = { "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "noticeboard", "volleyball",
+            "bigStatue", "obelisk", "triumphalArch", "sculptureWalk", "terraceGarden", "folly" };
         protected override bool HostsStreetShops => true;
         public override float MinArea => 60f;
 

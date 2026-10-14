@@ -5,6 +5,7 @@
 // built when all four mirror images fit, so the symmetry never breaks on an irregular outline).
 
 using System.Collections.Generic;
+using Placemaker.Core.Layers.AddOns.Monuments;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Park;
 using Unity.Mathematics;
@@ -20,11 +21,11 @@ namespace Placemaker.Core.Layers.Leisure
         public override float MinArea => 1500f;
         protected override int WantedEntrances(LayerRegion region) => 2;
 
-        protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
+        protected override List<FeatureInfo> BuildFeatures() => MonumentFeatures.With(new List<FeatureInfo>
         {
             Feature("restrooms"), Feature("shops", ("count", 1.0)), StreetShopsFeature(Area),
             Feature("decals", ("theme", "paving"), ("density", 0.5)), Feature("terrain", ("shape", "terraces"), ("height", 2.0), ("levels", 2.0)),
-        };
+        });
 
         protected override void DefineControls(ControlSet c)
         {

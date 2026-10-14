@@ -51,8 +51,9 @@ namespace Placemaker.Tests
                     foreach (var kv in f.Preset.Values) Assert.Contains(fg.Controls, c => c.Id == kv.Key);
                     if (f.Target.Length > 0) Assert.Contains(f.Target, g.Emits);
                 }
-            Assert.Equal(new[] { "plaza", "playground", "pond", "picnic", "restrooms", "fountain", "bigtrees", "flowerbeds", "shops", "edgeZoning", "rocks", "decals", "terrain",
-                    "volleyball", "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "dogRun", "noticeboard" },
+            Assert.Equal(new[] { "plaza", "playground", "pond", "picnic", "restrooms", "fountain", "bigtrees", "flowerbeds", "shops", "edgeZoning", "rocks", "ground", "decals", "terrain",
+                    "volleyball", "basketball", "tableTennis", "chess", "fitness", "splashPad", "bandstand", "dogRun", "noticeboard",
+                    "bigStatue", "folly", "obelisk", "triumphalArch", "sculptureWalk", "terraceGarden" },
                 Features.Of(GeneratorRegistry.Get("park")).Select(f => f.Layer).ToArray());
             Assert.Contains(Features.Of(GeneratorRegistry.Get("plaza")), f => f.Layer == "plazatrees");
             Assert.Contains(Features.Of(GeneratorRegistry.Get("plaza")), f => f.Layer == "kiosk");
