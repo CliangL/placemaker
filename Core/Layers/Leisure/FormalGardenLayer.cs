@@ -63,14 +63,14 @@ namespace Placemaker.Core.Layers.Leisure
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
             ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            var pts = LeisureKit.Points(gates);
+            LeisureKit.FrameToward(region, pts, out var centre, out var axis, out var side, out _, out _);
             region.DeepestPoint(out float ins, null, 12);
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
 
             // Axes (+ entrances joined straight), as the park's formal style. Thin paths (FEEDBACK-4).
-            var pts = LeisureKit.Points(gates);
             float keep = math.max(ctx.M(2f), ctx.EdgeMargin + 0.5f);
-            var graph = ParkPathStyles.Formal(region, pts, p => region.ContainsDisc(p, keep));
+            var graph = ParkPathStyles.Formal(region, pts, centre, axis, side);
             var curves = ParkPaths.Build(graph, region, false, "narrow");
             // The axes end at the round point's edge (an axis between two opposite entrances would
             // otherwise run straight across the basin).

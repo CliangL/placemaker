@@ -74,6 +74,13 @@ namespace Placemaker.Core.Layers.Leisure
             // Promenade along the long axis (shifted to one third so one side holds the big pitches).
             var spine = new List<(float2 a, float2 b)>();
             var through = centre - side * (minor * 0.18f);
+            // s9: aim at an entrance facing the promenade's end when one is near its line (no sideways connector).
+            foreach (var g in gates)
+            {
+                if (math.abs(math.dot(GateApproach.Inward(region, g.Position), axis)) < 0.85f) continue;
+                float off = math.dot(g.Position - centre, side);
+                if (math.abs(off) <= minor * 0.3f) { through = centre + side * off; break; }
+            }
             if (!region.Contains(through)) through = centre;
             if (LeisureKit.Chord(region, through, axis, 3f, out var s0, out var s1))
             {

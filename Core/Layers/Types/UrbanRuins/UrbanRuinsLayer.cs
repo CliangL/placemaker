@@ -285,8 +285,11 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                     float sideSign = math.dot(g.Position - deck.Center, deck.Side) >= 0f ? 1f : -1f;
                     target = deck.Local(along, sideSign * (deck.HalfWidth + 2f));
                 }
-                if (!region.Contains(target) || region.CrossesBoundary(g.Position, target, true)) continue;
-                LeisureKit.Path(ctx, occ, g.Position, target, NetRole.Pathway, pathAsset);
+                if (!region.Contains(target)) continue;
+                // s9: straight in from the edge, never a leg sideways along it.
+                var route = GateApproach.ToPoint(region, g.Position, target, LeisureLayer.ApproachLength(ctx));
+                if (route == null) continue;
+                for (int i = 1; i < route.Count; i++) LeisureKit.Path(ctx, occ, route[i - 1], route[i], NetRole.Pathway, pathAsset);
             }
             if (ctx.B("fence"))
                 DecayKit.BrokenFence(ctx, occ, region, gates, ctx.F("fenceGaps") / 100f, AssetMix.One(ctx.S("fenceAsset"), AbandonedLotLayer.SiteFences), 0xFE7Du);

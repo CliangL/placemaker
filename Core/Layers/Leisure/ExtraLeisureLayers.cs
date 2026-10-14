@@ -151,7 +151,7 @@ namespace Placemaker.Core.Layers.Leisure
             ParkPaths.Index(curves, occ.Corridors, 100);
             ParkPaths.Index(curves, occ.Paths, 100);
             ParkPaths.Emit(ctx, curves, gates, AssetMix.One(""));
-            LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out _);
+            LeisureKit.FrameToward(region, LeisureKit.Points(gates), out var centre, out var axis, out var side, out _, out _);
 
             if (ctx.B("chapel"))
             {

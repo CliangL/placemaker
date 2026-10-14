@@ -363,8 +363,13 @@ namespace Placemaker.Core.Layers.Common
                 gates.Add(new Gate { Position = p, Segment = seg, T = t, AttachId = -1, Kind = k });
             }
             if (gates.Count == 0)
+            {
+                // s9: no entrance placed yet (Build is blocked until one is). The suggestions still shape the
+                // layout, but as points inside the area: paths stay internal, no connector to the outline or a road.
                 foreach (var m in SuggestTyped(input, region, wanted, kinds))
-                    gates.Add(new Gate { Position = m.Position.xz, Segment = m.RingSegment, T = m.RingT, AttachId = -1, Suggested = true, Kind = m.Kind });
+                    gates.Add(new Gate { Position = Inside(region, m.Position.xz, m.RingSegment), Segment = m.RingSegment, T = m.RingT, AttachId = -1, Suggested = true, Kind = m.Kind });
+                return gates;
+            }
             for (int i = 0; i < gates.Count; i++)
             {
                 var g = gates[i];
@@ -372,6 +377,21 @@ namespace Placemaker.Core.Layers.Common
                 gates[i] = g;
             }
             return gates;
+        }
+
+        /// <summary>How far inside the outline a suggested (not yet placed) entrance's path stops (m).</summary>
+        public static float SuggestedInset => math.max(Layout.M(10f, 6f), Layout.EdgeMargin + 5f);
+
+        /// <summary>Outline point <paramref name="p"/> moved inward along its edge normal (less when the area is narrow).</summary>
+        private static float2 Inside(LayerRegion region, float2 p, int seg)
+        {
+            var n = region.InwardNormal(math.clamp(seg, 0, region.Ring.Length - 1));
+            for (float d = SuggestedInset; d >= 2f; d *= 0.7f)
+            {
+                var q = p + n * d;
+                if (region.ContainsDisc(q, math.min(2f, d * 0.5f))) return q;
+            }
+            return p;
         }
 
         /// <summary>

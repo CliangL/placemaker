@@ -192,6 +192,28 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>Principal axis through the area centroid (long axis first) and the spans along both axes.</summary>
+        /// <summary>
+        /// The outline's dominant edge direction modulo 90° (radians), from the length-weighted mean of the
+        /// edge angles ×4. <paramref name="coherence"/> is 1 for a rectilinear outline, ~0 for a round one.
+        /// </summary>
+        public bool DominantEdgeAngle(out float angle, out float coherence)
+        {
+            double c4 = 0, s4 = 0, total = 0;
+            for (int i = 0; i < Ring.Length; i++)
+            {
+                var d = Ring[(i + 1) % Ring.Length] - Ring[i];
+                double len = Math.Sqrt(d.x * d.x + d.y * d.y);
+                if (len < 1e-4) continue;
+                double th = Math.Atan2(d.y, d.x) * 4;
+                c4 += len * Math.Cos(th); s4 += len * Math.Sin(th); total += len;
+            }
+            angle = 0f; coherence = 0f;
+            if (total <= 0) return false;
+            coherence = (float)(Math.Sqrt(c4 * c4 + s4 * s4) / total);
+            angle = (float)(Math.Atan2(s4, c4) / 4);
+            return true;
+        }
+
         public void PrincipalAxes(out float2 center, out float2 major, out float majorSpan, out float minorSpan)
         {
             center = Centroid;
@@ -205,6 +227,23 @@ namespace Placemaker.Core.Layers.Common
                 xx += p.x * p.x; xy += p.x * p.y; yy += p.y * p.y;
             }
             float angle = 0.5f * (float)Math.Atan2(2 * xy, xx - yy);
+            // s9: square-ish outlines have no principal axis (the moments are isotropic, so the angle is
+            // float noise — formal axes came out at 45°). Snap to the outline's dominant edge direction
+            // when the moments are nearly isotropic or already close to it.
+            double tr = xx + yy;
+            double aniso = tr > 1e-9 ? Math.Sqrt((xx - yy) * (xx - yy) + 4 * xy * xy) / tr : 0;
+            if (DominantEdgeAngle(out float edgeAngle, out float coherence) && coherence > 0.35f)
+            {
+                // Nearest of the two edge directions (mod 180°) to the moment axis.
+                float best = edgeAngle, bestDiff = float.MaxValue;
+                for (int k = 0; k < 4; k++)
+                {
+                    float cand = edgeAngle + k * math.PI * 0.5f;
+                    float diff = math.abs(math.atan2(math.sin(2f * (cand - angle)), math.cos(2f * (cand - angle)))) * 0.5f;
+                    if (diff < bestDiff) { bestDiff = diff; best = cand; }
+                }
+                if (aniso < 0.12 || bestDiff < math.radians(20f)) angle = best;
+            }
             major = new float2(math.cos(angle), math.sin(angle));
             var minor = new float2(-major.y, major.x);
             float minA = float.MaxValue, maxA = float.MinValue, minB = float.MaxValue, maxB = float.MinValue;
