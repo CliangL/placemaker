@@ -242,6 +242,7 @@ namespace Placemaker.Gallery
         public int Objects, Nets, Surfaces, Errors, Warnings, BenchesOffPath, Overlaps, Outside, Decals;
         public double PathMetres;
         public Dictionary<string, int> ByRole = new Dictionary<string, int>();
+        public Dictionary<string, int> ByCategory = new Dictionary<string, int>();
         public List<string> IssueKeys = new List<string>();
         public string Failure;
     }
@@ -546,6 +547,7 @@ namespace Placemaker.Gallery
             {
                 string c = RoleCategories.ForObject(o) ?? "";
                 res.ByRole[o.Role.ToString()] = res.ByRole.TryGetValue(o.Role.ToString(), out var k) ? k + 1 : 1;
+                res.ByCategory[c] = res.ByCategory.TryGetValue(c, out var kc) ? kc + 1 : 1;
                 var (poly, r) = Footprint(o, cat);
                 fps.Add((o, c, poly, r));
             }
@@ -824,7 +826,7 @@ namespace Placemaker.Gallery
                     {
                         type = j.Type, variant = j.Variant, file = r.File, ms = Math.Round(r.Ms), failure = r.Failure, objects = r.Objects, nets = r.Nets,
                         pathMetres = Math.Round(r.PathMetres), surfaces = r.Surfaces, errors = r.Errors, warnings = r.Warnings,
-                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, decals = r.Decals, byRole = r.ByRole, issues = r.IssueKeys.Distinct().ToList(),
+                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(),
                     });
                 }
                 sb.Append("</div>");

@@ -138,6 +138,7 @@ namespace Placemaker.Core.Build
                 r.Add(AssetCategories.Decal);
                 var theme = DecalTheme(name);
                 if (theme != null) r.Add(theme);
+                GroundCoverCategoryRules.ClassifyDecal(lower, r);   // farm wheel-rut decals (decal.farm, s8)
                 return r;
             }
 
@@ -268,6 +269,7 @@ namespace Placemaker.Core.Build
             // Objects.
             if ((t & (AssetTraits.BrandObject | AssetTraits.WallOrHanging | AssetTraits.WaterPlacement)) != 0) return false;
             // Decals: curated themes (AssetCuration) — natural park looks, never letters or road markings.
+            if (category == AssetCategories.DecalFarm) return GroundCoverCategoryRules.DecalAuto(lower);
             if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
                 return AssetCuration.DecalAutoEligible(category, name);
             // Built-in prop names are CamelCase without spaces; "HighSchool03 Rooftop Garden" or
@@ -486,6 +488,7 @@ namespace Placemaker.Core.Build
             if (ContainsAny(lower, "invisible", "marker") && category != AssetCategories.InvisiblePath) score -= 200;
             // Curated order: allow-listed built-ins in list order, decals by natural look (playtest 4b).
             score += AssetCuration.Score(category, name);
+            score += GroundCoverCategoryRules.Score(category, lower);
             if (category == AssetCategories.Decal || category.StartsWith("decal.", StringComparison.Ordinal))
                 score += AssetCuration.DecalScore(category, name);
             return score;
