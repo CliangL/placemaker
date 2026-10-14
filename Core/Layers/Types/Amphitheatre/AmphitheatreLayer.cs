@@ -420,7 +420,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         /// <summary>Seating, promenade and the stage's back (pit ramp when dug) all inside, clear of reserved polygons/discs.</summary>
         private static bool Fits(LayerRegion region, Occupancy occ, Bowl b)
         {
-            bool Ok(float2 p, float margin) => region.ContainsDisc(p, margin) && !occ.HitsPolygon(p, 0.5f) && !occ.Discs.Overlaps(p, 0.5f);
+            bool Ok(float2 p, float margin) => region.ContainsDisc(p, margin) && !occ.HitsPolygon(p, 0.5f) && !occ.Discs.Overlaps(p, 0.5f) && !occ.Corridors.Overlaps(p, 0.5f);
             float rim = b.Rim + 0.5f;
             // Behind/around the stage: the orchestra disc (and the pit ramp when dug) must be inside.
             float back = b.Mode == Mode.Dig ? b.R0 + b.Height / EdgeSlope * 0.9f : b.R0 + 1f;
