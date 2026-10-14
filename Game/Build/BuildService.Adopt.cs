@@ -232,6 +232,7 @@ namespace Placemaker.Game.Build
         {
             _tagged.Clear();
             int unmatched = 0, unmatchedEdges = 0;
+            _taggedCounts = default;
             var nodeRefs = new Dictionary<Entity, int2>();   // x = all temp edges, y = our edges
             bool carrier = _carrier != Entity.Null && EntityManager.Exists(_carrier);
             using var temps = _tempQuery.ToEntityArray(Allocator.Temp);
@@ -396,7 +397,27 @@ namespace Placemaker.Game.Build
         }
 
         /// <summary>Counts permanent members per kind and logs mismatches against the plan.</summary>
-        private void VerifyMembers()
+        private MemberCounts _taggedCounts;
+        private bool _dupRetried;
+
+        private PlannedCounts PlannedNow() => new PlannedCounts
+        {
+            Objects = _emittedObjects,
+            OptionalDropped = _dropped,
+            Areas = _emittedAreas,
+            NetPieces = _work?.Nets.Count ?? 0,
+        };
+
+        /// <summary>Pre-Apply invariant: true when the temporaries are a duplicate set (the caller retries once, then fails).</summary>
+        private bool TemporariesDuplicated()
+        {
+            if (!BuildVerification.Duplicated(PlannedNow(), _taggedCounts, out var why)) return false;
+            Mod.Log.Warn($"Placemaker: temporaries look duplicated before Apply ({why}; {_taggedCounts}).");
+            return true;
+        }
+
+        /// <summary>Post-Apply check. Returns true when the built group is a duplicate set and must be rolled back.</summary>
+        private bool VerifyMembers()
         {
             try
             {
@@ -415,18 +436,18 @@ namespace Placemaker.Game.Build
                     else if (EntityManager.HasComponent<global::Game.Net.Node>(e)) kind = MemberKind.Node;
                     counts.Add(kind);
                 }
-                var planned = new PlannedCounts
-                {
-                    Objects = _emittedObjects,
-                    OptionalDropped = _dropped,
-                    Areas = _emittedAreas,
-                    NetPieces = _work?.Nets.Count ?? 0,
-                };
+                var planned = PlannedNow();
                 var issues = BuildVerification.Compare(planned, counts);
                 if (issues.Count == 0) Mod.Log.Info($"Placemaker verified group {_groupId}: {counts}.");
                 else Mod.Log.Warn($"Placemaker group {_groupId} member check ({counts}): {string.Join("; ", issues)}.");
+                if (BuildVerification.Duplicated(planned, counts, out var why))
+                {
+                    Mod.Log.Warn($"Placemaker group {_groupId} was built twice ({why}); rolling it back.");
+                    return true;
+                }
             }
             catch (Exception e) { Mod.Log.Warn("Placemaker member verification failed: " + e.Message); }
+            return false;
         }
 
         private static void CountNode(Dictionary<Entity, int2> refs, Entity node, bool own)
@@ -460,6 +481,7 @@ namespace Placemaker.Game.Build
             if (EntityManager.HasComponent<PlacemakerMember>(e)) EntityManager.SetComponentData(e, tag);
             else EntityManager.AddComponentData(e, tag);
             _tagged.Add(e);
+            _taggedCounts.Add(kind);
         }
 
         private int CountTaggedTemporaries()
