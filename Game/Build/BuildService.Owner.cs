@@ -106,7 +106,9 @@ namespace Placemaker.Game.Build
             var ring3 = new float3[ring.Length];
             for (int i = 0; i < ring.Length; i++) ring3[i] = new float3(ring[i].x, 0f, ring[i].y);
             var w = new WorkItem { Kind = WorkKind.Area, Layer = -1, Index = -1, Category = BuildCategories.AreaLot };
+            int areas = _emittedAreas;
             EmitAreaDefinition(_ownerPrefab, ring3, OwnerKey, w);
+            _emittedAreas = areas;   // the owner lot is not a planned area (verification)
             _itemByKey.Remove(OwnerKey);   // never part of the census or exclusion: optional by design
         }
 

@@ -36,6 +36,8 @@ namespace Placemaker.Game.Build
         private PlanIndex _netIndex, _objectIndex, _areaIndex;
         private long _syntheticKey = 1L << 62;
         private readonly HashSet<string> _usedPrefabNames = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<Entity> _usedPrefabs = new HashSet<Entity>();
+        private int _emittedObjects, _emittedAreas;
         private TerrainHeightData _heights;
         private bool _heightsValid;
 
@@ -61,6 +63,7 @@ namespace Placemaker.Game.Build
 
         private void ResetIndexes()
         {
+            _emittedObjects = _emittedAreas = 0;
             _netIndex = _objectIndex = _areaIndex = null;
             _itemByKey.Clear();
             _heightsValid = false;
@@ -72,6 +75,7 @@ namespace Placemaker.Game.Build
         {
             var n = _catalog.NameOf(prefab);
             if (!string.IsNullOrEmpty(n)) _usedPrefabNames.Add(n);
+            _usedPrefabs.Add(prefab);
         }
 
         private static long PrefabId(Entity e) => ((long)e.Version << 32) | (uint)e.Index;
@@ -116,7 +120,7 @@ namespace Placemaker.Game.Build
                 var settings = CourseFitSettings.Default;
                 settings.FollowTerrain = net.FollowTerrain;
                 settings.MaxLength = _catalog.MaxEdgeLength(prefab);
-                var pieces = CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), Height, settings);
+                var pieces = CourseFitting.Fit(new Cubic(net.A, net.B, net.C, net.D), GroundHeight, settings);
                 long key = PlanWork.Key(w);
                 bool any = false;
                 for (int p = 0; p < pieces.Count; p++)
@@ -299,7 +303,7 @@ namespace Placemaker.Game.Build
         {
             _objectIndex = _objectIndex ?? new PlanIndex();
             var p = position;
-            if (snapToGround || !math.isfinite(p.y)) p.y = Height(p.xz);
+            if (snapToGround || !math.isfinite(p.y)) p.y = GroundHeight(p.xz);
             var rotation = quaternion.RotateY(yaw);
             var def = NewDefinition();
             EntityManager.AddComponentData(def, new CreationDefinition
@@ -324,6 +328,8 @@ namespace Placemaker.Game.Build
                 m_ParentMesh = -1,
             });
             _objectIndex.AddPoint(key, PrefabId(prefab), p.xz);
+            _emittedObjects++;
+            _usedPrefabs.Add(prefab);
         }
 
         // ───────────────────────── surfaces and areas ─────────────────────────
@@ -412,10 +418,11 @@ namespace Placemaker.Game.Build
             {
                 var p = ring[i];
                 // float.MinValue elevation = "on the ground" (vanilla AreaToolSystem).
-                nodes[i] = new global::Game.Areas.Node(new float3(p.x, Height(p.xz), p.z), float.MinValue);
+                nodes[i] = new global::Game.Areas.Node(new float3(p.x, GroundHeight(p.xz), p.z), float.MinValue);
             }
             nodes[ring.Length] = nodes[0];   // vanilla closes the ring by repeating the first node
             _areaIndex.AddPoint(key, PrefabId(prefab), PlanWork.Centroid(ring));
+            _emittedAreas++;
             _itemByKey[key] = w;
             NoteUsed(prefab);
         }

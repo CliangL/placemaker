@@ -17,6 +17,41 @@ namespace Placemaker.Tests
                 Assert.True(math.distance(pieces[i - 1].D, pieces[i].A) < 1e-4f, "pieces must join exactly");
         }
 
+
+        [Fact]
+        public void InnerProfileFollowsGroundEvenWhenPlanHeightsAreStale()
+        {
+            // Plan heights from the ground BEFORE terraform (flat 0); the real ground is a bowl.
+            System.Func<float2, float> bowl = p => 2f + 0.02f * (p.x - 6f) * (p.x - 6f);
+            var c = Cubic.Straight(new float3(0, 0, 0), new float3(12, 0, 0));
+            var r = CourseFitting.Fit(c, bowl, CourseFitSettings.Default);
+            Assert.Single(r);   // a quadratic profile fits one cubic exactly: no split needed
+            Assert.True(CourseFitting.TerrainDeviation(r[0], bowl, out _) < 0.01f);
+        }
+
+        [Fact]
+        public void ShortBumpyPiecesAreSplitToo()
+        {
+            System.Func<float2, float> bumps = p => 1.5f * math.sin(p.x / 3f);
+            var c = Cubic.Straight(new float3(0, 0, 0), new float3(40, 0, 0));
+            var s = CourseFitSettings.Default;
+            var r = CourseFitting.Fit(c, bumps, s);
+            AssertContinuous(r, c);
+            foreach (var piece in r)
+                if (piece.Length() >= s.MinSplitLength)
+                    Assert.True(CourseFitting.TerrainDeviation(piece, bumps, out _) <= s.MaxTerrainDeviation + 1e-3f);
+        }
+
+        [Fact]
+        public void MaxLengthPiecesAreTerrainFittedAsWell()
+        {
+            System.Func<float2, float> slope = p => 0.001f * p.x * p.x;
+            var c = Cubic.Straight(new float3(0, 0, 0), new float3(300, 0, 0));
+            var s = CourseFitSettings.Default; s.MaxLength = 100;
+            var r = CourseFitting.Fit(c, slope, s);
+            AssertContinuous(r, c);
+            foreach (var piece in r) Assert.True(CourseFitting.TerrainDeviation(piece, slope, out _) <= s.MaxTerrainDeviation + 1e-3f);
+        }
         [Fact]
         public void FlatStraightCourseStaysOnePiece()
         {

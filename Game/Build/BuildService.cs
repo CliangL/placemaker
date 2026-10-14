@@ -344,7 +344,7 @@ namespace Placemaker.Game.Build
 
         private void DoWaitReplaced(int frame)
         {
-            _status.Progress = 0.05f;
+            SetProgress(0.05f);
             if (!_registry.TryGetRecordEntity(_request.ReplaceGroup, out _)) { Go(Step.ActivateTool); return; }
             if (frame - _stepFrame > ReplaceTimeoutFrames) ForceIdle(BuildPhase.Failed, "Placemaker.Build.ReplaceFailed");
         }
@@ -367,7 +367,7 @@ namespace Placemaker.Game.Build
                 CreateRecord();
                 EmitOwnerArea();
                 _status.Phase = BuildPhase.Materializing;
-                _status.Progress = 0.4f;
+                SetProgress(0.4f);
                 _lastMatched = -1;
                 Go(Step.WaitTemps);
                 return;
@@ -388,7 +388,7 @@ namespace Placemaker.Game.Build
 
         private void DoEmitNets()
         {
-            _status.Progress = 0.2f;
+            SetProgress(0.2f);
             EmitNets();
             _emitCursor = 0;
             Go(Step.EmitRest);
@@ -412,7 +412,7 @@ namespace Placemaker.Game.Build
                 else EmitObject(_work.Objects[i - _work.Surfaces.Count - _work.Areas.Count]);
             }
             _emitCursor = end;
-            _status.Progress = 0.2f + 0.2f * (total == 0 ? 1f : end / (float)total);
+            SetProgress(0.2f + 0.2f * (total == 0 ? 1f : end / (float)total));
             if (_emitCursor >= total)
             {
                 _lastMatched = -1;
@@ -433,7 +433,7 @@ namespace Placemaker.Game.Build
         {
             if (frame - _stepFrame < 2) return;
             var census = Census();
-            _status.Progress = 0.4f + 0.15f * (census.Expected == 0 ? 1f : math.saturate(census.Matched / (float)census.Expected));
+            SetProgress(0.4f + 0.15f * (census.Expected == 0 ? 1f : math.saturate(census.Matched / (float)census.Expected)));
             if (census.Matched >= census.Expected)
             {
                 Go(Step.Validate);
@@ -500,7 +500,7 @@ namespace Placemaker.Game.Build
             }
             _status.ErrorPositions.Clear();   // transient errors seen while settling are not real
             _status.Phase = BuildPhase.Applying;
-            _status.Progress = 0.65f;
+            SetProgress(0.65f);
             Go(Step.Apply);
         }
 
@@ -526,9 +526,10 @@ namespace Placemaker.Game.Build
 
         private void DoApply()
         {
+            TagLateTemporaries();
             _tool.Requested = ApplyMode.Apply;
             _applied = true;   // from here on, failures roll back through group removal
-            _status.Progress = 0.75f;
+            SetProgress(0.75f);
             _status.Phase = BuildPhase.Settling;
             Go(Step.Settle);
         }
@@ -540,6 +541,7 @@ namespace Placemaker.Game.Build
             int stillTemp = CountTaggedTemporaries();
             if (stillTemp > 0 && frame - _stepFrame < ApplyTimeoutFrames) return;
             if (stillTemp > 0) Mod.Log.Warn($"Placemaker: {stillTemp} parts stayed temporary after Apply; they are discarded.");
+            AdoptStrays();
             _registry.MarkDirty();
             int members = _registry.CountMembers(_groupId, false);
             if (members == 0)
@@ -550,12 +552,14 @@ namespace Placemaker.Game.Build
             }
             ChargeNets();
             AfterApply();
-            _status.Progress = 0.85f;
+            SetProgress(0.85f);
             Go(_work.Zoning.Count > 0 ? Step.ZoningWait : Step.Finish);
         }
 
         private void DoFinish()
         {
+            _registry.MarkDirty();
+            VerifyMembers();
             FinishRecord();
             RestoreTool();
             var groupId = _groupId;
@@ -676,6 +680,8 @@ namespace Placemaker.Game.Build
             _itemByKey.Clear();
             _tagged.Clear();
             _usedPrefabNames.Clear();
+            _usedPrefabs.Clear();
+            _preexisting.Clear();
             ResetIndexes();
             _errorKey = BuildErrorKeys.Other;
             _errorArgs = Array.Empty<object>();

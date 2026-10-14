@@ -1,7 +1,9 @@
 // Placemaker — terraform brushes, lake water and zoning (GPL-3.0).
-// Terraform + water adapted from ParkManager's ParkLakeBuild (tomkpunkt, GPL-3.0): the game's
-// own level brush is re-emitted every frame for spots not yet at the target height, then a
-// constant-level water source fills the basin. Zoning follows GridRoadGenerator's Zoning
+// Terraform: the desired ground (Core TerraformRaster) is applied directly with
+// TerrainSystem.ApplyBrush (Shift kernel, one generated mask texture per tile) and verified against
+// the CPU height readback. Fallback and water adapted from ParkManager's ParkLakeBuild (tomkpunkt,
+// GPL-3.0): the game's level brush re-emitted for spots off target, then a constant-level water
+// source fills the basin. Zoning follows GridRoadGenerator's Zoning
 // definitions (Ti4goc, GPL-3.0): ZoningFlags.Zone|Marquee without Overwrite never repaints cells
 // that are already zoned.
 
@@ -23,6 +25,294 @@ namespace Placemaker.Game.Build
 {
     public sealed partial class BuildService
     {
+        // ───────────────────────── direct terraform (playtest 4b) ─────────────────────────
+        // One generated mask texture per tile, applied with TerrainSystem.ApplyBrush (Shift kernel):
+        // no brush entities, no previews, a handful of applications in total. Every pass is measured
+        // against the CPU height readback; the first pass also calibrates the brush texture
+        // orientation (remembered for the session). Old per-frame level-brush dabs remain only as a
+        // fallback when the direct path is unavailable or does not converge.
+
+        private const float TerraformCell = 1.75f;        // half a heightmap pixel (14336 m / 4096)
+        private const float TerraformBank = 4f;           // blended edge outside the rings (m)
+        private const float TerraformTolerance = 0.3f;
+        private const float TerraformOffFraction = 0.02f;
+        private const int TerraformMaxPasses = 4;
+        private const int TerraformWaitFrames = 6;        // apply → cascade re-render → CPU readback
+        private const int TerraformMaxStaleWaits = 3;
+        private const int TerraformTileTexels = 1024;
+        private const int TerraformMaxRasterCells = 1 << 20;
+        private const double DirectTerraformSeconds = 6.0;
+        private const float ShiftToolStrength = 2000f;    // TerrainSystem.GetTerrainAdjustmentSpeed(Shift)
+
+        private enum TfMode { Direct, Dabs }
+
+        private struct TfApplied { public UnityEngine.Texture2D Texture; public Brush Brush; public Bounds2 Area; }
+
+        /// <summary>Brush texture orientation found by calibration (0..3 = flipX | flipY·2); -1 unknown.</summary>
+        private static int s_shiftOrientation = -1;
+
+        private TerraformRaster _tfRaster;
+        private TfMode _tfMode;
+        private bool _tfAwaiting;        // a pass was applied and is waiting to be measured
+        private bool _tfReverting;       // the last applications are being undone (wrong orientation)
+        private bool _tfVerified;        // the ground reached the raster: nets/objects may use it
+        private int _tfPass, _tfOrientation, _tfOrientationTries, _tfStaleWaits, _tfWaitUntil;
+        private float _tfStartRms, _tfLastRms;
+        private readonly List<TfApplied> _tfApplied = new List<TfApplied>();
+        private readonly List<UnityEngine.Texture2D> _tfTextures = new List<UnityEngine.Texture2D>();
+
+        private void ResetTerraform()
+        {
+            // Cancel/cleanup must also delete any brush definitions still alive (else they keep shaping).
+            DiscardTerraformBrushes();
+            DestroyTerraformTextures();
+            _dabs.Clear();
+            _paintDabs.Clear();
+            _paintCursor = 0;
+            _dabCursor = 0;
+            _tfRaster = null;
+            _tfVerified = false;
+            _tfAwaiting = _tfReverting = false;
+            _tfWaitUntil = 0;
+        }
+
+        private void DestroyTerraformTextures()
+        {
+            foreach (var t in _tfTextures) if (t != null) UnityEngine.Object.Destroy(t);
+            _tfTextures.Clear();
+            _tfApplied.Clear();
+        }
+
+        /// <summary>Monotonic progress: retries and phase changes never move the bar backwards.</summary>
+        private void SetProgress(float value)
+        {
+            if (value > _status.Progress) _status.Progress = math.min(1f, value);
+        }
+
+        private List<(float2[] ring, float target, int layer)> TerraformItems()
+        {
+            var items = new List<(float2[] ring, float target, int layer)>();
+            foreach (var w in _work.Terraform)
+            {
+                var t = _request.Plan.Layers[w.Layer].Terraform[w.Index];
+                if (!math.isfinite(t.TargetHeight) || t.Ring == null || t.Ring.Length < 3) continue;
+                var ring = new float2[t.Ring.Length];
+                for (int i = 0; i < ring.Length; i++) ring[i] = t.Ring[i].xz;
+                items.Add((ring, t.TargetHeight, w.Layer));
+            }
+            return items;
+        }
+
+        private void BeginTerraform()
+        {
+            _dabs.Clear();
+            _dabCursor = 0;
+            _terraformStart = DateTime.UtcNow;
+            _tfPass = _tfOrientationTries = _tfStaleWaits = 0;
+            _tfAwaiting = _tfReverting = _tfVerified = false;
+            _tfWaitUntil = 0;
+            _tfOrientation = s_shiftOrientation >= 0 ? s_shiftOrientation : 0;
+            var items = TerraformItems();
+            if (items.Count == 0) { Go(AfterTerraform()); return; }
+            try
+            {
+                _tfRaster = TerraformRaster.Build(items, TerraformCell, TerraformBank, TerraformMaxRasterCells);
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn("Placemaker terraform raster failed: " + e.Message);
+                _tfRaster = null;
+            }
+            if (_tfRaster == null) { BeginTerraformDabs(items); return; }
+            _tfMode = TfMode.Direct;
+            _tfStartRms = _tfLastRms = -1f;
+            Mod.Log.Info($"Placemaker terraform: {items.Count} items, raster {_tfRaster.Width}x{_tfRaster.Height} @ {_tfRaster.Cell:F2} m (direct brush).");
+        }
+
+        private void DoTerraform(int frame)
+        {
+            if (_tfMode == TfMode.Dabs) { DoTerraformDabs(frame); return; }
+            if (frame < _tfWaitUntil) return;
+            if ((DateTime.UtcNow - _terraformStart).TotalSeconds > DirectTerraformSeconds)
+            {
+                FinishTerraformDirect(false, "time limit");
+                return;
+            }
+            _heightsValid = false;
+            var deltas = _tfRaster.Deltas(Height, TerraformTolerance, out var stats);
+            if (_tfStartRms < 0) _tfStartRms = math.max(1e-3f, stats.Rms);
+            SetProgress(0.1f + 0.08f * math.saturate(1f - stats.Rms / _tfStartRms));
+
+            if (_tfReverting)
+            {
+                // The wrong orientation was undone: try the next one from the restored ground.
+                _tfReverting = false;
+                DestroyTerraformTextures();
+                _tfOrientation = (_tfOrientation + 1) & 3;
+                _tfLastRms = stats.Rms;
+            }
+            else if (_tfAwaiting)
+            {
+                _tfAwaiting = false;
+                float before = _tfLastRms;
+                if (math.abs(stats.Rms - before) < 0.01f * math.max(0.05f, before) && _tfStaleWaits < TerraformMaxStaleWaits)
+                {
+                    // Nothing changed yet: the CPU height copy lags the GPU. Measure again shortly.
+                    _tfStaleWaits++;
+                    _tfAwaiting = true;
+                    _tfWaitUntil = frame + TerraformWaitFrames;
+                    return;
+                }
+                _tfStaleWaits = 0;
+                bool improved = stats.Rms < before * 0.8f;
+                if (!improved && s_shiftOrientation < 0)
+                {
+                    if (++_tfOrientationTries >= 4)
+                    {
+                        Mod.Log.Warn("Placemaker direct terraform: no brush orientation converged; using level brushes.");
+                        RevertLastApplied();
+                        BeginTerraformDabs(TerraformItems());
+                        _tfWaitUntil = frame + TerraformWaitFrames;
+                        return;
+                    }
+                    Mod.Log.Info($"Placemaker direct terraform: orientation {_tfOrientation} did not converge (rms {before:F2} -> {stats.Rms:F2}); reverting.");
+                    RevertLastApplied();
+                    _tfReverting = true;
+                    _tfWaitUntil = frame + TerraformWaitFrames;
+                    return;
+                }
+                if (improved && s_shiftOrientation < 0)
+                {
+                    s_shiftOrientation = _tfOrientation;
+                    Mod.Log.Info($"Placemaker direct terraform: brush orientation {_tfOrientation} confirmed.");
+                }
+                DestroyTerraformTextures();
+            }
+
+            if (stats.Done(TerraformTolerance, TerraformOffFraction))
+            {
+                FinishTerraformDirect(true, null);
+                return;
+            }
+            if (_tfPass >= TerraformMaxPasses)
+            {
+                FinishTerraformDirect(false, $"{stats.InsideOff}/{stats.Inside} cells still off after {_tfPass} passes");
+                return;
+            }
+            int applied = ApplyShiftPass(deltas);
+            _tfPass++;
+            _tfLastRms = stats.Rms;
+            _tfAwaiting = applied > 0;
+            _tfWaitUntil = frame + TerraformWaitFrames;
+            if (applied == 0) FinishTerraformDirect(true, null);
+        }
+
+        private void FinishTerraformDirect(bool done, string why)
+        {
+            DestroyTerraformTextures();
+            _tfVerified = done;
+            if (!done)
+            {
+                _warnings.Add("Placemaker.Build.TerraformIncomplete");
+                Mod.Log.Warn($"Placemaker terraform incomplete ({why}).");
+            }
+            else Mod.Log.Info($"Placemaker terraform reached its target in {_tfPass} pass(es), {(DateTime.UtcNow - _terraformStart).TotalSeconds:F1} s.");
+            SetProgress(0.18f);
+            Go(AfterTerraform());
+        }
+
+        /// <summary>Raise and lower brushes per tile. Returns the number of brush applications.</summary>
+        private int ApplyShiftPass(float[] deltas)
+        {
+            bool flipX = (_tfOrientation & 1) != 0, flipY = (_tfOrientation & 2) != 0;
+            int applied = 0;
+            float dt = UnityEngine.Time.unscaledDeltaTime;
+            _tfAppliedDelta = math.clamp(dt, 0.05f, 1f);
+            foreach (var tile in _tfRaster.Tiles(TerraformTileTexels))
+            {
+                float metres = TerraformRaster.Masks(deltas, _tfRaster.Width, _tfRaster.Height, tile, flipX, flipY, TerraformTolerance * 0.25f,
+                    out var raise, out var lower, out bool anyRaise, out bool anyLower);
+                if (metres <= 0f) continue;
+                float strength = TerraformRaster.ShiftStrength(metres, dt, ShiftToolStrength, out float maskScale);
+                _tfRaster.TileWorld(tile, out var center, out float size);
+                if (anyRaise) { ApplyShift(raise, tile.Size, maskScale, center, size, strength); applied++; }
+                if (anyLower) { ApplyShift(lower, tile.Size, maskScale, center, size, -strength); applied++; }
+            }
+            return applied;
+        }
+
+        private void ApplyShift(float[] mask, int n, float scale, float2 center, float size, float strength)
+        {
+            var tex = MaskTexture(mask, n, scale);
+            float y = Height(center);
+            var brush = new Brush
+            {
+                m_Tool = Entity.Null,   // no TerraformingBrushData → the Shift speed (2000) applies
+                m_Position = new float3(center.x, y, center.y),
+                m_Target = new float3(center.x, y, center.y),
+                m_Start = new float3(center.x, y, center.y),
+                m_Angle = 0f,
+                m_Size = size,
+                m_Strength = strength,
+                m_Opacity = 1f,
+            };
+            var area = new Bounds2(center - size * 0.5f, center + size * 0.5f);
+            _terrain.ApplyBrush(TerraformingType.Shift, area, brush, tex);
+            _tfApplied.Add(new TfApplied { Texture = tex, Brush = brush, Area = area });
+        }
+
+        /// <summary>Undoes the last pass exactly (Shift is additive): same textures, opposite strength.</summary>
+        private void RevertLastApplied()
+        {
+            var list = new List<TfApplied>(_tfApplied);
+            _tfApplied.Clear();
+            float dt = UnityEngine.Time.unscaledDeltaTime;
+            foreach (var a in list)
+            {
+                var b = a.Brush;
+                // The game scales by this frame's clamped delta time: rescale so the change matches.
+                b.m_Strength = -b.m_Strength * _tfAppliedDelta / math.clamp(dt, 0.05f, 1f);
+                _terrain.ApplyBrush(TerraformingType.Shift, a.Area, b, a.Texture);
+            }
+        }
+
+        /// <summary>Clamped delta time of the frame the last pass was applied in.</summary>
+        private float _tfAppliedDelta = 0.05f;
+
+        /// <summary>RGBA half texture (every channel = mask): the kernels' sampled channel is not documented.</summary>
+        private UnityEngine.Texture2D MaskTexture(float[] mask, int n, float scale)
+        {
+            var tex = new UnityEngine.Texture2D(n, n, UnityEngine.TextureFormat.RGBAHalf, false, true)
+            {
+                wrapMode = UnityEngine.TextureWrapMode.Clamp,
+                filterMode = UnityEngine.FilterMode.Bilinear,
+                name = "PlacemakerMask",
+            };
+            var pixels = new UnityEngine.Color[n * n];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                float v = mask[i] * scale;
+                pixels[i] = new UnityEngine.Color(v, v, v, v);
+            }
+            tex.SetPixels(pixels);
+            tex.Apply(false, false);
+            _tfTextures.Add(tex);
+            return tex;
+        }
+
+        /// <summary>
+        /// Ground for nets/objects after terraform: the raster's desired height where terraform
+        /// touched the ground and reached it (verified), else the live terrain. Keeps paths and
+        /// objects consistent with the terraform even while the CPU height copy still lags.
+        /// </summary>
+        private float GroundHeight(float2 p)
+        {
+            if (_tfVerified && _tfRaster != null && _tfRaster.TrySample(p, Height, out float h)) return h;
+            return Height(p);
+        }
+
+        // ───────────────────────── fallback: level brush dabs ─────────────────────────
+
         private const float BrushRadius = 12f;
         private const float LevelTolerance = 0.3f;
         private const float BrushTime = 0.3f;
@@ -42,44 +332,29 @@ namespace Placemaker.Game.Build
         private Entity _levelTool, _brushPrefab;
         private EntityQuery _allPrefabs;
 
-        private void ResetTerraform()
+        private void BeginTerraformDabs(List<(float2[] ring, float target, int layer)> items)
         {
-            // Cancel/cleanup must also delete any brush definitions still alive (else they keep shaping).
-            DiscardTerraformBrushes();
-            _dabs.Clear();
-            _paintDabs.Clear();
-            _paintCursor = 0;
-            _dabCursor = 0;
-        }
-
-        private void BeginTerraform()
-        {
+            _tfMode = TfMode.Dabs;
             _dabs.Clear();
             _dabCursor = 0;
             _terraformStart = DateTime.UtcNow;
+            _stepFrame = UnityEngine.Time.frameCount;
             if (!ResolveTerraformTools())
             {
                 _warnings.Add("Placemaker.Build.TerraformUnavailable");
                 Go(AfterTerraform());
                 return;
             }
-            var items = new List<(float2[] ring, float target, int layer)>();
-            foreach (var w in _work.Terraform)
-            {
-                var t = _request.Plan.Layers[w.Layer].Terraform[w.Index];
-                if (!math.isfinite(t.TargetHeight)) continue;
-                var ring = new float2[t.Ring.Length];
-                for (int i = 0; i < ring.Length; i++) ring[i] = t.Ring[i].xz;
-                items.Add((ring, t.TargetHeight, w.Layer));
-            }
             // A feature's own levelling inside a terraformed parent wins over the parent's cells there
             // (otherwise both targets are dabbed at once and never settle).
             foreach (var d in TerraformDabs.Merge(items, BrushRadius)) _dabs.Add(new Dab { P = d.P, Target = d.Target });
+            Mod.Log.Info($"Placemaker terraform fallback: {_dabs.Count} level-brush spots.");
             if (_dabs.Count == 0) Go(AfterTerraform());
         }
 
-        private void DoTerraform(int frame)
+        private void DoTerraformDabs(int frame)
         {
+            if (frame < _tfWaitUntil) return;
             DiscardTerraformBrushes();
             _heightsValid = false;
             int elapsed = frame - _stepFrame;
@@ -93,7 +368,7 @@ namespace Placemaker.Game.Build
                 if (emitted < MaxBrushesPerFrame) { EmitBrush(new float3(d.P.x, h, d.P.y), d.Target); emitted++; }
             }
             if (n > 0) _dabCursor = (_dabCursor + MaxBrushesPerFrame) % n;
-            _status.Progress = 0.1f + 0.1f * (_dabs.Count == 0 ? 1f : 1f - pending / (float)_dabs.Count);
+            SetProgress(0.1f + 0.08f * (_dabs.Count == 0 ? 1f : 1f - pending / (float)_dabs.Count));
             bool done = pending == 0 && elapsed > TerraformSettleFrames;
             bool timedOut = elapsed > TerraformTimeoutFrames * math.max(1, (n + MaxBrushesPerFrame - 1) / MaxBrushesPerFrame) / 4
                 || (DateTime.UtcNow - _terraformStart).TotalSeconds > TerraformTimeoutSeconds;
