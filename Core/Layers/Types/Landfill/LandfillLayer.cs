@@ -143,11 +143,9 @@ namespace Placemaker.Core.Layers.Types.Landfill
             string style = ctx.S("style");
 
             YardKit.Fence(ctx, s.Gates, ctx.S("fence"), AssetMix.One(ctx.S("fenceAsset")), s.Salt(0xFE7Cu));
-            if (ctx.B("screenTrees") && style != "capped")
-            {
-                YardKit.Screen(ctx, s.Occ, s.Gates, 2.6f, 8f, ctx.L("treeSpecies"), s.Salt(0x5C2Eu));
-                s.EdgeInset = 5.5f;
-            }
+            // Room for the screening belt now; the trees go in after the site so nothing has to dodge them.
+            bool screen = ctx.B("screenTrees") && style != "capped";
+            if (screen) s.EdgeInset = 6.2f;
             s.Start = region.Centroid;
             if (s.Gates.Count > 0)
             {
@@ -168,8 +166,9 @@ namespace Placemaker.Core.Layers.Types.Landfill
             }
             ctx.Check();
 
+            if (screen) YardKit.Screen(ctx, s.Occ, s.Gates, 2.6f, 8f, ctx.L("treeSpecies"), s.Salt(0x5C2Eu));
             if (ctx.B("leachatePond") && (style == "active" || style == "capped" || style == "compost")) Lagoon(s);
-            if (style == "active" || style == "capped") { GasVents(s, ctx.F("gasVents")); ToeTrees(s); }
+            if (style == "active" || style == "capped") ToeTrees(s);
             YardKit.Weeds(ctx, s.Occ, ctx.F("weeds"), 5f + s.EdgeInset, s.Salt(0x3EEDu));
             Grime(s, ctx.F("grime"));
             if (ctx.B("paint")) Paint(s);
@@ -268,6 +267,16 @@ namespace Placemaker.Core.Layers.Types.Landfill
 
             if (face)
             {
+                // Machines on the face.
+                int machines = ctx.I("machines");
+                string mc = machines > 0 ? YardKit.Cat(ctx, ctx.L("machineAssets"), AssetCategories.ScrapMachine) : null;
+                for (int k = 0; k < machines * 6 && s.Machines < machines && mc != null; k++)
+                {
+                    uint v = s.Salt(0x3AC0u + (uint)k);
+                    var p = m.At(Dir(a0 + (Hashing.Unit(v) - 0.5f) * 2f * half * 0.8f), 0.4f + 0.5f * Hashing.Unit(Hashing.Mix(v, 1u)));
+                    if (LeisureKit.Put(ctx, s.Occ, p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Furniture, AssetMix.Pick(ctx.L("machineAssets"), v), mc, 2.6f, v, 1f, 0.3f))
+                        s.Machines++;
+                }
                 // Raw garbage on the face, compactors working it.
                 var fan = Fan(m, a0, half, 0.3f, 0.95f);
                 YardKit.Patch(ctx, fan, SurfaceRole.Ground, AssetMix.One(""), haulCat);
@@ -286,16 +295,6 @@ namespace Placemaker.Core.Layers.Types.Landfill
                         if (o != null) { o.Scale = 0.8f + 0.6f * Hashing.Unit(Hashing.Mix(v, 1u)); s.Garbage++; }
                     }
                     s.Dirty.Add((m.At(Dir(a0), 0.65f), math.sqrt(fanRegion.Area / math.PI)));
-                }
-                // Machines on the face.
-                int machines = ctx.I("machines");
-                string mc = machines > 0 ? YardKit.Cat(ctx, ctx.L("machineAssets"), AssetCategories.ScrapMachine) : null;
-                for (int k = 0; k < machines * 6 && s.Machines < machines && mc != null; k++)
-                {
-                    uint v = s.Salt(0x3AC0u + (uint)k);
-                    var p = m.At(Dir(a0 + (Hashing.Unit(v) - 0.5f) * 2f * half * 0.8f), 0.4f + 0.5f * Hashing.Unit(Hashing.Mix(v, 1u)));
-                    if (LeisureKit.Put(ctx, s.Occ, p, Hashing.Unit(Hashing.Mix(v, 2u)) * 6.283f, ObjectRole.Furniture, AssetMix.Pick(ctx.L("machineAssets"), v), mc, 2.6f, v, 1f, 0.3f))
-                        s.Machines++;
                 }
                 // Daily cover: soil piles just beyond the face edges.
                 int piles = ctx.I("coverPiles");
@@ -329,6 +328,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
                 }
             }
             // Cap scrub on the finished part.
+            GasVents(s, ctx.F("gasVents"));
             Meadow(s, ctx.F("meadow") * 0.5f, face ? a0 : float.NaN, half);
         }
 
@@ -341,6 +341,7 @@ namespace Placemaker.Core.Layers.Types.Landfill
             s.Shapes[s.Shapes.Count - 1] = m;
             s.Mound = m;
             if (ctx.B("summitPath")) SummitPath(s);
+            GasVents(s, ctx.F("gasVents"));
             Meadow(s, ctx.F("meadow"), float.NaN, 0f);
         }
 

@@ -137,11 +137,12 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
                     if (!region.Contains(c)) continue;
                     inside[i] = true;
                     float h0 = ctx.H(c);
-                    float d = region.BoundaryDistance(c, falloff + 1f);
-                    dist[i] = d;
                     baseH[i] = h0;
                     float o = offset(c, h0);
                     if (!math.isfinite(o)) o = 0f;
+                    // Only look as far for the outline as this cell's change needs (keeps the search cheap).
+                    float d = region.BoundaryDistance(c, math.max(falloff, math.abs(o) / slope) + 1f);
+                    dist[i] = d;
                     o *= Smooth(0f, falloff, d);
                     off[i] = math.clamp(o, -slope * d, slope * d);
                 }

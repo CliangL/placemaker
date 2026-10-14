@@ -60,7 +60,7 @@ namespace Placemaker.Core.Layers.Types.Scrapyard
             { categories.Add(AssetCategories.ScrapWreck); return true; }
             if (Has(lower, "tire", "tyre") && !Has(lower, "retire", "tired"))
             { categories.Add(AssetCategories.ScrapTire); return true; }
-            if (Has(lower, "container") && !Has(lower, "garbage", "trash", "waste", "recycl", "bin", "plant", "flower", "water", "glass", "cloth", "bottle"))
+            if (Has(lower, "container") && !Has(lower, "garbage", "trash", "waste", "recycl", "bin", "plant", "flower", "water", "glass", "cloth", "bottle", "skip", "dumpster"))
             { categories.Add(AssetCategories.ScrapContainer); return true; }
             if (Has(lower, "forklift", "fork lift", "excavator", "bulldozer", "digger", "wheelloader", "wheel loader", "frontloader", "front loader",
                     "dumper", "compactor", "reachstacker", "reach stacker", "straddle", "crusher", "baler", "material handler", "scrap handler",
