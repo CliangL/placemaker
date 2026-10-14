@@ -695,9 +695,12 @@ namespace Placemaker.Game.Overlay
         {
             switch (r)
             {
-                case NetRole.Avenue: return new Color(0.35f, 0.85f, 1f);                                   // cyan
-                case NetRole.Street: case NetRole.PerimeterRoad: case NetRole.CulDeSac: case NetRole.Roundabout: return new Color(0.95f, 0.95f, 0.95f);   // white
-                case NetRole.Pathway: case NetRole.PathwayWide: return new Color(1f, 0.82f, 0.45f);          // warm yellow
+                // (s16) Roads by role, in the colours of the panel's road legend (RoadRoles.Color): white streets,
+                // cyan avenues, green locals, violet roundabout rings, orange perimeter, warm-yellow car-free/paths.
+                case NetRole.Avenue: case NetRole.Street: case NetRole.PerimeterRoad: case NetRole.CulDeSac: case NetRole.Roundabout:
+                case NetRole.Pathway: case NetRole.PathwayWide:
+                    var c = Placemaker.Core.Layers.Roads.RoadRoles.Rgb(Placemaker.Core.Layers.Roads.RoadRoles.Of(r));
+                    return new Color(c.x, c.y, c.z);
                 case NetRole.DriveAisle: case NetRole.DriveConnector: case NetRole.Alley: return new Color(0.4f, 0.6f, 1f);   // parking aisles: blue
                 case NetRole.Fence: return new Color(0.6f, 0.45f, 0.32f);
                 default: return Color.white;

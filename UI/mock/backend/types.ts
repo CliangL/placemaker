@@ -1,4 +1,4 @@
-import { Issue, LocText, SettingValue, Stat } from "../../src/contract";
+import { Issue, LocText, NetLegendEntry, ResolvedAsset, SettingValue, Stat } from "../../src/contract";
 import { V2 } from "./geometry";
 
 /** A recipe step as the mock backend stores it (mirrors Core.RecipeStep). */
@@ -17,7 +17,8 @@ export interface StepModel {
 }
 
 export interface PlanRegion { key: string; tags: string[]; ring: V2[]; areaM2: number }
-export interface PlanNet { role: string; pts: V2[]; width: number }
+/** roleColor (s16): the road role colour for roads of the roads layer (same as the in-game preview). */
+export interface PlanNet { role: string; pts: V2[]; width: number; roleColor?: string | null }
 export interface PlanObject { role: string; p: V2; yaw: number; r: number }
 
 /** One executed step × region; same JSON as the mock host's /api/compose. */
@@ -45,4 +46,6 @@ export interface ComposeResult {
     permanent: LocText[];
     ms: number;
     source: "core" | "fake";
+    /** s16: per UI step path, what Automatic became and the roads by role. */
+    steps?: Record<string, { resolvedAssets?: Record<string, ResolvedAsset>; netLegend?: NetLegendEntry[] }>;
 }
