@@ -144,8 +144,8 @@ namespace Placemaker.Core.Layers.Commercial
                 mall.LaneRows(legs[1], cells, null, -1, 0f, 0f, unit, math.min(cells, 3));
                 if (innerCells > 0)
                 {
-                    mall.LaneRows(legs[0], innerCells, null, -1, mall.GateTrim(legs[0], true, t1), 0f, unit, math.min(innerCells, 2));
-                    mall.LaneRows(legs[1], innerCells, null, 1, mall.GateTrim(legs[1], true, t1), 0f, unit, math.min(innerCells, 2));
+                    mall.LaneRows(legs[0], innerCells, null, -1, mall.GateTrim(legs[0], true, t1 + Mall.Cell), 0f, unit, math.min(innerCells, 2));
+                    mall.LaneRows(legs[1], innerCells, null, 1, mall.GateTrim(legs[1], true, t1 + Mall.Cell), 0f, unit, math.min(innerCells, 2));
                 }
             }
             // The horseshoe runs up the left leg, across and down: its left side (+1) is the outside all the way round.

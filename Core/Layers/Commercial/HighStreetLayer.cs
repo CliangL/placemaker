@@ -133,6 +133,9 @@ namespace Placemaker.Core.Layers.Commercial
                     var e = new List<(float2, string)>();
                     LotEntrances(e, r, s0, s1, 0f, "entrance");
                     float tp = math.min(lt * 0.5f, len - Mall.Cell);
+                    // (s39) Two whole cell columns of plots between the forecourt and the paseo (the game blocks a lone column).
+                    tp = math.max(tp, Forecourt + Mall.MinStretch + Mall.PaseoWidth * 0.5f);
+                    if (tp > lt - 3f || len - tp - Mall.PaseoWidth * 0.5f < Mall.MinStretch) { mall.Lot(Mall.Rect(r, s0, s1, 0f, lt), e, Mall.Parking(ctx), salt++); continue; }
                     var paseo = mall.Hold(Mall.Rect(r, edge, laneS + (laneS < c ? -hs : hs), tp - Mall.PaseoWidth * 0.5f, tp + Mall.PaseoWidth * 0.5f));
                     e.Add((r.At(edge, tp), "footpath"));
                     if (mall.Lot(Mall.Rect(r, s0, s1, 0f, lt), e, Mall.Parking(ctx), salt++))
