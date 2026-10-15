@@ -508,7 +508,35 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void GroundPaintAloneNeedsNoAcknowledgement()
+        {
+            var plan = new ComposedPlan();
+            var layer = new AreaPlan();
+            layer.Paint.Add(new PlannedPaint { Ring = Poly.To3D(Square(0, 0, 20, 20), _ => 0f), Layer = TerrainMaterials.Dirt, Strength = 0.5f });
+            plan.Layers.Add(layer);
+            var effects = UiModels.Permanent(plan);
+            Assert.Single(effects);
+            Assert.False(UiModels.NeedsAck(effects));
+            Assert.Equal("", UiModels.PermanentFingerprint(effects));
+            var j = JsonValue.Parse(UiModels.Summary(new SummaryInput { Plan = plan }).ToString());
+            Assert.False(j["permanentNeedsAck"].AsBool());
+            Assert.True(j["permanentAcknowledged"].AsBool());
+            // With a terraform the tick is back, and repainting more does not reset it.
+            layer.Terraform.Add(new PlannedTerraform { Ring = Poly.To3D(Square(0, 0, 10, 10), _ => 0f), Permanent = true });
+            var withLake = UiModels.Permanent(plan);
+            Assert.True(UiModels.NeedsAck(withLake));
+            string fp = UiModels.PermanentFingerprint(withLake);
+            layer.Paint.Add(new PlannedPaint { Ring = Poly.To3D(Square(30, 0, 60, 20), _ => 0f), Layer = TerrainMaterials.Dry, Strength = 0.5f });
+            Assert.Equal(fp, UiModels.PermanentFingerprint(UiModels.Permanent(plan)));
+            // Shape paints count their probed area, not their support box.
+            var kit = new PaintKit(layer.Paint, null, 1u);
+            var r = kit.Radial(new float2(200, 200), TerrainMaterials.Lush, 1f, 0f, 5f, Falloff.Linear);
+            Assert.InRange(r.AreaEstimate, 40f, 110f);
+        }
+
+        [Fact]
         public void GroundPaintComposeStaysFast()
+
         {
             Compose("park", 1);   // warm up
             var sw = System.Diagnostics.Stopwatch.StartNew();

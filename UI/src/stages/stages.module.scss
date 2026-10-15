@@ -310,6 +310,13 @@
     @include border(1rem, rgba(255, 181, 71, 0.3));
 }
 
+/* s33: an information line (ground paint is permanent), no tick. */
+.calloutInfo {
+    background-color: rgba(255, 255, 255, 0.04);
+    align-items: center;
+}
+
+
 .calloutBody {
     @include col;
     margin-left: 6rem;

@@ -19,6 +19,11 @@ import { defaultSurface, surfaceColor } from "./fakeAssets";
 import { area, closestOnRing, dist, perimeter, selfIntersects, simplify, V2 } from "./geometry";
 import { ComposeResult, StepModel } from "./types";
 
+/** s33: like Core UiModels.NeedsAck — ground paint alone needs no tick. */
+function needsAck(permanent: { key: string }[]): boolean {
+    return permanent.some((p) => p.key !== "Placemaker.Permanent.Paint");
+}
+
 const EN: Record<string, string> = { ...FAKE_STRINGS };
 const en = (key: string, fallback?: string) => EN[key] ?? fallback ?? key.split(".").pop() ?? key;
 
@@ -1212,7 +1217,7 @@ export class MockBackend {
             }
             case "build":
             case "finishEdit":
-                if (this.plan && this.plan.permanent.length && !this.ackPermanent) return;
+                if (this.plan && needsAck(this.plan.permanent) && !this.ackPermanent) return;
                 this.startBuild();
                 break;
             case "cancelBuild":
@@ -1631,7 +1636,9 @@ export class MockBackend {
             layers: p.perLayer,
             issues,
             permanent: p.permanent,
+            permanentNeedsAck: needsAck(p.permanent),
             parkStats: p.parkStats ?? undefined,
+
             legend: p.legend?.length ? p.legend : fakeLegend(p, this.root ? this.allSteps().reduce((n, st) => n + st.markers.length, 0) : 0),
         };
     }

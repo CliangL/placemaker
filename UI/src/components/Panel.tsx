@@ -667,8 +667,14 @@ export const PlacemakerPanel = () => {
 
     if (!state.open) return null;
 
+    // s33: ground paint alone (permanentNeedsAck false) is information, not a gate.
     const needsAck =
-        state.stage === "review" && summary.permanent.length > 0 && !ack && (state.primary.action === "build" || state.primary.action === "finishEdit");
+        state.stage === "review" &&
+        summary.permanent.length > 0 &&
+        summary.permanentNeedsAck !== false &&
+        !ack &&
+        (state.primary.action === "build" || state.primary.action === "finishEdit");
+
     const missing = state.stage === "design" || state.stage === "review" ? missingMarkers(design.root) : null;
     const gated = state.primary.action === "toReview" || state.primary.action === "build" || state.primary.action === "finishEdit";
     // Who to lead to when the player presses the (disabled) button while entrances are missing.

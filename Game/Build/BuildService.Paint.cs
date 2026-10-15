@@ -15,6 +15,13 @@
 // m_Texture swapped for the stamp mask during the call. Exactly once per build: the Paint step runs only from the
 // terraform step, never on retries (ResetForRetry → EmitNets), and _paintStarted guards re-entry. Painting is
 // permanent (not undone when the group is removed). If the raster fails, the old per-ring brush dabs run.
+//
+// s33 (PaintSplatmap DXBC disassembled, docs/TERRAIN-PAINT.md): the user splatmap keeps one 4-bit weight per material
+// (R8 = Extra1 | Extra2 << 4, G8 = Extra3 | Extra4 << 4); PaintDither = max(old, mask.a × strength) on the tool's
+// channel, quantised with a 2×2 checkerboard (0.25 / 0.75), EraseDither = min(old, 1 − mask.a) on the tool's channels
+// (Clear: all). Repainting the same value is a no-op. The brush maps u = +x, v = +z at angle 0 (no calibration needed).
+// A stamp marked Erase with a material tool is applied at strength 0, which selects EraseDither for that channel only.
+
 
 using System;
 using System.Collections.Generic;
@@ -151,7 +158,9 @@ namespace Placemaker.Game.Build
                 _paintStamps = _paintJob.Result ?? new List<PaintStamp>();
                 _paintStampCursor = 0;
                 _paintLastApplyFrame = frame;
-                Mod.Log.Info($"Placemaker paints the terrain: {_paintStamps.Count} stamps, {PaintRaster.PaintedArea(_paintStamps):0} m² (orientation {(s_shiftOrientation >= 0 ? s_shiftOrientation : 0)}).");
+                int erases = 0; foreach (var s in _paintStamps) if (s.Erase) erases++;
+                Mod.Log.Info($"Placemaker paints the terrain: {_paintStamps.Count} stamps ({erases} erase), {PaintRaster.PaintedArea(_paintStamps):0} m², cell {(_paintStamps.Count > 0 ? _paintStamps[0].Cell : 0f):0.##} m.");
+
             }
 
             if (_paintStampCursor < _paintStamps.Count)
@@ -186,8 +195,10 @@ namespace Placemaker.Game.Build
                 throw new InvalidOperationException("brush prefab missing");
             var materials = World.GetOrCreateSystemManaged<global::Game.Rendering.TerrainMaterialSystem>();
             if (materials == null) throw new InvalidOperationException("TerrainMaterialSystem missing");
-            int orientation = s_shiftOrientation >= 0 ? s_shiftOrientation : 0;
-            var tex = StampTexture(stamp, (orientation & 1) != 0, (orientation & 2) != 0);
+            // s33: the PaintSplatmap kernel (DXBC disassembled) maps the brush texture with u = +x, v = +z at m_Angle 0
+            // (uv = rotate(texel centre − brush centre) / half size), and row 0 of a Texture2D is v = 0: identity, whatever
+            // the heightmap brush calibration found for the terraform shader.
+            var tex = StampTexture(stamp, false, false);
             var c = stamp.Center;
             float h = Height(c);
             var brush = new Brush
@@ -198,7 +209,9 @@ namespace Placemaker.Game.Build
                 m_Start = new float3(c.x, h, c.y),
                 m_Angle = 0f,
                 m_Size = stamp.Size,
-                m_Strength = 1f,
+                // s33: strength 0 with a material tool runs EraseDither on that material's channel only
+                // (TerrainMaterialSystem.ApplyToSplatmap: kernel = strength > 0 ? Paint : Erase); the mask is the strength.
+                m_Strength = stamp.Erase && stamp.Layer > 0 ? 0f : 1f,
                 m_Opacity = 1f,
             };
             var original = brushPrefab.m_Texture;
@@ -249,15 +262,18 @@ namespace Placemaker.Game.Build
             _heightsValid = false;
             _paintDabs.Clear();
             _paintCursor = 0;
+            int skipped = 0;
             foreach (var paint in AllPaints())
             {
+                // s33: shape fields and per-material erases have no dab equivalent (a dab paints its whole ring).
+                if (paint.Shape != null || (paint.Erase && paint.Layer > 0)) { skipped++; continue; }
                 if (!_paintTools.TryGetValue(math.clamp(paint.Layer, 0, 4), out var tool)) continue;
                 var ring = new float2[paint.Ring.Length];
                 for (int i = 0; i < ring.Length; i++) ring[i] = paint.Ring[i].xz;
                 foreach (var q in TerraformDabs.Dabs(ring, PaintBrushRadius))
                     _paintDabs.Add(new PaintDab { Tool = tool, At = new float3(q.x, Height(q), q.y), Strength = math.saturate(paint.Strength) });
             }
-            Mod.Log.Info($"Placemaker paints the terrain with {_paintDabs.Count} brush dabs (fallback).");
+            Mod.Log.Info($"Placemaker paints the terrain with {_paintDabs.Count} brush dabs (fallback; {skipped} field paints skipped).");
         }
 
         private void PaintDabsFrame(int frame)
