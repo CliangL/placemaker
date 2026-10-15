@@ -562,3 +562,18 @@ explicit-height courses exactly as with the hand tool, the boardwalk (LeisurePie
 84. **Pack projection masks are `DecalLayers`.** EAI sets `DecalProperties.m_LayerMask = (DecalLayers)colossal_DecalLayerMask`
     (decal.json). Mask 4/36 decals (84 + 22 RealVision items, incl. "foliage" and "dirt") project onto buildings only and
     never show on the ground; the catalog now marks decal objects without the Terrain bit `WallOrHanging` → never automatic.
+
+## Smooth shores (s30) — what makes a terrain "curtain"
+
+85. **The heightmap is coarse.** The playable area's heightmap has ~3.5 m texels (14 336 m / 4096); terrain is a mesh through
+    them. A height jump of more than ~0.6 m between two texels (steeper than ~50 %) renders as a stretched vertical sheet.
+    Terraform patches that meet at different heights (a flat `Level` patch inside a slope, a field cut off abruptly, the build
+    raster's bank extrapolating the last patch) all produce one. Metric: `Core/Build/TerrainMetrics.Curtains`.
+86. **Nets flatten their own width.** A path on a cross slope, or a deck at a different height from the ground beside it,
+    leaves a lip/wall along the net's edge; the game draws a concrete retaining wall where a net is cut into higher ground
+    (screenshot 56). Every walk must sit on ground level across its width plus ~1.5 m shoulders (`TerrainMetrics.Seats`), or be
+    an explicit-height net whose cut is the intended wall (s30 "Hillside: retaining wall").
+87. **Quay/bridge prefabs are built straight** (`StraightEdges`): a curved Bézier piece came out as a straight wall at a
+    different angle. Emit quays and piers as short straight chords sharing their nodes along a smooth curve.
+88. **In-game check:** setting "Debug: dump terrain after build" writes the live heights/water/nets to
+    ModsData/Placemaker/debug; `Tests/Placemaker.Gallery --terrain-dump` renders them (docs/proposals/s30.md).
