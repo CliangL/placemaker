@@ -54,10 +54,10 @@ namespace Placemaker.Tests
             _out.WriteLine($"ground wear paints: {added}");
             Assert.True(added > 5, $"only {added} ground-wear paints on a bare-lawn park");
             Assert.True(added <= GroundWear.MaxPaints);
-            // Faint, wide and only dirt / dry grass.
+            // Wear is dirt / dry grass (stronger since the 2026-10-14 tuning: 100 % = 3x the old base).
             foreach (var p in bare.Layers.SelectMany(l => l.Paint).Skip(0))
                 if (p.Layer == TerrainMaterials.Dirt || p.Layer == TerrainMaterials.Dry) Assert.True(p.Strength <= 1f);
-            var wear = bare.Layers.SelectMany(l => l.Paint).Where(p => p.Strength <= 0.5f && (p.Layer == TerrainMaterials.Dirt || p.Layer == TerrainMaterials.Dry)).ToList();
+            var wear = bare.Layers.SelectMany(l => l.Paint).Where(p => (p.Layer == TerrainMaterials.Dirt || p.Layer == TerrainMaterials.Dry)).ToList();
             Assert.NotEmpty(wear);
             Assert.Contains(bare.AllIssues(), i => i.Key == TerrainPaint.PermanentKey);
         }

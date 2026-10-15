@@ -101,7 +101,9 @@ namespace Placemaker.Core.Decals
             public Group(DressingWorld w, SiteContext site, AreaPlan host, LayerRegion region, DressSettings s, uint seed, Report r)
             {
                 W = w; Site = site; Host = host; Region = region; S = s; Seed = seed; R = r;
-                K = math.min(3f, s.PaintWear) * StyleK(s.Style);
+                // In game 100 % read as barely there (user, 2026-10-14): the slider now scales a 3x base strength, and the
+                // per-paint caps open up with it (still capped at full strength).
+                K = 3f * math.min(3f, s.PaintWear) * StyleK(s.Style);
                 Kit = new PaintKit(host.Paint, HeightAt, seed) { MaxPaints = MaxPaints, Amount = 1f, Outline = region.Ring };
             }
 
@@ -129,7 +131,7 @@ namespace Placemaker.Core.Decals
             private PlannedPaint Paint(PaintShape shape, int layer, float strength, float cap = 1f, bool knockout = false, IReadOnlyList<float2> outline = null)
             {
                 Kit.Mask = Mask.Shape;
-                Kit.MaxStrength = cap;
+                Kit.MaxStrength = math.min(1f, cap * math.max(1f, K * 0.5f));
                 return Kit.Shape(shape, layer, strength * K, outline, knockout);
             }
 
