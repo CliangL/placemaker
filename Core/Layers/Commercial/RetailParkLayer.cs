@@ -177,11 +177,5 @@ namespace Placemaker.Core.Layers.Commercial
                 mall.Row(r, mid - half, mid + half, 0f, 3, 1f, ZoneKinds.CommercialLow, 2, 2);
             }
         }
-
-        protected override void FillRest(LayerContext ctx, Mall mall)
-        {
-            OverflowLots(ctx, mall, 0xF90u);
-            GreenRest(ctx, mall, "pocket", false, 0xF80u);
-        }
     }
 }

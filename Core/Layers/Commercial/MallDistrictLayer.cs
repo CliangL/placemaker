@@ -238,11 +238,5 @@ namespace Placemaker.Core.Layers.Commercial
             role = p.pedestrian ? NetRole.Street : NetRole.Alley;
             return (p.asset, p.half);
         }
-
-        protected override void FillRest(LayerContext ctx, Mall mall)
-        {
-            OverflowLots(ctx, mall, 0xDA0u);
-            GreenRest(ctx, mall, "pocket", false, 0xD80u);
-        }
     }
 }

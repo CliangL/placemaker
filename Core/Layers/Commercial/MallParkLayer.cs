@@ -31,7 +31,7 @@ namespace Placemaker.Core.Layers.Commercial
             c.Toggle("fountain", true, ControlTier.More, "layout").Tip();
             OuterRowControls(c, ZoneKinds.CommercialHigh);
             Shared(c.Slider("outerDepth", 24, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
-            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false);
+            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false, green: false);
             c.Fixed("parkStyle");
             c.Fixed("loop");
         }
@@ -165,6 +165,8 @@ namespace Placemaker.Core.Layers.Commercial
             }
             else mall.Green(park, 0x7A5u);
         }
+
+        protected override bool KeepsPark(LayerContext ctx) => true;
 
         protected override void FillRest(LayerContext ctx, Mall mall) => GreenRest(ctx, mall, "pocket", false, 0x780u);
     }

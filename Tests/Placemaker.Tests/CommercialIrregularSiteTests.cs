@@ -116,16 +116,29 @@ namespace Placemaker.Tests
             return ring.ToArray();
         }
 
+        /// <summary>Site kinds: 6 = half curved (the angled / concave / convex block), 0 = fully curved, -1 = square 2.9 ha, -2 = square 1.5 ha, -3 = square 4 ha.</summary>
+        public static readonly float[] SiteKinds = { 6f, 0f, -1f, -2f, -3f };
+
+        public static string SiteName(float kind) => kind == 6f ? "halfcurved" : kind == 0f ? "curved" : kind == -1f ? "sq2.9" : kind == -2f ? "sq1.5" : "sq4";
+
         public static IEnumerable<object[]> Cases()
         {
             foreach (var t in CommercialTests.Types)
                 foreach (var p in new[] { "" }.Concat(GeneratorRegistry.Get(t).Presets.Select(x => x.Id)))
-                    foreach (var st in new[] { 6f, 0f, -1f }) yield return new object[] { t, p, st };
+                    foreach (var st in SiteKinds) yield return new object[] { t, p, st };
         }
 
         private static ComposedPlan Run(string type, string preset, float step, out float area, out SiteContext site)
         {
-            float3[] ring; if (step < 0f) { ring = TestKit.Rect(170, 170); site = ZoningCutoutTests.Streets(ring); foreach (var g in ZoneLots.SiteGrids(site, null)) { var c = g; c.Predicted = false; c.Existing = false; site.ZoneGrids.Add(c); } } else ring = step == 0f ? Round(out site) : Block(out site, step);
+            float3[] ring;
+            if (step < 0f)
+            {
+                float side = step == -1f ? 170f : step == -2f ? 122f : 200f;
+                ring = TestKit.Rect(side, side);
+                site = ZoningCutoutTests.Streets(ring);
+                foreach (var g in ZoneLots.SiteGrids(site, null)) { var c = g; c.Predicted = false; c.Existing = false; site.ZoneGrids.Add(c); }
+            }
+            else ring = step == 0f ? Round(out site) : Block(out site, step);
             area = Poly.Area(Poly.To2D(ring));
             var r = Editor.SingleLayerRecipe(GeneratorRegistry.Get(type), 5);
             if (preset != "") Editor.ApplyPreset(r, RecipePaths.Root, preset);
@@ -134,37 +147,68 @@ namespace Placemaker.Tests
             return Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 
-        /// <summary>Plots + lot (stalls x 26 m2... measured from the lot regions) + lanes, as a share of the block.</summary>
-        private static (float plots, float lanes, float stalls, int nPlots, float grass) Measure(ComposedPlan plan, out int trees)
+        private static float UnionArea(List<float2[]> rings, float2[] clipTo)
+        {
+            if (rings.Count == 0) return 0f;
+            var union = Poly.UnionAll(rings.Select(q => (IReadOnlyList<float2>)Poly.EnsureCcw(q)));
+            var inside = Poly.Boolean(union, new[] { new Region(Poly.EnsureCcw(clipTo)) }, BoolOp.Intersection);
+            float a = 0f;
+            foreach (var g in inside) { a += Poly.Area(g.Outer); foreach (var h in g.Holes) a -= Poly.Area(h); }
+            return a;
+        }
+
+        public sealed class Share
+        {
+            public float Plots, Lots, Lanes, Commercial, Grass;
+            public int NPlots, Trees;
+        }
+
+        /// <summary>
+        /// Plots (zoning cutouts) + lots (their whole ring: islands, edges and planted strips are the lot's own) + lane corridors
+        /// (8 m), as a union clipped to the site — nothing counted twice — as a share of the block.
+        /// </summary>
+        public static Share Measure(ComposedPlan plan, float2[] site)
         {
             var host = plan.Layers.First();
-            float lotA = host.Areas.Where(a => a.Role == AreaRole.Lot).Sum(a => Poly.Area(Poly.To2D(a.Ring))); float plots = host.Regions.Where(Cutouts.IsCutout).Sum(g => Poly.Area(Poly.To2D(g.Ring)));
-            int np = host.Regions.Count(Cutouts.IsCutout);
-            float lanes = 0f;
+            var plots = host.Regions.Where(Cutouts.IsCutout).Select(g => Poly.To2D(g.Ring)).ToList();
+            var lots = host.Areas.Where(a => a.Role == AreaRole.Lot).Select(a => Poly.To2D(a.Ring)).ToList();
+            var lanes = new List<float2[]>();
             foreach (var n in host.Nets)
                 if (n.Role == NetRole.Alley || n.Role == NetRole.Street)
                 {
-                    float len = 0f; float3 p = n.A;
-                    for (int i = 1; i <= 8; i++) { var q = Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f); len += math.distance(p.xz, q.xz); p = q; }
-                    lanes += len * 8f;
+                    float2 prev = n.A.xz;
+                    for (int i = 1; i <= 8; i++)
+                    {
+                        var q = Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f).xz;
+                        var d = math.normalizesafe(q - prev); var nr = new float2(-d.y, d.x) * 4f;
+                        if (math.distance(prev, q) > 0.01f) lanes.Add(new[] { prev - nr, q - nr, q + nr, prev + nr });
+                        prev = q;
+                    }
                 }
-            float asph = host.Surfaces.Where(s => s.Role == SurfaceRole.Asphalt).Sum(s => Poly.Area(Poly.To2D(s.Ring))); float grass = host.Surfaces.Where(s => s.Role == SurfaceRole.Grass).Sum(s => Poly.Area(Poly.To2D(s.Ring))); trees = host.Objects.Count(o => o.Role == ObjectRole.Tree);
-            return (plots, lanes, lotA, np, grass);
+            var s = new Share { NPlots = plots.Count, Trees = host.Objects.Count(o => o.Role == ObjectRole.Tree) };
+            s.Plots = UnionArea(plots, site); s.Lots = UnionArea(lots, site); s.Lanes = UnionArea(lanes, site);
+            var all = new List<float2[]>(plots); all.AddRange(lots); all.AddRange(lanes);
+            s.Commercial = UnionArea(all, site) / Poly.Area(site);
+            s.Grass = host.Surfaces.Where(x => x.Role == SurfaceRole.Grass).Sum(x => Poly.Area(Poly.To2D(x.Ring)));
+            return s;
         }
+
+        /// <summary>(s50) The least commercial share a type must reach on any realistic site: lot first, a park only where it is the type's own.</summary>
+        public static float Target(string type, string preset) =>
+            type == "shopsPark" || type == "mallPark" || (type == "outdoorMall" && preset == "lifestyle") ? 0.45f : 0.75f;
 
         [Theory]
         [MemberData(nameof(Cases))]
-        public void Irregular_block_stays_commercial(string type, string preset, float step)
+        public void Block_stays_commercial(string type, string preset, float step)
         {
             var plan = Run(type, preset, step, out float area, out var site);
-            var m = Measure(plan, out int trees);
-            float share = (m.plots + m.lanes + m.stalls) / area;
-            _out.WriteLine($"SHARE {type}/{preset}: area {area / 10000f:0.00} ha, plots {m.nPlots} ({m.plots:0}), lanes {m.lanes:0}, stalls {m.stalls:0} => {share:P0}, grass {m.grass:0}, trees {trees}; issues {string.Join(",", plan.AllIssues().Select(i => i.Key.Substring(i.Key.LastIndexOf((char)46) + 1)).Distinct())}");
+            var ringXz = Poly.To2D(step < 0f ? TestKit.Rect(step == -1f ? 170f : step == -2f ? 122f : 200f, step == -1f ? 170f : step == -2f ? 122f : 200f) : step == 0f ? Round(out _) : Block(out _, step));
+            var m = Measure(plan, ringXz);
+            _out.WriteLine($"SHARE {type}/{preset} @ {SiteName(step)}: area {area / 10000f:0.00} ha, plots {m.NPlots} ({m.Plots:0}), lots {m.Lots:0}, lanes {m.Lanes:0} => {m.Commercial:P0} (need {Target(type, preset):P0}), grass {m.Grass:0}, trees {m.Trees}; issues {string.Join(",", plan.AllIssues().Select(i => i.Key.Substring(i.Key.LastIndexOf((char)46) + 1)).Distinct())}");
             Assert.False(plan.HasErrors);
             Assert.DoesNotContain(plan.AllIssues(), i => i.Key == CommercialLayer.NoStreetKey);
-            Assert.True(m.nPlots >= 3, type + "/" + preset + ": " + m.nPlots + " plots");
-            Assert.True(share >= 0.06f, type + "/" + preset + ": only " + share.ToString("P0") + " commercial");
-            if (type == "stripMall" && step <= 0f) Assert.True(share >= 0.2f, type + "/" + preset + ": " + share.ToString("P0"));
+            Assert.True(m.NPlots >= 3, type + "/" + preset + ": " + m.NPlots + " plots");
+            Assert.True(m.Commercial >= Target(type, preset), $"{type}/{preset} @ {SiteName(step)}: only {m.Commercial:P0} commercial (need {Target(type, preset):P0})");
         }
     }
 }

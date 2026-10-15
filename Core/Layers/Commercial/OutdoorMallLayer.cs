@@ -297,6 +297,12 @@ namespace Placemaker.Core.Layers.Commercial
             }
         }
 
-        protected override void FillRest(LayerContext ctx, Mall mall) => GreenRest(ctx, mall, "pocket", ctx.B("playground"), 0xC80u);
+        protected override bool KeepsPark(LayerContext ctx) => ctx.S("style") == "lifestyle" || ctx.B("extraGreen");
+
+        protected override void FillRest(LayerContext ctx, Mall mall)
+        {
+            if (KeepsPark(ctx)) GreenRest(ctx, mall, "pocket", ctx.B("playground"), 0xC80u);
+            else base.FillRest(ctx, mall);
+        }
     }
 }
