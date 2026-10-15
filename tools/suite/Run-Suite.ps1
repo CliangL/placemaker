@@ -10,7 +10,8 @@
   3. Backs up the files a session rewrites (root *.coc, launcher-settings.json, continue_game.json, ModsSettings,
      ModsData/Placemaker, Player*.log, Logs/), swaps in a light window/graphics profile, arms the run
      (ModsData/Placemaker/suite/run.json + runOnce.txt) and starts Cities2.exe directly (route A:
-     -noSplash -placemakerSuite=<runId>, SteamAppId set). Route B goes through steam://rungameid.
+     -disableModding -disableCodeModding- -noSplash, a 1280x720 window, -placemakerSuite=<runId>, SteamAppId set:
+     only local mods, i.e. Placemaker, load). Route B goes through steam://rungameid.
   4. Watches the heartbeat; the mod quits the game itself (GameManager.QuitGame). Only the PID this script started is
      ever killed, and only when the clean quit did not happen in time or the heartbeat stopped.
   5. Copies the session logs into the run folder, restores every backed-up file and verifies the hashes.
@@ -24,9 +25,11 @@ param(
     [int]$TimeoutMin = 0,
     [int]$MaxScenarios = 0,
     [switch]$NoSwitching,
-    # 1.6.2f1: -disablePdxSdk kills the boot (EditorHierarchyUISystem.GetSystemsForContextActions dereferences the
-    # missing PdxSdk platform: FATAL NullReferenceException in CreateSystems), so the playset loads as usual by default.
-    [switch]$DisablePdxSdk,
+    # Only Placemaker loads: -disableModding stops the Paradox mods from being registered (GameManager gates the PDX SDK's
+    # RegisterDatabase on it) and the negated -disableCodeModding- (Mono.Options '-flag-' form, parsed after it) turns local
+    # code mods back on. -disablePdxSdk cannot be used on 1.6.2f1: EditorHierarchyUISystem.GetSystemsForContextActions
+    # dereferences the missing PdxSdk platform and the boot dies in CreateSystems (run boot1). -AllMods loads the whole playset.
+    [switch]$AllMods,
     [switch]$KeepGraphics,
     [float]$GrowSeconds = 100,
     [float]$PregrowSeconds = 75,
@@ -143,9 +146,13 @@ $cfg = [ordered]@{
     noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = 1280; shotHeight = 720
 }
 Write-NoBom (Join-Path $suiteData 'run.json') ($cfg | ConvertTo-Json -Depth 3)
-$gameArgs = "-noSplash -placemakerSuite=$RunId"
-if ($DisablePdxSdk) { $gameArgs = "-disablePdxSdk " + $gameArgs }
-Set-Content -Path (Join-Path $ud 'runOnce.txt') -Value $gameArgs -Encoding ASCII -NoNewline
+# Order matters on the real command line: -disableModding also sets disableCodeModding, the later '-disableCodeModding-'
+# clears it again. runOnce.txt is merged through a HashSet (order not kept), so for route A it carries only the token.
+$modFlags = if ($AllMods) { '' } else { '-disableModding -disableCodeModding- ' }
+$windowFlags = '-screen-fullscreen 0 -screen-width 1280 -screen-height 720'
+$gameArgs = "$modFlags-noSplash $windowFlags -placemakerSuite=$RunId"
+$runOnce = if ($Route -eq 'A') { "-placemakerSuite=$RunId" } else { "$modFlags-noSplash -placemakerSuite=$RunId" }
+Set-Content -Path (Join-Path $ud 'runOnce.txt') -Value $runOnce -Encoding ASCII -NoNewline
 
 $restored = $false
 function Restore-All {
