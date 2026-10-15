@@ -27,6 +27,8 @@ namespace Placemaker.Game.Suite
         /// <summary>Stop after the fixture (bootstrap check).</summary>
         public bool fixtureOnly;
         public bool quit = true;
+        /// <summary>Keep the default world as it is (no heightmap replacement: no slope or rough blocks).</summary>
+        public bool noTerrain;
         public int shotWidth = 1280, shotHeight = 720;
     }
 

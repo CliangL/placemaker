@@ -109,6 +109,9 @@ namespace Placemaker.Game.Suite
             return null;
         }
 
+        /// <summary>Live ground height (equals the layout once the heightmap is in; the default world otherwise).</summary>
+        public float H(float x, float z) => SampleHeight(new float2(x, z));
+
         public float SampleHeight(float2 p)
         {
             var terrain = _world.GetOrCreateSystemManaged<TerrainSystem>();
@@ -164,8 +167,8 @@ namespace Placemaker.Game.Suite
                     float2 a2 = math.lerp(seg.A, seg.B, k / (float)pieces), b2 = math.lerp(seg.A, seg.B, (k + 1) / (float)pieces);
                     if (k == 0) a2 = seg.A;
                     if (k == pieces - 1) b2 = seg.B;
-                    var a = new float3(a2.x, Layout.Height(a2.x, a2.y), a2.y);
-                    var b = new float3(b2.x, Layout.Height(b2.x, b2.y), b2.y);
+                    var a = new float3(a2.x, H(a2.x, a2.y), a2.y);
+                    var b = new float3(b2.x, H(b2.x, b2.y), b2.y);
                     var curve = NetUtils.StraightCurve(a, b);
                     var start = new CoursePos
                     {
@@ -239,7 +242,7 @@ namespace Placemaker.Game.Suite
                 if (b.Kind != SuiteBlockKind.Zoned) continue;
                 float z0 = b.Z0 + HalfWidth(b.South) + 0.5f, z1 = z0 + ZoneDepth;
                 float x0 = b.X0 + HalfWidth(b.West) + 0.5f, x1 = b.X1 - HalfWidth(b.East) - 0.5f;
-                float3 P(float x, float z) => new float3(x, Layout.Height(x, z), z);
+                float3 P(float x, float z) => new float3(x, H(x, z), z);
                 var def = tool.NewDefinition();
                 _em.AddComponentData(def, new CreationDefinition { m_Prefab = zone });
                 _em.AddComponentData(def, new Zoning { m_Position = new Quad3(P(x0, z0), P(x1, z0), P(x1, z1), P(x0, z1)), m_Flags = ZoningFlags.Zone | ZoningFlags.Marquee | ZoningFlags.Overwrite });
@@ -291,7 +294,7 @@ namespace Placemaker.Game.Suite
                 {
                     var park = parks[(k * 7) % parks.Count];
                     float z = roadEdge + park.Lot.y * 4f + 0.5f;
-                    var pos = new float3(xs[k], Layout.Height(xs[k], z), z);
+                    var pos = new float3(xs[k], H(xs[k], z), z);
                     var rot = quaternion.RotateY(math.PI);   // front (+Z local) faces the south street
                     var def = tool.NewDefinition();
                     _em.AddComponentData(def, new CreationDefinition { m_Prefab = park.Prefab, m_RandomSeed = 1234 + k });

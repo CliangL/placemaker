@@ -31,6 +31,7 @@ param(
     # dereferences the missing PdxSdk platform and the boot dies in CreateSystems (run boot1). -AllMods loads the whole playset.
     [switch]$AllMods,
     [switch]$KeepGraphics,
+    [switch]$NoTerrain,
     [float]$GrowSeconds = 100,
     [float]$PregrowSeconds = 75,
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
@@ -143,7 +144,7 @@ $cfg = [ordered]@{
     runId = $RunId; set = $Set; outDir = $runDir; scenarioFile = $scenarioFile; git = $git
     expiresUtc = (Get-Date).ToUniversalTime().AddMinutes(25).ToString('o')
     speed = 4; pregrowSeconds = $PregrowSeconds; growSeconds = $GrowSeconds; maxScenarios = $MaxScenarios
-    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = 1280; shotHeight = 720
+    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = 1280; shotHeight = 720; noTerrain = [bool]$NoTerrain
 }
 Write-NoBom (Join-Path $suiteData 'run.json') ($cfg | ConvertTo-Json -Depth 3)
 # Order matters on the real command line: -disableModding also sets disableCodeModding, the later '-disableCodeModding-'

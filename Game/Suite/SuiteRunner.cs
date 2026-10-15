@@ -284,6 +284,18 @@ namespace Placemaker.Game.Suite
             _phase = "menu";
             yield return Until(() => GameManager.instance.gameMode == GameMode.MainMenu && !GameManager.instance.isGameLoading, 900f, "main menu");
             Mark("mainMenuSec");
+            try
+            {
+                var gm = GameManager.instance;
+                _summary["commandLine"] = string.Join(" ", (gm.cmdLine ?? new string[0]).Skip(1).Where(a => a.IndexOf("token", StringComparison.OrdinalIgnoreCase) < 0 && a.IndexOf("userid", StringComparison.OrdinalIgnoreCase) < 0));
+                _summary["disableModding"] = gm.configuration.disableModding;
+                _summary["disableCodeModding"] = gm.configuration.disableCodeModding;
+                var mods = new JArray();
+                if (gm.modManager != null) foreach (var m in gm.modManager) mods.Add(m.name + (m.isLoaded ? "" : " (not loaded)"));
+                _summary["codeMods"] = mods;
+                Say($"code mods loaded: {mods.Count}: {string.Join(", ", mods.Take(10))}{(mods.Count > 10 ? " ..." : "")}");
+            }
+            catch (Exception e) { Say("mod list: " + e.Message); }
             yield return Frames(10);
             _world = World.DefaultGameObjectInjectionWorld;
             _tool = _world.GetExistingSystemManaged<PlacemakerToolSystem>();
@@ -448,7 +460,8 @@ namespace Placemaker.Game.Suite
 
             // terrain
             yield return Settle("after load");
-            string err = _fixture.ApplyHeightmap();
+            string err = _cfg.noTerrain ? "skipped" : _fixture.ApplyHeightmap();
+            fx["heightmap"] = err ?? "replaced";
             yield return Frames(40);
             float worst = _fixture.CheckTerrain(out var detail);
             Say($"terrain check: worst error {worst:F2} m: {detail}");
@@ -670,7 +683,7 @@ namespace Placemaker.Game.Suite
             };
         }
 
-        private float3 FocusOf(SuiteBlock b) => new float3(b.Center.x, _fixture.Layout.Height(b.Center.x, b.Center.y), b.Center.y);
+        private float3 FocusOf(SuiteBlock b) => new float3(b.Center.x, _fixture.H(b.Center.x, b.Center.y), b.Center.y);
 
         // ───────────── one scenario ─────────────
 
