@@ -332,6 +332,33 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void Refresh_moves_a_plot_whose_live_cells_are_blocked_onto_the_nearest_open_cells()
+        {
+            var (plan, site) = MarketSquare();
+            ZoneGuard.Apply(plan, site);
+            var live = new List<ZoneGrid> { site.ZoneGrids[0] };
+            foreach (var g in ZoneGuard.PredictedGrids(plan, site))
+            {
+                var s = g; s.Predicted = false; s.Ours = true;
+                s.Cells = new byte[s.Size.x * s.Size.y];
+                for (int x = 0; x < s.Size.x; x++)
+                    for (int y = 0; y < s.Size.y; y++)
+                    {
+                        bool blocked = math.abs(ZoneGuard.CellCentre(s, x, y).x - 64f) < 14f;   // under the middle plot: blocked live
+                        s.Cells[x + y * s.Size.x] = (byte)(ZoneGrid.CellVisible | (blocked ? ZoneGrid.CellBlocked : 0));
+                    }
+                live.Add(s);
+            }
+            var quads = ZoneGuard.Refresh(plan, live);
+            Assert.NotNull(quads);
+            var zoned = plan.ZoneCells.Where(c => c.State == ZoneCellState.Zoned).ToList();
+            // the middle plot found open cells at least 2 x 2 elsewhere; nothing zoned on the blocked ones
+            Assert.DoesNotContain(zoned, c => math.abs(Centre(c).x - 64f) < 10f && Centre(c).y > 20f && Centre(c).y < 36f);
+            Assert.Contains("moved to the nearest open cells", ZoneGuard.LastRefreshReport);
+            Assert.False(ZoneGuard.TouchesAny(plan.ZoneBlockers, zoned.Select(c => new[] { c.A, c.B, c.C, c.D }).ToList()));
+        }
+
+        [Fact]
         public void Blockers_never_touch_kept_cells_among_many_scattered_plots()
         {
             var foot = Rect(0, 0, 160, 96);

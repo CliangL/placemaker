@@ -87,6 +87,7 @@ namespace Placemaker.Game.Build
                 var before = new List<float2>();
                 foreach (var c in plan.ZoneCells) if (c.State == ZoneCellState.Zoned) before.Add(0.25f * (c.A + c.B + c.C + c.D));
                 _heightsValid = false;
+                LogBlockedPlanCells();
                 var refreshed = ZoneGuard.Refresh(plan, grids, p => Height(p));
                 if (refreshed != null)
                 {
