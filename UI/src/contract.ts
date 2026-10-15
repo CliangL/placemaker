@@ -12,7 +12,7 @@ export const GROUP = "Placemaker";
  * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
  * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
  */
-export const PROTOCOL = 21;
+export const PROTOCOL = 22;
 
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
@@ -365,6 +365,9 @@ export interface Summary {
   /** Additive (s17, docs/PARK-STATS.md): park stats of the planned build. Absent = not a park type (parking,
    *  roads, industrial) or no plan yet. */
   parkStats?: ParkStatsView;
+  /** Additive (s45, PROTOCOL 22): the cost by friendly category ("planting" | "paths" | "roads" | "parking" | "shops" |
+   *  "water" | "play" | "ground" | "extras" | "other"), most expensive first; adds up to cost. Absent = older DLL. */
+  costBuckets?: { id: string; cost: number; upkeep: number }[];
   /** Additive (s22): the preview layers of the plan, in display order (the legend window). Absent = no plan. */
   legend?: LegendEntry[];
 }

@@ -112,9 +112,18 @@ test("s42 review: money card with one cost bar, stat chips, alert chips, park st
         ["parks", "park"],
         ["water", "waterfront"],
         ["commercial", "stripMall"],
+        ["commercial", "outdoorMall"],
     ]) {
         await toReviewReal(page, group, recipe);
         await expect(page.getByTestId("review-cost")).toContainText("¢");
+        // s45: the cost bar splits by friendly category (never one "<type> 100%" bucket); one chip per stat label and alert
+        const buckets = await page.locator('[data-testid^="bucket-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!));
+        expect(buckets.some((b) => b.startsWith("bucket-type:"))).toBe(false);
+        expect(buckets.length).toBeGreaterThan(1);
+        const statLabels = await page.locator('[data-testid="review-stats"] [data-testid^="stat-"]').evaluateAll((els) => els.map((e) => (e.lastElementChild?.textContent ?? "").trim()));
+        expect(new Set(statLabels).size).toBe(statLabels.length);
+        const alertTexts = await page.locator('[data-testid="issues"] button').evaluateAll((els) => els.map((e) => (e.textContent ?? "").trim()));
+        expect(new Set(alertTexts).size).toBe(alertTexts.length);
         // alerts are short chips: never cut, full sentence in the tooltip
         await noTextOverflow(page, "review " + recipe);
         await panelShot(page, `s42-review-${recipe}`);

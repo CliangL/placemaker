@@ -207,7 +207,9 @@ test("Review is compact: issues as short chips (tooltip has the sentence), +N mo
     // Seven long issues (NoRoom = "{0}: no free spot left, skipped.") and a two-layer breakdown.
     await page.evaluate((text) => {
         const raw = (window as any).pm.backend.summary();
-        raw.issues = Array.from({ length: 7 }, (_, i) => ({ severity: ["error", "warning", "info"][i % 3], text: { key: "Placemaker.Issue.NoRoom", args: [text + " #" + i] }, stepPath: "0", at: [600, 0, 380] }));
+        raw.issues = Array.from({ length: 7 }, (_, i) => ({ severity: ["error", "warning", "info"][i % 3], text: { key: "Placemaker.Test.Issue" + i, args: [text + " #" + i] }, stepPath: "0", at: [600, 0, 380] }));
+        // s45: the same issue from two layers is one chip
+        raw.issues.push({ severity: "warning", text: { key: "Placemaker.Test.Issue1", args: [text + " again"] }, stepPath: "0" });
         raw.layers = [{ stepPath: "0", layer: "park", regionKey: "root", stats: [], cost: 1000, upkeep: 10 }, { stepPath: "0/0", layer: "plaza", regionKey: "core", stats: [], cost: 2000, upkeep: 20 }];
         (window as any).pmPublish("Placemaker", "summary", JSON.stringify(raw));
     }, long);
@@ -268,8 +270,9 @@ test("Make: many types — the browser opens on the selected type's category; ch
     await page.getByTestId("make-group-squares").click();
     await expect(recipes.getByTestId("recipe-marketSquare")).toBeVisible();
     await expect(recipes.getByTestId("recipe-park")).toHaveCount(0);
-    // the category holding the selected type is marked
-    await expect(page.getByTestId("make-group-parks")).toHaveAttribute("data-has-selected", "true");
+    // switching category picks its first type, so the styles follow
+    await expect(page.getByTestId("make-group-squares")).toHaveAttribute("data-has-selected", "true");
+    await expect(page.getByTestId("make-group-parks")).toHaveAttribute("data-has-selected", "false");
     await page.getByTestId("make-group-parking").click();
     await expect(recipes.getByTestId("recipe-parkingGarage")).toBeVisible();
     await noTextOverflow(page, "grouped make row");

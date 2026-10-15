@@ -1638,6 +1638,7 @@ export class MockBackend {
             permanent: p.permanent,
             permanentNeedsAck: needsAck(p.permanent),
             parkStats: p.parkStats ?? undefined,
+            costBuckets: p.costBuckets ?? undefined,
 
             legend: p.legend?.length ? p.legend : fakeLegend(p, this.root ? this.allSteps().reduce((n, st) => n + st.markers.length, 0) : 0),
         };

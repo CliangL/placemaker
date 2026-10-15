@@ -262,6 +262,9 @@ export function normalizeSummary(raw: unknown): Summary {
         upkeep: Number(v.upkeep) || 0,
         canAfford: v.canAfford !== false,
         legend: normalizePreviewLegend(v.legend),
+        costBuckets: Array.isArray(v.costBuckets)
+            ? arr<any>(v.costBuckets).filter((b) => isObj(b) && typeof b.id === "string").map((b) => ({ id: b.id, cost: Number(b.cost) || 0, upkeep: Number(b.upkeep) || 0 }))
+            : undefined,
     } as Summary;
 }
 

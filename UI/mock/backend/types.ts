@@ -51,6 +51,8 @@ export interface ComposeResult {
     steps?: Record<string, { resolvedAssets?: Record<string, ResolvedAsset>; netLegend?: NetLegendEntry[] }>;
     /** s17: park stats from the real Core estimator (host only). */
     parkStats?: import("../../src/contract").ParkStatsView | null;
+    /** s45: cost by friendly category (host: Core CostBuckets with the stand-in prices). */
+    costBuckets?: { id: string; cost: number; upkeep: number }[];
     /** s22: the preview legend (host: Core UiModels.Legend). */
     legend?: LegendEntry[];
 }
