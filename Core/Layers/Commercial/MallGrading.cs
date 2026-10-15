@@ -374,10 +374,31 @@ namespace Placemaker.Core.Layers.Commercial
                     for (int i = 1; i + 1 < n; i++) if (!pinned[i]) h[i] = 0.25f * o[i - 1] + 0.5f * o[i] + 0.25f * o[i + 1];
                 }
                 float ds = total / (n - 1), g = (lane.MaxGrade > 0f ? lane.MaxGrade : LaneMaxGrade) * ds;
+                // (s47) Between two pinned samples (street ends, a host lane, the lot edge) the profile must be able to get from one
+                // height to the other: where the pins are further apart in height than the grade limit allows over that run (a lane
+                // down a hillside steeper than its limit, pinned to the street at one end and to a host at the other) the clamps
+                // below could only keep the limit by dumping the whole difference as one step beside the first pinned sample — a
+                // 0.7 m step 7 m from the kerb, the pit at the entrance. The run takes the grade it needs instead (evenly), the limit
+                // everywhere else.
+                var link = new float[n];   // the allowed |Δh| between sample i and i + 1
+                for (int i = 0; i + 1 < n; i++) link[i] = g;
+                for (int a = 0; a < n; a++)
+                {
+                    if (!pinned[a]) continue;
+                    int b = a + 1;
+                    while (b < n && !pinned[b]) b++;
+                    if (b >= n) break;
+                    if (b > a + 1)
+                    {
+                        float need = math.abs(h[b] - h[a]) / (b - a) * 1.02f;
+                        if (need > g) for (int i = a; i < b; i++) link[i] = need;
+                    }
+                    a = b - 1;
+                }
                 for (int pass = 0; pass < 4; pass++)
                 {
-                    for (int i = 1; i < n; i++) if (!pinned[i]) h[i] = math.clamp(h[i], h[i - 1] - g, h[i - 1] + g);
-                    for (int i = n - 2; i >= 0; i--) if (!pinned[i]) h[i] = math.clamp(h[i], h[i + 1] - g, h[i + 1] + g);
+                    for (int i = 1; i < n; i++) if (!pinned[i]) h[i] = math.clamp(h[i], h[i - 1] - link[i - 1], h[i - 1] + link[i - 1]);
+                    for (int i = n - 2; i >= 0; i--) if (!pinned[i]) h[i] = math.clamp(h[i], h[i + 1] - link[i], h[i + 1] + link[i]);
                 }
                 pr.H = h;
                 pr._total = total;
