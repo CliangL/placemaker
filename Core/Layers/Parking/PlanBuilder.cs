@@ -305,6 +305,57 @@ namespace Placemaker.Core.Layers.Parking
             }
         }
 
+        /// <summary>
+        /// (s47) Cut-back (m) along a road of half width hi (ray di away from the node) where it meets one of half width hj (ray dj):
+        /// the game cuts each edge back to where it crosses the neighbour's — (hj + hi cos φ) / sin φ, φ the angle between the rays
+        /// (a T is hj). A continuation (≥ 165°) needs none. Game.Net.ValidationHelpers.ValidateEdge: an edge shorter than its two
+        /// cut-backs folds (InvalidShape).
+        /// </summary>
+        internal static double Cutback(double2 di, double hi, double2 dj, double hj)
+        {
+            double cos = Math.Max(-1, Math.Min(1, PGeo.Dot(di, dj)));
+            if (cos < -0.9659) return 0;
+            double sin = Math.Sqrt(Math.Max(1e-6, 1 - cos * cos));
+            return Math.Max(0, (hj + hi * cos) / sin);
+        }
+
+        /// <summary>
+        /// (s47) An alley entrance: a stub from the road (centre at <paramref name="road"/>) to the lot edge <paramref name="e"/>, then the
+        /// connector to the junction <paramref name="j"/>. The stub needs its T cut-back (the road's half width) plus the cut-back of the
+        /// turn into the connector; a lot edge on the road's kerb leaves it exactly the road's half width. The stub is carried on into the
+        /// lot (<paramref name="inner"/>, up to 8 m) until both fit; false where a stall is in the way or the connector would be left
+        /// too short.
+        /// </summary>
+        private static bool AlleyStub(double2 e, double2 j, double2 road, double roadHalf, double stubHalf, double connHalf, Layout layout, Frame f, out double2 inner)
+        {
+            inner = e;
+            var toRoad = PGeo.Norm(road - e);
+            for (double x = 0; x <= 8.0 + 1e-9; x += 0.25)
+            {
+                var p = e - toRoad * x;
+                var toJ = PGeo.Norm(j - p);
+                double turn = Cutback(toRoad, stubHalf, toJ, connHalf), margin = turn > 0.01 ? 0.3 : 0;   // a straight stub (a continuation) keeps its length
+                double stubNeed = roadHalf + turn + margin;
+                double connNeed = Cutback(toJ, connHalf, toRoad, stubHalf) + connHalf + margin;
+                if (PGeo.Len(road - p) < stubNeed - 0.01 || PGeo.Len(j - p) < connNeed - 0.01) continue;
+                if (x > 0)
+                {
+                    var a = PGeo.Corridor(p, e, stubHalf); var b = PGeo.Corridor(p, j, connHalf);
+                    bool clash = false;
+                    foreach (var bay in layout.LiveBays)
+                    {
+                        var q = new double2[4];
+                        for (int i = 0; i < 4; i++) q[i] = f.ToWorld(bay.Quad[i]);
+                        if (PGeo.ConvexOverlap(a, q, 1e-4) || PGeo.ConvexOverlap(b, q, 1e-4)) { clash = true; break; }
+                    }
+                    if (clash) return false;
+                }
+                inner = p;
+                return true;
+            }
+            return false;
+        }
+
         private static float Yaw(double2 worldDir) => (float)Math.Atan2(worldDir.x, worldDir.y);
 
         private static void Emit(AreaPlan plan, Layout layout, ParkingSettings s, SiteContext site, Func<double2, float> H, AreaInput input, CancellationToken cancel,
@@ -410,9 +461,16 @@ namespace Placemaker.Core.Layers.Parking
                 {
                     var road = roads[hit.Road];
                     var alley = new Seg { Role = NetRole.Alley, Asset = oneWay ? new AssetRef(ParkingAssets.AlleyOneWay, ParkingAssets.Alley) : new AssetRef(ParkingAssets.Alley) };
-                    if (exit) { alley.A = E; alley.B = hit.Point; alley.EndAttach = road.Id; alley.EndT = (float)hit.T; }
-                    else { alley.A = hit.Point; alley.B = E; alley.StartAttach = road.Id; alley.StartT = (float)hit.T; }
-                    if (PGeo.Len(hit.Point - E) > 0.5) segs.Add(alley);
+                    // (s47) The stub must be long enough for its two nodes (AlleyStub): a lot edge on a lane's kerb leaves the stub as
+                    // long as the lane's half width, and the turn into the lot's connector then folds both (InvalidShape). Where it
+                    // cannot be made long enough (a stall in the way) there is no stub: the connector is a dead end at the kerb.
+                    if (AlleyStub(E, J, hit.Point, road.Width / 2, oneWay ? 2.5 : 4.0, e.Width / 2, layout, f, out var inner))
+                    {
+                        if (exit) { alley.A = inner; alley.B = hit.Point; alley.EndAttach = road.Id; alley.EndT = (float)hit.T; }
+                        else { alley.A = hit.Point; alley.B = inner; alley.StartAttach = road.Id; alley.StartT = (float)hit.T; }
+                        if (PGeo.Len(hit.Point - inner) > 0.5) segs.Add(alley);
+                        outer = inner;
+                    }
                 }
                 else if (hasRoad)
                 {
