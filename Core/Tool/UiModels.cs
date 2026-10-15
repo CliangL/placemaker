@@ -100,7 +100,7 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 20;   // s27: brush rules builds / anything / drawClip (shared by every paint tool)
+        public const int Protocol = 21;   // s33: summary.permanentNeedsAck (ground paint alone is one info line, no checkbox)
 
         // ───────────── state ─────────────
 
@@ -788,8 +788,11 @@ namespace Placemaker.Core.Tool
             var effects = Permanent(plan);
             foreach (var p in effects) permanent.Add(p.ToJson());
             o.Set("permanent", permanent);
+            // (s33) Ground paint alone is listed (one info line) but needs no tick: only terrain / water changes do.
+            bool needsAck = NeedsAck(effects);
+            o.Set("permanentNeedsAck", needsAck);
             // Extension (docs/proposals/gametool.md): whether acknowledgePermanent(true) covers the current effects.
-            o.Set("permanentAcknowledged", effects.Count == 0 || s.PermanentAcknowledged);
+            o.Set("permanentAcknowledged", !needsAck || s.PermanentAcknowledged);
             // Extension (docs/proposals/s17.md): park stats of the planned build.
             if (s.AreaM2 > 0 && s.Recipe != null)
             {
@@ -918,7 +921,7 @@ namespace Placemaker.Core.Tool
                 }
                 if (l.Paint != null)
                     foreach (var p in l.Paint)
-                        if (p != null) paint += Pricing.PolygonArea(p.Ring ?? Array.Empty<float3>());
+                        if (p != null) paint += p.AreaEstimate > 0f ? p.AreaEstimate : Pricing.PolygonArea(p.Ring ?? Array.Empty<float3>());
             }
             if (ground > 0) list.Add(new LocText("Placemaker.Permanent.Terraform", RoundArea(ground)));
             if (water > 0) list.Add(new LocText("Placemaker.Permanent.Water", RoundArea(water)));
@@ -928,14 +931,29 @@ namespace Placemaker.Core.Tool
 
         private static double RoundArea(double m2) => m2 < 100 ? Math.Round(m2) : Math.Round(m2 / 10) * 10;
 
-        /// <summary>Identity of a set of permanent effects: an acknowledgement covers exactly these (reset when they change).</summary>
+        public const string PermanentPaintKey = "Placemaker.Permanent.Paint";
+
+        /// <summary>(s33) True when the effects include more than ground paint (terraform, water): those need the tick.</summary>
+        public static bool NeedsAck(List<LocText> effects)
+        {
+            if (effects == null) return false;
+            foreach (var e in effects) if (e != null && e.Key != PermanentPaintKey) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Identity of the permanent effects that need an acknowledgement: it covers exactly these (reset when they change).
+        /// (s33) Ground paint alone needs none (""): it is the default dressing of most parks now, so asking every build was
+        /// nagging; the paint line stays in the summary as information.
+        /// </summary>
         public static string PermanentFingerprint(List<LocText> effects)
         {
-            if (effects == null || effects.Count == 0) return "";
+            if (!NeedsAck(effects)) return "";
             var sb = new System.Text.StringBuilder();
-            foreach (var e in effects) sb.Append(e.ToJson().ToString()).Append('|');
+            foreach (var e in effects) if (e.Key != PermanentPaintKey) sb.Append(e.ToJson().ToString()).Append('|');
             return sb.ToString();
         }
+
 
         /// <summary>
         /// Icon path filter installed by the game (verifies vanilla Media files exist, fixes known

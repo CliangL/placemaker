@@ -176,7 +176,7 @@ namespace Placemaker.Core.Layers.Leisure
             }
             foreach (var kv in counts) ctx.Plan.Facts["collection." + kv.Key] = kv.Value;
 
-            ctx.Surface(region.Ring, SurfaceRole.Grass, OneOr(ctx.S("surface"), new[] { "Grass Surface 01" }));
+            Lawn.Cover(ctx, region.Ring, OneOr(ctx.S("surface"), new[] { "Grass Surface 01" }));
             if (ctx.B("fence")) Fence(ctx, gates, OneOr(ctx.S("fenceAsset"), BoundaryHedge));
             EmitGreenRegions(ctx, occ);
             CommonStats(ctx);

@@ -681,18 +681,21 @@ namespace Placemaker.Game.Overlay
             }
         }
 
-        /// <summary>Preview tint of the vanilla terrain materials (TerrainMaterials: 1 Dry, 2 Lush, 3 Dirt, 4 Sand; 0 erase).</summary>
+        /// <summary>
+        /// Preview tint of a paint layer: the map's real material colour (s33 TerrainPaletteReader; vanilla: dry grass,
+        /// forest floor, light dirt, grey sand), lifted and saturated so it reads as an overlay on the terrain. 0 = erase.
+        /// </summary>
         private static Color PaintColor(int layer)
         {
-            switch (layer)
-            {
-                case 1: return new Color(0.80f, 0.74f, 0.50f, 1f);
-                case 2: return new Color(0.42f, 0.66f, 0.30f, 1f);
-                case 3: return new Color(0.55f, 0.40f, 0.27f, 1f);
-                case 4: return new Color(0.98f, 0.86f, 0.55f, 1f);
-                default: return new Color(0.70f, 0.80f, 0.60f, 1f);
-            }
+            if (layer <= 0) return new Color(0.70f, 0.80f, 0.60f, 1f);
+            var p = Placemaker.Core.Paint.TerrainPalette.OrVanilla(Placemaker.Game.Preview.TerrainPaletteReader.Last);
+            var c = p.ColorOf(layer);
+            float grey = (c.x + c.y + c.z) / 3f;
+            var sat = new Unity.Mathematics.float3(grey) + (c - grey) * 2.2f;
+            var lifted = Unity.Mathematics.math.saturate(Unity.Mathematics.math.lerp(sat, new Unity.Mathematics.float3(1f), 0.3f) * 1.35f);
+            return new Color(lifted.x, lifted.y, lifted.z, 1f);
         }
+
 
         private static List<float3[]> Group(Dictionary<int, List<float3[]>> d, int key)
         {

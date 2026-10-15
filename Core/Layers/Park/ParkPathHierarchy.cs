@@ -46,7 +46,7 @@ namespace Placemaker.Core.Layers.Park
             Trails = s.I("trails", 0),
             Desire = s.S("desireLines", "none"),
             DesireCount = s.I("desireCount", 3),
-            DesireLayer = s.I("desireLayer", 1),
+            DesireLayer = s.I("desireLayer", 3),
         };
     }
 
@@ -853,20 +853,14 @@ namespace Placemaker.Core.Layers.Park
                     float len = math.distance(a, b);
                     var dir = (b - a) / len; var nrm = new float2(-dir.y, dir.x);
                     var a2 = a + dir * 1.8f; var b2 = b - dir * 1.8f;
-                    var left = new List<float2>(); var right = new List<float2>();
                     int k = math.max(2, (int)(len / 8f));
                     uint ws = Hashing.Mix(ctx.Seed, 0xDE51u + (uint)i);
-                    for (int j = 0; j <= k; j++)
-                    {
-                        float u = j / (float)k;
-                        float taper = 0.6f + 0.4f * math.sin(u * math.PI);
-                        float wob = (j == 0 || j == k) ? 0f : (Hashing.Unit(Hashing.Mix(ws, (uint)j)) - 0.5f) * 0.8f;
-                        var c = math.lerp(a2, b2, u) + nrm * wob;
-                        left.Add(c + nrm * hw * taper); right.Add(c - nrm * hw * taper);
-                    }
-                    right.Reverse(); left.AddRange(right);
-                    var ring = Poly.EnsureCcw(left.ToArray());
-                    TerrainPaint.Patch(ctx, ring, o.DesireLayer, 0.75f, 0.35f);
+
+                    // s33: one painted stroke (frayed, faded ends, knockout) instead of a feathered polygon.
+                    var kit = new Placemaker.Core.Paint.PaintKit(ctx.Plan.Paint, ctx.H, ws) { Outline = ctx.LayerRegion.Ring };
+                    TrailPaint.DesireLine(kit, a2, b2, 2f * hw + 0.6f, 0.72f, math.clamp(o.DesireLayer, 1, 4), ws);
+                    TerrainPaint.Warn(ctx);
+
                     for (int j = 1; j <= k; j++) s.Occ.Corridors.Add(math.lerp(a2, b2, (j - 1f) / k), math.lerp(a2, b2, (float)j / k), hw, DesireCorridorKind);
                 }
             }

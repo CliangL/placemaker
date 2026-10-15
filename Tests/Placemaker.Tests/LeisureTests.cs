@@ -352,7 +352,7 @@ namespace Placemaker.Tests
             Assert.NotEmpty(plan.Layers.Single(l => l.GeneratorId == "park").Paint);
             var ring = Poly.To2D(TestKit.Rect(200, 150));
             foreach (var p in plan.Layers.SelectMany(l => l.Paint))
-                foreach (var v in p.Ring) Assert.True(Poly.Contains(ring, v.xz), "paint outside the area");
+                foreach (var v in p.Ring) Assert.True(Poly.Contains(ring, v.xz), $"paint outside the area: layer {p.Layer} shape {p.Shape?.GetType().Name} at {v} ring {p.Ring.Length}");
             Assert.Contains(plan.AllIssues(), i => i.Key == TerrainPaint.PermanentKey);
         }
 

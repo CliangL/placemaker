@@ -103,7 +103,9 @@ namespace Placemaker.Tests.Types
             Assert.NotEmpty(avenue);
             int lined = plan.Objects.Count(o => o.Role == ObjectRole.Tree && avenue.Any(n => math.abs(TestKit.DistanceToCurve(o.Position.xz, n) - (Composer.DefaultHalfWidth(NetRole.PathwayWide) + 3f)) < 0.1f));
             Assert.True(lined > 20, "avenue trees " + lined);
-            Assert.Contains(plan.Surfaces, s => s.Role == SurfaceRole.Grass);
+            // s33: the orchard's lawn is painted terrain by default (no grass surface).
+            Assert.DoesNotContain(plan.Surfaces, s => s.Role == SurfaceRole.Grass && Poly.Area(Poly.To2D(s.Ring)) > 5000f);
+
             Assert.True(TestKit.Stat(plan, Keys.StatLamps) > 0);
         }
 

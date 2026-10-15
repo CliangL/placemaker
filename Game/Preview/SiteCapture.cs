@@ -40,6 +40,7 @@ namespace Placemaker.Game.Preview
         private readonly global::Game.Objects.SearchSystem _objectSearch;
         private readonly global::Game.Zones.SearchSystem _zoneSearch;
         private readonly CityConfigurationSystem _cityConfig;
+        private readonly World _world;
 
         private Dictionary<string, AssetInfo> _assets = new Dictionary<string, AssetInfo>();
         private int _assetsVersion = -1;
@@ -54,6 +55,7 @@ namespace Placemaker.Game.Preview
             _objectSearch = world.GetOrCreateSystemManaged<global::Game.Objects.SearchSystem>();
             _zoneSearch = world.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>();
             _cityConfig = world.GetOrCreateSystemManaged<CityConfigurationSystem>();
+            _world = world;
         }
 
         /// <summary>True once the asset catalog delivered its info map (prices, footprints).</summary>
@@ -103,6 +105,8 @@ namespace Placemaker.Game.Preview
             try { site.LeftHandTraffic = _cityConfig != null && _cityConfig.leftHandTraffic; } catch (Exception) { }
             // Copy: the worker must not see the catalog's dictionary mutate under it.
             site.Assets = new Dictionary<string, AssetInfo>(Assets());
+            // s33: the map's terrain paint materials (planners remap their paint intents to these slots).
+            site.Terrain = TerrainPaletteReader.Current(_world);
             return site;
         }
 

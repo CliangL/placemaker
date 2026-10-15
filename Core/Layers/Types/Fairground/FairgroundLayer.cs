@@ -332,7 +332,7 @@ namespace Placemaker.Core.Layers.Types.Events
                     ctx.Surface(region.Ring, SurfaceRole.Ground, asset, AssetCategories.SurfaceNatural);
                     break;
                 default:
-                    ctx.Surface(region.Ring, SurfaceRole.Grass, asset);
+                    Lawn.Cover(ctx, region.Ring, asset);
                     break;
             }
         }

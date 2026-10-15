@@ -242,6 +242,7 @@
   "Placemaker.UI.Review.EditLayer": "Edit",
   "Placemaker.UI.Review.Fewer": "Show fewer",
   "Placemaker.UI.Review.MoreN": "{0} more",
+  "Placemaker.UI.Review.PaintOnly": "Ground paint stays when the build is removed.",
   "Placemaker.UI.Review.Permanent": "Permanent changes",
   "Placemaker.UI.Review.Planning": "Planning…",
   "Placemaker.UI.Review.Show": "Show",

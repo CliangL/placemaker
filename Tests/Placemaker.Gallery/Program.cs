@@ -12,6 +12,9 @@
 //   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront] [--decals]
 //   (s30) ... -- --terrain-dump <ModsData/Placemaker/debug/x.json or folder> --out <dir>: renders in-game terrain dumps
 //   --decals: also "decals-on" (100 %), "decals-max" (300 %) and "decals-gritty" per type (decals are off by default); decals are drawn in category colours with a legend.
+//   --paint: ground paint variants per type (lawn painted / surface, gritty 200 %, off, painted trails, arid map) + _paint/toolkit;
+//   --map arid|mediterranean|tropic|alpine|shuffled: plan and draw with that map's paint materials. Terrain (bare ground and
+//   paint) is drawn in the census colours at a fixed exposure (PaintView.cs).
 
 using System;
 using System.Collections.Generic;
@@ -49,6 +52,8 @@ namespace Placemaker.Gallery
                     case "--showcase": Renderer.Showcase = true; break;
                     case "--shops": Variants.ShopVariants = true; break;
                     case "--decals": Variants.DecalVariants = true; break;
+                    case "--paint": Variants.PaintVariants = true; break;
+                    case "--map": Renderer.MapPalette = next; i++; break;
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--shores": Renderer.Shores = next.Split(','); i++; break;
                     case "--slopes": Renderer.Slopes = next.Split(','); i++; break;
@@ -194,6 +199,10 @@ namespace Placemaker.Gallery
         public float TargetArea;
         /// <summary>Site shape (--shapes): "" = the default irregular site, else triangle, sliver, square, L.</summary>
         public string Shape = "";
+        /// <summary>(s33) Map palette for this job (PaintView.ForMap), null = --map / vanilla.</summary>
+        public string Map;
+        /// <summary>(s33) A hand-built plan instead of a recipe (the toolkit sheet).</summary>
+        public Func<(float3[] ring, ComposedPlan plan)> Custom;
     }
 
     public static class Variants
@@ -218,14 +227,20 @@ namespace Placemaker.Gallery
         public static bool ShopVariants;
         /// <summary>--decals: Decals amount at 300 % and 0 % for every type with decal dressing (s21).</summary>
         public static bool DecalVariants;
+        /// <summary>(s33) --paint: ground paint variants (lawn surface, gritty 200 %, off, arid map) per type with Ground paint, plus the toolkit sheet.</summary>
+        public static bool PaintVariants;
         private static readonly (string layout, string amount)[] ShopCombos =
         {
             // s14: the Zoning feature is plain cutouts (Row / Speckled); the elaborate layouts are the Commercial types.
             ("band", "few"), ("band", "some"), ("band", "lots"), ("pads", "some"), ("pads", "lots"),
         };
 
+        /// <summary>(s33) Paint views hide the decals (their squares would cover the ground paint being reviewed).</summary>
+        private static void NoDecals(Recipe r) => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 0.0;
+
         public static List<Job> All(string repo, HashSet<string> only)
         {
+
             var editor = new DesignEditor(GeneratorRegistry.Get);
             var recipes = new List<(string id, Recipe r)>();
             var roots = new HashSet<string>(StringComparer.Ordinal);
@@ -284,10 +299,40 @@ namespace Placemaker.Gallery
                     jobs.Add(Make("decals-gritty", "Decals gritty", r => { r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.AmountId] = 100.0; r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.StyleId] = "gritty"; }));
                     // s28: terrain-paint ground wear only shows on bare terrain: "wear-bare" turns the type's lawn surface off.
                     jobs.Add(Make("wear-off", "Ground wear 0 %", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.PaintWearId] = 0.0));
-                    if (gen.Controls.Any(c => c.Id == "groundSurface"))
-                        jobs.Add(Make("wear-bare", "Ground wear, bare lawn", r => r.Root.Settings.Values["groundSurface"] = false));
+                    if (gen.Controls.Any(c => c.Id == Placemaker.Core.Decals.DressingControls.LawnId))
+                        jobs.Add(Make("wear-bare", "Ground wear, bare lawn", r => r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.LawnId] = "painted"));
+                }
+                // s33: ground paint — the lawn choice both ways, gritty and heavy, off, and the same design on an arid map.
+                if (PaintVariants && gen.Controls.Any(c => c.Id == Placemaker.Core.Decals.DressingControls.PaintWearId))
+                {
+                    string lawnId = Placemaker.Core.Decals.DressingControls.LawnId;
+                    if (gen.Controls.Any(c => c.Id == lawnId))
+                    {
+                        jobs.Add(Make("paint-painted", "Lawn: painted terrain", r => { NoDecals(r); r.Root.Settings.Values[lawnId] = "painted"; }));
+                        jobs.Add(Make("paint-surface", "Lawn: grass surface", r => { NoDecals(r); r.Root.Settings.Values[lawnId] = "surface"; }));
+                    }
+                    jobs.Add(Make("paint-gritty", "Ground paint 200 %, gritty", r =>
+                    {
+                        NoDecals(r);
+                        r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.PaintWearId] = 200.0;
+                        r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.StyleId] = "gritty";
+                    }));
+                    if (gen.Controls.Any(c => c.Id == "trailStyle"))
+                        jobs.Add(Make("paint-trails", "Painted trails + worn shortcuts", r =>
+                        {
+                            NoDecals(r);
+                            r.Root.Settings.Values["trails"] = 3.0;
+                            r.Root.Settings.Values["trailStyle"] = "painted";
+                            r.Root.Settings.Values["desireLines"] = "worn";
+                        }));
+                    jobs.Add(Make("paint-off", "Ground paint 0 %"
+, r => { NoDecals(r); r.Root.Settings.Values[Placemaker.Core.Decals.DressingControls.PaintWearId] = 0.0; }));
+                    var arid = Make("paint-arid", "Arid map (custom slots)", NoDecals);
+                    arid.Map = "arid";
+                    jobs.Add(arid);
                 }
                 var paletteControl = (gen.Controls ?? Array.Empty<ControlSchema>()).FirstOrDefault(c => c.Id == "palette" && c.Kind == ControlKind.Choice);
+
                 if (Palettes && paletteControl != null)
                     foreach (var o in paletteControl.Options.Where(o => o.Value != "auto" && o.Value != "custom"))
                     {
@@ -325,6 +370,8 @@ namespace Placemaker.Gallery
                     }));
                 }
             }
+            if (PaintVariants && (only == null || only.Contains("_paint")))
+                jobs.Add(new Job { Type = "_paint", Variant = "toolkit", Title = "Paint toolkit", Custom = PaintView.Toolkit, TargetArea = 17600f });
             if (Areas != null && Areas.Length > 0)
             {
                 var expanded = new List<Job>();
@@ -460,6 +507,11 @@ namespace Placemaker.Gallery
         [ThreadStatic] private static float _waterZ;
         [ThreadStatic] private static List<NearbyNet> _roads;
         [ThreadStatic] private static List<EdgeMarker> _markers;
+        [ThreadStatic] private static Placemaker.Core.Paint.TerrainPalette _palette;
+        [ThreadStatic] private static bool _toolkit;
+        [ThreadStatic] private static bool _paintView;
+        /// <summary>(s33) --map arid|mediterranean|tropic|alpine|shuffled: plan and draw with that map's paint materials.</summary>
+        public static string MapPalette;
 
         /// <summary>(s18) Odd sites: a triangle, a long thin trapezoid, a square, an L (CCW in x/z, scaled to the area).</summary>
         public static float3[] Shaped(string shape, float targetArea)
@@ -520,8 +572,15 @@ namespace Placemaker.Gallery
             var res = new Result();
             bool shaped = !string.IsNullOrEmpty(job.Shape);
             var ring = shaped ? Shaped(job.Shape, job.TargetArea) : Showcase ? Square(job.TargetArea) : Site(job.TargetArea);
+            (float3[] ring, ComposedPlan plan) custom = default;
+            if (job.Custom != null) { custom = job.Custom(); ring = custom.ring; }
+            _toolkit = job.Custom != null;
+            _paintView = _toolkit || (job.Variant ?? "").StartsWith("paint-", StringComparison.Ordinal);
             var shape = new AreaShape { Ring = ring, Source = AreaSource.Drawn };
             var site = new SiteContext { Assets = catalog.Items, LayoutScale = LayoutScale };
+            string map = job.Map ?? MapPalette;
+            _palette = PaintView.ForMap(map);
+            if (!string.IsNullOrEmpty(map)) site.Terrain = _palette;
             if (Showcase || shaped) site.NearbyNets = RoadsAround(ring);
             _waterZ = float.NaN;
             if (WaterTypes != null && (WaterTypes.Contains(job.Type) || WaterTypes.Contains(job.Type + "/" + job.Variant)))
@@ -560,13 +619,18 @@ namespace Placemaker.Gallery
             var sw = Stopwatch.StartNew();
             try
             {
-                if (Showcase || shaped) ApplySuggestedMarkers(job.Recipe, ring, site);
-                AddMarkersIfNeeded(job.Recipe, ring);
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                Placemaker.Core.Build.SiteHarmony.Disabled = Variants.NoHarmony;
-                plan = Composer.Compose(job.Recipe, shape, site, cts.Token);
-                AutoAssets.Resolve(plan, catalog.Source());
-                Placemaker.Core.Decals.DecalFit.Orient(plan, catalog.Items);
+                if (job.Custom != null) plan = custom.plan;
+                else
+                {
+                    if (Showcase || shaped) ApplySuggestedMarkers(job.Recipe, ring, site);
+                    AddMarkersIfNeeded(job.Recipe, ring);
+
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                    Placemaker.Core.Build.SiteHarmony.Disabled = Variants.NoHarmony;
+                    plan = Composer.Compose(job.Recipe, shape, site, cts.Token);
+                    AutoAssets.Resolve(plan, catalog.Source());
+                    Placemaker.Core.Decals.DecalFit.Orient(plan, catalog.Items);
+                }
             }
             catch (Exception e)
             {
@@ -624,42 +688,6 @@ namespace Placemaker.Gallery
 
         // ─── palette ───
 
-        /// <summary>Vanilla terrain material colours (TerrainMaterials 1 Dry, 2 Lush, 3 Dirt, 4 Sand); 0 = erase.</summary>
-        private static Rgba PaintColor(int layer)
-        {
-            switch (layer)
-            {
-                case 1: return Rgba.Hex("#c8bd86");
-                case 2: return Rgba.Hex("#6f9e4f");
-                case 3: return Rgba.Hex("#8a6a4c");
-                case 4: return Rgba.Hex("#ecd9a6");
-                default: return Rgba.Hex("#b9c9a0");
-            }
-        }
-
-        private static void DrawPaint(Canvas cv, ComposedPlan plan, float2 min, float2 max, bool underWater = true)
-        {
-            var paints = plan.Layers.Where(l => l != null).SelectMany(l => l.Paint).Where(p => p?.Ring != null && p.Ring.Length >= 3).ToList();
-            if (paints.Count == 0) return;
-            var stamps = PaintRaster.Build(paints, new PaintRasterOptions { Cell = 1f, Align = 1f, TileCells = 2048 });
-            float wz = _waterZ;
-            foreach (var s in stamps)
-            {
-                var c = PaintColor(s.Layer);
-                var smin = s.Min; var smax = s.Min + s.Size;
-                cv.Shade(p =>
-                {
-                    float v = s.Sample(p);
-                    if (v < 0.02f) return default;
-                    float a = 0.92f * v;
-                    if (underWater && !float.IsNaN(wz) && p.y < wz) a *= 0.45f;
-                    return c.WithA(a);
-                }, math.max(min, smin), math.min(max, smax));
-            }
-        }
-
-        private static readonly Rgba Ground = Rgba.Hex("#ece8dd");
-        private static readonly Rgba Outside = Rgba.Hex("#d9d6ce");
 
         /// <summary>
         /// Distinct stone tones for paved surfaces: one per paving ASSET (art pass a2), so a plaza pattern of
@@ -749,7 +777,10 @@ namespace Placemaker.Gallery
             }
         }
 
+        private static bool Invisible(PlannedNet n) => n.Category == AssetCategories.InvisiblePath && (n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide);
+
         private static (Rgba fill, Rgba edge) NetColors(PlannedNet n)
+
         {
             string cat = n.Category ?? "";
             if (cat == "net.bike") return (Rgba.Hex("#e6b3a8"), Rgba.Hex("#9c5a4c"));
@@ -803,7 +834,9 @@ namespace Placemaker.Gallery
             float2 ext = max - min;
             float ppm = math.min(6f, 880f / math.cmax(ext));
             int w = (int)math.ceil(ext.x * ppm), h = (int)math.ceil(ext.y * ppm);
-            var cv = new Canvas(w, h, min, ppm, Outside);
+            var pal = _palette ?? Placemaker.Core.Paint.TerrainPalette.Vanilla();
+            var cv = new Canvas(w, h, min, ppm, PaintView.Outside(pal));
+            HashSet<int> painted = null;
             // Surrounding streets (showcase): grey 12 m band with a dashed centre line.
             if (_roads != null)
                 foreach (var r in _roads)
@@ -812,7 +845,8 @@ namespace Placemaker.Gallery
                     cv.StrokePolyline(rp, r.Width, Rgba.Hex("#9a9aa0"));
                     cv.DashedPolyline(rp, cv.Px(1f), 4f, 4f, Rgba.Hex("#ffffff", 0.8f));
                 }
-            cv.FillPolygon(ring2, Ground);
+            // s33: the bare ground is the map's procedural grass (census colour at the gallery exposure).
+            cv.FillPolygon(ring2, PaintView.Ground(pal));
             Func<float2, float> final = null;
             if (!float.IsNaN(_waterZ) || _sloped)
             {
@@ -823,8 +857,7 @@ namespace Placemaker.Gallery
                 var fin = final;
                 float level = _level;
                 cv.FillPolygon(new[] { min, new float2(max.x, min.y), max, new float2(min.x, max.y) }, Rgba.Hex("#d5dcc6"));
-                cv.FillPolygon(ring2, Ground);
-                DrawPaint(cv, plan, min, max, underWater: false);
+                painted = PaintView.Draw(cv, plan, ring2, min, max, pal, _waterZ, false, true);
                 float px = cv.Px(1f);
                 cv.Shade(p =>
                 {
@@ -882,7 +915,7 @@ namespace Placemaker.Gallery
 
             // Terrain texture paint (s13): the real per-point strength field the game paints (PaintRaster stamps: feather,
             // gradient, edge noise), in the vanilla material colours, alpha = strength; fainter under water.
-            if (final == null) DrawPaint(cv, plan, min, max);
+            if (final == null) painted = PaintView.Draw(cv, plan, ring2, min, max, pal, _waterZ, true, false);
 
             // Surfaces: translucent fill + crisp darker outline; paved surfaces one stone tone per paving asset.
             var tones = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -936,18 +969,20 @@ namespace Placemaker.Gallery
             {
                 res.Nets++;
                 for (int i = 0; i + 1 < pts.Length; i++) res.PathMetres += math.distance(pts[i], pts[i + 1]);
-                if (n.Role == NetRole.Fence) continue;
+                if (n.Role == NetRole.Fence || Invisible(n)) continue;
                 cv.StrokePolyline(pts, hw * 2f + cv.Px(1.6f), NetColors(n).edge);
             }
             foreach (var (n, pts, hw) in polylines)
             {
                 var (fill, edge) = NetColors(n);
                 if (n.Role == NetRole.Fence) { cv.StrokePolyline(pts, math.max(0.4f, cv.Px(1.5f)), fill); continue; }
+                // s33: an invisible (walkable) path under a painted trail: only a fine dotted line.
+                if (Invisible(n)) { cv.DashedPolyline(pts, cv.Px(1f), 0.8f, 1.6f, Rgba.Hex("#ffffff", 0.75f)); continue; }
                 cv.StrokePolyline(pts, hw * 2f, fill);
             }
             foreach (var (n, pts, hw) in polylines)
             {
-                if (n.Role == NetRole.Fence) continue;
+                if (n.Role == NetRole.Fence || Invisible(n)) continue;
                 // s16: roads of the roads layer carry their role colour as a centre band (same colours as the
                 // in-game preview and the panel legend); other nets keep the thin dashed centre line.
                 string role = RoadRoles.Of(n.Role);
@@ -989,6 +1024,15 @@ namespace Placemaker.Gallery
                 DrawObject(cv, f.o, f.cat, f.poly, f.r);
 
             DrawDecalLegend(cv, objs);
+            PaintView.Legend(cv, pal, painted);
+            if (_toolkit)
+                foreach (var (at, text) in PaintView.Labels)
+                {
+                    var px = cv.OutPx(at);
+                    cv.RectPx(px.x - 2, px.y - 2, text.Length * 12 + 4, 18, Rgba.Hex("#ffffff", 0.8f));
+                    cv.TextPx(px.x, px.y, text, Rgba.Hex("#202020"), 2);
+                }
+
 
             // Issues
             foreach (var i in plan.AllIssues())
@@ -1142,7 +1186,7 @@ namespace Placemaker.Gallery
             switch (o.Role)
             {
                 case ObjectRole.Tree:
-                    cv.FillCircle(p, math.max(r, minR), col.WithA(0.5f));
+                    cv.FillCircle(p, math.max(r, minR), col.WithA(_paintView ? 0.22f : 0.5f));   // s33: paint views see the mulch under the crowns
                     cv.StrokeCircle(p, math.max(r, minR), cv.Px(1f), col.Darker(0.6f).WithA(0.8f));
                     cv.FillCircle(p, math.max(r * 0.22f, cv.Px(1.5f)), col.Darker(0.45f));
                     return;

@@ -33,7 +33,11 @@ namespace Placemaker.Tests
             Assert.True(TestKit.Count(plan, ObjectRole.Lamp) > 3);
             Assert.Contains(plan.Regions, r => r.Tags.Contains(RegionTags.Core) && r.Tags.Contains(RegionTags.Green));
             Assert.Contains(plan.Regions, r => r.Tags.Contains(RegionTags.Edge));
-            Assert.Single(plan.Surfaces);
+            // s33: the default lawn is painted terrain (no grass surface); "Grass surface" lays exactly one.
+            Assert.Empty(plan.Surfaces);
+            var surf = TestKit.Plan("park", TestKit.Entered("park", TestKit.Input(Hectare5, new SettingsBag { Values = { [Placemaker.Core.Decals.DressingControls.LawnId] = "surface" } }, site: TestKit.RoadAlongBottom(250))));
+            Assert.Single(surf.Surfaces);
+
             Assert.Equal(50000, TestKit.Stat(plan, Keys.StatArea), 0);
             Assert.True(TestKit.Stat(plan, Keys.StatPathLength) > 100);
             // The road runs along the bottom edge: at least one path end connects to it.

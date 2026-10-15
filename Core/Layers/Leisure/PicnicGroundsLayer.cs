@@ -73,7 +73,7 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One("", ParkArt.Grass));
             // Art pass (a1): the promised "gentle loop round a big open lawn" — a circuit walk inset from the edge with
             // the entrances joined to it; the generic planner (a teardrop to one side) only when no circuit fits.
             if (!CircuitPath(ctx, occ, gates, AssetMix.One(ctx.S("pathAsset"))))

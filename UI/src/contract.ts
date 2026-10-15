@@ -12,7 +12,7 @@ export const GROUP = "Placemaker";
  * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
  * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
  */
-export const PROTOCOL = 20;
+export const PROTOCOL = 21;
 
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
@@ -358,6 +358,10 @@ export interface Summary {
   permanent: LocText[];
   /** True once the player ticked the permanent-effects box for exactly these effects. */
   permanentAcknowledged?: boolean;
+  /** (s33, PROTOCOL 21) False when the permanent effects are ground paint only: listed as one info line, no tick needed.
+   *  Absent (older DLL) = every permanent effect needs the tick. */
+  permanentNeedsAck?: boolean;
+
   /** Additive (s17, docs/PARK-STATS.md): park stats of the planned build. Absent = not a park type (parking,
    *  roads, industrial) or no plan yet. */
   parkStats?: ParkStatsView;

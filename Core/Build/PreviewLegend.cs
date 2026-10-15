@@ -210,7 +210,7 @@ namespace Placemaker.Core.Build
                     foreach (var a in l.Areas)
                         if (a?.Ring != null && a.Ring.Length >= 3) E(Of(a)).Count++;
                     foreach (var p in l.Paint)
-                        if (p?.Ring != null && p.Ring.Length >= 3) { var e = E(Of(p)); e.Count++; e.AreaM2 += Poly.Area(Poly.To2D(p.Ring)); }
+                        if (p?.Ring != null && p.Ring.Length >= 3) { var e = E(Of(p)); e.Count++; e.AreaM2 += p.AreaEstimate > 0f ? p.AreaEstimate : Poly.Area(Poly.To2D(p.Ring)); }
                     foreach (var z in l.Zoning)
                         if (z != null && (plan.ZoneCells == null || plan.ZoneCells.Count == 0))
                         { var e = E(Cutouts); e.Count++; e.AreaM2 += Poly.Area(new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz }); }

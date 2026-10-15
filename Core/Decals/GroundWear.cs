@@ -1,25 +1,29 @@
-// Placemaker — ground wear painted into the terrain texture (s28, phase 2 of the decal pass). GPL-3.0.
+// Placemaker — ground paint dressing: wear, mulch, lawn variation painted into the terrain texture (s28, s33). GPL-3.0.
 //
-// User idea: instead of (or as well as) decals, use the terrain "Paint texture" materials (s13 PaintRaster:
-// 1 Dry grass, 2 Lush grass, 3 Dirt, 4 Sand; soft feathered edges, per-point strength) as ground dressing:
-//   Verges     faint dirt feathered 1–2 m along path edges (gradient from the path centreline)
-//   Desire     faint dirt lines where people cut corners between path arms, and from the nearest path across the
-//              lawn to benches, play items and picnic tables standing off the path
-//   Patches    worn ground at benches, play items, picnic tables and entrances
-//   Edges      speckled dry-grass / dirt variation just inside the outline, blending the build into its surroundings
-// Paint shows only where the terrain itself shows: never under a planned surface (a park's grass surface, paving,
-// sand…), a net or water — those spots are skipped (see Visible). Granularity is one splatmap texel (≈ 3.5 m on
-// vanilla maps, smoothed by the shader), so everything here is faint and wide rather than crisp; a 1 m desire line
-// reads as a soft trodden band. Amount: "Ground wear" (dressPaintWear) × style (Clean 0.6, Lived-in 1, Gritty 1.4);
-// desire lines also need "Desire paths" (dressDesirePaths). Paint is permanent (TerrainPaint.PermanentKey warning,
-// listed under Paint in the permanent-changes summary). Deterministic: every decision is a hash of the step seed
-// and the host's position. Independent of decal packs.
+// User (s28): use the terrain "Paint texture" materials as ground dressing; (s33) "terrain paint is what gives us
+// power … draw dark mulch under each tree". Built on the Core/Paint toolkit (PaintShape fields, one PlannedPaint per
+// field), always masked by where bare terrain shows (GroundMask: not under any planned surface, net, paving, sand,
+// water or cutout), so nothing is painted where it would be invisible:
+//   Lawn       (painted lawns only) lush = forest-floor tint in hollows, near water and in noise patches; dry grass on
+//              knolls and in other patches — the procedural grass in between stays the lawn
+//   Mulch      dark forest floor under every tree crown (radial, noisy edge; needle beds stronger under conifers)
+//   Verges     faint dirt feathered 2 m out from every path edge
+//   Desire     faint dirt lines where people cut corners and walk across the lawn to benches / play items (knockout)
+//   Patches    worn dirt at play items, picnic tables, bench fronts, entrances, with a dry-grass halo
+//   Edges      dry-grass (gritty: some dirt) speckle in a soft band inside the outline: the build blends into the land
+//   Extras     pitch wear at goals and fitness stations, campground pitch and fire-ring wear, dune grass along sand,
+//              headlands round crop fields
+// Vanilla materials (docs/TERRAIN-PAINT.md): 1 dry grass, 2 "lush" = dark forest floor, 3 light dirt, 4 grey sand.
+// Amount: "Ground paint" (dressPaintWear) × style (Clean 0.6, Lived-in 1, Gritty 1.4); toggles Desire paths, Mulch,
+// Lawn variation, Clear old paint. Paint is permanent (TerrainPaint.PermanentKey warning; the permanent-changes summary
+// lists it). Deterministic: every decision is a hash of the step seed and the host's position.
 
 using System;
 using System.Collections.Generic;
 using Placemaker.Core.Build;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
+using Placemaker.Core.Paint;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Decals
@@ -29,8 +33,16 @@ namespace Placemaker.Core.Decals
         /// <summary>Paints per fill step at most (keeps the raster and the permanent area small).</summary>
         public const int MaxPaints = 360;
         public const string StatKey = "Placemaker.Stat.GroundWear";
+        /// <summary>Trees that get mulch per step at most (one union paint; beyond this the crowns overlap into forest floor anyway).</summary>
+        public const int MaxMulchTrees = 2500;
 
-        public sealed class Report { public int Verges, Desire, Patches, Edges, Skipped; public int Total => Verges + Desire + Patches + Edges; }
+        public sealed class Report
+        {
+            public int Verges, Desire, Patches, Edges, Skipped;
+            /// <summary>(s33) Lawn tint fields, mulch fields (trees covered), type extras, erase fields.</summary>
+            public int Lawn, Mulch, MulchTrees, Extras, Clears;
+            public int Total => Verges + Desire + Patches + Edges + Lawn + Mulch + Extras + Clears;
+        }
 
         internal static float StyleK(DressStyle s) => s == DressStyle.Clean ? 0.6f : s == DressStyle.Gritty ? 1.4f : 1f;
 
@@ -53,10 +65,14 @@ namespace Placemaker.Core.Decals
                 AreaPlan host = layers.Find(l => l.GeneratorId == s.LayerId) ?? layers[0];
                 var region = (s.Ring != null && s.Ring.Length >= 3 ? LayerRegion.From(s.Ring) : null) ?? w.Root;
                 var g = new Group(w, site, host, region, s, Hashing.Mix(host.Seed == 0 ? 1u : host.Seed, 0x6A0Bu), report);
+                g.Clear();
+                if (s.LawnPainted && s.LawnTint) g.LawnTint();
+                if (s.Mulch) g.Mulch();
                 g.Verges(layers);
                 if (s.DesirePaths) g.Desire(layers);
                 g.Patches(layers);
                 g.Edges();
+                g.Extras(layers);
                 if (g.Count > 0)
                 {
                     bool warned = false;
@@ -77,31 +93,27 @@ namespace Placemaker.Core.Decals
             private readonly uint Seed;
             private readonly Report R;
             private readonly float K;
-            public int Count;
+            private readonly PaintKit Kit;
+            private GroundMask _mask;
+
+            public int Count => Kit.Count;
 
             public Group(DressingWorld w, SiteContext site, AreaPlan host, LayerRegion region, DressSettings s, uint seed, Report r)
             {
                 W = w; Site = site; Host = host; Region = region; S = s; Seed = seed; R = r;
                 K = math.min(3f, s.PaintWear) * StyleK(s.Style);
+                Kit = new PaintKit(host.Paint, HeightAt, seed) { MaxPaints = MaxPaints, Amount = 1f, Outline = region.Ring };
             }
+
+            /// <summary>Where bare terrain shows (built on first use: types with nothing to paint never pay for it).</summary>
+            private GroundMask Mask => _mask ?? (_mask = GroundMask.Build(W, Region, S.LawnPainted ? 4f : 1.5f, Hashing.Mix(Seed, 0x3A5Bu)));
 
             private uint H(int a, int b = 0, int c = 0) => Hashing.Mix(Hashing.Mix(Seed, a, b), unchecked((uint)c * 0x9E3779B1u + 11u));
             private static uint H2(uint h, int k) => Hashing.Mix(h, unchecked((uint)k + 0x632BE5ABu));
             private static float U(uint h) => Hashing.Unit(h);
 
-            /// <summary>Bare terrain shows here: inside the step, not water, not under a surface or a net, off cutouts.</summary>
-            private readonly Dictionary<long, bool> _visible = new Dictionary<long, bool>();
-
-            /// <summary>Cheapest tests first; the water test (terrain vs water level) last and memoised per 1 m cell.</summary>
-            public bool Visible(float2 p)
-            {
-                if (!Region.Contains(p) || Region.BoundaryDistance(p, 1.2f) < 1f) return false;
-                if (W.Covered(p) || W.InPoly(p, GroundKind.Paved) || W.InPoly(p, GroundKind.Sand)) return false;
-                if (W.Cutouts.Count > 0 && W.NearCutout(p, 1.5f)) return false;
-                long key = ((long)(int)math.floor(p.x) << 32) ^ (uint)(int)math.floor(p.y);
-                if (!_visible.TryGetValue(key, out bool dry)) _visible[key] = dry = !W.IsWater(p);
-                return dry;
-            }
+            /// <summary>Bare terrain shows here (mask ≥ 0.5) inside the step.</summary>
+            public bool Visible(float2 p) => Mask.At(p) >= 0.5f;
 
             private float HeightAt(float2 p)
             {
@@ -113,24 +125,12 @@ namespace Placemaker.Core.Decals
                 catch (Exception) { return 0f; }
             }
 
-            private bool Add(float2[] ring, int layer, float strength, float feather, float noise, float2[] gradient = null, float full = 0f, float fade = 0f)
+            /// <summary>Emits a masked field at strength × K (capped); null when it would paint nothing.</summary>
+            private PlannedPaint Paint(PaintShape shape, int layer, float strength, float cap = 1f, bool knockout = false, IReadOnlyList<float2> outline = null)
             {
-                if (Count >= MaxPaints || ring == null || ring.Length < 3 || !(strength > 0.01f)) return false;
-                var p = new PlannedPaint
-                {
-                    Ring = Poly.To3D(ring, HeightAt), Layer = layer, Strength = math.saturate(strength),
-                    Feather = math.max(0.5f, feather), Noise = noise, NoiseScale = 4f, Seed = Hashing.Mix(Seed, (uint)(Count + 1)),
-                };
-                if (gradient != null)
-                {
-                    p.GradientFrom = gradient;
-                    p.GradientFull = full;
-                    p.GradientFade = math.max(0.5f, fade);
-                    p.GradientMin = 0f;
-                }
-                Host.Paint.Add(p);
-                Count++;
-                return true;
+                Kit.Mask = Mask.Shape;
+                Kit.MaxStrength = cap;
+                return Kit.Shape(shape, layer, strength * K, outline, knockout);
             }
 
             private static bool IsPath(NetRole r) => r == NetRole.Pathway || r == NetRole.PathwayWide;
@@ -142,32 +142,102 @@ namespace Placemaker.Core.Decals
                 return pts;
             }
 
-            /// <summary>A band of half width <paramref name="half"/> around a polyline (left side forward, right side back).</summary>
-            internal static float2[] Band(IReadOnlyList<float2> line, float half)
+            // ───────────────────────── clear ─────────────────────────
+
+            /// <summary>"Clear old paint": every material back to the procedural base inside the outline (before anything is painted).</summary>
+            public void Clear()
             {
-                int n = line.Count;
-                if (n < 2) return null;
-                var left = new float2[n]; var right = new float2[n];
-                for (int i = 0; i < n; i++)
-                {
-                    var a = line[math.max(0, i - 1)]; var b = line[math.min(n - 1, i + 1)];
-                    var t = math.normalizesafe(b - a, new float2(1, 0));
-                    var nrm = new float2(-t.y, t.x);
-                    var p = line[i];
-                    if (i == 0) p -= t * half * 0.5f;
-                    if (i == n - 1) p += t * half * 0.5f;
-                    left[i] = p + nrm * half; right[i] = p - nrm * half;
-                }
-                var ring = new float2[2 * n];
-                for (int i = 0; i < n; i++) { ring[i] = left[i]; ring[2 * n - 1 - i] = right[i]; }
-                return ring;
+                if (!S.ClearFirst) return;
+                Kit.Mask = null;
+                if (Kit.Erase(Region.Ring, TerrainMaterials.Erase, 1f, 2f) != null) R.Clears++;
             }
 
-            internal static float2[] Circle(float2 c, float r, int n = 12)
+            // ───────────────────────── lawn ─────────────────────────
+
+            /// <summary>
+            /// Lawn variation on a painted lawn: a moisture field (two octaves of noise, hollows and water make it wetter,
+            /// knolls drier) → lush (forest-floor tint) where wet, dry grass where dry, the procedural grass between.
+            /// </summary>
+            public void LawnTint()
             {
-                var ring = new float2[n];
-                for (int i = 0; i < n; i++) { float a = i * math.PI * 2f / n; ring[i] = c + new float2(math.cos(a), math.sin(a)) * r; }
-                return ring;
+                var m = Mask;
+                if (m.OpenShare < 0.05f) return;
+                float cell = math.max(3.5f, m.Cell * 2f);
+                var size = Region.Max - Region.Min + 2f;
+                int gw = math.max(1, (int)math.ceil(size.x / cell)), gh = math.max(1, (int)math.ceil(size.y / cell));
+                var origin = Region.Min - 1f;
+                var lush = new float[gw * gh];
+                var dry = new float[gw * gh];
+                uint n1 = Hashing.Mix(Seed, 0x1A3Bu), n2 = Hashing.Mix(Seed, 0x2C4Du);
+                // Flat sites skip the drainage term (it costs 7 height samples per cell).
+                bool flat = true;
+                float h0 = HeightAt((Region.Min + Region.Max) * 0.5f);
+                for (int y = 0; y < gh && flat; y += 2)
+                    for (int x = 0; x < gw && flat; x += 2)
+                        if (math.abs(HeightAt(origin + (new float2(x, y) + 0.5f) * cell) - h0) > 0.6f) flat = false;
+                bool water = Site?.WaterDepthAt != null;
+                for (int y = 0; y < gh; y++)
+                    for (int x = 0; x < gw; x++)
+                    {
+                        var p = origin + (new float2(x, y) + 0.5f) * cell;
+                        if (m.At(p) <= 0f) continue;
+                        float moist = 0.65f * ValueNoise.Clumps(p, 26f, n1) + 0.35f * ValueNoise.Clumps(p, 9f, n2);
+                        if (!flat)
+                        {
+                            // Drainage: below the local mean = wetter, above = drier (±1 m ≈ ±0.18).
+                            float h = HeightAt(p), mean = 0f;
+                            for (int k = 0; k < 6; k++) { math.sincos(k * math.PI / 3f, out float sn, out float cs); mean += HeightAt(p + new float2(cs, sn) * 12f); }
+                            moist += math.clamp((mean / 6f - h) * 0.18f, -0.25f, 0.25f);
+                        }
+                        // Water nearby keeps the grass lush.
+                        if (water)
+                            for (int k = 0; k < 4; k++)
+                            {
+                                math.sincos(k * math.PI / 2f + 0.4f, out float sn, out float cs);
+                                if (W.IsWater(p + new float2(cs, sn) * 7f)) { moist += 0.12f; break; }
+                            }
+                        lush[y * gw + x] = PaintShape.Curve(Falloff.Smooth, (0.62f - moist) / 0.12f);
+                        dry[y * gw + x] = PaintShape.Curve(Falloff.Smooth, (moist - 0.40f) / 0.12f);
+                    }
+                var outline = Region.Ring;
+                if (Paint(PaintShape.Grid(origin, cell, gw, gh, lush), TerrainMaterials.Lush, 0.42f, 0.55f, false, outline) != null) R.Lawn++;
+                if (Paint(PaintShape.Grid(origin, cell, gw, gh, dry), TerrainMaterials.Dry, 0.5f, 0.65f, false, outline) != null) R.Lawn++;
+            }
+
+            // ───────────────────────── mulch ─────────────────────────
+
+            /// <summary>Dark forest-floor mulch under every tree crown on bare terrain: one union field (broadleaf) + one (conifers).</summary>
+            public void Mulch()
+            {
+                var broad = new List<PaintShape>(); var needles = new List<PaintShape>();
+                bool clean = S.Style == DressStyle.Clean;
+                for (int i = 0; i < W.Trees.Count && broad.Count + needles.Count < MaxMulchTrees; i++)
+                {
+                    var t = W.Trees[i];
+                    if (!Region.Contains(t.P) || !Visible(t.P)) continue;
+                    uint h = H((int)math.floor(t.P.x * 2f), (int)math.floor(t.P.y * 2f), 41);
+                    float crown = t.Crown * (0.9f + 0.2f * U(h));
+                    // Clean: a crisp round mulch bed close to the trunk; lived-in: a soft, irregular shadow of the crown.
+                    var shape = clean
+                        ? PaintShape.Radial(t.P, crown * 0.42f, crown * 0.62f, Falloff.Hold, 0.15f, 2f, h)
+                        : PaintShape.Radial(t.P, crown * 0.35f, crown * 1.1f, Falloff.Smooth, 0.35f + crown * 0.08f, math.max(2f, crown), h);
+                    (t.Conifer ? needles : broad).Add(shape);
+                }
+                if (broad.Count > 0 && Paint(PaintShape.Union(broad), TerrainMaterials.Lush, clean ? 0.85f : 0.78f, 0.9f) != null) { R.Mulch++; R.MulchTrees += broad.Count; }
+                if (needles.Count > 0 && Paint(PaintShape.Union(needles), TerrainMaterials.Lush, 0.78f, 0.95f) != null) { R.Mulch++; R.MulchTrees += needles.Count; }
+                // Shrub beds: a mulched bed under every bush (neat in a clean style, ragged otherwise).
+                var beds = new List<PaintShape>();
+                foreach (var l in W.Plans)
+                    foreach (var o in l.Objects)
+                    {
+                        if (o == null || o.Role != ObjectRole.Bush || beds.Count >= MaxMulchTrees) continue;
+                        var p = o.Position.xz;
+                        if (!Region.Contains(p) || !Visible(p)) continue;
+                        uint h = H((int)math.floor(p.x * 2f), (int)math.floor(p.y * 2f), 43);
+                        float r = 1.9f * (o.Scale > 0.05f ? o.Scale : 1f) * (0.85f + 0.3f * U(h));
+                        beds.Add(clean ? PaintShape.Radial(p, r * 0.6f, r, Falloff.Hold, 0.1f, 2f, h) : PaintShape.Radial(p, r * 0.3f, r * 1.2f, Falloff.Smooth, 0.4f, 2.5f, h));
+                    }
+                if (beds.Count > 0 && Paint(PaintShape.Union(beds), TerrainMaterials.Lush, clean ? 0.8f : 0.6f, 0.85f) != null) R.Mulch++;
             }
 
             // ───────────────────────── verges ─────────────────────────
@@ -175,6 +245,7 @@ namespace Placemaker.Core.Decals
             public void Verges(List<AreaPlan> layers)
             {
                 int ni = 0;
+                var strokes = new List<PaintShape>();
                 foreach (var l in layers)
                     foreach (var n in l.Nets)
                     {
@@ -194,9 +265,12 @@ namespace Placemaker.Core.Decals
                         float len = 0f; for (int i = 1; i < line.Length; i++) len += math.distance(line[i - 1], line[i]);
                         if (len < 3f) continue;
                         uint h = H(ni, 1);
-                        float strength = (0.12f + 0.06f * U(h)) * K;   // faint: the band runs the whole path
-                        if (Add(Band(line, hw + 2.4f), TerrainMaterials.Dirt, math.min(0.4f, strength), 1.0f, 1.0f, line, hw + 0.1f, 1.8f)) R.Verges++;
+                        // Full at the path edge (the path itself is masked out), fading ~2 m into the grass; the width breathes.
+                        strokes.Add(PaintShape.Stroke(line, 2f * (hw + 2.2f), 2.1f, 0.8f + 0.2f * U(h), 0.8f + 0.2f * U(H2(h, 2)), Falloff.Linear, 0f, 0.18f, 6f, h));
+                        R.Verges++;
                     }
+                // One field for every verge of the step (faint: the band runs the whole path).
+                if (strokes.Count > 0) Paint(PaintShape.Union(strokes), TerrainMaterials.Dirt, 0.26f, 0.45f);
             }
 
             // ───────────────────────── desire paths ─────────────────────────
@@ -220,9 +294,12 @@ namespace Placemaker.Core.Decals
 
             private void DesireLine(float2 a, float2 b, uint h)
             {
-                var line = new[] { a, b };
-                float strength = math.min(0.5f, (0.24f + 0.08f * U(H2(h, 7))) * K);
-                if (Add(Band(line, 1.7f), TerrainMaterials.Dirt, strength, 0.8f, 0.4f, line, 0.25f, 1.2f)) R.Desire++;
+                // A slight bow: nobody walks a ruler line.
+                var mid = math.lerp(a, b, 0.5f) + new float2(-(b - a).y, (b - a).x) * (U(H2(h, 3)) - 0.5f) * 0.12f;
+                var line = new[] { a, mid, b };
+                float strength = 0.24f + 0.08f * U(H2(h, 7));
+                var shape = PaintShape.Stroke(line, 2.0f, 0.8f, 1f, 1f, Falloff.Linear, 1.8f, 0.3f, 4f, h);
+                if (Paint(shape, TerrainMaterials.Dirt, strength, 0.5f, knockout: true) != null) R.Desire++;
             }
 
             public void Desire(List<AreaPlan> layers)
@@ -241,7 +318,6 @@ namespace Placemaker.Core.Decals
                         arms.Add((rev[0], rev));
                     }
                 var used = new bool[arms.Count];
-                int corners = 0;
                 for (int i = 0; i < arms.Count; i++)
                 {
                     if (used[i]) continue;
@@ -256,14 +332,13 @@ namespace Placemaker.Core.Decals
                         for (int b = a + 1; b < group.Count; b++)
                         {
                             float back = 7f + 4f * U(H2(hj, a * 8 + b));
-                            if (!PointAlong(arms[group[a]].line, back, out var pa, out var ta) || !PointAlong(arms[group[b]].line, back, out var pb, out var tb)) continue;
+                            if (!PointAlong(arms[group[a]].line, back, out var pa, out _) || !PointAlong(arms[group[b]].line, back, out var pb, out _)) continue;
                             float ang = math.degrees(math.acos(math.clamp(math.dot(math.normalizesafe(pa - J), math.normalizesafe(pb - J)), -1f, 1f)));
                             if (ang < 35f || ang > 115f) continue;
                             uint hc = H2(hj, 100 + a * 8 + b);
                             if (U(hc) > 0.55f * math.min(1.5f, K)) continue;
                             if (!LineClear(pa, pb, 1.6f)) continue;
                             DesireLine(pa, pb, hc);
-                            corners++;
                         }
                 }
                 // Features off the path: a trodden line from the nearest path point to benches, play items and picnic tables.
@@ -320,6 +395,7 @@ namespace Placemaker.Core.Decals
             public void Patches(List<AreaPlan> layers)
             {
                 int oi = 0;
+                var dirt = new List<PaintShape>(); var halo = new List<PaintShape>();
                 foreach (var l in layers)
                     foreach (var o in l.Objects)
                     {
@@ -327,18 +403,21 @@ namespace Placemaker.Core.Decals
                         if (o == null) continue;
                         string cat = RoleCategories.ForObject(o) ?? "";
                         float r; float2 c = o.Position.xz; float s;
-                        if (cat.StartsWith(AssetCategories.Playground, StringComparison.Ordinal) || cat.StartsWith("play.", StringComparison.Ordinal)) { r = 3.2f; s = 0.3f; }
-                        else if (cat.StartsWith(AssetCategories.Picnic, StringComparison.Ordinal)) { r = 2.6f; s = 0.24f; }
+                        if (cat.StartsWith(AssetCategories.Playground, StringComparison.Ordinal) || cat.StartsWith("play.", StringComparison.Ordinal)) { r = 3.4f; s = 1f; }
+                        else if (cat.StartsWith(AssetCategories.Picnic, StringComparison.Ordinal)) { r = 2.8f; s = 0.8f; }
                         else if (cat.StartsWith(AssetCategories.Bench, StringComparison.Ordinal))
                         {
                             math.sincos(o.Yaw, out float sn, out float cs);
-                            c += new float2(sn, cs) * 1.2f; r = 2.0f; s = 0.2f;
+                            c += new float2(sn, cs) * 1.2f; r = 2.0f; s = 0.65f;
                         }
                         else continue;
                         if (!Visible(c)) continue;
                         uint h = H(oi, 21);
                         r *= 0.85f + 0.3f * U(h);
-                        if (Add(Circle(c, r), TerrainMaterials.Dirt, math.min(0.5f, s * K), r * 0.6f, 0.7f)) R.Patches++;
+                        // Worn dirt in the middle, trampled dry grass round it: dirt → dry → green.
+                        dirt.Add(PaintShape.Radial(c, r * 0.25f, r, Falloff.Smooth, 0.5f, 3f, h).Scale(s));
+                        halo.Add(PaintShape.Radial(c, r * 0.6f, r * 1.9f, Falloff.Smooth, 0.7f, 4f, H2(h, 1)).Scale(s));
+                        R.Patches++;
                     }
                 // Entrances: path ends at the outline get a trodden fan just inside.
                 foreach (var l in layers)
@@ -356,40 +435,124 @@ namespace Placemaker.Core.Decals
                             {
                                 var c = e + dir * 2.5f + nrm * side * (hw + 1.4f);
                                 if (!Visible(c) || U(H2(h, side + 3)) > 0.7f * math.min(1.4f, K)) continue;
-                                if (Add(Circle(c, 2.2f), TerrainMaterials.Dirt, math.min(0.45f, 0.22f * K), 1.3f, 0.6f)) R.Patches++;
+                                dirt.Add(PaintShape.Radial(c, 0.6f, 2.4f, Falloff.Smooth, 0.4f, 3f, H2(h, side + 7)).Scale(0.8f));
+                                R.Patches++;
                             }
                         }
                     }
+                if (dirt.Count > 0) Paint(PaintShape.Union(dirt), TerrainMaterials.Dirt, 0.32f, 0.5f, knockout: true);
+                if (halo.Count > 0) Paint(PaintShape.Union(halo), TerrainMaterials.Dry, 0.26f, 0.45f);
             }
 
             // ───────────────────────── edge variation ─────────────────────────
 
+            /// <summary>A soft band inside the outline (0–7 m), speckled dry grass (gritty: and dirt): the build fades into the land.</summary>
             public void Edges()
             {
                 var ring = Region.Ring;
                 if (ring == null || ring.Length < 3) return;
-                float sign = Poly.SignedArea(ring) >= 0f ? 1f : -1f;   // CCW: inward normal is the left of each edge
-                const float step = 11f;
-                float carry = U(H(0, 31)) * step;
-                for (int i = 0; i < ring.Length; i++)
+                var band = PaintShape.Stroke(Closed(ring), 14f, 6.5f, 1f, 1f, Falloff.Linear, 0f, 0.25f, 14f, H(0, 31)).Mul(PaintShape.Polygon(ring, 1.5f));
+                var dryPatches = band.Mul(PaintShape.Noise(7f, 0.5f, 0.6f, H(0, 32)));
+                if (Paint(dryPatches, TerrainMaterials.Dry, 0.3f, 0.45f, false, ring) != null) R.Edges++;
+                if (S.Style == DressStyle.Gritty)
                 {
-                    var a = ring[i]; var b = ring[(i + 1) % ring.Length];
-                    float len = math.distance(a, b);
-                    if (len < 1e-3f) continue;
-                    var t = (b - a) / len; var inward = new float2(-t.y, t.x) * sign;
-                    for (float d = carry; d < len; d += step)
-                    {
-                        uint h = H(i, (int)d, 33);
-                        var c = a + t * d + inward * (3f + 3f * U(H2(h, 1)));
-                        if (!Visible(c)) continue;
-                        float r = 3.5f + 2.5f * U(H2(h, 2));
-                        bool dirt = U(H2(h, 3)) < (S.Style == DressStyle.Gritty ? 0.45f : 0.25f);
-                        float strength = (dirt ? 0.12f : 0.2f) * (0.7f + 0.6f * U(H2(h, 4))) * K;
-                        if (Add(Circle(c, r, 10), dirt ? TerrainMaterials.Dirt : TerrainMaterials.Dry, math.min(0.4f, strength), r * 0.8f, 1.6f)) R.Edges++;
-                    }
-                    carry = (carry - len) % step; if (carry < 0f) carry += step;
+                    var dirtPatches = band.Mul(PaintShape.Noise(5f, 0.22f, 0.5f, H(0, 33)));
+                    if (Paint(dirtPatches, TerrainMaterials.Dirt, 0.16f, 0.4f, false, ring) != null) R.Edges++;
                 }
             }
+
+            private static float2[] Closed(float2[] ring)
+            {
+                var closed = new float2[ring.Length + 1];
+                Array.Copy(ring, closed, ring.Length);
+                closed[ring.Length] = ring[0];
+                return closed;
+            }
+
+            // ───────────────────────── extras by what was planned ─────────────────────────
+
+            public void Extras(List<AreaPlan> layers)
+            {
+                var pitch = new List<PaintShape>(); var pitchHalo = new List<PaintShape>(); var fire = new List<PaintShape>();
+                int oi = 0;
+                foreach (var l in layers)
+                    foreach (var o in l.Objects)
+                    {
+                        oi++;
+                        if (o == null) continue;
+                        string cat = RoleCategories.ForObject(o) ?? "";
+                        var c = o.Position.xz;
+                        if (!Region.Contains(c)) continue;
+                        uint h = H(oi, 51);
+                        if (cat.StartsWith(AssetCategories.SportsGoal, StringComparison.Ordinal))
+                        {
+                            // Goalmouth: an oval of bare dirt across the goal, worn grass round it.
+                            pitch.Add(PaintShape.Radial(c, 1.2f, 5.5f, Falloff.Smooth, 0.6f, 3f, h, 1.6f, -o.Yaw));
+                            pitchHalo.Add(PaintShape.Radial(c, 3f, 9f, Falloff.Smooth, 1f, 5f, H2(h, 1), 1.4f, -o.Yaw));
+                        }
+                        else if (cat.StartsWith(AssetCategories.SportsFitness, StringComparison.Ordinal))
+                            pitch.Add(PaintShape.Radial(c, 0.8f, 3f, Falloff.Smooth, 0.4f, 2f, h));
+                        else if (cat.StartsWith(AssetCategories.CampingFire, StringComparison.Ordinal))
+                            fire.Add(PaintShape.Radial(c, 0.8f, 3.2f, Falloff.Fast, 0.4f, 2f, h));
+                        else if (cat.StartsWith(AssetCategories.Camping, StringComparison.Ordinal))
+                        {
+                            // A pitch: flattened, worn ground under and round the tent / caravan.
+                            pitch.Add(PaintShape.Radial(c, 1.5f, 4.5f, Falloff.Smooth, 0.7f, 3f, h).Scale(0.8f));
+                            pitchHalo.Add(PaintShape.Radial(c, 3f, 7.5f, Falloff.Smooth, 1f, 4f, H2(h, 1)));
+                        }
+                    }
+                // Dog runs: dogs wear a track along the fence line, patchy.
+                if (S.LayerId == "dogPark" && Region.Ring != null && Region.Ring.Length >= 3)
+                {
+                    var inner = Region.InsetVertices(4.5f);
+                    if (inner != null && inner.Length >= 3 && Poly.IsSimple(inner) && Poly.SignedArea(inner) > 100f)
+                    {
+                        var run = PaintShape.Stroke(Closed(inner), 5f, 1.8f, 1f, 1f, Falloff.Linear, 0f, 0.45f, 9f, H(0, 71))
+                            .Mul(PaintShape.Noise(4f, 0.7f, 0.6f, H(0, 72)));
+                        if (Paint(run, TerrainMaterials.Dirt, 0.4f, 0.55f, true, Region.Ring) != null) R.Extras++;
+                    }
+
+                }
+                if (pitch.Count > 0 && Paint(PaintShape.Union(pitch), TerrainMaterials.Dirt, 0.42f, 0.6f, knockout: true) != null) R.Extras++;
+
+                if (pitchHalo.Count > 0 && Paint(PaintShape.Union(pitchHalo), TerrainMaterials.Dry, 0.3f, 0.45f) != null) R.Extras++;
+                // Fire rings: dark ash (forest floor) round the pit.
+                if (fire.Count > 0 && Paint(PaintShape.Union(fire), TerrainMaterials.Lush, 0.7f, 0.85f) != null) R.Extras++;
+
+                // Dune grass: dry grass in a soft band along the landward edge of sand (paint or surface) — sand blends into grass.
+                var sandEdges = new List<PaintShape>();
+                foreach (var l in layers)
+                {
+                    foreach (var p in l.Paint)
+                        if (p != null && p.Shape == null && !p.Erase && p.Layer == TerrainMaterials.Sand && p.Strength >= 0.35f && p.Ring != null && p.Ring.Length >= 3)
+                            sandEdges.Add(EdgeBand(Poly.To2D(p.Ring), 9f));
+                    foreach (var s in l.Surfaces)
+                        if (s?.Ring != null && s.Ring.Length >= 3 && (s.Category ?? "").StartsWith("surface.sand", StringComparison.Ordinal))
+                            sandEdges.Add(EdgeBand(Poly.To2D(s.Ring), 9f));
+                }
+                if (sandEdges.Count > 0)
+                {
+                    var dune = PaintShape.Union(sandEdges).Mul(PaintShape.Noise(5f, 0.55f, 0.7f, H(0, 61)));
+                    if (Paint(dune, TerrainMaterials.Dry, 0.4f, 0.55f) != null) R.Extras++;
+                }
+
+                // Farm fields: a worn headland just outside every crop field (tractors turn there), dry grass beyond.
+                var headland = new List<PaintShape>(); var verge = new List<PaintShape>();
+                foreach (var l in layers)
+                    foreach (var s in l.Surfaces)
+                        if (s?.Ring != null && s.Ring.Length >= 3 && (s.Category ?? "").StartsWith("surface.crop", StringComparison.Ordinal))
+                        {
+                            var r2 = Poly.To2D(s.Ring);
+                            headland.Add(EdgeBand(r2, 3.5f));
+                            verge.Add(EdgeBand(r2, 8f));
+                        }
+                if (headland.Count > 0 && Paint(PaintShape.Union(headland), TerrainMaterials.Dirt, 0.4f, 0.55f) != null) R.Extras++;
+                if (verge.Count > 0 && Paint(PaintShape.Union(verge).Mul(PaintShape.Noise(6f, 0.6f, 0.6f, H(0, 62))), TerrainMaterials.Dry, 0.3f, 0.45f) != null) R.Extras++;
+            }
+
+            /// <summary>A band just OUTSIDE a polygon, full at its outline, fading over <paramref name="width"/> m.</summary>
+            private static PaintShape EdgeBand(float2[] ring, float width) =>
+                PaintShape.Stroke(Closed(ring), width * 2f, width, 1f, 1f, Falloff.Linear, 0f, 0.2f, 8f, 0u).Subtract(PaintShape.Polygon(ring, 0.5f));
         }
     }
 }

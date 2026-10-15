@@ -803,7 +803,7 @@ namespace Placemaker.Core.Decals
             foreach (var s in c.L.Surfaces)
                 if (s?.Ring != null && s.Ring.Length >= 3 && DressingWorld.KindOf(s) != GroundKind.Water) tracks.Add(Geometry.Poly.To2D(s.Ring));
             foreach (var pt in c.L.Paint)
-                if (pt?.Ring != null && pt.Ring.Length >= 3 && pt.Layer != TerrainMaterials.Erase) tracks.Add(Geometry.Poly.To2D(pt.Ring));
+                if (pt?.Ring != null && pt.Ring.Length >= 3 && pt.Layer != TerrainMaterials.Erase && pt.Shape == null && !pt.Erase) tracks.Add(Geometry.Poly.To2D(pt.Ring));
             for (int ti = 0; ti < tracks.Count; ti++)
             {
                 var reg = LayerRegion.From(tracks[ti]);

@@ -133,7 +133,7 @@ namespace Placemaker.Core.Layers.Types.UrbanFarm
 
             // 1. Ground and terrain.
             ShapeTerrain(ctx, region);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One(""));
             ctx.Check();
 
             // 2. Farm tracks.

@@ -376,14 +376,18 @@ namespace Placemaker.Core.Build
                 if (!touched) { result.Add(p); continue; }
                 if (pieces.Count == 0) { r.Paint++; continue; }
                 r.Cut++;
+                if (p.Shape != null)
+                {
+                    // (s33) A shape paint keeps its outline; the lots are cut out of its field.
+                    var holes = new List<Paint.PaintShape>();
+                    foreach (var g in grown) holes.Add(Paint.PaintShape.Polygon(g, 0.25f));
+                    var cut = p.WithRing(p.Ring);
+                    cut.Shape = p.Shape.Subtract(Paint.PaintShape.Union(holes));
+                    result.Add(cut);
+                    continue;
+                }
                 float y = p.Ring[0].y;
-                foreach (var q in pieces)
-                    result.Add(new PlannedPaint
-                    {
-                        Ring = Poly.To3D(q, _ => y), Layer = p.Layer, Strength = p.Strength, Feather = p.Feather, Noise = p.Noise,
-                        NoiseScale = p.NoiseScale, Seed = p.Seed, GradientFrom = p.GradientFrom, GradientFull = p.GradientFull,
-                        GradientFade = p.GradientFade, GradientMin = p.GradientMin,
-                    });
+                foreach (var q in pieces) result.Add(p.WithRing(Poly.To3D(q, _ => y)));
             }
             l.Paint.Clear();
             l.Paint.AddRange(result);

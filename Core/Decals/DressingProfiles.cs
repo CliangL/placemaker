@@ -32,6 +32,14 @@ namespace Placemaker.Core.Decals
         public float PaintWear = 1f;
         /// <summary>(s28) Faint dirt desire lines where people cut corners and walk to features across the lawn.</summary>
         public bool DesirePaths = true;
+        /// <summary>(s33) Dark forest-floor mulch under tree crowns (on bare terrain).</summary>
+        public bool Mulch = true;
+        /// <summary>(s33) Lawn variation: lush patches in hollows and shade, dry patches on knolls (only on a painted lawn).</summary>
+        public bool LawnTint = true;
+        /// <summary>(s33) The step's lawn is bare terrain + paint (Lawn = Painted terrain), not a grass surface.</summary>
+        public bool LawnPainted;
+        /// <summary>(s33) Clear older ground paint inside the area first (also the player's own).</summary>
+        public bool ClearFirst;
         /// <summary>Outline of the fill step (open-ground scatter and shore sampling stay inside it). Null = the whole area.</summary>
         public Unity.Mathematics.float2[] Ring;
         /// <summary>Set by the pass when the step's own plan was dressed (open-ground scatter runs once per step).</summary>
@@ -152,6 +160,13 @@ namespace Placemaker.Core.Decals
         public const string StyleId = "dressStyle";
         public const string PaintWearId = "dressPaintWear";
         public const string DesirePathsId = "dressDesirePaths";
+        /// <summary>(s33) Lawn: "painted" (bare terrain + paint) or "surface" (a grass surface). Types with a lawn only.</summary>
+        public const string LawnId = "dressLawn";
+        public const string MulchId = "dressMulch";
+        public const string LawnTintId = "dressLawnTint";
+        public const string ClearPaintId = "dressPaintClear";
+        /// <summary>(s33) The "Ground paint" section (the terrain-texture controls).</summary>
+        public const string PaintGroup = "groundPaint";
         public const string Group = "decals";
         public const string KeyPrefix = "Placemaker.Dress.";
         public static readonly string[] Styles = { "clean", "livedIn", "gritty" };
@@ -194,14 +209,28 @@ namespace Placemaker.Core.Decals
             foreach (var s in Styles)
                 style.Options.Add(new ControlOption { Value = s, LabelKey = KeyPrefix + StyleId + "." + s, TooltipKey = KeyPrefix + StyleId + "." + s + ".Tooltip" });
             list.Add(style);
-            // s28: ground wear painted into the terrain texture (permanent, like all Placemaker paint).
-            list.Add(Slider(PaintWearId, 100, Group));
-            list.Add(new ControlSchema
+            // s33: one "Ground paint" section: the lawn choice (types with a lawn), the amount of everything painted into
+            // the terrain texture as dressing (s28 wear + s33 mulch / lawn variation / type extras) and a few toggles.
+            // Permanent, like all Placemaker paint.
+            string lawnDefault = Layers.Common.Lawn.DefaultFor(layerId, null);
+            if (lawnDefault != null)
             {
-                Id = DesirePathsId, Kind = ControlKind.Toggle, Tier = ControlTier.More, Group = Group, Default = p.Style != DressStyle.Clean,
-                LabelKey = KeyPrefix + DesirePathsId, TooltipKey = KeyPrefix + DesirePathsId + ".Tooltip",
-                EnabledWhen = PaintWearId + "!=0", DisabledReasonKey = KeyPrefix + DesirePathsId + ".Off",
-            });
+                var lawn = new ControlSchema
+                {
+                    Id = LawnId, Kind = ControlKind.Choice, Tier = ControlTier.More, Group = PaintGroup, Default = lawnDefault,
+                    LabelKey = KeyPrefix + LawnId, TooltipKey = KeyPrefix + LawnId + ".Tooltip",
+                };
+                foreach (var v in new[] { Layers.Common.Lawn.Painted, Layers.Common.Lawn.Surface })
+                    lawn.Options.Add(new ControlOption { Value = v, LabelKey = KeyPrefix + LawnId + "." + v, TooltipKey = KeyPrefix + LawnId + "." + v + ".Tooltip" });
+                list.Add(lawn);
+            }
+            list.Add(Slider(PaintWearId, 100, PaintGroup));
+            list.Add(PaintToggle(DesirePathsId, p.Style != DressStyle.Clean));
+            list.Add(PaintToggle(MulchId, true));
+            if (lawnDefault != null) list.Add(PaintToggle(LawnTintId, true));
+            var clear = PaintToggle(ClearPaintId, false);
+            clear.EnabledWhen = "";
+            list.Add(clear);
             foreach (var f in p.Families)
             {
                 string group = Group;
@@ -212,6 +241,13 @@ namespace Placemaker.Core.Decals
             }
             return list;
         }
+
+        private static ControlSchema PaintToggle(string id, bool def) => new ControlSchema
+        {
+            Id = id, Kind = ControlKind.Toggle, Tier = ControlTier.More, Group = PaintGroup, Default = def,
+            LabelKey = KeyPrefix + id, TooltipKey = KeyPrefix + id + ".Tooltip",
+            EnabledWhen = PaintWearId + "!=0", DisabledReasonKey = KeyPrefix + DesirePathsId + ".Off",
+        };
 
         private static ControlSchema Slider(string id, double def, string group) => new ControlSchema
         {
@@ -245,6 +281,14 @@ namespace Placemaker.Core.Decals
             foreach (var f in p.Families) s.Amount[(int)f] = Pct(values, FamilyId(f));
             s.PaintWear = Pct(values, PaintWearId);
             s.DesirePaths = values == null ? p.Style != DressStyle.Clean : values.B(DesirePathsId, p.Style != DressStyle.Clean);
+            s.Mulch = values == null || values.B(MulchId, true);
+            s.LawnTint = values == null || values.B(LawnTintId, true);
+            s.ClearFirst = values != null && values.B(ClearPaintId, false);
+            string lawn = Layers.Common.Lawn.DefaultFor(gen.Id, null);
+            s.LawnPainted = lawn != null && (values?.S(LawnId, lawn) ?? lawn) == Layers.Common.Lawn.Painted;
+            // The park's older "Grass surface" toggle off also leaves a bare lawn.
+            if (lawn != null && !s.LawnPainted && values != null && values.Values.ContainsKey(Layers.Common.Lawn.LegacyToggle)
+                && !values.B(Layers.Common.Lawn.LegacyToggle, true)) s.LawnPainted = true;
             return s;
         }
 

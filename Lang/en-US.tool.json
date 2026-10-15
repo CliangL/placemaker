@@ -276,5 +276,5 @@
   "Placemaker.Settings.Action.Undo": "Undo",
   "Placemaker.Settings.Action.Redo": "Redo",
   "Placemaker.Settings.Action.RedoAlt": "Redo (alternative)",
-  "Placemaker.Permanent.Paint": "Paints the ground texture (about {0} m²). The painted ground stays even if you remove the build later."
+  "Placemaker.Permanent.Paint": "Ground paint, about {0} m² — stays if the build is removed."
 }

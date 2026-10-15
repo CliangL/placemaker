@@ -172,6 +172,8 @@ namespace Placemaker.Core
             // s21: decals complement what was planned (leaves under trees, oil in bays, wear at junctions…). Before
             // cutouts and building lots are enforced, so those rules apply to decals too.
             Decals.Dressing.Apply(result, area, site, dress, cancel);
+            // (s33) Paint intents (1 dry, 2 lush, 3 dirt, 4 sand) → this map's material slots (identity on vanilla maps).
+            Paint.TerrainPalette.Remap(result, site?.Terrain);
             // s14: zoning cutouts stay empty whatever a feature placed (Layers/Common/Cutouts.cs).
             Layers.Common.Cutouts.Enforce(result, area?.Ring != null && area.Ring.Length >= 3 ? new[] { area.Ring2D() } : null);
             // (s31) Site harmony: one graded ground for everything planned. Paths level across and smooth along, pads and hard

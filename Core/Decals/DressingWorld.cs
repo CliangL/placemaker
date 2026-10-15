@@ -76,7 +76,7 @@ namespace Placemaker.Core.Decals
                 }
                 foreach (var pt in l.Paint)
                 {
-                    if (pt?.Ring == null || pt.Ring.Length < 3 || pt.Strength < 0.35f) continue;
+                    if (pt?.Ring == null || pt.Ring.Length < 3 || pt.Strength < 0.35f || pt.Shape != null || pt.Erase) continue;
                     if (pt.Layer == TerrainMaterials.Dirt) AddPoly(Geometry.Poly.To2D(pt.Ring), GroundKind.Dirt);
                     else if (pt.Layer == TerrainMaterials.Sand) AddPoly(Geometry.Poly.To2D(pt.Ring), GroundKind.Sand);
                 }

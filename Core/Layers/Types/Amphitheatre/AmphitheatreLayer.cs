@@ -225,7 +225,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             var gates = Gates(ctx);
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
             string style = ctx.S("style");
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One(""));
 
             var b = Fit(ctx, region, occ, gates);
             ctx.Check();

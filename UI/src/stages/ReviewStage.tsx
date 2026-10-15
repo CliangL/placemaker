@@ -109,7 +109,19 @@ export const ReviewStage = ({
                     {summary.parkStats && summary.parkStats.stats && summary.parkStats.stats.length ? (
                         <ParkStatsSection ps={summary.parkStats} pending={pending} />
                     ) : null}
-                    {summary.permanent.length ? (
+                    {summary.permanent.length && summary.permanentNeedsAck === false ? (
+                        // s33: ground paint only — one quiet line, no tick (painting is the default dressing of most parks).
+                        <div className={classNames(s.callout, s.calloutInfo)} data-testid="permanent">
+                            <Icon name="info" size={12} tint="dim" />
+                            {summary.permanent.map((p, n) => (
+                                <Tip key={n} title={t("Placemaker.UI.Review.PaintOnly", "Ground paint stays when the build is removed.")}>
+                                    <div className={s.calloutText} data-ellipsis="tooltip">
+                                        {tl(p)}
+                                    </div>
+                                </Tip>
+                            ))}
+                        </div>
+                    ) : summary.permanent.length ? (
                         <div className={classNames(s.callout, s.calloutWarn)} data-testid="permanent">
                             <Icon name="warning" size={13} tint="warn" />
                             <div className={s.calloutBody}>
@@ -130,6 +142,7 @@ export const ReviewStage = ({
                             </div>
                         </div>
                     ) : null}
+
                     {errors === 0 && summary.issues.length === 0 && !pending ? (
                         <div className={s.allGood} data-testid="all-good">
                             <Icon name="check" size={12} tint="ok" />

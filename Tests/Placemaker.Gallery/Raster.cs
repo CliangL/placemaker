@@ -44,6 +44,8 @@ namespace Placemaker.Gallery
 
         /// <summary>World XZ → internal (supersampled) pixel coordinates.</summary>
         private float2 P(float2 w) => new float2((w.x - _origin.x) * _ppm * _ss, _h - (w.y - _origin.y) * _ppm * _ss);
+        /// <summary>(s33) Output pixel (x right, y down) of a world point.</summary>
+        public int2 OutPx(float2 w) { var p = P(w) / _ss; return new int2((int)p.x, (int)p.y); }
 
         /// <summary>World metres for one output pixel.</summary>
         public float Px(float pixels) => pixels / _ppm;

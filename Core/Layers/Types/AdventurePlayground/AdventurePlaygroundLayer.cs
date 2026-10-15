@@ -127,7 +127,7 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
             var chains = new CategoryChains(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One("", ParkArt.Grass));
 
             // Circulation: meandering paths between the entrances, a loop on bigger sites.
             int loops = region.Area > 9000f ? 1 : 0;
