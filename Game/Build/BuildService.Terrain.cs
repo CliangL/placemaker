@@ -676,15 +676,38 @@ namespace Placemaker.Game.Build
         }
 
         /// <summary>
-        /// (s26) What blocks a live cell (mirrors Game.Zones.CellBlockJobs): one of our zone block lots, one of the
-        /// build's nets, only the CleanBlockedCells rules (a blocked cell nearer the road / row 0 behind a blocked row
-        /// 1), another physical lot, else a city net or object.
+        /// (s26, s36) What blocks a live cell. The direct sources of Game.Zones.CellBlockJobs (one of our zone block lots,
+        /// one of the build's nets, another physical lot) are looked for in this cell and every cell in front of it
+        /// (CleanBlockedCells blocks every cell behind a blocked one, and row 0 behind a blocked row 1); when none is
+        /// found the column was cut by the game's depth rule (CellOverlapJobs: a column deeper than its neighbours is
+        /// cut to theirs, a lone 1-column cutout entirely) — reported with the neighbours' depths.
         /// </summary>
         private string BlockedCause(Entity blockEntity, int2 xy)
         {
             if (blockEntity == Entity.Null || !EntityManager.Exists(blockEntity)) return "unknown";
             var block = EntityManager.GetComponentData<global::Game.Zones.Block>(blockEntity);
             var cells = EntityManager.GetBuffer<global::Game.Zones.Cell>(blockEntity, true);
+            int rows = math.min(block.m_Size.y - 1, math.max(xy.y, 1));
+            for (int y = 0; y <= rows; y++)
+            {
+                if ((cells[xy.x + y * block.m_Size.x].m_State & global::Game.Zones.CellFlags.Blocked) == 0) continue;
+                string direct = DirectCause(block, new int2(xy.x, y));
+                if (direct == null) continue;
+                return y == xy.y ? direct : $"{direct} at row {y} (CleanBlockedCells: the column behind it is blocked)";
+            }
+            int Depth(int x)
+            {
+                if (x < 0 || x >= block.m_Size.x) return -1;
+                int y = 0;
+                while (y < block.m_Size.y && (cells[x + y * block.m_Size.x].m_State & global::Game.Zones.CellFlags.Blocked) == 0) y++;
+                return y;
+            }
+            return $"the game's depth rule (CellOverlapJobs ReduceDepth: a column deeper than its neighbours, depths left {Depth(xy.x - 1)} / right {Depth(xy.x + 1)}; a lone column is cut to 0) or a city net";
+        }
+
+        /// <summary>A direct blocking source of the cell (CellBlockJobs), or null.</summary>
+        private string DirectCause(global::Game.Zones.Block block, int2 xy)
+        {
             var centre = global::Game.Zones.ZoneUtils.GetCellPosition(block, xy).xz;
             float2 d = block.m_Direction, r = new float2(d.y, -d.x);
             var sq = new[] { centre + (d + r) * 3.98f, centre + (d - r) * 3.98f, centre - (d + r) * 3.98f, centre - (d - r) * 3.98f };
@@ -706,10 +729,6 @@ namespace Placemaker.Game.Build
                     }
                 }
             }
-            if (xy.y > 0 && (cells[xy.x + (xy.y - 1) * block.m_Size.x].m_State & global::Game.Zones.CellFlags.Blocked) != 0)
-                return "behind a blocked cell (row " + (xy.y - 1) + ")";
-            if (xy.y == 0 && block.m_Size.y > 1 && (cells[xy.x + block.m_Size.x].m_State & global::Game.Zones.CellFlags.Blocked) != 0)
-                return "row 0 with row 1 blocked";
             var query = EntityManager.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Areas.Area>(), ComponentType.ReadOnly<global::Game.Areas.Node>(),
                 ComponentType.ReadOnly<global::Game.Prefabs.PrefabRef>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             using (var areas = query.ToEntityArray(Allocator.Temp))
@@ -728,7 +747,7 @@ namespace Placemaker.Game.Build
                     bool ours = EntityManager.HasComponent<PlacemakerMember>(a);
                     return (ours ? "our lot " : "lot ") + _prefabs.GetPrefabName(prefab);
                 }
-            return "a city net or object";
+            return null;
         }
     }
 }

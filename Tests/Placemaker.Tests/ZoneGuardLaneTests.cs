@@ -183,13 +183,16 @@ namespace Placemaker.Tests
         {
             var foot = Rect(0, 0, 80, 80);
             var grids = new List<ZoneGrid> { new ZoneGrid { Position = new float2(40, 24), Direction = new float2(0, -1), Size = new int2(10, 6) } };
-            var quads = new[] { Rect(16, -1, 40, 16) };
-            // A 4 m path along x = 28 from the street into the park crosses the middle column of the cutout.
+            var quads = new[] { Rect(16, -1, 56, 16) };
+            // A 4 m path along x = 28 from the street into the park crosses the second column of the cutout.
             var own = new List<(float2[] line, float half)> { (new[] { new float2(28, -2), new float2(28, 60) }, 2f) };
             var r = ZoneGuard.Compute(new[] { foot }, quads, new[] { "z" }, new List<float2[]>(), grids, null, true, own);
             var zoned = r.Cells.Where(c => c.State == ZoneCellState.Zoned).ToList();
             Assert.DoesNotContain(zoned, c => math.abs(Centre(c).x - 28f) < 0.1f);
-            Assert.Contains(zoned, c => math.abs(Centre(c).x - 20f) < 0.1f);
+            // (s36) The column left alone beside the path (x = 20) is blocked by the game's depth rule: not planned.
+            Assert.DoesNotContain(zoned, c => math.abs(Centre(c).x - 20f) < 0.1f);
+            Assert.Contains(zoned, c => math.abs(Centre(c).x - 36f) < 0.1f);
+            Assert.Contains(zoned, c => math.abs(Centre(c).x - 52f) < 0.1f);
         }
 
         // ───────────── lanes are never cut by cutouts ─────────────
