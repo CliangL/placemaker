@@ -32,6 +32,8 @@ namespace Placemaker.Core.Paint
 
         /// <summary>Applied to every paint (×): where the terrain actually shows. Null = everywhere.</summary>
         public PaintShape Mask;
+        /// <summary>Default outline of emitted paints (the area): their ring never reaches past it. Null = the shape's box.</summary>
+        public IReadOnlyList<float2> Outline;
         /// <summary>Most paints this kit emits; later requests are counted in <see cref="Dropped"/>.</summary>
         public int MaxPaints = 400;
         /// <summary>Multiplies every strength (the "Ground paint" amount × style).</summary>
@@ -82,12 +84,19 @@ namespace Placemaker.Core.Paint
         {
             if (shape == null) return null;
             if (Mask != null) shape = shape.Mul(Mask);
+            if ((outline == null || outline.Count < 3) && Outline != null && Outline.Count >= 3)
+            {
+                outline = Outline;
+                shape = shape.Mul(PaintShape.Polygon(Outline, 0.3f));
+            }
+
             if (!shape.Bounded && (outline == null || outline.Count < 3)) return null;
             if (shape.Empty) return null;
             float s = math.min(MaxStrength, math.saturate(strength) * math.max(0f, Amount));
             if (!(s > 1f / 30f)) return null;   // below the kernel's quantisation (4 bits + dither): paints nothing
             if (Count >= MaxPaints) { Dropped++; return null; }
-            float2[] ring = outline != null && outline.Count >= 3 ? Copy(outline) : Box(shape.Min, shape.Max);
+            // The ring is bookkeeping (bounds, permanent area, cutting): kept a hair inside the outline it came from.
+            float2[] ring = outline != null && outline.Count >= 3 ? Pull(Copy(outline), 0.05f) : Box(shape.Min, shape.Max);
             // Probe the field: a masked-out field paints nothing and must not count as a (permanent) paint.
             float area = Coverage(shape, ring, 1f / (30f * s));
             if (area <= 0f) { Skipped++; return null; }
@@ -185,6 +194,17 @@ namespace Placemaker.Core.Paint
         }
 
         public static float2[] Box(float2 min, float2 max) => new[] { min, new float2(max.x, min.y), max, new float2(min.x, max.y) };
+
+        /// <summary>Moves every vertex <paramref name="d"/> m toward the centroid (keeps the ring strictly inside its outline).</summary>
+        private static float2[] Pull(float2[] r, float d)
+        {
+            float2 c = float2.zero;
+            foreach (var v in r) c += v;
+            c /= r.Length;
+            for (int i = 0; i < r.Length; i++) r[i] += math.normalizesafe(c - r[i]) * math.min(d, math.distance(c, r[i]) * 0.5f);
+            return r;
+        }
+
 
         public static float2[] Circle(float2 c, float r, int n = 12)
         {

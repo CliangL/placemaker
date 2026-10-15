@@ -227,6 +227,10 @@ memorial and cemetery types and for maps whose base terrain is not grass (desert
 sand or rock). Next step (not done here, it changes the types' own layers): an A/B in game with park
 `groundSurface` off (`wear-bare` in the gallery) before flipping any defaults.
 
+**s33: done.** The naturalistic types now default to Lawn = Painted terrain (bare terrain + lawn variation, mulch and this
+wear, all on the Core/Paint toolkit); manicured types keep the grass surface; every lawn type has the choice in its Ground
+paint section. See docs/TERRAIN-PAINT.md.
+
 ## Open problems
 
 - In-game confirmation of the sunk-decal trick (renders on the Tunnel mesh layer; projection unaffected?). Fallback: the

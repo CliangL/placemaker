@@ -102,7 +102,7 @@ namespace Placemaker.Core.Decals
             {
                 W = w; Site = site; Host = host; Region = region; S = s; Seed = seed; R = r;
                 K = math.min(3f, s.PaintWear) * StyleK(s.Style);
-                Kit = new PaintKit(host.Paint, HeightAt, seed) { MaxPaints = MaxPaints, Amount = 1f };
+                Kit = new PaintKit(host.Paint, HeightAt, seed) { MaxPaints = MaxPaints, Amount = 1f, Outline = region.Ring };
             }
 
             /// <summary>Where bare terrain shows (built on first use: types with nothing to paint never pay for it).</summary>

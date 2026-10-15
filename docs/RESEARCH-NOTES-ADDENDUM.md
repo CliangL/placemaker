@@ -570,3 +570,27 @@ explicit-height courses exactly as with the hand tool, the boardwalk (LeisurePie
     neither read — so its copies drew like the originals. s28 scales the vector's w plus both channel opacities.
     The log now says "decal opacity: made N see-through copies (tiers …)" and, per build, "used N see-through decals, M at
     full strength (why)"; copies are requested while the preview is shown so the build finds them ready.
+
+## Terrain paint kernel and materials (s33, 1.6.2f1) — details in docs/TERRAIN-PAINT.md
+
+Sources: `PaintSplatmap` compute shader (4 kernels Paint/PaintDither/Erase/EraseDither, DXBC in `resources.assets`,
+disassembled with the Windows SDK `fxc /dumpbin`), `TerrainMaterialSystem`, `DefaultTerrainRenderSettings` in
+`resources.assets` (AssetReference = Colossal `Hash128`, stored as 4 LE uints = the `.cid` hex with each byte's nibbles
+swapped), the textures in `Blob_Environment.cok` (header 18 bytes, BC7 sRGB, mips largest first).
+
+86. **Corrects 58/59/62: one 4-bit weight per material.** `m_UserSplatmap` R8G8 packs four 4-bit weights
+    (`R = Extra1 | Extra2 << 4`, `G = Extra3 | Extra4 << 4`). PaintDither: `w = max(old, brushTex.a × _BrushOpacity)` on the
+    tool's channel only, stored `floor(w·15 + 0.25|0.75)` (2×2 checkerboard). Materials are independent channels (paint
+    order does not decide who "wins"; the terrain shader blends all weights), repainting the same value is a no-op (the
+    "may thicken" worry is void), and strengths below ~1/30 vanish. The brush texture's ALPHA is sampled.
+87. **Erase per material.** EraseDither: `w = min(old, 1 − brushTex.a)` on `_BrushChannels`; the Clear tool sets all four,
+    a material tool with `m_Strength ≤ 0` selects the erase kernel with ITS channel only (`ApplyToSplatmap`:
+    `kernel = strength > 0 ? Paint : Erase`). Opacity is not used when erasing. Placemaker: `PlannedPaint.Erase`.
+88. **Orientation is identity.** The kernel maps texel → brush uv with `uv = rotate(texel centre − centre) / half size`,
+    x → u, z → v at angle 0; Texture2D row 0 = v 0. The terraform calibration flip is no longer applied to paint stamps.
+89. **Materials.** One render-settings prefab ships: DefaultTerrainRenderSettings = Grass_temperate / Dirt_temperate /
+    Rock_temperate base, Extra1 Grass_Dry_Temperate (#4f4f40), Extra2 **Forest_temperate** (#3b3e27, the "Lush" tool is a dark
+    forest floor), Extra3 Light_dirt_temperate (#61594e), Extra4 Sand_temperate (#777066). Vanilla maps predate 1.6 and use
+    it; the map editor can save custom settings with any texture per slot (arid/mediterranean/tropic/alpine sets ship
+    unused). Mods cannot add a fifth material (4 channels). Placemaker reads the slots at site capture
+    (`TerrainPaletteReader` → `SiteContext.Terrain`) and remaps paint intents by texture name, else nearest colour.

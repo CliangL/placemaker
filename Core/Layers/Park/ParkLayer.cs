@@ -131,7 +131,7 @@ namespace Placemaker.Core.Layers.Park
             c.Asset("trailAsset", AssetCategories.TrailPath, ControlTier.More, "paths").Tip();
             // s33: a dirt trail can be painted into the ground instead of being a path net (walkable when the playset has
             // an invisible pedestrian path, else visual only).
-            c.Choice("trailStyle", "net", ControlTier.More, "paths", "net", "painted").When("trails!=0").Tip();
+            c.Choice("trailStyle", "net", ControlTier.More, "paths", "net", "painted").Tip();
             c.Choice("desireLines", "none", ControlTier.More, "paths", "none", "worn", "paved").Tip();
             c.Slider("desireCount", 3, 1, 8, 1, "count", ControlTier.More, "paths");
             c.Slider("desireLayer", 3, 1, 4, 1, "count", ControlTier.More, "paths").When("desireLines=worn").Tip();   // s33: 3 = dirt (1 was dry grass)
@@ -766,7 +766,7 @@ namespace Placemaker.Core.Layers.Park
         /// </summary>
         private static void PaintedTrails(LayerContext ctx, List<PathCurve> trails, List<Gate> gates)
         {
-            var kit = new Placemaker.Core.Paint.PaintKit(ctx.Plan.Paint, ctx.H, Hashing.Mix(ctx.Seed, 0x7A11u));
+            var kit = new Placemaker.Core.Paint.PaintKit(ctx.Plan.Paint, ctx.H, Hashing.Mix(ctx.Seed, 0x7A11u)) { Outline = ctx.LayerRegion.Ring };
             string walk = TrailPaint.WalkableNet(ctx.Site);
             foreach (var c in trails)
             {

@@ -857,7 +857,7 @@ namespace Placemaker.Core.Layers.Park
                     uint ws = Hashing.Mix(ctx.Seed, 0xDE51u + (uint)i);
 
                     // s33: one painted stroke (frayed, faded ends, knockout) instead of a feathered polygon.
-                    var kit = new Placemaker.Core.Paint.PaintKit(ctx.Plan.Paint, ctx.H, ws);
+                    var kit = new Placemaker.Core.Paint.PaintKit(ctx.Plan.Paint, ctx.H, ws) { Outline = ctx.LayerRegion.Ring };
                     TrailPaint.DesireLine(kit, a2, b2, 2f * hw + 0.6f, 0.72f, math.clamp(o.DesireLayer, 1, 4), ws);
                     TerrainPaint.Warn(ctx);
 
