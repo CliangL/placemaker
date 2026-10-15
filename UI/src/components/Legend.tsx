@@ -92,13 +92,26 @@ const Row = ({ e, state, t, hover, setHover, side }: { e: LegendEntry; state: To
                     {e.color2 ? <div className={s.swatchPart} style={{ backgroundColor: e.color2 }} /> : null}
                 </div>
                 <div className={s.name}>{name}</div>
-                <div className={s.detail} data-ellipsis="true">{road ? "· " + road : ""}</div>
+                <div className={s.detail}>{shortRoad(road) ? "· " + shortRoad(road) : ""}</div>
                 <div className={s.value}>{legendValue(e)}</div>
                 <Icon name={visible ? "eye" : "eyeOff"} size={12} className={s.eye} />
             </div>
         </Tip>
     );
 };
+
+/**
+ * (s45) The road name in a legend row, short enough to never be cut: "Small Pedestrian Street" → "Small Ped.",
+ * "Two-Lane Road" → "Two-Lane". Still too long → left out (the row tooltip has the full name).
+ */
+export function shortRoad(name: string): string {
+    if (!name) return "";
+    const short = name
+        .replace(/\bPedestrian\b/g, "Ped.")
+        .replace(/\s+(Road|Street|Avenue|Path)$/i, "")
+        .trim();
+    return short.length <= 14 ? short : "";
+}
 
 export const Legend = ({ state, summary, side }: { state: ToolState; summary: Summary; side: "left" | "right" }) => {
     const { t } = useT();

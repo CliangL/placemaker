@@ -100,7 +100,8 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 21;   // s33: summary.permanentNeedsAck (ground paint alone is one info line, no checkbox)
+        public const int Protocol = 22;   // s45: summary.costBuckets (cost bar by friendly category)
+        // 21 = s33: summary.permanentNeedsAck (ground paint alone is one info line, no checkbox)
 
         // ───────────── state ─────────────
 
@@ -761,6 +762,11 @@ namespace Placemaker.Core.Tool
             o.Set("cost", Math.Round(total.Cost));
             o.Set("upkeep", Math.Round(total.Upkeep));
             o.Set("canAfford", s.CanAfford);
+            // (s45, PROTOCOL 22) the cost by friendly category for the Review cost bar.
+            var buckets = JsonValue.Arr();
+            foreach (var b in Placemaker.Core.Build.CostBuckets.Sum(plan, assets))
+                buckets.Add(JsonValue.Obj().Set("id", b.Id).Set("cost", Math.Round(b.Cost)).Set("upkeep", Math.Round(b.Upkeep)));
+            o.Set("costBuckets", buckets);
             var layers = JsonValue.Arr();
             foreach (var l in plan.Layers)
             {

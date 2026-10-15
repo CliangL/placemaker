@@ -10,7 +10,7 @@
 // The "OK, permanent" tick sits beside the Build button in the footer (Panel.tsx).
 import React, { useState } from "react";
 import classNames from "classnames";
-import { Catalog, Issue, LocText, Summary, ToolState } from "../contract";
+import { Catalog, Issue, LocText, Stat, Summary, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { area as fmtArea, formatValue, Money } from "../lib/format";
 import { entityIcon, layerColor, statIcon } from "../lib/icons";
@@ -39,47 +39,95 @@ export const StatChip = ({ k, value, unit }: { k: string; value: number; unit: s
     );
 };
 
+/**
+ * (s45) One chip per label: stats of different layers that read the same ("15 trees" + "62 trees") merge. Counts and
+ * lengths add up; areas take the largest (a parking lot inside the mall is not extra land).
+ */
+export function mergeStats(t: TFunc, stats: Stat[]): Stat[] {
+    const out: Stat[] = [];
+    const seen = new Map<string, Stat>();
+    for (const st of stats) {
+        const area = st.unit === "m2" || st.unit === "area";
+        const label = t(st.key + ".Short", t(st.key, humanize(st.key))).toLowerCase();
+        const k = label + "|" + (area ? "area" : st.unit);
+        const hit = seen.get(k);
+        if (!hit) {
+            const copy = { ...st };
+            seen.set(k, copy);
+            out.push(copy);
+        } else if (area) {
+            if (st.value > hit.value) {
+                hit.value = st.value;
+                hit.unit = st.unit;
+            }
+        } else hit.value += st.value;
+    }
+    return out;
+}
+
 // ───────────── cost buckets ─────────────
 
 type Bucket = { id: string; label: string; color: string; cost: number };
 
-/** Friendly bucket of a plan layer: the type itself, or what kind of extra it is. */
-const BUCKETS: [RegExp, string, string, string][] = [
-    [/fountain|pond|lake|shore|splash|water/i, "water", "Placemaker.UI.Bucket.Water", "Water"],
-    [/tree|flower|plant|hedge|garden/i, "planting", "Placemaker.UI.Bucket.Planting", "Planting"],
-    [/terrain|ground|decal|rock|spoil|heap|paint/i, "ground", "Placemaker.UI.Bucket.Ground", "Ground"],
-    [/play|ball|court|pitch|track|skate|fitness|tennis|cricket|baseball|volley|kick|chess|golf/i, "play", "Placemaker.UI.Bucket.Play", "Play"],
-    [/restroom|kiosk|shop|bar|picnic|stall|stand|bench|tea/i, "amenities", "Placemaker.UI.Bucket.Amenities", "Amenities"],
-    [/zon/i, "zoning", "Placemaker.UI.Bucket.Zoning", "Zoning"],
+/** (s45) Friendly cost categories from the DLL (summary.costBuckets), with their legend names and colours. */
+const BUCKET_TEXT: Record<string, { label: [string, string]; color: string }> = {
+    planting: { label: ["Placemaker.UI.Bucket.Planting", "Planting"], color: "#6cc56a" },
+    paths: { label: ["Placemaker.UI.Bucket.Paths", "Paths"], color: "#f5c542" },
+    roads: { label: ["Placemaker.UI.Bucket.Roads", "Roads"], color: "#8fe3ff" },
+    parking: { label: ["Placemaker.UI.Bucket.Parking", "Parking"], color: "#5f9dff" },
+    shops: { label: ["Placemaker.UI.Bucket.Shops", "Shops"], color: "#ff7c9c" },
+    water: { label: ["Placemaker.UI.Bucket.Water", "Water"], color: "#4fb8e8" },
+    play: { label: ["Placemaker.UI.Bucket.Play", "Play"], color: "#ff8f5a" },
+    ground: { label: ["Placemaker.UI.Bucket.Ground", "Ground"], color: "#c99a6b" },
+    extras: { label: ["Placemaker.UI.Bucket.Extras", "Extras"], color: "#b48cff" },
+    other: { label: ["Placemaker.UI.Bucket.Other", "Other"], color: "#9fb0b9" },
+};
+
+/** Layer-based fallback for an older DLL (no costBuckets): the type itself, or what kind of extra a layer is. */
+const LAYER_BUCKETS: [RegExp, string][] = [
+    [/fountain|pond|lake|shore|splash|water/i, "water"],
+    [/tree|flower|plant|hedge|garden/i, "planting"],
+    [/terrain|ground|decal|rock|spoil|heap|paint/i, "ground"],
+    [/play|ball|court|pitch|track|skate|fitness|tennis|cricket|baseball|volley|kick|chess|golf/i, "play"],
+    [/restroom|kiosk|shop|bar|picnic|stall|stand|tea/i, "shops"],
 ];
-const BUCKET_COLOR: Record<string, string> = {
-    water: "#4fb8e8", planting: "#6cc56a", ground: "#c99a6b", play: "#ff8f5a", amenities: "#ff7c9c", zoning: "#b48cff", extras: "#ffa94d",
+
+const bucketOf = (t: TFunc, id: string, cost: number): Bucket => {
+    const x = BUCKET_TEXT[id] ?? BUCKET_TEXT.other;
+    return { id, label: t(x.label[0], x.label[1]), color: x.color, cost };
 };
 
 function buckets(t: TFunc, catalog: Catalog, summary: Summary): Bucket[] {
-    const out = new Map<string, Bucket>();
-    for (const l of summary.layers) {
-        if (!(l.cost > 0)) continue;
-        const layer = layerOf(catalog, l.layer);
-        let b: Bucket;
-        if (layer.kind === "fill" && !layer.hidden) {
-            const r = catalog.recipes.find((x) => x.id === layer.id);
-            b = { id: "type:" + layer.id, label: layerName(t, layer), color: r ? categoryColor(recipeGroup(r)) : layerColor(layer.id, layer.kind), cost: 0 };
-        } else {
-            const hit = BUCKETS.find(([re]) => re.test(layer.id));
-            b = hit
-                ? { id: hit[1], label: t(hit[2], hit[3]), color: BUCKET_COLOR[hit[1]], cost: 0 }
-                : { id: "extras", label: t("Placemaker.UI.Bucket.Extras", "Extras"), color: BUCKET_COLOR.extras, cost: 0 };
+    let list: Bucket[];
+    if (summary.costBuckets && summary.costBuckets.length) {
+        list = summary.costBuckets.filter((b) => b.cost > 0).map((b) => bucketOf(t, b.id, b.cost));
+    } else {
+        const out = new Map<string, Bucket>();
+        for (const l of summary.layers) {
+            if (!(l.cost > 0)) continue;
+            const layer = layerOf(catalog, l.layer);
+            let b: Bucket;
+            if (layer.kind === "fill" && !layer.hidden) {
+                const r = catalog.recipes.find((x) => x.id === layer.id);
+                b = { id: "type:" + layer.id, label: layerName(t, layer), color: r ? categoryColor(recipeGroup(r)) : layerColor(layer.id, layer.kind), cost: 0 };
+            } else {
+                const hit = LAYER_BUCKETS.find(([re]) => re.test(layer.id));
+                b = bucketOf(t, hit ? hit[1] : "extras", 0);
+            }
+            const cur = out.get(b.id) ?? b;
+            cur.cost += l.cost;
+            out.set(b.id, cur);
         }
-        const cur = out.get(b.id) ?? b;
-        cur.cost += l.cost;
-        out.set(b.id, cur);
+        list = Array.from(out.values());
     }
-    const list = Array.from(out.values()).sort((a, b) => b.cost - a.cost);
-    // Five buckets at most: the rest goes to "Other".
-    if (list.length > 5) {
-        const rest = list.splice(4);
-        list.push({ id: "other", label: t("Placemaker.UI.Bucket.Other", "Other"), color: "#9fb0b9", cost: rest.reduce((n, x) => n + x.cost, 0) });
+    list.sort((a, b) => b.cost - a.cost);
+    // Six buckets at most: the rest goes to "Other".
+    if (list.length > 6) {
+        const rest = list.splice(5);
+        const other = list.find((x) => x.id === "other");
+        const extra = rest.reduce((n, x) => n + x.cost, 0);
+        if (other) other.cost += extra;
+        else list.push(bucketOf(t, "other", extra));
     }
     return list;
 }
@@ -190,29 +238,71 @@ export function shortText(t: TFunc, loc: LocText | undefined): string {
 }
 const STOP = new Set(["a", "an", "the", "of", "to", "in", "on", "for", "with", "and", "or", "is", "are", "was", "were", "be", "been", "has", "have", "will", "can", "not", "no", "at", "by", "from", "this", "that", "it"]);
 
-type Alert = { kind: "error" | "warn" | "info"; text: string; full: string; issue?: Issue; permanent?: boolean };
+type Alert = { kind: "error" | "warn" | "info"; text: string; full: string; issue?: Issue; permanent?: boolean; loc?: LocText };
+
+/**
+ * (s45) One chip per thing: alerts with the same text key merge (number arguments add up: "12 trees cut"), then
+ * chips that read the same merge too (the permanent "Reshapes ground" and the layer issue saying it). The first,
+ * most severe one wins; the tooltip keeps every distinct sentence.
+ */
+export function mergeAlerts(t: TFunc, raw: Alert[]): Alert[] {
+    const byKey = new Map<string, Alert>();
+    const out: Alert[] = [];
+    for (const a of raw) {
+        const key = a.loc && a.loc.key ? (a.permanent ? "p:" : "i:") + a.loc.key : "";
+        const hit = key ? byKey.get(key) : undefined;
+        if (hit && hit.loc && a.loc) {
+            const x = hit.loc.args ?? [],
+                y = a.loc.args ?? [];
+            if (x.length && x.length === y.length && x.every((v, n) => typeof v === "number" && typeof y[n] === "number"))
+                hit.loc = { key: hit.loc.key, args: x.map((v, n) => (v as number) + (y[n] as number)) };
+            if (hit.full.indexOf(a.full) < 0) hit.full += "\n" + a.full;
+            continue;
+        }
+        const copy = { ...a };
+        if (key) byKey.set(key, copy);
+        out.push(copy);
+    }
+    const byText = new Map<string, Alert>();
+    const merged: Alert[] = [];
+    for (const a of out) {
+        a.text = shortText(t, a.loc);
+        const k = a.text.toLowerCase();
+        const hit = byText.get(k);
+        if (hit) {
+            if (hit.full.indexOf(a.full) < 0) hit.full += "\n" + a.full;
+            if (!hit.issue && a.issue) hit.issue = a.issue;
+            continue;
+        }
+        byText.set(k, a);
+        merged.push(a);
+    }
+    return merged;
+}
 
 const ALERT_ICON = { error: ["error", "danger"], warn: ["warning", "warn"], info: ["info", "accent"] } as const;
 
 const Alerts = ({ summary }: { summary: Summary }) => {
     const { t, tl } = useT();
     const [all, setAll] = useState(false);
-    const alerts: Alert[] = [];
+    const raw: Alert[] = [];
     const paintOnly = summary.permanentNeedsAck === false;
     for (const p of summary.permanent)
-        alerts.push({
+        raw.push({
             kind: paintOnly ? "info" : "warn",
-            text: shortText(t, p),
+            text: "",
             full: tl(p) + (paintOnly ? " " + t("Placemaker.UI.Review.PaintOnly", "Ground paint stays when the build is removed.") : ""),
             permanent: true,
+            loc: p,
         });
     const rank = { error: 0, warning: 1, info: 2 } as Record<string, number>;
     const issues = summary.issues.map((i, n) => ({ i, n })).sort((a, b) => (rank[a.i.severity] ?? 3) - (rank[b.i.severity] ?? 3) || a.n - b.n);
     for (const { i } of issues)
-        alerts.push({ kind: i.severity === "error" ? "error" : i.severity === "warning" ? "warn" : "info", text: shortText(t, i.text), full: tl(i.text), issue: i });
+        raw.push({ kind: i.severity === "error" ? "error" : i.severity === "warning" ? "warn" : "info", text: "", full: tl(i.text), issue: i, loc: i.text });
     // errors first, then permanent changes, warnings, info
     const order = (a: Alert) => (a.kind === "error" ? 0 : a.permanent ? 1 : a.kind === "warn" ? 2 : 3);
-    alerts.sort((a, b) => order(a) - order(b));
+    raw.sort((a, b) => order(a) - order(b));
+    const alerts = mergeAlerts(t, raw);
     if (!alerts.length) return null;
     const shown = all ? alerts : alerts.slice(0, ALERTS_SHOWN);
     return (
@@ -276,7 +366,7 @@ export const ReviewStage = ({ catalog, state, summary }: { catalog: Catalog; sta
                 <>
                     <MoneyCard catalog={catalog} state={state} summary={summary} pending={pending} />
                     <div className={classNames(s.stats, { [s.shimmer]: pending })} data-testid="review-stats">
-                        {summary.stats.map((st) => (
+                        {mergeStats(t, summary.stats).map((st) => (
                             <StatChip key={st.key + st.unit} k={st.key} value={st.value} unit={st.unit} />
                         ))}
                     </div>

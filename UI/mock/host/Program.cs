@@ -412,10 +412,39 @@ namespace Placemaker.MockHost
                 ["perLayer"] = perLayer,
                 ["cost"] = Math.Round(cost),
                 ["upkeep"] = Math.Round(upkeep),
+                ["costBuckets"] = FakeBuckets(plan),
                 ["permanent"] = permanent,
                 ["legend"] = JsonNode.Parse(Placemaker.Core.Tool.UiModels.Legend(plan, recipe, (cat, id) => new Placemaker.Core.Tool.AssetLabel { Name = RoadRoles.NameOf(id) }).ToString()),
                 ["ms"] = sw.Elapsed.TotalMilliseconds,
             };
+        }
+
+        /// <summary>(s45) summary.costBuckets with the stand-in prices below, bucketed like the game (Core CostBuckets).</summary>
+        private static JsonArray FakeBuckets(ComposedPlan plan)
+        {
+            var sums = new Dictionary<string, double>();
+            void Add(string b, double c) { if (c > 0) sums[b] = (sums.TryGetValue(b, out var v) ? v : 0) + c; }
+            foreach (var l in plan.Layers)
+            {
+                foreach (var o in l.Objects)
+                    Add(CostBuckets.Of(o), o.Role switch
+                    {
+                        ObjectRole.Tree => 150, ObjectRole.Bush => 40, ObjectRole.Centerpiece => 4500,
+                        ObjectRole.Bench => 90, ObjectRole.Lamp => 120, ObjectRole.Furniture => 600, ObjectRole.Planter => 70,
+                        _ => 60,
+                    });
+                foreach (var n in l.Nets)
+                    Add(CostBuckets.Of(n), Pricing.CurveLength(n) * (n.Role switch
+                    {
+                        NetRole.Avenue => 220, NetRole.Street or NetRole.PerimeterRoad or NetRole.Roundabout or NetRole.CulDeSac => 120,
+                        NetRole.Pathway => 18, NetRole.PathwayWide => 30, NetRole.Fence => 12, _ => 60,
+                    }));
+                foreach (var sf in l.Surfaces) Add(CostBuckets.Of(sf), Pricing.PolygonArea(sf.Ring) * (sf.Role == SurfaceRole.Grass ? 0.5 : 3));
+            }
+            var arr = new JsonArray();
+            foreach (var kv in sums.OrderByDescending(x => x.Value))
+                arr.Add(new JsonObject { ["id"] = kv.Key, ["cost"] = Math.Round(kv.Value), ["upkeep"] = Math.Round(kv.Value * 0.012) });
+            return arr;
         }
 
         /// <summary>Stand-in prices (the game catalog supplies real AssetInfo costs).</summary>
