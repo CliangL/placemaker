@@ -347,6 +347,7 @@ namespace Placemaker.Game.Settings
             {
                 global::Placemaker.Game.Build.BuildService.AutoExcludeCollisions = AutoExcludeCollisions;
                 global::Placemaker.Game.Build.BuildService.IgnoreOwnCollisions = IgnoreOwnCollisions;
+                global::Placemaker.Core.Build.Declutter.Anarchy = IgnoreOwnCollisions;
                 global::Placemaker.Game.Build.BuildService.ClearExistingObjects = ClearExistingTreesAndProps;
                 global::Placemaker.Game.Build.BuildService.BlockZoning = KeepZonedBuildingsOff;
                 global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;

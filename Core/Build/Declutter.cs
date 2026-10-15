@@ -31,6 +31,13 @@ namespace Placemaker.Core.Build
 {
     public static class Declutter
     {
+        /// <summary>(s55) Setting "Ignore collisions in my builds" (pushed by the settings): lots with stall markings only drop exact duplicates.</summary>
+        public static bool Anarchy;
+
+        /// <summary>Two objects on (almost) the same spot: centres closer than 0.4 m or a third of the smaller box.</summary>
+        public static bool NearDuplicate(in Footprint a, in Footprint b)
+            => math.distance(a.Center, b.Center) < math.max(0.4f, 0.35f * math.min(math.cmin(a.Half), math.cmin(b.Half)));
+
         /// <summary>Clearance between two collision boxes (the game counts touching as overlapping).</summary>
         public const float Gap = 0.05f;
         /// <summary>Largest nudge distance (m).</summary>
@@ -287,6 +294,11 @@ namespace Placemaker.Core.Build
             var stamp = new Dictionary<int, int>();
             int query = 0;
 
+            // (s55) "Ignore collisions in my builds" on a lot with stall markings: the build gives every prop the parking carrier as owner,
+            // so the game never pairs our own pieces. Then only a near-exact duplicate (same spot) is a reason to drop an object; the
+            // overlaps with stall markings and neighbouring props that dropped 85 bushes, lamps and trees (playtest 89) are fine.
+            bool relax = Anarchy && PlanWork.StallMarkings(plan) > 0;
+
             bool Free(in Footprint f, Item it)
             {
                 query++;
@@ -294,7 +306,7 @@ namespace Placemaker.Core.Build
                 {
                     if (stamp.TryGetValue(idx, out var q) && q == query) continue;
                     stamp[idx] = query;
-                    if (Overlaps(f, accepted[idx])) return false;
+                    if (Overlaps(f, accepted[idx]) && (!relax || NearDuplicate(f, accepted[idx]))) return false;
                 }
                 if (IsFixed(it.Obj.Role)) return true;   // parking pieces are laid out on their own nets
                 foreach (var si in Near(netGrid, f))

@@ -317,6 +317,7 @@ namespace Placemaker.Game.Build
             int unmatched = 0, unmatchedEdges = 0;
             _taggedCounts = default;
             _taggedBays = 0;
+            _carrierOwned = 0;
             var nodeRefs = new Dictionary<Entity, int2>();   // x = all temp edges, y = our edges
             bool carrier = _carrier != Entity.Null && EntityManager.Exists(_carrier);
             using var temps = _tempQuery.ToEntityArray(Allocator.Temp);
@@ -362,6 +363,7 @@ namespace Placemaker.Game.Build
                 if (role == MemberRole.ParkingAisle && carrier)
                     EntityManager.GetBuffer<global::Game.Net.SubNet>(_carrier).Add(new global::Game.Net.SubNet(e));
                 if (role == MemberRole.ParkingBay) _taggedBays++;
+                if (carrier && memberKind == MemberKind.Object && role != MemberRole.ParkingBay) ShareCarrierOwner(e);
                 if (role == MemberRole.ParkingBay && carrier)
                 {
                     // Bare carrier owner (PLT): LaneConnectionSystem walks Owner/Attached to find the
@@ -378,6 +380,7 @@ namespace Placemaker.Game.Build
                 if (!EntityManager.Exists(node) || !EntityManager.HasComponent<Temp>(node) || !IsOwnCandidate(node, out _)) continue;
                 Tag(node, MemberKind.Node, MemberRole.Generic);
             }
+            if (_carrierOwned > 0) Mod.Log.Info($"Placemaker: {_carrierOwned} props/trees/chargers share the parking carrier owner (the game does not pair them with the markings).");
             Mod.Log.Info($"Placemaker tagged {_tagged.Count} temporary parts for group {_groupId}"
                 + (unmatched > 0 ? $" ({unmatched} objects/areas adopted without a plan match)" : "")
                 + (unmatchedEdges > 0 ? $"; {unmatchedEdges} unmatched new edges left to the city" : "") + ".");
@@ -388,6 +391,34 @@ namespace Placemaker.Game.Build
                 if (_taggedBays < markings) Mod.Log.Warn(msg); else Mod.Log.Info(msg);
             }
             return _tagged.Count;
+        }
+
+        private int _carrierOwned;
+
+        /// <summary>
+        /// (s55) Playtest 89/90: a lot built "successfully" had no island trees, bushes, lamps or chargers. OverrideSystem (decompiled
+        /// 1.6.2f1) hides (Overridden) every overridable object that meets another overridable one (the entity with the higher index
+        /// loses), and the stall markings are not sunk any more, so every prop that touches a marking box vanished. The game skips an
+        /// object whose top-level owner is the same (ObjectIterator: m_TopLevelEntity == entity), which is how the markings already
+        /// coexist with each other. Props, trees, lamps and chargers get the parking carrier as Owner as well (no SubObject entry:
+        /// the group removal owns their lifetime, exactly like the bays), so the game never pairs them with the markings or each other.
+        /// Only plain overridable objects: buildings and anything already owned or attached stay untouched.
+        /// </summary>
+        private void ShareCarrierOwner(Entity e)
+        {
+            try
+            {
+                if (EntityManager.HasComponent<Owner>(e) || EntityManager.HasComponent<global::Game.Objects.Attached>(e)
+                    || EntityManager.HasComponent<global::Game.Buildings.Building>(e) || !EntityManager.HasComponent<PrefabRef>(e)) return;
+                var prefab = EntityManager.GetComponentData<PrefabRef>(e).m_Prefab;
+                if (!EntityManager.HasComponent<ObjectGeometryData>(prefab)) return;
+                var flags = EntityManager.GetComponentData<ObjectGeometryData>(prefab).m_Flags;
+                const global::Game.Objects.GeometryFlags mask = global::Game.Objects.GeometryFlags.Overridable | global::Game.Objects.GeometryFlags.DeleteOverridden;
+                if ((flags & mask) != global::Game.Objects.GeometryFlags.Overridable) return;
+                EntityManager.AddComponentData(e, new Owner(_carrier));
+                _carrierOwned++;
+            }
+            catch (Exception ex) { Mod.Log.Warn("Placemaker: carrier owner failed: " + ex.Message); }
         }
 
         /// <summary>Top-level object or area (sub-elements go with their owner; nodes are decided by their edges).</summary>

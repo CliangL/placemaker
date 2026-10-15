@@ -22,6 +22,7 @@ namespace Placemaker.Core.Build
         public const string AssetMissing = "asset-missing";        // no usable asset in this playset
         public const string NoFit = "no-fit";                      // the layout could not fit it / unusable shape
         public const string ZoningMismatch = "zoning";            // cells shown in the preview that the game does not have zoned
+        public const string Hidden = "hidden";                     // built, then hidden by the game after Apply (Overridden: overlap)
         public const string Other = "other";
 
         public static string Rejected(string errorType) => RejectedPrefix + (string.IsNullOrEmpty(errorType) ? "Unknown" : errorType);

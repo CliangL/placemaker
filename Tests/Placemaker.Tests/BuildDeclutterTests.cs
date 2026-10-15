@@ -214,5 +214,34 @@ namespace Placemaker.Tests
             Assert.True(ra.TotalDropped > 0);
             Assert.Equal(a.Layers[0].Objects.Select(o => o.Position), b.Layers[0].Objects.Select(o => o.Position));
         }
+
+        // s55: "Ignore collisions in my builds" on a lot with stall markings. The build gives every prop the parking carrier as owner,
+        // so the game never pairs our own pieces: only a near-exact duplicate is moved or dropped (playtest 89: 85 bushes, lamps and trees lost).
+        [Fact]
+        public void AnarchyOnALotKeepsOverlappingPropsAndDropsOnlyDuplicates()
+        {
+            ComposedPlan Make() => Plan(
+                Obj(ObjectRole.ParkingBay, "Bush", 0f, 0f),     // a "stall marking" (any asset with bounds)
+                Obj(ObjectRole.Tree, "Apple", 1.2f, 0f),
+                Obj(ObjectRole.Bush, "Bush", 2.6f, 0f),          // overlaps the tree's core
+                Obj(ObjectRole.Bush, "Bush", 2.65f, 0.05f));     // the same spot as the bush before: a duplicate
+            bool was = Declutter.Anarchy;
+            try
+            {
+                Declutter.Anarchy = false;
+                var off = Make(); var repOff = Declutter.Run(off, Assets);
+                Assert.True(repOff.TotalDropped + repOff.TotalMoved >= 2);
+                Declutter.Anarchy = true;
+                var on = Make(); var repOn = Declutter.Run(on, Assets);
+                Assert.Equal(1, repOn.TotalMoved + repOn.TotalDropped);   // only the duplicate (nudged off or dropped)
+                Assert.Equal(new float3(1.2f, 0, 0), on.Layers[0].Objects.First(o => o.Role == ObjectRole.Tree).Position);
+                Assert.Equal(new float3(2.6f, 0, 0), on.Layers[0].Objects.First(o => o.Role == ObjectRole.Bush).Position);
+                // no markings on the plan: the old rule (the game would hide one of an overlapping pair)
+                var plain = Plan(Obj(ObjectRole.Tree, "Apple", 0f, 0f), Obj(ObjectRole.Bush, "Bush", 0.5f, 0.3f));
+                var repPlain = Declutter.Run(plain, Assets);
+                Assert.Equal(1, repPlain.TotalMoved + repPlain.TotalDropped);
+            }
+            finally { Declutter.Anarchy = was; }
+        }
     }
 }

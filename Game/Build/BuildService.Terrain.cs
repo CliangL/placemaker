@@ -134,9 +134,44 @@ namespace Placemaker.Game.Build
                 _tfRaster = null;
             }
             if (_tfRaster == null) { BeginTerraformDabs(items); return; }
+            GuardPits();
             _tfMode = TfMode.Direct;
             _tfStartRms = _tfLastRms = -1f;
             Mod.Log.Info($"Placemaker terraform: {items.Count} items, raster {_tfRaster.Width}x{_tfRaster.Height} @ {_tfRaster.Cell:F2} m (direct brush).");
+        }
+
+        /// <summary>(s55) A lot is never meant to have a bowl in it (playtest 91): raise any pit of the target to its rim and log it.</summary>
+        private void GuardPits()
+        {
+            try
+            {
+                if (_tfRaster == null || _work == null || !_work.HasParking) return;
+                int n = TerraformPits.Fill(_tfRaster, Height, PitDepth, out float deepest, out var at);
+                if (n > 0) Mod.Log.Warn($"Placemaker pit guard: raised {n} texel(s) of the target, deepest bowl {deepest:F2} m at ({at.x:F0}, {at.y:F0}) (a lot has no hollow).");
+            }
+            catch (Exception e) { Mod.Log.Warn("Placemaker pit guard failed: " + e.Message); }
+        }
+
+        /// <summary>A pit is a bowl lower than the ring round it by more than this (m).</summary>
+        private const float PitDepth = 0.35f;
+
+        /// <summary>(s55) After the build: does the live terrain hold a bowl although the target has none? One log line per bowl (max 3).</summary>
+        private void VerifyLiveHollows()
+        {
+            try
+            {
+                if (_tfRaster == null || !_tfVerified) return;
+                _heightsValid = false;   // read the terrain as it is now
+                var pits = TerraformPits.Worst(_tfRaster, Height, 0.5f);
+                if (pits.Count == 0) { Mod.Log.Info("Placemaker terrain check: no bowl deeper than 0.5 m in the built ground."); return; }
+                foreach (var p in pits)
+                {
+                    float planned = _tfRaster.TrySample(p.At, _ => p.Height, out float t) ? t : float.NaN;
+                    Mod.Log.Warn($"Placemaker terrain check: bowl {p.Depth:F2} m deep at ({p.At.x:F0}, {p.At.y:F0}); live ground {p.Height:F2} m, target there {planned:F2} m"
+                        + (math.abs(planned - p.Height) > 0.6f ? " (the game's ground differs from the target)" : " (the target itself has it)") + ".");
+                }
+            }
+            catch (Exception e) { Mod.Log.Warn("Placemaker terrain check failed: " + e.Message); }
         }
 
         private void DoTerraform(int frame)

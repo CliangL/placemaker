@@ -20,6 +20,7 @@ using Placemaker.Game.Settings;
 using Placemaker.Core;
 using Placemaker.Core.Build;
 using Placemaker.Core.Geometry;
+using Placemaker.Game.Groups;
 using Placemaker.Game.Selection;
 using Unity.Collections;
 using Unity.Entities;
@@ -145,6 +146,7 @@ namespace Placemaker.Game.Build
                 if (_ownOverlap == null) _ownOverlap = new OwnOverlap(_request.Plan, assets);
                 var buildings = ExistingBuildingPolys();
                 using var errors = _errorQuery.ToEntityArray(Allocator.Temp);
+                var why = new Dictionary<string, int>(StringComparer.Ordinal);
                 for (int i = 0; i < errors.Length; i++)
                 {
                     var e = errors[i];
@@ -155,22 +157,93 @@ namespace Placemaker.Game.Build
                         if (o == Entity.Null || !EntityManager.Exists(o) || !EntityManager.HasComponent<Temp>(o)) break;
                         top = o;
                     }
-                    if (!EntityManager.HasComponent<Temp>(top) || !EntityManager.HasComponent<PrefabRef>(top) || !IsOwnCandidate(top, out _)
-                        || !TryMatch(top, out long key, out var kind) || kind != WorkKind.Object || key == OwnerKey
-                        || !_itemByKey.TryGetValue(key, out var w)) continue;
-                    if (!byOwner.TryGetValue(e, out var type) && !byOwner.TryGetValue(top, out type)) continue;   // unknown kind of error: stays real
-                    if (type != "OverlapExisting" && type != "NotEnoughClearance") continue;
+                    // (s55) Why an error is NOT ignorable, counted for the log (playtest 89: 399 overlap errors, "anarchy: cleared" never appeared).
+                    if (!EntityManager.HasComponent<Temp>(top) || !EntityManager.HasComponent<PrefabRef>(top) || !IsOwnCandidate(top, out _)) { Tally(why, "not-our-temporary"); continue; }
+                    if (!TryMatch(top, out long key, out var kind) || kind != WorkKind.Object || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) { Tally(why, "no-plan-object"); continue; }
+                    if (!byOwner.TryGetValue(e, out var type) && !byOwner.TryGetValue(top, out type)) { Tally(why, "no-error-icon"); continue; }   // unknown kind of error: stays real
+                    if (type != "OverlapExisting" && type != "NotEnoughClearance") { Tally(why, "type-" + type); continue; }
                     var obj = ItemObject(_request.Plan, w);
-                    if (obj == null || !_ownOverlap.Overlaps(w.Layer, w.Index)) continue;
-                    if (TouchesBuilding(obj, assets, buildings)) continue;
+                    if (obj == null || !_ownOverlap.Overlaps(w.Layer, w.Index)) { Tally(why, "overlaps-nothing-planned"); continue; }
+                    if (TouchesBuilding(obj, assets, buildings)) { Tally(why, "touches-building"); continue; }
                     _anarchyErrors.Add(e);
                     _anarchyItems.Add(key);
                     if (_auditKept.Add(key)) AuditItem(w, AuditReason.Anarchy);
+                }
+                if (why.Count > 0)
+                {
+                    var parts = new List<string>();
+                    foreach (var kv in why) parts.Add(kv.Key + " x" + kv.Value);
+                    Mod.Log.Info($"Placemaker anarchy: {_anarchyErrors.Count} of {total} error(s) ignorable; the rest stay real: {string.Join(", ", parts)}.");
                 }
             }
             catch (Exception ex) { Mod.Log.Warn("Placemaker: anarchy classification failed: " + ex.Message); _anarchyErrors.Clear(); _anarchyItems.Clear(); return total; }
             return total - _anarchyErrors.Count;
         }
+
+        /// <summary>
+        /// (s55) What the build really leaves standing. After Apply the game's OverrideSystem hides (Overridden) any overridable object
+        /// that meets another one, so "built" must not count temporaries: this scans the group's objects for Overridden, reports them
+        /// as "hidden" (left out, "hidden by the game: overlap") and brings back those that are hidden only because of our own pieces.
+        /// Runs in DoFinish, ~50 frames after Apply (OverrideSystem decides within a few frames).
+        /// </summary>
+        private void AuditSurvivors()
+        {
+            try
+            {
+                if (_groupId == 0 || LooseBuild || _request?.Plan == null) return;
+                var q = GetEntityQuery(ComponentType.ReadOnly<PlacemakerMember>(), ComponentType.ReadOnly<global::Game.Common.Overridden>(),
+                    ComponentType.ReadOnly<global::Game.Objects.Transform>(), ComponentType.ReadOnly<PrefabRef>(),
+                    ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+                int hiddenNow = 0, restored = 0;
+                var byPrefab = new Dictionary<string, int>(StringComparer.Ordinal);
+                if (!q.IsEmptyIgnoreFilter)
+                {
+                    var assets = SafeAssetInfo();
+                    var buildings = ExistingBuildingPolys();
+                    using var entities = q.ToEntityArray(Allocator.Temp);
+                    for (int i = 0; i < entities.Length; i++)
+                    {
+                        var e = entities[i];
+                        var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
+                        if (tag.GroupId != _groupId || tag.Kind != MemberKind.Object) continue;
+                        var prefab = EntityManager.GetComponentData<PrefabRef>(e).m_Prefab;
+                        var pos = EntityManager.GetComponentData<global::Game.Objects.Transform>(e).m_Position;
+                        string name = null;
+                        try { name = _catalog?.NameOf(prefab); } catch (Exception) { }
+                        if (string.IsNullOrEmpty(name)) name = "?";
+                        bool own = false;
+                        if (IgnoreOwnCollisions && _objectIndex != null && _objectIndex.TryMatch(pos.xz, PrefabId(prefab), ObjectMatchTolerance, out long key, out _)
+                            && _itemByKey.TryGetValue(key, out var w) && w.Kind == WorkKind.Object && SelfOverlaps(w))
+                        {
+                            var obj = ItemObject(_request.Plan, w);
+                            own = obj != null && !TouchesBuilding(obj, assets, buildings);
+                        }
+                        hiddenNow++;
+                        byPrefab[name] = (byPrefab.TryGetValue(name, out int n) ? n : 0) + 1;
+                        if (own)
+                        {
+                            // Only our own pieces are in the way: show it again (no Updated: that would re-run the override check).
+                            EntityManager.RemoveComponent<global::Game.Common.Overridden>(e);
+                            EntityManager.AddComponent<global::Game.Common.BatchesUpdated>(e);
+                            restored++;
+                        }
+                        else Audit.Add("object", name, pos, AuditReason.Hidden);
+                    }
+                }
+                if (hiddenNow > 0)
+                {
+                    var top = new List<KeyValuePair<string, int>>(byPrefab);
+                    top.Sort((a, b) => b.Value.CompareTo(a.Value));
+                    var parts = new List<string>();
+                    for (int i = 0; i < top.Count && i < 6; i++) parts.Add(top[i].Key + " x" + top[i].Value);
+                    Mod.Log.Warn($"Placemaker survivors: {hiddenNow} object(s) of group {_groupId} were hidden by the game (Overridden): {restored} shown again (only our own pieces overlapped), {hiddenNow - restored} stay hidden [{string.Join("; ", parts)}].");
+                }
+                else Mod.Log.Info($"Placemaker survivors: no object of group {_groupId} is hidden by the game (Overridden); {_carrierOwned} share the carrier owner.");
+            }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: survivor check failed: " + e.Message); }
+        }
+
+        private static void Tally(Dictionary<string, int> d, string key) => d[key] = (d.TryGetValue(key, out int n) ? n : 0) + 1;
 
         private static bool TouchesBuilding(PlannedObject o, Dictionary<string, AssetInfo> assets, List<float2[]> polys)
         {

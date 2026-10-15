@@ -18,6 +18,7 @@
   "Placemaker.Audit.Reason.anarchy": "Kept despite overlap",
   "Placemaker.Audit.Reason.site-safety": "Building in the way",
   "Placemaker.Audit.Reason.declutter": "Overlapped another piece",
+  "Placemaker.Audit.Reason.hidden": "Hidden by the game: overlap",
   "Placemaker.Audit.Reason.budget": "Object budget",
   "Placemaker.Audit.Reason.asset-missing": "Asset missing",
   "Placemaker.Audit.Reason.no-fit": "Layout could not fit",
