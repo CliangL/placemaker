@@ -131,3 +131,39 @@ export async function noTextOverflow(page: Page, where: string) {
     expect(bad, where).toEqual([]);
 }
 
+
+/**
+ * (s42) Selects a type in the picker: its category chip first (opening "N more" when the category is hidden), then
+ * the type chip. Picking an already selected type does nothing.
+ */
+export async function pickType(page: Page, id: string) {
+    const chip = page.getByTestId(`recipe-${id}`);
+    if (!(await chip.count())) {
+        const group: string = await page.evaluate((r) => {
+            const b = (window as any).pm.backend;
+            const rec = b.recipes.find((x: any) => x.info.id === r);
+            return rec?.info.group ?? "";
+        }, id);
+        const cat = page.getByTestId(`make-group-${group}`);
+        if (!(await cat.count()) && (await page.getByTestId("make-groups-more").count())) await page.getByTestId("make-groups-more").click();
+        if (await cat.count()) await cat.click();
+        else {
+            // no declared group: walk the categories until the type shows up
+            const all = await page.locator('[data-testid^="make-group-"][data-nav]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!));
+            for (const c of all) {
+                await page.getByTestId(c).click();
+                if (await chip.count()) break;
+            }
+        }
+    }
+    await chip.click();
+}
+
+/** (s42) Shape sections start folded: unfold every section head of the type (not its extras' options). */
+export async function unfoldSections(page: Page) {
+    for (let i = 0; i < 20; i++) {
+        const closed = page.locator('[data-testid="shape"] [data-testid$="-toggle"][aria-expanded="false"]');
+        if (!(await closed.count())) return;
+        await closed.first().click();
+    }
+}

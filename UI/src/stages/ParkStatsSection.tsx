@@ -11,6 +11,7 @@ import { area as fmtArea, formatValue } from "../lib/format";
 import { useT } from "../lib/l10n";
 import { Tip } from "../lib/tips";
 import { Btn, Check, Collapsible, Icon } from "../components/common";
+import { useOpen } from "../lib/collapse";
 import { Slider } from "../controls/Slider";
 import s from "./parkStats.module.scss";
 
@@ -44,77 +45,109 @@ const STAT_TEXT: Record<string, { label: [string, string]; meaning: [string, str
 
 const fmt = (st: ParkStatView, v: number) => formatValue(v, st.unit === "money" ? "money" : st.unit === "count" ? "count" : "", st.step);
 
+/** The five tiles of the folded card (upkeep is already in the money card). */
+const TILES: { id: string; label: [string, string] }[] = [
+    { id: "attractiveness", label: ["Placemaker.UI.ParkStats.Tile.Tourism", "Tourism"] },
+    { id: "leisure", label: ["Placemaker.UI.ParkStats.Tile.Leisure", "Leisure"] },
+    { id: "coverageRange", label: ["Placemaker.UI.ParkStats.Tile.Reach", "Reach"] },
+    { id: "coverageCapacity", label: ["Placemaker.UI.ParkStats.Tile.Capacity", "Capacity"] },
+    { id: "entertainment", label: ["Placemaker.UI.ParkStats.Tile.Wellbeing", "Wellbeing"] },
+];
+
+/** One mini tile: name, value, a tiny bar of the value against the vanilla range (band marked). */
+const Tile = ({ st, label }: { st: ParkStatView; label: string }) => {
+    const { t } = useT();
+    const lo = Math.min(st.min, st.bandMin);
+    const hi = Math.max(st.max, st.bandMax, lo + 1);
+    const at = (v: number) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+    const text = STAT_TEXT[st.id];
+    const outside = st.value < st.bandMin || st.value > st.bandMax;
+    return (
+        <Tip title={label + " " + fmt(st, st.value)} description={(text ? t(text.meaning[0], text.meaning[1]) + " " : "") + t("Placemaker.UI.ParkStats.Band", "Vanilla parks this size: {0}–{1}", [fmt(st, st.bandMin), fmt(st, st.bandMax)])}>
+            <div className={s.tile} data-testid={`park-tile-${st.id}`}>
+                <div className={s.tileLabel}>{label}</div>
+                <div className={classNames(s.tileValue, { [s.valueOut]: outside, [s.valueSet]: st.overridden })}>{fmt(st, st.value)}</div>
+                <div className={s.tileBar}>
+                    <div className={s.tileBand} style={{ left: at(st.bandMin) + "%", width: Math.max(2, at(st.bandMax) - at(st.bandMin)) + "%" }} />
+                    <div className={s.tileMark} style={{ left: at(st.value) + "%" }} />
+                </div>
+            </div>
+        </Tip>
+    );
+};
+
 export const ParkStatsSection = ({ ps, pending }: { ps: ParkStatsView; pending: boolean }) => {
     const { t } = useT();
+    const [open, setOpen] = useOpen("review:parkStats:edit", false);
     const anyOverride = ps.stats.some((x) => x.overridden);
     const outside = !ps.keepVanilla && ps.stats.some((x) => x.value < x.bandMin || x.value > x.bandMax);
-    const attr = ps.stats.find((x) => x.id === "attractiveness");
-    const leisure = ps.stats.find((x) => x.id === "leisure");
-    const summary = [attr, leisure]
-        .filter((x): x is ParkStatView => !!x)
-        .map((x) => t(STAT_TEXT[x.id].label[0], STAT_TEXT[x.id].label[1]) + " " + fmt(x, x.value))
-        .join(" · ");
     return (
-        <Collapsible
-            id="review:parkStats"
-            title={t("Placemaker.UI.ParkStats.Title", "Park stats")}
-            icon="star"
-            summary={summary}
-            defaultOpen
-            testId="park-stats"
-            className={classNames({ [s.shimmer]: pending })}
-            right={
-                anyOverride ? (
-                    <Btn
-                        icon="reset"
-                        iconSize={12}
-                        title={t("Placemaker.UI.ParkStats.ResetAll", "Reset all to suggested")}
-                        onClick={() => act.resetParkStat("")}
-                        testId="park-stats-reset-all"
-                    />
-                ) : null
-            }
-        >
-            <div className={s.topRow}>
-                <Tip title={t("Placemaker.UI.ParkStats.KeepVanilla.Tip", "Keeps every value inside what vanilla parks of a similar size use.")}>
-                    <div className={s.keep}>
-                        <Check
-                            testId="park-stats-keep-vanilla"
-                            checked={ps.keepVanilla}
-                            onChange={(v) => act.setParkStatsKeepVanilla(v)}
-                            label={t("Placemaker.UI.ParkStats.KeepVanilla", "Keep within vanilla range")}
-                        />
-                    </div>
-                </Tip>
-                <div className={s.kind} data-ellipsis>
-                    {ps.leisureType === "beach"
-                        ? t("Placemaker.UI.ParkStats.Beach", "Beach leisure")
-                        : t("Placemaker.UI.ParkStats.Park", "Park leisure")}
-                </div>
+        <div className={classNames(s.card, { [s.shimmer]: pending })} data-testid="park-stats" data-open={open ? "true" : "false"}>
+            <div className={s.cardHead}>
+                <Icon name="star" size={11} tint="dim" />
+                <div className={s.cardTitle}>{t("Placemaker.UI.ParkStats.Title", "Park stats")}</div>
+                <div className={s.flex} />
+                {anyOverride ? (
+                    <Btn icon="reset" iconSize={11} title={t("Placemaker.UI.ParkStats.ResetAll", "Reset all to suggested")} onClick={() => act.resetParkStat("")} testId="park-stats-reset-all" />
+                ) : null}
+                <Btn
+                    icon={open ? "chevronUp" : "edit"}
+                    iconSize={11}
+                    label={open ? t("Placemaker.UI.ParkStats.Done", "Done") : t("Placemaker.UI.ParkStats.Edit", "Edit")}
+                    className={s.editBtn}
+                    onClick={() => setOpen(!open)}
+                    testId="park-stats-toggle"
+                />
             </div>
-            {ps.companion === "noRoad" ? (
-                <div className={s.warn} data-testid="park-stats-no-road">
-                    <Icon name="info" size={12} tint="warn" />
-                    <div className={s.warnText}>{t("Placemaker.UI.ParkStats.NoRoad", "No road edge: only attractiveness applies.")}</div>
+            <div className={s.tiles}>
+                {TILES.map((x) => {
+                    const st = ps.stats.find((y) => y.id === x.id);
+                    return st ? <Tile key={x.id} st={st} label={t(x.label[0], x.label[1])} /> : null;
+                })}
+            </div>
+            {open ? (
+                <div className={s.edit}>
+                    <div className={s.topRow}>
+                        <Tip title={t("Placemaker.UI.ParkStats.KeepVanilla.Tip", "Keeps every value inside what vanilla parks of a similar size use.")}>
+                            <div className={s.keep}>
+                                <Check testId="park-stats-keep-vanilla" checked={ps.keepVanilla} onChange={(v) => act.setParkStatsKeepVanilla(v)} label={t("Placemaker.UI.ParkStats.KeepVanilla", "Vanilla range")} />
+                            </div>
+                        </Tip>
+                        <div className={s.kind}>
+                            {ps.leisureType === "beach" ? t("Placemaker.UI.ParkStats.Beach", "Beach leisure") : t("Placemaker.UI.ParkStats.Park", "Park leisure")}
+                        </div>
+                    </div>
+                    {ps.companion === "noRoad" ? (
+                        <Tip title={t("Placemaker.UI.ParkStats.NoRoad", "No road edge: only tourism applies.")}>
+                            <div className={s.warn} data-testid="park-stats-no-road">
+                                <Icon name="info" size={11} tint="warn" />
+                                <div className={s.warnText}>{t("Placemaker.UI.ParkStats.NoRoadShort", "No road edge")}</div>
+                            </div>
+                        </Tip>
+                    ) : null}
+                    {outside ? (
+                        <Tip title={t("Placemaker.UI.ParkStats.Outside", "Some values are beyond what vanilla parks this size have; the city may feel unbalanced.")}>
+                            <div className={s.warn} data-testid="park-stats-outside">
+                                <Icon name="warning" size={11} tint="warn" />
+                                <div className={s.warnText}>{t("Placemaker.UI.ParkStats.OutsideShort", "Beyond vanilla")}</div>
+                            </div>
+                        </Tip>
+                    ) : null}
+                    {ps.stats.map((st) => (
+                        <StatRow key={st.id} st={st} keepVanilla={ps.keepVanilla} />
+                    ))}
+                    <Tip
+                        title={
+                            ps.companion === "yes"
+                                ? t("Placemaker.UI.ParkStats.NoteCompanion", "A small hidden park building at the road edge carries these stats, like a vanilla park.")
+                                : t("Placemaker.UI.ParkStats.Note", "Only attractiveness reaches the game here. The others are saved with the build.")
+                        }
+                    >
+                        <div className={s.note}>{ps.companion === "yes" ? t("Placemaker.UI.ParkStats.NoteCompanionShort", "All stats apply") : t("Placemaker.UI.ParkStats.NoteShort", "Only tourism applies")}</div>
+                    </Tip>
                 </div>
             ) : null}
-            {outside ? (
-                <div className={s.warn} data-testid="park-stats-outside">
-                    <Icon name="warning" size={12} tint="warn" />
-                    <div className={s.warnText}>
-                        {t("Placemaker.UI.ParkStats.Outside", "Some values are beyond what vanilla parks this size have; the city may feel unbalanced.")}
-                    </div>
-                </div>
-            ) : null}
-            {ps.stats.map((st) => (
-                <StatRow key={st.id} st={st} keepVanilla={ps.keepVanilla} />
-            ))}
-            <div className={s.note}>
-                {ps.companion === "yes"
-                    ? t("Placemaker.UI.ParkStats.NoteCompanion", "A small hidden park building at the road edge carries these stats, like a vanilla park.")
-                    : t("Placemaker.UI.ParkStats.Note", "Only attractiveness reaches the game here. The others are saved with the build.")}
-            </div>
-        </Collapsible>
+        </div>
     );
 };
 
@@ -163,11 +196,6 @@ const StatRow = ({ st, keepVanilla }: { st: ParkStatView; keepVanilla: boolean }
                     />
                 ) : null}
             </div>
-            {meaning ? (
-                <div className={s.meaning} data-ellipsis>
-                    {meaning}
-                </div>
-            ) : null}
             <Slider
                 value={Math.min(hi, Math.max(lo, st.value))}
                 min={lo}

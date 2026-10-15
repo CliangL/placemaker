@@ -132,7 +132,14 @@ namespace Placemaker.MockHost
                 }
             }
             var all = new JsonArray();
-            foreach (var r in recipes) all.Add(r.DeepClone());
+            foreach (var r in recipes)
+            {
+                var copy = r.DeepClone();
+                // Make-row category (contract RecipeInfo.group), as Core UiModels.Catalog sends it.
+                var grp = GeneratorGroups.Of(GeneratorRegistry.Get((string)r["root"]?["layer"] ?? (string)r["id"] ?? ""));
+                if (!string.IsNullOrEmpty(grp)) copy["group"] = grp;
+                all.Add(copy);
+            }
             return new JsonObject { ["layers"] = layers, ["recipes"] = all };
         }
 

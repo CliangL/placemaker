@@ -1,22 +1,20 @@
-// One browser for "what to make", as grids (playtest: "more vertically space conscious … why does it not go
-// into a grid?"), plus the active-preset bar (Save / Save as / rename / delete / reset / export).
-//   • Categories: a wrapping chip strip ("All" + the groups types declare, RecipeInfo.group, else guessed
-//     from the id). Small catalogs start on "All"; the choice is kept for the session. A dot marks the
-//     category holding the selected type.
-//   • Types of the chosen category: a tile grid (icon + name, as many columns as fit, balanced rows).
-//     Click = selectRecipe (the type with its default settings).
-//   • Presets of the selected type: wrapping chips: "Default", built-ins ("edited" when saved over),
-//     player presets (★). Click = selectPreset(layer, preset).
-//   • Search filters categories / types / presets by name (preset hits of every type, with their type
-//     icon); arrow keys walk the grid, Enter in the search box picks the first match, Esc clears it.
-import React, { KeyboardEvent, useRef, useState } from "react";
+// s42 — "pick what to make" + "what you are editing" (docs/proposals/s42.md).
+//   Picker: one bordered panel, three numbered rows of equal-height chips: 1 Category · 2 Type · 3 Style.
+//     Each chip = coloured icon tile (category colour; types and styles inherit it) + name + small count. Categories
+//     show the most used ones and an "N more" chip; styles end with the player's own (gold star) and a dashed
+//     "+ New" (save the current settings as a new style). The search icon in the header filters all three rows.
+//   Editing bar: "EDITING · ● unsaved changes", the breadcrumb [Category] › [Type] › [Style] and an icon toolbar:
+//     undo changes (back to the style) · shuffle · save as new · save (overwrite) · more (rename, delete, reset, export).
+// Styles are the engine's presets (selectPreset / savePreset / savePresetAs …); categories come from the type's
+// GeneratorRegistry group (RecipeInfo.group), guessed from the id only for types that declare none.
+import React, { KeyboardEvent, useEffect, useRef, useState } from "react";
 import classNames from "classnames";
 import { ActivePreset, Catalog, DesignState, LayerType, PresetView, RecipeInfo, StepView } from "../contract";
 import { act } from "../lib/bindings";
-import { entityIcon, layerColor } from "../lib/icons";
 import { humanize, TFunc, useT } from "../lib/l10n";
 import { Tip } from "../lib/tips";
-import { BODY_PAD_REM, tileColumns, usePanelLayout } from "../lib/layout";
+import { useOpen } from "../lib/collapse";
+import { categoryColor, categoryIcon, CUSTOM_COLOR, styleIcon, typeIcon } from "../lib/palette";
 import { Btn, Icon } from "../components/common";
 import { Confirm } from "../components/dialog";
 import s from "./browser.module.scss";
@@ -47,21 +45,21 @@ export function makeRecipes(catalog: Catalog): RecipeInfo[] {
     return singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
 }
 
-/** Category order of the strip and tiles: Roads first (playtest), Parking and Commercial (s14) last before Other. */
+/** Every category the backend declares (GeneratorRegistry Group), in their default order of popularity. */
 export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
-    { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
     { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
-    { id: "gardens", key: "Placemaker.UI.MakeGroup.Gardens", en: "Gardens" },
     { id: "squares", key: "Placemaker.UI.MakeGroup.Squares", en: "Squares" },
-    { id: "sports", key: "Placemaker.UI.MakeGroup.Sports", en: "Sports" },
+    { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
+    { id: "commercial", key: "Placemaker.UI.MakeGroup.Commercial", en: "Shops" },
+    { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
+    { id: "gardens", key: "Placemaker.UI.MakeGroup.Gardens", en: "Gardens" },
     { id: "water", key: "Placemaker.UI.MakeGroup.Water", en: "Water" },
     { id: "nature", key: "Placemaker.UI.MakeGroup.Nature", en: "Nature" },
-    { id: "farms", key: "Placemaker.UI.MakeGroup.Farms", en: "Farms" },
+    { id: "sports", key: "Placemaker.UI.MakeGroup.Sports", en: "Sports" },
     { id: "events", key: "Placemaker.UI.MakeGroup.Events", en: "Events" },
-    { id: "industrial", key: "Placemaker.UI.MakeGroup.Industrial", en: "Industrial" },
+    { id: "farms", key: "Placemaker.UI.MakeGroup.Farms", en: "Farms" },
     { id: "transport", key: "Placemaker.UI.MakeGroup.Transport", en: "Transport" },
-    { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
-    { id: "commercial", key: "Placemaker.UI.MakeGroup.Commercial", en: "Commercial" },
+    { id: "industrial", key: "Placemaker.UI.MakeGroup.Industrial", en: "Industry" },
     { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
 ];
 
@@ -71,7 +69,7 @@ export function recipeGroup(r: RecipeInfo): string {
     return makeGroupOf(r.id);
 }
 
-/** Group of a type id (checked in this order: "parking" before "park", "market square" before parks). */
+/** Fallback group of a type id that declares none ("parking" before "park", "market square" before parks). */
 export function makeGroupOf(id: string): string {
     const x = id.toLowerCase();
     if (/mall|retail|commercial|shopping/.test(x)) return "commercial";
@@ -82,9 +80,6 @@ export function makeGroupOf(id: string): string {
     return "other";
 }
 
-/** Up to this many types: the browser starts on "All". More: on the selected type's category. */
-const SMALL_CATALOG = 8;
-
 function typeLayer(catalog: Catalog, r: RecipeInfo): LayerType | undefined {
     const id = r.id.toLowerCase();
     return catalog.layers.find((l) => l.id.toLowerCase() === id);
@@ -92,9 +87,13 @@ function typeLayer(catalog: Catalog, r: RecipeInfo): LayerType | undefined {
 
 export const presetName = (t: TFunc, p: PresetView) => (p.custom ? p.name : t(p.name, humanize(p.name || p.id)));
 const recipeName = (t: TFunc, r: RecipeInfo) => (r.custom ? r.name : t(r.name, humanize(r.name || r.id)));
+const groupName = (t: TFunc, id: string) => {
+    const g = MAKE_GROUPS.find((x) => x.id === id) ?? MAKE_GROUPS[MAKE_GROUPS.length - 1];
+    return t(g.key, g.en);
+};
 const DEFAULT_ID = "";
 
-/** "Park · Formal garden" — what the folded Make section reads. */
+/** "Park · Formal garden". */
 export function makeSummary(t: TFunc, catalog: Catalog, design: DesignState): string {
     const r = catalog.recipes.find((x) => x.id === design.recipeId);
     if (!r) return "";
@@ -104,188 +103,183 @@ export function makeSummary(t: TFunc, catalog: Catalog, design: DesignState): st
     return p ? recipeName(t, r) + " · " + presetName(t, p) : recipeName(t, r);
 }
 
-// ───────────── grid browser ─────────────
+// ───────────── remembered choices ─────────────
 
-/** Category chosen in the strip ("all" = every type), remembered; none chosen yet → a default. */
-const CATEGORY_KEY = "placemaker.browserCategory.v1";
-const ALL = "all";
+const CATEGORY_KEY = "placemaker.browserCategory.v2";
+const USE_KEY = "placemaker.categoryUse.v1";
 
-function loadCategory(): string | null {
+function load<T>(key: string, fallback: T): T {
     try {
-        return window.localStorage?.getItem(CATEGORY_KEY) || null;
+        const raw = window.localStorage?.getItem(key);
+        return raw ? (JSON.parse(raw) as T) : fallback;
     } catch {
-        return null;
+        return fallback;
     }
 }
 
-function saveCategory(c: string) {
+function save(key: string, v: unknown) {
     try {
-        window.localStorage?.setItem(CATEGORY_KEY, c);
+        window.localStorage?.setItem(key, JSON.stringify(v));
     } catch {
         /* not remembered */
     }
 }
-/** Estimated tile width in rem for a name (icon, paddings, ~7.4rem per character at 13rem). */
-const tileRem = (name: string) => 40 + name.length * 7.4;
 
-/** Badges after a preset name: "edited" for saved-over built-ins, ★ for the player's own. */
-const PresetBadges = ({ p }: { p: PresetView }) => {
-    const { t } = useT();
-    if (p.custom) return <Icon name="star" size={11} tint="warn" className={s.star} />;
-    if (p.overridden)
-        return (
-            <div className={s.badge} data-testid={`preset-edited-${p.id}`}>
-                {t("Placemaker.UI.Preset.Edited", "edited")}
+/** Counts a type pick for its category ("most used" categories come first). */
+function countUse(group: string) {
+    const use = load<Record<string, number>>(USE_KEY, {});
+    use[group] = (use[group] ?? 0) + 1;
+    save(USE_KEY, use);
+}
+
+/** Categories shown before "N more". */
+const SHOWN_CATEGORIES = 7;
+
+// ───────────── chips ─────────────
+
+/** Coloured icon tile with a dark glyph (category colour; types and styles inherit it). */
+export const Tile = ({ icon, color, size = 16 }: { icon: string; color: string; size?: number }) => (
+    <div className={s.tile} style={{ backgroundColor: color, width: size + "rem", height: size + "rem" }}>
+        <Icon name={icon} size={Math.round(size * 0.7)} tint="dark" />
+    </div>
+);
+
+type ChipProps = {
+    testId: string;
+    nav: string;
+    icon: string;
+    color: string;
+    name: string;
+    count?: number;
+    on?: boolean;
+    title?: string;
+    description?: string;
+    dashed?: boolean;
+    badge?: React.ReactNode;
+    extra?: Record<string, string>;
+    onClick: () => void;
+};
+
+const Chip = ({ testId, nav, icon, color, name, count, on, title, description, dashed, badge, extra, onClick }: ChipProps) => (
+    <Tip title={title ?? name} description={description}>
+        <button
+            type="button"
+            data-nav={nav}
+            data-testid={testId}
+            aria-pressed={on ? "true" : "false"}
+            className={classNames(s.chip, { [s.chipOn]: on, [s.chipDashed]: dashed })}
+            onClick={(e) => {
+                e.stopPropagation();
+                onClick();
+            }}
+            {...extra}
+        >
+            {dashed ? <Icon name={icon} size={12} tint="dim" /> : <Tile icon={icon} color={color} />}
+            <div className={s.chipName} data-ellipsis>
+                {name}
             </div>
-        );
-    return null;
-};
+            {count !== undefined ? <div className={s.chipCount}>{count}</div> : null}
+            {badge}
+        </button>
+    </Tip>
+);
 
-/** One preset as a chip: [name ★|edited •]. `typeIcon` marks whose preset it is in search results. */
-const PresetChip = ({
-    layer, recipe, p, active, modified, typeIcon,
-}: { layer: LayerType; recipe: RecipeInfo; p: PresetView | null; active: boolean; modified: boolean; typeIcon?: boolean }) => {
-    const { t } = useT();
-    const name = p ? presetName(t, p) : t("Placemaker.UI.Preset.Default", "Default");
-    const id = p ? p.id : DEFAULT_ID;
-    const desc = p?.custom && p.basedOn ? t("Placemaker.UI.Preset.BasedOn", "Your preset, based on {0}", [humanize(p.basedOn)]) : undefined;
-    return (
-        <Tip title={typeIcon ? recipeName(t, recipe) + " · " + name : name} description={desc}>
-            <button
-                type="button"
-                data-nav="preset"
-                data-testid={p ? `preset-${p.id}` : "preset-default"}
-                data-layer={layer.id}
-                aria-pressed={active ? "true" : "false"}
-                className={classNames(s.chip, s.presetChip, { [s.chipOn]: active, [s.chipDefault]: !p })}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    if (active && !modified) return;
-                    if (p) act.selectPreset(layer.id, id);
-                    else act.selectRecipe(recipe.id);
-                }}
-            >
-                {typeIcon ? (
-                    <div className={s.chipType} style={{ backgroundColor: layerColor(recipe.id) }}>
-                        <Icon name={entityIcon(recipe.id, recipe.icon)} size={9} tint="dark" />
-                    </div>
-                ) : null}
-                <div className={s.chipName} data-ellipsis>
-                    {name}
-                </div>
-                {p ? <PresetBadges p={p} /> : null}
-                {active && modified ? <div className={s.dot} /> : null}
-            </button>
-        </Tip>
-    );
-};
+const RowLabel = ({ n, label }: { n: number; label: string }) => (
+    <div className={s.rowLabel}>
+        <div className={s.rowNum}>{n}</div>
+        <div className={s.rowLabelText}>{label}</div>
+    </div>
+);
 
-/** A type tile: colour-coded icon + name. Click = selectRecipe (the type with its default settings). */
-const TypeTile = ({ catalog, recipe, selected, width }: { catalog: Catalog; recipe: RecipeInfo; selected: boolean; width: string | null }) => {
-    const { t } = useT();
-    const layer = typeLayer(catalog, recipe);
-    const name = recipeName(t, recipe);
-    const desc = recipe.description ? t(recipe.description, "") : "";
-    const count = layer ? layer.presets.length : 0;
-    return (
-        <div className={classNames(s.tileCell, { [s.tileGrow]: !width })} style={width ? { width } : undefined} data-testid={`type-${recipe.id}`}>
-            <Tip
-                title={name}
-                description={[desc, count ? t("Placemaker.UI.Browser.PresetCount", "{0} presets", [count]) : ""].filter((x) => x).join("\n") || undefined}
-            >
-                <button
-                    type="button"
-                    data-nav="type"
-                    data-testid={`recipe-${recipe.id}`}
-                    aria-pressed={selected ? "true" : "false"}
-                    className={classNames(s.tile, { [s.tileOn]: selected })}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (!selected) act.selectRecipe(recipe.id);
-                    }}
-                >
-                    <div className={s.typeIcon} style={{ backgroundColor: layerColor(recipe.id) }}>
-                        <Icon name={entityIcon(recipe.id, recipe.icon)} size={11} tint="dark" />
-                    </div>
-                    <div className={s.tileName} data-ellipsis>
-                        {name}
-                    </div>
-                </button>
-            </Tip>
-        </div>
-    );
-};
-
-type CatView = { id: string; title: string; types: RecipeInfo[]; hasSelected: boolean };
+// ───────────── picker ─────────────
 
 /**
- * Category strip (chips, wrapping) ▸ type tiles of the chosen category (grid) ▸ preset chips of the
- * selected type (wrapping). Search filters all three: matching categories / types as tiles, matching
- * presets of any type as chips (with their type's icon).
+ * 1 Category · 2 Type · 3 Style. Search (header icon) filters the rows: categories with a hit, the matching
+ * types of every category, the matching styles of every type. Arrow keys walk the chips, Enter in the search box
+ * picks the first hit, Esc clears it.
  */
-export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: DesignState }) => {
+export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; design: DesignState; onNew: () => void }) => {
     const { t } = useT();
-    const layout = usePanelLayout();
+    const [open, setOpen] = useOpen("design:make", true);
     const [query, setQuery] = useState("");
+    const [searching, setSearching] = useState(false);
+    const [moreCats, setMoreCats] = useOpen("design:moreCategories", false);
     const list = makeRecipes(catalog);
-    const small = list.length <= SMALL_CATALOG;
     const selectedRecipe = list.find((r) => r.id === design.recipeId);
-    // Not chosen yet: small catalogs show everything, big ones the selected type's category.
-    const [chosen, setChosen] = useState<string | null>(loadCategory);
-    const category = chosen ?? (small || !selectedRecipe ? ALL : recipeGroup(selectedRecipe));
-    const setCategory = (c: string) => {
-        saveCategory(c);
-        setChosen(c);
-    };
+    const selectedGroup = selectedRecipe ? recipeGroup(selectedRecipe) : "";
+    const [chosen, setChosen] = useState<string | null>(() => load<string | null>(CATEGORY_KEY, null));
+    // Popularity snapshot at mount: chips do not jump around while the player clicks.
+    const [use] = useState(() => load<Record<string, number>>(USE_KEY, {}));
     const root = useRef<HTMLDivElement>(null);
     const q = query.trim().toLowerCase();
     const has = (text: string) => text.toLowerCase().includes(q);
 
-    // categories → their types (search: the types that match by category, name or one of their presets)
-    const cats: CatView[] = [];
-    const presetHits: { r: RecipeInfo; layer: LayerType; p: PresetView }[] = [];
-    let firstType: { recipe: string; layer: string } | null = null;
-    for (const g of MAKE_GROUPS) {
-        const members = list.filter((r) => recipeGroup(r) === g.id);
-        if (!members.length) continue;
-        const title = t(g.key, g.en);
-        const catHit = !q || has(title);
-        const types: RecipeInfo[] = [];
-        for (const r of members) {
-            const layer = typeLayer(catalog, r);
-            const hits = q && layer ? layer.presets.filter((p) => has(presetName(t, p))) : [];
-            if (layer) for (const p of hits) presetHits.push({ r, layer, p });
-            if (catHit || has(recipeName(t, r)) || hits.length) {
-                types.push(r);
-                if (q && !firstType && (catHit || has(recipeName(t, r)))) firstType = { recipe: r.id, layer: layer?.id ?? r.id };
+    const cats = MAKE_GROUPS.map((g, order) => ({ id: g.id, title: t(g.key, g.en), order, types: list.filter((r) => recipeGroup(r) === g.id) }))
+        .filter((c) => c.types.length)
+        .sort((a, b) => (use[b.id] ?? 0) - (use[a.id] ?? 0) || a.order - b.order);
+    const exists = (id: string | null) => !!id && cats.some((c) => c.id === id);
+    const category = exists(chosen) ? chosen! : exists(selectedGroup) ? selectedGroup : cats[0]?.id ?? "";
+    const setCategory = (c: string) => {
+        save(CATEGORY_KEY, c);
+        setChosen(c);
+    };
+    // The selected type changed from elsewhere (undo, a search hit, a preset of another type): show its category.
+    const lastRecipe = useRef(design.recipeId);
+    useEffect(() => {
+        if (lastRecipe.current === design.recipeId) return;
+        lastRecipe.current = design.recipeId;
+        if (selectedGroup && selectedGroup !== chosen) setCategory(selectedGroup);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [design.recipeId]);
+
+    // search hits
+    type Hit = { r: RecipeInfo; layer: LayerType; p: PresetView };
+    const typeHits: RecipeInfo[] = [];
+    const styleHits: Hit[] = [];
+    const catHits = new Set<string>();
+    if (q) {
+        for (const c of cats) {
+            const catHit = has(c.title);
+            for (const r of c.types) {
+                const layer = typeLayer(catalog, r);
+                const ps = layer ? layer.presets.filter((p) => has(presetName(t, p))) : [];
+                if (layer) for (const p of ps) styleHits.push({ r, layer, p });
+                if (catHit || has(recipeName(t, r)) || ps.length) {
+                    typeHits.push(r);
+                    catHits.add(c.id);
+                }
             }
         }
-        if (types.length) cats.push({ id: g.id, title, types, hasSelected: members.some((r) => r.id === design.recipeId) });
     }
-    // The chosen category, unless the search left it empty (then everything that matched).
-    const current = category !== ALL && cats.some((c) => c.id === category) ? category : ALL;
-    const tiles = current === ALL ? cats.flatMap((c) => c.types) : cats.find((c) => c.id === current)!.types;
-    const firstHit = presetHits.length ? { recipe: presetHits[0].r.id, layer: presetHits[0].layer.id, preset: presetHits[0].p.id } : firstType;
 
-    // Tiles: one row sharing the width when every name fits; else a grid of equal columns, as many as
-    // the longest name allows, balanced rows — names are never cut.
-    const inner = layout.width - BODY_PAD_REM - 4;
-    const widths = tiles.map((r) => tileRem(recipeName(t, r)) + 4);
-    const oneRow = tiles.length >= 3 && widths.reduce((n, w) => n + w, 0) <= inner;
-    // one or two tiles (a narrow category, a search hit) keep a third of the row each, not all of it
-    const cols = oneRow ? tiles.length : Math.max(tiles.length < 3 ? 3 : 1, tileColumns(tiles.length, inner, Math.max(96, ...widths), 6));
-    const tileWidth = oneRow ? null : 100 / cols + "%";
+    // categories: the most used first; the current one and the selected type's always visible
+    const visibleCats = q ? cats.filter((c) => catHits.has(c.id)) : moreCats ? cats : cats.filter((c, i) => i < SHOWN_CATEGORIES || c.id === category || c.id === selectedGroup);
+    const hiddenCats = q ? 0 : cats.length - cats.filter((c, i) => i < SHOWN_CATEGORIES || c.id === category || c.id === selectedGroup).length;
+    const types = q ? typeHits : cats.find((c) => c.id === category)?.types ?? [];
+    const firstHit = styleHits.length ? { recipe: styleHits[0].r.id, layer: styleHits[0].layer.id, preset: styleHits[0].p.id } : typeHits.length ? { recipe: typeHits[0].id, layer: typeHits[0].id, preset: null } : null;
 
-    // presets: the selected type's (Default first), or the search hits of every type
     const ap = design.activePreset;
     const selLayer = selectedRecipe ? typeLayer(catalog, selectedRecipe) : undefined;
     const activeId = selLayer && ap && ap.layer.toLowerCase() === selLayer.id.toLowerCase() ? ap.id : null;
     const modified = !!ap?.modified;
 
-    const rows = () => Array.from(root.current?.querySelectorAll<HTMLElement>("[data-nav]") ?? []);
-    /** Arrow keys walk the grid: ←/→ the previous / next item, ↑/↓ the nearest item in the row above / below. */
+    const pickType = (r: RecipeInfo) => {
+        if (r.id === design.recipeId) return;
+        countUse(recipeGroup(r));
+        act.selectRecipe(r.id);
+    };
+    const pickStyle = (r: RecipeInfo, layer: LayerType, p: PresetView | null) => {
+        const active = r.id === design.recipeId && activeId === (p ? p.id : DEFAULT_ID);
+        if (active && !modified) return;
+        if (r.id !== design.recipeId) countUse(recipeGroup(r));
+        if (p) act.selectPreset(layer.id, p.id);
+        else act.selectRecipe(r.id);
+    };
+
+    const chips = () => Array.from(root.current?.querySelectorAll<HTMLElement>("[data-nav]") ?? []);
+    /** Arrow keys walk the chips: ←/→ previous / next, ↑/↓ the nearest chip in the row above / below. */
     const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
-        const all = rows();
+        const all = chips();
         const i = all.indexOf(document.activeElement as HTMLElement);
         let next: HTMLElement | undefined;
         if (e.key === "ArrowRight") next = all[i < 0 ? 0 : Math.min(all.length - 1, i + 1)];
@@ -310,7 +304,7 @@ export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: Des
         } else if (e.key === "Home") next = all[0];
         else if (e.key === "End") next = all[all.length - 1];
         else if (e.key === "Enter") {
-            // Enter activates the focused item (native click); keep it from reaching the tool's Enter = primary.
+            // Enter activates the focused chip (native click); keep it from reaching the tool's Enter = primary.
             e.stopPropagation();
             return;
         } else return;
@@ -319,107 +313,219 @@ export const TypeBrowser = ({ catalog, design }: { catalog: Catalog; design: Des
         next?.focus();
     };
 
-    const search = (
-        <div className={classNames(s.search, { [s.searchSide]: layout.wide })}>
-            <Icon name="search" size={12} tint="dim" />
-            <input
-                className={s.searchInput}
-                data-testid="browser-search"
-                value={query}
-                placeholder={layout.wide ? t("Placemaker.UI.Browser.SearchShort", "Search") : t("Placemaker.UI.Browser.Search", "Search types and presets")}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === "Escape" && query) {
-                        setQuery("");
-                        e.preventDefault();
-                    } else if (e.key === "Enter") {
-                        // first matching preset, else the first matching type
-                        if (firstHit && "preset" in firstHit && firstHit.preset) act.selectPreset(firstHit.layer, firstHit.preset);
-                        else if (firstHit && firstHit.recipe !== design.recipeId) act.selectRecipe(firstHit.recipe);
-                        e.preventDefault();
-                    } else if (e.key === "ArrowDown") {
-                        rows()[0]?.focus();
-                        e.preventDefault();
-                    }
+    const closeSearch = () => {
+        setQuery("");
+        setSearching(false);
+    };
+
+    const head = (
+        <div className={s.head}>
+            <button
+                type="button"
+                className={s.headToggle}
+                data-testid="make-toggle"
+                aria-expanded={open ? "true" : "false"}
+                onClick={(e) => {
                     e.stopPropagation();
+                    setOpen(!open);
                 }}
-            />
-            {query ? <Btn icon="close" iconSize={11} className={s.clear} title={t("Placemaker.UI.Browser.Clear", "Clear")} onClick={() => setQuery("")} testId="browser-clear" /> : null}
+            >
+                <Icon name={open ? "chevronDown" : "chevronRight"} size={11} tint="dim" />
+                <div className={s.headTitle}>{t("Placemaker.UI.Make.Title", "Pick what to make")}</div>
+            </button>
+            {searching && open ? (
+                <div className={s.search}>
+                    <input
+                        className={s.searchInput}
+                        data-testid="browser-search"
+                        autoFocus
+                        value={query}
+                        placeholder={t("Placemaker.UI.Browser.SearchShort", "Search")}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                                closeSearch();
+                                e.preventDefault();
+                            } else if (e.key === "Enter") {
+                                if (firstHit && firstHit.preset) act.selectPreset(firstHit.layer, firstHit.preset);
+                                else if (firstHit && firstHit.recipe !== design.recipeId) act.selectRecipe(firstHit.recipe);
+                                e.preventDefault();
+                            } else if (e.key === "ArrowDown") {
+                                chips()[0]?.focus();
+                                e.preventDefault();
+                            }
+                            e.stopPropagation();
+                        }}
+                    />
+                    <Btn icon="close" iconSize={10} className={s.clear} title={t("Placemaker.UI.Browser.Clear", "Clear")} onClick={closeSearch} testId="browser-clear" />
+                </div>
+            ) : (
+                <div className={s.flex} />
+            )}
+            {open ? (
+                <Btn
+                    icon="search"
+                    iconSize={12}
+                    className={s.headBtn}
+                    selected={searching}
+                    title={t("Placemaker.UI.Browser.Search", "Search types and styles")}
+                    onClick={() => (searching ? closeSearch() : setSearching(true))}
+                    testId="browser-search-toggle"
+                />
+            ) : null}
         </div>
     );
 
-    const catChip = (id: string, title: string, count: number, hasSelected: boolean) => (
-        <button
-            key={id}
-            type="button"
-            data-nav="cat"
-            data-testid={`make-group-${id}`}
-            data-has-selected={hasSelected ? "true" : "false"}
-            aria-pressed={current === id ? "true" : "false"}
-            className={classNames(s.cat, { [s.catOn]: current === id })}
-            onClick={(e) => {
-                e.stopPropagation();
-                setCategory(id);
-            }}
-        >
-            <div className={s.catName}>{title}</div>
-            <div className={s.catCount}>{count}</div>
-            {hasSelected && current !== id && current !== ALL ? <div className={s.catMark} /> : null}
-        </button>
-    );
+    const color = (r: RecipeInfo) => categoryColor(recipeGroup(r));
+    const tIcon = (r: RecipeInfo) => typeIcon(r.id, recipeGroup(r));
+    const styleChip = (r: RecipeInfo, layer: LayerType, p: PresetView | null, inSearch: boolean) => {
+        const name = p ? presetName(t, p) : t("Placemaker.UI.Preset.Default", "Default");
+        const id = p ? p.id : DEFAULT_ID;
+        const active = r.id === design.recipeId && activeId === id;
+        return (
+            <Chip
+                key={layer.id + "/" + id}
+                testId={p ? `preset-${p.id}` : "preset-default"}
+                nav="preset"
+                icon={p?.custom ? "star" : inSearch ? tIcon(r) : p ? styleIcon(p.id, name, tIcon(r)) : tIcon(r)}
+                color={p?.custom ? CUSTOM_COLOR : color(r)}
+                name={name}
+                on={active}
+                title={inSearch ? recipeName(t, r) + " · " + name : name}
+                description={
+                    p?.custom
+                        ? p.basedOn
+                            ? t("Placemaker.UI.Preset.BasedOn", "Your style, based on {0}", [humanize(p.basedOn)])
+                            : t("Placemaker.UI.Preset.Yours", "Your style")
+                        : p?.overridden
+                          ? t("Placemaker.UI.Preset.EditedTip", "You saved over this style.")
+                          : undefined
+                }
+                extra={{ "data-layer": layer.id }}
+                badge={
+                    <>
+                        {p?.overridden ? <div className={s.edited} data-testid={`preset-edited-${p.id}`} /> : null}
+                        {active && modified ? <div className={s.dot} /> : null}
+                    </>
+                }
+                onClick={() => pickStyle(r, layer, p)}
+            />
+        );
+    };
 
     return (
-        <div className={s.browser} data-testid="type-browser" ref={root} onKeyDown={onKey}>
-            {layout.wide ? null : search}
-            <div className={s.head}>
-                <div className={s.cats} data-testid="make-groups">
-                    {cats.length > 1 || current !== ALL ? catChip(ALL, t("Placemaker.UI.Browser.All", "All"), cats.reduce((n, c) => n + c.types.length, 0), false) : null}
-                    {cats.map((c) => catChip(c.id, c.title, c.types.length, c.hasSelected))}
-                </div>
-                {layout.wide ? search : null}
-            </div>
-            {cats.length ? (
-                <div className={s.tiles} data-testid="recipes" data-grouped="true" data-cols={cols}>
-                    {tiles.map((r) => (
-                        <TypeTile key={r.id} catalog={catalog} recipe={r} selected={r.id === design.recipeId} width={tileWidth} />
-                    ))}
-                </div>
-            ) : (
-                <div className={s.empty} data-testid="browser-empty">
-                    {t("Placemaker.UI.Browser.None", "Nothing matches “{0}”", [query.trim()])}
-                </div>
-            )}
-            {q ? (
-                presetHits.length ? (
-                    <div className={s.presets} data-testid="preset-hits">
-                        {presetHits.map(({ r, layer, p }) => (
-                            <PresetChip
-                                key={layer.id + "/" + p.id}
-                                layer={layer}
-                                recipe={r}
-                                p={p}
-                                active={r.id === design.recipeId && activeId === p.id}
-                                modified={modified}
-                                typeIcon
-                            />
-                        ))}
-                    </div>
-                ) : null
-            ) : selectedRecipe && selLayer && selLayer.presets.length ? (
-                <div className={s.presets} data-testid={`presets-${selectedRecipe.id}`}>
-                    <PresetChip layer={selLayer} recipe={selectedRecipe} p={null} active={activeId === DEFAULT_ID} modified={modified} />
-                    {selLayer.presets.map((p) => (
-                        <PresetChip key={p.id} layer={selLayer} recipe={selectedRecipe} p={p} active={activeId === p.id} modified={modified} />
-                    ))}
+        <div className={s.picker} data-testid="make" data-open={open ? "true" : "false"}>
+            {head}
+            {open ? (
+                <div className={s.browser} data-testid="type-browser" ref={root} onKeyDown={onKey}>
+                    {q && !typeHits.length && !styleHits.length ? (
+                        <div className={s.empty} data-testid="browser-empty">
+                            {t("Placemaker.UI.Browser.None", "Nothing matches “{0}”", [query.trim()])}
+                        </div>
+                    ) : (
+                        <>
+                            <div className={s.row}>
+                                <RowLabel n={1} label={t("Placemaker.UI.Make.Category", "Category")} />
+                                <div className={s.chips} data-testid="make-groups">
+                                    {visibleCats.map((c) => (
+                                        <Chip
+                                            key={c.id}
+                                            testId={`make-group-${c.id}`}
+                                            nav="cat"
+                                            icon={categoryIcon(c.id)}
+                                            color={categoryColor(c.id)}
+                                            name={c.title}
+                                            count={q ? c.types.filter((r) => typeHits.includes(r)).length : c.types.length}
+                                            on={!q && c.id === category}
+                                            extra={{ "data-has-selected": c.id === selectedGroup ? "true" : "false" }}
+                                            badge={c.id === selectedGroup && c.id !== category && !q ? <div className={s.mark} /> : null}
+                                            onClick={() => {
+                                                setCategory(c.id);
+                                                if (q) closeSearch();
+                                            }}
+                                        />
+                                    ))}
+                                    {hiddenCats > 0 || (moreCats && !q && cats.length > SHOWN_CATEGORIES) ? (
+                                        <button
+                                            type="button"
+                                            data-nav="cat"
+                                            data-testid="make-groups-more"
+                                            className={classNames(s.chip, s.chipMore)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setMoreCats(!moreCats);
+                                            }}
+                                        >
+                                            <div className={s.chipName}>
+                                                {moreCats ? t("Placemaker.UI.Make.Fewer", "Fewer") : t("Placemaker.UI.Make.MoreN", "{0} more", [hiddenCats])}
+                                            </div>
+                                            <Icon name={moreCats ? "chevronLeft" : "chevronRight"} size={10} tint="dim" />
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </div>
+                            <div className={s.rule} />
+                            <div className={s.row}>
+                                <RowLabel n={2} label={t("Placemaker.UI.Make.Type", "Type")} />
+                                <div className={s.chips} data-testid="recipes" data-grouped="true">
+                                    {types.map((r) => {
+                                        const layer = typeLayer(catalog, r);
+                                        const desc = r.description ? t(r.description, "") : "";
+                                        return (
+                                            <Chip
+                                                key={r.id}
+                                                testId={`recipe-${r.id}`}
+                                                nav="type"
+                                                icon={tIcon(r)}
+                                                color={color(r)}
+                                                name={recipeName(t, r)}
+                                                count={layer ? layer.presets.length : undefined}
+                                                on={r.id === design.recipeId}
+                                                description={desc || undefined}
+                                                onClick={() => pickType(r)}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className={s.rule} />
+                            <div className={s.row}>
+                                <RowLabel n={3} label={t("Placemaker.UI.Make.Style", "Style")} />
+                                {q ? (
+                                    <div className={s.chips} data-testid="preset-hits">
+                                        {styleHits.map((h) => styleChip(h.r, h.layer, h.p, true))}
+                                    </div>
+                                ) : selectedRecipe && selLayer ? (
+                                    <div className={s.chips} data-testid={`presets-${selectedRecipe.id}`}>
+                                        {styleChip(selectedRecipe, selLayer, null, false)}
+                                        {selLayer.presets.filter((p) => !p.custom).map((p) => styleChip(selectedRecipe, selLayer, p, false))}
+                                        {selLayer.presets.filter((p) => p.custom).map((p) => styleChip(selectedRecipe, selLayer, p, false))}
+                                        <Chip
+                                            testId="preset-new"
+                                            nav="preset"
+                                            icon="plus"
+                                            color=""
+                                            dashed
+                                            name={t("Placemaker.UI.Preset.New", "New")}
+                                            title={t("Placemaker.UI.Preset.SaveAsTip", "Save these settings as a new style")}
+                                            onClick={onNew}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className={s.chips} />
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
             ) : null}
         </div>
     );
 };
 
-// ───────────── active preset bar ─────────────
+// ───────────── editing bar ─────────────
 
-type Mode = "idle" | "saveAs" | "rename" | "menu";
+export type BarMode = "idle" | "saveAs" | "rename" | "menu";
 
 const NameField = ({ initial, onSave, onCancel, testId }: { initial: string; onSave: (name: string) => void; onCancel: () => void; testId: string }) => {
     const { t } = useT();
@@ -433,7 +539,7 @@ const NameField = ({ initial, onSave, onCancel, testId }: { initial: string; onS
                 autoFocus
                 value={value}
                 maxLength={48}
-                placeholder={t("Placemaker.UI.Preset.NamePlaceholder", "Preset name")}
+                placeholder={t("Placemaker.UI.Preset.NamePlaceholder", "Style name")}
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={(e) => {
                     e.stopPropagation();
@@ -451,45 +557,70 @@ const MenuItem = ({ icon, label, onClick, testId, danger }: { icon: string; labe
     <button
         type="button"
         data-testid={testId}
-        className={classNames(s.row, s.menuItem, { [s.menuDanger]: danger })}
+        className={classNames(s.menuItem, { [s.menuDanger]: danger })}
         onClick={(e) => {
             e.stopPropagation();
             onClick();
         }}
     >
         <Icon name={icon} size={12} tint={danger ? "danger" : "dim"} />
-        <div className={s.name}>{label}</div>
+        <div className={s.menuText}>{label}</div>
     </button>
 );
 
+const Crumb = ({ icon, color, name, on, testId }: { icon: string; color: string; name: string; on?: boolean; testId?: string }) => (
+    <Tip title={name}>
+        <div className={classNames(s.crumb, { [s.crumbOn]: on })}>
+            <Tile icon={icon} color={color} size={14} />
+            <div className={s.crumbName} data-testid={testId} data-ellipsis>
+                {name}
+            </div>
+        </div>
+    </Tip>
+);
+
 /**
- * "Victorian · modified   [Save] [Save as…] [⋯]" above the options. Save overwrites the player's preset
- * or saves over a built-in (which then shows "edited" and can be reset); Save as names a new one (★).
+ * What is being edited: [Category] › [Type] › [Style] and the style's actions. Save overwrites the player's style
+ * or saves over a built-in (shown "edited", resettable); + saves a new one (★).
  */
-export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design: DesignState; step: StepView }) => {
+export const PresetBar = ({
+    catalog, design, step, mode, setMode,
+}: { catalog: Catalog; design: DesignState; step: StepView; mode: BarMode; setMode: (m: BarMode) => void }) => {
     const { t } = useT();
-    const [mode, setMode] = useState<Mode>("idle");
     const [confirm, setConfirm] = useState<"delete" | "reset" | null>(null);
     const [exported, setExported] = useState(false);
     const ap: ActivePreset | undefined = design.activePreset;
     const layer = catalog.layers.find((l) => l.id === step.layer);
+    const recipe = catalog.recipes.find((r) => r.id === design.recipeId);
     if (!ap || !layer) return null;
     const p = ap.id ? layer.presets.find((x) => x.id === ap.id) ?? null : null;
     const name = p ? presetName(t, p) : t("Placemaker.UI.Preset.Default", "Default");
+    const group = recipe ? recipeGroup(recipe) : "other";
+    const tIcon = typeIcon(layer.id, group);
     const canSave = ap.modified && ap.canSave && !!p;
     const close = () => setMode("idle");
+    const saveWhy = !p
+        ? t("Placemaker.UI.Preset.SaveDefaultNo", "Default can't be changed. Save as a new style.")
+        : !ap.modified
+          ? t("Placemaker.UI.Preset.NothingToSave", "No changes to save")
+          : !ap.canSave
+            ? t("Placemaker.UI.Preset.CantSave", "This style can't be saved over")
+            : p.custom
+              ? t("Placemaker.UI.Preset.SaveTip", "Save changes to this style")
+              : t("Placemaker.UI.Preset.SaveBuiltIn", "Save over this style (reset any time)");
+    const revert = () => {
+        if (!ap.modified) return;
+        if (p) act.selectPreset(layer.id, p.id);
+        else if (recipe) act.selectRecipe(recipe.id);
+    };
 
     const dialog = confirm ? (
         <Confirm
-            title={
-                confirm === "delete"
-                    ? t("Placemaker.UI.Preset.DeleteTitle", "Delete “{0}”?", [name])
-                    : t("Placemaker.UI.Preset.ResetTitle", "Reset “{0}” to default?", [name])
-            }
+            title={confirm === "delete" ? t("Placemaker.UI.Preset.DeleteTitle", "Delete “{0}”?", [name]) : t("Placemaker.UI.Preset.ResetTitle", "Reset “{0}”?", [name])}
             message={
                 confirm === "delete"
-                    ? t("Placemaker.UI.Preset.DeleteText", "Your preset is removed. What you already built stays as it is.")
-                    : t("Placemaker.UI.Preset.ResetText", "Your saved changes to this preset are discarded and it goes back to the shipped settings.")
+                    ? t("Placemaker.UI.Preset.DeleteText", "Your style is removed. Builds stay as they are.")
+                    : t("Placemaker.UI.Preset.ResetText", "Your changes to this style are dropped.")
             }
             confirm={confirm === "delete" ? t("Placemaker.UI.Delete", "Delete") : t("Placemaker.UI.Preset.Reset", "Reset")}
             danger
@@ -503,7 +634,7 @@ export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design:
 
     return (
         <div
-            className={s.bar}
+            className={classNames(s.bar, { [s.barModified]: ap.modified })}
             data-testid="preset-bar"
             data-modified={ap.modified ? "true" : "false"}
             onKeyDown={(e) => {
@@ -511,6 +642,17 @@ export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design:
                 if (e.key === "Enter") e.stopPropagation();
             }}
         >
+            <div className={s.barHead}>
+                <div className={s.barTitle}>{t("Placemaker.UI.Editing", "Editing")}</div>
+                {ap.modified ? (
+                    <div className={s.modified} data-testid="preset-modified">
+                        <div className={s.modDot} />
+                        <div className={s.modText}>{t("Placemaker.UI.Preset.Unsaved", "unsaved changes")}</div>
+                    </div>
+                ) : p?.overridden ? (
+                    <div className={s.barNote}>{t("Placemaker.UI.Preset.Edited", "edited")}</div>
+                ) : null}
+            </div>
             {mode === "saveAs" ? (
                 <NameField
                     testId="preset-save-as-form"
@@ -533,48 +675,68 @@ export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design:
                 />
             ) : (
                 <div className={s.barRow}>
-                    {p?.custom ? <Icon name="star" size={11} tint="warn" className={s.barStar} /> : null}
-                    <Tip title={name}>
-                        <div className={s.barName} data-testid="preset-bar-name" data-ellipsis>
-                            {name}
-                        </div>
-                    </Tip>
-                    {p?.overridden && !ap.modified ? <div className={s.badge}>{t("Placemaker.UI.Preset.Edited", "edited")}</div> : null}
-                    {ap.modified ? (
-                        <div className={s.modified} data-testid="preset-modified">
-                            {t("Placemaker.UI.Preset.Modified", "modified")}
-                        </div>
-                    ) : null}
-                    <div className={s.flex} />
-                    {ap.id ? (
+                    <div className={s.crumbs}>
+                        <Crumb icon={categoryIcon(group)} color={categoryColor(group)} name={groupName(t, group)} />
+                        <Icon name="chevronRight" size={10} tint="dim" className={s.sep} />
+                        <Crumb icon={tIcon} color={categoryColor(group)} name={recipe ? recipeName(t, recipe) : humanize(layer.id)} />
+                        <Icon name="chevronRight" size={10} tint="dim" className={s.sep} />
+                        <Crumb
+                            icon={p?.custom ? "star" : p ? styleIcon(p.id, name, tIcon) : tIcon}
+                            color={p?.custom ? CUSTOM_COLOR : categoryColor(group)}
+                            name={name}
+                            on
+                            testId="preset-bar-name"
+                        />
+                    </div>
+                    <div className={s.tools}>
+                        <Btn
+                            icon="undo"
+                            iconSize={13}
+                            className={s.tool}
+                            disabled={!ap.modified}
+                            title={t("Placemaker.UI.Preset.Revert", "Undo changes")}
+                            description={ap.modified ? t("Placemaker.UI.Preset.RevertTip", "Back to “{0}” as saved", [name]) : t("Placemaker.UI.Preset.NoChanges", "No changes")}
+                            onClick={revert}
+                            testId="preset-revert"
+                        />
+                        <Btn
+                            icon="shuffle"
+                            iconSize={13}
+                            className={s.tool}
+                            title={t("Placemaker.UI.Randomize", "Shuffle")}
+                            description={t("Placemaker.UI.RandomizeTip", "New variation. Locked values stay.")}
+                            onClick={() => act.randomize(step.path)}
+                            testId="randomize"
+                        />
+                        <Btn
+                            icon="plus"
+                            iconSize={13}
+                            className={s.tool}
+                            title={t("Placemaker.UI.Preset.SaveAs", "Save as new style")}
+                            onClick={() => setMode("saveAs")}
+                            testId="preset-save-as"
+                        />
                         <Btn
                             icon="save"
-                            iconSize={12}
+                            iconSize={13}
                             variant={canSave ? "accent" : "ghost"}
-                            label={t("Placemaker.UI.Save", "Save")}
-                            title={p && !p.custom ? t("Placemaker.UI.Preset.SaveBuiltIn", "Save over this preset") : t("Placemaker.UI.Preset.SaveTip", "Save changes to this preset")}
-                            description={p && !p.custom ? t("Placemaker.UI.Preset.SaveBuiltInTip", "Your version replaces it; Reset to default brings the original back.") : undefined}
+                            className={classNames(s.tool, { [s.toolPrimary]: canSave })}
                             disabled={!canSave}
+                            title={t("Placemaker.UI.Save", "Save")}
+                            description={saveWhy}
                             onClick={() => act.savePreset(step.path, ap.id)}
                             testId="preset-save"
-                            className={s.barBtn}
                         />
-                    ) : null}
-                    <Btn
-                        label={t("Placemaker.UI.Preset.SaveAs", "Save as…")}
-                        title={t("Placemaker.UI.Preset.SaveAsTip", "Save these settings as a new preset of your own")}
-                        onClick={() => setMode("saveAs")}
-                        testId="preset-save-as"
-                        className={s.barBtn}
-                    />
-                    <Btn
-                        icon="more"
-                        iconSize={13}
-                        selected={mode === "menu"}
-                        title={t("Placemaker.UI.Preset.More", "More")}
-                        onClick={() => setMode(mode === "menu" ? "idle" : "menu")}
-                        testId="preset-more"
-                    />
+                        <Btn
+                            icon="more"
+                            iconSize={13}
+                            className={s.tool}
+                            selected={mode === "menu"}
+                            title={t("Placemaker.UI.Preset.More", "More")}
+                            onClick={() => setMode(mode === "menu" ? "idle" : "menu")}
+                            testId="preset-more"
+                        />
+                    </div>
                 </div>
             )}
             {mode === "menu" ? (
@@ -597,7 +759,7 @@ export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design:
                     {p?.overridden ? (
                         <MenuItem
                             icon="reset"
-                            label={t("Placemaker.UI.Preset.ResetDefault", "Reset to default")}
+                            label={t("Placemaker.UI.Preset.ResetDefault", "Reset to shipped")}
                             onClick={() => {
                                 close();
                                 setConfirm("reset");
@@ -607,7 +769,7 @@ export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design:
                     ) : null}
                     <MenuItem
                         icon="save"
-                        label={t("Placemaker.UI.Preset.Export", "Export presets")}
+                        label={t("Placemaker.UI.Preset.Export", "Export styles")}
                         onClick={() => {
                             act.exportPresets();
                             setExported(true);
@@ -621,7 +783,7 @@ export const PresetBar = ({ catalog, design, step }: { catalog: Catalog; design:
                 <div className={s.exported} data-testid="presets-file">
                     <div className={s.exportedHead}>
                         <Icon name="info" size={12} tint="accent" />
-                        <div className={s.exportedNote}>{t("Placemaker.UI.Preset.ExportNote", "Send this file to get your presets built into the mod")}</div>
+                        <div className={s.exportedNote}>{t("Placemaker.UI.Preset.ExportNote", "Saved. Send this file to share your styles.")}</div>
                         <Btn icon="close" iconSize={11} title={t("Placemaker.UI.Close", "Close")} onClick={() => setExported(false)} testId="presets-file-close" />
                     </div>
                     <div className={s.path} data-testid="presets-file-path">

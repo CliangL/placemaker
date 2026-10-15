@@ -1,12 +1,12 @@
 // s15 — "When I can't see options, I should see them greyed out": controls, features and area modes that do not
 // apply are SHOWN greyed out with a short reason; a UI newer than the DLL says "Restart the game".
 import { expect, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned, pickType } from "./helpers";
 
 async function design(page: import("@playwright/test").Page, recipe: string) {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 
@@ -59,9 +59,11 @@ test("a feature that cannot fit the area is listed greyed out with why; area mod
         b.areaModes = b.areaModes.map((m: any) => (m.mode === "blockPaint" ? { ...m, enabled: false, reason: { key: "Placemaker.Why.Test", args: [] } } : m));
         b.publishAll();
     });
-    const bp = page.getByTestId("area-mode-blockPaint");
-    await expect(bp).toHaveAttribute("aria-disabled", "true");
-    await bp.click({ force: true });
+    // Paint area opens as plain paint; its Smart edges switch is greyed with the reason
+    await page.getByTestId("area-mode-paint").click();
+    expect(await page.evaluate(() => (window as any).pm.backend.mode)).toBe("paint");
+    await expect(page.getByTestId("smart-edges-wrap")).toHaveAttribute("data-disabled", "true");
+    await page.getByTestId("smart-edges").click({ force: true });
     expect(await page.evaluate(() => (window as any).pm.backend.mode)).not.toBe("blockPaint");
     expect(errors).toEqual([]);
 });
@@ -79,43 +81,47 @@ test("UI newer than the DLL: restart notice, and modes it cannot know are greyed
     });
     await expect(page.getByTestId("version-notice")).toBeVisible();
     await expect(page.getByTestId("version-notice")).toContainText("Restart the game");
-    await expect(page.getByTestId("area-mode-blockPaint")).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByTestId("area-mode-blockPaint")).toHaveAttribute("data-reason", /Restart the game/);
     await expect(page.getByTestId("area-mode-paint")).not.toHaveAttribute("aria-disabled", "true");
+    await page.getByTestId("area-mode-paint").click();
+    expect(await page.evaluate(() => (window as any).pm.backend.mode)).toBe("paint");
+    await expect(page.getByTestId("brush-size")).toBeVisible();
     await panelShot(page, "s15-version-notice");
     expect(errors).toEqual([]);
 });
 
-test("brush: the angle is greyed for a round brush; Paint shares the brush rules (block lock greyed)", async ({ page }) => {
+test("brush: Angle only for the square brush; Smart edges off greys the stops, one block, snap and smooth", async ({ page }) => {
     const errors = await open(page);
     await page.getByTestId("area-mode-paint").click();
-    await expect(page.getByTestId("brush-angle-row")).toHaveAttribute("data-disabled", "true");
-    await expect(page.getByTestId("brush-rules")).toBeVisible();
+    expect(await page.evaluate(() => (window as any).pm.backend.mode)).toBe("blockPaint");
+    await expect(page.getByTestId("brush-angle-row")).toHaveCount(0);
     await page.getByTestId("brush-shape").getByText("Square").click();
-    await expect(page.getByTestId("brush-angle-row")).not.toHaveAttribute("data-disabled", "true");
-    if ((await page.getByTestId("brush-rules").getAttribute("data-open")) !== "true") await page.getByTestId("brush-rules-toggle").click();
-    await expect(page.getByTestId("brush-rule-stayInBlock")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("brush-angle-row")).toBeVisible();
     await expect(page.getByTestId("brush-rule-builds")).toHaveAttribute("aria-pressed", "true");
-    await page.getByTestId("area-mode-blockPaint").click();
-    await expect(page.getByTestId("brush-rule-stayInBlock")).not.toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("brush-rules")).not.toHaveAttribute("data-disabled", "true");
+    await page.getByTestId("smart-edges").click();
+    expect(await page.evaluate(() => (window as any).pm.backend.mode)).toBe("paint");
+    expect(await page.evaluate(() => (window as any).pm.backend.brushRules.anything)).toBe(true);
+    await expect(page.getByTestId("brush-rules")).toHaveAttribute("data-disabled", "true");
+    for (const k of ["roads", "buildings", "builds", "lots", "zoned", "water"]) await expect(page.getByTestId(`brush-rule-${k}`)).toHaveAttribute("aria-disabled", "true");
+    await page.getByTestId("smart-edges").click();
+    expect(await page.evaluate(() => (window as any).pm.backend.mode)).toBe("blockPaint");
     expect(errors).toEqual([]);
 });
 
-test("s27: Paint over anything turns every stop off; Draw keeps off other builds", async ({ page }) => {
+test("s42: Smart edges off does not touch the outline tools' Keep off chips; reset brings the defaults back", async ({ page }) => {
     const errors = await open(page);
-    await page.getByTestId("area-mode-blockPaint").click();
-    if ((await page.getByTestId("brush-rules").getAttribute("data-open")) !== "true") await page.getByTestId("brush-rules-toggle").click();
-    await page.getByTestId("brush-rule-anything").click();
-    await expect(page.getByTestId("brush-rule-anything")).toHaveAttribute("aria-pressed", "true");
-    for (const k of ["roads", "buildings", "builds", "lots", "zoned", "water", "stayInBlock"])
-        await expect(page.getByTestId(`brush-rule-${k}`)).toHaveAttribute("aria-disabled", "true");
+    await page.getByTestId("area-mode-paint").click();
+    await page.getByTestId("smart-edges").click();
     await page.getByTestId("area-mode-draw").click();
-    await expect(page.getByTestId("keep-off-builds")).toHaveAttribute("aria-disabled", "true");
-    await page.getByTestId("area-mode-blockPaint").click();
+    await expect(page.getByTestId("keep-off-builds")).not.toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("keep-off-builds")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("keep-off-free-land").click();
+    await expect(page.getByTestId("keep-off-free-land")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("area-mode-paint").click();
     await page.getByTestId("brush-rules-reset").click();
     await page.getByTestId("area-mode-draw").click();
     await expect(page.getByTestId("keep-off-builds")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("keep-off-free-land")).toHaveAttribute("aria-pressed", "false");
-    await noTextOverflow(page, "s27 keep off row");
+    await noTextOverflow(page, "keep off row");
     expect(errors).toEqual([]);
 });

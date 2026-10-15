@@ -2,12 +2,12 @@
 // one-line summary when folded), and each enabled feature says in Design whether it fit the latest
 // plan: green check, amber "won't fit — reduced", red "no room"; the type header counts the misfits.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned, pickType } from "./helpers";
 
 async function toDesign(page: Page, recipe: string) {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 
@@ -48,8 +48,8 @@ test("feature rows fold: collapsed after enabling, summary when folded, open sta
     await expect(page.getByTestId("feature-playground")).toHaveAttribute("data-open", "false");
 
     // remembered across a type switch and a reload
-    await page.getByTestId("recipe-plaza").click();
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "plaza");
+    await pickType(page, "park");
     await page.getByTestId("feature-toggle-plaza").click();
     await expect(page.getByTestId("feature-plaza")).toHaveAttribute("data-open", "true");
     await page.getByTestId("feature-fold-plaza").click();
@@ -85,7 +85,7 @@ test("fit status: check when placed, amber reduced / red no room from the plan, 
     await forceFit(page, "playground", { kind: "reduced", text: { key: "Placemaker.Issue.NoRoom", args: ["Playground"] } });
     await forceFit(page, "fountain", { kind: "failed", text: { key: "Placemaker.UI.Feature.NoRoom" } });
     await expect(page.getByTestId("feature-fit-playground")).toHaveAttribute("data-kind", "reduced");
-    await expect(page.getByTestId("feature-fit-line-playground")).toContainText("Won't fit — reduced");
+    await expect(page.getByTestId("feature-fit-line-playground")).toContainText("Reduced");
     await expect(page.getByTestId("feature-fit-line-fountain")).toContainText("No room");
     await expect(page.getByTestId("feature-fit-line-fountain")).toHaveAttribute("data-kind", "failed");
     const chip = page.getByTestId("misfits-0");

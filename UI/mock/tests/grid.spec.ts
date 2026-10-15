@@ -2,12 +2,12 @@
 // columns when it looks decent": grid browser (category chips ▸ type tiles ▸ preset chips), a resizable
 // panel (left edge, remembered, 360rem … 45 % of the screen) and 1 ↔ 2 column content.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned, pickType } from "./helpers";
 
 async function toDesign(page: Page, recipe = "park") {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 
@@ -25,49 +25,51 @@ async function dragEdge(page: Page, dx: number) {
     await page.mouse.up();
 }
 
-test("browser is a grid: category chips ▸ type tiles ▸ preset chips, compact", async ({ page }) => {
+test("picker: 1 Category · 2 Type · 3 Style rows of chips, compact", async ({ page }) => {
     const errors = await open(page);
+    await page.evaluate(() => {
+        localStorage.removeItem("placemaker.browserCategory.v2");
+        localStorage.removeItem("placemaker.categoryUse.v1");
+    });
     await toDesign(page, "park");
     expect(await width(page)).toBe(560); // 1920 px wide screen → the wide default
 
-    // types side by side, one tile row at this width
-    const tiles = await page.locator('[data-testid="recipes"] [data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    expect(tiles).toEqual(["recipe-roads", "recipe-park", "recipe-campground", "recipe-plaza", "recipe-parking"]);
-    const roads = await box(page, "recipe-roads");
-    const parking = await box(page, "recipe-parking");
-    expect(Math.abs(roads.y - parking.y)).toBeLessThan(2); // one row
-    const chips = await page.locator('[data-testid="make-groups"] > button').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    expect(chips).toEqual(["make-group-all", "make-group-roads", "make-group-parks", "make-group-squares", "make-group-parking"]);
+    // categories from the backend groups, most used first (defaults: parks, squares, roads, parking, nature)
+    const chips = await page.locator('[data-testid="make-groups"] [data-testid^="make-group-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+    expect(chips).toEqual(["make-group-parks", "make-group-squares", "make-group-roads", "make-group-parking", "make-group-nature"]);
+    await expect(page.getByTestId("make-group-parks")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("recipe-park")).toHaveAttribute("aria-pressed", "true");
 
-    // presets of the selected type as chips, several per row
+    // styles of the selected type as chips, several per row, ending with "+ New"
     const presets = page.getByTestId("presets-park");
-    for (const id of ["default", "formal", "wild", "pond"]) await expect(presets.getByTestId(`preset-${id}`)).toBeVisible();
+    for (const id of ["default", "formal", "wild", "pond", "new"]) await expect(presets.getByTestId(`preset-${id}`)).toBeVisible();
     const d = await box(page, "preset-default");
     const f = await box(page, "preset-formal");
     expect(Math.abs(f.y - d.y)).toBeLessThan(2);
     expect(f.x).toBeGreaterThan(d.x);
+    // chips are one 24rem line each
+    expect(Math.round(d.height)).toBe(24);
 
-    // the whole browser: search + chips + tiles + presets in a few lines
+    // the whole picker in a few lines
     const browser = await box(page, "type-browser");
-    expect(browser.height).toBeLessThan(120);
-    await noTextOverflow(page, "grid browser wide");
+    expect(browser.height).toBeLessThan(130);
+    await noTextOverflow(page, "picker wide");
     await panelShot(page, "grid-browser-wide");
 
-    // a category narrows the tiles; the selected type stays selected and its presets stay listed
+    // a category lists its types; the selected type stays selected and its styles stay listed
     await page.getByTestId("make-group-squares").click();
     await expect(page.getByTestId("make-group-squares")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("recipe-plaza")).toBeVisible();
     await expect(page.getByTestId("recipe-park")).toHaveCount(0);
     await expect(page.getByTestId("make-group-parks")).toHaveAttribute("data-has-selected", "true");
     await expect(presets.getByTestId("preset-formal")).toBeVisible();
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
     await expect(page.getByTestId("presets-plaza").getByTestId("preset-civic")).toBeVisible();
-    await expect(page.getByTestId("make-groups")).toBeVisible(); // the strip stays
-    await page.getByTestId("make-group-all").click();
+    await page.getByTestId("make-group-parks").click();
     await expect(page.getByTestId("recipe-park")).toBeVisible();
 
-    // search: preset hits of any type, marked with their type
+    // search: style hits of any type, marked with their type
+    await page.getByTestId("browser-search-toggle").click();
     await page.getByTestId("browser-search").fill("meadow");
     await expect(page.getByTestId("preset-hits").getByTestId("preset-wild")).toBeVisible();
     await expect(page.getByTestId("recipe-park")).toBeVisible();
@@ -78,22 +80,16 @@ test("browser is a grid: category chips ▸ type tiles ▸ preset chips, compact
     expect(errors).toEqual([]);
 });
 
-test("narrow screen: 400rem default, tiles wrap, one column", async ({ page }) => {
+test("narrow screen: 400rem default, chips wrap, section heads still in two columns", async ({ page }) => {
     const errors = await open(page, { width: 1440, height: 900 });
     await toDesign(page, "park");
     expect(await width(page)).toBe(400);
     await expect(page.getByTestId("placemaker-wrap")).toHaveAttribute("data-cols", "1");
-    // 5 tiles in room for 3 → 3 + 2
-    await expect(page.getByTestId("recipes")).toHaveAttribute("data-cols", "3");
-    const park = await box(page, "recipe-park");
-    const roads = await box(page, "recipe-roads");
-    const parking = await box(page, "recipe-parking");
-    expect(Math.abs(roads.y - park.y)).toBeLessThan(2);
-    expect(roads.x).toBeLessThan(park.x); // Roads first
-    expect(parking.y).toBeGreaterThan(park.y + 10);
-    await expect(page.getByTestId("feature-grid")).toHaveCount(0);
+    await expect(page.getByTestId("step-0").getByTestId("control-list").first()).toHaveAttribute("data-cols", "2");
+    await expect(page.getByTestId("feature-grid")).toHaveAttribute("data-cols", "2");
     await expect(page.getByTestId("control-grid")).toHaveCount(0);
     await noTextOverflow(page, "narrow");
+    await panelShot(page, "grid-park-narrow-default");
     expect(errors).toEqual([]);
 });
 
@@ -140,38 +136,38 @@ test("resize a floating panel: its right edge stays where it is", async ({ page 
     expect(Math.abs(after.x + after.width - (before.x + before.width))).toBeLessThan(3);
 });
 
-test("two columns when wide: paired property rows, folded groups side by side, feature grid; one column when narrow", async ({ page }) => {
+test("two columns: section heads and extras side by side, an open one unfolds under its pair", async ({ page }) => {
     const errors = await open(page);
     await page.evaluate(() => localStorage.removeItem("placemaker.sections.v1"));
     await toDesign(page, "park");
     const step = page.getByTestId("step-0");
-    // Basics is open: its sliders pair up (same line, side by side)
-    await expect(step.getByTestId("control-grid").first()).toBeVisible();
-    const rows = step.locator('[data-testid="group-basics"] [data-testid^="control-"][data-kind="slider"]');
-    const n = await rows.count();
-    expect(n).toBeGreaterThanOrEqual(2);
+    // every section starts folded, heads two per line
+    await expect(step.getByTestId("group-basics")).toHaveAttribute("data-open", "false");
+    const g0 = await box(page, "group-basics");
+    const g1 = (await step.locator('[data-testid^="group-"][data-open]').nth(1).boundingBox())!;
+    expect(Math.abs(g0.y - g1.y)).toBeLessThan(2);
+    expect(g1.x).toBeGreaterThan(g0.x + g0.width - 4);
+    // opening one: its controls unfold full width under the pair, the heads stay where they are
+    await step.getByTestId("group-basics-toggle").click();
+    await expect(step.getByTestId("group-basics")).toHaveAttribute("data-open", "true");
+    const body = (await step.getByTestId("group-basics-body").boundingBox())!;
+    expect(body.y).toBeGreaterThan(g0.y + g0.height - 1);
+    expect(body.width).toBeGreaterThan(g0.width * 1.8);
+    const g0b = await box(page, "group-basics");
+    expect(Math.abs(g0b.y - g0.y)).toBeLessThan(2);
+    // short slider labels pair up inside
+    const rows = step.locator('[data-testid="group-basics-body"] [data-testid^="control-"][data-kind="slider"]');
+    expect(await rows.count()).toBeGreaterThanOrEqual(2);
     const a = (await rows.nth(0).boundingBox())!;
     const b = (await rows.nth(1).boundingBox())!;
     expect(Math.abs(a.y - b.y)).toBeLessThan(2);
-    expect(b.x).toBeGreaterThan(a.x + a.width - 2);
-    // folded groups sit side by side
-    const halves = step.locator('[data-testid^="groupcell-"][data-half="true"]');
-    expect(await halves.count()).toBeGreaterThanOrEqual(2);
-    const g0 = (await halves.nth(0).boundingBox())!;
-    const g1 = (await halves.nth(1).boundingBox())!;
-    expect(Math.abs(g0.y - g1.y)).toBeLessThan(2);
-    // opening a folded group gives it the whole row
-    await step.getByTestId("group-water-toggle").click();
-    await expect(step.getByTestId("groupcell-water")).toHaveAttribute("data-half", "false");
-    await step.getByTestId("group-water-toggle").click();
-    await expect(step.getByTestId("groupcell-water")).toHaveAttribute("data-half", "true");
+    await step.getByTestId("group-basics-toggle").click();
 
-    // features in a 2-column grid; an open feature spans the row
+    // extras in two columns; an open one unfolds under its pair
     await expect(page.getByTestId("feature-grid")).toHaveAttribute("data-cols", "2");
-    const f0 = await box(page, "feature-playground");
-    const feats = page.locator('[data-testid="feature-grid"] > [data-testid^="feature-"]');
-    const f1 = (await feats.nth(1).boundingBox())!;
-    expect(Math.abs((await feats.nth(0).boundingBox())!.y - f1.y)).toBeLessThan(2);
+    const f0 = await box(page, "feature-plaza");
+    const f1 = await box(page, "feature-playground");
+    expect(Math.abs(f0.y - f1.y)).toBeLessThan(2);
     expect(f0.width).toBeLessThan(300);
     await page.getByTestId("feature-toggle-playground").click();
     await waitPlanned(page);
@@ -179,7 +175,7 @@ test("two columns when wide: paired property rows, folded groups side by side, f
     if (await fold.count()) {
         await fold.click();
         await expect(page.getByTestId("feature-playground")).toHaveAttribute("data-open", "true");
-        expect((await box(page, "feature-playground")).width).toBeGreaterThan(450);
+        expect((await box(page, "feature-options-playground")).width).toBeGreaterThan(450);
         await noTextOverflow(page, "park wide, feature open");
         await panelShot(page, "grid-park-wide-open");
         await fold.click();
@@ -187,19 +183,17 @@ test("two columns when wide: paired property rows, folded groups side by side, f
     await noTextOverflow(page, "park wide");
     await panelShot(page, "grid-park-wide");
 
-    // narrow again → one column everywhere
+    // narrower than 380rem → one column
     await dragEdge(page, 200);
-    await expect(page.getByTestId("placemaker-wrap")).toHaveAttribute("data-cols", "1");
-    await expect(page.getByTestId("feature-grid")).toHaveCount(0);
-    await expect(page.getByTestId("control-grid")).toHaveCount(0);
+    await expect(page.getByTestId("feature-grid")).toHaveAttribute("data-cols", "1");
     await noTextOverflow(page, "park narrow");
     await panelShot(page, "grid-park-narrow");
-    await page.getByTestId("recipe-parking").click();
+    await page.getByTestId("make-group-parking").click();
+    await pickType(page, "parking");
     await waitPlanned(page);
     await noTextOverflow(page, "parking narrow");
     await panelShot(page, "grid-parking-narrow");
     await dragEdge(page, -200);
-    await expect(page.getByTestId("placemaker-wrap")).toHaveAttribute("data-cols", "2");
     await noTextOverflow(page, "parking wide");
     await panelShot(page, "grid-parking-wide");
     expect(errors).toEqual([]);

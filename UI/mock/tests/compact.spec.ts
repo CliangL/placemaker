@@ -2,12 +2,12 @@
 // remembered, single types only in the Make row, features as switches with indented options, and no
 // text that overflows or is cut anywhere in the panel.
 import { expect, Page, test } from "@playwright/test";
-import { clickWorld, drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
+import { clickWorld, drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned, pickType } from "./helpers";
 
 async function toDesign(page: Page, recipe: string) {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 
@@ -22,30 +22,29 @@ async function expandAll(page: Page) {
 test("Make: one browser of single types (category ▸ type rows), no mixes", async ({ page }) => {
     const errors = await open(page);
     await toDesign(page, "park");
-    const ids = await page.locator('[data-testid="recipes"] [data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    expect(ids).toEqual(["recipe-roads", "recipe-park", "recipe-campground", "recipe-plaza", "recipe-parking"]);
+    // every category's types: single types only
+    const ids: string[] = [];
+    for (const c of await page.locator('[data-testid="make-groups"] [data-testid^="make-group-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!))) {
+        await page.getByTestId(c).click();
+        ids.push(...(await page.locator('[data-testid="recipes"] [data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!))));
+    }
+    expect(ids.sort()).toEqual(["recipe-campground", "recipe-park", "recipe-parking", "recipe-plaza", "recipe-roads"]);
+    await page.getByTestId("make-group-parks").click();
     await expect(page.getByTestId("mixes")).toHaveCount(0);
     // hidden layers (split, pond) never get a row
     await expect(page.getByTestId("placemaker-panel")).not.toContainText("Mixes");
-    // compact tiles: icon + name, side by side in a grid
-    const boxes = await Promise.all(["park", "campground"].map((id) => page.getByTestId(`recipe-${id}`).boundingBox()));
-    expect(Math.abs(boxes[1]!.y - boxes[0]!.y)).toBeLessThan(2);
-    expect(boxes[1]!.x).toBeGreaterThan(boxes[0]!.x + 10);
-    expect(boxes[0]!.height).toBeLessThanOrEqual(30);
-    for (const id of ["parking", "park"]) {
-        const row = page.getByTestId(`recipe-${id}`);
-        await expect(row.locator("img")).toHaveCount(1);
-    }
+    // compact chips: icon tile + name on one 24rem line
+    expect((await page.getByTestId("recipe-park").boundingBox())!.height).toBeLessThanOrEqual(24);
+    await expect(page.getByTestId("recipe-park").locator("img")).toHaveCount(1);
     expect(errors).toEqual([]);
 });
 
-test("groups are foldable: only the first essential group open, summaries when folded, state remembered", async ({ page }) => {
+test("groups are foldable: all folded at first, summaries when folded, state remembered", async ({ page }) => {
     await open(page);
     await page.evaluate(() => localStorage.removeItem("placemaker.sections.v1"));
     await toDesign(page, "parking");
     const step = page.getByTestId("step-0");
-    await expect(step.getByTestId("group-basics")).toHaveAttribute("data-open", "true");
-    for (const g of ["layout", "zoning", "extras"]) await expect(step.getByTestId(`group-${g}`)).toHaveAttribute("data-open", "false");
+    for (const g of ["basics", "layout", "zoning", "extras"]) await expect(step.getByTestId(`group-${g}`)).toHaveAttribute("data-open", "false");
     // folded groups show their values instead of rows
     await expect(page.getByTestId("control-aisle")).toHaveCount(0);
     await expect(step.getByTestId("group-layout-summary")).toHaveText("6.0 m");
@@ -56,11 +55,10 @@ test("groups are foldable: only the first essential group open, summaries when f
     // open Layout, close Basics → remembered across reloads and recipe switches
     await step.getByTestId("group-layout-toggle").click();
     await expect(page.getByTestId("slider-aisle-value")).toHaveText("6.0 m");
-    await step.getByTestId("group-basics-toggle").click();
     await expect(page.getByTestId("control-angle")).toHaveCount(0);
     await expect(step.getByTestId("group-basics-summary")).toContainText("90°");
-    await page.getByTestId("recipe-plaza").click();
-    await page.getByTestId("recipe-parking").click();
+    await pickType(page, "plaza");
+    await pickType(page, "parking");
     await expect(page.getByTestId("step-0").getByTestId("group-layout")).toHaveAttribute("data-open", "true");
     await expect(page.getByTestId("step-0").getByTestId("group-basics")).toHaveAttribute("data-open", "false");
     await page.reload();
@@ -92,10 +90,10 @@ test("features: switch adds the feature (row folded, one-line summary), its opti
     const opts = page.getByTestId("feature-options-playground");
     await expect(opts).toBeVisible();
     await expect(page.getByTestId("feature-summary-playground")).toHaveCount(0);
-    // indented under the feature row, collapsed by default with a summary
+    // unfolded under the row (full width), its sections collapsed by default with a summary
     const rowBox = (await page.getByTestId("feature-playground").boundingBox())!;
     const optBox = (await opts.boundingBox())!;
-    expect(optBox.x).toBeGreaterThan(rowBox.x + 8);
+    expect(optBox.y).toBeGreaterThan(rowBox.y + rowBox.height - 2);
     await expect(opts.getByTestId("group-basics")).toHaveAttribute("data-open", "false");
     await expect(opts.getByTestId("group-basics-summary")).toContainText("Medium");
     await waitPlanned(page);
@@ -134,13 +132,13 @@ test("features: switch adds the feature (row folded, one-line summary), its opti
     expect(await page.evaluate(() => (window as any).pm.backend.root.children.find((c: any) => c.feature === "playground").values.size)).toBe("l");
 
     // plaza: trees on by default; roads: zoning along streets
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
     await expect(page.getByTestId("feature-bigTrees")).toHaveAttribute("data-enabled", "true");
     await expect(page.getByTestId("feature-bigTrees")).toContainText("Trees");
     await expect(page.getByTestId("feature-kiosk")).toBeVisible();
-    await page.getByTestId("recipe-roads").click();
+    await pickType(page, "roads");
     await expect(page.getByTestId("feature-edgeZoning")).toContainText("Zoning along streets");
-    await page.getByTestId("recipe-parking").click();
+    await pickType(page, "parking");
     await expect(page.getByTestId("features")).toHaveCount(0);
     expect(errors).toEqual([]);
 });
@@ -155,14 +153,14 @@ test("no text overflows or is cut anywhere in the panel (every stage, every type
     await noTextOverflow(page, "area closed");
     await page.getByTestId("primary").click();
     for (const id of ["parking", "plaza", "park", "roads", "campground"]) {
-        await page.getByTestId(`recipe-${id}`).click();
+        await pickType(page, id);
         await waitPlanned(page);
         await noTextOverflow(page, id + " folded");
         for (const f of await page.locator('[data-testid^="feature-toggle-"]').all()) if ((await f.getAttribute("aria-checked")) === "false") await f.click();
         await expandAll(page);
         await noTextOverflow(page, id + " expanded");
     }
-    await page.getByTestId("recipe-parking").click();
+    await pickType(page, "parking");
     await page.getByTestId("asset-button-surface").click();
     await expect(page.getByTestId("asset-picker")).toBeVisible();
     await noTextOverflow(page, "asset picker");
@@ -189,16 +187,17 @@ test("compact: the whole park design fits without scrolling; full-HD screenshots
     await shot(page, "r3-1-area");
     await panelShot(page, "r3-panel-1-area");
     await page.getByTestId("primary").click();
-    await page.getByTestId("recipe-parking").click();
+    await pickType(page, "parking");
     await waitPlanned(page);
     await shot(page, "r3-2-design-parking");
     await panelShot(page, "r3-panel-2-design-parking");
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await waitPlanned(page);
-    // once the type is picked the Make browser folds to one line ("Park"); folded by default, the park's
-    // options and features then need no scrolling
+    // the picker folds to its header (the editing bar says what is picked); the park's sections and
+    // extras then need no scrolling
     await page.getByTestId("make-toggle").click();
-    await expect(page.getByTestId("make-summary")).toHaveText("Park");
+    await expect(page.getByTestId("make")).toHaveAttribute("data-open", "false");
+    await expect(page.getByTestId("preset-bar-name")).toHaveText("Default");
     const body = page.getByTestId("panel-body");
     const fits = await body.evaluate((el) => el.scrollHeight <= el.clientHeight + 1);
     expect(fits).toBe(true);
@@ -209,13 +208,13 @@ test("compact: the whole park design fits without scrolling; full-HD screenshots
     await waitPlanned(page);
     await panelShot(page, "r3-panel-2-design-park-features");
     await page.getByTestId("make-toggle").click();
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
     await waitPlanned(page);
     await panelShot(page, "r3-panel-2-design-plaza");
-    await page.getByTestId("recipe-roads").click();
+    await pickType(page, "roads");
     await waitPlanned(page);
     await panelShot(page, "r3-panel-2-design-roads");
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await page.getByTestId("primary").click();
     await waitPlanned(page);
     await shot(page, "r3-3-review");
@@ -228,7 +227,7 @@ test("places-inside slot is reserved under the type browser (hidden until round 
     await toDesign(page, "park");
     await expect(page.getByTestId("places-inside")).toHaveCount(0);
     await page.evaluate(() => ((window as any).__pmPlacesInside = true));
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
     await expect(page.getByTestId("places-inside")).toBeVisible();
     const placesY = (await page.getByTestId("places-inside").boundingBox())!.y;
     expect(placesY).toBeGreaterThan((await page.getByTestId("recipes").boundingBox())!.y);

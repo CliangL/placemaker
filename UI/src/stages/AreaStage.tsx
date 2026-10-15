@@ -1,249 +1,223 @@
-// Stage 1 — choose the area: Draw / Block / Block paint / Paint / Roads as one row of compact buttons (descriptions
-// in tooltips), brush settings, and a one-line readout of the current area with what to do next.
+// Stage 1 — choose the area (s42): four tools as one row of equal cards (icon tile + name + a short line):
+//   Points (draw) · Paint bucket (block) · Paint area (paint + block paint: the "Smart edges" switch picks the
+//   mode) · Road nodes (perimeter). The tool's settings sit under it, always visible (no folds), then one summary
+//   line: Area · Edge · Corners · Clear. Mode ids and saved settings are unchanged (a saved "blockPaint" opens
+//   Paint area with Smart edges on).
 import React from "react";
 import classNames from "classnames";
 import { AreaMode, BrushRules, BrushShape, LocText, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { area as fmtArea, group } from "../lib/format";
 import { TFunc, useT } from "../lib/l10n";
-import { Btn, Collapsible, Icon, Section, Segmented } from "../components/common";
+import { usePanelLayout } from "../lib/layout";
+import { Btn, Icon, Segmented, Switch } from "../components/common";
 import { Slider } from "../controls/Slider";
 import { Tip } from "../lib/tips";
-import s from "./stages.module.scss";
+import { Tile } from "./PresetBrowser";
+import s from "./area.module.scss";
+
+type Tool = "draw" | "block" | "paint" | "perimeter";
+
+/** The tool a mode belongs to (block paint and paint are one tool). */
+export const toolOf = (m: AreaMode): Tool => (m === "blockPaint" || m === "paint" ? "paint" : m === "block" ? "block" : m === "perimeter" ? "perimeter" : "draw");
 
 export function modeOptions(t: TFunc) {
     return [
         {
-            value: "draw",
-            icon: "draw",
-            label: t("Placemaker.UI.Mode.Draw", "Draw"),
-            title: t("Placemaker.UI.Mode.Draw", "Draw"),
-            description: t("Placemaker.UI.Mode.DrawTip", "Click corners; click the first one to close. Snaps to curbs and right angles."),
+            value: "draw" as Tool,
+            icon: "points",
+            label: t("Placemaker.UI.Tool.Points", "Points"),
+            line: t("Placemaker.UI.Tool.PointsLine", "Click corners"),
+            description: t("Placemaker.UI.Tool.PointsTip", "Click corners, then the first one to close. Snaps to curbs and right angles."),
         },
         {
-            value: "block",
-            icon: "block",
-            label: t("Placemaker.UI.Mode.Block", "Block"),
-            title: t("Placemaker.UI.Mode.Block", "Block"),
-            description: t("Placemaker.UI.Mode.BlockTip", "Click a city block. Shift+click adds neighbours."),
+            value: "block" as Tool,
+            icon: "bucket",
+            label: t("Placemaker.UI.Tool.Bucket", "Paint bucket"),
+            line: t("Placemaker.UI.Tool.BucketLine", "Click to fill"),
+            description: t("Placemaker.UI.Tool.BucketTip", "Click a city block to fill it. Shift+click adds more."),
         },
         {
-            value: "blockPaint",
-            icon: "blockPaint",
-            label: t("Placemaker.UI.Mode.BlockPaint", "Block paint"),
-            title: t("Placemaker.UI.Mode.BlockPaint", "Block paint"),
-            description: t(
-                "Placemaker.UI.Mode.BlockPaintTip",
-                "Paint; roads stop the brush at the curb (in a closed block it stays in that block), and it skips zoned cells, buildings and other areas. Right mouse or Shift erases."
-            ),
+            value: "paint" as Tool,
+            icon: "brush",
+            label: t("Placemaker.UI.Tool.Paint", "Paint area"),
+            line: t("Placemaker.UI.Tool.PaintLine", "Brush it on"),
+            description: t("Placemaker.UI.Tool.PaintTip", "Brush the area on. Right-click erases."),
         },
         {
-            value: "paint",
-            icon: "paint",
-            label: t("Placemaker.UI.Mode.Paint", "Paint"),
-            title: t("Placemaker.UI.Mode.Paint", "Paint"),
-            description: t("Placemaker.UI.Mode.PaintTip", "Left mouse paints, right mouse erases."),
-        },
-        {
-            value: "perimeter",
-            icon: "perimeter",
-            label: t("Placemaker.UI.Mode.Perimeter", "Roads"),
-            title: t("Placemaker.UI.Mode.Perimeter", "Roads"),
-            description: t("Placemaker.UI.Mode.PerimeterTip", "Click the intersections around the area to follow its roads."),
+            value: "perimeter" as Tool,
+            icon: "nodes",
+            label: t("Placemaker.UI.Tool.Nodes", "Road nodes"),
+            line: t("Placemaker.UI.Tool.NodesLine", "Click road corners"),
+            description: t("Placemaker.UI.Tool.NodesTip", "Click road corners around the area; the roads between are followed."),
         },
     ];
 }
 
-type StopKey = "roads" | "buildings" | "builds" | "lots" | "zoned" | "emptyZones" | "water" | "stayInBlock";
-
-/**
- * Brush rules (s11; s27: shared by Paint and Block paint): "Paint over anything" master toggle, what the brush
- * stops at (icon toggles), snap and smoothing. Mirrors Options → Brush rules. In plain Paint the block lock,
- * snap and smoothing do not apply (greyed with the reason).
- */
-const BrushRulesRow = ({ rules, paint }: { rules: BrushRules; paint?: boolean }) => {
-    const { t } = useT();
-    const any = !!rules.anything;
-    const stops: { key: StopKey; icon: string; title: string; tip: string; blockOnly?: boolean }[] = [
-        { key: "roads", icon: "roads", title: t("Placemaker.UI.Rules.Roads", "Roads"), tip: t("Placemaker.UI.Rules.RoadsTip", "Stop at the curb and never paint across a road.") },
-        { key: "buildings", icon: "building", title: t("Placemaker.UI.Rules.Buildings", "Buildings"), tip: t("Placemaker.UI.Rules.BuildingsTip", "Keep off building lots.") },
-        { key: "builds", icon: "otherBuilds", title: t("Placemaker.UI.Rules.Builds", "Other builds"), tip: t("Placemaker.UI.Rules.BuildsTip", "Keep off parks, plazas and lots built with Placemaker.") },
-        { key: "lots", icon: "area", title: t("Placemaker.UI.Rules.Lots", "Areas"), tip: t("Placemaker.UI.Rules.LotsTip2", "Keep off other lots and lot areas (other mods, extractors).") },
-        { key: "zoned", icon: "edgeZoning", title: t("Placemaker.UI.Rules.Zoned", "Zoned"), tip: t("Placemaker.UI.Rules.ZonedTip", "Keep off zoned cells.") },
-        { key: "emptyZones", icon: "zoneEmpty", title: t("Placemaker.UI.Rules.EmptyZones", "Empty zones"), tip: t("Placemaker.UI.Rules.EmptyZonesTip", "Also keep the empty zone grid free.") },
-        { key: "water", icon: "water", title: t("Placemaker.UI.Rules.Water", "Water"), tip: t("Placemaker.UI.Rules.WaterTip", "Keep off deep water.") },
-        { key: "stayInBlock", icon: "lock", title: t("Placemaker.UI.Rules.Block", "One block"), tip: t("Placemaker.UI.Rules.BlockTip", "Keep a stroke inside the block where it started."), blockOnly: true },
-    ];
-    const on = any ? 0 : stops.filter((x) => rules[x.key] !== false && !(paint && x.blockOnly)).length;
-    const blockOnlyWhy = t("Placemaker.UI.Why.BlockPaintOnlyRule", "Only for Block paint.");
-    const offWhy = t("Placemaker.UI.Why.PaintOverAnything", "Off while Paint over anything is on.");
-    return (
-        <Collapsible
-            id="brushRules"
-            testId="brush-rules"
-            icon="layers"
-            title={t("Placemaker.UI.Rules.Title", "Rules")}
-            summary={any ? t("Placemaker.UI.Rules.SummaryAny", "Paints over anything") : t("Placemaker.UI.Rules.Summary", "{0} of {1} on", [on, paint ? stops.length - 1 : stops.length])}
-            right={
-                <Btn
-                    icon="reset"
-                    iconSize={12}
-                    title={t("Placemaker.UI.Rules.Reset", "Reset rules")}
-                    description={t("Placemaker.UI.Rules.ResetTip", "Put every brush rule back to its default.")}
-                    onClick={act.resetBrushRules}
-                    testId="brush-rules-reset"
-                />
-            }
+/** A toggle chip: icon + word, accent outline when on. */
+const ToggleChip = ({ icon, label, on, disabled, tip, onClick, testId }: { icon: string; label: string; on: boolean; disabled?: boolean; tip?: string; onClick: () => void; testId: string }) => (
+    <Tip title={label} description={tip}>
+        <button
+            type="button"
+            data-testid={testId}
+            aria-pressed={on && !disabled ? "true" : "false"}
+            aria-disabled={disabled ? "true" : "false"}
+            className={classNames(s.chip, { [s.chipOn]: on && !disabled, [s.chipOff]: disabled })}
+            onClick={(e) => {
+                e.stopPropagation();
+                if (!disabled) onClick();
+            }}
         >
-            <div className={s.brushRow}>
-                <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Any", "Over all")}</div>
-                <Btn
-                    icon="paintAny"
-                    iconSize={14}
-                    selected={any}
-                    label={any ? t("Placemaker.UI.Rules.AnyOn", "On") : t("Placemaker.UI.Rules.AnyOff", "Off")}
-                    title={t("Placemaker.UI.Rules.AnyTitle", "Paint over anything")}
-                    description={t("Placemaker.UI.Rules.AnyTip", "Turn every stop off and paint over roads, buildings and other builds like the old Paint.")}
-                    onClick={() => act.setBrushRules({ anything: !any })}
-                    testId="brush-rule-anything"
-                />
-            </div>
-            <div className={s.brushRow}>
-                <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Stops", "Stops at")}</div>
-                <div className={s.ruleIcons} data-testid="brush-rules-stops">
-                    {stops.map((x) => {
-                        const disabled = any || (paint && x.blockOnly);
-                        return (
-                            <Btn
-                                key={x.key}
-                                icon={x.icon}
-                                iconSize={14}
-                                selected={!disabled && rules[x.key] !== false}
-                                disabled={disabled}
-                                title={x.title}
-                                description={disabled ? (any ? offWhy : blockOnlyWhy) : x.tip}
-                                onClick={() => act.setBrushRules({ [x.key]: !(rules[x.key] !== false) })}
-                                testId={`brush-rule-${x.key}`}
-                            />
-                        );
-                    })}
-                </div>
-            </div>
-            <div className={classNames(s.brushRow, { [s.rowOff]: paint })} data-disabled={paint ? "true" : undefined}>
-                <Tip title={t("Placemaker.UI.Rules.Snap", "Snap")} description={paint ? blockOnlyWhy : t("Placemaker.UI.Rules.SnapTip", "Pull painted edges this close to a curb or obstacle onto it.")}>
-                    <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Snap", "Snap")}</div>
-                </Tip>
-                <Slider
-                    testId="brush-rule-snap"
-                    value={rules.snap}
-                    min={0}
-                    max={20}
-                    step={1}
-                    unit="m"
-                    onPreview={() => undefined}
-                    onCommit={(v) => !paint && act.setBrushRules({ snap: v })}
-                />
-            </div>
-            <div className={classNames(s.brushRow, { [s.rowOff]: paint })} data-disabled={paint ? "true" : undefined}>
-                <Tip title={t("Placemaker.UI.Rules.Smooth", "Smooth")} description={paint ? blockOnlyWhy : t("Placemaker.UI.Rules.SmoothTip", "How much the painted edge is smoothed.")}>
-                    <div className={s.brushLabel}>{t("Placemaker.UI.Rules.Smooth", "Smooth")}</div>
-                </Tip>
-                <Slider
-                    testId="brush-rule-smoothing"
-                    value={rules.smoothing}
-                    min={0}
-                    max={6}
-                    step={1}
-                    onPreview={() => undefined}
-                    onCommit={(v) => !paint && act.setBrushRules({ smoothing: v })}
-                />
-            </div>
-        </Collapsible>
-    );
-};
+            <Icon name={icon} size={12} tint={on && !disabled ? "light" : "dim"} />
+            <div className={s.chipText}>{label}</div>
+        </button>
+    </Tip>
+);
 
-/** (s27) Draw / Roads / Block: keep the outline off other Placemaker builds, optionally off everything the brush rules stop at. */
-const KeepOffRow = ({ rules }: { rules: BrushRules }) => {
-    const { t } = useT();
-    const any = !!rules.anything;
-    const builds = !any && rules.builds !== false;
-    const clip = !any && !!rules.drawClip;
-    const offWhy = t("Placemaker.UI.Why.PaintOverAnything", "Off while Paint over anything is on.");
-    return (
-        <div className={s.brushRow} data-testid="keep-off">
-            <div className={s.brushLabel}>{t("Placemaker.UI.Rules.KeepOff", "Keep off")}</div>
-            <div className={s.ruleIcons}>
-                <Btn
-                    icon="otherBuilds"
-                    iconSize={14}
-                    selected={builds}
-                    disabled={any}
-                    label={t("Placemaker.UI.Rules.Builds", "Other builds")}
-                    title={t("Placemaker.UI.Rules.Builds", "Other builds")}
-                    description={any ? offWhy : t("Placemaker.UI.Rules.BuildsCutTip", "Cut the outline back where it covers something built with Placemaker.")}
-                    onClick={() => act.setBrushRules({ builds: !builds })}
-                    testId="keep-off-builds"
-                />
-                <Btn
-                    icon="area"
-                    iconSize={14}
-                    selected={clip}
-                    disabled={any}
-                    label={t("Placemaker.UI.Rules.FreeLand", "Free land")}
-                    title={t("Placemaker.UI.Rules.FreeLand", "Free land")}
-                    description={any ? offWhy : t("Placemaker.UI.Rules.FreeLandTip", "Also cut the outline back from what the brush rules stop at.")}
-                    onClick={() => act.setBrushRules({ drawClip: !clip })}
-                    testId="keep-off-free-land"
-                />
-            </div>
-        </div>
-    );
-};
+const Row = ({ label, children, off, testId, tip }: { label: string; children: React.ReactNode; off?: boolean; testId?: string; tip?: string }) => (
+    <div className={classNames(s.row, { [s.rowOff]: off })} data-testid={testId} data-disabled={off ? "true" : undefined}>
+        <Tip title={label} description={tip}>
+            <div className={s.label}>{label}</div>
+        </Tip>
+        <div className={s.rowBody}>{children}</div>
+    </div>
+);
 
-const HOWTO: Record<string, [string, string]> = {
-    draw: ["Placemaker.UI.Area.HowDraw", "Click corners; click the first to finish"],
-    block: ["Placemaker.UI.Area.HowBlock", "Click a block; Shift+click adds more"],
-    paint: ["Placemaker.UI.Area.HowPaint", "Paint with left mouse; right erases"],
-    blockPaint: ["Placemaker.UI.Area.HowBlockPaint", "Paint; roads and zoning stop the brush"],
-    perimeter: ["Placemaker.UI.Area.HowPerimeter", "Click intersections around the area"],
-};
+type StopKey = "roads" | "buildings" | "builds" | "lots" | "zoned" | "emptyZones" | "water";
 
-/** One-line area readout for the footer. */
-export const AreaReadout = ({ state }: { state: ToolState; compact?: boolean }) => {
+/** Paint area settings: Smart edges + what the brush stops at, one block, snap, smooth; then the brush. */
+const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }) => {
     const { t, tl } = useT();
-    const a = state.area;
-    if (a.problem) {
-        return (
-            <div className={s.readout} data-testid="area-readout">
-                <Icon name="warning" size={13} tint="warn" />
-                <div className={s.problem}>{tl(a.problem)}</div>
-            </div>
-        );
-    }
-    if (!a.closed || a.areaM2 <= 0) {
-        return (
-            <div className={s.readout} data-testid="area-readout">
-                <div className={s.readoutHint}>
-                    {a.pointCount > 0
-                        ? t("Placemaker.UI.Area.Corners", "{0} corners · close the outline", [a.pointCount])
-                        : t("Placemaker.UI.Area.Empty", "No area yet")}
-                </div>
-            </div>
-        );
-    }
+    // Smart edges = the block paint mode; a DLL without it greys the switch with the reason (s15).
+    const smartAv = modeAvailability(state, "blockPaint", t, tl);
+    const b = state.brush;
+    const smart = state.areaMode === "blockPaint";
+    const offWhy = t("Placemaker.UI.Why.SmartOff", "Smart edges is off");
+    const stops: { key: StopKey; icon: string; label: string; tip: string }[] = [
+        { key: "roads", icon: "roads", label: t("Placemaker.UI.Rules.Roads", "Roads"), tip: t("Placemaker.UI.Rules.RoadsTip", "Stop at the curb.") },
+        { key: "buildings", icon: "building", label: t("Placemaker.UI.Rules.Buildings", "Buildings"), tip: t("Placemaker.UI.Rules.BuildingsTip", "Keep off building lots.") },
+        { key: "builds", icon: "otherBuilds", label: t("Placemaker.UI.Rules.MyBuilds", "My builds"), tip: t("Placemaker.UI.Rules.BuildsTip", "Keep off what you built with Placemaker.") },
+        { key: "lots", icon: "area", label: t("Placemaker.UI.Rules.Lots", "Lots"), tip: t("Placemaker.UI.Rules.LotsTip2", "Keep off other lots (other mods, extractors).") },
+        { key: "zoned", icon: "edgeZoning", label: t("Placemaker.UI.Rules.Zoned", "Zoned"), tip: t("Placemaker.UI.Rules.ZonedTip", "Keep off zoned cells.") },
+        { key: "emptyZones", icon: "zoneEmpty", label: t("Placemaker.UI.Rules.EmptyZones", "Empty zones"), tip: t("Placemaker.UI.Rules.EmptyZonesTip", "Keep the empty zone grid free.") },
+        { key: "water", icon: "water", label: t("Placemaker.UI.Rules.Water", "Water"), tip: t("Placemaker.UI.Rules.WaterTip", "Keep off deep water.") },
+    ];
+    const setSmart = (on: boolean) => {
+        if (on && !smartAv.enabled) return;
+        act.setBrushRules({ anything: !on });
+        act.setAreaMode(on ? "blockPaint" : "paint");
+    };
     return (
-        <div className={s.readout} data-testid="area-readout">
-            <Icon name="area" size={13} tint="accent" />
-            <div className={s.readoutBig}>{fmtArea(a.areaM2)}</div>
-            <div className={s.readoutDim}>{t("Placemaker.UI.Area.Perimeter", "{0} m edge", [group(a.perimeterM)])}</div>
+        <div className={s.settings} data-testid="brush">
+            <div className={s.smartRow}>
+                <Tip
+                    title={t("Placemaker.UI.Rules.Smart", "Smart edges")}
+                    description={t("Placemaker.UI.Rules.SmartTip", "On: the brush stops at what you tick below. Off: it paints over everything.")}
+                >
+                    <div className={s.smartLabel}>{t("Placemaker.UI.Rules.Smart", "Smart edges")}</div>
+                </Tip>
+                <Tip title={t("Placemaker.UI.Rules.Smart", "Smart edges")} description={smartAv.enabled ? undefined : smartAv.reason}>
+                    <div className={smartAv.enabled ? s.switchCell : classNames(s.switchCell, s.rowOff)} data-testid="smart-edges-wrap" data-disabled={smartAv.enabled ? undefined : "true"} data-reason={smartAv.reason}>
+                        <Switch on={smart} onChange={setSmart} testId="smart-edges" />
+                    </div>
+                </Tip>
+                <div className={s.flex} />
+                <Btn icon="reset" iconSize={11} title={t("Placemaker.UI.Rules.Reset", "Reset edges")} onClick={act.resetBrushRules} testId="brush-rules-reset" />
+            </div>
+            <Row label={t("Placemaker.UI.Rules.Stops", "Stops at")} off={!smart} testId="brush-rules">
+                <div className={s.chips} data-testid="brush-rules-stops">
+                    {stops.map((x) => (
+                        <ToggleChip
+                            key={x.key}
+                            icon={x.icon}
+                            label={x.label}
+                            on={rules[x.key] !== false}
+                            disabled={!smart}
+                            tip={smart ? x.tip : offWhy}
+                            onClick={() => act.setBrushRules({ [x.key]: !(rules[x.key] !== false) })}
+                            testId={`brush-rule-${x.key}`}
+                        />
+                    ))}
+                </div>
+            </Row>
+            <Row label={t("Placemaker.UI.Rules.Block", "One block")} off={!smart} tip={t("Placemaker.UI.Rules.BlockTip", "A stroke stays in the block where it started.")}>
+                <div className={s.switchCell}>
+                    <Switch on={smart && rules.stayInBlock !== false} onChange={(v) => smart && act.setBrushRules({ stayInBlock: v })} testId="brush-rule-stayInBlock" />
+                </div>
+            </Row>
+            <Row label={t("Placemaker.UI.Rules.Snap", "Snap")} off={!smart} tip={t("Placemaker.UI.Rules.SnapTip", "Pulls painted edges this close onto a curb.")}>
+                <Slider testId="brush-rule-snap" value={rules.snap} min={0} max={20} step={1} unit="m" onPreview={() => undefined} onCommit={(v) => smart && act.setBrushRules({ snap: v })} />
+            </Row>
+            <Row label={t("Placemaker.UI.Rules.Smooth", "Smooth")} off={!smart} tip={t("Placemaker.UI.Rules.SmoothTip", "How smooth the painted edge is.")}>
+                <Slider testId="brush-rule-smoothing" value={rules.smoothing} min={0} max={6} step={1} onPreview={() => undefined} onCommit={(v) => smart && act.setBrushRules({ smoothing: v })} />
+            </Row>
+            <div className={s.rule} />
+            <Row label={t("Placemaker.UI.Brush.Shape", "Shape")}>
+                <Segmented
+                    testId="brush-shape"
+                    stretch
+                    value={b.shape}
+                    onChange={(v) => act.setBrush(v as BrushShape, b.size, b.angle)}
+                    options={[
+                        { value: "round", icon: "brushRound", label: t("Placemaker.UI.Brush.Round", "Round") },
+                        { value: "square", icon: "brushSquare", label: t("Placemaker.UI.Brush.Square", "Square") },
+                    ]}
+                />
+            </Row>
+            <Row label={t("Placemaker.UI.Brush.Size", "Size")}>
+                <Slider testId="brush-size" value={b.size} min={5} max={200} step={1} unit="m" onPreview={(v) => act.setBrush(b.shape, v, b.angle)} onCommit={(v) => act.setBrush(b.shape, v, b.angle)} />
+            </Row>
+            {b.shape === "square" ? (
+                <Row label={t("Placemaker.UI.Brush.Angle", "Angle")} testId="brush-angle-row">
+                    <Slider testId="brush-angle" value={b.angle} min={0} max={90} step={1} unit="deg" onPreview={(v) => act.setBrush(b.shape, b.size, v)} onCommit={(v) => act.setBrush(b.shape, b.size, v)} />
+                </Row>
+            ) : null}
         </div>
     );
+};
+
+/** Points / Paint bucket / Road nodes: keep the outline off my builds, optionally clip it to free land. */
+const KeepOff = ({ rules }: { rules: BrushRules }) => {
+    const { t } = useT();
+    const builds = rules.builds !== false;
+    const clip = !!rules.drawClip;
+    return (
+        <div className={s.settings} data-testid="outline-rules">
+            <Row label={t("Placemaker.UI.Rules.KeepOff", "Keep off")} testId="keep-off">
+                <div className={s.chips}>
+                    <ToggleChip
+                        icon="otherBuilds"
+                        label={t("Placemaker.UI.Rules.MyBuilds", "My builds")}
+                        on={builds}
+                        tip={t("Placemaker.UI.Rules.BuildsCutTip", "Cut the outline back where it covers what you built.")}
+                        onClick={() => act.setBrushRules({ builds: !builds })}
+                        testId="keep-off-builds"
+                    />
+                    <ToggleChip
+                        icon="area"
+                        label={t("Placemaker.UI.Rules.FreeLand", "Clip to free land")}
+                        on={clip}
+                        tip={t("Placemaker.UI.Rules.FreeLandTip", "Also cut it back from buildings, lots, zoning and water.")}
+                        onClick={() => act.setBrushRules({ drawClip: !clip })}
+                        testId="keep-off-free-land"
+                    />
+                </div>
+            </Row>
+        </div>
+    );
+};
+
+const HOWTO: Record<Tool, [string, string]> = {
+    draw: ["Placemaker.UI.Area.HowDraw", "Click corners, then the first one"],
+    block: ["Placemaker.UI.Area.HowBlock", "Click a block to fill it"],
+    paint: ["Placemaker.UI.Area.HowPaint", "Drag to paint, right-drag erases"],
+    perimeter: ["Placemaker.UI.Area.HowPerimeter", "Click road corners around it"],
 };
 
 /**
  * (s15) Can this mode be used? The DLL lists the modes it handles (state.areaModes). An older DLL sends no list:
- * Block paint arrived together with the brush rules (s11), so without rules the DLL cannot do it — the button is
- * greyed with "restart" instead of silently doing nothing (the UI file reloads without a restart, the DLL does not).
+ * Block paint arrived together with the brush rules (s11), so without rules the DLL cannot do it — greyed with
+ * "restart" instead of silently doing nothing (the UI file reloads without a restart, the DLL does not).
  */
 export function modeAvailability(state: ToolState, mode: string, t: TFunc, tl: (l: LocText | undefined, f?: string) => string): { enabled: boolean; reason?: string } {
     const restart = t("Placemaker.UI.Why.RestartForMode", "Restart the game to use this: Placemaker was updated while the game was running.");
@@ -258,136 +232,79 @@ export function modeAvailability(state: ToolState, mode: string, t: TFunc, tl: (
 
 export const AreaStage = ({ state }: { state: ToolState }) => {
     const { t, tl } = useT();
-    const b = state.brush;
+    const layout = usePanelLayout();
+    const rules = state.brush.rules;
     const a = state.area;
+    const tool = toolOf(state.areaMode);
+    // Paint area opens in Smart edges (block paint) unless the DLL cannot, then plain paint.
+    const paintMode = (): AreaMode => (modeAvailability(state, "blockPaint", t, tl).enabled && !rules?.anything ? "blockPaint" : "paint");
+    const cols = layout.width >= 480 ? 4 : 2;
     return (
         <div className={s.stage} data-testid="stage-area">
-            <Section title={t("Placemaker.UI.Area.How", "Select by")} className={s.first}>
-                <div className={s.modes} data-testid="area-mode">
-                    {modeOptions(t).map((o) => {
-                        const on = o.value === state.areaMode;
-                        const av = modeAvailability(state, o.value, t, tl);
-                        return (
-                            <div key={o.value} className={s.modeCell}>
-                                <Tip title={o.title} description={av.enabled ? o.description : av.reason + " — " + o.description}>
-                                    <button
-                                        type="button"
-                                        data-testid={`area-mode-${o.value}`}
-                                        aria-pressed={on ? "true" : "false"}
-                                        aria-disabled={av.enabled ? undefined : "true"}
-                                        data-reason={av.enabled ? undefined : av.reason}
-                                        className={classNames(s.mode, { [s.modeOn]: on, [s.modeOff]: !av.enabled && !on })}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (!on && av.enabled) act.setAreaMode(o.value as AreaMode);
-                                        }}
-                                    >
-                                        <Icon name={o.icon} size={14} tint={on ? "dark" : "light"} />
-                                        <div className={s.modeName}>{o.label}</div>
-                                    </button>
-                                </Tip>
-                            </div>
-                        );
-                    })}
-                </div>
-            </Section>
-            {state.areaMode === "paint" || state.areaMode === "blockPaint" ? (
-                <Section title={t("Placemaker.UI.Brush.Title", "Brush")} testId="brush">
-                    <div className={s.brushRow}>
-                        <div className={s.brushLabel}>{t("Placemaker.UI.Brush.Shape", "Shape")}</div>
-                        <Segmented
-                            testId="brush-shape"
-                            stretch
-                            value={b.shape}
-                            onChange={(v) => act.setBrush(v as BrushShape, b.size, b.angle)}
-                            options={[
-                                { value: "round", icon: "brushRound", label: t("Placemaker.UI.Brush.Round", "Round") },
-                                { value: "square", icon: "brushSquare", label: t("Placemaker.UI.Brush.Square", "Square") },
-                            ]}
-                        />
-                    </div>
-                    <div className={s.brushRow}>
-                        <div className={s.brushLabel}>{t("Placemaker.UI.Brush.Size", "Size")}</div>
-                        <Slider
-                            testId="brush-size"
-                            value={b.size}
-                            min={5}
-                            max={200}
-                            step={1}
-                            unit="m"
-                            onPreview={(v) => act.setBrush(b.shape, v, b.angle)}
-                            onCommit={(v) => act.setBrush(b.shape, v, b.angle)}
-                        />
-                    </div>
-                    {/* s15: shown for both shapes, greyed for the round brush (it has no angle) instead of appearing from nowhere. */}
-                    <Tip
-                        title={t("Placemaker.UI.Brush.Angle", "Angle")}
-                        description={b.shape === "square" ? undefined : t("Placemaker.UI.Why.SquareBrush", "Only for the square brush")}
-                    >
-                        <div
-                            className={classNames(s.brushRow, { [s.rowOff]: b.shape !== "square" })}
-                            data-testid="brush-angle-row"
-                            data-disabled={b.shape === "square" ? undefined : "true"}
-                        >
-                            <div className={s.brushLabel}>{t("Placemaker.UI.Brush.Angle", "Angle")}</div>
-                            <div className={b.shape === "square" ? s.fillCell : classNames(s.fillCell, s.offInner)}>
-                            <Slider
-                                testId="brush-angle"
-                                value={b.angle}
-                                min={0}
-                                max={90}
-                                step={1}
-                                unit="deg"
-                                onPreview={(v) => b.shape === "square" && act.setBrush(b.shape, b.size, v)}
-                                onCommit={(v) => b.shape === "square" && act.setBrush(b.shape, b.size, v)}
-                            />
-                            </div>
+            <div className={s.tools} data-testid="area-mode">
+                {modeOptions(t).map((o) => {
+                    const on = o.value === tool;
+                    const mode: AreaMode = o.value === "paint" ? (on ? state.areaMode : paintMode()) : o.value;
+                    const av = modeAvailability(state, o.value === "paint" ? "paint" : o.value, t, tl);
+                    return (
+                        <div key={o.value} className={s.toolCell} style={{ width: 100 / cols + "%" }}>
+                            <Tip title={o.label} description={av.enabled ? o.description : av.reason + " — " + o.description}>
+                                <button
+                                    type="button"
+                                    data-testid={`area-mode-${o.value}`}
+                                    aria-pressed={on ? "true" : "false"}
+                                    aria-disabled={av.enabled ? undefined : "true"}
+                                    data-reason={av.enabled ? undefined : av.reason}
+                                    className={classNames(s.tool, { [s.toolOn]: on, [s.toolOff]: !av.enabled && !on })}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!on && av.enabled) act.setAreaMode(mode);
+                                    }}
+                                >
+                                    <Tile icon={o.icon} color={on ? "#8fd1ff" : "#9fb0b9"} size={20} />
+                                    <div className={s.toolText}>
+                                        <div className={s.toolName}>{o.label}</div>
+                                        <div className={s.toolLine}>{o.line}</div>
+                                    </div>
+                                </button>
+                            </Tip>
                         </div>
-                    </Tip>
-                    {state.areaMode === "blockPaint" && b.rules ? <BrushRulesRow rules={b.rules} /> : null}
-                    {state.areaMode === "paint" && b.rules ? <BrushRulesRow rules={b.rules} paint /> : null}
-                </Section>
+                    );
+                })}
+            </div>
+            {tool === "paint" && rules ? <PaintSettings state={state} rules={rules} /> : null}
+            {tool === "paint" && !rules ? (
+                <div className={s.settings} data-testid="brush">
+                    <Row label={t("Placemaker.UI.Brush.Size", "Size")}>
+                        <Slider testId="brush-size" value={state.brush.size} min={5} max={200} step={1} unit="m" onPreview={(v) => act.setBrush(state.brush.shape, v, state.brush.angle)} onCommit={(v) => act.setBrush(state.brush.shape, v, state.brush.angle)} />
+                    </Row>
+                </div>
             ) : null}
-            {b.rules && (state.areaMode === "draw" || state.areaMode === "block" || state.areaMode === "perimeter") ? (
-                <Section title={t("Placemaker.UI.Rules.Title", "Rules")} testId="outline-rules">
-                    <KeepOffRow rules={b.rules} />
-                </Section>
-            ) : null}
-            <Section
-                title={t("Placemaker.UI.Area.Selected", "Area")}
-                right={
-                    a.pointCount > 0 ? (
-                        <Btn icon="trash" iconSize={12} variant="solid" label={t("Placemaker.UI.Area.Clear", "Clear")} onClick={act.clearArea} testId="clear-area" />
-                    ) : undefined
-                }
-            >
+            {tool !== "paint" && rules ? <KeepOff rules={rules} /> : null}
+            <div className={s.summary} data-testid="area-summary">
                 {a.closed && a.areaM2 > 0 ? (
-                    <div className={s.areaStats}>
-                        <div className={s.areaStat}>
-                            <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.Size", "Size")}</div>
-                            <div className={s.areaStatValue}>{fmtArea(a.areaM2)}</div>
+                    <>
+                        <div className={s.sumLabel}>{t("Placemaker.UI.Area.Selected", "Area")}</div>
+                        <div className={s.sumValue}>{fmtArea(a.areaM2)}</div>
+                        <div className={s.sumLabel}>{t("Placemaker.UI.Area.Around", "Edge")}</div>
+                        <div className={s.sumValue}>{group(a.perimeterM) + " m"}</div>
+                        <div className={s.sumLabel}>{t("Placemaker.UI.Area.CornersLabel", "Corners")}</div>
+                        <div className={s.sumValue}>{group(a.pointCount)}</div>
+                        <div className={s.sumHint} data-testid="area-hint">
+                            {t("Placemaker.UI.Area.Adjust", "drag corners anytime")}
                         </div>
-                        <div className={s.areaStat}>
-                            <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.Around", "Edge")}</div>
-                            <div className={s.areaStatValue}>{group(a.perimeterM) + " m"}</div>
+                    </>
+                ) : (
+                    <>
+                        <Icon name="info" size={12} tint="accent" />
+                        <div className={s.sumHint} data-testid="area-hint">
+                            {t(HOWTO[tool][0], HOWTO[tool][1])}
                         </div>
-                        <div className={s.areaStat}>
-                            <div className={s.areaStatLabel}>{t("Placemaker.UI.Area.CornersLabel", "Corners")}</div>
-                            <div className={s.areaStatValue}>{group(a.pointCount)}</div>
-                        </div>
-                    </div>
-                ) : null}
-                <div className={s.areaFoot}>
-                    <Icon name={a.closed ? "check" : "info"} size={12} tint={a.closed ? "ok" : "accent"} />
-                    <div className={s.areaHint} data-testid="area-hint">
-                        {a.closed
-                            ? t("Placemaker.UI.Area.Adjust", "Drag corners to adjust, any time")
-                            : HOWTO[state.areaMode]
-                              ? t(HOWTO[state.areaMode][0], HOWTO[state.areaMode][1])
-                              : ""}
-                    </div>
-                </div>
-            </Section>
+                    </>
+                )}
+                <div className={s.flex} />
+                {a.pointCount > 0 || a.closed ? <Btn icon="trash" iconSize={11} label={t("Placemaker.UI.Area.Clear", "Clear")} onClick={act.clearArea} testId="clear-area" className={s.clear} /> : null}
+            </div>
         </div>
     );
 };

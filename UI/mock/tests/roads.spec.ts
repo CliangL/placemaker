@@ -1,7 +1,7 @@
 // s16 (real Core): roads say what they are — "Automatic · Two-Lane Road", a road legend by role, road role
 // descriptions, and the road mix cards that set every road pick at once.
 import { expect, test } from "@playwright/test";
-import { drawPolygon, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
+import { drawPolygon, noTextOverflow, open, panelShot, shot, waitPlanned, pickType } from "./helpers";
 
 const SITE: [number, number][] = [
     [380, 200],
@@ -26,7 +26,7 @@ test("roads: Automatic names its road, legend by role, road mixes", async ({ pag
     await page.getByTestId("primary").click();
     const all = page.getByTestId("make-group-all");
     if (await all.count()) await all.click();
-    await page.getByTestId("recipe-roads").click();
+    await pickType(page, "roads");
     await waitCore(page);
     const step = page.getByTestId("step-0");
 

@@ -1,7 +1,7 @@
 // s17 — Park stats in Review (real Core estimator through the mock host): suggested values, override,
 // reset, "keep within vanilla range" clamping and the "how it's calculated" expander.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, open, panelShot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, open, panelShot, waitPlanned, pickType } from "./helpers";
 
 /** Draw, pick a type from the "All" grid, wait for the real Core plan, go to Review. */
 async function toReview(page: Page, recipe: string) {
@@ -14,7 +14,7 @@ async function toReview(page: Page, recipe: string) {
     await page.getByTestId("primary").click();
     const all = page.getByTestId("make-group-all");
     if (await all.count()) await all.click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitCore(page);
     // Straight to Review (entrances etc. are not what this test is about).
     await page.evaluate(() => (window as any).pm.backend.onTrigger("goToStage", ["review"]));
@@ -32,6 +32,9 @@ test("park stats: suggested, override, clamp to vanilla range, reset", async ({ 
 
     const section = page.getByTestId("park-stats");
     await expect(section).toBeVisible();
+    // folded: five tiles; Edit unfolds the sliders
+    await expect(page.getByTestId("park-tile-attractiveness")).toBeVisible();
+    await page.getByTestId("park-stats-toggle").click();
     const attr = page.getByTestId("park-stat-attractiveness-value");
     await expect(attr).not.toHaveText("");
     await expect(page.getByTestId("park-stat-attractiveness")).toContainText("In game");

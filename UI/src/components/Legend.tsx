@@ -114,8 +114,8 @@ export const Legend = ({ state, summary, side }: { state: ToolState; summary: Su
         }
     }, [show, open]);
     if (!show) return null;
+    // Always clear on leave: the local hover can be stale after a click re-rendered the rows (the map kept isolating).
     const leave = () => {
-        if (!hover) return;
         setHover("");
         act.hoverLegend("");
     };

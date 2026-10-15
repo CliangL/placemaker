@@ -3,7 +3,7 @@
 import { expect, Page, test } from "@playwright/test";
 import fs from "fs";
 import path from "path";
-import { drawPolygon, FIELD, open, shot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, open, shot, waitPlanned, pickType, unfoldSections } from "./helpers";
 
 const UI = path.join(__dirname, "..", "..");
 
@@ -104,15 +104,17 @@ test("every icon button shows an icon, in every stage; icon files are namespaced
     await drawPolygon(page, FIELD);
     await iconButtonsHaveIcons(page);
     await page.getByTestId("primary").click();
-    await page.getByTestId("recipe-parking").click();
+    await pickType(page, "parking");
     await waitPlanned(page);
     await iconButtonsHaveIcons(page);
     await allImagesLoaded(page);
+    await unfoldSections(page);
+    await iconButtonsHaveIcons(page);
     await page.getByTestId("asset-button-surface").click();
     await expect(page.getByTestId("asset-picker")).toBeVisible();
     await iconButtonsHaveIcons(page);
     await page.keyboard.press("Escape");
-    await page.getByTestId("recipe-roads").click();
+    await pickType(page, "roads");
     await page.getByTestId("feature-toggle-edgeZoning").click();
     await waitPlanned(page);
     await iconButtonsHaveIcons(page);
@@ -168,10 +170,10 @@ test("full-HD screenshots of each stage", async ({ page }) => {
     await drawPolygon(page, FIELD);
     await shot(page, "stage-1-area");
     await page.getByTestId("primary").click();
-    await page.getByTestId("recipe-parking").click();
+    await pickType(page, "parking");
     await waitPlanned(page);
     await shot(page, "stage-2-design-parking");
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await waitPlanned(page);
     await shot(page, "stage-2-design-park");
     await page.getByTestId("primary").click();

@@ -3,12 +3,12 @@
 // commit (setValue); the Sketch | Real preview toggle; a clear "Planning…" indicator; a compact Review
 // that never overlaps; the Make row grouped once there are many types.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, SHOTS, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, SHOTS, waitPlanned, pickType, unfoldSections } from "./helpers";
 
 async function toDesign(page: Page, recipe: string) {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 
@@ -42,6 +42,7 @@ async function visibleThumb(page: Page, testId: string) {
 test("asset rows show the chosen thumbnail; Automatic shows a mosaic of the pool", async ({ page }) => {
     await open(page);
     await toDesign(page, "parking");
+    await unfoldSections(page);
     const row = page.getByTestId("control-surface");
     await expect(page.getByTestId("asset-thumb-surface")).toHaveAttribute("data-thumb", "mosaic");
     await expect(page.getByTestId("asset-thumb-surface").locator('[data-thumb="img"]')).toHaveCount(3);
@@ -90,6 +91,7 @@ test("surface picker: big swatch grid, Grass / Paving / Natural / Asphalt tabs, 
 test("hover previews on the map (previewValue), leaving / closing ends it (endPreview), click commits (setValue)", async ({ page }) => {
     await open(page);
     await toDesign(page, "parking");
+    await unfoldSections(page);
     await page.getByTestId("asset-button-surface").click();
     await expect(page.getByTestId("asset-concrete")).toBeVisible();
 
@@ -195,7 +197,7 @@ test("planning shows a spinner + 'Planning…' and dims the stale numbers", asyn
     await panelShot(page, "r4-planning");
 });
 
-test("Review is compact: one-line issues (tooltip has the rest), N more, breakdown folded; nothing overlaps", async ({ page }) => {
+test("Review is compact: issues as short chips (tooltip has the sentence), +N more, breakdown behind the cost bar; nothing overlaps", async ({ page }) => {
     await open(page);
     await toDesign(page, "park");
     await page.getByTestId("primary").click();
@@ -210,20 +212,22 @@ test("Review is compact: one-line issues (tooltip has the rest), N more, breakdo
         (window as any).pmPublish("Placemaker", "summary", JSON.stringify(raw));
     }, long);
     const issues = page.getByTestId("issues");
-    await expect(page.getByTestId("issues-more")).toHaveText("3 more");
-    // each issue is one line
-    const heights = await issues.evaluate((el) => Array.from(el.children).filter((c) => c.tagName === "DIV").map((c) => (c as HTMLElement).getBoundingClientRect().height));
-    expect(heights.length).toBe(4);
-    for (const h of heights) expect(h).toBeLessThanOrEqual(26);
+    await expect(page.getByTestId("issues-more")).toHaveText("+2 more");
+    // each issue is one short chip
+    const chips = issues.locator('[data-testid^="issue-"]');
+    expect(await chips.count()).toBe(5);
+    for (const b of await chips.all()) expect((await b.boundingBox())!.height).toBeLessThanOrEqual(24);
     // errors first
-    await expect(issues.locator("> div").first()).toHaveAttribute("data-testid", "issue-error");
+    await expect(chips.first()).toHaveAttribute("data-testid", "issue-error");
     await expect(page.getByTestId("breakdown")).toHaveAttribute("data-open", "false");
+    await expect(page.getByTestId("cost-bar")).toBeVisible();
     await noTextOverflow(page, "review with long issues");
     await panelShot(page, "r4-review-compact");
     await page.getByTestId("issues-more").click();
-    await expect(page.getByTestId("issues-more")).toHaveText("Show fewer");
-    await page.getByTestId("breakdown-toggle").click();
+    await expect(page.getByTestId("issues-more")).toHaveText("Fewer");
+    await page.getByTestId("breakdown").click();
     await expect(page.getByTestId("breakdown")).toHaveAttribute("data-open", "true");
+    await expect(page.getByTestId("breakdown-list")).toBeVisible();
     await noTextOverflow(page, "review expanded");
     // no sibling rows overlap vertically
     const overlaps = await page.getByTestId("stage-review").evaluate((root) => {
@@ -252,7 +256,11 @@ test("Make: many types — the browser opens on the selected type's category; ch
     const recipes = page.getByTestId("recipes");
     await expect(recipes).toHaveAttribute("data-grouped", "true");
     await expect(page.getByTestId("make-group-parks")).toHaveAttribute("aria-pressed", "true");
-    for (const id of ["botanicalGarden", "dogPark", "park"]) await expect(recipes.getByTestId(`recipe-${id}`)).toBeVisible();
+    for (const id of ["dogPark", "park"]) await expect(recipes.getByTestId(`recipe-${id}`)).toBeVisible();
+    await expect(recipes.getByTestId("recipe-botanicalGarden")).toHaveCount(0);
+    await page.getByTestId("make-group-gardens").click();
+    await expect(recipes.getByTestId("recipe-botanicalGarden")).toBeVisible();
+    await page.getByTestId("make-group-parks").click();
     await expect(recipes.getByTestId("recipe-marketSquare")).toHaveCount(0);
     // tiles share rows
     const ys = await recipes.locator('[data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));

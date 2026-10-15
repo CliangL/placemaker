@@ -688,3 +688,27 @@
     color: var(--menuText1Normal);
     white-space: normal;
 }
+
+// s42: [☐ OK, permanent] beside the primary button; the button takes the rest of the row.
+.primaryRow {
+    @include row;
+    min-width: 0;
+    > * {
+        flex: 1 1 auto;
+    }
+}
+
+.primaryRow > .ackChip {
+    flex: 0 0 auto;
+}
+
+.ackChip {
+    @include row;
+    flex-shrink: 0;
+    height: 30rem;
+    margin-right: 6rem;
+    padding: 0 8rem 0 6rem;
+    border-radius: $radius + 1rem;
+    background-color: rgba(255, 181, 71, 0.14);
+    @include border(1rem, rgba(255, 181, 71, 0.5));
+}

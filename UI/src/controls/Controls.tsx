@@ -9,15 +9,15 @@
 import React from "react";
 import classNames from "classnames";
 import { ControlOptionView, LayerType, ResolvedAsset, SettingValue, StepView, SwatchStripe, ToolState } from "../contract";
-import { act } from "../lib/bindings";
+import { act, playSound } from "../lib/bindings";
 import { formatValue } from "../lib/format";
 import { humanize, TFunc, useT } from "../lib/l10n";
 import { ControlAvailability, controlAvailability, ControlEx, defaultFor, isVisible, valueOf, valuesEqual } from "../lib/schema";
 import { Tip } from "../lib/tips";
-import { Btn, Collapsible, Icon, Segmented, Switch } from "../components/common";
+import { Btn, Icon, Segmented, Switch } from "../components/common";
 import { AutoMosaic, autoPool, Thumb, useAssetList, useAssetName, usePicker } from "../components/picker";
 import { Slider } from "./Slider";
-import { useSections } from "../lib/collapse";
+import { setOpen as setSectionOpen, useSections } from "../lib/collapse";
 import { pairHalves, usePanelLayout } from "../lib/layout";
 import s from "./controls.module.scss";
 
@@ -622,7 +622,8 @@ export const ControlList = ({
      */
     const rows = (list: ControlEx[]) => {
         if (!layout.wide) return list.map((c) => <ControlRow key={c.id} c={c} ctx={ctx} avail={avail(c)} />);
-        const half = pairHalves(list.map((c) => c.kind === "slider" || c.kind === "toggle"));
+        // A half row keeps a 92rem label: only short labels pair up (long ones keep the full width, never cut).
+        const half = pairHalves(list.map((c) => (c.kind === "slider" || c.kind === "toggle") && label(t, c).length <= 13));
         return (
             <div className={s.grid} data-testid="control-grid">
                 {list.map((c, i) => (
@@ -663,38 +664,76 @@ export const ControlList = ({
     }
     const groups = groupBy(visible);
     const key = scope ?? layer.id;
-    const defaultOpen = (i: number, list: ControlEx[]) => !allFolded && i === 0 && list.some((c) => c.tier !== "more");
-    // Wide panel: folded groups (a one-line header + summary) sit side by side, open ones span the row.
-    const half = layout.wide ? pairHalves(groups.map(([g, list], i) => !isOpen(key + ":" + (g || "basics"), defaultOpen(i, list)))) : groups.map(() => false);
+    // s42: every section starts folded (one line each); the player opens what they need, remembered per type.
+    const defaultOpen = (_i: number, _list: ControlEx[]) => false;
+    // s42: sections as fixed one-line heads in two columns (chevron · name · summary). A head never moves:
+    // an open section's controls unfold full width under the pair of heads it belongs to.
+    const cols = layout.width >= SECTION_TWO_COL_REM ? 2 : 1;
+    const items = groups.map(([g, list], i) => {
+        const name = g || "basics";
+        const id = key + ":" + name;
+        return {
+            name, list, id,
+            open: isOpen(id, defaultOpen(i, list)),
+            title: g ? t("Placemaker.UI.Group." + g, humanize(g)) : allFolded ? t("Placemaker.UI.Group.Options", "Options") : t("Placemaker.UI.Group.Basics", "Basics"),
+        };
+    });
+    const pairs: (typeof items)[] = [];
+    for (let i = 0; i < items.length; i += cols) pairs.push(items.slice(i, i + cols));
     return (
-        <div className={classNames(s.list, { [s.grid]: layout.wide })} data-testid="control-list">
-            {groups.map(([g, list], i) => {
-                const name = g || "basics";
-                const title = g ? t("Placemaker.UI.Group." + g, humanize(g)) : allFolded ? t("Placemaker.UI.Group.Options", "Options") : t("Placemaker.UI.Group.Basics", "Basics");
-                const fold = (
-                    <Collapsible
-                        key={name}
-                        id={key + ":" + name}
-                        testId={"group-" + name}
-                        title={title}
-                        summary={summarize(list, step, t, assetName)}
-                        defaultOpen={defaultOpen(i, list)}
-                        nested={allFolded}
-                    >
-                        {rows(list)}
-                    </Collapsible>
-                );
-                return layout.wide ? (
-                    <div key={name} className={half[i] ? s.half : s.full} data-testid={"groupcell-" + name} data-half={half[i] ? "true" : "false"}>
-                        {fold}
+        <div className={classNames(s.list, s.sections, { [s.sectionsNested]: allFolded })} data-testid="control-list" data-cols={cols}>
+            {pairs.map((pair) => (
+                <React.Fragment key={pair.map((x) => x.name).join("|")}>
+                    <div className={s.secRow}>
+                        {pair.map((x) => (
+                            <SectionHead key={x.name} id={x.id} name={x.name} title={x.title} open={x.open} summary={summarize(x.list, step, t, assetName)} width={100 / cols} />
+                        ))}
                     </div>
-                ) : (
-                    fold
-                );
-            })}
+                    {pair
+                        .filter((x) => x.open)
+                        .map((x) => (
+                            <div key={x.name} className={s.secBody} data-testid={"group-" + x.name + "-body"}>
+                                {pair.length > 1 && pair.every((p) => p.open) ? <div className={s.secBodyTitle}>{x.title}</div> : null}
+                                {rows(x.list)}
+                            </div>
+                        ))}
+                </React.Fragment>
+            ))}
         </div>
     );
 };
+
+/** From this panel width on (rem), section heads sit in two columns. */
+const SECTION_TWO_COL_REM = 380;
+
+/** One section head: a fixed 24rem line; the summary (right-aligned, cut with an ellipsis) only while folded. */
+const SectionHead = ({ id, name, title, open, summary, width }: { id: string; name: string; title: string; open: boolean; summary: string; width: number }) => (
+    <div className={classNames(s.secCell, { [s.secCellOpen]: open })} style={{ width: width + "%" }} data-testid={"group-" + name} data-open={open ? "true" : "false"}>
+        <Tip title={title} description={summary || undefined}>
+            <button
+                type="button"
+                aria-expanded={open ? "true" : "false"}
+                data-testid={"group-" + name + "-toggle"}
+                className={s.secHead}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    playSound(open ? "toggle-off" : "toggle-on");
+                    setSectionOpen(id, !open);
+                }}
+            >
+                <Icon name={open ? "chevronDown" : "chevronRight"} size={11} tint={open ? "accent" : "dim"} />
+                <div className={s.secName} data-ellipsis>{title}</div>
+                {summary && !open ? (
+                    <div className={s.secSummary} data-ellipsis data-testid={"group-" + name + "-summary"}>
+                        {summary}
+                    </div>
+                ) : (
+                    <div className={s.secSpacer} />
+                )}
+            </button>
+        </Tip>
+    </div>
+);
 
 /**
  * Values summary of a step's visible controls (optionally only some ids), for a folded header such as a
