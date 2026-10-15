@@ -122,8 +122,7 @@ namespace Placemaker.Game.Suite
         {
             lock (_errLock)
             {
-                string line = $"[{_scenario}] EXCEPTION {e?.GetType().Name}: {Trim(e?.Message)} @ {Trim((e?.StackTrace ?? "").Split('
-').FirstOrDefault())}";
+                string line = $"[{_scenario}] EXCEPTION {e?.GetType().Name}: {Trim(e?.Message)} @ {Trim((e?.StackTrace ?? "").Split('\n').FirstOrDefault())}";
                 if (Ours(null, null, e)) { _exceptions++; if (_errorLines.Count < 400) _errorLines.Add(line); }
                 else { _otherErrors++; if (_otherLines.Count < 200) _otherLines.Add(line); }
             }
