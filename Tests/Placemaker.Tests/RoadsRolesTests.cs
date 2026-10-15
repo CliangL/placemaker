@@ -173,7 +173,7 @@ namespace Placemaker.Tests
             Assert.True(j["disabled"]["streetAsset"].IsNull);
             var legend = j["netLegend"];
             var roles = Enumerable.Range(0, legend.Count).Select(i => legend.Items[i]["role"].AsString()).ToList();
-            Assert.Equal(new[] { "street", "avenue", "perimeter" }, roles);
+            Assert.Equal(new[] { "street", "avenue", "perimeter", "carFree" }, roles);   // s34: walkways (car-free) by default
             Assert.Equal("Four-Lane Road", legend.Items[1]["assetName"].AsString());
             Assert.Equal(RoadRoles.Color("avenue"), legend.Items[1]["color"].AsString());
             Assert.Equal("Placemaker.Roads.Role.avenue", legend.Items[1]["label"].AsString());

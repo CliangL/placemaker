@@ -101,6 +101,7 @@ namespace Placemaker.Core.Layers.Common
             }
             // Retired control ids of a live layer (s10: the sports park's facility controls became feature children).
             n += Leisure.SportsParkLayer.Migrate(step);
+            n += Roads.RoadsLayer.Migrate(step);   // s34: the roads type's old edge-zoning feature → "Pre-zone new roads"
             foreach (var c in step.Children) n += Normalize(c, depth + 1);
             foreach (var kv in step.RegionOverrides) n += Normalize(kv.Value, depth + 1);
             return n;

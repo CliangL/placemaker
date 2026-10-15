@@ -58,7 +58,8 @@ namespace Placemaker.Tests
                 Features.Of(GeneratorRegistry.Get("park")).Select(f => f.Layer).ToArray());
             Assert.Contains(Features.Of(GeneratorRegistry.Get("plaza")), f => f.Layer == "plazatrees");
             Assert.Contains(Features.Of(GeneratorRegistry.Get("plaza")), f => f.Layer == "kiosk");
-            Assert.Contains(Features.Of(GeneratorRegistry.Get("roads")), f => f.Layer == "edgeZoning" && f.Target == RegionTags.Edge);
+            // s34: the roads type pre-zones its roads itself (control "preZone"); no edge-zoning feature any more.
+            Assert.Empty(Features.Of(GeneratorRegistry.Get("roads")));
             Assert.Equal(8, Features.Of(GeneratorRegistry.Get("campground")).Count);
         }
 
@@ -278,11 +279,18 @@ namespace Placemaker.Tests
         }
 
         [Fact]
-        public void RoadsWithZoningFeature()
+        public void RoadsPreZoneTheirOwnRoads()
         {
-            var plan = Compose(With("roads", "edgeZoning"), TestKit.Rect(600, 400));
+            // s34: "Pre-zone new roads" replaced the edge-zoning feature: the roads layer zones its new roads' blocks itself.
+            var gen = GeneratorRegistry.Get("roads");
+            var recipe = Recipe.Single(gen, 1);
+            recipe.Root.Settings.Values[Placemaker.Core.Layers.Roads.RoadsIds.PreZone] = "residentialLow";
+            var plan = Composer.Compose(recipe, new AreaShape { Ring = TestKit.Rect(600, 400), Source = AreaSource.Drawn }, new SiteContext(), System.Threading.CancellationToken.None);
             Assert.False(plan.HasErrors, Errors(plan));
-            Assert.NotEmpty(plan.Layers.Where(l => l.GeneratorId == "edgeZoning").SelectMany(l => l.Zoning));
+            var roads = plan.Layers.Single(l => l.GeneratorId == "roads");
+            Assert.NotEmpty(roads.Zoning);
+            Assert.All(roads.Zoning, z => Assert.Equal("EU Residential Low", z.ZoneId));
+            Assert.DoesNotContain(plan.Layers, l => l.GeneratorId == "edgeZoning");
         }
 
         // ───────────── place solver ─────────────

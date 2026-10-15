@@ -34,16 +34,38 @@ namespace Placemaker.Core.Layers.Roads
         public string[] Emits => new[] { RegionTags.Block, RegionTags.Edge, RegionTags.Core };
         public int Version => 1;
 
-        private static readonly FeatureInfo[] FeatureList =
-        {
-            new FeatureInfo
-            {
-                Layer = AddOns.EdgeZoningAddOn.LayerId, Target = RegionTags.Edge, LabelKey = "Placemaker.Roads.Feature.edgeZoning",
-                TooltipKey = "Placemaker.Roads.Feature.edgeZoning.Tooltip",
-            },
-        };
+        /// <summary>
+        /// (s34) No features: the old "Zoning" feature (edge-zoning cutouts along the frontage) is replaced by the
+        /// "Pre-zone new roads" control — every cell of every new road's zone blocks (playtest image 62). Saved recipes
+        /// with the old feature child are migrated on load (<see cref="Migrate"/>).
+        /// </summary>
+        private static readonly FeatureInfo[] FeatureList = Array.Empty<FeatureInfo>();
 
         public IReadOnlyList<FeatureInfo> Features => FeatureList;
+
+        /// <summary>
+        /// (s34) Loaded roads step with the retired edge-zoning feature child (target "edge"): an enabled one becomes
+        /// "Pre-zone new roads" with its zone type (unless the step already pre-zones); the child goes. Idempotent.
+        /// </summary>
+        public static int Migrate(RecipeStep step)
+        {
+            if (step == null || step.Layer != LayerId) return 0;
+            int n = 0;
+            for (int i = step.Children.Count - 1; i >= 0; i--)
+            {
+                var c = step.Children[i];
+                if (c == null || c.Layer != AddOns.EdgeZoningAddOn.LayerId || (c.Target ?? "") != RegionTags.Edge) continue;
+                string current = step.Settings.S(RoadsIds.PreZone, RoadPreZone.None);
+                if (c.Enabled && current == RoadPreZone.None)
+                {
+                    string kind = c.Settings?.S(AddOns.EdgeZoningAddOn.KindControl, Common.ZoneKinds.Default) ?? Common.ZoneKinds.Default;
+                    step.Settings.Values[RoadsIds.PreZone] = Array.IndexOf(Common.ZoneKinds.All, kind) >= 0 ? kind : Common.ZoneKinds.Default;
+                }
+                step.Children.RemoveAt(i);
+                n++;
+            }
+            return n;
+        }
 
         public IReadOnlyList<ControlSchema> Controls => _controls;
         public IReadOnlyList<PresetInfo> Presets => _presets;
@@ -65,6 +87,7 @@ namespace Placemaker.Core.Layers.Roads
                 case RoadsIds.LocalAsset: role = NetRole.CulDeSac; break;
                 case RoadsIds.RoundaboutAsset: role = NetRole.Roundabout; break;
                 case RoadsIds.PerimeterAsset: role = NetRole.PerimeterRoad; break;
+                case RoadsIds.LaneAsset: role = NetRole.Alley; break;
                 case RoadsIds.PathAsset: return new[] { RoadRoles.PavementPath };
                 default: return Array.Empty<string>();
             }
@@ -140,23 +163,62 @@ namespace Placemaker.Core.Layers.Roads
             return RoadsPlanner.Plan(input, _controls, cancel);
         }
 
+        /// <summary>
+        /// (s34) Presets are whole designs: pattern, road mix, terrain fit, junction spacing on the main roads, walkways,
+        /// lanes, cul-de-sac tips. Ids are save format (downtown, suburb, village, hillside, garden-city stay).
+        /// </summary>
         private List<PresetInfo> BuildPresets()
         {
-            PresetInfo P(string id, params (string k, object v)[] values)
+            PresetInfo P(string id, string mix, params (string k, object v)[] values)
             {
                 var b = Defaults();
+                if (mix != null) RoadMixes.Apply(b, mix);
                 foreach (var (k, v) in values) b.Values[k] = v;
                 Derive(b);   // the mix reads what the preset picks (no false "modified")
                 return new PresetInfo { Id = id, LabelKey = "Placemaker.Roads.Preset." + id, Values = b };
             }
             return new List<PresetInfo>
             {
-                P("downtown", (RoadsIds.Pattern, "grid"), (RoadsIds.GridSpacing, 100.0), (RoadsIds.AvenueColumn, true), (RoadsIds.AvenueRow, true),
-                    (RoadsIds.StreetTrees, true)),
-                P("suburb", (RoadsIds.Pattern, "tree"), (RoadsIds.CapStyle, "grass")),
-                P("village", (RoadsIds.Pattern, "organic"), (RoadsIds.OrganicCurviness, 70.0), (RoadsIds.OrganicLoops, 40.0)),
-                P("hillside", (RoadsIds.Pattern, "contour")),
-                P("garden-city", (RoadsIds.Pattern, "radial"), (RoadsIds.RadialRings, 2.0), (RoadsIds.AvenueMedianTrees, true)),
+                // A tight downtown grid: avenues every few blocks keep all their junctions, alleys behind the blocks.
+                P("downtown", "boulevards", (RoadsIds.Pattern, "grid"), (RoadsIds.GridSpacing, 90.0), (RoadsIds.AvenueColumn, true), (RoadsIds.AvenueRow, true),
+                    (RoadsIds.AvenueColumnIndex, 2.0), (RoadsIds.AvenueRowIndex, 2.0), (RoadsIds.JunctionSpacing, 0.0), (RoadsIds.BackLanes, 60.0),
+                    (RoadsIds.Walkways, 20.0), (RoadsIds.TerrainFit, "ignore")),
+                // Cul-de-sac branches off a collector, footpaths between the bulbs.
+                P("suburb", "quiet", (RoadsIds.Pattern, "tree"), (RoadsIds.CapStyle, "grass"), (RoadsIds.Walkways, 75.0), (RoadsIds.JunctionSpacing, 150.0),
+                    (RoadsIds.TerrainFit, "follow")),
+                // Winding lanes that settle into the hill, a quiet main street, gravel at some tips, paths and trails everywhere.
+                P("village", "quiet", (RoadsIds.Pattern, "organic"), (RoadsIds.OrganicSpacing, 75.0), (RoadsIds.OrganicCurviness, 55.0),
+                    (RoadsIds.OrganicLoops, 50.0), (RoadsIds.TerrainFit, "follow"), (RoadsIds.JunctionSpacing, 140.0), (RoadsIds.Walkways, 70.0),
+                    (RoadsIds.WalkwayStyle, "mixed"), (RoadsIds.TipStyle, "mixed"), (RoadsIds.CapStyle, "grass"), (RoadsIds.MaxGrade, 9.0)),
+                // Streets along the contour lines, gentle climbs between them, dirt trails straight up the slope where it is walkable.
+                P("hillside", "quiet", (RoadsIds.Pattern, "contour"), (RoadsIds.TerrainFit, "follow"), (RoadsIds.Walkways, 60.0),
+                    (RoadsIds.WalkwayStyle, "mixed"), (RoadsIds.MaxGrade, 9.0)),
+                // A planted centre: avenues with trees around a roundabout, ring streets, footpaths.
+                P("garden-city", "boulevards", (RoadsIds.Pattern, "radial"), (RoadsIds.RadialRings, 2.0), (RoadsIds.RadialAvenues, 6.0),
+                    (RoadsIds.Walkways, 60.0), (RoadsIds.CapStyle, "trees"), (RoadsIds.JunctionSpacing, 0.0), (RoadsIds.TerrainFit, "ignore")),
+                // Small blocks, paths through the long ones, lanes behind: everything a short walk away.
+                P("walkable-grid", "bike", (RoadsIds.Pattern, "grid"), (RoadsIds.GridSpacing, 80.0), (RoadsIds.Walkways, 100.0), (RoadsIds.BackLanes, 40.0),
+                    (RoadsIds.JunctionSpacing, 0.0), (RoadsIds.TerrainFit, "ignore"), (RoadsIds.StreetTrees, true)),
+                // A grid turned along the hill: long streets on the contours, short cross streets up the slope.
+                P("terraced-grid", "quiet", (RoadsIds.Pattern, "grid"), (RoadsIds.GridSpacing, 90.0), (RoadsIds.TerrainFit, "follow"),
+                    (RoadsIds.Walkways, 60.0), (RoadsIds.WalkwayStyle, "mixed"), (RoadsIds.JunctionSpacing, 0.0)),
+                // Collector loops with cul-de-sacs inside, footpath greenways linking every close to the next.
+                P("suburban-loops", "quiet", (RoadsIds.Pattern, "loop"), (RoadsIds.LoopCollectorSpacing, 260.0), (RoadsIds.LoopCulDeSacRatio, 70.0),
+                    (RoadsIds.Walkways, 90.0), (RoadsIds.CapStyle, "trees"), (RoadsIds.JunctionSpacing, 150.0), (RoadsIds.TerrainFit, "follow")),
+                // A loose hamlet: gravel lanes, a paved through road, trails.
+                P("rural-village", "country", (RoadsIds.Pattern, "organic"), (RoadsIds.OrganicSpacing, 100.0), (RoadsIds.OrganicCurviness, 45.0),
+                    (RoadsIds.OrganicLoops, 20.0), (RoadsIds.TerrainFit, "follow"), (RoadsIds.TipStyle, "gravel"), (RoadsIds.Walkways, 40.0),
+                    (RoadsIds.WalkwayStyle, "trail"), (RoadsIds.CapStyle, "grass"), (RoadsIds.JunctionSpacing, 160.0), (RoadsIds.MaxGrade, 10.0)),
+                // Collectors around groups of blocks, car-free streets inside.
+                P("superblocks", null, (RoadsIds.Pattern, "superblock"), (RoadsIds.SuperblockZone, 100.0), (RoadsIds.Walkways, 60.0),
+                    (RoadsIds.JunctionSpacing, 0.0), (RoadsIds.TerrainFit, "ignore")),
+                // Lanes radiating from a small central circus, crooked narrow streets around it, paths through everything.
+                P("old-town", "alleys", (RoadsIds.Pattern, "mixed"), (RoadsIds.MixedCoreRadius, 110.0), (RoadsIds.MixedAvenues, 6.0),
+                    (RoadsIds.MixedSpacing, 60.0), (RoadsIds.MixedCurviness, 85.0), (RoadsIds.Walkways, 80.0), (RoadsIds.JunctionSpacing, 0.0),
+                    (RoadsIds.TerrainFit, "follow"), (RoadsIds.CapStyle, "none")),
+                // The straight grid, whatever the ground does.
+                P("strict-grid", null, (RoadsIds.Pattern, "grid"), (RoadsIds.GridSpacing, 100.0), (RoadsIds.TerrainFit, "ignore"),
+                    (RoadsIds.Walkways, 30.0), (RoadsIds.JunctionSpacing, 0.0)),
             };
         }
     }

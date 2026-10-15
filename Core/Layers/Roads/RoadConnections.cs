@@ -189,6 +189,11 @@ namespace Placemaker.Core.Layers.Roads
             {
                 if (!e.Alive) continue;
                 float hw = halfWidth(e.Role);
+                // (s34) A perimeter piece running alongside an existing road (closer than a frontage row) only doubles it:
+                // the playtest's corner leftovers hugged the street and turned the grid's last street into a hairpin.
+                float reach = e.Role == NetRole.PerimeterRoad ? 1f : 0.8f;
+                float extra = e.Role == NetRole.PerimeterRoad ? 14f : 0f;
+                int need = e.Role == NetRole.PerimeterRoad ? 4 : 5;
                 int inside = 0;
                 const int samples = 7;
                 for (int i = 1; i <= samples; i++)
@@ -199,13 +204,13 @@ namespace Placemaker.Core.Layers.Roads
                     foreach (var r in existing)
                     {
                         float d = r.Curve.DistanceXZ(p, out float rt);
-                        if (d > (r.HalfWidth + hw) * 0.8f) continue;
-                        if (math.abs(math.dot(dir, r.Curve.TangentXZ(rt))) < 0.85f) continue;
+                        if (d > (r.HalfWidth + hw) * reach + extra) continue;
+                        if (math.abs(math.dot(dir, r.Curve.TangentXZ(rt))) < (extra > 0f ? 0.7f : 0.85f)) continue;
                         inside++;
                         break;
                     }
                 }
-                if (inside >= 5)
+                if (inside >= need)
                 {
                     e.Removed = true;
                     removed++;

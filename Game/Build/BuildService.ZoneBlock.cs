@@ -65,6 +65,8 @@ namespace Placemaker.Game.Build
         {
             _refreshedZoning = null;
             if (GuardsZoning) { Go(Step.ZoneRefresh); return; }
+            // (s34) A roads build that pre-zones: zone the live blocks of the roads it just built.
+            if (PreZonesRoads) { Go(Step.RoadPreZone); return; }
             ContinueAfterApply();
         }
 
