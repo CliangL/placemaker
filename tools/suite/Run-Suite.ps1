@@ -268,7 +268,7 @@ finally {
     $logs = Join-Path $runDir 'logs'
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
     foreach ($f in @('Player.log')) { $p = Join-Path $ud $f; if (Test-Path $p) { Copy-Item $p $logs -Force } }
-    foreach ($f in @('Placemaker.log', 'SceneFlow.log', 'Modding.log', 'UI.log', 'Prefabs.log')) { $p = Join-Path $ud "Logs\$f"; if (Test-Path $p) { Copy-Item $p $logs -Force } }
+    Get-ChildItem (Join-Path $ud 'Logs') -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $launchedAt.AddSeconds(-5) } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $logs -Force }
     Restore-All
 }
 
