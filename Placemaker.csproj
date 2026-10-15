@@ -59,7 +59,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="UI\**;Tests\**;docs\**;bin\**;obj\**" />
+    <Compile Remove="UI\**;Tests\**;docs\**;bin\**;obj\**;.forensics\**;tools\**;suite\**" />
     <None Remove="UI\**;Tests\**;docs\**" />
     <None Include="Lang\*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Lang" />
     <None Include="Recipes\*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Recipes" />
