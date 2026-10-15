@@ -33,9 +33,11 @@ namespace Placemaker.Core.Layers.Roads
         public const string Roundabout = "roundabout";
         public const string Perimeter = "perimeter";
         public const string CarFree = "carFree";
+        /// <summary>(s34) Back lanes and gravel lanes (role Alley).</summary>
+        public const string Lane = "lane";
 
         /// <summary>Display order of the legend.</summary>
-        public static readonly string[] Order = { Street, Avenue, Local, Roundabout, Perimeter, CarFree };
+        public static readonly string[] Order = { Street, Avenue, Local, Roundabout, Perimeter, Lane, CarFree };
 
         /// <summary>Legend role of a planned net; null = not a road of the roads layer (fences, parking aisles…).</summary>
         public static string Of(NetRole role)
@@ -47,6 +49,7 @@ namespace Placemaker.Core.Layers.Roads
                 case NetRole.CulDeSac: return Local;
                 case NetRole.Roundabout: return Roundabout;
                 case NetRole.PerimeterRoad: return Perimeter;
+                case NetRole.Alley: return Lane;
                 case NetRole.Pathway: case NetRole.PathwayWide: return CarFree;
                 default: return null;
             }
@@ -66,6 +69,7 @@ namespace Placemaker.Core.Layers.Roads
                 case Local: return "#8fe07a";
                 case Roundabout: return "#c58cff";
                 case Perimeter: return "#ffa64d";
+                case Lane: return "#c9a27a";
                 case CarFree: return "#ffd173";
                 default: return "#cccccc";
             }
@@ -79,7 +83,7 @@ namespace Placemaker.Core.Layers.Roads
         private static Dictionary<string, float3> BuildRgb()
         {
             var d = new Dictionary<string, float3>(StringComparer.Ordinal);
-            foreach (var r in new[] { "street", "avenue", "local", "roundabout", "perimeter", "carFree" }) d[r] = Parse(Color(r));
+            foreach (var r in new[] { "street", "avenue", "local", "roundabout", "perimeter", "lane", "carFree" }) d[r] = Parse(Color(r));
             return d;
         }
 
@@ -101,6 +105,7 @@ namespace Placemaker.Core.Layers.Roads
                 case NetRole.CulDeSac: return RoadsIds.LocalAsset;
                 case NetRole.Pathway: case NetRole.PathwayWide: return RoadsIds.PathAsset;
                 case NetRole.PerimeterRoad: return RoadsIds.PerimeterAsset;
+                case NetRole.Alley: return RoadsIds.LaneAsset;
                 default: return RoadsIds.StreetAsset;
             }
         }
@@ -162,6 +167,7 @@ namespace Placemaker.Core.Layers.Roads
             {
                 case NetRole.Avenue: return new[] { FourLane, FourLaneDivided, TwoLane };
                 case NetRole.Roundabout: return new[] { TwoLaneOneWay, ThreeLaneOneWay, OneLaneOneWay };
+                case NetRole.Alley: return new[] { Alley, Gravel, TwoLane };
                 case NetRole.Pathway: case NetRole.PathwayWide: return Array.Empty<string>();
                 default: return new[] { TwoLane };
             }

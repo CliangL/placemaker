@@ -271,9 +271,55 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 _perimeter = new PerimeterGrid(polygon);
                 _index = new StreetIndex(_streets);
                 _cancel = parameters.Cancel;
+                _height = parameters.FollowContours ? parameters.HeightAt : null;
+                _mainGap = parameters.MainJunctionSpacing;
+                _maxGrade = parameters.MaxGrade > 0.005f ? parameters.MaxGrade : 0.1f;
             }
 
             private readonly System.Threading.CancellationToken _cancel;
+            /// <summary>(s34) Ground height when the streets follow the contours (null = the original GRG walk).</summary>
+            private readonly Func<float2, float> _height;
+            private readonly float _maxGrade;
+            /// <summary>(s34) Smallest distance between side junctions on the main street (0 = the GRG 45 m).</summary>
+            private readonly float _mainGap;
+
+            /// <summary>Grade (rise/run, signed) of one step from p along heading.</summary>
+            private float StepGrade(float2 p, float2 heading, float length = 12f) =>
+                (_height(p + heading * length) - _height(p)) / length;
+
+            /// <summary>
+            /// (s34) Steers a heading by the terrain: when the climb along it is steeper than ~80 % of the design grade, it turns
+            /// toward the contour direction (the side closer to the heading) just enough to bring the climb back, at most
+            /// <paramref name="maxTurnDeg"/> per step; on any slope a light pull toward the contours lays the streets into the hill.
+            /// </summary>
+            private float2 TerrainSteer(float2 p, float2 heading, float maxTurnDeg, float pull)
+            {
+                if (_height == null) return heading;
+                const float e = 6f;
+                float2 g = new float2(_height(p + new float2(e, 0f)) - _height(p - new float2(e, 0f)), _height(p + new float2(0f, e)) - _height(p - new float2(0f, e))) / (2f * e);
+                float slope = math.length(g);
+                if (slope < 0.02f) return heading;
+                float2 c = new float2(-g.y, g.x) / slope;
+                if (math.dot(c, heading) < 0f) c = -c;
+                float target = 0.9f * _maxGrade;
+                float sinNow = math.abs(math.dot(heading, g / slope));   // = |grade| / slope
+                float2 want = heading;
+                if (slope * sinNow > target)
+                {
+                    float sinWant = math.saturate(target / slope);
+                    float2 up = g / slope * math.sign(math.dot(heading, g));
+                    want = math.normalizesafe(c * math.sqrt(1f - sinWant * sinWant) + up * sinWant);
+                }
+                else if (pull > 0f)
+                {
+                    want = math.normalizesafe(math.lerp(heading, c, pull * math.saturate(slope / _maxGrade)));
+                }
+                float ang = math.acos(math.clamp(math.dot(heading, want), -1f, 1f));
+                float lim = math.radians(maxTurnDeg);
+                if (ang <= lim) return want;
+                float s = math.sign(heading.x * want.y - heading.y * want.x);
+                return Rotate(heading, s * lim);
+            }
 
             private float Random01() => (float)_random.NextDouble();
             private float RandomSigned() => (float)(_random.NextDouble() * 2.0 - 1.0);
@@ -400,6 +446,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     float2 goal = math.normalize(b - p);
                     float pull = math.saturate(0.35f + 0.5f * (1f - toB / total));
                     heading = math.normalize(math.lerp(Rotate(heading, turn), goal, pull * 0.35f));
+                    heading = TerrainSteer(p, heading, 7f, 0f);
                     heading = AvoidPerimeter(p, heading);
                     float2 next = p + heading * OrganicStep;
                     bool nearA = math.distance(next, a) < entryZone;
@@ -452,6 +499,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                                 }
                             }
                         }
+                        // (s34) A managed main street: a branch may also leave a junction on the other side (a crossroads).
+                        if (street.Main && _mainGap > OrganicMinJunctionGap)
+                            foreach (int j in street.Junctions)
+                                foreach (float side in new[] { 1f, -1f })
+                                    if (j > 0 && j + 1 < street.Points.Count && SpaceFor(s, j, side)) candidates.Add((s, j, side));
                     }
                     if (candidates.Count == 0)
                     {
@@ -490,7 +542,10 @@ namespace Placemaker.Core.Layers.Roads.Generators
             private bool SpaceFor(int street, int point, float side)
             {
                 OrganicStreet s = _streets[street];
-                if (!s.FreeAt(point, OrganicMinJunctionGap))
+                // (s34) The main street keeps its junctions further apart (access management at the source); its
+                // existing junctions stay open for a branch on the other side.
+                bool managed = s.Main && _mainGap > OrganicMinJunctionGap;
+                if (!(managed && s.Junctions.Contains(point)) && !s.FreeAt(point, managed ? _mainGap : OrganicMinJunctionGap))
                 {
                     return false;
                 }
@@ -508,6 +563,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float2 p = parentStreet.Points[origin];
                 branch.Points.Add(p);
                 float2 heading = Rotate(Normal(parent, origin, side), math.radians(15f) * RandomSigned());
+                if (_height != null)
+                {
+                    // (s34) On a slope a branch leaves its street diagonally (never under 50°) where the climb is gentlest.
+                    float2 normal = Normal(parent, origin, side);
+                    float best = float.MaxValue;
+                    for (int k = -4; k <= 4; k++)
+                    {
+                        float2 h = Rotate(normal, math.radians(10f * k));
+                        float g = math.abs(StepGrade(p, h, 24f)) + 0.002f * math.abs(k);
+                        if (g < best) { best = g; heading = h; }
+                    }
+                }
                 float turn = 0f;
                 float length = 0f;
                 float maxLength = _spacing * (2f + 6f * Random01());
@@ -531,9 +598,15 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     if (length > 2f * OrganicStep)
                     {
                         heading = Rotate(heading, math.clamp(turn, -_maxTurn, _maxTurn));
+                        heading = TerrainSteer(p, heading, length < 5f * OrganicStep ? 24f : 14f, length > _spacing ? 0.1f : 0f);
                         heading = AvoidPerimeter(p, heading);
                     }
                     float2 next = p + heading * OrganicStep;
+                    // (s34) Too steep even after steering: the street ends here (a cul-de-sac on the hillside).
+                    if (_height != null && length > 4f * OrganicStep && math.abs(StepGrade(p, heading)) > 3f * _maxGrade)
+                    {
+                        break;
+                    }
                     if (!PointInPolygon(next, _polygon) || _perimeter.Distance(next, OrganicTipClearance) < OrganicTipClearance)
                     {
                         break;
@@ -613,6 +686,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 float2 q = target.Points[point];
                 float2 dir = math.normalizesafe(q - p);
                 float2 tangent = target.Tangent(point);
+                // (s34) A loop link straight up the hill is not a street.
+                if (_height != null && math.abs(_height(q) - _height(p)) > 1.25f * _maxGrade * math.max(1f, math.distance(p, q))) return false;
                 float sin = math.abs(dir.x * tangent.y - dir.y * tangent.x);
                 if (sin < math.sin(math.radians(OrganicMinLoopAngle)))
                 {

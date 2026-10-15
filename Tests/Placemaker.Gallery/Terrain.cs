@@ -128,6 +128,77 @@ namespace Placemaker.Gallery
         }
     }
 
+    /// <summary>
+    /// (s34) Road-scale sites for the roads type (--roads): ~30 ha with two existing streets (south and west), a farm
+    /// cluster in the middle (obstacles: the playtest's islands came from roads removed around a ruin) and real relief —
+    /// a dome hill, a stream valley and a steep hillside, tens of metres high (the park slope sites are a few metres).
+    /// </summary>
+    public static class RoadSites
+    {
+        public static readonly string[] Kinds = { "flat", "gentle", "hill", "valley", "steep" };
+
+        public static Func<float2, float> Ground(float3[] ring, string kind)
+        {
+            float xMin = ring.Min(p => p.x), zMin = ring.Min(p => p.z), xMax = ring.Max(p => p.x), zMax = ring.Max(p => p.z);
+            float ext = math.max(xMax - xMin, zMax - zMin);
+            float Noise(float2 p) => 1.6f * (ValueNoise.Clumps(p, 70f, 51u) - 0.5f) + 0.5f * (ValueNoise.Clumps(p, 24f, 53u) - 0.5f);
+            switch (kind)
+            {
+                // 3 % rise to the north-east.
+                case "gentle": return p => 0.022f * (p.x - xMin) + 0.012f * (p.y - zMin) + Noise(p);
+                // A 34 m dome a little east of centre on a 1.5 % tilt (grades up to ~14 %).
+                case "hill":
+                {
+                    var top = new float2(xMin + (xMax - xMin) * 0.58f, zMin + (zMax - zMin) * 0.52f);
+                    float sig = ext * 0.27f;
+                    return p => 0.015f * (p.x - xMin) + 34f * math.exp(-math.lengthsq(p - top) / (2f * sig * sig)) + Noise(p);
+                }
+                // A stream valley running south-west → north-east; the sides rise 20 m, the floor falls 1.2 %.
+                case "valley":
+                {
+                    var a = new float2(xMin, zMin + (zMax - zMin) * 0.25f);
+                    var d = math.normalize(new float2(xMax - xMin, (zMax - zMin) * 0.6f));
+                    float sig = ext * 0.17f;
+                    return p =>
+                    {
+                        float2 v = p - a;
+                        float along = math.dot(v, d), across = v.x * d.y - v.y * d.x;
+                        return 20f * (1f - math.exp(-across * across / (2f * sig * sig))) - 0.012f * along + Noise(p);
+                    };
+                }
+                // A 10 % hillside rising to the north.
+                case "steep": return p => 0.1f * (p.y - zMin) + 0.02f * (p.x - xMin) + Noise(p);
+                default: return _ => 0f;
+            }
+        }
+
+        /// <summary>Two existing 12 m streets just outside the south and west edges of the gallery site.</summary>
+        public static List<NearbyNet> Streets(float3[] ring)
+        {
+            var all = Renderer.RoadsAround(ring);
+            // BaseRing edge 0 runs along the south (0,0)→(140,-6); the last edge closes the west side (6,70)→(0,0).
+            return new List<NearbyNet> { all[0], all[all.Count - 1] };
+        }
+
+        /// <summary>A farm cluster: a house, a barn and a shed a little west of the centre.</summary>
+        public static List<Obstacle> Farm(float3[] ring)
+        {
+            float xMin = ring.Min(p => p.x), zMin = ring.Min(p => p.z), xMax = ring.Max(p => p.x), zMax = ring.Max(p => p.z);
+            var c = new float2(xMin + (xMax - xMin) * 0.36f, zMin + (zMax - zMin) * 0.55f);
+            Obstacle Box(float2 centre, float w, float d, float yaw)
+            {
+                float2 u = new float2(math.cos(yaw), math.sin(yaw)) * (w * 0.5f), v = new float2(-math.sin(yaw), math.cos(yaw)) * (d * 0.5f);
+                return new Obstacle { A = centre - u - v, B = centre + u - v, C = centre + u + v, D = centre - u + v, Kind = ObstacleKind.Building };
+            }
+            return new List<Obstacle>
+            {
+                Box(c, 18f, 12f, 0.3f),
+                Box(c + new float2(34f, 10f), 36f, 20f, 0.3f),
+                Box(c + new float2(8f, 38f), 12f, 10f, 0.3f),
+            };
+        }
+    }
+
     public static class TerrainView
     {
         /// <summary>The ground the build would leave: the plan's terraform through the real TerraformRaster (1.75 m, 4 m bank).</summary>

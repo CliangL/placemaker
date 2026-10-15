@@ -258,6 +258,16 @@ namespace Placemaker.Core.Layers.Roads.Generators
         public Func<float2, float> HeightAt;
         /// <summary>Cancellation of a running generation (never saved). Checked between phases and in long loops.</summary>
         public CancellationToken Cancel;
+        /// <summary>
+        /// (s34) "Follow contours": winding patterns (organic, tree) steer their streets along the contour lines and keep
+        /// climbs under <see cref="MaxGrade"/>; straight patterns are aligned by the caller (AlignToTerrain) and the planner
+        /// bends them. False = the original GRG behaviour (golden replay).
+        /// </summary>
+        public bool FollowContours;
+        /// <summary>(s34) Steepest grade (rise/run) the terrain-following patterns aim for; 0 = 10 %.</summary>
+        public float MaxGrade;
+        /// <summary>(s34) Organic: smallest distance (m) between side junctions on the main street; 0 = the original 45 m.</summary>
+        public float MainJunctionSpacing;
         public static GridParameters Default => new GridParameters
         {
             Mode = SpacingMode.FitToArea,
@@ -826,8 +836,16 @@ namespace Placemaker.Core.Layers.Roads.Generators
         /// sign-insensitive, so opposite slopes on a hill do not cancel out), rotated by 90°. False if
         /// the area is nearly flat (mean slope &lt; 1 %).
         /// </summary>
-        internal static bool TryContourDirection(List<float2> polygon, Func<float2, float> heightAt, out float2 direction)
+        internal static bool TryContourDirection(List<float2> polygon, Func<float2, float> heightAt, out float2 direction) =>
+            TryContourDirection(polygon, heightAt, out direction, out _);
+
+        /// <summary>
+        /// (s34) Same, with how directional the slope is: (λ1 − λ2) / (λ1 + λ2) of the slope tensor, 0 on a round hill
+        /// (every direction climbs), 1 on an even hillside.
+        /// </summary>
+        internal static bool TryContourDirection(List<float2> polygon, Func<float2, float> heightAt, out float2 direction, out float anisotropy)
         {
+            anisotropy = 0f;
             direction = new float2(1f, 0f);
             float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
             foreach (float2 p in polygon)
@@ -859,6 +877,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 return false;
             }
             float gradientAngle = 0.5f * math.atan2(2f * sxy, sxx - syy);
+            float trace = sxx + syy;
+            anisotropy = trace > 1e-9f ? math.sqrt((sxx - syy) * (sxx - syy) + 4f * sxy * sxy) / trace : 0f;
             direction = new float2(-math.sin(gradientAngle), math.cos(gradientAngle)); // perpendicular to the slope
             return true;
         }
