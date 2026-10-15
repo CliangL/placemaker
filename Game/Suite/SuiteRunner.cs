@@ -48,7 +48,7 @@ namespace Placemaker.Game.Suite
 
         // frame times
         private readonly List<float> _window = new List<float>(4096);
-        private bool _windowOpen;
+        private bool _windowOpen, _tracing;
         private float _lastFrameMs, _worstRecentMs;
         private float _worstRecentAt;
 
@@ -135,6 +135,7 @@ namespace Placemaker.Game.Suite
             float ms = Time.unscaledDeltaTime * 1000f;
             _lastFrameMs = ms;
             if (_windowOpen) _window.Add(ms);
+            if (_tracing) Say($"frame {Time.frameCount} {ms:F1} ms sim {_world?.GetExistingSystemManaged<SimulationSystem>()?.frameIndex}");
             if (ms > _worstRecentMs || Time.realtimeSinceStartup - _worstRecentAt > 10f) { _worstRecentMs = ms; _worstRecentAt = Time.realtimeSinceStartup; }
             if (!_started && GameManager.instance != null)
             {
@@ -302,7 +303,7 @@ namespace Placemaker.Game.Suite
             if (_tool == null) throw new Exception("PlacemakerToolSystem missing");
 
             _phase = "newgame";
-            yield return NewFlatGame();
+            yield return NewGame();
             if (GameManager.instance.gameMode != GameMode.Game) throw new Exception("new game did not load (mode " + GameManager.instance.gameMode + ")");
 
             _phase = "fixture";
@@ -389,10 +390,31 @@ namespace Placemaker.Game.Suite
             GameManager.QuitGame();
         }
 
-        // ───────────── new game on the flat default world ─────────────
+        // ───────────── new game on a vanilla map ─────────────
 
-        private IEnumerator NewFlatGame()
+        /// <summary>
+        /// A new game on a vanilla map, set up the way the main menu's New Game does (MenuUISystem.NewGame: map name and
+        /// prefab references, the starting year, city options). The map-less world (Load with no asset) is NOT usable: its
+        /// SetDefaults world lacks what a map provides (climate, render settings, starting year, electricity source/sink…)
+        /// and the first road temporaries crash the game natively (runs boot2-boot5, e1, e3).
+        /// </summary>
+        private IEnumerator NewGame()
         {
+            string world = _cfg.world ?? "";
+            if (!world.StartsWith("map:", StringComparison.OrdinalIgnoreCase)) throw new Exception("world must be map:<name>, not '" + world + "'");
+            string want = world.Substring(4);
+            global::Game.Assets.MapMetadata map = null;
+            var names = new List<string>();
+            foreach (var m in AssetDatabase.global.GetAssets<global::Game.Assets.MapMetadata>())
+            {
+                string name;
+                try { name = m.target?.displayName ?? m.name; } catch (Exception) { name = m.name; }
+                names.Add(name);
+                if (map == null && string.Equals(name, want, StringComparison.OrdinalIgnoreCase)) map = m;
+            }
+            if (map == null) throw new Exception($"map '{want}' not found (maps: {string.Join(", ", names)})");
+            var info = map.target;
+
             var city = _world.GetOrCreateSystemManaged<CityConfigurationSystem>();
             city.overrideLoadedOptions = true;
             city.overrideCityName = "Placemaker Suite";
@@ -402,15 +424,21 @@ namespace Placemaker.Game.Suite
             city.overrideUnlockAll = true;
             city.overrideUnlimitedMoney = true;
             city.overrideUnlockMapTiles = true;
+            var meta = _world.GetOrCreateSystemManaged<global::Game.UI.MapMetadataSystem>();
+            meta.mapName = info.displayName;
+            meta.prefabReferences = info.prefabReferences;
+            _world.GetOrCreateSystemManaged<TimeSystem>().startingYear = info.startingYear != -1 ? info.startingYear : DateTime.Now.Year;
             try { SharedSettingsTweaks(); } catch (Exception e) { Say("settings tweaks: " + e.Message); }
+
             float t0 = Time.realtimeSinceStartup;
-            Say("loading a new game on the default (flat) world, no map");
-            var task = GameManager.instance.Load(GameMode.Game, Purpose.NewGame, (IAssetData)null);
+            Say($"loading a new game on map {info.displayName}");
+            var task = GameManager.instance.Load(GameMode.Game, Purpose.NewGame, map);
             yield return Until(() => task.IsCompleted, 600f, "new game load task");
             bool ok = task.IsCompleted && !task.IsFaulted && task.Result;
             yield return Until(() => GameManager.instance.gameMode == GameMode.Game && !GameManager.instance.isGameLoading, 300f, "game mode");
             _timeline["newGameLoadSec"] = Math.Round(Time.realtimeSinceStartup - t0, 1);
             Mark("worldReadySec");
+            _summary["map"] = info.displayName;
             Say($"new game load: ok={ok} mode={GameManager.instance.gameMode}");
             yield return Frames(30);
             var sim = _world.GetOrCreateSystemManaged<SimulationSystem>();
@@ -458,10 +486,22 @@ namespace Placemaker.Game.Suite
             var fx = new JObject();
             _summary["fixture"] = fx;
 
-            // terrain
+            // the map's own content out of the way, then the terrain
             yield return Settle("after load");
+            bool onMap = !string.Equals(_cfg.world ?? "", "null", StringComparison.OrdinalIgnoreCase);
+            if (onMap)
+            {
+                _fixture.ConfigureFromWorld();
+                fx["base"] = Math.Round(_fixture.Layout.Base, 2);
+                fx["waterSources"] = _fixture.RemoveWaterSources();
+                string cleared = "";
+                yield return ApplyWithFixtureTool(t => _fixture.EmitClear(t, out cleared), "clear fixture area");
+                fx["cleared"] = cleared;
+                fx["staticObjectsLeft"] = _fixture.CountInFixture();
+            }
             string err = _cfg.noTerrain ? "skipped" : _fixture.ApplyHeightmap();
             fx["heightmap"] = err ?? "replaced";
+            if (onMap) _fixture.ResetWater();
             yield return Frames(40);
             float worst = _fixture.CheckTerrain(out var detail);
             Say($"terrain check: worst error {worst:F2} m: {detail}");
@@ -472,17 +512,28 @@ namespace Placemaker.Game.Suite
 
             // roads: the vertical lines in a few batches, then the cross streets onto their junction nodes
             yield return Settle("before roads");
-            for (int i0 = 0; i0 <= _fixture.Layout.NX; i0 += 4)
+            _tracing = _cfg.trace;
+            string roads = (_cfg.roads ?? "single").ToLowerInvariant();
+            Say("roads mode " + roads);
+            if (roads == "single")
+                yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, null), "roads all");
+            else if (roads != "none")
             {
-                int a = i0, b = i0 + 3;
-                yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, s => s.Vertical && s.Line >= a && s.Line <= b), $"roads x{a}-{b}");
-            }
-            for (int j0 = 0; j0 <= _fixture.Layout.NZ; j0 += 3)
-            {
-                int a = j0, b = j0 + 2;
-                yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, s => !s.Vertical && s.Line >= a && s.Line <= b), $"roads z{a}-{b}");
+                for (int i0 = 0; i0 <= _fixture.Layout.NX; i0 += 4)
+                {
+                    int a = i0, b = i0 + 3;
+                    yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, s => s.Vertical && s.Line >= a && s.Line <= b), $"roads x{a}-{b}");
+                }
+                if (roads != "vertical")
+                    for (int j0 = 0; j0 <= _fixture.Layout.NZ; j0 += 3)
+                    {
+                        int a = j0, b = j0 + 2;
+                        yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, s => !s.Vertical && s.Line >= a && s.Line <= b), $"roads z{a}-{b}");
+                    }
             }
             yield return Frames(30);
+            if (_cfg.idleAfterRoads > 0) { Say($"idle {_cfg.idleAfterRoads} s"); yield return Seconds(_cfg.idleAfterRoads); Say("idle done"); }
+            _tracing = false;
             yield return Settle("after roads");
             int edges = _fixture.CountEdges(out int temps);
             fx["roadEdges"] = edges;
@@ -505,7 +556,7 @@ namespace Placemaker.Game.Suite
 
             // overview shot of the fixture
             var mid = new float2((_fixture.Layout.LineX(0) + _fixture.Layout.LineX(_fixture.Layout.NX)) * 0.5f, (_fixture.Layout.LineZ(0) + _fixture.Layout.LineZ(_fixture.Layout.NZ)) * 0.5f);
-            SuiteCapture.Aim(new float3(mid.x, SuiteLayout.BaseHeight, mid.y), 0f, 70f, 1500f);
+            SuiteCapture.Aim(new float3(mid.x, _fixture.Layout.Base, mid.y), 0f, 70f, 1500f);
             yield return Frames(40);
             yield return Seconds(1f);
             var e1 = SuiteCapture.RenderPng(Path.Combine(_shots, "fixture-overview.png"), _cfg.shotWidth, _cfg.shotHeight);
@@ -553,10 +604,14 @@ namespace Placemaker.Game.Suite
             float t0 = Time.realtimeSinceStartup, lastChange = t0;
             int last = start;
             uint f0 = sim.frameIndex;
+            var pathfind = _world.GetOrCreateSystemManaged<global::Game.Pathfind.PathfindResultSystem>();
+            int beats = 0;
             while (Time.realtimeSinceStartup - t0 < seconds)
             {
                 yield return Seconds(2.5f);
                 int n = _fixture.CountAllBuildings();
+                if (beats++ % 4 == 0)
+                    Say($"{what}: sim frame {sim.frameIndex} (+{sim.frameIndex - f0}), speed {sim.selectedSpeed}/{sim.smoothSpeed:F2}, pathfind pending frame {pathfind.pendingSimulationFrame}, requests {pathfind.pendingRequestCount}, buildings {n}");
                 if (n != last) { last = n; lastChange = Time.realtimeSinceStartup; }
                 if (n > start && Time.realtimeSinceStartup - lastChange > 20f && Time.realtimeSinceStartup - t0 > 30f) break;
             }

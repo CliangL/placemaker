@@ -5,17 +5,18 @@
 .DESCRIPTION
   powershell -File tools/suite/Run-Suite.ps1 -Set core
 
-  1. Refuses to start while a Cities2.exe it did not start is running (the user's session is never touched).
+  1. Stops (exit 2) while a Cities2.exe it did not start is running: the user's session is never touched.
   2. Builds and deploys this worktree's mod into Mods/Placemaker (it stays installed afterwards).
-  3. Backs up the files a session rewrites (root *.coc, launcher-settings.json, continue_game.json, ModsSettings,
-     ModsData/Placemaker, Player*.log, Logs/), swaps in a light window/graphics profile, arms the run
-     (ModsData/Placemaker/suite/run.json + runOnce.txt) and starts Cities2.exe directly (route A:
-     -disableModding -disableCodeModding- -noSplash, a 1280x720 window, -placemakerSuite=<runId>, SteamAppId set:
-     only local mods, i.e. Placemaker, load). Route B goes through steam://rungameid.
-  4. Watches the heartbeat; the mod quits the game itself (GameManager.QuitGame). Only the PID this script started is
-     ever killed, and only when the clean quit did not happen in time or the heartbeat stopped.
-  5. Copies the session logs into the run folder, restores every backed-up file and verifies the hashes.
-  Results: .forensics/suite/runs/<runId>/ (summary.json, summary.md, scenarios/*.json, shots/*.png, logs/, restore.txt).
+  3. Saves the user's settings (root *.coc, launcher-settings.json, continue_game.json, ModsSettings/) into
+     .forensics/suite/user-settings/, switches to a small window (no vsync, muted), arms the run
+     (ModsData/Placemaker/suite/run.json + runOnce.txt) and starts Cities2.exe directly with only local mods
+     (-disableModding -disableCodeModding-: Placemaker and nothing else) and -placemakerSuite=<runId>.
+  4. Watches the heartbeat; the mod quits through the game's own quit. Only the PID this script started is ever
+     killed, and only when the clean quit did not happen in time or the heartbeat stopped.
+  5. Copies the session logs into the run folder and puts the user's settings back. If a run was cut off before
+     that, the next run puts them back first (user-settings/pending.txt).
+  Results: .forensics/suite/runs/<runId>/ (summary.json, summary.md, scenarios/*.json, shots/*.png, logs/).
+  -Opt 'key=value;key=value' passes extra run.json fields (world=map:Name, roads=single, trace=true, ...).
 #>
 param(
     [ValidateSet('smoke', 'core', 'full', 'bootstrap')][string]$Set = 'smoke',
@@ -32,8 +33,10 @@ param(
     [switch]$AllMods,
     [switch]$KeepGraphics,
     [switch]$NoTerrain,
+    [string]$Window = '1600x900',
     [float]$GrowSeconds = 100,
     [float]$PregrowSeconds = 75,
+    [string]$Opt = '',
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
 )
 
@@ -43,6 +46,7 @@ $gameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II'
 $exe = Join-Path $gameDir 'Cities2.exe'
 $ud = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
 $suiteData = Join-Path $ud 'ModsData\Placemaker\suite'
+$saved = Join-Path (Split-Path $ResultsRoot) 'user-settings'
 if (-not $RunId) { $RunId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $Set }
 $runDir = Join-Path $ResultsRoot $RunId
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
@@ -57,14 +61,46 @@ function Say([string]$m) {
     Add-Content -Path $hostLog -Value $line
 }
 
+# The user's settings: saved before the run, put back after it (or at the start of the next run if this one was cut off).
+function Get-SettingsFiles {
+    $r = @(Get-ChildItem -Path $ud -File | Where-Object { $_.Extension -eq '.coc' -or $_.Name -in @('launcher-settings.json', 'continue_game.json') })
+    $ms = Join-Path $ud 'ModsSettings'
+    if (Test-Path $ms) { $r += @(Get-ChildItem -Path $ms -File -Recurse) }
+    return $r
+}
+
+function Restore-Settings([string]$why) {
+    $pending = Join-Path $saved 'pending.txt'
+    if (-not (Test-Path $pending)) { return }
+    $list = @(Get-Content (Join-Path $saved 'files.txt'))
+    $n = 0
+    foreach ($rel in $list) {
+        $src = Join-Path $saved "files\$rel"
+        $dst = Join-Path $ud $rel
+        if (-not (Test-Path -LiteralPath $src)) { continue }
+        New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
+        Copy-Item -LiteralPath $src -Destination $dst -Force
+        $n++
+    }
+    # settings files the session created (the game writes some on quit)
+    $known = @{}; foreach ($rel in $list) { $known[$rel.ToLowerInvariant()] = $true }
+    foreach ($f in Get-SettingsFiles) {
+        $rel = $f.FullName.Substring($ud.Length + 1)
+        if (-not $known.ContainsKey($rel.ToLowerInvariant())) { Remove-Item -LiteralPath $f.FullName -Force; Say "removed new settings file $rel" }
+    }
+    $ro = Join-Path $ud 'runOnce.txt'; if (Test-Path $ro) { Remove-Item $ro -Force }
+    foreach ($f in @('run.json', 'run.active.json')) { $p = Join-Path $suiteData $f; if (Test-Path $p) { Remove-Item $p -Force } }
+    Remove-Item $pending -Force
+    Say "user settings put back ($n files, $why)"
+}
+
 # ───────────── 1. preflight ─────────────
 $running = @(Get-Process -Name 'Cities2' -ErrorAction SilentlyContinue)
 if ($running.Count -gt 0) {
     Say ("STOP: Cities2.exe is already running (PID {0}); the suite never touches a session it did not start." -f (($running | ForEach-Object { $_.Id }) -join ', '))
     exit 2
 }
-$launcher = @(Get-Process -Name 'Paradox Launcher' -ErrorAction SilentlyContinue)
-if ($launcher.Count -gt 0) { Say 'STOP: the Paradox launcher is open (the user may be about to play).'; exit 2 }
+Restore-Settings 'left over from an earlier run'
 
 # ───────────── 2. build + deploy ─────────────
 Push-Location $repo
@@ -83,41 +119,28 @@ $dll = Join-Path $ud 'Mods\Placemaker\Placemaker.dll'
 $dllInfo = Get-Item $dll
 Say ("installed Placemaker.dll {0} bytes, {1:yyyy-MM-dd HH:mm:ss}" -f $dllInfo.Length, $dllInfo.LastWriteTime)
 
-# ───────────── 3. backup ─────────────
-$backup = Join-Path $runDir 'backup'
-New-Item -ItemType Directory -Force -Path $backup | Out-Null
-$items = New-Object System.Collections.ArrayList
-Get-ChildItem -Path $ud -File | Where-Object { $_.Extension -eq '.coc' -or $_.Name -in @('launcher-settings.json', 'continue_game.json', 'Player.log', 'Player-prev.log') } | ForEach-Object { [void]$items.Add($_.FullName) }
-foreach ($dir in @('ModsSettings', 'ModsData\Placemaker', 'Logs')) {
-    $p = Join-Path $ud $dir
-    if (Test-Path $p) {
-        Get-ChildItem -Path $p -File -Recurse | Where-Object { $_.FullName -notlike "$suiteData*" } | ForEach-Object { [void]$items.Add($_.FullName) }
-    }
-}
-if ($Route -eq 'B') {
-    foreach ($f in @('launcher-v2.sqlite')) { $p = Join-Path $ud $f; if (Test-Path $p) { [void]$items.Add($p) } }
-    $lc = Join-Path $ud '.launcher-cache'
-    if (Test-Path $lc) { Get-ChildItem $lc -File -Recurse | ForEach-Object { [void]$items.Add($_.FullName) } }
-}
-$manifest = @()
-foreach ($f in $items) {
-    $rel = $f.Substring($ud.Length + 1)
-    $dst = Join-Path $backup $rel
+# ───────────── 3. save the user's settings, small window ─────────────
+if (Test-Path (Join-Path $saved 'files')) { Remove-Item (Join-Path $saved 'files') -Recurse -Force }
+New-Item -ItemType Directory -Force -Path (Join-Path $saved 'files') | Out-Null
+$rels = @()
+foreach ($f in Get-SettingsFiles) {
+    $rel = $f.FullName.Substring($ud.Length + 1)
+    $dst = Join-Path $saved "files\$rel"
     New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-    Copy-Item -LiteralPath $f -Destination $dst -Force
-    $manifest += [pscustomobject]@{ rel = $rel; sha = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash }
+    Copy-Item -LiteralPath $f.FullName -Destination $dst -Force
+    $rels += $rel
 }
-$manifest | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $runDir 'backup-manifest.json') -Encoding UTF8
-$backupDirs = @('ModsSettings', 'ModsData\Placemaker', 'Logs')
-Say ("backed up {0} files" -f $manifest.Count)
+Set-Content -Path (Join-Path $saved 'files.txt') -Value $rels -Encoding UTF8
+Set-Content -Path (Join-Path $saved 'pending.txt') -Value $RunId -Encoding ASCII
+Say ("saved {0} settings files" -f $rels.Count)
 
-# ───────────── profile: small window, no vsync, no blur, silent ─────────────
+$w, $h = $Window -split 'x'
 if (-not $KeepGraphics) {
     $ls = Join-Path $ud 'launcher-settings.json'
     if (Test-Path $ls) {
         $j = Get-Content $ls -Raw | ConvertFrom-Json
         $j.system.display_mode = 'windowed'
-        $j.system.windowed_resolution = '1280x720'
+        $j.system.windowed_resolution = $Window
         $j.system.vsync = $false
         Write-NoBom $ls ($j | ConvertTo-Json -Depth 5)
     }
@@ -133,7 +156,7 @@ if (-not $KeepGraphics) {
         $t = $t -replace '("enabled":\s*)true(,\s*"sampleCount")', '${1}false$2'
         Write-NoBom $sc $t
     }
-    Say 'suite profile: 1280x720 window, vsync off, no DOF/motion blur/dynamic resolution/volumetric clouds, muted'
+    Say "suite profile: $Window window, vsync off, no DOF/motion blur/dynamic resolution/volumetric clouds, muted"
 }
 
 # ───────────── arm ─────────────
@@ -144,65 +167,27 @@ $cfg = [ordered]@{
     runId = $RunId; set = $Set; outDir = $runDir; scenarioFile = $scenarioFile; git = $git
     expiresUtc = (Get-Date).ToUniversalTime().AddMinutes(25).ToString('o')
     speed = 4; pregrowSeconds = $PregrowSeconds; growSeconds = $GrowSeconds; maxScenarios = $MaxScenarios
-    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = 1280; shotHeight = 720; noTerrain = [bool]$NoTerrain
+    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = [int]$w; shotHeight = [int]$h; noTerrain = [bool]$NoTerrain
+}
+foreach ($kv in ($Opt -split ';' | Where-Object { $_ -match '=' })) {
+    $k, $v = $kv -split '=', 2
+    $k = $k.Trim(); $v = $v.Trim()
+    if ($v -match '^(true|false)$') { $cfg[$k] = ($v -eq 'true') } elseif ($v -match '^-?[0-9.]+$') { $cfg[$k] = [double]$v } else { $cfg[$k] = $v }
 }
 Write-NoBom (Join-Path $suiteData 'run.json') ($cfg | ConvertTo-Json -Depth 3)
+Say ("run.json: " + (($cfg.GetEnumerator() | Where-Object { $_.Key -notin @('outDir', 'scenarioFile', 'expiresUtc') } | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '))
 # Order matters on the real command line: -disableModding also sets disableCodeModding, the later '-disableCodeModding-'
 # clears it again. runOnce.txt is merged through a HashSet (order not kept), so for route A it carries only the token.
 $modFlags = if ($AllMods) { '' } else { '-disableModding -disableCodeModding- ' }
-$windowFlags = '-screen-fullscreen 0 -screen-width 1280 -screen-height 720'
+$windowFlags = "-screen-fullscreen 0 -screen-width $w -screen-height $h"
 $gameArgs = "$modFlags-noSplash $windowFlags -placemakerSuite=$RunId"
 $runOnce = if ($Route -eq 'A') { "-placemakerSuite=$RunId" } else { "$modFlags-noSplash -placemakerSuite=$RunId" }
 Set-Content -Path (Join-Path $ud 'runOnce.txt') -Value $runOnce -Encoding ASCII -NoNewline
 
-$restored = $false
-function Restore-All {
-    if ($script:restored) { return }
-    $script:restored = $true
-    Say 'restoring user files ...'
-    $report = New-Object System.Collections.ArrayList
-    $ro = Join-Path $ud 'runOnce.txt'
-    if (Test-Path $ro) { Remove-Item $ro -Force; [void]$report.Add('runOnce.txt was still there: removed') }
-    foreach ($f in @('run.json', 'run.active.json')) { $p = Join-Path $suiteData $f; if (Test-Path $p) { Remove-Item $p -Force } }
-    # files the session added inside the backed-up folders
-    $known = @{}
-    foreach ($m in $manifest) { $known[$m.rel.ToLowerInvariant()] = $true }
-    foreach ($dir in $backupDirs) {
-        $p = Join-Path $ud $dir
-        if (-not (Test-Path $p)) { continue }
-        Get-ChildItem -Path $p -File -Recurse | Where-Object { $_.FullName -notlike "$suiteData*" } | ForEach-Object {
-            $rel = $_.FullName.Substring($ud.Length + 1)
-            if (-not $known.ContainsKey($rel.ToLowerInvariant())) { Remove-Item -LiteralPath $_.FullName -Force; [void]$report.Add("removed new file $rel") }
-        }
-    }
-    $changed = 0; $bad = 0
-    foreach ($m in $manifest) {
-        $src = Join-Path $backup $m.rel
-        $dst = Join-Path $ud $m.rel
-        $now = if (Test-Path -LiteralPath $dst) { (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash } else { '' }
-        if ($now -ne $m.sha) {
-            New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-            Copy-Item -LiteralPath $src -Destination $dst -Force
-            $changed++
-            [void]$report.Add("restored $($m.rel)")
-        }
-        $after = (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash
-        if ($after -ne $m.sha) { $bad++; [void]$report.Add("HASH MISMATCH $($m.rel)") }
-    }
-    $root = Get-ChildItem -Path $ud -File | Where-Object { $_.Extension -eq '.coc' -or $_.Name -in @('launcher-settings.json', 'continue_game.json') }
-    foreach ($r in $root) {
-        $rel = $r.Name
-        if (-not $known.ContainsKey($rel.ToLowerInvariant())) { Remove-Item -LiteralPath $r.FullName -Force; [void]$report.Add("removed new root file $rel") }
-    }
-    $line = "restore: $($manifest.Count) files checked, $changed restored, $bad hash mismatches"
-    [void]$report.Insert(0, $line)
-    $report | Set-Content -Path (Join-Path $runDir 'restore.txt') -Encoding UTF8
-    Say $line
-}
-
 # ───────────── launch ─────────────
 $launchedAt = Get-Date
 $proc = $null
+$status = 'not started'; $phaseTimes = [ordered]@{}; $ourPid = 0
 try {
     if ($Route -eq 'A') {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -223,11 +208,11 @@ try {
     if ($TimeoutMin -le 0) { $TimeoutMin = switch ($Set) { 'bootstrap' { 15 } 'smoke' { 25 } 'core' { 75 } 'full' { 75 } } }
     $hb = Join-Path $runDir 'heartbeat.json'
     $ourPid = if ($proc) { $proc.Id } else { 0 }
-    $lastBeat = $null; $lastBeatChange = Get-Date; $lastPhase = ''; $status = 'running'; $phaseTimes = [ordered]@{}
+    $lastBeat = $null; $lastBeatChange = Get-Date; $lastPhase = ''; $status = 'running'
     while ($true) {
-        Start-Sleep -Seconds 3
+        Start-Sleep -Seconds 2
         $now = Get-Date
-        # route A relaunched through Steam, or route B: adopt the Cities2 process started after our launch
+        # route B: adopt the Cities2 process started after our launch
         if ($ourPid -eq 0 -or -not (Get-Process -Id $ourPid -ErrorAction SilentlyContinue)) {
             $cand = @(Get-Process -Name 'Cities2' -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -ge $launchedAt.AddSeconds(-2) })
             if ($cand.Count -gt 0 -and $cand[0].Id -ne $ourPid) {
@@ -248,7 +233,7 @@ try {
         }
         if (-not $alive) {
             if ($lastPhase -eq 'quit') { $status = 'quit'; Say 'game exited after the clean quit' }
-            elseif (($now - $launchedAt).TotalSeconds -lt 60 -and $Route -eq 'A') { continue }
+            elseif (($now - $launchedAt).TotalSeconds -lt 60 -and -not $beat) { continue }   # a relaunch through Steam gets adopted above
             else { $status = 'crashed'; Say "game process gone in phase '$lastPhase' without the clean quit" }
             break
         }
@@ -259,7 +244,7 @@ try {
         if ($beat -and $beat.phase -eq 'quit') {
             # give the game's own quit time to finish
             $quitAt = Get-Date
-            while ((Get-Process -Id $ourPid -ErrorAction SilentlyContinue) -and ((Get-Date) - $quitAt).TotalSeconds -lt 90) { Start-Sleep -Seconds 2 }
+            while ((Get-Process -Id $ourPid -ErrorAction SilentlyContinue) -and ((Get-Date) - $quitAt).TotalSeconds -lt 90) { Start-Sleep -Seconds 1 }
             if (Get-Process -Id $ourPid -ErrorAction SilentlyContinue) { $status = 'quit-timeout'; Say 'clean quit did not finish in 90 s' }
             else { $status = 'quit'; Say ("game exited cleanly {0:F0} s after the quit request" -f ((Get-Date) - $quitAt).TotalSeconds) }
             break
@@ -272,19 +257,19 @@ try {
     }
 }
 finally {
-    # ───────────── collect logs, restore ─────────────
+    # ───────────── collect logs, put the settings back ─────────────
     $logs = Join-Path $runDir 'logs'
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
     foreach ($f in @('Player.log')) { $p = Join-Path $ud $f; if (Test-Path $p) { Copy-Item $p $logs -Force } }
     Get-ChildItem (Join-Path $ud 'Logs') -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $launchedAt.AddSeconds(-5) } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $logs -Force }
-    Restore-All
+    Restore-Settings "after run $RunId"
 }
 
 $total = ((Get-Date) - $t0).TotalSeconds
 $hostInfo = [ordered]@{ runId = $RunId; set = $Set; route = $Route; git = $git; status = $status; launchedAt = $launchedAt.ToString('o'); totalSec = [math]::Round($total, 1); phaseAtSec = $phaseTimes; pid = $ourPid }
 ($hostInfo | ConvertTo-Json -Depth 4) | Set-Content -Path (Join-Path $runDir 'host.json') -Encoding UTF8
 $md = Join-Path $runDir 'summary.md'
-$extra = @('', '## Host', "status **$status**, route $Route, total $([math]::Round($total)) s (build, backup, boot, run, quit, restore)", "phases (s after launch): $(($phaseTimes.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', ')", (Get-Content (Join-Path $runDir 'restore.txt') -TotalCount 1))
+$extra = @('', '## Host', "status **$status**, route $Route, total $([math]::Round($total)) s (build, boot, run, quit)", "phases (s after launch): $(($phaseTimes.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', ')")
 Add-Content -Path $md -Value $extra
 Say "done: $status in $([math]::Round($total)) s -> $runDir"
 if ($status -ne 'quit') { exit 1 }

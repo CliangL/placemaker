@@ -1,8 +1,9 @@
 // In-game test suite (docs/teardown/10-ingame-suite.md): the fixture's geometry, pure so it is unit-tested offline.
 //
-// The suite starts a new game on the game's own flat default world (no map: TerrainSystem's default heightmap,
-// every texel 8191/65535 of 4096 m ≈ 511.98 m), reshapes a few areas through one heightmap replacement, then lays
-// a grid of vanilla roads. Every block of the grid hosts one scenario. Block kinds:
+// The suite starts a new game on a vanilla map (the map-less "default world" is incomplete and crashes natively as
+// soon as roads appear: runs boot2-5, e1, e3), reshapes the fixture area in place through one heightmap replacement
+// (flat at the area's median ground, a slope, rough blocks, easing back into the map's terrain), then lays a grid of
+// vanilla roads. Every block of the grid hosts one scenario. Block kinds:
 //   Zoned   row 1: residential zoning on the south street side, grown before the scenarios run
 //   Survive row 2, column 4: plopped buildings that every build there must leave standing
 //   Rough   row 4, columns 0-2: ±4 m hills inside the block (the roads around stay level)
@@ -53,10 +54,7 @@ namespace Placemaker.Core.Suite
 
         /// <summary>TerrainSystem's default heightmap value (8191) on the default 4096 m height scale.</summary>
         public const float DefaultHeight = 8191f / 65535f * 4096f;
-        /// <summary>
-        /// The whole map is lifted 30 m: the default world's sea level (WaterSystem.SetDefaults, 511.7 m) is only 0.28 m below
-        /// its ground, so the rough blocks' dips would fill with sea water.
-        /// </summary>
+        /// <summary>Default Base when no map says otherwise (offline tests): 30 m above the default world's sea level.</summary>
         public const float BaseHeight = DefaultHeight + 30f;
         public const float HeightScale = 4096f;
         public const int HeightmapSize = 4096;
@@ -112,6 +110,20 @@ namespace Placemaker.Core.Suite
         }
 
         // ───────────── terrain ─────────────
+        // The map's own terrain stays outside the fixture: inside FixtureMin..FixtureMax the ground is the layout
+        // (Base + slope + rough), and over the next Blend metres it eases back into the map's heights.
+
+        /// <summary>Ground level of the flat blocks (set from the live map: the median ground of the fixture area).</summary>
+        public float Base = BaseHeight;
+        /// <summary>The terrain's height scale / offset (TerrainSystem.heightScaleOffset): height = offset + value / 65535 * scale.</summary>
+        public float HeightScaleM = HeightScale, HeightOffset;
+        /// <summary>The playable area the heightmap covers (TerrainSystem.playableOffset / playableArea).</summary>
+        public float2 MapOffset = new float2(-MapSize * 0.5f), MapExtent = new float2(MapSize);
+        /// <summary>Flat apron around the outer roads, and the width of the ease back into the map's terrain.</summary>
+        public float Apron = 40f, Blend = 200f;
+
+        public float2 FixtureMin => new float2(LineX(0) - Apron, LineZ(0) - Apron);
+        public float2 FixtureMax => new float2(LineX(NX) + Apron, SlopeEnd + Apron);
 
         private float SlopeStart => LineZ(5);
         private float SlopeEnd => LineZ(NZ) + 60f;
@@ -135,43 +147,68 @@ namespace Placemaker.Core.Suite
             return 0f;
         }
 
-        public float Height(float x, float z) => BaseHeight + SlopeRise(z) + RoughBump(x, z);
+        public float Height(float x, float z) => Base + SlopeRise(z) + RoughBump(x, z);
 
-        /// <summary>World position of heightmap texel (px, py): the map spans [-MapSize/2, MapSize/2] on both axes.</summary>
-        public static float2 TexelWorld(int px, int py)
+        /// <summary>World position (x, z) of heightmap texel (px, py) (row = z, column = x).</summary>
+        public float2 TexelWorld(int px, int py) => MapOffset + (new float2(px, py) + 0.5f) * (MapExtent / HeightmapSize);
+
+        public ushort Encode(float height) => (ushort)math.clamp((int)math.round((height - HeightOffset) / HeightScaleM * 65535f), 0, 65535);
+
+        public float Decode(ushort value) => HeightOffset + value / 65535f * HeightScaleM;
+
+        /// <summary>Metres from (x, z) to the fixture rectangle (0 inside).</summary>
+        public float OutsideFixture(float x, float z)
         {
-            float cell = MapSize / HeightmapSize;
-            return new float2(-MapSize * 0.5f + (px + 0.5f) * cell, -MapSize * 0.5f + (py + 0.5f) * cell);
+            var lo = FixtureMin;
+            var hi = FixtureMax;
+            float dx = math.max(math.max(lo.x - x, x - hi.x), 0f), dz = math.max(math.max(lo.y - z, z - hi.y), 0f);
+            return math.sqrt(dx * dx + dz * dz);
         }
 
-        public static ushort Encode(float height) => (ushort)math.clamp((int)math.round(height / HeightScale * 65535f), 0, 65535);
-
-        /// <summary>The full R16 heightmap (row = z, column = x), default height everywhere outside the shaped areas.</summary>
-        public ushort[] Heightmap()
+        /// <summary>
+        /// The full R16 heightmap (row = z, column = x). <paramref name="existing"/> is the map's current heightmap (same
+        /// size and encoding): kept beyond the blend, the layout inside the fixture, a smooth ease between. Without it the
+        /// whole map is the layout.
+        /// </summary>
+        public ushort[] Heightmap(ushort[] existing = null)
         {
             int n = HeightmapSize;
             var data = new ushort[n * n];
-            ushort baseValue = Encode(BaseHeight);
-            float cell = MapSize / n;
-            float roughX0 = LineX(0) - 1f, roughX1 = LineX(3) + 1f, roughZ0 = LineZ(4) - 1f, roughZ1 = LineZ(5) + 1f;
+            if (existing != null && existing.Length != data.Length) throw new ArgumentException("existing heightmap must be " + n + "x" + n);
+            float2 cell = MapExtent / n;
+            float reach = existing != null ? Blend : float.MaxValue;
+            var lo = FixtureMin - reach;
+            var hi = FixtureMax + reach;
             for (int py = 0; py < n; py++)
             {
-                float z = -MapSize * 0.5f + (py + 0.5f) * cell;
-                float rise = SlopeRise(z);
-                bool roughRow = z > roughZ0 && z < roughZ1;
-                ushort rowValue = rise > 0f ? Encode(BaseHeight + rise) : baseValue;
+                float z = MapOffset.y + (py + 0.5f) * cell.y;
                 int o = py * n;
-                for (int px = 0; px < n; px++) data[o + px] = rowValue;
-                if (!roughRow) continue;
+                bool rowNear = z >= lo.y && z <= hi.y;
+                if (existing != null && !rowNear) { Array.Copy(existing, o, data, o, n); continue; }
+                float rise = SlopeRise(z);
+                bool roughRow = z > LineZ(4) - 1f && z < LineZ(5) + 1f;
                 for (int px = 0; px < n; px++)
                 {
-                    float x = -MapSize * 0.5f + (px + 0.5f) * cell;
-                    if (x < roughX0 || x > roughX1) continue;
-                    float b = RoughBump(x, z);
-                    if (b != 0f) data[o + px] = Encode(BaseHeight + rise + b);
+                    float x = MapOffset.x + (px + 0.5f) * cell.x;
+                    if (existing != null && (x < lo.x || x > hi.x)) { data[o + px] = existing[o + px]; continue; }
+                    float target = Base + rise + (roughRow ? RoughBump(x, z) : 0f);
+                    if (existing == null) { data[o + px] = Encode(target); continue; }
+                    float d = OutsideFixture(x, z);
+                    if (d >= Blend) { data[o + px] = existing[o + px]; continue; }
+                    float t = math.smoothstep(0f, Blend, d);
+                    data[o + px] = Encode(math.lerp(target, Decode(existing[o + px]), t));
                 }
             }
             return data;
+        }
+
+        /// <summary>The median of the given ground heights (the fixture's Base: least earth moved).</summary>
+        public static float Median(List<float> heights)
+        {
+            if (heights == null || heights.Count == 0) return BaseHeight;
+            var s = new List<float>(heights);
+            s.Sort();
+            return s[s.Count / 2];
         }
     }
 }

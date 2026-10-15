@@ -36,7 +36,7 @@ namespace Placemaker.Tests.Suite
         public void Heightmap_FlatSlopeAndRough()
         {
             var l = new SuiteLayout();
-            Assert.Equal(SuiteLayout.BaseHeight, l.Height(l.LineX(5) + 40, l.LineZ(2) + 50), 3);
+            Assert.Equal(l.Base, l.Height(l.LineX(5) + 40, l.LineZ(2) + 50), 3);
             // slope: 6 % north of LineZ(5), level roads at the start line
             Assert.Equal(SuiteLayout.BaseHeight + 0.06f * 70f, l.Height(100f, l.LineZ(5) + 70f), 3);
             Assert.Equal(SuiteLayout.BaseHeight, l.Height(100f, l.LineZ(5)), 3);
@@ -56,12 +56,46 @@ namespace Placemaker.Tests.Suite
             int n = SuiteLayout.HeightmapSize;
             foreach (var (px, py) in new[] { (2000, 2000), (1900, 2200), (1880, 2040), (2100, 2100) })
             {
-                var w = SuiteLayout.TexelWorld(px, py);
+                var w = l.TexelWorld(px, py);
                 float h = data[py * n + px] / 65535f * SuiteLayout.HeightScale;
                 Assert.InRange(math.abs(l.Height(w.x, w.y) - h), 0f, 0.07f);
             }
-            Assert.Equal(SuiteLayout.Encode(SuiteLayout.BaseHeight), data[0]);
+            Assert.Equal(l.Encode(SuiteLayout.BaseHeight), data[0]);
             Assert.True(SuiteLayout.BaseHeight > 511.7f + 25f);
+        }
+
+        [Fact]
+        public void Heightmap_EasesIntoTheMapsTerrain()
+        {
+            // a map with its own scale/offset and a ramp along x; the fixture sits 20 m below the map's ground there
+            var l = new SuiteLayout { HeightScaleM = 2048f, HeightOffset = 100f, Base = 400f };
+            int n = SuiteLayout.HeightmapSize;
+            var existing = new ushort[n * n];
+            for (int py = 0; py < n; py++)
+                for (int px = 0; px < n; px++)
+                    existing[py * n + px] = l.Encode(420f + 0.002f * l.TexelWorld(px, py).x);
+            var data = l.Heightmap(existing);
+            float At(float x, float z)
+            {
+                int px = (int)((x - l.MapOffset.x) / (l.MapExtent.x / n)), py = (int)((z - l.MapOffset.y) / (l.MapExtent.y / n));
+                return l.Decode(data[py * n + px]);
+            }
+            // inside: the layout (flat block, slope), to the encoding's resolution
+            Assert.InRange(math.abs(At(l.LineX(5) + 40, l.LineZ(2) + 50) - l.Height(l.LineX(5) + 40, l.LineZ(2) + 50)), 0f, 0.1f);
+            Assert.InRange(math.abs(At(100f, l.LineZ(5) + 70f) - l.Height(100f, l.LineZ(5) + 70f)), 0f, 0.3f);
+            // far away: the map's own ground, untouched
+            Assert.Equal(existing[10 * n + 10], data[10 * n + 10]);
+            float farX = l.FixtureMax.x + l.Blend + 50f;
+            Assert.InRange(math.abs(At(farX, l.LineZ(2)) - (420f + 0.002f * farX)), 0f, 0.1f);
+            // the ease climbs steadily from the fixture to the map's ground
+            float prev = At(l.FixtureMax.x + 1f, l.LineZ(2));
+            for (float d = 20f; d < l.Blend; d += 20f)
+            {
+                float h = At(l.FixtureMax.x + d, l.LineZ(2));
+                Assert.True(h >= prev - 0.05f, $"ease dips at {d} m: {h} after {prev}");
+                prev = h;
+            }
+            Assert.Equal(400f, SuiteLayout.Median(new List<float> { 380f, 400f, 450f }));
         }
 
         [Fact]

@@ -92,11 +92,128 @@ namespace Placemaker.Game.Suite
 
         // ───────────── terrain ─────────────
 
+        /// <summary>
+        /// Takes the live map's terrain encoding and playable area, and sets the fixture's Base to the median ground of the
+        /// fixture area (least earth moved), at least 8 m above the sea.
+        /// </summary>
+        public void ConfigureFromWorld()
+        {
+            var terrain = _world.GetOrCreateSystemManaged<TerrainSystem>();
+            Layout.HeightScaleM = terrain.heightScaleOffset.x;
+            Layout.HeightOffset = terrain.heightScaleOffset.y;
+            Layout.MapOffset = terrain.playableOffset;
+            Layout.MapExtent = terrain.playableArea;
+            var heights = new List<float>();
+            var lo = Layout.FixtureMin;
+            var hi = Layout.FixtureMax;
+            for (float x = lo.x; x <= hi.x; x += 20f)
+                for (float z = lo.y; z <= hi.y; z += 20f)
+                    heights.Add(SampleHeight(new float2(x, z)));
+            heights.Sort();
+            float median = SuiteLayout.Median(heights);
+            float sea = _world.GetOrCreateSystemManaged<WaterSystem>().SeaLevel;
+            Layout.Base = math.max(median, sea + 8f);
+            Note($"map terrain: scale {Layout.HeightScaleM:F0} m, offset {Layout.HeightOffset:F1} m, playable {Layout.MapExtent.x:F0} m at {Layout.MapOffset}; "
+                + $"fixture ground {heights[0]:F1}..{heights[heights.Count - 1]:F1} m, median {median:F1} m, sea {sea:F1} m -> base {Layout.Base:F1} m");
+        }
+
+        /// <summary>Removes every water source (the flattened fixture must never flood); the water itself is reset after the heightmap.</summary>
+        public int RemoveWaterSources()
+        {
+            using (var q = _em.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Simulation.WaterSourceData>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>()))
+            {
+                int n = q.CalculateEntityCount();
+                if (n > 0) _em.AddComponent<Deleted>(q);
+                Note($"water sources removed: {n}");
+                return n;
+            }
+        }
+
+        public void ResetWater()
+        {
+            var water = _world.GetOrCreateSystemManaged<WaterSystem>();
+            water.Reset();
+            Note("water reset (no water left on the map)");
+        }
+
+        /// <summary>
+        /// Bulldozes what the map has in the fixture area (top-level nets and static objects: trees, props, buildings) through
+        /// vanilla delete definitions, the way the bulldozer does.
+        /// </summary>
+        public int EmitClear(SuiteFixtureToolSystem tool, out string detail)
+        {
+            var lo = Layout.FixtureMin - 20f;
+            var hi = Layout.FixtureMax + 20f;
+            bool Inside(float3 p) => p.x >= lo.x && p.x <= hi.x && p.z >= lo.y && p.z <= hi.y;
+            int edges = 0, objects = 0;
+            using (var q = _em.CreateEntityQuery(ComponentType.ReadOnly<Edge>(), ComponentType.ReadOnly<Curve>(), ComponentType.Exclude<Owner>(),
+                ComponentType.Exclude<Temp>(), ComponentType.Exclude<Deleted>()))
+            using (var all = q.ToEntityArray(Allocator.Temp))
+            {
+                foreach (var e in all)
+                {
+                    var c = _em.GetComponentData<Curve>(e).m_Bezier;
+                    bool hit = false;
+                    for (int k = 0; k <= 8 && !hit; k++) hit = Inside(MathUtils.Position(c, k / 8f));
+                    if (!hit) continue;
+                    var edge = _em.GetComponentData<Edge>(e);
+                    var def = tool.NewDefinition();
+                    _em.AddComponentData(def, new CreationDefinition { m_Original = e, m_Flags = CreationFlags.Delete });
+                    _em.AddComponent<Updated>(def);
+                    _em.AddComponentData(def, new NetCourse
+                    {
+                        m_Curve = c, m_Length = MathUtils.Length(c), m_FixedIndex = -1,
+                        m_StartPosition = new CoursePos { m_Entity = edge.m_Start, m_Position = c.a, m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(c)), m_CourseDelta = 0f, m_ParentMesh = -1 },
+                        m_EndPosition = new CoursePos { m_Entity = edge.m_End, m_Position = c.d, m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(c)), m_CourseDelta = 1f, m_ParentMesh = -1 },
+                    });
+                    edges++;
+                }
+            }
+            using (var q = _em.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Objects.Static>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(),
+                ComponentType.Exclude<Owner>(), ComponentType.Exclude<Temp>(), ComponentType.Exclude<Deleted>()))
+            using (var all = q.ToEntityArray(Allocator.Temp))
+            {
+                foreach (var e in all)
+                {
+                    var t = _em.GetComponentData<global::Game.Objects.Transform>(e);
+                    if (!Inside(t.m_Position)) continue;
+                    var def = tool.NewDefinition();
+                    _em.AddComponentData(def, new CreationDefinition { m_Original = e, m_Flags = CreationFlags.Delete });
+                    _em.AddComponent<Updated>(def);
+                    _em.AddComponentData(def, new ObjectDefinition { m_Position = t.m_Position, m_Rotation = t.m_Rotation, m_LocalPosition = t.m_Position, m_LocalRotation = t.m_Rotation, m_ParentMesh = -1, m_Scale = new float3(1f), m_Intensity = 1f, m_PrefabSubIndex = -1 });
+                    objects++;
+                }
+            }
+            detail = $"{edges} edges, {objects} static objects";
+            Note("clear fixture area: " + detail);
+            return edges + objects;
+        }
+
+        public int CountInFixture()
+        {
+            var lo = Layout.FixtureMin;
+            var hi = Layout.FixtureMax;
+            int n = 0;
+            using (var q = _em.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Objects.Static>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(),
+                ComponentType.Exclude<Owner>(), ComponentType.Exclude<Temp>(), ComponentType.Exclude<Deleted>()))
+            using (var all = q.ToEntityArray(Allocator.Temp))
+                foreach (var e in all)
+                {
+                    var p = _em.GetComponentData<global::Game.Objects.Transform>(e).m_Position;
+                    if (p.x >= lo.x && p.x <= hi.x && p.z >= lo.y && p.z <= hi.y) n++;
+                }
+            return n;
+        }
+
         public string ApplyHeightmap()
         {
             var terrain = _world.GetOrCreateSystemManaged<TerrainSystem>();
-            var data = Layout.Heightmap();
+            ushort[] existing = null;
+            var hd = terrain.GetHeightData(true);
             int n = SuiteLayout.HeightmapSize;
+            if (hd.isCreated && hd.heights.Length == n * n) existing = hd.heights.ToArray();
+            else Note($"live heights unavailable ({(hd.isCreated ? hd.heights.Length : 0)} texels): the whole map becomes the layout");
+            var data = Layout.Heightmap(existing);
             var tex = new Texture2D(n, n, UnityEngine.Experimental.Rendering.GraphicsFormat.R16_UNorm,
                 UnityEngine.Experimental.Rendering.TextureCreationFlags.None);
             try

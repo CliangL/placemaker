@@ -27,8 +27,16 @@ namespace Placemaker.Game.Suite
         /// <summary>Stop after the fixture (bootstrap check).</summary>
         public bool fixtureOnly;
         public bool quit = true;
-        /// <summary>Keep the default world as it is (no heightmap replacement: no slope or rough blocks).</summary>
+        /// <summary>Keep the map's terrain as it is (no heightmap replacement: no flat, slope or rough blocks).</summary>
         public bool noTerrain;
+        /// <summary>"map:&lt;display name&gt;": the vanilla map the new game starts on (the fixture area is reshaped in place).</summary>
+        public string world = "map:Plains";
+        /// <summary>Road fixture: "single" (one apply; ends merge on exact positions), "batches" (vertical lines, then cross streets onto their nodes), "vertical", "none".</summary>
+        public string roads = "single";
+        /// <summary>Seconds to idle after the roads (diagnostics).</summary>
+        public float idleAfterRoads;
+        /// <summary>Log every frame while the roads apply (diagnostics).</summary>
+        public bool trace;
         public int shotWidth = 1280, shotHeight = 720;
     }
 
