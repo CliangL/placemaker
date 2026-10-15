@@ -71,6 +71,15 @@ namespace Placemaker.Core.Layers.Roads
         public readonly List<RoadEdge> Edges = new List<RoadEdge>();
         public readonly List<RoadNode> Nodes = new List<RoadNode>();
 
+        /// <summary>(s61) Sharp outline corners (xz): a node there is kept when a crowding junction merges with it.</summary>
+        public readonly List<float2> Corners = new List<float2>();
+
+        public bool IsCorner(RoadNode n)
+        {
+            foreach (var c in Corners) if (math.distancesq(c, n.Position.xz) < 0.09f) return true;
+            return false;
+        }
+
         /// <summary>
         /// Rebuilds the node table from edge end points (all non-discarded edges, removed ones too, so
         /// "degree before removal" stays measurable) and writes canonical node positions back into the
@@ -248,6 +257,9 @@ namespace Placemaker.Core.Layers.Roads
                         continue;
                     }
                     RoadNode keep = aFixed || !bFixed ? a : b;
+                    // (s61) An outline corner stays where the outline has it: the street end that crowds it moves onto it.
+                    bool aCorner = IsCorner(a), bCorner = IsCorner(b);
+                    if (aCorner != bCorner && a.Attach < 0 && b.Attach < 0) keep = aCorner ? a : b;
                     RoadNode drop = keep == a ? b : a;
                     int keepId = keep == a ? e.N0 : e.N1, dropId = keep == a ? e.N1 : e.N0;
                     e.Discarded = true;

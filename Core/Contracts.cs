@@ -833,6 +833,12 @@ namespace Placemaker.Core
         public object[] Args = Array.Empty<object>();
         /// <summary>Optional location to mark on the map.</summary>
         public float3? At;
+        /// <summary>(s61) The setting (control id of the issue's layer) that made this happen, "" = none: the UI names it and jumps to it.</summary>
+        public string Cause = "";
+        /// <summary>(s61) That setting's value as the player sees it ("120 m", "On"); shown beside its name.</summary>
+        public string CauseValue = "";
+        /// <summary>(s61) Something was left out or blocked (red marker); false = a warning (orange) or a note.</summary>
+        public bool Dropped;
     }
 
     /// <summary>One line in the summary card, e.g. ("Placemaker.Stat.Stalls", 312, "count").</summary>

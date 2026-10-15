@@ -49,6 +49,42 @@ namespace Placemaker.Core.Layers.Roads
         public const string FactLanes = "roads.lanes";
         public const string FactSteepest = "roads.steepestGrade";
         private const int MaxSteepIssues = 6;
+        // s61: issues that explain themselves
+        public const string IssueDroppedObstacle = "Placemaker.Roads.Issue.DroppedObstacle";
+        public const string IssuePerimeterBlocked = "Placemaker.Roads.Issue.PerimeterBlocked";
+        public const string IssuePerimeterOpen = "Placemaker.Roads.Issue.PerimeterOpen";
+        public const string IssueJunctionCut = "Placemaker.Roads.Issue.JunctionCut";
+        public const string FactBypassed = "roads.bypassed";
+        public const string FactPerimeterClosed = "roads.perimeterClosed";
+        public const string FactPerimeterOpen = "roads.perimeterOpen";
+        private const int MaxBlockedIssues = 8;
+        private const int MaxCutIssues = 4;
+
+        private static string FormatValue(float v, string unit) => Math.Round(v).ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + unit;
+        private static string FormatValue(bool on) => on ? "On" : "Off";
+
+        private static bool NearObstacle(RoadObstacles o, float2 p, float radius)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * math.PI / 4f;
+                if (o.BlockedAt(p + new float2(math.cos(a), math.sin(a)) * radius * 0.5f) || o.BlockedAt(p + new float2(math.cos(a), math.sin(a)) * radius)) return true;
+            }
+            return o.BlockedAt(p);
+        }
+
+        /// <summary>(s61) The sharp corners of the outline: a junction that crowds one merges onto it (the corner stays where the outline has it).</summary>
+        private static void AddCorners(RoadNetwork net, float2[] boundary)
+        {
+            net.Corners.Clear();
+            int n = boundary.Length;
+            for (int i = 0; i < n; i++)
+            {
+                float2 d0 = math.normalizesafe(boundary[i] - boundary[(i + n - 1) % n]), d1 = math.normalizesafe(boundary[(i + 1) % n] - boundary[i]);
+                if (math.degrees(math.acos(math.clamp(math.dot(d0, d1), -1f, 1f))) >= FreeAreaPerimeter.SharpCornerDegrees) net.Corners.Add(boundary[i]);
+            }
+        }
+
         private const float RingClipMargin = 1.5f;
 
         public static AreaPlan Plan(AreaInput input, IReadOnlyList<ControlSchema> controls, CancellationToken cancel)
@@ -142,11 +178,13 @@ namespace Placemaker.Core.Layers.Roads
                 net.Edges.Add(new RoadEdge(curve, RoleOf(s, pattern, loopFamily), s.IsCulDeSacEnd));
             }
             if (terraceLayout != null) Terraces.TerraceNetwork.Add(net, terraceLayout, terraceOpt);
+            AddCorners(net, boundary);
             net.Weld();
             // (s34) Follow contours: the long streets of a grid / superblocks are laid onto contour lines.
             bool followContours = settings.S(RoadsIds.TerrainFit, "auto") == "follow";
             if (followContours && follow && (pattern == RoadPattern.Grid || pattern == RoadPattern.Superblock)
-                && GridGenerator.TryContourDirection(new List<float2>(boundary), heightAt, out float2 contourAxis, out float slopeAnisotropy) && slopeAnisotropy > 0.3f)
+                && GridGenerator.TryContourDirection(new List<float2>(boundary), heightAt, out float2 contourAxis, out float slopeAnisotropy, out float meanSlope)
+                && slopeAnisotropy > 0.3f && meanSlope >= RoadContourWarp.MinSlope)
             {
                 float rot = math.radians(gp.AngleOffsetDegrees);
                 float2 axis = new float2(contourAxis.x * math.cos(rot) - contourAxis.y * math.sin(rot), contourAxis.x * math.sin(rot) + contourAxis.y * math.cos(rot));
@@ -168,12 +206,15 @@ namespace Placemaker.Core.Layers.Roads
 
             // ── 3. Obstacles (interior) ─────────────────────────────────
             int removedByObstacles = 0;
+            var detours = new List<RoadDetour.Result>();
             RoadObstacles obstacles = null;
             if (avoid)
             {
                 Poly.Bounds(ring2, out float2 mn, out float2 mx);
                 obstacles = new RoadObstacles(site, mn, mx);
-                removedByObstacles += obstacles.RemoveBlocked(net, null, e => hw(e.Role) + 1f);
+                var det0 = RoadDetour.Run(net, obstacles, null, e => hw(e.Role) + 1f, boundary);
+                removedByObstacles += det0.Removed;
+                detours.Add(det0);
                 // (s34) No stub pruning here: on tree-like layouts (organic, superblocks) it cascaded through whole
                 // networks (the rural playtest site lost every road). Dead ends are handled once the network is final
                 // (RoadConnectivity.CleanDeadEnds: short stubs go, long ones become cul-de-sacs).
@@ -197,7 +238,11 @@ namespace Placemaker.Core.Layers.Roads
                 }
                 net.Weld();
                 if (obstacles != null)
-                    removedByObstacles += obstacles.RemoveBlocked(net, e => e.Role == NetRole.PerimeterRoad, e => hw(e.Role) + 1f);
+                {
+                    var det1 = RoadDetour.Run(net, obstacles, e => e.Role == NetRole.PerimeterRoad, e => hw(e.Role) + 1f, boundary);
+                    removedByObstacles += det1.Removed;
+                    detours.Add(det1);
+                }
             }
             cancel.ThrowIfCancellationRequested();
 
@@ -219,7 +264,7 @@ namespace Placemaker.Core.Layers.Roads
             var ctx = new RoadDesign.Context
             {
                 Boundary = boundary, Existing = existing, Obstacles = obstacles, Height = follow ? heightAt : null, HalfWidth = hw,
-                Perimeter = perimeter, JunctionSpacing = RoadsSchema.Num(settings, controls, RoadsIds.JunctionSpacing),
+                Perimeter = perimeter, PerimeterCorner = perimeter ? corner : -1f, JunctionSpacing = RoadsSchema.Num(settings, controls, RoadsIds.JunctionSpacing),
                 MaxGrade = RoadsSchema.Num(settings, controls, RoadsIds.MaxGrade) / 100f,
                 Walkways = RoadsSchema.Num(settings, controls, RoadsIds.Walkways) / 100f,
                 WalkwayStyle = settings.S(RoadsIds.WalkwayStyle, "paved"),
@@ -340,18 +385,62 @@ namespace Placemaker.Core.Layers.Roads
             {
                 plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = IssueNothing });
             }
+            // (s61) Every marker on the map explains itself: what happened, which setting caused it (named + its value, the UI
+            // jumps to it), red = something was dropped / blocked, orange = a warning. Resolve first (bypass, merge, join); this
+            // only reports what could not be resolved.
+            float3 At3(float2 p) => new float3(p.x, heightAt(p), p.y);
+            string spacingValue = FormatValue(RoadsSchema.Num(settings, controls, RoadsIds.JunctionSpacing), "m");
+            string gradeValue = FormatValue(RoadsSchema.Num(settings, controls, RoadsIds.MaxGrade), "%");
             if (removedByObstacles > 0)
-                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = IssueObstacles, Args = new object[] { removedByObstacles } });
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = IssueObstacles, Args = new object[] { removedByObstacles }, Cause = RoadsIds.AvoidObstacles, CauseValue = FormatValue(avoid) });
+            int bypassed = 0;
+            foreach (var d in detours) bypassed += d.Bypassed + d.Trimmed;
+            if (bypassed > 0)
+                plan.Facts[FactBypassed] = bypassed;
+            int blockedShown = 0;
+            foreach (var d in detours)
+                foreach (var (at, role) in d.RemovedAt)
+                {
+                    if (blockedShown++ >= MaxBlockedIssues) break;
+                    plan.Issues.Add(new PlanIssue
+                    {
+                        Severity = IssueSeverity.Warning, Key = role == NetRole.PerimeterRoad ? IssuePerimeterBlocked : IssueDroppedObstacle,
+                        At = At3(at), Cause = RoadsIds.AvoidObstacles, CauseValue = FormatValue(avoid), Dropped = true,
+                    });
+                }
+            foreach (var p in design.PerimeterClose.OpenAt)
+                plan.Issues.Add(new PlanIssue
+                {
+                    Severity = IssueSeverity.Warning, Key = IssuePerimeterOpen, At = At3(p), Dropped = true,
+                    Cause = obstacles != null && !obstacles.IsEmpty ? RoadsIds.AvoidObstacles : RoadsIds.PerimeterRoad,
+                    CauseValue = obstacles != null && !obstacles.IsEmpty ? FormatValue(avoid) : settings.S(RoadsIds.PerimeterRoad, "auto"),
+                });
+            plan.Facts[FactPerimeterClosed] = design.PerimeterClose.Closed;
+            plan.Facts[FactPerimeterOpen] = design.PerimeterClose.OpenAt.Count;
             // (s34) What the network design did that the player should know.
             var conn = design.Connectivity;
             if (conn.Dropped > 0)
             {
                 float3? at = null;
-                if (conn.DroppedAt.Count > 0) at = new float3(conn.DroppedAt[0].x, heightAt(conn.DroppedAt[0]), conn.DroppedAt[0].y);
-                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = IssueIslands, Args = new object[] { conn.Dropped, Math.Round(conn.DroppedLength) }, At = at });
+                if (conn.DroppedAt.Count > 0) at = At3(conn.DroppedAt[0]);
+                // The cause: an obstacle near the piece, else the junction spacing on the main roads, else the steepness limit.
+                string cause = RoadsIds.JunctionSpacing, causeValue = spacingValue;
+                if (conn.DroppedAt.Count > 0 && obstacles != null && NearObstacle(obstacles, conn.DroppedAt[0], 60f)) { cause = RoadsIds.AvoidObstacles; causeValue = FormatValue(avoid); }
+                else if (ctx.JunctionSpacing <= 0f) { cause = RoadsIds.MaxGrade; causeValue = gradeValue; }
+                plan.Issues.Add(new PlanIssue
+                {
+                    Severity = IssueSeverity.Warning, Key = IssueIslands, Args = new object[] { conn.Dropped, Math.Round(conn.DroppedLength) },
+                    At = at, Cause = cause, CauseValue = causeValue, Dropped = true,
+                });
             }
             if (conn.CityUnreached && plan.Nets.Count > 0)
-                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = IssueNotConnected });
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = IssueNotConnected, Cause = RoadsIds.ConnectExisting, CauseValue = FormatValue(connect) });
+            int cutsShown = 0;
+            foreach (var at in design.AccessCutAt)
+            {
+                if (cutsShown++ >= MaxCutIssues) break;
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = IssueJunctionCut, At = at, Cause = RoadsIds.JunctionSpacing, CauseValue = spacingValue });
+            }
             if (terraceLayout != null && follow)
             {
                 // (s52) Grades on the ground the build leaves (the terraces and the link ramps), not the hillside before.
@@ -377,7 +466,11 @@ namespace Placemaker.Core.Layers.Roads
                 foreach (var (g, at) in design.Steep)
                 {
                     if (shown++ >= MaxSteepIssues) break;
-                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = IssueSteep, Args = new object[] { Math.Round(g * 100f) }, At = at });
+                    plan.Issues.Add(new PlanIssue
+                    {
+                        Severity = IssueSeverity.Warning, Key = IssueSteep, Args = new object[] { Math.Round(g * 100f) }, At = at,
+                        Cause = RoadsIds.MaxGrade, CauseValue = gradeValue,
+                    });
                 }
             }
 

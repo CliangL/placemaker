@@ -43,6 +43,8 @@ namespace Placemaker.Game.Overlay
         private static readonly Color Erase = new Color(1f, 0.45f, 0.35f, 0.35f);
         private static readonly Color Error = new Color(1f, 0.15f, 0.1f, 0.95f);
         private static readonly Color Warning = new Color(1f, 0.75f, 0.15f, 0.95f);
+        private static readonly Color IssueOrange = new Color(1f, 0.6f, 0.12f, 0.95f);   // = PreviewLegend.Color("issues")
+        private static readonly Color IssueNote = new Color(0.45f, 0.72f, 1f, 0.9f);
         private static readonly Color Manage = new Color(0.55f, 1f, 0.55f, 0.9f);
         private static readonly Color Marker = new Color(1f, 0.85f, 0.2f, 0.95f);
         private static readonly Color OutlineDim = new Color(0.80f, 0.92f, 1f, 0.35f);
@@ -599,11 +601,16 @@ namespace Placemaker.Game.Overlay
                     foreach (var z in l.Zoning)
                         if (z != null && !_snappedZoning) Ring(buffer, new[] { z.A, z.B, z.C, z.D }, WithAlpha(ZoneCellColor(ZoneColorKey(z.ZoneId)), 0.7f * alpha), w * 0.35f);
                 }
-            foreach (var issue in plan.AllIssues())
-            {
-                if (issue?.At == null) continue;
-                buffer.DrawCircle(issue.Severity == IssueSeverity.Error ? Error : Warning, new Color(1f, 0f, 0f, 0.15f), w, 0, new float2(0, 1), issue.At.Value, w * 14f);
-            }
+            // (s61) The ring markers are the "issues" legend layer: red = left out / blocked, orange = a warning, blue = a note.
+            // Hover the legend row to see only them; every marker has an entry in the issue chips (reason + the setting).
+            if (Shows(PreviewLegend.Issues))
+                foreach (var issue in plan.AllIssues())
+                {
+                    if (issue?.At == null) continue;
+                    bool red = issue.Dropped || issue.Severity == IssueSeverity.Error;
+                    var col = red ? Error : issue.Severity == IssueSeverity.Warning ? IssueOrange : IssueNote;
+                    buffer.DrawCircle(col, new Color(col.r, col.g * 0.4f, 0f, 0.15f), w, 0, new float2(0, 1), issue.At.Value, w * 14f);
+                }
         }
 
         private static Color Hex(string hex)

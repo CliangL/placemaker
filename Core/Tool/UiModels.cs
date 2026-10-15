@@ -862,6 +862,7 @@ namespace Placemaker.Core.Tool
                 if (e.LengthM > 0) eo.Set("lengthM", e.LengthM);
                 if (e.AreaM2 > 0) eo.Set("areaM2", e.AreaM2);
                 if (e.MinDelta != 0 || e.MaxDelta != 0) eo.Set("minDelta", e.MinDelta).Set("maxDelta", e.MaxDelta);
+                if (e.Blocked > 0) eo.Set("blocked", e.Blocked);
                 if (!e.DefaultOn) eo.Set("defaultOff", true);
                 if (Placemaker.Core.Build.PreviewLegend.IsRoad(e.Id))
                 {
@@ -1009,6 +1010,14 @@ namespace Placemaker.Core.Tool
             var o = JsonValue.Obj()
                 .Set("severity", i.Severity == IssueSeverity.Error ? "error" : i.Severity == IssueSeverity.Warning ? "warning" : "info")
                 .Set("text", new LocText(i.Key, i.Args ?? Array.Empty<object>()).ToJson());
+            // (s61) What caused it: the setting (named, with its value) the player can change; red = left out / blocked.
+            if (!string.IsNullOrEmpty(i.Cause))
+            {
+                int at = (i.Key ?? "").IndexOf(".Issue.", StringComparison.Ordinal);
+                string prefix = at > 0 ? i.Key.Substring(0, at) : "Placemaker";
+                o.Set("cause", JsonValue.Obj().Set("id", i.Cause).Set("label", prefix + ".Control." + i.Cause).Set("value", i.CauseValue ?? ""));
+            }
+            if (i.Dropped) o.Set("dropped", true);
             if (!string.IsNullOrEmpty(planPath))
                 o.Set("stepPath", recipe != null ? RecipePaths.OwnerOfPlan(recipe, planPath) : planPath);
             if (i.At.HasValue)

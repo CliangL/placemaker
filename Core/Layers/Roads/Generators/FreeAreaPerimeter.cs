@@ -36,6 +36,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
         private const float MinTransitionGap = 15f;
         /// <summary>Minimum length (m) of a segment produced by splitting (junctions forced by streets excepted).</summary>
         private const float MinPieceLength = 40f;
+        /// <summary>(s61) An outline vertex turning at least this much (degrees) is a real corner: a node with straight edges on both sides.</summary>
+        public const float SharpCornerDegrees = 35f;
 
         /// <summary>True if the polygon has at least 3 points, enough area and no edge crossing another.</summary>
         public static bool IsSimple(IReadOnlyList<float3> polygon)
@@ -280,6 +282,18 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     seq.RemoveAt(i);
                 }
             }
+            // (s61) A real corner (an outline vertex turning >= SharpCornerDegrees: Corner rounding 0, a block's corner) is
+            // a node with straight edges on both sides, NOT a bend inside a curved piece: with the bisector tangent the
+            // 22 m either side of it were drawn as a bulge that rounded the corner whatever the setting said.
+            var sharp = new HashSet<float3>();
+            for (int i = 0; i < n; i++)
+            {
+                float2 pa = ring[(i + n - 1) % n].xz, pb = ring[i].xz, pc = ring[(i + 1) % n].xz;
+                float2 d0 = math.normalizesafe(pb - pa), d1 = math.normalizesafe(pc - pb);
+                if (math.degrees(math.acos(math.clamp(math.dot(d0, d1), -1f, 1f))) >= SharpCornerDegrees) sharp.Add(ring[i]);
+            }
+            for (int i = 0; i < seq.Count; i++)
+                if (!seq[i].node && sharp.Contains(seq[i].p)) seq[i] = (seq[i].p, true);
             // Straight edge <-> rounded corner transition gets a node, so every segment is either straight
             // or a regular arc: the game's curve tracks a half-straight, half-curved segment poorly.
             int total = seq.Count;
@@ -348,6 +362,11 @@ namespace Placemaker.Core.Layers.Roads.Generators
                 dir = math.normalizesafe(dir, math.normalizesafe(next - cur));
                 return new float3(dir.x, 0f, dir.y);
             }
+            float3 Dir(float3 p, float3 q)
+            {
+                float2 d = math.normalizesafe(q.xz - p.xz);
+                return new float3(d.x, 0f, d.y);
+            }
             int from = 0;
             for (int k = 1; k <= count; k++)
             {
@@ -365,7 +384,9 @@ namespace Placemaker.Core.Layers.Roads.Generators
                         float2 d = nodes[m].p.xz - a.xz;
                         straight = math.abs(chord.x * d.y - chord.y * d.x) < 0.3f;
                     }
-                    float3 ta = TangentAt(from), tb = TangentAt(k);
+                    // A sharp corner has two tangents: each piece leaves / arrives along its own edge.
+                    float3 ta = sharp.Contains(a) && from + 1 < nodes.Count ? Dir(nodes[from].p, nodes[from + 1].p) : TangentAt(from);
+                    float3 tb = sharp.Contains(b) && k > 0 ? Dir(nodes[k - 1].p, nodes[k].p) : TangentAt(k);
                     straight &= math.dot(ta.xz, chord) > 0.9995f && math.dot(tb.xz, chord) > 0.9995f;
                     result.Add(straight ? new RoadSegmentDef(a, b, isHorizontal: false) : RoadSegmentDef.Arc(a, b, ta, tb));
                 }

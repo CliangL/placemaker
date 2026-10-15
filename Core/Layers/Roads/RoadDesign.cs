@@ -24,6 +24,8 @@ namespace Placemaker.Core.Layers.Roads
             public Func<float2, float> Height;
             public Func<NetRole, float> HalfWidth = r => 8f;
             public bool Perimeter;
+            /// <summary>(s61) Corner rounding (m) for perimeter bends; negative = the road class default.</summary>
+            public float PerimeterCorner = -1f;
             /// <summary>Junction spacing on main roads (m), 0 = off.</summary>
             public float JunctionSpacing = 120f;
             /// <summary>"Follow contours": streets steeper than the design grade go wherever the network stays connected.</summary>
@@ -43,6 +45,10 @@ namespace Placemaker.Core.Layers.Roads
         public sealed class Report
         {
             public int MergedJunctions, AccessCuts, Fillets, Squared, Lanes, GravelTips, SteepRemoved;
+            /// <summary>(s61) Perimeter ring closure: joins made, free ends left.</summary>
+            public RoadPerimeter.Result PerimeterClose = new RoadPerimeter.Result();
+            /// <summary>(s61) Where side streets were cut back from a main road (junction spacing), for the issue markers.</summary>
+            public List<float3> AccessCutAt = new List<float3>();
             public RoadConnectivity.Result Connectivity = new RoadConnectivity.Result();
             public RoadWalkways.Result Walkways = new RoadWalkways.Result();
             /// <summary>Car road runs steeper than the design grade: worst grade and where.</summary>
@@ -57,6 +63,7 @@ namespace Placemaker.Core.Layers.Roads
             net.Weld();
 
             r.MergedJunctions = RoadTopology.MergeCloseJunctions(net, 18f);
+            if (c.Perimeter) CloseRing(net, c, r);
             cancel.ThrowIfCancellationRequested();
 
             var co = new RoadConnectivity.Options
@@ -75,11 +82,13 @@ namespace Placemaker.Core.Layers.Roads
             float setback = c.HalfWidth(NetRole.Avenue) + capR + 12f;
             var cuts = RoadAccess.Apply(net, c.JunctionSpacing, setback, 40f, n => RoadConnectivity.Ensure(n, trial));
             r.AccessCuts = cuts.Count;
+            foreach (var cut in cuts) r.AccessCutAt.Add(cut.To);
             cancel.ThrowIfCancellationRequested();
             RoadConnectivity.Ensure(net, co, r.Connectivity);
             if (c.FollowContours && c.Height != null) r.SteepRemoved = PruneSteep(net, c.Height, c.MaxGrade);
             RoadTopology.RemoveHairpins(net);
             RoadConnectivity.CleanDeadEnds(net, co, r.Connectivity);
+            if (c.Perimeter) CloseRing(net, c, r);
             // Removing stubs never splits the network, but a dead end that lost its cul-de-sac can leave a piece: check again.
             RoadConnectivity.Ensure(net, co, r.Connectivity);
             cancel.ThrowIfCancellationRequested();
@@ -92,8 +101,8 @@ namespace Placemaker.Core.Layers.Roads
             });
             cancel.ThrowIfCancellationRequested();
 
-            r.Squared = RoadTopology.SquareJunctions(net);
-            r.Fillets = RoadTopology.FilletBends(net, c.HalfWidth);
+            r.Squared = RoadTopology.SquareJunctions(net, c.Obstacles, c.HalfWidth);
+            r.Fillets = RoadTopology.FilletBends(net, c.HalfWidth, c.PerimeterCorner);
             // Crumbs of road (a trimmed bend next to a junction, a generator sliver) merge into their neighbours.
             net.CollapseShortEdges(8f);
             net.Weld();
@@ -111,6 +120,15 @@ namespace Placemaker.Core.Layers.Roads
 
             Grades(net, c, r);
             return r;
+        }
+
+        private static void CloseRing(RoadNetwork net, Context c, Report r)
+        {
+            var res = RoadPerimeter.Close(net, c.Obstacles, c.Boundary, c.HalfWidth, c.Existing);
+            r.PerimeterClose.Closed += res.Closed;
+            r.PerimeterClose.Joined += res.Joined;
+            r.PerimeterClose.OpenAt.Clear();
+            r.PerimeterClose.OpenAt.AddRange(res.OpenAt);
         }
 
         /// <summary>City connections wanted: one per ~450 m of outline (1–6), 180 m apart (CityLinkSpacing).</summary>

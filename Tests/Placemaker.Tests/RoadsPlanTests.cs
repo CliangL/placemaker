@@ -368,10 +368,11 @@ namespace Placemaker.Tests
                 for (int i = 0; i <= 16; i++)
                 {
                     float2 p = c.Position(i / 16f).xz;
-                    Assert.False(p.x > 286 && p.x < 314 && p.y > 136 && p.y < 164, "road through the building");
+                    Assert.False(p.x > 286 && p.x < 314 && p.y > 136 && p.y < 164, "road through the building: " + n.Role + " " + n.A + " " + n.B + " " + n.C + " " + n.D + " at " + p + " bypassed " + (plan.Facts.TryGetValue(RoadsPlanner.FactBypassed, out var by) ? by : -1));
                 }
             }
-            Assert.True(TestKit.Stat(plan, RoadsPlanner.StatBlocks) < 24, "the blocks beside the removed street merge");
+            // (s61) The street first tries to bend round the building; only when it cannot, the blocks beside it merge.
+            Assert.True(TestKit.Stat(plan, RoadsPlanner.StatBlocks) < 24 || plan.Facts.ContainsKey(RoadsPlanner.FactBypassed), "the street was bypassed or the blocks beside the removed street merge");
         }
 
         [Fact]

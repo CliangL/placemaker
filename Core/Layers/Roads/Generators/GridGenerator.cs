@@ -844,8 +844,13 @@ namespace Placemaker.Core.Layers.Roads.Generators
         /// (every direction climbs), 1 on an even hillside.
         /// </summary>
         internal static bool TryContourDirection(List<float2> polygon, Func<float2, float> heightAt, out float2 direction, out float anisotropy)
+            => TryContourDirection(polygon, heightAt, out direction, out anisotropy, out _);
+
+        /// <summary>(s61) Same, with the mean slope over the area (rise/run): a warp onto contours only makes sense on a real slope.</summary>
+        internal static bool TryContourDirection(List<float2> polygon, Func<float2, float> heightAt, out float2 direction, out float anisotropy, out float meanSlope)
         {
             anisotropy = 0f;
+            meanSlope = 0f;
             direction = new float2(1f, 0f);
             float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
             foreach (float2 p in polygon)
@@ -872,6 +877,7 @@ namespace Placemaker.Core.Layers.Roads.Generators
                     count++;
                 }
             }
+            meanSlope = count > 0 ? slope / count : 0f;
             if (count == 0 || slope / count < 0.01f)
             {
                 return false;
@@ -908,7 +914,8 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             float2 origin2 = polygon[bestIndex];
             float2 uDir = math.normalize(polygon[(bestIndex + 1) % polygon.Count] - origin2);
-            if (heightAt != null && TryContourDirection(polygon, heightAt, out float2 contour))
+            // (s61) Only on a real slope: a 1-3 % tilt used to turn a strict grid away from the outline.
+            if (heightAt != null && TryContourDirection(polygon, heightAt, out float2 contour, out _, out float tilt) && tilt >= RoadContourWarp.MinSlope)
             {
                 uDir = contour;
             }

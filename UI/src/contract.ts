@@ -212,6 +212,8 @@ export interface LegendEntry {
   /** Terrain: deepest cut / highest fill, metres. */
   minDelta?: number;
   maxDelta?: number;
+  /** (s61) Issues: how many of the markers are red (left out / blocked); the rest are orange warnings. */
+  blocked?: number;
   /** Hidden unless the player shows it (blocked cells, decals). */
   defaultOff?: boolean;
   /** "roads" for the road roles (shown as one group). */
@@ -356,7 +358,18 @@ export interface DesignState {
 }
 
 export interface Stat { key: string; value: number; unit: string }
-export interface Issue { severity: "info" | "warning" | "error"; text: LocText; stepPath?: string; at?: [number, number, number] }
+/** (s61) The setting behind an issue: control id, its label key and its value as shown ("120 m", "On"). */
+export interface IssueCause { id: string; label: string; value: string }
+export interface Issue {
+  severity: "info" | "warning" | "error";
+  text: LocText;
+  stepPath?: string;
+  at?: [number, number, number];
+  /** (s61) The setting that caused it (named in the chip, one click to change it). */
+  cause?: IssueCause;
+  /** (s61) Something was left out / blocked: red marker and chip (orange = a warning). */
+  dropped?: boolean;
+}
 
 /** (s53) One reason a planned piece was not built (or was kept despite a collision). */
 export interface AuditReason { id: string; label: string; arg: string; count: number; kept: boolean; top: string }

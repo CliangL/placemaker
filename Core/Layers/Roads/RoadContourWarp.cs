@@ -17,6 +17,9 @@ namespace Placemaker.Core.Layers.Roads
 {
     internal static class RoadContourWarp
     {
+        /// <summary>(s61) Mean slope (rise/run) below which the ground is flat for this purpose: a strict grid stays straight (a 1 % tilt used to bend every street).</summary>
+        public const float MinSlope = 0.035f;
+
         /// <summary>Lays the runs along <paramref name="axis"/> onto contour lines. Returns how many nodes moved.</summary>
         public static int Apply(RoadNetwork net, Func<float2, float> height, float2 axis, float spacing, float2[] boundary)
         {
