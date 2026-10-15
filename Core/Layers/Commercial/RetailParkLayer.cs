@@ -21,6 +21,7 @@ namespace Placemaker.Core.Layers.Commercial
         public override string Icon => "Media/Game/Icons/ZoneCommercial.svg";
         public override float MinArea => 9000f;
         protected override float GradeTolerance => 0.04f;
+        protected override bool RowsOnFreeFrontage => false;
 
         public static readonly string[] Styles = { "horseshoe", "twin" };
         public static readonly string[] Units = { "small", "medium", "large" };

@@ -109,9 +109,13 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 ctx.Check();
                 bool main = k == 0 && !strip;
-                if (strip || (!main && mall.IsStrip(piece)) || !mall.Fill(piece, "park", main ? ctx.S("parkStyle") : "pocket", doors, 0xD00u + k)) mall.Buffer(piece, 0xD80u + k);
+                // A walk along the park's edge must not touch the zone cells of a plot beside it: the park keeps off the plots.
+                var apart = strip ? new List<float2[]>() : mall.KeepOffPlots(piece, 3.2f);
+                var parkRing = apart.Count > 0 ? apart[0] : piece;
+                if (strip || (!main && mall.IsStrip(piece)) || !mall.Fill(parkRing, "park", main ? ctx.S("parkStyle") : "pocket", doors, 0xD00u + k)) mall.Buffer(piece, 0xD80u + k);
                 k++;
             }
+            LotEdges(ctx, mall, 0xDC0u);
         }
     }
 }

@@ -169,7 +169,7 @@ namespace Placemaker.Core.Layers.Commercial
                         bag.Values["rowAngle"] = (double)(ang + rot);
                     }
                     var t = PlanLot(shape, entries, bag, salt + (uint)(si * 3), true);
-                    if (t == null) continue;
+                    if (t == null || NetFit.Violations(t.Sub.Nets, t.Site).Count > 0) continue;   // a connector the game would fold (InvalidShape)
                     float fill = t.Capacity * 26f / math.max(1f, Poly.Area(t.Ring));
                     float score = t.Capacity * math.min(1f, fill / GoodFill);
                     if (score > bestScore) { bestScore = score; best = t; }
@@ -278,7 +278,7 @@ namespace Placemaker.Core.Layers.Commercial
         public const float PlotClear = 4.2f;
 
         /// <summary>The piece minus everything within <see cref="PlotClear"/> of a shop plot (simple parts, largest first).</summary>
-        public List<float2[]> KeepOffPlots(float2[] piece)
+        public List<float2[]> KeepOffPlots(float2[] piece, float clear = PlotClear)
         {
             var result = new List<float2[]>();
             if (Shops.Count == 0) { result.Add(piece); return result; }
@@ -287,8 +287,8 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 var c = Poly.Centroid(s);
                 bool near = false;
-                foreach (var v in s) if (Poly.DistanceToBoundary(piece, v) < PlotClear + 1f || Poly.Contains(piece, v)) { near = true; break; }
-                if (near) grown.Add(GrowConvex(s, PlotClear));
+                foreach (var v in s) if (Poly.DistanceToBoundary(piece, v) < clear + 1f || Poly.Contains(piece, v)) { near = true; break; }
+                if (near) grown.Add(GrowConvex(s, clear));
             }
             if (grown.Count == 0) { result.Add(piece); return result; }
             try

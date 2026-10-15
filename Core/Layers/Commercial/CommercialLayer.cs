@@ -146,9 +146,14 @@ namespace Placemaker.Core.Layers.Commercial
 
         /// <summary>The planted strip between a street and the first plots of an access alley leaving it (m).</summary>
         public const float AlleyForecourt = 4f;
+        /// <summary>Shortest free stretch of street frontage that gets plots in the lot-first pass (m).</summary>
+        private const float StreetRowMin = 48f;
 
         /// <summary>Does this type put a park in what is left over (by design, or the "Green" extra)?</summary>
         protected virtual bool KeepsPark(LayerContext ctx) => ctx.B("extraGreen");
+
+        /// <summary>Does the lot-first pass put plot rows on the street frontage the composition left free? (The retail park keeps its pads and boxes as designed.)</summary>
+        protected virtual bool RowsOnFreeFrontage => true;
 
         /// <summary>
         /// (s50) The lot is the base of a commercial site: every street frontage the composition left free gets shop rows
@@ -159,9 +164,9 @@ namespace Placemaker.Core.Layers.Commercial
         protected virtual void LotFirst(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
         {
             int cells = Cells(ctx);
-            var alleys = Environment.GetEnvironmentVariable("PM_NOALLEY") != null ? new List<Alley>() : AccessAlleys(ctx, mall, runs, cells);
+            var alleys = AccessAlleys(ctx, mall, runs, cells);
             ctx.Check();
-            mall.StreetRows(runs, cells, null, 3, 2);
+            if (RowsOnFreeFrontage) mall.StreetRows(runs, cells, null, 3, 2, StreetRowMin);
             // A type with a park keeps its biggest leftover for it: lots come after the park is chosen (FillRest).
             if (KeepsPark(ctx)) { DropDeadAlleys(mall, alleys, runs, cells); return; }
             RestLots(ctx, mall, 0xB00u, 400f, false, true);
@@ -193,7 +198,7 @@ namespace Placemaker.Core.Layers.Commercial
                 foreach (var r in a.Rows) { mall.Shops.Remove(r); mall.Taken.Remove(r); mall.ShopZone.Remove(r); }
                 dropped = true;
             }
-            if (dropped) mall.StreetRows(runs, cells, null, 3, 2);
+            if (dropped) mall.StreetRows(runs, cells, null, 3, 2, StreetRowMin);
             return dropped;
         }
 
@@ -242,7 +247,6 @@ namespace Placemaker.Core.Layers.Commercial
         /// </summary>
         protected static void RestLots(LayerContext ctx, Mall mall, uint salt, float minArea = 500f, bool keepLargest = false, bool openAccess = false)
         {
-            if (Environment.GetEnvironmentVariable("PM_NOLOT") != null) return;
             var failed = new HashSet<long>();
             for (int pass = 0; pass < 24; pass++)
             {

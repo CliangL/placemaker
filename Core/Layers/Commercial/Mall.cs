@@ -274,6 +274,7 @@ namespace Placemaker.Core.Layers.Commercial
             public float2[] Ring;
             public float Capacity, Ev;
             public Dictionary<long, (Lane lane, int seg)> Synthetic;
+            public SiteContext Site;
         }
 
         /// <summary>Plans a lot on <paramref name="ring"/> (see <see cref="Lot"/>) without merging it; null when it cannot be planned or holds no stall.</summary>
@@ -327,12 +328,11 @@ namespace Placemaker.Core.Layers.Commercial
             try { sub = gen.Plan(input, Ctx.Cancel); }
             catch (OperationCanceledException) { throw; }
             catch (Exception) { sub = null; }
-            if (Environment.GetEnvironmentVariable("PM_TRACE") != null) Console.WriteLine("    LOT area " + Poly.Area(lot).ToString("0") + " verts " + lot.Length + " entr " + entrances.Count + " sub " + (sub == null ? "null" : string.Join(",", sub.Issues.ConvertAll(i => i.Severity + ":" + i.Key.Substring(i.Key.LastIndexOf('.') + 1))) + " cap " + (sub.Facts.TryGetValue("capacity", out var cc) ? cc : -1)));
             if (sub == null || sub.HasErrors) return null;
             sub.Facts.TryGetValue("capacity", out var cap);
             sub.Facts.TryGetValue("evCapacity", out var ev);
             if (cap <= 0) return null;
-            return new LotTry { Sub = sub, Ring = lot, Capacity = (float)cap, Ev = (float)ev, Synthetic = synthetic };
+            return new LotTry { Sub = sub, Ring = lot, Capacity = (float)cap, Ev = (float)ev, Synthetic = synthetic, Site = site };
         }
 
         /// <summary>Merges a planned lot into the plan and takes its land.</summary>
