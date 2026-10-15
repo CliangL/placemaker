@@ -135,6 +135,7 @@ namespace Placemaker.Game.Build
         {
             if (_iconQuery.IsEmptyIgnoreFilter) return "";
             var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var carriers = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
             using var icons = _iconQuery.ToEntityArray(Allocator.Temp);
             for (int i = 0; i < icons.Length; i++)
             {
@@ -143,9 +144,36 @@ namespace Placemaker.Game.Build
                 string t = EntityManager.GetComponentData<ToolErrorData>(prefab).m_Error.ToString();
                 counts.TryGetValue(t, out int n);
                 counts[t] = n + 1;
+                // (s44) What carries the error: kind and prefab ("InvalidShape×13" alone did not tell which parts to fix).
+                string what = "?";
+                if (EntityManager.HasComponent<Owner>(icons[i]))
+                {
+                    var o = EntityManager.GetComponentData<Owner>(icons[i]).m_Owner;
+                    if (o != Entity.Null && EntityManager.Exists(o))
+                    {
+                        string kind = EntityManager.HasComponent<Edge>(o) ? "net" : EntityManager.HasComponent<global::Game.Areas.Area>(o) ? "area"
+                            : EntityManager.HasComponent<global::Game.Objects.Object>(o) ? "object" : "other";
+                        string name = EntityManager.HasComponent<PrefabRef>(o) ? _catalog?.NameOf(EntityManager.GetComponentData<PrefabRef>(o).m_Prefab) : null;
+                        what = kind + " '" + (name ?? "?") + "'";
+                    }
+                }
+                if (!carriers.TryGetValue(t, out var byWhat)) carriers[t] = byWhat = new Dictionary<string, int>(StringComparer.Ordinal);
+                byWhat.TryGetValue(what, out int m);
+                byWhat[what] = m + 1;
             }
             var sb = new System.Text.StringBuilder();
-            foreach (var kv in counts) sb.Append(sb.Length > 0 ? ", " : "").Append(kv.Key).Append('×').Append(kv.Value);
+            foreach (var kv in counts)
+            {
+                sb.Append(sb.Length > 0 ? ", " : "").Append(kv.Key).Append('×').Append(kv.Value);
+                if (carriers.TryGetValue(kv.Key, out var byWhat))
+                {
+                    var top = new List<KeyValuePair<string, int>>(byWhat);
+                    top.Sort((a, b) => b.Value.CompareTo(a.Value));
+                    sb.Append(" [");
+                    for (int k = 0; k < top.Count && k < 3; k++) sb.Append(k > 0 ? "; " : "").Append(top[k].Key).Append(" ×").Append(top[k].Value);
+                    sb.Append(']');
+                }
+            }
             return sb.ToString();
         }
 
@@ -251,13 +279,16 @@ namespace Placemaker.Game.Build
         }
 
         /// <summary>(s22) What the last ExcludeErroneousItems left out, by kind (for the log).</summary>
-        private int _exNets, _exObjects, _exSurfaces, _exAreas, _keptFunctional, _taggedBays;
+        private int _exNets, _exObjects, _exSurfaces, _exAreas, _keptFunctional, _taggedBays, _droppedFunctional;
+        /// <summary>(s44) Safety net: the only errors left are functional markings — leave them out rather than fail.</summary>
+        private bool _dropFunctional;
 
         private int Exclude(WorkItem w, bool exact = false)
         {
             // (s25) Stall markings, chargers and arrows are never left out because something NEAR them failed (the probe
             // match); one that is itself rejected goes only after two retries did not settle it (PlanWork.Excludable).
-            if (!PlanWork.Excludable(_request?.Plan, w) && !(exact && _excludeAttempts >= 2)) { _keptFunctional++; return 0; }
+            if (!PlanWork.Excludable(_request?.Plan, w) && !(exact && _excludeAttempts >= 2) && !_dropFunctional) { _keptFunctional++; return 0; }
+            if (!PlanWork.Excludable(_request?.Plan, w)) _droppedFunctional++;
             if (!_excluded.Add(PlanWork.Key(w))) return 0;
             if (w.Kind == WorkKind.Net) _exNets++;
             else if (w.Kind == WorkKind.Surface) _exSurfaces++;

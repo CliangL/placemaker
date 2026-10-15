@@ -494,7 +494,16 @@ namespace Placemaker.Game.Build
                 if (recover && _excludeAttempts < MaxAutoExcludeAttempts)
                 {
                     string histogram = ErrorHistogram();
+                    _keptFunctional = 0;
                     int newly = ExcludeErroneousItems();
+                    if (newly == 0 && _keptFunctional > 0 && !_dropFunctional)
+                    {
+                        // (s44) Only stall markings / chargers / arrows are still rejected: build the lot without those few
+                        // rather than fail the whole build back to Review.
+                        _dropFunctional = true;
+                        newly = ExcludeErroneousItems();
+                        if (newly > 0) Mod.Log.Warn($"Placemaker: the game still rejects {_droppedFunctional} stall marking(s)/charger(s)/arrow(s) ({histogram}); leaving them out instead of failing.");
+                    }
                     if (newly > 0)
                     {
                         _excludeAttempts++;
@@ -718,6 +727,8 @@ namespace Placemaker.Game.Build
             _excluded.Clear();
             _excludeAttempts = 0;
             _keptFunctional = 0;
+            _dropFunctional = false;
+            _droppedFunctional = 0;
             _applied = false;
             _groupId = 0;
             _record = Entity.Null;

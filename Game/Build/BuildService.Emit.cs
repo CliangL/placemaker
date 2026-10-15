@@ -39,6 +39,8 @@ namespace Placemaker.Game.Build
         /// </summary>
         public static bool SinkDecals = true;
         public const float DecalSink = -0.01f;
+        /// <summary>(s44) Stall markings and arrows sink like decals (PlanWork.SinkInBuild). Off = s25 behaviour.</summary>
+        public static bool SinkStallMarkings = true;
 
         private static bool IsPaved(SurfaceRole r) => r == SurfaceRole.Paving || r == SurfaceRole.Asphalt || r == SurfaceRole.Plaza || r == SurfaceRole.Decorative;
         /// <summary>Resolved prefab per work item key.</summary>
@@ -347,7 +349,7 @@ namespace Placemaker.Game.Build
             // Uniform categories (benches, lamps, bins…): one random seed per build, so colour/mesh
             // variations do not turn a row of one bench into a mix (FEEDBACK-2 #1).
             int? seed = AutoAssets.IsUniform(w.Category) ? AutoAssets.UniformSeed(w.Category, (uint)_groupId) : (int?)null;
-            float elevation = SinkDecals && o.Role == ObjectRole.Decal ? DecalSink : 0f;
+            float elevation = SinkDecals && (o.Role == ObjectRole.Decal || SinkStallMarkings && PlanWork.SinkInBuild(o.Role)) ? DecalSink : 0f;
             EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation, optional: !PlanWork.IsFunctional(o.Role));
             NoteUsed(prefab);
         }

@@ -98,6 +98,9 @@ namespace Placemaker.Tests
             Assert.False(PlanWork.IsFunctional(ObjectRole.Decal));
             Assert.False(PlanWork.IsFunctional(ObjectRole.Tree));
             Assert.False(PlanWork.IsFunctional(ObjectRole.Lamp));
+            // s44: stall markings and arrows take no space in the build (sunk like decals, never collide); a charger is a real object.
+            Assert.True(PlanWork.SinkInBuild(ObjectRole.ParkingBay) && PlanWork.SinkInBuild(ObjectRole.Arrow) && PlanWork.SinkInBuild(ObjectRole.Decal));
+            Assert.False(PlanWork.SinkInBuild(ObjectRole.Charger) || PlanWork.SinkInBuild(ObjectRole.Tree) || PlanWork.SinkInBuild(ObjectRole.Lamp));
         }
 
         [Fact]
