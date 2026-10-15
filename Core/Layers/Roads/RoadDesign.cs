@@ -78,6 +78,7 @@ namespace Placemaker.Core.Layers.Roads
             cancel.ThrowIfCancellationRequested();
             RoadConnectivity.Ensure(net, co, r.Connectivity);
             if (c.FollowContours && c.Height != null) r.SteepRemoved = PruneSteep(net, c.Height, c.MaxGrade);
+            RoadTopology.RemoveHairpins(net);
             RoadConnectivity.CleanDeadEnds(net, co, r.Connectivity);
             // Removing stubs never splits the network, but a dead end that lost its cul-de-sac can leave a piece: check again.
             RoadConnectivity.Ensure(net, co, r.Connectivity);

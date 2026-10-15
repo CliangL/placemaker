@@ -118,7 +118,7 @@ namespace Placemaker.Core.Layers.Roads
                 int r = Find(i);
                 compAnchored[r] = (compAnchored.TryGetValue(r, out bool b) && b) || attached[i];
                 mainSide[i] = mainAt[i] && sideAt[i] && carDeg[i] >= 3;
-                if (carDeg[i] == 1 && !attached[i])
+                if (carDeg[i] == 1 && allDeg[i] == 1 && !attached[i])
                 {
                     bool capped = false;
                     foreach (var cp in caps) if (math.distance(cp, pos[i]) < 0.5f) { capped = true; break; }

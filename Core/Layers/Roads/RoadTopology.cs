@@ -181,6 +181,12 @@ namespace Placemaker.Core.Layers.Roads
                     int ei = dirs[k].ei;
                     var e = net.Edges[ei];
                     if (e.Role == NetRole.Roundabout || e.Role == NetRole.Avenue) continue;
+                    // A road passing through the junction (same class on the far side) never bends: only the side street.
+                    bool through = false;
+                    foreach (var (_, oi) in dirs)
+                        if (oi != ei && net.Edges[oi].Role == e.Role
+                            && RoadGraph.Angle(RoadGraph.Leaving(e, n), RoadGraph.Leaving(net.Edges[oi], n)) > 140f) through = true;
+                    if (through) continue;
                     float prev = dirs[(k - 1 + m) % m].ang, next = dirs[(k + 1) % m].ang, cur = dirs[k].ang;
                     float gapPrev = Wrap(cur - prev), gapNext = Wrap(next - cur);
                     float minGap = math.degrees(math.min(gapPrev, gapNext));
@@ -212,6 +218,39 @@ namespace Placemaker.Core.Layers.Roads
                 }
             }
             return fixedCount;
+        }
+
+        /// <summary>
+        /// A road that doubles back at a plain node (turning more than <paramref name="minTurn"/>°: a perimeter cut short by
+        /// an existing road hooking into a street) loses its shorter side when the network stays in one piece — the
+        /// dead-end pass then joins the free end to the city or ends it properly. Returns how many.
+        /// </summary>
+        public static int RemoveHairpins(RoadNetwork net, float minTurn = 110f, float maxLength = 160f)
+        {
+            int removed = 0;
+            for (int pass = 0; pass < 4; pass++)
+            {
+                var inc = RoadGraph.Incidence(net, RoadGraph.Car);
+                RoadGraph.Components(net, RoadGraph.Car, out int before);
+                bool any = false;
+                for (int n = 0; n < net.Nodes.Count && !any; n++)
+                {
+                    if (inc[n].Count != 2 || RoadConnectivity.Attached(net.Nodes[n])) continue;
+                    var a = net.Edges[inc[n][0]]; var b = net.Edges[inc[n][1]];
+                    float turn = 180f - RoadGraph.Angle(RoadGraph.Leaving(a, n), RoadGraph.Leaving(b, n));
+                    if (turn < minTurn) continue;
+                    float la = RoadGraph.Length(a), lb = RoadGraph.Length(b);
+                    var drop = la <= lb ? a : b;
+                    if (math.min(la, lb) > maxLength) continue;
+                    drop.Removed = true;
+                    RoadGraph.Components(net, RoadGraph.Car, out int after);
+                    if (after > before) { drop.Removed = false; continue; }
+                    removed++;
+                    any = true;
+                }
+                if (!any) break;
+            }
+            return removed;
         }
 
         private static float Wrap(float a)

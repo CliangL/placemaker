@@ -310,6 +310,13 @@ namespace Placemaker.Gallery
                             editor.SetValue(r, RecipePaths.Root, RoadsIds.AvenueRow, true, true);
                             editor.SetValue(r, RecipePaths.Root, RoadsIds.RoadMix, mix.Id, true);
                         }));
+                // s34: "Pre-zone new roads" (the village preset with low housing).
+                if (gen.Controls.Any(c => c.Id == RoadsIds.PreZone) && gen.Presets.Any(p => p.Id == "village"))
+                    jobs.Add(Make("prezone", "Village, pre-zoned (low housing)", r =>
+                    {
+                        editor.ApplyPreset(r, RecipePaths.Root, "village");
+                        editor.SetValue(r, RecipePaths.Root, RoadsIds.PreZone, "residentialLow", true);
+                    }));
                 var features = Features.Of(gen);
                 if (ShopVariants && features.Any(f => f.Layer == "edgeZoning" && f.Target == "shops"))
                     foreach (var (layout, amount) in ShopCombos)
@@ -980,8 +987,10 @@ namespace Placemaker.Gallery
                 foreach (var z in l.Zoning)
                 {
                     var q = new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz };
-                    cv.FillPolygon(q, Rgba.Hex("#8fb4e8", 0.75f));
-                    cv.StrokePolyline(q, cv.Px(1f), Rgba.Hex("#3d6db5"), closed: true);
+                    // (s34) A roads layer's pre-zoning: housing green, the whole blocks (8 m cells as a light grid).
+                    bool roadsZoning = l.GeneratorId == "roads";
+                    cv.FillPolygon(q, roadsZoning ? Rgba.Hex("#7cc96b", 0.45f) : Rgba.Hex("#8fb4e8", 0.75f));
+                    cv.StrokePolyline(q, cv.Px(1f), roadsZoning ? Rgba.Hex("#3f8f3a", 0.8f) : Rgba.Hex("#3d6db5"), closed: true);
                 }
             // (s26) The cells ZoneGuard zones (snapped to the roads' blocks, incl. the predicted blocks of the lanes this
             // build adds): what the game will zone, one outline per cell.

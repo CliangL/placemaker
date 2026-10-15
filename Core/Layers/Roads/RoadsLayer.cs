@@ -209,12 +209,12 @@ namespace Placemaker.Core.Layers.Roads
                     (RoadsIds.OrganicLoops, 20.0), (RoadsIds.TerrainFit, "follow"), (RoadsIds.TipStyle, "gravel"), (RoadsIds.Walkways, 40.0),
                     (RoadsIds.WalkwayStyle, "trail"), (RoadsIds.CapStyle, "grass"), (RoadsIds.JunctionSpacing, 160.0), (RoadsIds.MaxGrade, 10.0)),
                 // Collectors around groups of blocks, car-free streets inside.
-                P("superblocks", null, (RoadsIds.Pattern, "superblock"), (RoadsIds.SuperblockZone, 180.0), (RoadsIds.Walkways, 60.0),
+                P("superblocks", null, (RoadsIds.Pattern, "superblock"), (RoadsIds.SuperblockZone, 100.0), (RoadsIds.Walkways, 60.0),
                     (RoadsIds.JunctionSpacing, 0.0), (RoadsIds.TerrainFit, "ignore")),
-                // Narrow crooked lanes and many small squares of streets, paths through everything.
-                P("old-town", "alleys", (RoadsIds.Pattern, "organic"), (RoadsIds.OrganicSpacing, 60.0), (RoadsIds.OrganicCurviness, 90.0),
-                    (RoadsIds.OrganicLoops, 80.0), (RoadsIds.Walkways, 85.0), (RoadsIds.JunctionSpacing, 0.0), (RoadsIds.TerrainFit, "follow"),
-                    (RoadsIds.CapStyle, "none")),
+                // Lanes radiating from a small central circus, crooked narrow streets around it, paths through everything.
+                P("old-town", "alleys", (RoadsIds.Pattern, "mixed"), (RoadsIds.MixedCoreRadius, 110.0), (RoadsIds.MixedAvenues, 6.0),
+                    (RoadsIds.MixedSpacing, 60.0), (RoadsIds.MixedCurviness, 85.0), (RoadsIds.Walkways, 80.0), (RoadsIds.JunctionSpacing, 0.0),
+                    (RoadsIds.TerrainFit, "follow"), (RoadsIds.CapStyle, "none")),
                 // The straight grid, whatever the ground does.
                 P("strict-grid", null, (RoadsIds.Pattern, "grid"), (RoadsIds.GridSpacing, 100.0), (RoadsIds.TerrainFit, "ignore"),
                     (RoadsIds.Walkways, 30.0), (RoadsIds.JunctionSpacing, 0.0)),
