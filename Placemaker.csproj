@@ -45,7 +45,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <GameReference Include="Game;Colossal.Core;Colossal.Collections;Colossal.Logging;Colossal.Localization;Colossal.Mathematics;Colossal.IO.AssetDatabase;Colossal.AssetPipeline;Colossal.UI;Colossal.UI.Binding;Colossal.PSI.Common;Unity.Collections;Unity.Entities;Unity.Mathematics;Unity.Burst;UnityEngine.CoreModule;UnityEngine.ImageConversionModule;UnityEngine.InputLegacyModule;Unity.InputSystem;Newtonsoft.Json" />
+    <GameReference Include="Game;Colossal.Core;Colossal.Collections;Colossal.Logging;Colossal.Localization;Colossal.Mathematics;Colossal.IO.AssetDatabase;Colossal.AssetPipeline;Colossal.UI;Colossal.UI.Binding;Unity.Collections;Unity.Entities;Unity.Mathematics;Unity.Burst;UnityEngine.CoreModule;UnityEngine.ImageConversionModule;UnityEngine.ScreenCaptureModule;Colossal.PSI.Common;UnityEngine.InputLegacyModule;Unity.InputSystem;Newtonsoft.Json" />
     <Reference Include="@(GameReference)">
       <HintPath Condition="'$(UseToolchain)' != 'true'">$(ManagedPath)\%(Identity).dll</HintPath>
       <Private>false</Private>
@@ -65,6 +65,20 @@
     <None Include="Recipes\*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Recipes" />
     <None Include="LICENSE" CopyToOutputDirectory="PreserveNewest" Condition="Exists('LICENSE')" />
   </ItemGroup>
+
+  <!-- Every build names its commit (the in-game suite records it): InformationalVersion = Version+<short hash>[-dirty]. -->
+  <Target Name="PlacemakerGitVersion" BeforeTargets="GetAssemblyAttributes;GenerateAssemblyInfo">
+    <Exec Command="git rev-parse --short HEAD" WorkingDirectory="$(MSBuildProjectDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="PlacemakerGitHash" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no" WorkingDirectory="$(MSBuildProjectDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="PlacemakerGitDirty" />
+    </Exec>
+    <PropertyGroup>
+      <InformationalVersion Condition="'$(PlacemakerGitHash)' != ''">$(Version)+$(PlacemakerGitHash)</InformationalVersion>
+      <InformationalVersion Condition="'$(PlacemakerGitHash)' != '' AND '$(PlacemakerGitDirty)' != ''">$(Version)+$(PlacemakerGitHash)-dirty</InformationalVersion>
+    </PropertyGroup>
+  </Target>
 
   <Import Project="$(CS2ToolPath)\Mod.targets" Condition="'$(UseToolchain)' == 'true'" />
 

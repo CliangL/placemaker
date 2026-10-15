@@ -16,6 +16,8 @@ namespace Placemaker
             // rest still loads, so a broken feature never takes the whole mod (or the game) down.
             Try("build", () => Game.Build.BuildRegistration.Register(updateSystem));
             Try("tool", () => Game.Tool.ToolRegistration.Register(updateSystem, this));
+            // In-game test suite: inert unless the command line AND an armed ModsData/Placemaker/suite/run.json ask for it.
+            Try("suite", () => Game.Suite.SuiteGate.Register(updateSystem));
         }
 
         public void OnDispose()

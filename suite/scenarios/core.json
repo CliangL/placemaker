@@ -1,0 +1,30 @@
+{
+  "set": "core",
+  "description": "Every parking preset, every commercial type x preset, small plazas, a couple of parks, road grids, hillside terraces on a slope; plus the switching run (every commercial type's first two presets, parking, plaza).",
+  "grow": true,
+  "switching": {
+    "site": "flat",
+    "settleSeconds": 2.5,
+    "rapidMs": 300,
+    "steps": [
+      { "expand": "presets", "group": "commercial", "limit": 2 },
+      { "layer": "parking", "preset": "" },
+      { "layer": "plaza", "preset": "civic" },
+      { "layer": "park", "preset": "" }
+    ]
+  },
+  "scenarios": [
+    { "expand": "presets", "layer": "parking", "site": "flat" },
+    { "expand": "presets", "group": "commercial", "site": "zoned" },
+    { "layer": "plaza", "preset": "", "site": "flat", "draw": [44, 32] },
+    { "layer": "plaza", "preset": "market", "site": "flat", "draw": [60, 40] },
+    { "layer": "park", "preset": "", "site": "survive" },
+    { "layer": "park", "preset": "", "site": "rough", "id": "park-default-rough" },
+    { "layer": "roads", "preset": "strict-grid", "site": "flat" },
+    { "layer": "roads", "preset": "superblocks", "site": "flat" },
+    { "layer": "plaza", "preset": "terraced", "site": "slope", "id": "plaza-terraced-slope" },
+    { "layer": "roads", "preset": "terraced-hillside", "site": "slope", "id": "roads-terraced-hillside-slope" },
+    { "layer": "parking", "preset": "", "site": "slope", "id": "parking-default-slope" },
+    { "layer": "stripMall", "preset": "classic", "site": "rough", "id": "stripMall-classic-rough" }
+  ]
+}

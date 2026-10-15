@@ -1,0 +1,22 @@
+{
+  "set": "smoke",
+  "description": "3-4 scenarios to check the suite itself: a parking lot, a strip mall next to grown housing, a small drawn plaza, a park around plopped buildings; plus a short type/preset switching run.",
+  "grow": true,
+  "switching": {
+    "site": "flat",
+    "settleSeconds": 2.5,
+    "rapidMs": 300,
+    "steps": [
+      { "layer": "stripMall", "preset": "classic" },
+      { "layer": "highStreet", "preset": "market" },
+      { "layer": "parking", "preset": "" },
+      { "layer": "plaza", "preset": "civic" }
+    ]
+  },
+  "scenarios": [
+    { "layer": "parking", "preset": "", "site": "flat" },
+    { "layer": "stripMall", "preset": "classic", "site": "zoned" },
+    { "layer": "plaza", "preset": "", "site": "flat", "draw": [44, 32] },
+    { "layer": "park", "preset": "", "site": "survive" }
+  ]
+}

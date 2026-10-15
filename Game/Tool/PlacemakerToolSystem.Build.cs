@@ -203,6 +203,7 @@ namespace Placemaker.Game.Tool
                 var first = notes[0];
                 Flash(new LocText(notes.Count == 1 ? first.Key : "Placemaker.Hint.BuiltWithNotes", notes.Count == 1 ? (first.Args ?? Array.Empty<object>()) : new object[] { notes.Count }), 10f);
             }
+            SuiteNoteBuilt(groupId);
             Mod.Log.Info("Placemaker: built group " + groupId);
         }
 

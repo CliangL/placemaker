@@ -562,7 +562,7 @@ namespace Placemaker.Game.Tool
         private void Touch() => ViewVersion++;
 
         private static uint _seedCounter;
-        private static uint NewSeed() => Seeds.Mix((uint)Environment.TickCount, ++_seedCounter);
+        private static uint NewSeed() => Seeds.Mix(SuiteSeed ?? (uint)Environment.TickCount, ++_seedCounter);
 
         public bool PanelCollapsed => _panelCollapsed;
         public float BrushSize => _brushSize;
