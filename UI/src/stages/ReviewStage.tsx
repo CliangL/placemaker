@@ -176,7 +176,8 @@ const MoneyCard = ({ catalog, state, summary, pending }: { catalog: Catalog; sta
 const ALERTS_SHOWN = 5;
 
 /** The short chip label of a long text: its `.Short` key, else its first clause, cut to whole words (never "…"). */
-export function shortText(t: TFunc, loc: LocText): string {
+export function shortText(t: TFunc, loc: LocText | undefined): string {
+    if (!loc || !loc.key) return t("Placemaker.UI.Review.Issue", "Issue");
     const short = t(loc.key + ".Short", "", loc.args);
     if (short) return short;
     const full = t(loc.key, humanize(loc.key), loc.args);

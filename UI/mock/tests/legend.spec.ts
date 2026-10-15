@@ -2,12 +2,12 @@
 // Hover an entry → the map shows only that layer; click → hide / show it; "All" → every layer back to its default.
 // Blocked-for-zoning cells and decals start hidden. Runs on the fake planner (stable) and on the real Core host.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, shot, waitPlanned, pickType } from "./helpers";
 
 async function toDesign(page: Page, recipe: string) {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 

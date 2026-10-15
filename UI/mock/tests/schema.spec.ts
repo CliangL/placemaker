@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { clickWorld, drawPolygon, FIELD, open, panelShot, shot, waitPlanned } from "./helpers";
+import { clickWorld, drawPolygon, FIELD, open, panelShot, shot, waitPlanned, pickType, unfoldSections } from "./helpers";
 
 async function design(page: import("@playwright/test").Page, recipe: string) {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 
@@ -18,6 +18,7 @@ async function unfold(page: import("@playwright/test").Page, group: string) {
 test("every control kind renders from the schema, grouped into foldable sections", async ({ page }) => {
     const errors = await open(page);
     await design(page, "parking");
+    await unfold(page, "basics");
     await expect(page.getByTestId("control-angle")).toHaveAttribute("data-kind", "choice");
     await expect(page.getByTestId("control-surface")).toHaveAttribute("data-kind", "asset");
     await expect(page.getByTestId("control-greenery")).toHaveAttribute("data-kind", "toggle");
@@ -39,9 +40,10 @@ test("every control kind renders from the schema, grouped into foldable sections
     await expect(page.getByTestId("more-options")).toHaveCount(0);
     await panelShot(page, "panel-parking-options");
 
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
+    await unfoldSections(page);
     await expect(page.getByTestId("control-arrangement")).toHaveAttribute("data-kind", "arrangement");
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await unfold(page, "planting");
     await expect(page.getByTestId("control-treeSpecies")).toHaveAttribute("data-kind", "assetMulti");
     // untyped markers control still works as before (park entrances)
@@ -53,7 +55,7 @@ test("every control kind renders from the schema, grouped into foldable sections
 test("visibleWhen, lock indicator, reset-to-default, randomize keeps locked values", async ({ page }) => {
     await open(page);
     await design(page, "park");
-    await unfold(page, "water");
+    await unfoldSections(page);
     // s15: a control that does not apply is shown greyed out with the reason, not hidden
     await expect(page.getByTestId("control-lakeSize")).toHaveAttribute("data-disabled", "true");
     await page.getByTestId("toggle-lake").click();
@@ -85,6 +87,7 @@ test("visibleWhen, lock indicator, reset-to-default, randomize keeps locked valu
 test("asset picker: search, thumbnails, automatic; closes with X, Esc and a click outside", async ({ page }) => {
     await open(page);
     await design(page, "parking");
+    await unfoldSections(page);
     const picker = page.getByTestId("asset-picker");
     await page.getByTestId("asset-button-surface").click();
     await expect(picker).toBeVisible();
@@ -127,7 +130,7 @@ test("asset picker: search, thumbnails, automatic; closes with X, Esc and a clic
     await page.getByTestId("asset-automatic").click();
     await expect(page.getByTestId("asset-button-surface")).toContainText("Automatic");
 
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await unfold(page, "planting");
     await page.getByTestId("assetmulti-add-treeSpecies").click();
     await page.getByTestId("asset-linden").click();
@@ -138,7 +141,8 @@ test("asset picker: search, thumbnails, automatic; closes with X, Esc and a clic
     await page.getByTestId("chip-remove-linden").click();
     await expect(page.getByTestId("chip-linden")).toHaveCount(0);
 
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
+    await unfoldSections(page);
     const arr = page.getByTestId("arrangement-arrangement");
     await expect(arr).toContainText("Wooden Bench");
     await page.getByTestId("arrangement-add-arrangement").click();
@@ -155,25 +159,22 @@ test("entrances: none placed automatically; disabled primary leads to the Entran
     // FEEDBACK-4b: no suggested entrance is placed for the player
     await expect(page.getByTestId("marker-list")).toHaveCount(0);
     expect(await page.evaluate(() => (window as any).pm.backend.root.markers.length)).toBe(0);
-    await expect(page.getByTestId("entrance-required")).toContainText("Add at least one entrance");
+    await expect(page.getByTestId("entrance-required")).toContainText("Add one to build");
     await expect(primary).toHaveAttribute("aria-disabled", "true");
     await expect(primary).toHaveAttribute("data-action", "placeMarkers");
-    await expect(page.getByTestId("primary-reason")).toContainText("Add at least one entrance");
+    await expect(page.getByTestId("primary-reason")).toContainText("Add an entrance to build");
     // five typed buttons, each with an icon
     for (const k of ["entrance", "entry", "exit", "alley", "footpath"]) await expect(page.getByTestId(`marker-kind-${k}`).locator("img")).toHaveCount(1);
     await panelShot(page, "panel-entrance-required");
 
-    // fold the section away and scroll the panel to the bottom, then press the disabled button anyway:
-    // the section opens, scrolls into view, flashes, and placement starts with its first type
-    await page.getByTestId("entrances-0-toggle").click();
-    await expect(page.getByTestId("entrances-0")).toHaveAttribute("data-open", "false");
+    // scroll the panel to the bottom, then press the disabled button anyway: the Entrances block scrolls into
+    // view, flashes, and placement starts with its first type
     await page.getByTestId("panel-body").evaluate((el) => {
         for (let e: HTMLElement | null = el; e; e = e.firstElementChild as HTMLElement | null) e.scrollTop = 100000;
     });
     await primary.click({ force: true }); // aria-disabled: Playwright would refuse a normal click
     await expect(page.getByTestId("marker-banner")).toBeVisible();
     expect(await page.evaluate(() => (window as any).pm.backend.markerMode)).toEqual({ stepPath: "0", kind: "entrance" });
-    await expect(page.getByTestId("entrances-0")).toHaveAttribute("data-open", "true");
     await expect(page.getByTestId("entrances-wrap-0")).toHaveAttribute("data-flash", "true");
     await expect(page.getByTestId("marker-kind-entrance")).toBeInViewport();
     await panelShot(page, "panel-entrance-lead");
@@ -183,7 +184,7 @@ test("entrances: none placed automatically; disabled primary leads to the Entran
     // place a two-way entrance, show it, remove it again
     await clickWorld(page, (FIELD[0][0] + FIELD[1][0]) / 2, (FIELD[0][1] + FIELD[1][1]) / 2);
     await expect(page.getByTestId("marker-0")).toHaveAttribute("data-kind", "entrance");
-    await expect(page.getByTestId("marker-0")).toContainText("Two-way 1");
+    await expect(page.getByTestId("marker-0")).toContainText("2-way 1");
     await page.getByTestId("marker-done").click();
     await expect(page.getByTestId("entrance-required")).toHaveCount(0);
     await expect(primary).toHaveAttribute("aria-disabled", "false");
@@ -191,7 +192,7 @@ test("entrances: none placed automatically; disabled primary leads to the Entran
     await page.getByTestId("marker-show-0").click();
     expect(await page.evaluate(() => (window as any).pm.backend.locateAt)).not.toBeNull();
     await page.getByTestId("marker-remove-0").click();
-    await expect(page.getByTestId("entrance-required")).toContainText("Add at least one entrance");
+    await expect(page.getByTestId("entrance-required")).toContainText("Add one to build");
     await expect(primary).toHaveAttribute("aria-disabled", "true");
 
     // choose "Exit only", click the outline → placed with its type; Build path unblocked
@@ -218,9 +219,9 @@ test("disabled primary explains why; permanent effects need acknowledgement", as
     await open(page);
     const primary = page.getByTestId("primary");
     await expect(primary).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByTestId("primary-reason")).toContainText("Draw, pick or paint");
+    await expect(page.getByTestId("primary-reason")).toContainText("Select an area first");
     await primary.hover();
-    await expect(page.getByTestId("tooltip")).toContainText("Draw, pick or paint");
+    await expect(page.getByTestId("tooltip")).toContainText("Select an area first");
     await panelShot(page, "panel-disabled-reason");
 
     // a pond is permanent: Build waits for the tick (and tells C#)
@@ -228,9 +229,9 @@ test("disabled primary explains why; permanent effects need acknowledgement", as
     await page.getByTestId("preset-pond").click();
     await primary.click();
     await waitPlanned(page);
-    await expect(page.getByTestId("permanent")).toBeVisible();
+    await expect(page.getByTestId("permanent").first()).toBeVisible();
     await expect(primary).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByTestId("primary-reason")).toContainText("Tick the box");
+    await expect(page.getByTestId("primary-reason")).toContainText("Tick OK to build");
     await panelShot(page, "panel-permanent");
     await page.getByTestId("ack-permanent").click();
     expect(await page.evaluate(() => (window as any).pm.backend.ackPermanent)).toBe(true);

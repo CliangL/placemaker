@@ -1,7 +1,7 @@
 // s42 — the Design stage as picker + editing bar + Shape / Extras grids, the compact Review and Area stages.
 // Screenshots of real Core types at the default panel width land in mock/screenshots/s42-*.png.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned, pickType } from "./helpers";
 
 async function realDesign(page: Page) {
     const errors = await open(page, { real: true });
@@ -21,7 +21,7 @@ async function pick(page: Page, group: string, recipe: string) {
     const chip = page.getByTestId(`make-group-${group}`);
     if (!(await chip.count())) await page.getByTestId("make-groups-more").click();
     await page.getByTestId(`make-group-${group}`).click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
     await page.waitForTimeout(150);
 }
@@ -80,7 +80,7 @@ test("s42 editing bar: unsaved changes, undo changes, save as new from the + chi
     const errors = await open(page);
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await waitPlanned(page);
     await expect(page.getByTestId("preset-revert")).toHaveAttribute("aria-disabled", "true");
     await page.getByTestId("randomize").click();
@@ -139,7 +139,7 @@ test("s42 review: permanent changes need the OK chip beside Build", async ({ pag
     const errors = await open(page);
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await page.getByTestId("preset-pond").click();
     await page.getByTestId("primary").click();
     await waitPlanned(page);

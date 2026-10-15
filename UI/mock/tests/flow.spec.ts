@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clickWorld, drawPolygon, FIELD, open, panelShot, shot, stage, waitPlanned } from "./helpers";
+import { clickWorld, drawPolygon, FIELD, open, panelShot, shot, stage, waitPlanned, pickType, unfoldSections } from "./helpers";
 
 test("full flow: draw → design → review → build, then manage the result", async ({ page }) => {
     const errors = await open(page);
@@ -18,7 +18,7 @@ test("full flow: draw → design → review → build, then manage the result", 
     await clickWorld(page, FIELD[3][0], FIELD[3][1]);
     await clickWorld(page, FIELD[0][0], FIELD[0][1]);
     await expect(page.getByTestId("panel-compact")).toBeHidden();
-    await expect(page.getByTestId("area-readout")).toContainText("ha");
+    await expect(page.getByTestId("area-summary")).toContainText("ha");
     await page.getByTestId("undo").hover();
     await expect(page.getByTestId("tooltip")).toContainText("Close outline");
     await shot(page, "03-area-closed");
@@ -72,8 +72,9 @@ test("going back to Area keeps the design; switching recipe keeps the area", asy
     await open(page);
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
     await waitPlanned(page);
+    await unfoldSections(page);
     await page.getByTestId("choice-pattern-grid").click();
     await expect(page.getByTestId("choice-pattern-grid")).toHaveAttribute("aria-pressed", "true");
 
@@ -91,7 +92,7 @@ test("going back to Area keeps the design; switching recipe keeps the area", asy
 
     // switching recipe keeps the area
     const area = await page.evaluate(() => (window as any).pm.backend.state().area.areaM2);
-    await page.getByTestId("recipe-park").click();
+    await pickType(page, "park");
     await waitPlanned(page);
     expect(await page.evaluate(() => (window as any).pm.backend.state().area.areaM2)).toBe(area);
     // and undo brings the plaza back

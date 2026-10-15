@@ -7,7 +7,7 @@
 //     undo changes (back to the style) · shuffle · save as new · save (overwrite) · more (rename, delete, reset, export).
 // Styles are the engine's presets (selectPreset / savePreset / savePresetAs …); categories come from the type's
 // GeneratorRegistry group (RecipeInfo.group), guessed from the id only for types that declare none.
-import React, { KeyboardEvent, useRef, useState } from "react";
+import React, { KeyboardEvent, useEffect, useRef, useState } from "react";
 import classNames from "classnames";
 import { ActivePreset, Catalog, DesignState, LayerType, PresetView, RecipeInfo, StepView } from "../contract";
 import { act } from "../lib/bindings";
@@ -223,6 +223,14 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
         save(CATEGORY_KEY, c);
         setChosen(c);
     };
+    // The selected type changed from elsewhere (undo, a search hit, a preset of another type): show its category.
+    const lastRecipe = useRef(design.recipeId);
+    useEffect(() => {
+        if (lastRecipe.current === design.recipeId) return;
+        lastRecipe.current = design.recipeId;
+        if (selectedGroup && selectedGroup !== chosen) setCategory(selectedGroup);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [design.recipeId]);
 
     // search hits
     type Hit = { r: RecipeInfo; layer: LayerType; p: PresetView };

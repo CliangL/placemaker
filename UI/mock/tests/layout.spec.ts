@@ -3,7 +3,7 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { lintCss } from "../../tools/css-lint";
-import { clickWorld, drawPolygon, FIELD, open, shot, waitPlanned } from "./helpers";
+import { clickWorld, drawPolygon, FIELD, open, shot, waitPlanned, pickType } from "./helpers";
 
 const UI = path.join(__dirname, "..", "..");
 
@@ -41,7 +41,7 @@ for (const [w, h] of [
         await drawPolygon(page, FIELD);
         await noHorizontalOverflow(page);
         await page.getByTestId("primary").click();
-        await page.getByTestId("recipe-park").click();
+        await pickType(page, "park");
         await page.getByTestId("feature-toggle-playground").click();
         await waitPlanned(page);
         await noHorizontalOverflow(page);

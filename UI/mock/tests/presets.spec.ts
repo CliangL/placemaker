@@ -1,12 +1,12 @@
 // Playtest 3: one browser Category ▸ Type ▸ Preset, search, keyboard; active-preset bar with
 // Save (over a built-in = "edited", Reset to default), Save as (★ own preset), Rename, Delete, Export.
 import { expect, Page, test } from "@playwright/test";
-import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned } from "./helpers";
+import { drawPolygon, FIELD, noTextOverflow, open, panelShot, waitPlanned, pickType } from "./helpers";
 
 async function toDesign(page: Page, recipe = "park") {
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
-    await page.getByTestId(`recipe-${recipe}`).click();
+    await pickType(page, recipe);
     await waitPlanned(page);
 }
 
@@ -35,7 +35,7 @@ test("browser: categories ▸ types ▸ presets; clicking a preset applies it; t
     await expect(page.getByTestId("preset-save")).toHaveAttribute("aria-disabled", "true");
 
     // another type: selected with its defaults, expanded instead
-    await page.getByTestId("recipe-plaza").click();
+    await pickType(page, "plaza");
     await expect(page.getByTestId("recipe-plaza")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("presets-plaza").getByTestId("preset-civic")).toBeVisible();
     await expect(page.getByTestId("presets-park")).toHaveCount(0);
@@ -46,10 +46,10 @@ test("browser: categories ▸ types ▸ presets; clicking a preset applies it; t
     await page.keyboard.press("Control+z");
     await expect(page.getByTestId("presets-plaza").getByTestId("preset-default")).toHaveAttribute("aria-pressed", "true");
 
-    // a category chip narrows the tiles; All shows every type again
+    // a category chip lists its own types
     await page.getByTestId("make-group-squares").click();
     await expect(page.getByTestId("recipe-park")).toHaveCount(0);
-    await page.getByTestId("make-group-all").click();
+    await page.getByTestId("make-group-parks").click();
     await expect(page.getByTestId("recipe-park")).toBeVisible();
     await noTextOverflow(page, "browser");
     await panelShot(page, "p-browser");
@@ -60,6 +60,7 @@ test("browser: search filters categories, types and presets; keyboard moves betw
     await open(page);
     await toDesign(page, "park");
     const search = page.getByTestId("browser-search");
+    await page.getByTestId("browser-search-toggle").click();
     await search.fill("civ");
     await expect(page.getByTestId("make-group-squares")).toBeVisible();
     await expect(page.getByTestId("make-group-parks")).toHaveCount(0);
@@ -69,32 +70,33 @@ test("browser: search filters categories, types and presets; keyboard moves betw
     // a category name matches → all its types
     await search.fill("parks");
     await expect(page.getByTestId("recipe-park")).toBeVisible();
-    await expect(page.getByTestId("recipe-campground")).toBeVisible();
     await expect(page.getByTestId("recipe-plaza")).toHaveCount(0);
     // nothing
     await search.fill("zzz");
     await expect(page.getByTestId("browser-empty")).toBeVisible();
-    // Esc clears (and does not close the tool)
+    // Esc clears and closes the search (and does not close the tool)
     await search.press("Escape");
-    await expect(search).toHaveValue("");
+    await expect(search).toHaveCount(0);
     await expect(page.getByTestId("placemaker-panel")).toBeVisible();
-    await expect(page.getByTestId("recipe-plaza")).toBeVisible();
+    await expect(page.getByTestId("recipe-park")).toBeVisible();
     // Enter picks the first match
+    await page.getByTestId("browser-search-toggle").click();
     await search.fill("meadow");
     await search.press("Enter");
     await expect.poll(() => backend(page, "b.active && b.active.id")).toBe("wild");
     await page.getByTestId("browser-clear").click();
-    await expect(search).toHaveValue("");
+    await expect(search).toHaveCount(0);
 
+    await page.getByTestId("browser-search-toggle").click();
     // ↓ from the search box enters the grid; arrows walk it; Enter activates the focused item, not the
     // tool's primary action
     await search.focus();
     await search.press("ArrowDown"); // first category chip
-    await expect(page.getByTestId("make-group-all")).toBeFocused();
+    await expect(page.getByTestId("make-group-parks")).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByTestId("make-group-roads")).toBeFocused();
+    await expect(page.getByTestId("make-group-squares")).toBeFocused();
     await page.keyboard.press("ArrowLeft");
-    await expect(page.getByTestId("make-group-all")).toBeFocused();
+    await expect(page.getByTestId("make-group-parks")).toBeFocused();
     await page.keyboard.press("ArrowDown"); // the tile row below
     await expect(page.locator('[data-testid="recipes"] [data-nav="type"]:focus')).toHaveCount(1);
     await page.getByTestId("preset-default").focus();
@@ -189,7 +191,7 @@ test("Save as → own preset (★, active) → save changes → rename → delet
     // export: shows where presets.json is, with the note
     await page.getByTestId("preset-more").click();
     await page.getByTestId("preset-export").click();
-    await expect(page.getByTestId("presets-file")).toContainText("Send this file to get your presets built into the mod");
+    await expect(page.getByTestId("presets-file")).toContainText("Send this file to share your styles");
     await expect(page.getByTestId("presets-file-path")).toContainText("ModsData\\Placemaker\\presets.json");
     await noTextOverflow(page, "export note");
     await panelShot(page, "p-export");
@@ -217,7 +219,8 @@ test("long own preset names and many types never overflow", async ({ page }) => 
     await page.getByTestId("preset-name-input").fill("A really very long preset name for the big park");
     await page.getByTestId("preset-name-save").click();
     await expect(page.getByTestId("presets-park").locator('[data-testid^="preset-custom-"]')).toHaveCount(1);
-    for (const g of ["squares", "parking", "roads", "all"]) {
+    for (const g of ["squares", "parking", "roads", "nature", "gardens"]) {
+        if (!(await page.getByTestId(`make-group-${g}`).count())) await page.getByTestId("make-groups-more").click();
         await page.getByTestId(`make-group-${g}`).click();
         await noTextOverflow(page, "long names " + g);
     }

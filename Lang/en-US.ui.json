@@ -252,6 +252,7 @@
   "Placemaker.UI.Review.ClickShow": "Click: show on map",
   "Placemaker.UI.Review.Cost": "Cost",
   "Placemaker.UI.Review.Fewer": "Fewer",
+  "Placemaker.UI.Review.Issue": "Issue",
   "Placemaker.UI.Review.PaintOnly": "Ground paint stays when the build is removed.",
   "Placemaker.UI.Review.Planning": "Planning…",
   "Placemaker.UI.Review.PlusN": "+{0} more",

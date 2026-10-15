@@ -33,7 +33,7 @@
 
   "Placemaker.Roads.Control.roadMix": "Road mix",
   "Placemaker.Roads.Control.roadMix.Tooltip": "Which road goes where, in one pick. It sets the street, avenue, local, roundabout and perimeter roads and their upgrades below; changing any of them makes it Custom.",
-  "Placemaker.Roads.Control.roadMix.Description": "Which road goes in each role of the layout.",
+  "Placemaker.Roads.Control.roadMix.Description": "Which road goes where.",
   "Placemaker.Roads.Option.roadMix.auto": "Automatic",
   "Placemaker.Roads.Option.roadMix.auto.Tooltip": "The standard mix: Two-Lane Roads for streets, Four-Lane Roads for avenues, a Two-Lane One-Way Road around roundabouts.",
   "Placemaker.Roads.Option.roadMix.auto.Detail": "Streets: Two-Lane · Avenues: Four-Lane",
@@ -73,7 +73,7 @@
   "Placemaker.Roads.Control.avenueAsset.Description": "Wider main roads through the grid.",
   "Placemaker.Roads.Control.roundaboutAsset": "Roundabout ring",
   "Placemaker.Roads.Control.roundaboutAsset.Tooltip": "The one-way road that circles a roundabout island. Automatic places a Two-Lane One-Way Road: two lanes in the ring direction, like the Four-Lane avenue that feeds it. Only used when the layout has roundabouts (Radial, Mixed, Grid avenue crossings).",
-  "Placemaker.Roads.Control.roundaboutAsset.Description": "The circular one-way road around a roundabout island; only used when the layout has roundabouts.",
+  "Placemaker.Roads.Control.roundaboutAsset.Description": "The one-way ring of a roundabout.",
   "Placemaker.Roads.Control.perimeterAsset": "Perimeter road",
   "Placemaker.Roads.Control.perimeterAsset.Tooltip": "The loop around the edge of a drawn or painted area. Automatic uses the street road.",
   "Placemaker.Roads.Control.perimeterAsset.Description": "The road around the edge of the area.",

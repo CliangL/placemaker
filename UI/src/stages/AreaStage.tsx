@@ -87,7 +87,9 @@ type StopKey = "roads" | "buildings" | "builds" | "lots" | "zoned" | "emptyZones
 
 /** Paint area settings: Smart edges + what the brush stops at, one block, snap, smooth; then the brush. */
 const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }) => {
-    const { t } = useT();
+    const { t, tl } = useT();
+    // Smart edges = the block paint mode; a DLL without it greys the switch with the reason (s15).
+    const smartAv = modeAvailability(state, "blockPaint", t, tl);
     const b = state.brush;
     const smart = state.areaMode === "blockPaint";
     const offWhy = t("Placemaker.UI.Why.SmartOff", "Smart edges is off");
@@ -101,6 +103,7 @@ const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }
         { key: "water", icon: "water", label: t("Placemaker.UI.Rules.Water", "Water"), tip: t("Placemaker.UI.Rules.WaterTip", "Keep off deep water.") },
     ];
     const setSmart = (on: boolean) => {
+        if (on && !smartAv.enabled) return;
         act.setBrushRules({ anything: !on });
         act.setAreaMode(on ? "blockPaint" : "paint");
     };
@@ -113,7 +116,11 @@ const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }
                 >
                     <div className={s.smartLabel}>{t("Placemaker.UI.Rules.Smart", "Smart edges")}</div>
                 </Tip>
-                <Switch on={smart} onChange={setSmart} testId="smart-edges" />
+                <Tip title={t("Placemaker.UI.Rules.Smart", "Smart edges")} description={smartAv.enabled ? undefined : smartAv.reason}>
+                    <div className={smartAv.enabled ? s.switchCell : classNames(s.switchCell, s.rowOff)} data-testid="smart-edges-wrap" data-disabled={smartAv.enabled ? undefined : "true"} data-reason={smartAv.reason}>
+                        <Switch on={smart} onChange={setSmart} testId="smart-edges" />
+                    </div>
+                </Tip>
                 <div className={s.flex} />
                 <Btn icon="reset" iconSize={11} title={t("Placemaker.UI.Rules.Reset", "Reset edges")} onClick={act.resetBrushRules} testId="brush-rules-reset" />
             </div>

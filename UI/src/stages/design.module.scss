@@ -181,8 +181,11 @@
 
 .entrHead {
     @include row;
+    flex-wrap: wrap;
     min-width: 0;
-    height: 30rem;
+    min-height: 30rem;
+    padding: 3rem 0;
+    box-sizing: border-box;
 }
 
 .entrTitle {
@@ -212,9 +215,11 @@
     white-space: nowrap;
 }
 
+// the typed buttons follow the title on one line when they fit, else take the next line (never squeezed)
 .kindRow {
     @include row;
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 .kindBtn {
