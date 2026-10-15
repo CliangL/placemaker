@@ -89,8 +89,8 @@ namespace Placemaker.Core.Build
             return result;
         }
 
-        /// <summary>Host content keeps this far off the cells of a plot (m).</summary>
-        public const float Clearance = 2.5f;
+        /// <summary>Host content keeps this far off the cells of a plot (m): flush, just enough that a path edge never touches a cell (s48; was 2.5).</summary>
+        public const float Clearance = 0.2f;
 
         /// <summary>A convex ring grown outward by <paramref name="by"/> (corners moved along both edges).</summary>
         public static float2[] Grow(float2[] ring, float by)

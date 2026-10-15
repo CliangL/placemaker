@@ -756,7 +756,18 @@ namespace Placemaker.Core.Layers.Commercial
                     if (zone != null) ShopZone[rect] = zone;
                 }
             }
-// (s46) A plot no cell can be zoned for is not given back to the park: it keeps its land as a paved forecourt            // (a pad the layout planned for shops), with a warning.            int padsKept = 0;            foreach (var pad in pads)            {                bool clash = false;                foreach (var o in keep) if (StreetShops.ConvexOverlap(pad, o, 0.05f)) { clash = true; break; }                if (clash) { Taken.Remove(pad); continue; }                Ctx.Surface(Poly.EnsureCcw(pad), SurfaceRole.Paving, new AssetRef(""), AssetCategories.SurfacePaving);                padsKept++;            }            if (padsKept > 0) Ctx.Issue(IssueSeverity.Warning, CommercialLayer.PadKey);
+            // (s46) A plot no cell can be zoned for is not given back to the park: it keeps its land as a paved forecourt
+            // (a pad the layout planned for shops), with a warning.
+            int padsKept = 0;
+            foreach (var pad in pads)
+            {
+                bool clash = false;
+                foreach (var o in keep) if (StreetShops.ConvexOverlap(pad, o, 0.05f)) { clash = true; break; }
+                if (clash) { Taken.Remove(pad); continue; }
+                Ctx.Surface(Poly.EnsureCcw(pad), SurfaceRole.Paving, new AssetRef(""), AssetCategories.SurfacePaving);
+                padsKept++;
+            }
+            if (padsKept > 0) Ctx.Issue(IssueSeverity.Warning, CommercialLayer.PadKey);
             Shops.Clear();
             Shops.AddRange(keep);
         }
