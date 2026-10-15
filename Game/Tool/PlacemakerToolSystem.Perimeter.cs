@@ -2,6 +2,10 @@
 // between two clicks are filled in with the shortest path (Dijkstra), clicking the first node again
 // closes the loop. Right-click removes the last node. The area is the inside of the loop, at the
 // curbs, exactly like block mode.
+// s43 ("closable at any moment, it just bridges that gap"): from 3 nodes on, the open chain already gives an area:
+// the gap back to the first node is closed along the roads when a short route exists (< 1.5x the straight
+// distance, never back through the chain), else by a straight chord across open land (RoadGraphAlgorithms.Closing).
+// The overlay shows that closing dashed; clicking the first node (or Next) uses exactly that closing.
 
 using System.Collections.Generic;
 using Game.Net;
@@ -21,6 +25,18 @@ namespace Placemaker.Game.Tool
 
         private Entity _hoverNode;
         public Entity HoverNode => _hoverNode;
+        private List<HalfEdge> _perimeterClosing;
+        /// <summary>How the open chain closes right now (dashed in the overlay), or null.</summary>
+        public IReadOnlyList<HalfEdge> PerimeterClosing => _perimeter.Closed ? null : _perimeterClosing;
+
+        public float3 NodePositionOf(long node) => _roads.NodePosition(node);
+
+        private List<HalfEdge> ComputePerimeterClosing()
+        {
+            if (_perimeter.Closed || _perimeter.Nodes.Count < 3) return null;
+            try { return RoadGraphAlgorithms.Closing(_roads, _perimeter.Nodes, _perimeter.Path, n => _roads.NodePosition(n).xz, MaxPathVisited); }
+            catch (System.Exception e) { Mod.Log.Warn("Placemaker: road nodes closing failed: " + e.Message); return null; }
+        }
         public PerimeterSelectionState Perimeter => _perimeter;
 
         private void UpdatePerimeter()
@@ -45,6 +61,20 @@ namespace Placemaker.Game.Tool
                 }
                 long last = _perimeter.Nodes[_perimeter.Nodes.Count - 1];
                 if (id == last) return;
+                if (id == _perimeter.Nodes[0] && _perimeter.Nodes.Count >= 3)
+                {
+                    // Close with the previewed closing (road route or straight chord): what you see is what you get.
+                    var closeVia = ComputePerimeterClosing();
+                    if (closeVia == null || closeVia.Count == 0) { Flash(new LocText("Placemaker.Problem.NoRoadPath")); return; }
+                    _perimeter.Path.AddRange(closeVia);
+                    _perimeter.Closed = true;
+                    ShapeChanged();
+                    Commit("Placemaker.Undo.ClosePerimeter");
+                    RebuildShapeIfDirty(true);
+                    if (_shape == null) Flash(new LocText("Placemaker.Problem.Crossing"));
+                    else if (_stage == ToolStage.Area) SetStage(ToolStage.Design);
+                    return;
+                }
                 var path = new List<HalfEdge>();
                 if (!RoadGraphAlgorithms.ShortestPath(_roads, last, id, MaxPathVisited, path) || path.Count == 0)
                 {
@@ -87,7 +117,9 @@ namespace Placemaker.Game.Tool
                 if (_perimeter.Closed)
                 {
                     _perimeter.Closed = false;
-                    if (_perimeter.Path.Count > 0) _perimeter.Path.RemoveAt(_perimeter.Path.Count - 1);
+                    // The closing may be several road half-edges (or one straight chord): drop all of it.
+                    int keep = System.Math.Max(0, _perimeter.Nodes.Count - 1);
+                    if (_perimeter.Path.Count > keep) _perimeter.Path.RemoveRange(keep, _perimeter.Path.Count - keep);
                 }
                 else
                 {
@@ -126,8 +158,20 @@ namespace Placemaker.Game.Tool
 
         private AreaShape BuildPerimeterShape()
         {
-            if (!_perimeter.Closed || _perimeter.Path.Count < 3) return null;
-            var loop = new List<HalfEdge>(_perimeter.Path);
+            _perimeterClosing = ComputePerimeterClosing();
+            List<HalfEdge> loop;
+            if (_perimeter.Closed)
+            {
+                if (_perimeter.Path.Count < 3) return null;
+                loop = new List<HalfEdge>(_perimeter.Path);
+            }
+            else
+            {
+                if (_perimeterClosing == null) return null;
+                loop = new List<HalfEdge>(_perimeter.Path);
+                loop.AddRange(_perimeterClosing);
+                if (loop.Count < 3) return null;
+            }
             // The face must be on the left of the walk: make the loop counter-clockwise.
             var center = Poly.To2D(_roads.CenterRing(loop));
             if (center.Length >= 3 && Poly.SignedArea(center) < 0f)

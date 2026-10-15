@@ -43,6 +43,8 @@ namespace Placemaker.Core.Geometry
         public float Snap = DefaultSnap;
         /// <summary>Moving-average passes for the painted edge (0–6; Paint uses 6).</summary>
         public int Smoothing = BlockBrush.SmoothPasses;
+        /// <summary>(s43) What the Paint bucket (Block mode) treats as a wall (curve walls trace the face, area walls cut it).</summary>
+        public FillWall BucketWalls = FillWalls.Default;
 
         public static BrushRules Defaults() => new BrushRules();
 
@@ -54,6 +56,7 @@ namespace Placemaker.Core.Geometry
             var r = Clone();
             r.Snap = float.IsNaN(r.Snap) ? DefaultSnap : math.clamp(r.Snap, 0f, MaxSnap);
             r.Smoothing = math.clamp(r.Smoothing, 0, MaxSmoothing);
+            r.BucketWalls &= FillWalls.All;
             return r;
         }
 
@@ -105,10 +108,10 @@ namespace Placemaker.Core.Geometry
         }
 
         public bool Equals(BrushRules o) => o != null && Roads == o.Roads && Buildings == o.Buildings && Lots == o.Lots && Zoned == o.Zoned
-            && EmptyZones == o.EmptyZones && Water == o.Water && StayInBlock == o.StayInBlock && Builds == o.Builds && Anything == o.Anything && DrawClip == o.DrawClip && Snap == o.Snap && Smoothing == o.Smoothing;
+            && EmptyZones == o.EmptyZones && Water == o.Water && StayInBlock == o.StayInBlock && Builds == o.Builds && Anything == o.Anything && DrawClip == o.DrawClip && Snap == o.Snap && Smoothing == o.Smoothing && BucketWalls == o.BucketWalls;
         public override bool Equals(object obj) => Equals(obj as BrushRules);
         public override int GetHashCode() => (Roads ? 1 : 0) | (Buildings ? 2 : 0) | (Lots ? 4 : 0) | (Zoned ? 8 : 0) | (EmptyZones ? 16 : 0)
-            | (Water ? 32 : 0) | (StayInBlock ? 64 : 0) | (Builds ? 1024 : 0) | (Anything ? 2048 : 0) | (DrawClip ? 4096 : 0) | (Smoothing << 7) ^ Snap.GetHashCode();
+            | (Water ? 32 : 0) | (StayInBlock ? 64 : 0) | (Builds ? 1024 : 0) | (Anything ? 2048 : 0) | (DrawClip ? 4096 : 0) | (Smoothing << 7) ^ Snap.GetHashCode() ^ ((int)BucketWalls << 16);
 
         /// <summary>
         /// The brush for a stroke starting at <paramref name="start"/>: fenced to <paramref name="block"/>

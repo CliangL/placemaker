@@ -10,6 +10,7 @@ using Colossal.IO.AssetDatabase;
 using Game.Input;
 using Game.Modding;
 using Game.Settings;
+using FillWall = global::Placemaker.Core.Geometry.FillWall;
 
 namespace Placemaker.Game.Settings
 {
@@ -123,6 +124,28 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupBrush)]
         public bool BrushDrawClip { get; set; }
 
+        // (s43) Paint bucket walls (Core/Geometry/FillWalls): lines trace the block, areas cut it. Ids are save format.
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BucketWallRoads { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BucketWallPaths { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BucketWallBikes { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BucketWallTracks { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BucketWallWater { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BucketWallLots { get; set; }
+
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BucketWallZoned { get; set; }
+
         [SettingsUISlider(min = 0f, max = 20f, step = 1f, scalarMultiplier = 1)]
         [SettingsUISection(SectionMain, GroupBrush)]
         public float BrushSnapDistance { get; set; }
@@ -148,6 +171,9 @@ namespace Placemaker.Game.Settings
             EmptyZones = BlockPaintAvoidEmptyZones, Water = BrushStopWater, StayInBlock = BrushStayInBlock,
             Snap = BrushSnapDistance, Smoothing = BrushSmoothing,
             Builds = BrushStopBuilds, Anything = BrushPaintOverAnything, DrawClip = BrushDrawClip,
+            BucketWalls = (BucketWallRoads ? FillWall.Roads : 0) | (BucketWallPaths ? FillWall.Paths : 0) | (BucketWallBikes ? FillWall.Bikes : 0)
+                | (BucketWallTracks ? FillWall.Tracks : 0) | (BucketWallWater ? FillWall.Water : 0) | (BucketWallLots ? FillWall.Lots : 0)
+                | (BucketWallZoned ? FillWall.Zoned : 0),
         }.Normalized();
 
         public void SetBrushRules(global::Placemaker.Core.Geometry.BrushRules r)
@@ -157,6 +183,10 @@ namespace Placemaker.Game.Settings
             BlockPaintAvoidEmptyZones = r.EmptyZones; BrushStopWater = r.Water; BrushStayInBlock = r.StayInBlock;
             BrushSnapDistance = r.Snap; BrushSmoothing = r.Smoothing;
             BrushStopBuilds = r.Builds; BrushPaintOverAnything = r.Anything; BrushDrawClip = r.DrawClip;
+            var w = r.BucketWalls;
+            BucketWallRoads = (w & FillWall.Roads) != 0; BucketWallPaths = (w & FillWall.Paths) != 0; BucketWallBikes = (w & FillWall.Bikes) != 0;
+            BucketWallTracks = (w & FillWall.Tracks) != 0; BucketWallWater = (w & FillWall.Water) != 0; BucketWallLots = (w & FillWall.Lots) != 0;
+            BucketWallZoned = (w & FillWall.Zoned) != 0;
         }
 
         // ───────────── Keys ─────────────

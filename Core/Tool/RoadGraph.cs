@@ -49,8 +49,17 @@ namespace Placemaker.Core.Tool
         /// within <paramref name="maxVisited"/> nodes.
         /// </summary>
         public static bool ShortestPath(IRoadGraph graph, long start, long end, int maxVisited, List<HalfEdge> path)
+            => ShortestPath(graph, start, end, maxVisited, path, null, null, float.MaxValue, out _);
+
+        /// <summary>
+        /// (s43) Same, never entering <paramref name="avoidNodes"/> (except <paramref name="end"/>) nor using
+        /// <paramref name="avoidEdges"/>, and giving up beyond <paramref name="maxLength"/> metres.
+        /// </summary>
+        public static bool ShortestPath(IRoadGraph graph, long start, long end, int maxVisited, List<HalfEdge> path,
+            ICollection<long> avoidNodes, ICollection<long> avoidEdges, float maxLength, out float length)
         {
             path.Clear();
+            length = 0f;
             if (start == end) return true;
             var dist = new Dictionary<long, float> { [start] = 0f };
             var via = new Dictionary<long, HalfEdge>();
@@ -62,11 +71,14 @@ namespace Placemaker.Core.Tool
                 heap.Pop(out float d, out long node);
                 if (!done.Add(node)) continue;
                 if (node == end) break;
-                if (done.Count > maxVisited) return false;
+                if (done.Count > maxVisited || d > maxLength) return false;
                 foreach (var l in graph.Links(node))
                 {
                     if (done.Contains(l.Other)) continue;
+                    if (l.Other != end && avoidNodes != null && avoidNodes.Contains(l.Other)) continue;
+                    if (avoidEdges != null && avoidEdges.Contains(l.Edge)) continue;
                     float nd = d + math.max(0.01f, l.Length);
+                    if (nd > maxLength) continue;
                     if (dist.TryGetValue(l.Other, out float old) && old <= nd) continue;
                     dist[l.Other] = nd;
                     via[l.Other] = new HalfEdge(l.Edge, node, l.Other);
@@ -74,6 +86,7 @@ namespace Placemaker.Core.Tool
                 }
             }
             if (!done.Contains(end)) return false;
+            length = dist[end];
             for (long n = end; n != start;)
             {
                 if (!via.TryGetValue(n, out var h)) { path.Clear(); return false; }
@@ -82,6 +95,34 @@ namespace Placemaker.Core.Tool
             }
             path.Reverse();
             return true;
+        }
+
+        /// <summary>Marker edge id of a straight closing segment (Road nodes, s43): no road, a chord between two nodes.</summary>
+        public const long StraightEdge = long.MinValue;
+
+        public static bool IsStraight(HalfEdge h) => h.Edge == StraightEdge;
+
+        /// <summary>
+        /// (s43) Road nodes "closable at any moment": how an open chain of picked nodes (≥ 3) closes back to its
+        /// first node. Along the roads when a route exists that avoids the chain (its nodes and edges) and is no
+        /// longer than <paramref name="detour"/> × the straight distance; otherwise a straight chord
+        /// (<see cref="StraightEdge"/>). Null for fewer than 3 nodes or an already closed chain.
+        /// </summary>
+        public static List<HalfEdge> Closing(IRoadGraph graph, IReadOnlyList<long> nodes, IReadOnlyList<HalfEdge> chain,
+            Func<long, float2> position, int maxVisited, float detour = 1.5f)
+        {
+            if (nodes == null || nodes.Count < 3) return null;
+            long first = nodes[0], last = nodes[nodes.Count - 1];
+            if (first == last) return null;
+            float straight = math.distance(position(first), position(last));
+            var avoidNodes = new HashSet<long>();
+            for (int i = 1; i < nodes.Count - 1; i++) avoidNodes.Add(nodes[i]);
+            var avoidEdges = new HashSet<long>();
+            if (chain != null) foreach (var h in chain) avoidEdges.Add(h.Edge);
+            var path = new List<HalfEdge>();
+            if (graph != null && ShortestPath(graph, last, first, maxVisited, path, avoidNodes, avoidEdges, math.max(1f, straight * detour), out _) && path.Count > 0)
+                return path;
+            return new List<HalfEdge> { new HalfEdge(StraightEdge, last, first) };
         }
 
         /// <summary>

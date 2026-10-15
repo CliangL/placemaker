@@ -42,35 +42,85 @@ namespace Placemaker.Game.Selection
             _boundaryCache.Clear();
         }
 
-        /// <summary>Ground-level road edges bound blocks; tunnels, bridges and building-internal nets do not.</summary>
+        /// <summary>Ground-level road edges bound blocks; tunnels, bridges and building-internal nets do not (Road nodes).</summary>
         public bool IsBoundaryEdge(Entity e)
         {
             if (_boundaryCache.TryGetValue(e, out bool cached)) return cached;
-            bool ok = ComputeBoundary(e);
+            bool ok = KindOf(e) == FillWall.Roads;
             _boundaryCache[e] = ok;
             return ok;
         }
 
-        private bool ComputeBoundary(Entity e)
+        private readonly Dictionary<Entity, FillWall> _prefabKind = new Dictionary<Entity, FillWall>();
+
+        /// <summary>
+        /// (s43) What a net edge is for the Paint bucket: Roads (every car road: alleys, gravel, one-way, pedestrian
+        /// streets…), Paths, Bikes (bicycle-only), Tracks (train / tram / subway at ground level); None for anything
+        /// else (pipes, power lines, fences, waterways, taxiways), elevated / tunnelled pieces, temp / deleted edges
+        /// and nets inside a building's lot. Before s43 only edges with a Road component counted (paths, bike paths
+        /// and tracks were invisible to the bucket) and every net owned by any object was dropped.
+        /// </summary>
+        public FillWall KindOf(Entity e)
         {
-            if (e == Entity.Null || !_em.Exists(e)) return false;
-            if (!_em.HasComponent<Edge>(e) || !_em.HasComponent<Curve>(e) || !_em.HasComponent<Road>(e)) return false;
-            if (_em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) return false;
-            if (_em.HasComponent<Owner>(e))
-            {
-                var owner = _em.GetComponentData<Owner>(e).m_Owner;
-                if (owner != Entity.Null && _em.Exists(owner) && _em.HasComponent<global::Game.Objects.Object>(owner)) return false;
-            }
+            if (e == Entity.Null || !_em.Exists(e)) return FillWall.None;
+            if (!_em.HasComponent<Edge>(e) || !_em.HasComponent<Curve>(e)) return FillWall.None;
+            if (_em.HasComponent<Temp>(e) || _em.HasComponent<Deleted>(e)) return FillWall.None;
+            if (OwnedByBuilding(e)) return FillWall.None;
             if (_em.HasComponent<Composition>(e))
             {
                 var comp = _em.GetComponentData<Composition>(e).m_Edge;
                 if (comp != Entity.Null && _em.HasComponent<NetCompositionData>(comp))
                 {
                     var flags = _em.GetComponentData<NetCompositionData>(comp).m_Flags.m_General;
-                    if ((flags & (CompositionFlags.General.Elevated | CompositionFlags.General.Tunnel)) != 0) return false;
+                    if ((flags & (CompositionFlags.General.Elevated | CompositionFlags.General.Tunnel)) != 0) return FillWall.None;
                 }
             }
-            return true;
+            var prefab = _em.HasComponent<PrefabRef>(e) ? _em.GetComponentData<PrefabRef>(e).m_Prefab : Entity.Null;
+            if (prefab != Entity.Null && _prefabKind.TryGetValue(prefab, out var known)) return known;
+            FillWall kind = FillWall.None;
+            if (_em.HasComponent<Road>(e)) kind = BicycleOnly(e, out _) ? FillWall.Bikes : FillWall.Roads;
+            else if (_em.HasComponent<TrainTrack>(e) || _em.HasComponent<TramTrack>(e) || _em.HasComponent<SubwayTrack>(e)) kind = FillWall.Tracks;
+            else if (prefab != Entity.Null && _em.HasComponent<PathwayData>(prefab)) kind = BicycleOnly(e, out _) ? FillWall.Bikes : FillWall.Paths;
+            if (prefab != Entity.Null) _prefabKind[prefab] = kind;
+            return kind;
+        }
+
+        /// <summary>Lanes say bicycles only: a bike lane and no car or pedestrian lane.</summary>
+        private bool BicycleOnly(Entity edge, out bool hasBike)
+        {
+            hasBike = false;
+            if (!_em.HasBuffer<global::Game.Net.SubLane>(edge)) return false;
+            bool other = false;
+            var lanes = _em.GetBuffer<global::Game.Net.SubLane>(edge, true);
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                var lane = lanes[i].m_SubLane;
+                if (lane == Entity.Null || !_em.Exists(lane)) continue;
+                if (_em.HasComponent<global::Game.Net.CarLane>(lane) || _em.HasComponent<global::Game.Net.TrackLane>(lane)) { other = true; continue; }
+                if (_em.HasComponent<global::Game.Net.PedestrianLane>(lane))
+                {
+                    if ((_em.GetComponentData<global::Game.Net.PedestrianLane>(lane).m_Flags & global::Game.Net.PedestrianLaneFlags.AllowBicycle) != 0) hasBike = true;
+                    other = true;
+                    continue;
+                }
+                if (!_em.HasComponent<PrefabRef>(lane)) continue;
+                var lp = _em.GetComponentData<PrefabRef>(lane).m_Prefab;
+                if (lp != Entity.Null && _em.HasComponent<NetLaneData>(lp) && (_em.GetComponentData<NetLaneData>(lp).m_Flags & global::Game.Prefabs.LaneFlags.BicyclesOnly) != 0) hasBike = true;
+            }
+            return hasBike && !other;
+        }
+
+        private bool OwnedByBuilding(Entity e)
+        {
+            var cur = e;
+            for (int depth = 0; depth < 4 && _em.HasComponent<Owner>(cur); depth++)
+            {
+                var o = _em.GetComponentData<Owner>(cur).m_Owner;
+                if (o == Entity.Null || !_em.Exists(o)) return false;
+                if (_em.HasComponent<global::Game.Buildings.Building>(o) || _em.HasComponent<global::Game.Buildings.Extension>(o)) return true;
+                cur = o;
+            }
+            return false;
         }
 
         public IReadOnlyList<RoadLink> Links(long nodeId)
@@ -138,60 +188,165 @@ namespace Placemaker.Game.Selection
 
         private readonly List<Entity> _scratch = new List<Entity>();
 
-        // ───────────── block picking (Core PlanarGraph) ─────────────
+        // ───────────── block picking (Core FillGraph / PlanarGraph) ─────────────
 
         private const float GraphRadius = 900f;
         private const float GraphRebuildDistance = 350f;
         private const float GraphMaxAge = 2f;
-        private PlanarGraph _planar;
+        private FillGraph _fill;
         private float2 _planarCenter;
         private float _planarBuilt = -100f;
+        private FillWall _planarWalls = FillWall.None;
         private readonly List<float2> _geomScratch = new List<float2>();
+        /// <summary>Real edges in the current graph with their wall kind (overlay: what the fill sees).</summary>
+        private readonly Dictionary<Entity, FillWall> _graphEdges = new Dictionary<Entity, FillWall>();
+        /// <summary>
+        /// Sub-edges of split hosts ever built (id → geometry): a selection keeps its loop of half-edges while the
+        /// graph is rebuilt around other places; the outline of a loop with sub-edges is built from these.
+        /// </summary>
+        private readonly Dictionary<long, FillCurve> _subEdges = new Dictionary<long, FillCurve>();
+        private int _graphVersion;
+
+        public FillGraph CurrentGraph => _fill;
+        public int GraphVersion => _graphVersion;
+        public IReadOnlyDictionary<Entity, FillWall> GraphEdges => _graphEdges;
 
         /// <summary>
-        /// Planar graph of block-bounding roads around <paramref name="p"/>. Rebuilt when the cursor
-        /// leaves the covered area or every couple of seconds (the network may have changed) —
-        /// a bounded query, never the whole map.
+        /// Planar graph of the walls around <paramref name="p"/>. Rebuilt when the cursor leaves the covered area,
+        /// the walls change, or every couple of seconds (the network may have changed) — a bounded query, never the
+        /// whole map. Side connections (a path ending on a road's sidewalk without a node) split their host edge.
         /// </summary>
-        private PlanarGraph GraphAround(float2 p, float now)
+        private FillGraph GraphAround(float2 p, float now, FillWall walls)
         {
-            if (_planar != null && math.distance(p, _planarCenter) < GraphRebuildDistance && now - _planarBuilt < GraphMaxAge) return _planar;
-            var g = new PlanarGraph();
+            if (_fill != null && walls == _planarWalls && math.distance(p, _planarCenter) < GraphRebuildDistance && now - _planarBuilt < GraphMaxAge) return _fill;
             Query(p - GraphRadius, p + GraphRadius, _scratch);
             var seen = new HashSet<Entity>();
+            var curves = new List<FillCurve>();
+            var nodes = new Dictionary<long, float2>();
+            var links = new List<FillSideLink>();
+            _graphEdges.Clear();
             foreach (var e in _scratch)
             {
-                if (!seen.Add(e) || !IsBoundaryEdge(e)) continue;
+                if (!seen.Add(e)) continue;
+                var kind = KindOf(e);
+                if ((kind & walls) == 0) continue;
                 var edge = _em.GetComponentData<Edge>(e);
                 if (!_em.HasComponent<Node>(edge.m_Start) || !_em.HasComponent<Node>(edge.m_End)) continue;
                 long a = EntityIds.Pack(edge.m_Start), b = EntityIds.Pack(edge.m_End);
-                if (!g.HasNode(a)) g.AddNode(a, _em.GetComponentData<Node>(edge.m_Start).m_Position.xz);
-                if (!g.HasNode(b)) g.AddNode(b, _em.GetComponentData<Node>(edge.m_End).m_Position.xz);
+                nodes[a] = _em.GetComponentData<Node>(edge.m_Start).m_Position.xz;
+                nodes[b] = _em.GetComponentData<Node>(edge.m_End).m_Position.xz;
                 _geomScratch.Clear();
                 foreach (var q in SampleCurve(_em.GetComponentData<Curve>(e).m_Bezier, true, 6)) _geomScratch.Add(q.xz);
-                g.AddEdge(EntityIds.Pack(e), a, b, _geomScratch);
+                long id = EntityIds.Pack(e);
+                curves.Add(new FillCurve { Id = id, Host = id, A = a, B = b, Geom = _geomScratch.ToArray(), HalfWidth = RoadWidth(e) * 0.5f, Kind = kind });
+                _graphEdges[e] = kind;
+                if (_em.HasBuffer<ConnectedNode>(e))
+                {
+                    var cn = _em.GetBuffer<ConnectedNode>(e, true);
+                    for (int i = 0; i < cn.Length; i++)
+                    {
+                        var n = cn[i].m_Node;
+                        if (n == Entity.Null || !_em.HasComponent<Node>(n)) continue;
+                        long nid = EntityIds.Pack(n);
+                        nodes[nid] = _em.GetComponentData<Node>(n).m_Position.xz;
+                        links.Add(new FillSideLink(id, nid));
+                    }
+                }
             }
-            g.Prepare();
-            _planar = g;
+            var g = FillGraph.Build(curves, nodes, links, walls);
+            if (_subEdges.Count > 20000) _subEdges.Clear();
+            foreach (var c in g.Edges) if (c.IsSub) _subEdges[c.Id] = c;
+            _fill = g;
             _planarCenter = p;
             _planarBuilt = now;
+            _planarWalls = walls;
+            _graphVersion++;
             return g;
         }
 
         /// <summary>Forget the cached graph (after a build changed the roads).</summary>
-        public void InvalidateGraph() => _planar = null;
+        public void InvalidateGraph() => _fill = null;
 
-        /// <summary>The block containing <paramref name="p"/> as a CCW loop of half-edges (face on the left).</summary>
-        public FacePickStatus PickBlock(float2 p, float now, List<HalfEdge> loop)
+        /// <summary>The block (roads only) containing <paramref name="p"/> — Block paint.</summary>
+        public FacePickStatus PickBlock(float2 p, float now, List<HalfEdge> loop) => PickBlock(p, now, loop, FillWall.Roads);
+
+        /// <summary>The face of the walls containing <paramref name="p"/> as a CCW loop of half-edges (face on the left).</summary>
+        public FacePickStatus PickBlock(float2 p, float now, List<HalfEdge> loop, FillWall walls)
         {
             loop.Clear();
-            var g = GraphAround(p, now);
-            var pick = g.PickFace(p, GraphRadius, 4000, true);
+            walls &= FillWalls.Curves;
+            if (walls == FillWall.None) return FacePickStatus.EmptyGraph;
+            var g = GraphAround(p, now, walls);
+            var pick = g.Pick(p, GraphRadius, 4000);
             if (!pick.Ok) return pick.Status;
             int n = pick.EdgeIds.Count;
             for (int i = 0; i < n; i++)
                 loop.Add(new HalfEdge(pick.EdgeIds[i], pick.NodeIds[i], pick.NodeIds[(i + 1) % n]));
             return loop.Count >= 2 ? FacePickStatus.Ok : FacePickStatus.Degenerate;
+        }
+
+        /// <summary>
+        /// (s43) Outline of a face loop: the entity curbs (BuildArea) when every edge is a real net; otherwise (split
+        /// sub-edges from side connections) the centre ring minus each wall's corridor at its own half-width, the
+        /// piece under <paramref name="seed"/>. Attachments are left to the caller in the second case.
+        /// </summary>
+        public AreaShape BuildFaceArea(IReadOnlyList<HalfEdge> loop, float2 seed, AreaSource source, out bool needsAttachments)
+        {
+            needsAttachments = false;
+            bool allReal = true;
+            foreach (var h in loop) if (EntityIds.Resolve(_em, h.Edge) == Entity.Null) { allReal = false; break; }
+            if (allReal)
+            {
+                var a = BuildArea(loop, source);
+                if (a != null) return a;
+            }
+            var centre = new List<float2>();
+            var heights = new List<float3>();
+            foreach (var h in loop)
+            {
+                if (!TryGeometry(h.Edge, out var geom, out _, out long ga)) return null;
+                bool fwd = ga == h.From;
+                for (int k = 0; k < geom.Length - 1; k++)
+                {
+                    var q = fwd ? geom[k] : geom[geom.Length - 1 - k];
+                    if (centre.Count == 0 || math.distancesq(centre[centre.Count - 1], q) > 1e-8f) centre.Add(q);
+                }
+                heights.Add(NodePosition(h.From));
+            }
+            if (centre.Count < 3) return null;
+            var ring2 = Poly.EnsureCcw(centre.ToArray());
+            float2[] outline = null;
+            if (_fill != null)
+            {
+                bool covered = true;
+                foreach (var h in loop) if (!_fill.TryEdge(h.Edge, out _)) { covered = false; break; }
+                if (covered) outline = _fill.CurbOutline(ring2, seed);
+            }
+            if (outline == null)
+            {
+                var walls = new List<FillCurveGeom>();
+                foreach (var h in loop) if (TryGeometry(h.Edge, out var g, out float w, out _)) walls.Add(new FillCurveGeom(g, w));
+                outline = FillWalls.CurbOutline(ring2, walls, seed);
+            }
+            if (outline == null) return null;
+            needsAttachments = true;
+            return new AreaShape { Ring = Lift(outline, heights), Source = source };
+        }
+
+        /// <summary>Centre polyline (A→B), half-width and start node of a real edge or a stored sub-edge.</summary>
+        private bool TryGeometry(long id, out float2[] geom, out float halfWidth, out long a)
+        {
+            geom = null; halfWidth = 0; a = 0;
+            if (_fill != null && _fill.TryEdge(id, out var fe)) { geom = fe.Geom; halfWidth = fe.HalfWidth; a = fe.A; return true; }
+            if (_subEdges.TryGetValue(id, out var se)) { geom = se.Geom; halfWidth = se.HalfWidth; a = se.A; return true; }
+            var e = EntityIds.Resolve(_em, id);
+            if (e == Entity.Null || !_em.HasComponent<Curve>(e) || !_em.HasComponent<Edge>(e)) return false;
+            var pts = SampleCurve(_em.GetComponentData<Curve>(e).m_Bezier, true, 6);
+            geom = new float2[pts.Count];
+            for (int i = 0; i < pts.Count; i++) geom[i] = pts[i].xz;
+            halfWidth = RoadWidth(e) * 0.5f;
+            a = EntityIds.Pack(_em.GetComponentData<Edge>(e).m_Start);
+            return true;
         }
 
         // ───────────── loop → area ─────────────
@@ -248,6 +403,8 @@ namespace Placemaker.Game.Selection
             bool curbsOk = true;
             foreach (var h in loop)
             {
+                // (s43) Road nodes closed across open land: no curb, the stitch joins the neighbouring curbs straight.
+                if (RoadGraphAlgorithms.IsStraight(h)) continue;
                 var piece = CurbPiece(h, center2);
                 if (piece == null) { curbsOk = false; break; }
                 curbPieces.Add(piece);
@@ -271,6 +428,7 @@ namespace Placemaker.Game.Selection
             foreach (var h in loop)
             {
                 if (!TryCurve(h.Edge, out var c, out var edge)) continue;
+                if (KindOf(edge) == FillWall.Tracks) continue;   // s43: a block bounded by rail has no entrance on the tracks
                 bool forward = _em.GetComponentData<Edge>(edge).m_Start == EntityIds.Unpack(h.From);
                 var mid = MathUtils.Position(c, 0.5f);
                 var tangent = math.normalizesafe(MathUtils.Tangent(c, 0.5f).xz) * (forward ? 1f : -1f);

@@ -435,7 +435,8 @@ namespace Placemaker.Game.Tool
                 switch (_mode)
                 {
                     case SelectionMode.Draw: return _draw.Closed;
-                    case SelectionMode.Perimeter: return _perimeter.Closed;
+                    // s43: an open chain of 3+ nodes closes itself (preview), so it is an area already.
+                    case SelectionMode.Perimeter: return _perimeter.Closed || _shape != null;
                     case SelectionMode.Block: return _blocks.Faces.Count > 0;
                     default: return _shape != null;
                 }

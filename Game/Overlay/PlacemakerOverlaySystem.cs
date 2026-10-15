@@ -292,8 +292,49 @@ namespace Placemaker.Game.Overlay
             }
         }
 
+        // s43: the walls the Paint bucket traces, faint, by kind (road white, path green, bike teal, track amber).
+        private static Color WallColor(Placemaker.Core.Geometry.FillWall k)
+        {
+            switch (k)
+            {
+                case Placemaker.Core.Geometry.FillWall.Paths: return new Color(0.45f, 0.95f, 0.5f, 0.45f);
+                case Placemaker.Core.Geometry.FillWall.Bikes: return new Color(0.3f, 0.9f, 0.85f, 0.45f);
+                case Placemaker.Core.Geometry.FillWall.Tracks: return new Color(1f, 0.75f, 0.3f, 0.45f);
+                default: return new Color(1f, 1f, 1f, 0.28f);
+            }
+        }
+
+        private int _wallsVersion = -1;
+        private readonly List<(Bezier4x3 curve, Placemaker.Core.Geometry.FillWall kind, float2 min, float2 max)> _walls = new List<(Bezier4x3, Placemaker.Core.Geometry.FillWall, float2, float2)>();
+        private const float WallsShownRadius = 220f;
+
+        private void DrawBucketWalls(OverlayRenderSystem.Buffer buffer, float w)
+        {
+            var em = EntityManager;
+            if (_wallsVersion != _tool.BucketGraphVersion)
+            {
+                _wallsVersion = _tool.BucketGraphVersion;
+                _walls.Clear();
+                foreach (var kv in _tool.BucketGraphEdges)
+                {
+                    if (!em.Exists(kv.Key) || !em.HasComponent<Curve>(kv.Key)) continue;
+                    var c = em.GetComponentData<Curve>(kv.Key).m_Bezier;
+                    float2 mn = math.min(math.min(c.a.xz, c.b.xz), math.min(c.c.xz, c.d.xz)), mx = math.max(math.max(c.a.xz, c.b.xz), math.max(c.c.xz, c.d.xz));
+                    _walls.Add((c, kv.Value, mn, mx));
+                }
+            }
+            if (!_tool.CursorValid) return;
+            float2 at = _tool.Cursor.xz;
+            foreach (var x in _walls)
+            {
+                if (math.length(math.max(math.max(x.min - at, at - x.max), 0f)) > WallsShownRadius) continue;
+                buffer.DrawCurve(WallColor(x.kind), x.curve, w * 0.45f);
+            }
+        }
+
         private void DrawBlockMode(OverlayRenderSystem.Buffer buffer, float w, AreaShape shape)
         {
+            if (_tool.Stage == ToolStage.Area) DrawBucketWalls(buffer, w);
             if (shape != null) Ring(buffer, shape.Ring, Outline, w);
             var hover = _tool.HoverFace;
             if (hover?.Area != null && _tool.Stage != ToolStage.Building)
@@ -308,16 +349,40 @@ namespace Placemaker.Game.Overlay
         {
             var per = _tool.Perimeter;
             var em = EntityManager;
+            // s43 (playtest: "should be cleaner"): thinner picked roads, small node dots, the closing dashed.
+            var em2 = em;
             foreach (var h in per.Path)
             {
-                var e = EntityIds.Resolve(em, h.Edge);
-                if (e == Entity.Null || !em.HasComponent<Curve>(e)) continue;
-                buffer.DrawCurve(Handle, em.GetComponentData<Curve>(e).m_Bezier, w * 2.5f);
+                if (RoadGraphAlgorithms.IsStraight(h))
+                {
+                    buffer.DrawLine(Handle, new Line3.Segment(_tool.NodePositionOf(h.From), _tool.NodePositionOf(h.To)), w * 1.1f);
+                    continue;
+                }
+                var e = EntityIds.Resolve(em2, h.Edge);
+                if (e == Entity.Null || !em2.HasComponent<Curve>(e)) continue;
+                buffer.DrawCurve(Handle, em2.GetComponentData<Curve>(e).m_Bezier, w * 1.1f);
             }
-            float d = w * 6f;
+            var closing = _tool.PerimeterClosing;
+            if (closing != null)
+            {
+                var dash = new Color(1f, 1f, 1f, 0.7f);
+                foreach (var h in closing)
+                {
+                    var e = RoadGraphAlgorithms.IsStraight(h) ? Entity.Null : EntityIds.Resolve(em2, h.Edge);
+                    if (e != Entity.Null && em2.HasComponent<Curve>(e))
+                    {
+                        // Dashed along the road: its curve as short chords.
+                        var c = em2.GetComponentData<Curve>(e).m_Bezier;
+                        for (int k = 0; k < 8; k++)
+                            buffer.DrawDashedLine(dash, new Line3.Segment(MathUtils.Position(c, k / 8f), MathUtils.Position(c, (k + 1) / 8f)), w * 0.8f, w * 4f, w * 3f);
+                    }
+                    else buffer.DrawDashedLine(dash, new Line3.Segment(_tool.NodePositionOf(h.From), _tool.NodePositionOf(h.To)), w * 0.8f, w * 4f, w * 3f);
+                }
+            }
+            float d = w * 3.2f;
             for (int i = 0; i < per.Positions.Count; i++)
-                buffer.DrawCircle(Outline, i == 0 ? HandleHot : Handle, w * 0.6f, 0, new float2(0, 1), per.Positions[i], i == 0 ? d * 1.3f : d);
-            if (shape != null) Ring(buffer, shape.Ring, Outline, w * 0.8f, dashed: true);
+                buffer.DrawCircle(Outline, i == 0 ? HandleHot : Handle, w * 0.4f, 0, new float2(0, 1), per.Positions[i], i == 0 ? d * 1.4f : d);
+            if (shape != null) Ring(buffer, shape.Ring, OutlineDim, w * 0.6f);
             var node = _tool.HoverNode;
             if (node != Entity.Null && em.Exists(node) && em.HasComponent<Node>(node))
                 buffer.DrawCircle(HandleHot, new Color(1, 1, 1, 0.3f), w * 0.6f, 0, new float2(0, 1), em.GetComponentData<Node>(node).m_Position, d * 1.6f);
