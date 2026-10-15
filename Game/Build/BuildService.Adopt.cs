@@ -1,6 +1,6 @@
 // Placemaker — recognising our temporaries, game validation, adoption into the group (GPL-3.0).
-// Error capture adapted from ParkManager's ParkBuildValidation (tomkpunkt, GPL-3.0); error-to-piece
-// mapping for auto-exclusion from GridRoadGenerator's TryExcludeErrorSegments (Ti4goc, GPL-3.0).
+// Error capture adapted from ParkManager's ParkBuildValidation (tomkpunkt, GPL-3.0). (s59) The error-to-piece
+// exclusion/retry loop is gone: BuildService.Verdicts decides once.
 
 using System;
 using System.Collections.Generic;
@@ -23,7 +23,6 @@ namespace Placemaker.Game.Build
         private const float NetMatchTolerance = 1.0f;
         private const float ObjectMatchTolerance = 0.75f;
         private const float AreaMatchTolerance = 2.0f;
-        private const float ErrorMatchTolerance = 2.0f;
         private const int MaxErrorMarkers = 64;
 
         private readonly List<Entity> _tagged = new List<Entity>();
@@ -127,56 +126,6 @@ namespace Placemaker.Game.Build
             }
         }
 
-        /// <summary>
-        /// (s22) Error types of our temporaries with counts ("OverlapExisting×180, SteepSlope×3"): the retry log used to
-        /// name only the first type found, so 188 colliding optional objects read as "188 parts (SteepSlope)".
-        /// </summary>
-        private string ErrorHistogram()
-        {
-            if (_iconQuery.IsEmptyIgnoreFilter) return "";
-            var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);
-            var carriers = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
-            using var icons = _iconQuery.ToEntityArray(Allocator.Temp);
-            for (int i = 0; i < icons.Length; i++)
-            {
-                var prefab = EntityManager.GetComponentData<PrefabRef>(icons[i]).m_Prefab;
-                if (!EntityManager.HasComponent<ToolErrorData>(prefab) || !BelongsToTemporary(icons[i])) continue;
-                string t = EntityManager.GetComponentData<ToolErrorData>(prefab).m_Error.ToString();
-                counts.TryGetValue(t, out int n);
-                counts[t] = n + 1;
-                // (s44) What carries the error: kind and prefab ("InvalidShape×13" alone did not tell which parts to fix).
-                string what = "?";
-                if (EntityManager.HasComponent<Owner>(icons[i]))
-                {
-                    var o = EntityManager.GetComponentData<Owner>(icons[i]).m_Owner;
-                    if (o != Entity.Null && EntityManager.Exists(o))
-                    {
-                        string kind = EntityManager.HasComponent<Edge>(o) ? "net" : EntityManager.HasComponent<global::Game.Areas.Area>(o) ? "area"
-                            : EntityManager.HasComponent<global::Game.Objects.Object>(o) ? "object" : "other";
-                        string name = EntityManager.HasComponent<PrefabRef>(o) ? _catalog?.NameOf(EntityManager.GetComponentData<PrefabRef>(o).m_Prefab) : null;
-                        what = kind + " '" + (name ?? "?") + "'";
-                    }
-                }
-                if (!carriers.TryGetValue(t, out var byWhat)) carriers[t] = byWhat = new Dictionary<string, int>(StringComparer.Ordinal);
-                byWhat.TryGetValue(what, out int m);
-                byWhat[what] = m + 1;
-            }
-            var sb = new System.Text.StringBuilder();
-            foreach (var kv in counts)
-            {
-                sb.Append(sb.Length > 0 ? ", " : "").Append(kv.Key).Append('×').Append(kv.Value);
-                if (carriers.TryGetValue(kv.Key, out var byWhat))
-                {
-                    var top = new List<KeyValuePair<string, int>>(byWhat);
-                    top.Sort((a, b) => b.Value.CompareTo(a.Value));
-                    sb.Append(" [");
-                    for (int k = 0; k < top.Count && k < 3; k++) sb.Append(k > 0 ? "; " : "").Append(top[k].Key).Append(" ×").Append(top[k].Value);
-                    sb.Append(']');
-                }
-            }
-            return sb.ToString();
-        }
-
         private static bool ContainsNear(List<float3> list, float3 p)
         {
             foreach (var q in list) if (math.distancesq(q, p) < 1f) return true;
@@ -208,100 +157,8 @@ namespace Placemaker.Game.Build
             return false;
         }
 
-        /// <summary>
-        /// US8: maps every errored temporary back to plan items and excludes them (reported per kind).
-        /// Exact first (our temporary, or the temporary that owns the errored sub-element, matched by
-        /// prefab + geometry), then by proximity for errors on foreign temporaries (an existing road
-        /// copy that our piece collides with). An error on the owner lot drops only the owner lot.
-        /// Returns the number of newly excluded items.
-        /// </summary>
-        private readonly List<float2> _unmatchedProbes = new List<float2>();
+        private int _taggedBays;
 
-        private int ExcludeErroneousItems()
-        {
-            int newly = 0;
-            _exNets = _exObjects = _exSurfaces = _exAreas = 0;
-            using var errors = _errorQuery.ToEntityArray(Allocator.Temp);
-            var typeByOwner = ErrorTypeByOwner();
-            var probes = new List<float2>(3);
-            for (int i = 0; i < errors.Length; i++)
-            {
-                var e = errors[i];
-                if (_anarchyErrors.Contains(e)) continue;   // (s53) only our own pieces overlapping: built, not left out
-                string why = AuditReason.Rejected(ErrorTypeOf(typeByOwner, e));
-                // Climb to the top-level temporary (sub-objects/lanes go with their owner).
-                var top = e;
-                for (int depth = 0; depth < 4 && EntityManager.HasComponent<Owner>(top); depth++)
-                {
-                    var o = EntityManager.GetComponentData<Owner>(top).m_Owner;
-                    if (o == Entity.Null || !EntityManager.Exists(o) || !EntityManager.HasComponent<Temp>(o)) break;
-                    top = o;
-                }
-                if (EntityManager.HasComponent<Temp>(top) && EntityManager.HasComponent<PrefabRef>(top) && IsOwnCandidate(top, out _)
-                    && TryMatch(top, out long exact, out var kind))
-                {
-                    if (exact == OwnerKey)
-                    {
-                        if (!_ownerSuppressed) { _ownerSuppressed = true; newly++; Mod.Log.Warn("Placemaker: the game rejected the owner lot; building without it."); }
-                        continue;
-                    }
-                    if (_itemByKey.TryGetValue(exact, out var hitItem)) { newly += Exclude(hitItem, exact: true, reason: why); continue; }
-                }
-                probes.Clear();
-                if (EntityManager.HasComponent<Curve>(e))
-                {
-                    var b = EntityManager.GetComponentData<Curve>(e).m_Bezier;
-                    probes.Add(MathUtils.Position(b, 0.25f).xz);
-                    probes.Add(MathUtils.Position(b, 0.5f).xz);
-                    probes.Add(MathUtils.Position(b, 0.75f).xz);
-                }
-                else if (TryGetPosition(e, out var p)) probes.Add(p.xz);
-                foreach (var probe in probes)
-                {
-                    long key = 0;
-                    bool hit = (_netIndex != null && _netIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _))
-                        || (_objectIndex != null && _objectIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _))
-                        || (_areaIndex != null && _areaIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _));
-                    if (!hit || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) { _unmatchedProbes.Add(probe); continue; }
-                    newly += Exclude(w, reason: why);
-                }
-            }
-            // Playtest 2026-10-14: a park failed on its 2nd attempt with 25 errors none of which matched a plan item within
-            // 2 m, so the build gave up and dropped back to Review. When nothing matched, widen the search for OBJECTS only
-            // (6 m, then 12 m on later attempts) so the decorative pieces in the way go instead of the whole build.
-            if (newly == 0 && _unmatchedProbes.Count > 0 && _objectIndex != null)
-            {
-                float wide = _excludeAttempts >= 2 ? 12f : 6f;
-                foreach (var probe in _unmatchedProbes)
-                    if (_objectIndex.TryMatch(probe, 0, wide, out long key, out _) && key != OwnerKey && _itemByKey.TryGetValue(key, out var w))
-                        newly += Exclude(w);
-                if (newly > 0) Mod.Log.Info($"Placemaker: {_unmatchedProbes.Count} rejected spot(s) matched nothing within {ErrorMatchTolerance} m; left out {newly} object(s) within {wide} m.");
-            }
-            _unmatchedProbes.Clear();
-            return newly;
-        }
-
-        /// <summary>(s22) What the last ExcludeErroneousItems left out, by kind (for the log).</summary>
-        private int _exNets, _exObjects, _exSurfaces, _exAreas, _keptFunctional, _taggedBays, _droppedFunctional;
-        /// <summary>(s44) Safety net: the only errors left are functional markings — leave them out rather than fail.</summary>
-        private bool _dropFunctional;
-
-        private int Exclude(WorkItem w, bool exact = false, string reason = null)
-        {
-            // (s25) Stall markings, chargers and arrows are never left out because something NEAR them failed (the probe
-            // match); one that is itself rejected goes only after two retries did not settle it (PlanWork.Excludable).
-            if (!PlanWork.Excludable(_request?.Plan, w) && !(exact && _excludeAttempts >= 2) && !_dropFunctional) { _keptFunctional++; return 0; }
-            if (!PlanWork.Excludable(_request?.Plan, w)) _droppedFunctional++;
-            if (!_excluded.Add(PlanWork.Key(w))) return 0;
-            AuditItem(w, reason ?? AuditReason.Rejected(_errorTypeName));
-            if (w.Kind == WorkKind.Net) _exNets++;
-            else if (w.Kind == WorkKind.Surface) _exSurfaces++;
-            else if (w.Kind == WorkKind.Area) _exAreas++;
-            else _exObjects++;
-            string what = w.Kind == WorkKind.Net ? "Net" : w.Kind == WorkKind.Surface ? "Surface" : w.Kind == WorkKind.Area ? "Area" : "Object";
-            NoteSkip("Placemaker.Build.Skipped." + what, new float3(w.Anchor.x, Height(w.Anchor), w.Anchor.y));
-            return 1;
-        }
         // ───────────────────────── adoption ─────────────────────────
 
         /// <summary>
@@ -387,7 +244,7 @@ namespace Placemaker.Game.Build
             int markings = PlanWork.StallMarkings(_request?.Plan);
             if (markings > 0)
             {
-                string msg = $"Placemaker parking: {_taggedBays} of {markings} stall markings built" + (carrier ? "" : " (no carrier)") + (_keptFunctional > 0 ? $"; {_keptFunctional} kept despite collision errors" : "") + ".";
+                string msg = $"Placemaker parking: {_taggedBays} of {markings} stall markings built" + (carrier ? "" : " (no carrier)") + (_keptDespite > 0 ? $"; {_keptDespite} piece(s) built despite game errors" : "") + ".";
                 if (_taggedBays < markings) Mod.Log.Warn(msg); else Mod.Log.Info(msg);
             }
             return _tagged.Count;

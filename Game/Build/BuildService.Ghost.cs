@@ -12,7 +12,8 @@
 //    in batches of GhostPerFrame. More than GhostMaxDefinitions → objects are sampled evenly and the
 //    status says Partial.
 //  * No error icon spam: objects get CreationFlags.Optional (ValidationSystem.CancelOptional hides a
-//    colliding optional temp with TempFlags.Hidden|Cancel and adds no icon — vanilla brushes do this);
+//    colliding optional temp with TempFlags.Hidden|Cancel and adds no icon — vanilla brushes do this). (s59) Only with
+//    "Ignore collisions in my builds" OFF: under anarchy the ghost is non-optional and untinted — it shows what the build places;
 //    remaining Temp icons (nets/areas) get Game.Tools.Hidden, which NotificationIconBufferSystem skips.
 //    Counts/positions are reported in GhostDetails instead.
 //  * Real surface textures: AreaBatchSystem excludes Temp areas from rendering; GhostSurfaceSystem
@@ -173,6 +174,7 @@ namespace Placemaker.Game.Build
                         if (frame - _gStepFrame >= GhostSettleFrames)
                         {
                             CollectGhostFacts();
+                            ClearGhostVerdicts();   // (s59) anarchy: no red refused tint on pieces the build will place
                             _gShown = _gEmitting;
                             _gStep = GhostStep.Shown;
                         }
@@ -228,7 +230,7 @@ namespace Placemaker.Game.Build
             _gDetails = new GhostDetails { ErrorPositions = new List<float3>() };
             _request = new BuildRequest { Plan = plan };
             _catalog.ResolveAutomatic(plan);   // idempotent; the tool normally did it already
-            _work = PlanWork.Flatten(plan, _excluded);
+            _work = PlanWork.Flatten(plan);
             ResolvePrefabs();
             _groupId = _registry.AllocateId();   // the id the build will get → same seeds/variations
             _gEmission = true;

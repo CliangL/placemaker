@@ -271,6 +271,16 @@ namespace Placemaker.Core.Build
                     AddSegments(segs, n, half, li, ni);
                 }
             }
+            // (s59) Existing city nets (captured roads/paths with their sidewalks, ComposedPlan.ExistingNets): the game rejects a
+            // prop that pokes into a street's sidewalk exactly like one on our own path. Planning them out here keeps the build
+            // free of those collisions (quality — the build no longer refuses anything for them under anarchy).
+            if (plan.ExistingNets != null)
+                foreach (var en in plan.ExistingNets)
+                {
+                    float half = en.Width * 0.5f;
+                    if (!(half > 0f)) continue;
+                    AddSegments(segs, en.A, en.B, en.C, en.D, half, -1, -1);
+                }
             var netGrid = new Dictionary<long, List<int>>();
             for (int i = 0; i < segs.Count; i++)
             {
@@ -375,7 +385,11 @@ namespace Placemaker.Core.Build
         }
 
         private static void AddSegments(List<NetSeg> segs, PlannedNet n, float half, int layer, int net)
+            => AddSegments(segs, n.A, n.B, n.C, n.D, half, layer, net);
+
+        private static void AddSegments(List<NetSeg> segs, float3 a, float3 b, float3 c, float3 d, float half, int layer, int net)
         {
+            var n = (A: a, B: b, C: c, D: d);
             float approx = math.distance(n.A.xz, n.B.xz) + math.distance(n.B.xz, n.C.xz) + math.distance(n.C.xz, n.D.xz);
             if (!math.isfinite(approx)) return;
             int count = math.clamp((int)math.ceil(approx / 4f), 1, 64);

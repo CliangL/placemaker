@@ -35,6 +35,9 @@ namespace Placemaker.Game.Build
         /// <summary>Vanilla's own apply gate: no Error entities and no deleted originals.</summary>
         internal bool AllowApply => GetAllowApply();
 
+        /// <summary>(s59) The non-error half of vanilla's gate: an original our temporaries modify was deleted meanwhile.</summary>
+        internal bool OriginalDeleted => m_OriginalDeletedSystem != null && m_OriginalDeletedSystem.GetOriginalDeletedResult(0);
+
         [Preserve]
         protected override void OnCreate()
         {

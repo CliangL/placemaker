@@ -7,8 +7,8 @@
 //    added to our temporaries before Apply survives. Temporaries are recognised by prefab AND
 //    geometry against the plan (PlanIndex) — never by a baseline diff that could adopt foreign
 //    entities or split pieces of an existing road.
-//  * Validation uses vanilla's own gate (Error entities / GetAllowApply) and reports the game's
-//    error type and positions; money is charged by vanilla ToolApplySystem from Temp.m_Cost.
+//  * (s59) Validation is read once (BuildService.Verdicts): Apply never reads Error, so under anarchy everything is applied;
+//    vanilla rules leave refused decorative pieces out in place, once. Money is charged by vanilla ToolApplySystem from Temp.m_Cost.
 //  * Every step is frame-bounded with timeouts and wrapped in try/catch; a failure before Apply
 //    clears the temporaries, a failure after Apply rolls the group back through the removal system.
 //
@@ -47,21 +47,16 @@ namespace Placemaker.Game.Build
         private const int ReplaceTimeoutFrames = 900;
         private const int TerraformTimeoutFrames = 900;
         private const int ZoningWaitFrames = 24;
-        private const int MaxAutoExcludeAttempts = 6;
         /// <summary>Objects/areas emitted per frame; nets always go in one frame so junctions merge.</summary>
         public const int DefinitionsPerFrame = 1500;
 
         /// <summary>
-        /// GridRoadGenerator-style "auto-exclude colliding pieces": instead of failing on game errors,
-        /// drop the pieces the game marked and try again (≤ 4 attempts). Set by the tool's settings.
+        /// Setting "Leave out parts that collide" — only with "Ignore collisions in my builds" OFF (vanilla rules): decorative
+        /// pieces the game refuses are left out in place, once (s59: no exclude-and-retry loop any more). Off: the build stops instead.
         /// </summary>
         public static bool AutoExcludeCollisions = true;
 
-        /// <summary>
-        /// US8: pieces the game rejects (InvalidShape, collisions, …) are fixed or skipped and the build
-        /// retried; the build only fails when nothing sensible remains. On by default. When off, only
-        /// <see cref="AutoExcludeCollisions"/> decides (round-1 behaviour).
-        /// </summary>
+        /// <summary>Setting "Fix or skip rejected pieces" — same role as <see cref="AutoExcludeCollisions"/> (either one enables it).</summary>
         public static bool RecoverRejectedPieces = true;
 
         private enum Step
@@ -102,8 +97,6 @@ namespace Placemaker.Game.Build
         private int _startFrame;
         private BuildRequest _request;
         private BuildWork _work;
-        private readonly HashSet<long> _excluded = new HashSet<long>();
-        private int _excludeAttempts;
         private ToolBaseSystem _previousTool;
         private bool _toolActivated;
         private bool _applied;
@@ -148,6 +141,7 @@ namespace Placemaker.Game.Build
             InitOwner();
             InitGhost();
             InitProtect();
+            InitVerdicts();
             _tempQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<PrefabRef>() },
@@ -343,7 +337,7 @@ namespace Placemaker.Game.Build
         private void DoPrepare()
         {
             SnapshotPreviewZoning();
-            _work = PlanWork.Flatten(_request.Plan, _excluded);
+            _work = PlanWork.Flatten(_request.Plan);
             if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0 && !HasPaint())
             {
                 ForceIdle(BuildPhase.Failed, "Placemaker.Build.NothingToBuild");
@@ -481,58 +475,29 @@ namespace Placemaker.Game.Build
             }
         }
 
+        /// <summary>
+        /// (s59) ONE validation pass. The game's verdicts are read once (BuildVerdicts.Decide): under anarchy nothing is refused
+        /// — every planned piece is applied; with vanilla rules the refused decorative pieces are cancelled in place. Existing
+        /// buildings are never demolished (ProtectBuildings + NeutralizeVerdicts). No re-emission, no retry loop.
+        /// </summary>
         private void DoValidate(int frame)
         {
             CollectErrors();
             if (frame - _stepFrame < ValidationSettleFrames) return;
-            bool errors = !_errorQuery.IsEmptyIgnoreFilter || !_tool.AllowApply;
-            if (errors && IgnoreOwnCollisions && !_errorQuery.IsEmptyIgnoreFilter)
+            if (_tool.OriginalDeleted)
             {
-                // (s53) Placemaker anarchy: errors that are only our own pieces overlapping do not stop the build.
-                int real = ClassifyOwnCollisions();
-                if (real == 0 && _anarchyErrors.Count > 0)
-                {
-                    _anarchyCleared = _anarchyErrors.Count;
-                    errors = false;
-                    _status.ErrorPositions.Clear();
-                }
+                // Something we modify (an existing road we connect to) was removed meanwhile: nothing sensible to apply.
+                Mod.Log.Warn("Placemaker build stopped: an existing piece this build changes was removed meanwhile.");
+                BeginCleanup(BuildPhase.Failed, "Placemaker.Build.Interrupted");
+                return;
             }
-            if (errors)
+            if (!ApplyVerdicts())
             {
-                CollectErrors();
-                // US8: skip what the game rejects and try again; fail only when nothing changes or
-                // nothing remains (DoResetForRetry). Money is global: excluding pieces cannot fix it.
-                bool recover = (RecoverRejectedPieces || AutoExcludeCollisions) && !BuildErrorKeys.IsGlobal(_errorTypeName);
-                if (recover && _excludeAttempts < MaxAutoExcludeAttempts)
-                {
-                    string histogram = ErrorHistogram();
-                    _keptFunctional = 0;
-                    int newly = ExcludeErroneousItems();
-                    if (newly == 0 && _keptFunctional > 0 && !_dropFunctional)
-                    {
-                        // (s44) Only stall markings / chargers / arrows are still rejected: build the lot without those few
-                        // rather than fail the whole build back to Review.
-                        _dropFunctional = true;
-                        newly = ExcludeErroneousItems();
-                        if (newly > 0) Mod.Log.Warn($"Placemaker: the game still rejects {_droppedFunctional} stall marking(s)/charger(s)/arrow(s) ({histogram}); leaving them out instead of failing.");
-                    }
-                    if (newly > 0)
-                    {
-                        _excludeAttempts++;
-                        Mod.Log.Info($"Placemaker left out {newly} rejected parts (nets {_exNets}, objects {_exObjects}, surfaces {_exSurfaces}, areas {_exAreas}; "
-                            + $"errors: {(histogram.Length > 0 ? histogram : _errorTypeName)}; attempt {_excludeAttempts}); retrying.");
-                        Go(Step.ResetForRetry);
-                        return;
-                    }
-                }
-                Mod.Log.Warn($"Placemaker build rejected by the game: {_errorTypeName} ({_status.ErrorPositions?.Count ?? 0} markers).");
                 BeginCleanup(BuildPhase.Failed, _errorKey, _errorArgs);
                 return;
             }
-            // (s15) Never apply while the game marks an existing building for removal by our temporaries.
-            int protect = ProtectBuildings();
-            if (protect > 0) { Go(Step.ResetForRetry); return; }
-            if (protect < 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.WouldDemolish"); return; }
+            // (s15) Never demolish an existing building: its touching pieces are left out in place (nets: see ProtectBuildings).
+            if (ProtectBuildings() < 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.WouldDemolish"); return; }
             int tagged = TagTemporaries();
             if (TemporariesDuplicated())
             {
@@ -569,10 +534,11 @@ namespace Placemaker.Game.Build
             }
             if (frame - _stepFrame < 2) return;
             ResetIndexes();
+            ResetVerdicts();
             _errorTypeName = "";
-            _work = PlanWork.Flatten(_request.Plan, _excluded);
+            _work = PlanWork.Flatten(_request.Plan);
             ResolvePrefabs();
-            if (_work.DefinitionCount == 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.EverythingCollides"); return; }
+            if (_work.DefinitionCount == 0) { BeginCleanup(BuildPhase.Failed, "Placemaker.Build.NothingToBuild"); return; }
             _status.Phase = BuildPhase.Materializing;
             _status.ErrorPositions.Clear();
             Go(Step.EmitNets);
@@ -581,6 +547,7 @@ namespace Placemaker.Game.Build
         private void DoApply()
         {
             TagLateTemporaries();
+            NeutralizeVerdicts();   // (s59) nothing of ours deleted/hidden by a verdict under anarchy; no existing building demolished
             _tool.Requested = ApplyMode.Apply;
             _applied = true;   // from here on, failures roll back through group removal
             SetProgress(0.75f);
@@ -740,12 +707,8 @@ namespace Placemaker.Game.Build
             _step = Step.Idle;
             _request = null;
             _work = null;
-            _excluded.Clear();
             ResetAudit();
-            _excludeAttempts = 0;
-            _keptFunctional = 0;
-            _dropFunctional = false;
-            _droppedFunctional = 0;
+            ResetVerdicts();
             _applied = false;
             _groupId = 0;
             _record = Entity.Null;

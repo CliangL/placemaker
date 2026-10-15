@@ -68,6 +68,16 @@ namespace Placemaker.Core.Build
             return list;
         }
 
+        /// <summary>(s59) The captured city nets (not the synthetic lanes a composite adds to its child sites: negative ids).</summary>
+        public static List<NearbyNet> ExistingNets(SiteContext site)
+        {
+            var list = new List<NearbyNet>();
+            if (site?.NearbyNets == null) return list;
+            foreach (var n in site.NearbyNets)
+                if (n.ExternalId >= 0 && n.Width > 0f && math.all(math.isfinite(n.A)) && math.all(math.isfinite(n.D))) list.Add(n);
+            return list;
+        }
+
         /// <summary>Number of protected polygons overlapping the ring.</summary>
         public static int CountOverlapping(IReadOnlyList<float2> ring, IReadOnlyList<float2[]> protectedPolys)
         {
@@ -87,6 +97,7 @@ namespace Placemaker.Core.Build
             if (plan == null) return report;
             var prot = Protected(site);
             plan.Protected = prot;
+            plan.ExistingNets = ExistingNets(site);
             if (prot.Count == 0) return report;
 
             // Buildings counted once even when both the lot and the footprint quad overlap.
