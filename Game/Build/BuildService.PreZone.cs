@@ -4,7 +4,8 @@
 // now plans one Marquee quad per predicted zone block of every road it adds (Core RoadPreZone, fact "roads.preZone").
 // After the main Apply the game has given the new roads their real blocks (and split them where walkways and side
 // streets join): this step reads the live blocks, keeps those whose owner edge lies on a planned road, and zones each
-// whole (cells under nets / buildings stay blocked; Marquee never overwrites the player's zoning). Without a live
+// whole (cells under nets / buildings stay blocked; Marquee never overwrites the player's zoning; s52: on hillside terraces only
+// the rows that lie level on the terrace, read from the plan's built ground). Without a live
 // match the planned quads are used. Other layers' zoning quads of the plan are kept as planned.
 
 using System;
@@ -46,6 +47,7 @@ namespace Placemaker.Game.Build
                 var nets = new List<PlannedNet>();
                 var others = new List<ZoneGuard.ZoningQuad>();
                 string zoneId = null;
+                RoadPreZone.DepthRule rule = null;   // (s52) hillside terraces zone only the level rows
                 float2 min = new float2(float.MaxValue), max = new float2(float.MinValue);
                 foreach (var l in plan.Layers)
                 {
@@ -58,6 +60,7 @@ namespace Placemaker.Game.Build
                         continue;
                     }
                     foreach (var z in l.Zoning) if (z != null && !string.IsNullOrEmpty(z.ZoneId)) { zoneId = zoneId ?? z.ZoneId; break; }
+                    rule = rule ?? RoadPreZone.RuleOf(l);
                     foreach (var n in l.Nets)
                     {
                         if (n == null) continue;
@@ -68,7 +71,7 @@ namespace Placemaker.Game.Build
                 if (zoneId == null || nets.Count == 0) { ContinueAfterApply(); return; }
                 var blocks = new List<RoadPreZone.LiveBlock>();
                 CaptureOwnedBlocks(min - 60f, max + 60f, blocks);
-                var quads = RoadPreZone.FromLive(nets, blocks, zoneId);
+                var quads = RoadPreZone.FromLive(nets, blocks, zoneId, 1.5f, rule);
                 if (quads.Count > 0)
                 {
                     quads.AddRange(others);

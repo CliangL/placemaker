@@ -10,7 +10,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Roads
 {
-    public enum RoadPattern { Grid, Tree, Organic, Contour, Mixed, Loop, Superblock, Concentric, Radial }
+    public enum RoadPattern { Grid, Tree, Organic, Contour, Mixed, Loop, Superblock, Concentric, Radial, Terraces }
 
     /// <summary>Control ids of the roads layer (save format).</summary>
     public static class RoadsIds
@@ -126,6 +126,30 @@ namespace Placemaker.Core.Layers.Roads
         public const string MaxGrade = "maxGrade";
         /// <summary>Pre-zone every new road's zone blocks: "none" or a zone kind (ZoneKinds).</summary>
         public const string PreZone = "preZone";
+
+        // s52: hillside terraces (pattern "terraces", Core/Layers/Roads/Terraces)
+        /// <summary>Zone cells (8 m) kept level on each side of a terrace street, 1..6.</summary>
+        public const string TerraceCells = "terraceCells";
+        /// <summary>Cross-fall of a terrace away from the bank (%), for drainage.</summary>
+        public const string TerraceFall = "terraceFall";
+        /// <summary>"bank" (graded, rounded) | "wall" (steep straight face, crisp edges).</summary>
+        public const string TerraceBank = "terraceBank";
+        /// <summary>Steepest bank between terraces (%).</summary>
+        public const string TerraceBankSlope = "terraceBankSlope";
+        /// <summary>Links between terraces: "direct" | "serpentine" | "spiral".</summary>
+        public const string TerraceLinks = "terraceLinks";
+        /// <summary>Distance between links along a terrace street (m).</summary>
+        public const string TerraceLinkSpacing = "terraceLinkSpacing";
+        /// <summary>Links between terraces are avenues.</summary>
+        public const string TerraceAvenues = "terraceAvenues";
+        /// <summary>Ground flatter than this (%) is never terraced.</summary>
+        public const string TerraceFlat = "terraceFlat";
+        /// <summary>Deepest cut or highest fill (m).</summary>
+        public const string TerraceEarthwork = "terraceEarthwork";
+        /// <summary>Paint the banks (dry grass, worn dirt on the steep faces).</summary>
+        public const string TerracePaint = "terracePaint";
+        /// <summary>Trees on the banks.</summary>
+        public const string TerraceTrees = "terraceTrees";
     }
 
     /// <summary>Schema construction and settings → generator parameters.</summary>
@@ -134,7 +158,7 @@ namespace Placemaker.Core.Layers.Roads
         public const string KeyPrefix = "Placemaker.Roads.";
 
         public static readonly string[] PatternValues =
-            { "grid", "tree", "organic", "contour", "mixed", "loop", "superblock", "concentric", "radial" };
+            { "grid", "tree", "organic", "contour", "mixed", "loop", "superblock", "concentric", "radial", "terraces" };
 
         public static RoadPattern ParsePattern(string s)
         {
@@ -199,6 +223,10 @@ namespace Placemaker.Core.Layers.Roads
             c.Add(Slider(RoadsIds.RadialAvenues, ControlTier.Essential, "layout", 3, 16, 1, "count", 8, "pattern=radial", label: "avenues"));
             c.Add(Slider(RoadsIds.RadialRoundaboutRadius, ControlTier.Essential, "layout", 20, 150, 5, "m", 50, "pattern=radial", label: "roundaboutRadius"));
             c.Add(Slider(RoadsIds.RadialRings, ControlTier.Essential, "layout", 0, ConcentricGenerator.MaxLayersLimit, 1, "count", 2, "pattern=radial", label: "rings"));
+            // s52: hillside terraces — terrace depth in zone cells, how the terraces are linked.
+            c.Add(Slider(RoadsIds.TerraceCells, ControlTier.Essential, "layout", 1, 6, 1, "count", 4, "pattern=terraces"));
+            c.Add(Choice(RoadsIds.TerraceLinks, ControlTier.Essential, "layout", "direct", new[] { "direct", "serpentine", "spiral" }, "pattern=terraces"));
+            c.Add(Slider(RoadsIds.TerraceLinkSpacing, ControlTier.Essential, "layout", 120, 600, 20, "m", 300, "pattern=terraces"));
 
             // ── More: per pattern ─────────────────────────────────────────
             c.Add(Toggle(RoadsIds.GridAlignTerrain, ControlTier.More, "layout", false, "pattern=grid", label: "alignTerrain"));
@@ -258,6 +286,16 @@ namespace Placemaker.Core.Layers.Roads
             foreach (var o in preZone.Options)
                 if (o.Value != RoadPreZone.None) { o.LabelKey = "Placemaker.Zone." + o.Value; o.TooltipKey = "Placemaker.Zone." + o.Value + ".Tooltip"; }
             c.Add(preZone);
+
+            // ── s52: hillside terraces (more) ────────────────────────────
+            c.Add(Toggle(RoadsIds.TerraceAvenues, ControlTier.More, "layout", false, "pattern=terraces"));
+            c.Add(Slider(RoadsIds.TerraceFall, ControlTier.More, "terraces", 0, 4, 0.5, "%", 1, "pattern=terraces"));
+            c.Add(Choice(RoadsIds.TerraceBank, ControlTier.More, "terraces", "bank", new[] { "bank", "wall" }, "pattern=terraces"));
+            c.Add(Slider(RoadsIds.TerraceBankSlope, ControlTier.More, "terraces", 20, 50, 5, "%", 40, "pattern=terraces"));
+            c.Add(Slider(RoadsIds.TerraceFlat, ControlTier.More, "terraces", 2, 12, 1, "%", 5, "pattern=terraces"));
+            c.Add(Slider(RoadsIds.TerraceEarthwork, ControlTier.More, "terraces", 2, 20, 1, "m", 8, "pattern=terraces"));
+            c.Add(Toggle(RoadsIds.TerracePaint, ControlTier.More, "terraces", true, "pattern=terraces"));
+            c.Add(Toggle(RoadsIds.TerraceTrees, ControlTier.More, "terraces", true, "pattern=terraces"));
 
             // ── More: upgrades ────────────────────────────────────────────
             c.Add(Toggle(RoadsIds.StreetTrees, ControlTier.More, "streetUpgrades", false));

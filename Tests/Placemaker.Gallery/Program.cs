@@ -560,6 +560,7 @@ namespace Placemaker.Gallery
         public const float WaterSurface = -0.6f;
         [ThreadStatic] private static float _waterZ;
         [ThreadStatic] private static List<NearbyNet> _roads;
+        [ThreadStatic] private static Placemaker.Core.Layers.Roads.Terraces.TerraceGround _terraced;
         [ThreadStatic] private static List<EdgeMarker> _markers;
         [ThreadStatic] private static Placemaker.Core.Paint.TerrainPalette _palette;
         [ThreadStatic] private static bool _toolkit;
@@ -693,6 +694,9 @@ namespace Placemaker.Gallery
 
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                     Placemaker.Core.Build.SiteHarmony.Disabled = Variants.NoHarmony;
+                    // (s52) Keep the terraced ground of a roads plan for the protection map.
+                    _terraced = null;
+                    Placemaker.Core.Layers.Roads.Terraces.TerraceField.Inspect = g => _terraced = g;
                     plan = Composer.Compose(job.Recipe, shape, site, cts.Token);
                     AutoAssets.Resolve(plan, catalog.Source());
                     Placemaker.Core.Decals.DecalFit.Orient(plan, catalog.Items);
@@ -719,9 +723,15 @@ namespace Placemaker.Gallery
                 var rl = plan.Layers.FirstOrDefault(l => l != null && l.GeneratorId == "roads");
                 if (rl != null)
                 {
-                    var audit = RoadsAudit.Measure(rl, job.RoadSite == "flat" ? null : site.HeightAt, 0.1f, site.NearbyNets != null && site.NearbyNets.Count > 0, ring.Select(p => p.xz).ToArray());
+                    // Grades on the ground the build leaves (s52: terraced roads lie on the terraces, not the hillside).
+                    var audit = RoadsAudit.Measure(rl, job.RoadSite == "flat" ? null : rl.HeightAfter ?? site.HeightAt, 0.1f, site.NearbyNets != null && site.NearbyNets.Count > 0, ring.Select(p => p.xz).ToArray());
                     res.Summary += " | " + audit + " | " + string.Join(" ", rl.Facts.Where(kv => kv.Key == "roads.accessCuts" || kv.Key == "roads.links" || kv.Key == "roads.lanes").Select(kv => kv.Key.Substring(6) + "=" + kv.Value)) + " | " + string.Join(" ", rl.Issues.Select(i => i.Key.Replace("Placemaker.Roads.Issue.", "") + (i.Args != null && i.Args.Length > 0 ? "(" + string.Join(",", i.Args) + ")" : "")).Distinct());
                     res.RoadAudit = audit.ToString();
+                    // (s52) Hillside terraces: the terrace facts and the glitch metrics of the ground they leave.
+                    if (rl.Facts.ContainsKey("terraces.sloped"))
+                        res.Summary += " | " + string.Join(" ", rl.Facts.Where(kv => kv.Key.StartsWith("terraces.")).Select(kv => kv.Key.Substring(9) + "=" + kv.Value.ToString("0.##", CultureInfo.InvariantCulture)))
+                            + (res.Glitch != null ? " | " + res.Glitch : "")
+                            + (_terraced?.Layout != null ? " | planned walks " + _terraced.Layout.Walks.Count + " | rejects " + string.Join(", ", _terraced.Layout.Rejects.OrderByDescending(kv => kv.Key.Contains("dropped") ? 1000 : kv.Value).Take(8).Select(kv => kv.Key + " " + kv.Value)) : "");
                 }
             }
             if (res.Failure == null && job.Slope != null)
@@ -1189,6 +1199,10 @@ namespace Placemaker.Gallery
             if (final != null)
                 try { TerrainView.Oblique(file.Replace(".png", "-3d.png"), cv, plan, cat, _original, final, _level, min, max); }
                 catch (Exception e) { Console.WriteLine("  3d view failed: " + e.Message); }
+            // (s52) Terraced roads: the cut/fill map (blue cut, red fill, 0.5 m bands) under the nets.
+            if (final != null && plan.Layers.Any(l => l != null && l.Facts.ContainsKey("terraces.sloped")))
+                try { TerrainView.CutMap(file.Replace(".png", "-cut.png"), plan, _original, final, min, max, ppm, _terraced); }
+                catch (Exception e) { Console.WriteLine("  cut view failed: " + e.Message); }
         }
 
         /// <summary>Category colour of a decal (s21 gallery legend). Functional markings white.</summary>

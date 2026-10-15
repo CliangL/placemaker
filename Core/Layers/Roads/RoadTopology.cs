@@ -107,7 +107,13 @@ namespace Placemaker.Core.Layers.Roads
                     float3 p0 = Trim(net, i0, n, trim, out float2 t0);
                     float3 p1 = Trim(net, i1, n, trim, out float2 t1);
                     var arc = RoadCurve.Fit(p0, new float3(-t0.x, 0f, -t0.y), new float3(t1.x, 0f, t1.y), p1);
-                    var edge = new RoadEdge(arc, role) { AssetOverride = e0.AssetOverride, Category = e0.Category, Walk = e0.Walk, Trail = e0.Trail };
+                    var edge = new RoadEdge(arc, role)
+                    {
+                        AssetOverride = e0.AssetOverride, Category = e0.Category, Walk = e0.Walk, Trail = e0.Trail,
+                        // (s52) A bend inside one terrace street stays on that terrace.
+                        TerraceStreet = e0.TerraceStreet == e1.TerraceStreet ? e0.TerraceStreet : -1,
+                        TerraceLink = e0.TerraceLink && e1.TerraceLink,
+                    };
                     net.Edges.Add(edge);
                     done.Add(i0); done.Add(i1);
                     count++;
