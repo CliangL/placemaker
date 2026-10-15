@@ -548,6 +548,57 @@ namespace Placemaker.Core.Build
                 openList.Add(open);
                 zoned.Add(z); zoneQuad.Add(zq); kept.Add(k);
             }
+            // ── 1a. (s36) at least two columns per plot: the game blocks a lone column (rule below). A plot drawn
+            // along a curved road sits at an angle to the cells; its second column may hold less than half a cell. ──
+            for (int gi = 0; gi < gridList.Count; gi++)
+            {
+                var g = gridList[gi];
+                int sx = g.Size.x, sy = g.Size.y;
+                var z = zoned[gi]; var zq = zoneQuad[gi]; var op = openList[gi]; var k = kept[gi];
+                for (int x = 0; x < sx; x++)
+                {
+                    if (!z[x]) continue;
+                    int q = zq[x];
+                    bool leftSame = x > 0 && z[x - 1] && zq[x - 1] == q, rightSame = x + 1 < sx && z[x + 1] && zq[x + 1] == q;
+                    if (leftSame || rightSame) continue;
+                    int depth = 0;
+                    while (depth < sy && z[depth * sx + x]) depth++;
+                    int best = -1; float bestCover = WidenCover;
+                    foreach (int nx in new[] { x - 1, x + 1 })
+                    {
+                        if (nx < 0 || nx >= sx || z[nx]) continue;
+                        bool ok = true; float cover = 0f;
+                        for (int y = 0; y < depth && ok; y++)
+                        {
+                            int idx = y * sx + nx;
+                            if (!op[idx] || k[idx]) { ok = false; break; }
+                            var mine = CellSquare(g, nx, y, -0.5f);
+                            foreach (var sq in columnSquares) if (ObstacleCut.Overlaps(mine, sq)) { ok = false; break; }
+                            var c = CellCentre(g, nx, y);
+                            for (int oq = 0; oq < quads.Count && ok; oq++) if (oq != q && InQuad(oq, c)) ok = false;
+                            cover += CellCover(g, nx, y, quads[q], qb[q]);
+                        }
+                        cover /= math.max(1, depth);
+                        if (ok && cover > bestCover) { bestCover = cover; best = nx; }
+                    }
+                    if (best < 0) continue;
+                    for (int y = 0; y < depth; y++)
+                    {
+                        z[y * sx + best] = true;
+                        zq[y * sx + best] = q;
+                        columnSquares.Add(CellSquare(g, best, y, -0.5f));
+                    }
+                }
+            }
+
+            // ── 1b. (s36) the game's own depth rule (CellOverlapJobs CalculateLeft/RightDepth + ReduceDepth) ──
+            GameDepthPass(gridList, zoned, openList, feet);
+            Array.Clear(quadHasCell, 0, quadHasCell.Length);
+            for (int gi = 0; gi < gridList.Count; gi++)
+            {
+                var z = zoned[gi]; var zq = zoneQuad[gi];
+                for (int i = 0; i < z.Length; i++) if (z[i] && zq[i] >= 0 && zq[i] < quadHasCell.Length) quadHasCell[zq[i]] = true;
+            }
             for (int q = 0; q < quads.Count; q++) result.Snapped[q] = quadHasCell[q];
 
             // ── 2. zoning rectangles: column runs (always from row 0), merged across neighbouring columns ──
@@ -731,6 +782,204 @@ namespace Placemaker.Core.Build
                 best = math.min(best, math.length(e));
             }
             return best;
+        }
+
+        // ───────────────────────── s36: the game's depth rule ─────────────────────────
+
+        /// <summary>A lone column of a plot takes a neighbour column whose cells lie at least this much (share of area) on the plot.</summary>
+        public const float WidenCover = 0.2f;
+
+        /// <summary>Share of the cell's area inside <paramref name="quad"/> (convex; 0 when the bounds miss).</summary>
+        private static float CellCover(ZoneGrid g, int x, int y, float2[] quad, float4 bounds)
+        {
+            if (quad == null || quad.Length < 3) return 0f;
+            var sq = CellSquare(g, x, y);
+            float2 mn = new float2(float.MaxValue), mx = new float2(float.MinValue);
+            foreach (var p in sq) { mn = math.min(mn, p); mx = math.max(mx, p); }
+            if (mx.x < bounds.x || mx.y < bounds.y || mn.x > bounds.z || mn.y > bounds.w) return 0f;
+            var clipped = ClipConvex(sq, Poly.EnsureCcw((float2[])quad.Clone()));
+            return clipped == null || clipped.Count < 3 ? 0f : Poly.Area(clipped) / (Cell * Cell);
+        }
+
+        /// <summary>Sutherland-Hodgman: <paramref name="subject"/> clipped by the convex CCW <paramref name="clip"/>.</summary>
+        private static List<float2> ClipConvex(float2[] subject, float2[] clip)
+        {
+            var output = new List<float2>(subject);
+            for (int i = 0; i < clip.Length && output.Count > 0; i++)
+            {
+                float2 a = clip[i], b = clip[(i + 1) % clip.Length];
+                var input = output;
+                output = new List<float2>();
+                for (int j = 0; j < input.Count; j++)
+                {
+                    float2 p = input[j], q = input[(j + 1) % input.Count];
+                    float sp = Poly.Cross(b - a, p - a), sq = Poly.Cross(b - a, q - a);
+                    if (sp >= 0f) output.Add(p);
+                    if ((sp >= 0f) != (sq >= 0f)) output.Add(p + (q - p) * (sp / (sp - sq)));
+                }
+            }
+            return output;
+        }
+
+        /// <summary>
+        /// (s36) Port of Game.Zones.CellOverlapJobs (the Blocked pass, decompiled 1.6.2f1): after the cells are blocked,
+        /// every block evens out its column depths. Walking from both ends at once, column x becomes
+        /// CalculateLeftDepth(x) (and CalculateRightDepth from the other end) and ReduceDepth blocks every cell from
+        /// that depth on. A column deeper than both neighbours is cut to the deeper neighbour unless a neighbour of
+        /// its own depth stands beside it, so a lone 1-column cutout (depth 2 between blocked columns of depth 0) is
+        /// blocked entirely: the playtest's "row 0 with row 1 blocked / behind a blocked cell". Neighbour blocks of
+        /// the same road continue the row (GetDepth past the end of the block).
+        /// <paramref name="depth"/>: per grid, per column, the depth (first blocked row) the game will see.
+        /// </summary>
+        public static void ReduceDepths(IReadOnlyList<ZoneGrid> grids, List<int[]> depth)
+        {
+            int Get(int gi, int x)
+            {
+                var g = grids[gi];
+                if (x >= 0 && x < g.Size.x) return depth[gi][x];
+                // Past the end of the block: the neighbouring block of the same road whose cell continues the row.
+                var at = CellCentre(g, x, 0);
+                float2 d = math.normalizesafe(g.Direction);
+                for (int hi = 0; hi < grids.Count; hi++)
+                {
+                    if (hi == gi) continue;
+                    var h = grids[hi];
+                    if (math.dot(math.normalizesafe(h.Direction), d) < 0.95f) continue;
+                    if (math.distance(h.Position, at) > h.Size.x * Cell) continue;
+                    for (int hx = 0; hx < h.Size.x; hx++)
+                        if (math.distancesq(CellCentre(h, hx, 0), at) < 4f) return depth[hi][hx];
+                }
+                return 0;
+            }
+            int Left(int gi, int x)
+            {
+                int d0 = Get(gi, x - 1), d2 = Get(gi, x);
+                if (d2 <= d0) return d2;
+                int d3 = Get(gi, x - 2);
+                if (d0 != d3 && d0 != 0) return d0;
+                int d4 = Get(gi, x + 1);
+                if (d4 - d2 < d2 - d0) return math.min(math.max(d0, d4), d2);
+                if (Get(gi, x + 2) != d4) return math.min(math.max(d0, d4), d2);
+                return d0;
+            }
+            int Right(int gi, int x)
+            {
+                int d0 = Get(gi, x + 1), d2 = Get(gi, x);
+                if (d2 <= d0) return d2;
+                int d3 = Get(gi, x + 2);
+                if (d0 != d3 && d0 != 0) return d0;
+                int d4 = Get(gi, x - 1);
+                if (d4 - d2 < d2 - d0) return math.min(math.max(d4, d0), d2);
+                if (Get(gi, x - 2) != d4) return math.min(math.max(d4, d0), d2);
+                return d0;
+            }
+            for (int gi = 0; gi < grids.Count; gi++)
+            {
+                int n = grids[gi].Size.x;
+                int a = 0, b = n - 1;
+                while (b >= 0)
+                {
+                    int l = Left(gi, a);
+                    if (l < depth[gi][a]) depth[gi][a] = l;
+                    int r = Right(gi, b);
+                    if (r < depth[gi][b]) depth[gi][b] = r;
+                    a++; b--;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Applies <see cref="ReduceDepths"/> to the planned zoning: the depth the game sees per column is the first
+        /// row that is closed or will be under a blocker (inside the footprint and not zoned). Zoned columns the rule
+        /// cuts shallower keep only the rows above the cut, or go entirely when fewer than <see cref="MinRows"/> rows
+        /// remain; repeated until stable (a removed column changes its neighbours).
+        /// </summary>
+        private static void GameDepthPass(List<ZoneGrid> grids, List<bool[]> zoned, List<bool[]> open, List<float2[]> feet)
+        {
+            if (grids.Count == 0) return;
+            var inner = new List<float2[]>();
+            foreach (var f in feet)
+            {
+                try { foreach (var i in Poly.Offset(f, FootprintInset)) if (i != null && i.Length >= 3) inner.Add(i); }
+                catch (Exception) { inner.Add(f); }
+            }
+            var underBuild = new List<bool[]>();
+            for (int gi = 0; gi < grids.Count; gi++)
+            {
+                var g = grids[gi];
+                var u = new bool[g.Size.x * g.Size.y];
+                for (int x = 0; x < g.Size.x; x++)
+                    for (int y = 0; y < g.Size.y; y++)
+                    {
+                        var sq = CellSquare(g, x, y, -0.0625f);
+                        foreach (var r in inner) if (ObstacleCut.Overlaps(sq, r)) { u[y * g.Size.x + x] = true; break; }
+                    }
+                underBuild.Add(u);
+            }
+            for (int round = 0; round < 6; round++)
+            {
+                // The blocker is the footprint minus every zoned cell (grown KeepMargin): a cell another block zones on
+                // the same land (overlapping blocks at corners and curves) is a hole in it, not blocked.
+                var holes = new List<(float2[] sq, float2 min, float2 max)>();
+                for (int gi = 0; gi < grids.Count; gi++)
+                {
+                    var g = grids[gi];
+                    for (int x = 0; x < g.Size.x; x++)
+                        for (int y = 0; y < g.Size.y; y++)
+                            if (zoned[gi][y * g.Size.x + x])
+                            {
+                                var sq = CellSquare(g, x, y, KeepMargin);
+                                float2 mn = new float2(float.MaxValue), mx = new float2(float.MinValue);
+                                foreach (var p in sq) { mn = math.min(mn, p); mx = math.max(mx, p); }
+                                holes.Add((sq, mn, mx));
+                            }
+                }
+                bool InHole(float2[] cell)
+                {
+                    foreach (var p in cell)
+                    {
+                        bool inside = false;
+                        foreach (var h in holes)
+                            if (p.x >= h.min.x && p.y >= h.min.y && p.x <= h.max.x && p.y <= h.max.y && Poly.Contains(h.sq, p)) { inside = true; break; }
+                        if (!inside) return false;
+                    }
+                    return true;
+                }
+                var depth = new List<int[]>(grids.Count);
+                for (int gi = 0; gi < grids.Count; gi++)
+                {
+                    var g = grids[gi];
+                    int sx = g.Size.x, sy = g.Size.y;
+                    var d = new int[sx];
+                    for (int x = 0; x < sx; x++)
+                    {
+                        int y = 0;
+                        while (y < sy && open[gi][y * sx + x] && (zoned[gi][y * sx + x] || !underBuild[gi][y * sx + x] || InHole(CellSquare(g, x, y, -0.0625f)))) y++;
+                        // CleanBlockedCells: row 0 is blocked when row 1 is.
+                        if (y == 1) y = 0;
+                        d[x] = y;
+                    }
+                    depth.Add(d);
+                }
+                ReduceDepths(grids, depth);
+                bool changed = false;
+                for (int gi = 0; gi < grids.Count; gi++)
+                {
+                    var g = grids[gi];
+                    int sx = g.Size.x, sy = g.Size.y;
+                    var z = zoned[gi];
+                    for (int x = 0; x < sx; x++)
+                    {
+                        int zd = 0;
+                        while (zd < sy && z[zd * sx + x]) zd++;
+                        if (zd == 0 || depth[gi][x] >= zd) continue;
+                        int keep = depth[gi][x] >= MinRows ? depth[gi][x] : 0;
+                        for (int y = keep; y < zd; y++) z[y * sx + x] = false;
+                        changed = true;
+                    }
+                }
+                if (!changed) break;
+            }
         }
 
         /// <summary>True when the cell centre lies on a captured road (within its half width + <see cref="RoadCellReach"/>).</summary>
