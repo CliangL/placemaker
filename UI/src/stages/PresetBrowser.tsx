@@ -253,8 +253,9 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
     }
 
     // categories: the most used first; the current one and the selected type's always visible
-    const visibleCats = q ? cats.filter((c) => catHits.has(c.id)) : moreCats ? cats : cats.filter((c, i) => i < SHOWN_CATEGORIES || c.id === category || c.id === selectedGroup);
-    const hiddenCats = q ? 0 : cats.length - cats.filter((c, i) => i < SHOWN_CATEGORIES || c.id === category || c.id === selectedGroup).length;
+    // All categories, always (user: not cluttered enough to need "N more").
+    const visibleCats = q ? cats.filter((c) => catHits.has(c.id)) : cats;
+    const hiddenCats = 0;
     const types = q ? typeHits : cats.find((c) => c.id === category)?.types ?? [];
     const firstHit = styleHits.length ? { recipe: styleHits[0].r.id, layer: styleHits[0].layer.id, preset: styleHits[0].p.id } : typeHits.length ? { recipe: typeHits[0].id, layer: typeHits[0].id, preset: null } : null;
 
@@ -442,10 +443,12 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
                                             onClick={() => {
                                                 setCategory(c.id);
                                                 if (q) closeSearch();
+                                                // Switching category picks its first type, so the Style row follows at once.
+                                                else if (c.id !== selectedGroup && c.types.length) pickType(c.types[0]);
                                             }}
                                         />
                                     ))}
-                                    {hiddenCats > 0 || (moreCats && !q && cats.length > SHOWN_CATEGORIES) ? (
+                                    {hiddenCats > 0 && moreCats ? (
                                         <button
                                             type="button"
                                             data-nav="cat"
