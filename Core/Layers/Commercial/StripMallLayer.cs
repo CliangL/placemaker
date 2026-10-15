@@ -189,6 +189,7 @@ namespace Placemaker.Core.Layers.Commercial
             list.Add((r.At(math.lerp(s0, s1, 0.68f), t), "footpath"));
         }
 
+
         private static float2[] Poly4(float2 a, float2 b, float2 c, float2 d) => Geometry.Poly.EnsureCcw(new[] { a, b, c, d });
     }
 }

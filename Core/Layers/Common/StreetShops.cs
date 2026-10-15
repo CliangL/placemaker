@@ -120,7 +120,7 @@ namespace Placemaker.Core.Layers.Common
             public float2 At(float s, float t) => A + Dir * s + In * t;
         }
 
-        public static Result Plan(LayerRegion region, AreaInput input, IReadOnlyList<float2> gates, string layout, string amount, float depth, uint seed)
+        public static Result Plan(LayerRegion region, AreaInput input, IReadOnlyList<float2> gates, string layout, string amount, float depth, uint seed, bool follow = false)
         {
             var res = new Result();
             amount = NormalizeAmount(amount);
@@ -129,7 +129,7 @@ namespace Placemaker.Core.Layers.Common
             var roads = StreetFrontage.Roads(input);
             if (roads.Count == 0) return res;
             int cells = math.clamp((int)math.floor(depth / Cell + 0.01f), 1, 6);
-            var runs = Runs(region, roads, gates, input.Site?.WaterDepthAt);
+            var runs = Runs(region, roads, gates, input.Site?.WaterDepthAt, follow);
             if (runs.Count == 0) return res;
             var rng = new Random(seed == 0 ? 1u : seed);
             _water = input.Site?.WaterDepthAt;
@@ -236,10 +236,11 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>Road-facing outline runs with the entrance gaps cut out (intervals ≥ 2 cells).</summary>
-        public static List<Run> Runs(LayerRegion region, List<StreetFrontage.RoadLine> roads, IReadOnlyList<float2> gates, Func<float2, float> water)
+        public static float Tol = 6f;
+        public static List<Run> Runs(LayerRegion region, List<StreetFrontage.RoadLine> roads, IReadOnlyList<float2> gates, Func<float2, float> water, bool follow = false)
         {
             var runs = new List<Run>();
-            foreach (var (a, b) in StreetFrontage.Edges(region.Ring, roads, 2 * Cell))
+            foreach (var (a, b) in follow ? StreetFrontage.FollowEdges(region.Ring, roads, 2 * Cell, Tol) : StreetFrontage.Edges(region.Ring, roads, 2 * Cell))
             {
                 float len = math.distance(a, b);
                 var dir = (b - a) / len;

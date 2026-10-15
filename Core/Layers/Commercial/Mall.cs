@@ -104,7 +104,7 @@ namespace Placemaker.Core.Layers.Commercial
         public List<StreetShops.Run> Runs()
         {
             var roads = StreetFrontage.Roads(Ctx.Input);
-            var runs = roads.Count == 0 ? new List<StreetShops.Run>() : StreetShops.Runs(Region, roads, null, Ctx.Site?.WaterDepthAt);
+            var runs = roads.Count == 0 ? new List<StreetShops.Run>() : StreetShops.Runs(Region, roads, null, Ctx.Site?.WaterDepthAt, true);
             runs.Sort((a, b) => b.Length != a.Length ? b.Length.CompareTo(a.Length) : a.A.x != b.A.x ? a.A.x.CompareTo(b.A.x) : a.A.y.CompareTo(b.A.y));
             return runs;
         }
@@ -142,6 +142,9 @@ namespace Placemaker.Core.Layers.Commercial
         }
 
         public bool Fits(float2[] poly) => StreetShops.Fits(Region, poly) && Free(poly);
+
+        /// <summary>(s46) Area of everything planned so far (the pieces of Taken are disjoint, up to the 5 cm touching tolerance).</summary>
+        public float TakenArea() { float a = 0f; foreach (var t in Taken) a += Poly.Area(t); return a; }
 
         /// <summary>One shop plot (whole cells; must touch a street or a lane — the caller's geometry guarantees it).</summary>
         public bool Shop(float2[] rect)
@@ -708,11 +711,13 @@ namespace Placemaker.Core.Layers.Commercial
             var snapped = Build.ZoneLots.Snap(new[] { Region.Ring }, Shops, grids, Ctx.Site?.NearbyNets, Build.ZoneGuard.OwnNets(planned, Ctx.Site), others);
             if (snapped == null) return;
             var keep = new List<float2[]>();
+            var pads = new List<float2[]>();
             for (int i = 0; i < Shops.Count; i++)
             {
                 var old = Shops[i];
                 if (FacesLane(old)) { keep.Add(old); continue; }
                 ShopZone.TryGetValue(old, out var zone);
+                if (snapped[i].Count == 0) { pads.Add(old); continue; }
                 Taken.Remove(old);
                 foreach (var rect in snapped[i])
                 {
@@ -727,6 +732,7 @@ namespace Placemaker.Core.Layers.Commercial
                     if (zone != null) ShopZone[rect] = zone;
                 }
             }
+// (s46) A plot no cell can be zoned for is not given back to the park: it keeps its land as a paved forecourt            // (a pad the layout planned for shops), with a warning.            int padsKept = 0;            foreach (var pad in pads)            {                bool clash = false;                foreach (var o in keep) if (StreetShops.ConvexOverlap(pad, o, 0.05f)) { clash = true; break; }                if (clash) { Taken.Remove(pad); continue; }                Ctx.Surface(Poly.EnsureCcw(pad), SurfaceRole.Paving, new AssetRef(""), AssetCategories.SurfacePaving);                padsKept++;            }            if (padsKept > 0) Ctx.Issue(IssueSeverity.Warning, CommercialLayer.PadKey);
             Shops.Clear();
             Shops.AddRange(keep);
         }

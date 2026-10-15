@@ -30,6 +30,8 @@
   "Placemaker.Commercial.Issue.NoStreet": "No existing street runs along the area: shops need one to face (it became a small park).",
   "Placemaker.Commercial.Issue.NoLot": "There was no room for a parking lot.",
   "Placemaker.Commercial.Issue.Fallback": "The chosen layout did not fit here, so a simpler one was used.",
+  "Placemaker.Commercial.Issue.Pad": "A shop plot here cannot be zoned; it stays a paved pad.",
+  "Placemaker.Commercial.Issue.Rest": "Not enough street frontage for more shops; the rest is a park.",
   "Placemaker.Commercial.Stat.Plots": "shop plots",
   "Placemaker.Commercial.Stat.ZoneCells": "zone cells",
   "Placemaker.Recipe.StripMall": "Strip mall",
