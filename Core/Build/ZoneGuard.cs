@@ -900,9 +900,32 @@ namespace Placemaker.Core.Build
                     if (ring == null || ring.Length < 3 || Poly.Area(ring) < MinBlockerArea) continue;
                     List<float2[]> ok;
                     try { ok = AreaRings.PrepareSurface(ring, AreaRings.SurfaceMinNodeDistance); } catch (Exception) { ok = new List<float2[]>(); }
-                    foreach (var o in ok) if (o != null && o.Length >= 3 && Poly.Area(o) >= MinBlockerArea) result.Blockers.Add(Poly.EnsureCcw(o));
+                    foreach (var o in ok)
+                        if (o != null && o.Length >= 3 && Poly.Area(o) >= MinBlockerArea)
+                            foreach (var c in ClipToFeet(o, feet)) result.Blockers.Add(Poly.EnsureCcw(c));
                 }
             }
+        }
+
+        /// <summary>(s57) A blocker never extends past its own build's outline (ring repair / bridges could push an edge out into the street or the neighbour block).</summary>
+        private static List<float2[]> ClipToFeet(float2[] ring, List<float2[]> feet)
+        {
+            var r = new List<float2[]>();
+            try
+            {
+                var subject = new List<IReadOnlyList<float2>> { ring };
+                var clip = new List<IReadOnlyList<float2>>();
+                foreach (var f in feet) if (f != null && f.Length >= 3) clip.Add(f);
+                if (clip.Count == 0) { r.Add(ring); return r; }
+                foreach (var reg in Poly.Boolean(subject, clip, BoolOp.Intersection))
+                {
+                    if (reg?.Outer == null || reg.Outer.Length < 3 || reg.Area < MinBlockerArea) continue;
+                    var rings = reg.HasHoles ? Poly.CutHoles(reg) : new List<float2[]> { reg.Outer };
+                    foreach (var q in rings) if (q != null && q.Length >= 3 && Poly.Area(q) >= MinBlockerArea) r.Add(q);
+                }
+            }
+            catch (Exception) { r.Clear(); r.Add(ring); }
+            return r;
         }
 
         // ───────────────────────── s22: roads and clipping ─────────────────────────

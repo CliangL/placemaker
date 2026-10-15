@@ -280,6 +280,9 @@ namespace Placemaker.Game.Selection
                     var e = results[i];
                     if (e == Entity.Null || !seen.Add(e)) continue;
                     if (!_em.HasComponent<global::Game.Areas.Lot>(e) || !_em.HasBuffer<global::Game.Areas.Node>(e) || Skip(e, ignoreGroup)) continue;
+                    // (s57) Our helper lots (owner "Placemaker Area", "Placemaker Zone Block") are never obstacles: cell-shaped, they can poke
+                    // past the build. The build counts through its saved outline (BuildReceipts) only.
+                    if (IsHelperLot(e)) continue;
                     var nodes = _em.GetBuffer<global::Game.Areas.Node>(e, true);
                     if (nodes.Length < 3) continue;
                     var ring = new float2[nodes.Length];
