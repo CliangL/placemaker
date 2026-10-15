@@ -608,8 +608,8 @@ namespace Placemaker.Core.Layers.Commercial
                     var n = nets[k];
                     if (!PathJoins.IsPath(n)) continue;
                     float len = math.distance(n.A.xz, n.D.xz);
-                    bool endBad = n.EndAttach < 0 && Near(n.D.xz) < 3f && Degree(n.D.xz) == 1;
-                    bool startBad = !endBad && n.StartAttach < 0 && Near(n.A.xz) < 3f && Degree(n.A.xz) == 1;
+                    bool endBad = n.EndAttach < 0 && Near(n.D.xz) < 1.5f && Degree(n.D.xz) == 1;
+                    bool startBad = !endBad && n.StartAttach < 0 && Near(n.A.xz) < 1.5f && Degree(n.A.xz) == 1;
                     if (!endBad && !startBad) continue;
                     if (len < 5f)
                     {
@@ -618,7 +618,14 @@ namespace Placemaker.Core.Layers.Commercial
                         changed = true;
                         continue;
                     }
+                    // (s48) Pulled back just far enough that the walk's edge clears the cells (the game needs ~1.5 m centre to cell), not a fixed 3.5 m.
                     float f = 3.5f / len;
+                    {
+                        var tip = endBad ? n.D.xz : n.A.xz; var tail = endBad ? n.A.xz : n.D.xz;
+                        float pull = 0f;
+                        while (pull < 3.5f && Near(math.lerp(tip, tail, pull / len)) < 1.5f) pull += 0.25f;
+                        f = math.min(f, math.max(pull, 0.25f) / len);
+                    }
                     if (endBad) { n.D = math.lerp(n.D, n.A, f); n.C = math.lerp(n.C, n.A, f * 0.5f); }
                     else { n.A = math.lerp(n.A, n.D, f); n.B = math.lerp(n.B, n.D, f * 0.5f); }
                     changed = true;

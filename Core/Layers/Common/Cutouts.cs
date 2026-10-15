@@ -118,7 +118,7 @@ namespace Placemaker.Core.Layers.Common
         // never between the park and its cutouts.
 
         /// <summary>A border piece this close to a cutout edge goes, unless it also lies this close to the outer outline.</summary>
-        public const float BorderReach = 1.0f + Build.ZoneLots.Clearance;   // (s40) the host keeps ZoneLots.Clearance off the cells
+        public const float BorderReach = 0.5f + Build.ZoneLots.Clearance;   // (s40) the host keeps ZoneLots.Clearance off the cells
         /// <summary>A border this close to the outer outline stays (the street side).</summary>
         public const float OutlineReach = 1.0f;
 

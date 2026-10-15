@@ -4,6 +4,7 @@
 // content on a cell. Checked for every type hosting the Zoning feature and every commercial preset, on straight,
 // angled and curved sites, with the streets' blocks captured (as in the game).
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -50,7 +51,7 @@ namespace Placemaker.Tests
         private static float2 Centre(ZoneCellMark c) => 0.25f * (c.A + c.B + c.C + c.D);
 
         /// <summary>The checks: every street plot is exactly its zoned cells; every zoned cell lies in a plot; nothing of the host on a cell.</summary>
-        private static void AssertPlotsAreCells(ComposedPlan plan, string host, string ctx, bool lanePlotsExempt)
+        private static void AssertPlotsAreCells(ComposedPlan plan, string host, string ctx, bool lanePlotsExempt, float3[] siteRing)
         {
             var hostPlan = plan.Layers.First(l => l.GeneratorId == host);
             var lanes = plan.Layers.SelectMany(l => l.Nets).Where(n => ZoneBlockPredictor.Zones(n.Role)).ToList();
@@ -74,6 +75,7 @@ namespace Placemaker.Tests
                     foreach (var p in new[] { c.A, c.B, c.C, c.D })
                         Assert.True(Poly.Contains(q, p) || Poly.DistanceToBoundary(q, p) < 0.05f, $"{ctx}: cell at {Centre(c)} pokes out of its plot");
             }
+            AssertSnug(plots, lanePlotsExempt ? FacesLane : (Func<float2[], bool>)(_ => false), plan, ctx, Poly.To2D(siteRing));
             // No zoned cell outside the plots.
             // (Plots facing a lane the build adds keep their rows — their cells are snapped by ZoneGuard at the end and may
             // reach a little past them.)
@@ -91,6 +93,48 @@ namespace Placemaker.Tests
                         var p = Composer.Bezier(n.A, n.B, n.C, n.D, i / 16f).xz;
                         Assert.False(zoned.Any(c => Poly.Contains(Shrink(new[] { c.A, c.B, c.C, c.D }, 0.5f), p)), $"{ctx}: {l.GeneratorId} {n.Role} crosses a zoned cell at {p}");
                     }
+            }
+        }
+
+        /// <summary>s48: host surfaces and paths meet the cell blocks flush: where the host has content within 3 m of a plot side, it is within 0.5 m.</summary>
+        private static void AssertSnug(List<float2[]> plots, Func<float2[], bool> facesLane, ComposedPlan plan, string ctx, float2[] site)
+        {
+            var rings = plan.Layers.Where(l => l.GeneratorId != Cutouts.ZoningLayer)
+                .SelectMany(l => l.Surfaces.Where(s => s.Role != SurfaceRole.Water).Select(s => Poly.To2D(s.Ring))).ToList();
+            var paths = plan.Layers.Where(l => l.GeneratorId != Cutouts.ZoningLayer)
+                .SelectMany(l => l.Nets.Where(n => n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide)).ToList();
+            // A surface must start within 0.5 m of the cell edge; a walk (modelled 1 m / 1.5 m half-width) within 1 m: its dead end keeps ~1.5 m
+            // centre-to-cell, the least the game accepts before a walk edge closes the cell column.
+            float Near(float2 p, bool walks)
+            {
+                float d = 99f;
+                if (!walks) foreach (var r in rings) d = math.min(d, Poly.Contains(r, p) ? 0f : Poly.DistanceToBoundary(r, p));
+                else foreach (var n in paths)
+                    for (int i = 0; i <= 16; i++)
+                        d = math.min(d, math.distance(Composer.Bezier(n.A, n.B, n.C, n.D, i / 16f).xz, p) - (n.Role == NetRole.PathwayWide ? 1.5f : 1.0f));
+                return math.max(0f, d);
+            }
+            foreach (var q0 in plots)
+            {
+                if (facesLane(q0)) continue;
+                var q = Poly.EnsureCcw((float2[])q0.Clone());
+                for (int e = 0; e < q.Length; e++)
+                {
+                    var a = q[e]; var b = q[(e + 1) % q.Length];
+                    var n = math.normalizesafe(new float2(b.y - a.y, -(b.x - a.x)));   // outward of a CCW ring
+                    for (int k = 1; k < 4; k++)
+                    {
+                        var p = math.lerp(a, b, k / 4f) + n * 0.05f;
+                        if (!Poly.Contains(site, p) || plots.Any(o => !ReferenceEquals(o, q0) && Poly.Contains(o, p))) continue;   // street side / a neighbour plot
+                        // The first host content straight out from the edge: none within 3 m = nothing there to be snug to.
+                        float d = -1f;
+                        for (float t = 0f; t <= 3f; t += 0.1f) if (Near(p + n * t, false) <= 0.05f) { d = t; break; }
+                        float dw = -1f;
+                        for (float t = 0f; t <= 3f; t += 0.1f) if (Near(p + n * t, true) <= 0.05f) { dw = t; break; }
+                        Assert.True(dw <= 1.0f, $"{ctx}: a walk starts {dw:0.0} m from the cell block edge at {p} (leftover strip)");
+                        Assert.True(d <= 0.5f, $"{ctx}: host content starts {d:0.0} m from the cell block edge at {p} (leftover strip)");
+                    }
+                }
             }
         }
 
@@ -119,7 +163,7 @@ namespace Placemaker.Tests
             r.Root.Settings.Values[StreetShops.AmountId] = StreetShops.Some;
             TestKit.Entered(r, ring, site);
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
-            AssertPlotsAreCells(plan, host, $"{host}/{siteKind}", false);
+            AssertPlotsAreCells(plan, host, $"{host}/{siteKind}", false, ring);
             Assert.DoesNotContain(plan.AllIssues(), i => i.Key == ZoneGuard.NotZonableKey);
         }
 
@@ -142,7 +186,7 @@ namespace Placemaker.Tests
             Editor.AddDefaultFeatures(r, () => ++n);
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
             if (!plan.Layers.SelectMany(l => l.Regions).Any(Cutouts.IsCutout)) return;   // a layout without shops on this site
-            AssertPlotsAreCells(plan, type, $"{type}/{preset}", true);
+            AssertPlotsAreCells(plan, type, $"{type}/{preset}", true, ring);
         }
 
         [Fact]
@@ -176,7 +220,8 @@ namespace Placemaker.Tests
             r.Root.Settings.Values[StreetShops.AmountId] = StreetShops.Some;
             TestKit.Entered(r, rr, site);
             var plan = Composer.Compose(r, new AreaShape { Ring = rr, Source = AreaSource.Drawn }, site, CancellationToken.None);
-            AssertPlotsAreCells(plan, "plaza", "plaza/curved", false);
+            AssertPlotsAreCells(plan, "plaza", "plaza/curved", false, rr);
         }
     }
 }
+
