@@ -103,6 +103,8 @@ namespace Placemaker.Core.Layers.Common
                         l.Nets.AddRange(rebuilt);
                     }
                 }
+                // ── (s48) free walk ends keep WalkReach off the cells: a walk edge touching a cell closes its column ──
+                changed += TrimWalkEnds(l, cuts);
                 // ── ground: surfaces and areas minus the cutouts ──
                 changed += ClipRings(l.Surfaces, s => s.Ring, (s, ring) => new PlannedSurface { Ring = ring, Role = s.Role, Asset = s.Asset, Category = s.Category }, cuts);
                 changed += ClipRings(l.Areas, a => a.Ring, (a, ring) => new PlannedArea { Ring = ring, Role = a.Role, Asset = a.Asset }, cuts);
@@ -247,6 +249,62 @@ namespace Placemaker.Core.Layers.Common
                 foreach (var o in l.Objects)
                     if (o.AttachedNet == idx) o.AttachedNet = -1;
                     else if (o.AttachedNet > idx) o.AttachedNet--;
+            }
+            return changed;
+        }
+
+        /// <summary>A walk's free end keeps this far (centre line) off a cutout: with the walk's half width it clears the cells.</summary>
+        public const float WalkReach = 1.5f;
+
+        private static int TrimWalkEnds(AreaPlan l, List<float2[]> cuts)
+        {
+            float Gap(float2 p)
+            {
+                float g = float.MaxValue;
+                foreach (var c in cuts) g = Math.Min(g, Poly.Contains(c, p) ? 0f : Poly.DistanceToBoundary(c, p));
+                return g;
+            }
+            bool Shared(PlannedNet self, float2 p)
+            {
+                foreach (var m in l.Nets)
+                {
+                    if (ReferenceEquals(m, self) || m == null) continue;
+                    if (math.distancesq(m.A.xz, p) < 0.04f || math.distancesq(m.D.xz, p) < 0.04f) return true;
+                }
+                return false;
+            }
+            int changed = 0;
+            for (int i = l.Nets.Count - 1; i >= 0; i--)
+            {
+                var n = l.Nets[i];
+                if (n == null || (n.Role != NetRole.Pathway && n.Role != NetRole.PathwayWide)) continue;
+                for (int end = 0; end < 2; end++)
+                {
+                    bool atD = end == 0;
+                    var tip = atD ? n.D.xz : n.A.xz;
+                    if ((atD ? n.EndAttach : n.StartAttach) >= 0 || Gap(tip) >= WalkReach || Shared(n, tip)) continue;
+                    // The tip lies inside the reach: shorten to the first parameter that clears it.
+                    float lo = 0f, hi = 1f; float t = -1f;
+                    int steps = (int)math.clamp(Length(n, 0f, 1f) / 0.1f, 24f, 800f);
+                    for (int k = 1; k <= steps; k++)
+                    {
+                        float u = k / (float)steps;
+                        var p = Composer.Bezier(n.A, n.B, n.C, n.D, atD ? 1f - u : u).xz;
+                        if (Gap(p) >= WalkReach) { t = atD ? 1f - u : u; break; }
+                    }
+                    if (t < 0f || Length(n, atD ? 0f : t, atD ? t : 1f) < 1f)
+                    {
+                        l.Nets.RemoveAt(i);
+                        foreach (var o in l.Objects)
+                            if (o.AttachedNet == i) o.AttachedNet = -1;
+                            else if (o.AttachedNet > i) o.AttachedNet--;
+                        changed++;
+                        break;
+                    }
+                    var piece = atD ? Piece(Copy(n), 0f, t) : Piece(Copy(n), t, 1f);
+                    Assign(n, piece);
+                    changed++;
+                }
             }
             return changed;
         }
