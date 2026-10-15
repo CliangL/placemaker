@@ -100,7 +100,8 @@ namespace Placemaker.Core.Tool
         /// the UI needs something a previous DLL does not send or handle. The game reloads the UI file from disk but the
         /// DLL only on restart, so after an update they can disagree until the player restarts.
         /// </summary>
-        public const int Protocol = 21;   // s33: summary.permanentNeedsAck (ground paint alone is one info line, no checkbox)
+        public const int Protocol = 22;   // s43: brush.rules.walls (Paint bucket walls)
+        // 21 = s33: summary.permanentNeedsAck (ground paint alone is one info line, no checkbox)
 
         // ───────────── state ─────────────
 
@@ -1016,7 +1017,27 @@ namespace Placemaker.Core.Tool
             .Set("roads", r.Roads).Set("buildings", r.Buildings).Set("lots", r.Lots).Set("zoned", r.Zoned)
             .Set("emptyZones", r.EmptyZones).Set("water", r.Water).Set("stayInBlock", r.StayInBlock)
             .Set("builds", r.Builds).Set("anything", r.Anything).Set("drawClip", r.DrawClip)
-            .Set("snap", Round(r.Snap, 1)).Set("smoothing", r.Smoothing);
+            .Set("snap", Round(r.Snap, 1)).Set("smoothing", r.Smoothing)
+            .Set("walls", WallsJson(r.BucketWalls));
+
+        /// <summary>(s43) Paint bucket walls as { roads, paths, bikes, tracks, water, lots, zoned }.</summary>
+        public static JsonValue WallsJson(Placemaker.Core.Geometry.FillWall w)
+        {
+            var o = JsonValue.Obj();
+            foreach (var kv in WallKeys) o.Set(kv.Key, (w & kv.Value) != 0);
+            return o;
+        }
+
+        public static readonly KeyValuePair<string, Placemaker.Core.Geometry.FillWall>[] WallKeys =
+        {
+            new KeyValuePair<string, Placemaker.Core.Geometry.FillWall>("roads", Placemaker.Core.Geometry.FillWall.Roads),
+            new KeyValuePair<string, Placemaker.Core.Geometry.FillWall>("paths", Placemaker.Core.Geometry.FillWall.Paths),
+            new KeyValuePair<string, Placemaker.Core.Geometry.FillWall>("bikes", Placemaker.Core.Geometry.FillWall.Bikes),
+            new KeyValuePair<string, Placemaker.Core.Geometry.FillWall>("tracks", Placemaker.Core.Geometry.FillWall.Tracks),
+            new KeyValuePair<string, Placemaker.Core.Geometry.FillWall>("water", Placemaker.Core.Geometry.FillWall.Water),
+            new KeyValuePair<string, Placemaker.Core.Geometry.FillWall>("lots", Placemaker.Core.Geometry.FillWall.Lots),
+            new KeyValuePair<string, Placemaker.Core.Geometry.FillWall>("zoned", Placemaker.Core.Geometry.FillWall.Zoned),
+        };
 
         /// <summary>UI "setBrushRules": fields present in the JSON override <paramref name="current"/>; the result is clamped.</summary>
         public static Placemaker.Core.Geometry.BrushRules ParseBrushRules(string json, Placemaker.Core.Geometry.BrushRules current)
@@ -1037,6 +1058,13 @@ namespace Placemaker.Core.Tool
             r.DrawClip = v["drawClip"].AsBool(r.DrawClip);
             r.Snap = (float)v["snap"].AsNumber(r.Snap);
             r.Smoothing = (int)Math.Round(v["smoothing"].AsNumber(r.Smoothing));
+            var walls = v["walls"];
+            if (walls != null && walls.IsObject)
+                foreach (var kv in WallKeys)
+                {
+                    bool on = walls[kv.Key].AsBool((r.BucketWalls & kv.Value) != 0);
+                    r.BucketWalls = on ? r.BucketWalls | kv.Value : r.BucketWalls & ~kv.Value;
+                }
             return r.Normalized();
         }
 

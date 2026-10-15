@@ -10,7 +10,8 @@ import {
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
 
-const DEFAULT_BRUSH_RULES = { builds: true, anything: false, drawClip: false, roads: true, buildings: true, lots: true, zoned: true, emptyZones: false, water: true, stayInBlock: true, snap: 6, smoothing: 1 };
+const DEFAULT_BRUSH_RULES = { builds: true, anything: false, drawClip: false, roads: true, buildings: true, lots: true, zoned: true, emptyZones: false, water: true, stayInBlock: true, snap: 6, smoothing: 1,
+    walls: { roads: true, paths: true, bikes: true, tracks: true, water: true, lots: false, zoned: false } };
 import { addStrings } from "../cs2/l10n";
 import { BLOCKS, blocksRing, Block, cellsOutline, NODES, paintCells } from "./city";
 import { FAKE_FEATURES, FAKE_LAYERS, FAKE_RECIPES, FAKE_STRINGS, fakeAssets, FeatureDef, MockLayer, MockRecipe, MORE_TYPES, RecipeTemplate } from "./fakeCatalog";
@@ -606,10 +607,14 @@ export class MockBackend {
                 this.brush = { shape: a[0], size: Number(a[1]), angle: Number(a[2]) };
                 break;
             case "setBrushRules":
-                try { this.brushRules = { ...this.brushRules, ...JSON.parse(String(a[0])) }; } catch { /* ignore */ }
+                try {
+                    const patch = JSON.parse(String(a[0]));
+                    // s43: walls merge per key, like the DLL's ParseBrushRules.
+                    this.brushRules = { ...this.brushRules, ...patch, walls: { ...this.brushRules.walls, ...(patch.walls ?? {}) } };
+                } catch { /* ignore */ }
                 break;
             case "resetBrushRules":
-                this.brushRules = { ...DEFAULT_BRUSH_RULES };
+                this.brushRules = { ...DEFAULT_BRUSH_RULES, walls: { ...DEFAULT_BRUSH_RULES.walls } };
                 break;
             case "clearArea":
                 this.edit({ key: "Placemaker.Undo.ClearArea" }, () => {

@@ -83,6 +83,9 @@ namespace Placemaker.Core.Geometry
         private int[] _posInOut;
         private int[] _component;
 
+        /// <summary>Walks with less signed area (m²) than this are trees / outsides, never faces.</summary>
+        public const double TreeAreaEpsilon = 0.5;
+
         public int NodeCount => _nodes.Count;
         public int EdgeCount => _edges.Count;
 
@@ -246,7 +249,9 @@ namespace Placemaker.Core.Geometry
                 var cycle = WalkFace(h0, maxBoundaryEdges);
                 if (cycle == null) { result.Status = FacePickStatus.TooLarge; return result; }
                 double area = CycleArea(cycle);
-                if (area <= 0)
+                // s43: a tree (open-ended paths, a lone dead end) walks out and back: its area is zero up to
+                // rounding, which must never count as a face around the point.
+                if (area <= TreeAreaEpsilon)
                 {
                     // Outside of a road component that does not enclose the point: look past it.
                     excluded.Add(_component[Org(h0)]);

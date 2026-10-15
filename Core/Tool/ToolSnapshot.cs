@@ -52,11 +52,14 @@ namespace Placemaker.Core.Tool
     public sealed class BlockSelectionState
     {
         public List<List<HalfEdge>> Faces = new List<List<HalfEdge>>();
+        /// <summary>(s43) Where each face was clicked (parallel to Faces; may be shorter in old snapshots): area walls keep that side.</summary>
+        public List<Unity.Mathematics.float2> Seeds = new List<Unity.Mathematics.float2>();
 
         public BlockSelectionState Clone()
         {
             var c = new BlockSelectionState();
             foreach (var f in Faces) c.Faces.Add(new List<HalfEdge>(f));
+            c.Seeds.AddRange(Seeds);
             return c;
         }
     }

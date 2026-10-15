@@ -12,7 +12,7 @@ export const GROUP = "Placemaker";
  * together. The game reloads this UI file from disk but loads the DLL only at start, so right after an
  * update they can disagree: the panel then shows "Restart the game" (absent = a DLL older than s15).
  */
-export const PROTOCOL = 21;
+export const PROTOCOL = 22;
 
 // ─────────────────────────── Values (C# → UI) ───────────────────────────
 
@@ -39,6 +39,19 @@ export interface BrushRules {
   drawClip?: boolean;
   snap: number;          // m, 0 = off (default 6)
   smoothing: number;     // 0–6 passes (default 1; Paint uses 6)
+  /** (s43, PROTOCOL 22) What the Paint bucket treats as a wall; setBrushRules({ walls: { paths: false } }) merges per key. */
+  walls?: BucketWalls;
+}
+
+/** (s43) Paint bucket walls: lines (roads, paths, bikes, tracks) trace the block, areas (water, lots, zoned) cut it. */
+export interface BucketWalls {
+  roads: boolean;   // every car road: alleys, gravel, one-way, pedestrian streets (default on)
+  paths: boolean;   // pedestrian paths (default on)
+  bikes: boolean;   // bicycle-only paths (default on)
+  tracks: boolean;  // train / tram tracks at ground level (default on)
+  water: boolean;   // water edge (default on)
+  lots: boolean;    // buildings, other lots, other Placemaker builds (default off)
+  zoned: boolean;   // zoned cells (default off)
 }
 
 export interface LocText { key: string; args?: (string | number)[] }

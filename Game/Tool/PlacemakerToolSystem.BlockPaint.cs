@@ -66,9 +66,12 @@ namespace Placemaker.Game.Tool
             if (rules == null) return;
             rules = rules.Normalized();
             if (rules.Equals(BrushRules)) return;
+            bool wallsChanged = rules.BucketWalls != BrushRules.BucketWalls;
             if (_settings != null) { _settings.SetBrushRules(rules); _settings.ApplyAndSave(); }
             // The fence and the outline depend on the rules: rebuild them (not an undo step — it is a setting).
             if (_mode == SelectionMode.BlockPaint && !_bpMask.IsEmpty) ShapeChanged();
+            // s43: the bucket re-traces its blocks with the new walls (a setting, not an undo step).
+            if (wallsChanged && _mode == SelectionMode.Block) RepickBlocks();
             Touch();
         }
 

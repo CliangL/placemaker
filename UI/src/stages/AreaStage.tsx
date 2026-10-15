@@ -5,7 +5,7 @@
 //   Paint area with Smart edges on).
 import React from "react";
 import classNames from "classnames";
-import { AreaMode, BrushRules, BrushShape, LocText, ToolState } from "../contract";
+import { AreaMode, BrushRules, BrushShape, BucketWalls, LocText, ToolState } from "../contract";
 import { act } from "../lib/bindings";
 import { area as fmtArea, group } from "../lib/format";
 import { TFunc, useT } from "../lib/l10n";
@@ -176,13 +176,52 @@ const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }
     );
 };
 
+/**
+ * (s43) Paint bucket: what the fill treats as a wall. Lines (roads, paths, bike paths, tracks) trace the block; areas
+ * (water, lots & buildings, zoning) cut it and keep the side you clicked. Absent on DLLs before PROTOCOL 22.
+ */
+const BucketWallChips = ({ walls }: { walls: BucketWalls }) => {
+    const { t } = useT();
+    const chips: { key: keyof BucketWalls; icon: string; label: string; tip: string }[] = [
+        { key: "roads", icon: "roads", label: t("Placemaker.UI.Walls.Roads", "Roads"), tip: t("Placemaker.UI.Walls.RoadsTip", "Every street and road, alleys and gravel too.") },
+        { key: "paths", icon: "footpath", label: t("Placemaker.UI.Walls.Paths", "Paths"), tip: t("Placemaker.UI.Walls.PathsTip", "Footpaths split a block like streets do.") },
+        { key: "bikes", icon: "bike", label: t("Placemaker.UI.Walls.Bikes", "Bike paths"), tip: t("Placemaker.UI.Walls.BikesTip", "Bike-only paths split a block too.") },
+        { key: "tracks", icon: "track", label: t("Placemaker.UI.Walls.Tracks", "Rail & tram"), tip: t("Placemaker.UI.Walls.TracksTip", "Train and tram tracks on the ground.") },
+        { key: "water", icon: "water", label: t("Placemaker.UI.Walls.Water", "Water"), tip: t("Placemaker.UI.Walls.WaterTip", "Stop at the water's edge.") },
+        { key: "lots", icon: "building", label: t("Placemaker.UI.Walls.Lots", "Lots"), tip: t("Placemaker.UI.Walls.LotsTip", "Stop at buildings, other lots and your builds.") },
+        { key: "zoned", icon: "edgeZoning", label: t("Placemaker.UI.Walls.Zoned", "Zoned"), tip: t("Placemaker.UI.Walls.ZonedTip", "Stop at zoned cells.") },
+    ];
+    return (
+        <Row
+            label={t("Placemaker.UI.Walls.Label", "Walls")}
+            testId="bucket-walls"
+            tip={t("Placemaker.UI.Walls.Tip", "What the fill stops at. Lines split blocks; areas keep the side you click.")}
+        >
+            <div className={s.chips} data-testid="bucket-walls-chips">
+                {chips.map((x) => (
+                    <ToggleChip
+                        key={x.key}
+                        icon={x.icon}
+                        label={x.label}
+                        on={!!walls[x.key]}
+                        tip={x.tip}
+                        onClick={() => act.setBrushRules({ walls: { [x.key]: !walls[x.key] } })}
+                        testId={`bucket-wall-${x.key}`}
+                    />
+                ))}
+            </div>
+        </Row>
+    );
+};
+
 /** Points / Paint bucket / Road nodes: keep the outline off my builds, optionally clip it to free land. */
-const KeepOff = ({ rules }: { rules: BrushRules }) => {
+const KeepOff = ({ rules, bucket }: { rules: BrushRules; bucket?: boolean }) => {
     const { t } = useT();
     const builds = rules.builds !== false;
     const clip = !!rules.drawClip;
     return (
         <div className={s.settings} data-testid="outline-rules">
+            {bucket && rules.walls ? <BucketWallChips walls={rules.walls} /> : null}
             <Row label={t("Placemaker.UI.Rules.KeepOff", "Keep off")} testId="keep-off">
                 <div className={s.chips}>
                     <ToggleChip
@@ -280,7 +319,7 @@ export const AreaStage = ({ state }: { state: ToolState }) => {
                     </Row>
                 </div>
             ) : null}
-            {tool !== "paint" && rules ? <KeepOff rules={rules} /> : null}
+            {tool !== "paint" && rules ? <KeepOff rules={rules} bucket={tool === "block"} /> : null}
             <div className={s.summary} data-testid="area-summary">
                 {a.closed && a.areaM2 > 0 ? (
                     <>

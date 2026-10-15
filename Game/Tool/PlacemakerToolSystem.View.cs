@@ -69,6 +69,7 @@ namespace Placemaker.Game.Tool
                     else
                     {
                         h.Add(new HintInfo(_perimeter.Nodes.Count >= 2 ? "Placemaker.Hint.PerimeterAddOrClose" : "Placemaker.Hint.PerimeterAdd"));
+                        if (_perimeter.Nodes.Count >= 3 && _shape != null) h.Add(new HintInfo("Placemaker.Hint.PerimeterAutoClose"));
                         if (_perimeter.Nodes.Count > 0) h.Add(new HintInfo("Placemaker.Hint.PerimeterRemoveLast"));
                     }
                     break;
