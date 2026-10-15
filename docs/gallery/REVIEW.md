@@ -70,7 +70,7 @@ Per-image numbers (benches off-path, overlapping solid objects, objects outside)
 - **orchardPark**: 4 benches off-path (metrics).
 - **quarry**: FewerBenches info (metrics).
 - **restArea**: 2 benches off-path (metrics).
-- **roads**: renders nothing — `Roads.Issue.NothingFits` on the gallery site (needs a nearby road / bigger site in the gallery).
+- **roads**: renders nothing on the default 1.2 ha site — use `--roads` (s34: 30 ha road sites with two existing streets, a farm and flat / gentle / hill / valley / steep ground; per-card RoadsAudit line). Known (s34): organic layouts leave a round hilltop empty; access management keeps a junction when cutting it would strand a branch; the old-town preset is a radial circus with organic lanes, not a dense medieval mesh.
 - **scrapyard**: 23 overlaps, 422 scrap props (metrics).
 - **skatePark**: 5 benches off-path (metrics).
 
