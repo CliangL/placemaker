@@ -40,7 +40,7 @@ namespace Placemaker.Game.Build
         public static bool SinkDecals = true;
         public const float DecalSink = -0.01f;
         /// <summary>(s44) Stall markings and arrows sink like decals (PlanWork.SinkInBuild). Off = s25 behaviour.</summary>
-        public static bool SinkStallMarkings = true;
+        public static bool SinkStallMarkings = false;   // 2026-10-14 in game: sunk markings were rejected (3 of 18 built); plain markings built 401/401 before
 
         private static bool IsPaved(SurfaceRole r) => r == SurfaceRole.Paving || r == SurfaceRole.Asphalt || r == SurfaceRole.Plaza || r == SurfaceRole.Decorative;
         /// <summary>Resolved prefab per work item key.</summary>
