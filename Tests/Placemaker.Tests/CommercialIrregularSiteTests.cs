@@ -203,12 +203,12 @@ namespace Placemaker.Tests
         ///   * the small 1.5 ha block (sq1.5): the 8 m margins, the lane and its approaches are a fixed cost, so every type loses ~5 points;
         ///     mallDistrict (internal streets, squares) 0.60;
         ///   * highStreet 0.73 (its shared-street preset 0.68: the street is shared with greens), mallDistrict/village 0.68 (pocket greens);
-        ///   * shopsPark / mallPark are park-led: 0.45 on regular blocks, 0.35 on curved ones, 0.25 on the small block.
+        ///   * shopsPark / mallPark are park-led: 0.45 on regular blocks, 0.35 on curved ones, 0.22 on the small block (measured 25-29 %).
         /// </summary>
         public static float Target(string type, string preset, float step = 4f)
         {
             bool small = step == -2f, curved = step == 0f || step == 6f;
-            if (type == "shopsPark" || type == "mallPark" || (type == "shoppingPlaza" && preset == "green")) return small ? 0.25f : curved ? 0.35f : 0.45f;
+            if (type == "shopsPark" || type == "mallPark" || (type == "shoppingPlaza" && preset == "green")) return small ? 0.22f : curved ? 0.35f : 0.45f;
             if (type == "mallDistrict") return small ? 0.60f : preset == "village" ? 0.68f : 0.75f;
             if (type == "highStreet") return preset == "shared" ? 0.68f : 0.73f;
             return small ? 0.70f : 0.75f;

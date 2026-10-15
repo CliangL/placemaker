@@ -119,6 +119,7 @@ namespace Placemaker.Tests
             foreach (var q0 in plots)
             {
                 if (facesLane(q0)) continue;
+                if (!plan.ZoneCells.Any(c => c.State == ZoneCellState.Zoned && Poly.Contains(q0, 0.25f * (c.A + c.B + c.C + c.D)))) continue;   // s58: a reported not-zonable plot has no cell block to be snug to
                 var q = Poly.EnsureCcw((float2[])q0.Clone());
                 for (int e = 0; e < q.Length; e++)
                 {
