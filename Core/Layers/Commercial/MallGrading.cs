@@ -32,6 +32,8 @@ namespace Placemaker.Core.Layers.Commercial
         public const float Cell = 2f;
         /// <summary>Shoulder beside a lane kept level with it (m).</summary>
         public const float Shoulder = Cell;
+        /// <summary>(s41) How far past the street's edge a lane's approach is graded (m), whatever the outline does.</summary>
+        public const float ApproachDepth = 14f;
 
         public static void Grade(Mall mall, List<(float2[] ring, Func<float2, float> height)> lots)
         {
@@ -57,7 +59,11 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var (r, _) in lots) shrunk.Add(Mall.Shrink(r, 0.6f));
             bool InLot(float2 p) { foreach (var r in shrunk) if (Poly.Contains(r, p)) return true; return false; }
 
-            var sc = new Sculpt(g0, region.Min, region.Max, Cell, p => region.Contains(p) && !InLot(p));
+            var approaches = Approaches(mall);
+            float2 smn = region.Min, smx = region.Max;
+            foreach (var q in approaches) foreach (var v in q) { smn = math.min(smn, v); smx = math.max(smx, v); }
+            bool InApproach(float2 p) { foreach (var q in approaches) if (Poly.Contains(q, p)) return true; return false; }
+            var sc = new Sculpt(g0, smn, smx, Cell, p => (region.Contains(p) || InApproach(p)) && !InLot(p));
             var prot = new bool[sc.Count];
             ctx.Check();
 
@@ -147,9 +153,67 @@ namespace Placemaker.Core.Layers.Commercial
 
             Bank(sc, prot, MaxBank);
             ctx.Check();
-            var res = sc.Emit(ctx, new[] { region.Ring }, mall.GradeTolerance);
+            var clips = new List<float2[]> { region.Ring };
+            clips.AddRange(approaches);
+            var res = sc.Emit(ctx, clips, mall.GradeTolerance);
             ctx.Plan.Facts["gradeCells"] = res.Cells;
             if (res.Cells > 0) Sculpt.Resnap(ctx);
+        }
+
+        /// <summary>
+        /// (s41) Height of an existing street at a lane's attachment: the street curve (NearbyNet A–D) at the attach parameter,
+        /// the ground there when the street is unknown.
+        /// </summary>
+        public static float StreetHeight(LayerContext ctx, long id, float t, float2 at)
+        {
+            var nets = ctx.Site?.NearbyNets;
+            if (nets != null)
+                foreach (var n in nets)
+                    if (n.ExternalId == id)
+                    {
+                        float y = Composer.Bezier(n.A, n.B, n.C, n.D, math.saturate(t)).y;
+                        if (math.isfinite(y)) return y;
+                    }
+            return ctx.H(at);
+        }
+
+        /// <summary>Half width of the existing street a lane attaches to (0 when unknown).</summary>
+        public static float StreetHalf(LayerContext ctx, long id)
+        {
+            var nets = ctx.Site?.NearbyNets;
+            if (nets != null) foreach (var n in nets) if (n.ExternalId == id) return math.max(0f, n.Width * 0.5f);
+            return 0f;
+        }
+
+        /// <summary>
+        /// (s41) The approach of a lane end attached to a street: from the street's edge into the site, the lane's width plus
+        /// its shoulders. The site outline usually lies a few metres off the kerb; the sculpt must reach the street there, or
+        /// the strip between outline and kerb stays at the raw ground between a lane and a street both at the street's level.
+        /// </summary>
+        public static List<float2[]> Approaches(Mall mall)
+        {
+            var list = new List<float2[]>();
+            var ctx = mall.Ctx;
+            foreach (var lane in mall.Lanes)
+            {
+                if (lane.Points.Count < 2) continue;
+                for (int end = 0; end < 2; end++)
+                {
+                    long id = end == 0 ? lane.StartAttach : lane.EndAttach;
+                    if (id < 0) continue;
+                    var p0 = end == 0 ? lane.Points[0] : lane.Points[lane.Points.Count - 1];
+                    var p1 = end == 0 ? lane.Points[1] : lane.Points[lane.Points.Count - 2];
+                    var d = math.normalizesafe(p1 - p0);
+                    var nrm = new float2(-d.y, d.x);
+                    float edge = StreetHalf(ctx, id), len = math.min(math.distance(p0, p1), edge + ApproachDepth);
+                    float w = lane.Half + (lane.Shoulder >= 0f ? lane.Shoulder : Shoulder);
+                    if (len <= edge + 0.5f) continue;
+                    // From 2.5 m inside the street: the node rows round the kerb line must be graded too (2 m grid, 1.75 m raster).
+                    var a = p0 + d * math.max(0f, edge - 2.5f); var b = p0 + d * len;
+                    list.Add(Poly.EnsureCcw(new[] { a - nrm * w, b - nrm * w, b + nrm * w, a + nrm * w }));
+                }
+            }
+            return list;
         }
 
         /// <summary>Sculpt nodes within the bounds of <paramref name="pts"/> grown by <paramref name="margin"/>, in increasing index order.</summary>
@@ -283,9 +347,23 @@ namespace Placemaker.Core.Layers.Commercial
                     }
                     h[i] = math.isfinite(best) ? best : 0.5f * (g0(p + nrm * lane.Half) + g0(p - nrm * lane.Half));
                 }
-                // Attached ends sit on the street.
-                if (lane.StartAttach >= 0) { h[0] = ctx.H(lane.Points[0]); pinned[0] = true; }
-                if (lane.EndAttach >= 0) { h[n - 1] = ctx.H(lane.Points[lane.Points.Count - 1]); pinned[n - 1] = true; }
+                // Attached ends sit on the street — at the street's own height (s41: the captured road surface, not the raw
+                // terrain under it: a street on a fill or in a cut left the lane's first metres a step below / above it, the
+                // bowl and the torn curtain at the strip mall's entrance, screenshots 71/72).
+                // The samples on the street itself and its kerb (up to a metre past its edge) are the street too: the lane leaves
+                // the street flush and only then ramps (≤ 8 %) to the site.
+                if (lane.StartAttach >= 0)
+                {
+                    float hs = StreetHeight(ctx, lane.StartAttach, lane.StartT, lane.Points[0]), flush = StreetHalf(ctx, lane.StartAttach) + 1f;
+                    for (int i = 0; i < n && total * i / (n - 1) <= flush; i++) { h[i] = hs; pinned[i] = true; }
+                    h[0] = hs; pinned[0] = true;
+                }
+                if (lane.EndAttach >= 0)
+                {
+                    float hs = StreetHeight(ctx, lane.EndAttach, lane.EndT, lane.Points[lane.Points.Count - 1]), flush = StreetHalf(ctx, lane.EndAttach) + 1f;
+                    for (int i = n - 1; i >= 0 && total - total * i / (n - 1) <= flush; i--) { h[i] = hs; pinned[i] = true; }
+                    h[n - 1] = hs; pinned[n - 1] = true;
+                }
                 // (s32) Ends on another lane sit on that lane's profile; a closed loop meets itself.
                 if (hosts != null && lane.StartOn != null && hosts.TryGetValue(lane.StartOn, out var hs0)) { hs0.Distance(lane.Points[0], out float s0); h[0] = hs0.At(s0); pinned[0] = true; }
                 if (hosts != null && lane.EndOn != null && hosts.TryGetValue(lane.EndOn, out var hs1)) { hs1.Distance(lane.Points[lane.Points.Count - 1], out float s1); h[n - 1] = hs1.At(s1); pinned[n - 1] = true; }
