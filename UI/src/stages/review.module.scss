@@ -345,3 +345,46 @@
     color: $c-text-dim;
     @include ellipsis;
 }
+
+// s53 "Left out" chip + reason list
+.leftOut {
+    margin-top: 3rem;
+}
+
+.leftList {
+    margin: 2rem 0 3rem;
+    padding: 3rem 5rem;
+    border-radius: 6rem;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.leftRow {
+    @include row;
+    height: 18rem;
+    font-size: $fs-s;
+    cursor: default;
+    &:hover {
+        background-color: rgba(255, 181, 71, 0.16);
+    }
+}
+
+.leftName {
+    flex-shrink: 0;
+    margin-right: 6rem;
+    white-space: nowrap;
+}
+
+.leftTop {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: $c-text-dim;
+}
+
+.leftCount {
+    flex-shrink: 0;
+    margin-left: 6rem;
+    font-weight: bold;
+}

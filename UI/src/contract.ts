@@ -358,6 +358,10 @@ export interface DesignState {
 export interface Stat { key: string; value: number; unit: string }
 export interface Issue { severity: "info" | "warning" | "error"; text: LocText; stepPath?: string; at?: [number, number, number] }
 
+/** (s53) One reason a planned piece was not built (or was kept despite a collision). */
+export interface AuditReason { id: string; label: string; arg: string; count: number; kept: boolean; top: string }
+export interface BuildAudit { leftOut: number; kept: number; reasons: AuditReason[] }
+
 /** summary — the review card. Always reflects the latest finished plan. */
 export interface Summary {
   ready: boolean;           // a plan exists for the current area + design
@@ -373,6 +377,8 @@ export interface Summary {
   permanent: LocText[];
   /** True once the player ticked the permanent-effects box for exactly these effects. */
   permanentAcknowledged?: boolean;
+  /** Additive (s53): what the last build left out, by reason (C# Core/Build/BuildAudit.ToUi). Absent = nothing to report. */
+  audit?: BuildAudit;
   /** (s33, PROTOCOL 21) False when the permanent effects are ground paint only: listed as one info line, no tick needed.
    *  Absent (older DLL) = every permanent effect needs the tick. */
   permanentNeedsAck?: boolean;
@@ -529,6 +535,8 @@ export const Triggers = {
   hoverLegend: "hoverLegend",               // (layerId: string) — "" = none
   setLegendVisible: "setLegendVisible",     // (layerId: string, visible: boolean)
   resetLegend: "resetLegend",               // () — every layer back to its default
+  // s53 build audit: hover a "Left out" reason to mark where those pieces would have been ("" = none).
+  hoverAudit: "hoverAudit",                 // (reasonId: string)
 } as const;
 
 // ─────────────────────────── Localisation ───────────────────────────

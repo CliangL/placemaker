@@ -108,6 +108,7 @@ namespace Placemaker.Game.UI
             Trigger<bool>("setParkStatsKeepVanilla", keep => _tool.SetParkStatsKeepVanilla(keep));
             // s22 preview legend (docs/proposals/s22.md)
             Trigger<string>("hoverLegend", id => _tool.HoverLegend(id));
+            Trigger<string>("hoverAudit", id => _tool.HoverAudit(id));   // s53: "Left out" reason row hovered ("" = none)
             Trigger<string, bool>("setLegendVisible", (id, on) => _tool.SetLegendVisible(id, on));
             Trigger("resetLegend", () => _tool.ResetLegend());
         }
@@ -266,6 +267,7 @@ namespace Placemaker.Game.UI
                 input.Roads = roads;
             }
             foreach (var n in _tool.BuildNotes) input.ExtraIssues.Add(n);
+            input.Audit = _tool.BuildAudit;
             var clipIssue = _tool.ClipIssue;
             if (clipIssue != null) input.ExtraIssues.Add(clipIssue);
             var ghostDropped = _tool.GhostDroppedIssue;

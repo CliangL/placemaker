@@ -525,7 +525,7 @@ namespace Placemaker.Core.Layers.Parking
                 plan.Objects.Add(new PlannedObject
                 {
                     Position = P3(b.Center), Yaw = Yaw(f.DirToWorld(b.Axis)), Role = ObjectRole.ParkingBay, Asset = asset,
-                    Scale = 1f, Variation = (uint)bays,
+                    Scale = b.Role == BayRole.Disabled ? 1f : ParkingMarkings.Scale(false, b.Width, b.Length), Variation = (uint)bays,
                 });
             }
             var chargerAsset = ParkingAssets.Pick(s.ChargerAsset, ParkingAssets.Charger);

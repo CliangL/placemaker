@@ -42,6 +42,8 @@ namespace Placemaker.Game
         /// position. Severity Warning = something left out, Info = repaired. Never null after Start.
         /// </summary>
         public List<PlanIssue> Warnings;
+        /// <summary>(s53) What did not make it into the build, with reasons (Done); null when the service has nothing to report.</summary>
+        public Placemaker.Core.Build.BuildAudit Audit;
     }
 
     public interface IBuildService

@@ -68,7 +68,7 @@ namespace Placemaker.Game.Build
             try { assets = Services.Assets?.InfoMap(); } catch (System.Exception) { }
             var hits = SiteSafety.ItemsTouching(_request.Plan, _work, ObstacleCut.Grow(polys, 1f), assets, 1f);
             int newly = 0;
-            foreach (var w in hits) newly += Exclude(w);
+            foreach (var w in hits) newly += Exclude(w, reason: AuditReason.SiteSafety);
             if (newly > 0 && _protectAttempts++ < MaxAutoExcludeAttempts)
             {
                 _buildingsProtected += warned.Length;

@@ -770,6 +770,11 @@ namespace Placemaker.Game.Overlay
 
         private void DrawErrors(OverlayRenderSystem.Buffer buffer, float w)
         {
+            // (s53) Hovering a "Left out" reason in the panel: where those pieces would have been.
+            var auditHover = _tool.AuditHover;
+            if (!string.IsNullOrEmpty(auditHover) && _tool.BuildAudit != null)
+                foreach (var p in _tool.BuildAudit.Positions(auditHover))
+                    buffer.DrawCircle(Warning, new Color(1f, 0.7f, 0.1f, 0.25f), w, 0, new float2(0, 1), p, w * 9f);
             // What the last build skipped (amber) or repaired (blue), until the player changes something.
             foreach (var n in _tool.BuildNotes)
                 if (n?.At != null)

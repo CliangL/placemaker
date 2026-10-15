@@ -384,6 +384,8 @@ export const act = {
     setLegendVisible: (layerId: string, visible: boolean) => fire(Triggers.setLegendVisible, layerId, visible),
     /** s22: every preview layer back to its default. */
     resetLegend: () => fire(Triggers.resetLegend),
+    /** s53: mark on the map where the pieces of one "Left out" reason would have been ("" = none). */
+    hoverAudit: (reasonId: string) => fire(Triggers.hoverAudit, reasonId),
 };
 
 /** Vanilla UI sound through the game's audio binding; silently ignored where it doesn't exist. */
