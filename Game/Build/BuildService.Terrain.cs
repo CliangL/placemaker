@@ -648,6 +648,8 @@ namespace Placemaker.Game.Build
                             }
                         }
                 }
+                try { AuditZonePlots(plan, planned, state); }
+                catch (Exception ze) { Mod.Log.Warn("Placemaker zoning plot audit failed: " + ze.Message); }
                 for (int k = 0; k < planned.Count; k++)
                 {
                     int st = state[k];

@@ -26,6 +26,19 @@ namespace Placemaker.Game.Tool
         public IReadOnlyList<float3> BuildErrorPositions => _feedback.ErrorPositions;
         public int FeedbackVersion => _feedback.Version;
         public IReadOnlyList<PlanIssue> BuildNotes => _feedback.Notes;
+
+        /// <summary>(s53) What the last build left out (null = nothing), and the reason row hovered in the panel ("" = none).</summary>
+        public Placemaker.Core.Build.BuildAudit BuildAudit => _feedback.Audit;
+        private string _auditHover = "";
+        public string AuditHover => _feedback.Audit != null ? _auditHover : "";
+
+        public void HoverAudit(string id)
+        {
+            id = id ?? "";
+            if (id.Length > 96 || _auditHover == id) return;
+            _auditHover = id;
+            Touch();
+        }
         public int HoverGroup => _hoverGroup;
         public int ManagedGroup => _managedGroup;
 
@@ -111,7 +124,7 @@ namespace Placemaker.Game.Tool
                 case BuildPhase.Done:
                     Acknowledge(svc);
                     _building = false;
-                    OnBuilt(st.GroupId, st.Warnings);
+                    OnBuilt(st.GroupId, st.Warnings, st.Audit);
                     break;
                 case BuildPhase.Failed:
                     Acknowledge(svc);
@@ -164,7 +177,7 @@ namespace Placemaker.Game.Tool
         }
 
         /// <summary>Built: the tool stays open with a fresh selection; design and recipe stay for the next one.</summary>
-        private void OnBuilt(int groupId, List<PlanIssue> warnings)
+        private void OnBuilt(int groupId, List<PlanIssue> warnings, Placemaker.Core.Build.BuildAudit audit = null)
         {
             _markersEdited.Clear();
             _permanentAck = null;
@@ -181,7 +194,8 @@ namespace Placemaker.Game.Tool
             SetStage(ToolStage.Area);
             // After the stage change and the cleared selection (both clear feedback): what the build service
             // repaired, skipped or cleared stays in the summary until the next change, and the toast says it.
-            _feedback.Succeeded(warnings);
+            _feedback.Succeeded(warnings, audit);
+            _auditHover = "";
             var notes = _feedback.Notes;
             if (notes.Count == 0) Flash(new LocText("Placemaker.Hint.Built"), 5f);
             else

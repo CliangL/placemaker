@@ -92,7 +92,7 @@ namespace Placemaker.Game.Tool
                 nameof(PlacemakerSettings.ToggleToolBinding), nameof(PlacemakerSettings.PrimaryBinding), nameof(PlacemakerSettings.UndoBinding),
                 nameof(PlacemakerSettings.RedoBinding), nameof(PlacemakerSettings.RedoAltBinding), nameof(PlacemakerSettings.ResetKeys),
                 nameof(PlacemakerSettings.RemoveEverything), nameof(PlacemakerSettings.ResetDefaults),
-                nameof(PlacemakerSettings.AutoExcludeCollisions), nameof(PlacemakerSettings.SurfaceClones), nameof(PlacemakerSettings.TexturedPreviewSurfaces), nameof(PlacemakerSettings.ParkingEconomy),
+                nameof(PlacemakerSettings.AutoExcludeCollisions), nameof(PlacemakerSettings.IgnoreOwnCollisions), nameof(PlacemakerSettings.SurfaceClones), nameof(PlacemakerSettings.TexturedPreviewSurfaces), nameof(PlacemakerSettings.ParkingEconomy),
                 nameof(PlacemakerSettings.DefaultParkingFee), nameof(PlacemakerSettings.ExperimentalParkingCompanion), nameof(PlacemakerSettings.CompanionUpkeepFactor),
                 nameof(PlacemakerSettings.ClearExistingTreesAndProps), nameof(PlacemakerSettings.RecoverRejectedPieces), nameof(PlacemakerSettings.OverlayPavedSurfaces),
                 nameof(PlacemakerSettings.ChargeNetConstruction), nameof(PlacemakerSettings.SelectAsOneThing), nameof(PlacemakerSettings.ConfirmBulldoze),

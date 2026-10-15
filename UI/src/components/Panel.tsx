@@ -8,6 +8,7 @@
 // While drawing, C# may collapse it to a slim header + primary button (state.panelCollapsed); it then
 // shows an obvious "Show options" button.
 import { Legend } from "./Legend";
+import { LeftOut } from "./LeftOut";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import classNames from "classnames";
 import { PROTOCOL, Stage, StepView, Summary, ToolState } from "../contract";
@@ -708,10 +709,11 @@ export const PlacemakerPanel = () => {
         blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick OK to build");
     }
 
+    const leftOut = (state.stage === "area" || state.stage === "review") ? <LeftOut audit={summary.audit} /> : null;
     let body: React.ReactNode = null;
     switch (state.stage) {
         case "area":
-            body = <AreaStage state={state} />;
+            body = <>{leftOut}<AreaStage state={state} /></>;
             break;
         case "design":
             body = <DesignStage catalog={catalog} design={design} state={state} />;

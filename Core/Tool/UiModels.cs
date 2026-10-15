@@ -82,6 +82,8 @@ namespace Placemaker.Core.Tool
         public bool PermanentAcknowledged;
         /// <summary>Extra issues from the tool itself (build failure, timeout…).</summary>
         public List<PlanIssue> ExtraIssues = new List<PlanIssue>();
+        /// <summary>(s53) The last build's audit (Review/Done "Left out" chip).</summary>
+        public Placemaker.Core.Build.BuildAudit Audit;
         /// <summary>(s17) Selected area in m² (park stats scale with it). 0 = the plan's outline is unknown: no park stats.</summary>
         public double AreaM2;
         /// <summary>(s17) Setting "Real park stats (companion building)".</summary>
@@ -743,6 +745,15 @@ namespace Placemaker.Core.Tool
         // ───────────── summary ─────────────
 
         public static JsonValue Summary(SummaryInput s)
+        {
+            var o = SummaryCore(s);
+            // (s53) What the last build left out, by reason (the "Left out" chip). Absent = nothing to report.
+            var audit = s.Audit?.ToUi();
+            if (audit != null) o.Set("audit", audit);
+            return o;
+        }
+
+        private static JsonValue SummaryCore(SummaryInput s)
         {
             var o = JsonValue.Obj();
             var plan = s.Plan;

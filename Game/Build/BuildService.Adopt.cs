@@ -222,10 +222,13 @@ namespace Placemaker.Game.Build
             int newly = 0;
             _exNets = _exObjects = _exSurfaces = _exAreas = 0;
             using var errors = _errorQuery.ToEntityArray(Allocator.Temp);
+            var typeByOwner = ErrorTypeByOwner();
             var probes = new List<float2>(3);
             for (int i = 0; i < errors.Length; i++)
             {
                 var e = errors[i];
+                if (_anarchyErrors.Contains(e)) continue;   // (s53) only our own pieces overlapping: built, not left out
+                string why = AuditReason.Rejected(ErrorTypeOf(typeByOwner, e));
                 // Climb to the top-level temporary (sub-objects/lanes go with their owner).
                 var top = e;
                 for (int depth = 0; depth < 4 && EntityManager.HasComponent<Owner>(top); depth++)
@@ -242,7 +245,7 @@ namespace Placemaker.Game.Build
                         if (!_ownerSuppressed) { _ownerSuppressed = true; newly++; Mod.Log.Warn("Placemaker: the game rejected the owner lot; building without it."); }
                         continue;
                     }
-                    if (_itemByKey.TryGetValue(exact, out var hitItem)) { newly += Exclude(hitItem, exact: true); continue; }
+                    if (_itemByKey.TryGetValue(exact, out var hitItem)) { newly += Exclude(hitItem, exact: true, reason: why); continue; }
                 }
                 probes.Clear();
                 if (EntityManager.HasComponent<Curve>(e))
@@ -260,7 +263,7 @@ namespace Placemaker.Game.Build
                         || (_objectIndex != null && _objectIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _))
                         || (_areaIndex != null && _areaIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _));
                     if (!hit || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) { _unmatchedProbes.Add(probe); continue; }
-                    newly += Exclude(w);
+                    newly += Exclude(w, reason: why);
                 }
             }
             // Playtest 2026-10-14: a park failed on its 2nd attempt with 25 errors none of which matched a plan item within
@@ -283,13 +286,14 @@ namespace Placemaker.Game.Build
         /// <summary>(s44) Safety net: the only errors left are functional markings — leave them out rather than fail.</summary>
         private bool _dropFunctional;
 
-        private int Exclude(WorkItem w, bool exact = false)
+        private int Exclude(WorkItem w, bool exact = false, string reason = null)
         {
             // (s25) Stall markings, chargers and arrows are never left out because something NEAR them failed (the probe
             // match); one that is itself rejected goes only after two retries did not settle it (PlanWork.Excludable).
             if (!PlanWork.Excludable(_request?.Plan, w) && !(exact && _excludeAttempts >= 2) && !_dropFunctional) { _keptFunctional++; return 0; }
             if (!PlanWork.Excludable(_request?.Plan, w)) _droppedFunctional++;
             if (!_excluded.Add(PlanWork.Key(w))) return 0;
+            AuditItem(w, reason ?? AuditReason.Rejected(_errorTypeName));
             if (w.Kind == WorkKind.Net) _exNets++;
             else if (w.Kind == WorkKind.Surface) _exSurfaces++;
             else if (w.Kind == WorkKind.Area) _exAreas++;

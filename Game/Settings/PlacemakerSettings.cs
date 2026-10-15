@@ -271,6 +271,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool AutoExcludeCollisions { get; set; }
 
+        /// <summary>(s53) Placemaker anarchy: our own pieces are never rejected for overlapping each other or decorations.</summary>
+        [SettingsUISection(SectionMain, GroupBuild)]
+        public bool IgnoreOwnCollisions { get; set; }
+
         [SettingsUISection(SectionMain, GroupBuild)]
         public bool OverlayPavedSurfaces { get; set; }
 
@@ -342,6 +346,7 @@ namespace Placemaker.Game.Settings
             try
             {
                 global::Placemaker.Game.Build.BuildService.AutoExcludeCollisions = AutoExcludeCollisions;
+                global::Placemaker.Game.Build.BuildService.IgnoreOwnCollisions = IgnoreOwnCollisions;
                 global::Placemaker.Game.Build.BuildService.ClearExistingObjects = ClearExistingTreesAndProps;
                 global::Placemaker.Game.Build.BuildService.BlockZoning = KeepZonedBuildingsOff;
                 global::Placemaker.Game.Build.BuildService.RecoverRejectedPieces = RecoverRejectedPieces;
@@ -393,6 +398,7 @@ namespace Placemaker.Game.Settings
             LastRecipe = "";
             PanelCollapsed = false;
             AutoExcludeCollisions = true;
+            IgnoreOwnCollisions = true;
             ClearExistingTreesAndProps = true;
             KeepZonedBuildingsOff = true;
             RecoverRejectedPieces = true;

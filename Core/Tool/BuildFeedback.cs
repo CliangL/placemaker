@@ -16,6 +16,9 @@ namespace Placemaker.Core.Tool
         private readonly List<float3> _errors = new List<float3>();
         private readonly List<PlanIssue> _notes = new List<PlanIssue>();
 
+        /// <summary>(s53) What the last build left out, with reasons (until the next change).</summary>
+        public Placemaker.Core.Build.BuildAudit Audit { get; private set; }
+
         /// <summary>What the last successful build repaired or left out (BuildStatus.Warnings), until the next change.</summary>
         public IReadOnlyList<PlanIssue> Notes => _notes;
 
@@ -32,7 +35,8 @@ namespace Placemaker.Core.Tool
 
         public void Clear()
         {
-            if (Failure == null && _errors.Count == 0 && _notes.Count == 0) return;
+            if (Failure == null && _errors.Count == 0 && _notes.Count == 0 && Audit == null) return;
+            Audit = null;
             Failure = null;
             _errors.Clear();
             _notes.Clear();
@@ -43,9 +47,10 @@ namespace Placemaker.Core.Tool
         public void Started() => Clear();
 
         /// <summary>Build done: failure gone; keeps what the build service fixed or skipped so the player is told.</summary>
-        public void Succeeded(IEnumerable<PlanIssue> warnings = null)
+        public void Succeeded(IEnumerable<PlanIssue> warnings = null, Placemaker.Core.Build.BuildAudit audit = null)
         {
             Clear();
+            if (audit != null && audit.Entries.Count > 0) { Audit = audit; Version++; }
             if (warnings == null) return;
             foreach (var w in warnings) if (w != null && !string.IsNullOrEmpty(w.Key)) _notes.Add(w);
             if (_notes.Count > 0) Version++;

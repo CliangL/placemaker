@@ -65,7 +65,7 @@ namespace Placemaker.Game.Build
             {
                 if (w.Kind == WorkKind.Terraform) continue;
                 var prefab = _catalog.Resolve(w.Asset, w.Category);
-                if (prefab == Entity.Null) { missing++; continue; }
+                if (prefab == Entity.Null) { missing++; AuditMissing(w); continue; }
                 _itemPrefab[PlanWork.Key(w)] = prefab;
             }
             if (missing > 0)
@@ -350,7 +350,7 @@ namespace Placemaker.Game.Build
             // variations do not turn a row of one bench into a mix (FEEDBACK-2 #1).
             int? seed = AutoAssets.IsUniform(w.Category) ? AutoAssets.UniformSeed(w.Category, (uint)_groupId) : (int?)null;
             float elevation = SinkDecals && (o.Role == ObjectRole.Decal || SinkStallMarkings && PlanWork.SinkInBuild(o.Role)) ? DecalSink : 0f;
-            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation, optional: !PlanWork.IsFunctional(o.Role));
+            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation, optional: !PlanWork.IsFunctional(o.Role) && !(IgnoreOwnCollisions && SelfOverlaps(w)));
             NoteUsed(prefab);
         }
 

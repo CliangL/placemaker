@@ -342,6 +342,7 @@ namespace Placemaker.Game.Build
 
         private void DoPrepare()
         {
+            SnapshotPreviewZoning();
             _work = PlanWork.Flatten(_request.Plan, _excluded);
             if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0 && !HasPaint())
             {
@@ -485,6 +486,17 @@ namespace Placemaker.Game.Build
             CollectErrors();
             if (frame - _stepFrame < ValidationSettleFrames) return;
             bool errors = !_errorQuery.IsEmptyIgnoreFilter || !_tool.AllowApply;
+            if (errors && IgnoreOwnCollisions && !_errorQuery.IsEmptyIgnoreFilter)
+            {
+                // (s53) Placemaker anarchy: errors that are only our own pieces overlapping do not stop the build.
+                int real = ClassifyOwnCollisions();
+                if (real == 0 && _anarchyErrors.Count > 0)
+                {
+                    _anarchyCleared = _anarchyErrors.Count;
+                    errors = false;
+                    _status.ErrorPositions.Clear();
+                }
+            }
             if (errors)
             {
                 CollectErrors();
@@ -620,6 +632,7 @@ namespace Placemaker.Game.Build
             var issues = ComposeWarnings(dropped);
             var warnings = new List<string>(_warnings);
             DumpFinish(groupId);   // s30: live ground, water, nets and objects to ModsData/Placemaker/debug (when enabled)
+            var audit = FinishAudit(groupId);
             ResetTransaction();
             _warnings.AddRange(warnings);
             PlanIssue headline = null;
@@ -634,6 +647,7 @@ namespace Placemaker.Game.Build
                 // A successful build never shows red markers (US8).
                 ErrorPositions = new List<float3>(),
                 Warnings = issues,
+                Audit = audit,
             };
             Mod.Log.Info($"Placemaker build finished: group {groupId}, {_registry.CountMembers(groupId, true)} members, "
                 + $"{issues.Count} notes, {UnityEngine.Time.frameCount - _startFrame} frames.");
@@ -725,6 +739,7 @@ namespace Placemaker.Game.Build
             _request = null;
             _work = null;
             _excluded.Clear();
+            ResetAudit();
             _excludeAttempts = 0;
             _keptFunctional = 0;
             _dropFunctional = false;
