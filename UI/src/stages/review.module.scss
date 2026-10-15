@@ -1,0 +1,347 @@
+@use "../styles/tokens" as *;
+
+// s42 Review: money card with one stacked cost bar, stat chips, alert chips, park stat tiles. Every line single,
+// nothing cut ("…"): short words, the long text in tooltips. Gameface: flexbox + margins only.
+
+.stage {
+    @include col;
+    min-width: 0;
+}
+
+.flex {
+    flex: 1 1 auto;
+}
+
+.emptyNote {
+    padding: 10rem 0;
+    font-size: $fs;
+    color: $c-text-dim;
+    text-align: center;
+}
+
+@keyframes pmShimmerR {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.shimmer {
+    animation-name: pmShimmerR;
+    animation-duration: 1.2s;
+    animation-iteration-count: infinite;
+}
+
+// ── money card ──
+.money {
+    @include col;
+    min-width: 0;
+    padding: 5rem 8rem 6rem 8rem;
+    border-radius: $radius;
+    background-color: rgba(0, 0, 0, 0.18);
+    @include border(1rem, $c-line-strong);
+}
+
+.moneyRow {
+    @include row;
+    min-width: 0;
+    height: 24rem;
+}
+
+.moneyLabel {
+    flex-shrink: 0;
+    margin-right: 5rem;
+    font-size: 11rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5rem;
+    color: $c-text-faint;
+}
+
+.moneyValue {
+    flex-shrink: 0;
+    margin-right: 16rem;
+    font-size: 16rem;
+    font-weight: bold;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.bad {
+    color: $c-danger;
+}
+
+.area {
+    flex-shrink: 0;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    white-space: nowrap;
+}
+
+.cantAfford {
+    @include row;
+    flex-shrink: 0;
+}
+
+.cantText {
+    margin-left: 4rem;
+    font-size: $fs-s;
+    font-weight: bold;
+    color: $c-danger;
+    white-space: nowrap;
+}
+
+.barBtn {
+    @include col;
+    @include button-reset;
+    min-width: 0;
+    margin-top: 4rem;
+    text-align: left;
+}
+
+.bar {
+    @include row;
+    min-width: 0;
+    height: 8rem;
+    border-radius: 4rem;
+    background-color: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.barPart {
+    height: 8rem;
+    border-right-width: 1rem;
+    border-right-style: solid;
+    border-right-color: rgba(0, 0, 0, 0.35);
+}
+
+.legend {
+    @include row;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-top: 4rem;
+}
+
+.legendItem {
+    @include row;
+    flex-shrink: 0;
+    height: 16rem;
+    margin-right: 10rem;
+}
+
+.legendDot {
+    width: 7rem;
+    height: 7rem;
+    border-radius: 2rem;
+}
+
+.legendText {
+    margin-left: 4rem;
+    font-size: 11rem;
+    color: $c-text-dim;
+    white-space: nowrap;
+}
+
+.legendPct {
+    margin-left: 3rem;
+    font-size: 11rem;
+    font-weight: bold;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.breakdown {
+    @include col;
+    min-width: 0;
+    margin-top: 4rem;
+    padding-top: 3rem;
+    border-top-width: 1rem;
+    border-top-style: solid;
+    border-top-color: $c-line;
+}
+
+.breakRow {
+    @include row;
+    min-width: 0;
+    height: 20rem;
+}
+
+.breakName {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 6rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.breakCost {
+    flex-shrink: 0;
+    margin-left: 8rem;
+    font-size: $fs-s;
+    color: #ffffff;
+}
+
+// ── stat chips ──
+.stats {
+    @include row;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-top: 6rem;
+}
+
+.stat {
+    @include row;
+    flex-shrink: 0;
+    height: 22rem;
+    margin: 0 4rem 3rem 0;
+    padding: 0 7rem 0 5rem;
+    border-radius: $radius-s;
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.statValue {
+    margin-left: 5rem;
+    font-size: $fs;
+    font-weight: bold;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.statLabel {
+    margin-left: 4rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    white-space: nowrap;
+}
+
+// ── alert chips ──
+.alerts {
+    @include row;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-top: 3rem;
+}
+
+.alert {
+    @include row;
+    @include button-reset;
+    flex-shrink: 0;
+    height: 22rem;
+    margin: 0 4rem 3rem 0;
+    padding: 0 7rem 0 5rem;
+    border-radius: 11rem;
+    @include border(1rem, transparent);
+    transition-property: background-color;
+    transition-duration: $t-fast;
+}
+
+.alertText {
+    margin-left: 4rem;
+    margin-right: 3rem;
+    font-size: $fs-s;
+    white-space: nowrap;
+}
+
+.alert_warn {
+    background-color: rgba(255, 181, 71, 0.14);
+    @include border-color(rgba(255, 181, 71, 0.4));
+    .alertText {
+        color: #ffd79a;
+    }
+    &:hover {
+        background-color: rgba(255, 181, 71, 0.24);
+    }
+}
+
+.alert_error {
+    background-color: rgba(255, 107, 91, 0.16);
+    @include border-color(rgba(255, 107, 91, 0.45));
+    .alertText {
+        color: #ffb3a9;
+    }
+    &:hover {
+        background-color: rgba(255, 107, 91, 0.26);
+    }
+}
+
+.alert_info {
+    background-color: rgba(143, 209, 255, 0.12);
+    @include border-color(rgba(143, 209, 255, 0.35));
+    .alertText {
+        color: #dff1ff;
+    }
+    &:hover {
+        background-color: rgba(143, 209, 255, 0.22);
+    }
+}
+
+.alertMore {
+    padding-left: 7rem;
+    background-color: rgba(255, 255, 255, 0.06);
+    .alertText {
+        margin-left: 0;
+        color: $c-text-dim;
+    }
+}
+
+.allGood {
+    @include row;
+    margin-top: 3rem;
+    height: 20rem;
+}
+
+.allGoodText {
+    margin-left: 5rem;
+    font-size: $fs-s;
+    color: $c-ok;
+    white-space: nowrap;
+}
+
+// ── building ──
+.buildHead {
+    @include row;
+    min-width: 0;
+    margin-bottom: 6rem;
+}
+
+.buildTitle {
+    margin-left: 6rem;
+    font-size: $fs;
+    font-weight: bold;
+    @include ellipsis;
+}
+
+.buildPct {
+    font-size: $fs;
+    color: #ffffff;
+    flex-shrink: 0;
+}
+
+.progress {
+    @include row;
+    height: 6rem;
+    border-radius: 3rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.progressFill {
+    height: 6rem;
+    border-radius: 3rem;
+    background-color: var(--accentColorNormal);
+    transition-property: width;
+    transition-duration: 0.25s;
+}
+
+.buildHint {
+    margin-top: 6rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    @include ellipsis;
+}

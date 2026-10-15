@@ -45,7 +45,13 @@ namespace Placemaker.Game.Tool
                 Func<BrushObstacleKind, bool> only = rules.DrawClip
                     ? (Func<BrushObstacleKind, bool>)(k => k != BrushObstacleKind.Road)
                     : k => k == BrushObstacleKind.PlacemakerBuild;
-                if (rules.Anything) return s;
+                // s42: "Paint over anything" is the Paint area tool's Smart edges switch (off); the outline tools keep
+                // their own Keep off chips whatever the brush does.
+                if (rules.Anything)
+                {
+                    rules = rules.Clone();
+                    rules.Anything = false;
+                }
 
                 var ring = s.Ring2D();
                 Poly.Bounds(ring, out var mn, out var mx);

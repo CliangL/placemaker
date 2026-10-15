@@ -1,0 +1,232 @@
+@use "../styles/tokens" as *;
+
+// s42 Area stage: four tool cards (icon tile + name + one short line), the tool's settings always visible, one
+// summary line. Same tile / chip language as the Design picker. Gameface: flexbox + margins only.
+
+$accent: #8fd1ff;
+
+.stage {
+    @include col;
+    min-width: 0;
+}
+
+.flex {
+    flex: 1 1 auto;
+}
+
+// ── tool cards ──
+.tools {
+    @include row;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-left: -2rem;
+    margin-right: -2rem;
+}
+
+.toolCell {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 0 2rem 4rem 2rem;
+}
+
+.tool {
+    @include row;
+    @include button-reset;
+    width: 100%;
+    min-width: 0;
+    height: 40rem;
+    padding: 0 6rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.05);
+    @include border(1rem, rgba(255, 255, 255, 0.08));
+    text-align: left;
+    overflow: hidden;
+    transition-property: background-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+    }
+}
+
+.toolOn {
+    background-color: rgba(143, 209, 255, 0.18);
+    @include border-color($accent);
+    &:hover {
+        background-color: rgba(143, 209, 255, 0.26);
+    }
+    .toolName {
+        color: #ffffff;
+    }
+}
+
+.toolOff {
+    opacity: 0.45;
+}
+
+.toolText {
+    @include col;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 6rem;
+}
+
+.toolName {
+    font-size: $fs;
+    font-weight: bold;
+    color: var(--menuText1Normal);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.toolLine {
+    font-size: 11rem;
+    color: $c-text-faint;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+// ── settings under the tool ──
+.settings {
+    @include col;
+    min-width: 0;
+    padding: 4rem 8rem 4rem 8rem;
+    border-radius: $radius;
+    background-color: rgba(0, 0, 0, 0.18);
+    @include border(1rem, $c-line);
+}
+
+.smartRow {
+    @include row;
+    min-width: 0;
+    height: 26rem;
+}
+
+.smartLabel {
+    margin-right: 8rem;
+    font-size: $fs;
+    font-weight: bold;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.row {
+    @include row(flex-start);
+    min-width: 0;
+    min-height: 26rem;
+}
+
+.rowOff {
+    opacity: 0.45;
+}
+
+.label {
+    flex-shrink: 0;
+    width: 70rem;
+    height: 24rem;
+    padding-top: 5rem;
+    box-sizing: border-box;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.rowBody {
+    @include row;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 26rem;
+}
+
+.switchCell {
+    @include row;
+    height: 26rem;
+}
+
+.chips {
+    @include row;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    min-width: 0;
+    padding-top: 2rem;
+}
+
+.chip {
+    @include row;
+    @include button-reset;
+    flex-shrink: 0;
+    height: 22rem;
+    margin: 0 3rem 2rem 0;
+    padding: 0 7rem 0 5rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.05);
+    @include border(1rem, rgba(255, 255, 255, 0.08));
+    transition-property: background-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+    }
+}
+
+.chipOn {
+    background-color: rgba(143, 209, 255, 0.18);
+    @include border-color($accent);
+    .chipText {
+        color: #ffffff;
+    }
+}
+
+.chipOff {
+    cursor: default;
+}
+
+.chipText {
+    margin-left: 4rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+    white-space: nowrap;
+}
+
+.rule {
+    height: 1rem;
+    margin: 3rem 0;
+    background-color: $c-line;
+}
+
+// ── summary line ──
+.summary {
+    @include row;
+    min-width: 0;
+    height: 26rem;
+    margin-top: 4rem;
+    padding: 0 2rem 0 6rem;
+}
+
+.sumLabel {
+    flex-shrink: 0;
+    margin-right: 4rem;
+    font-size: 11rem;
+    color: $c-text-faint;
+    white-space: nowrap;
+}
+
+.sumValue {
+    flex-shrink: 0;
+    margin-right: 10rem;
+    font-size: $fs;
+    font-weight: bold;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.sumHint {
+    flex-shrink: 0;
+    margin-left: 4rem;
+    font-size: 11rem;
+    color: $c-text-dim;
+    white-space: nowrap;
+}
+
+.clear {
+    height: 22rem;
+}

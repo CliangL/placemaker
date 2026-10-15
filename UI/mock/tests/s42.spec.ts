@@ -95,3 +95,100 @@ test("s42 editing bar: unsaved changes, undo changes, save as new from the + chi
     await expect(page.getByTestId("preset-bar-name")).toHaveText("My park");
     expect(errors).toEqual([]);
 });
+
+async function toReviewReal(page: Page, group: string, recipe: string) {
+    await pick(page, group, recipe);
+    await page.evaluate(() => (window as any).pm.backend.onTrigger("goToStage", ["review"]));
+    await waitPlanned(page);
+    await page.waitForFunction(() => (window as any).pm.backend.plan?.source === "core");
+    await expect(page.getByTestId("stage-review")).toBeVisible();
+    await page.waitForTimeout(200);
+}
+
+test("s42 review: money card with one cost bar, stat chips, alert chips, park stat tiles, OK beside Build", async ({ page }) => {
+    const errors = await realDesign(page);
+    test.skip(!(await page.evaluate(() => (window as any).pm.backend.hostLayers.has("waterfront"))), "no real Core layers");
+    for (const [group, recipe] of [
+        ["parks", "park"],
+        ["water", "waterfront"],
+        ["commercial", "stripMall"],
+    ]) {
+        await toReviewReal(page, group, recipe);
+        await expect(page.getByTestId("review-cost")).toContainText("¢");
+        // alerts are short chips: never cut, full sentence in the tooltip
+        await noTextOverflow(page, "review " + recipe);
+        await panelShot(page, `s42-review-${recipe}`);
+        await page.getByTestId("stagebar-design").click();
+    }
+    // park stats: tiles folded, Edit unfolds the sliders
+    await toReviewReal(page, "parks", "park");
+    await expect(page.getByTestId("park-tile-attractiveness")).toBeVisible();
+    await expect(page.getByTestId("park-stat-attractiveness")).toHaveCount(0);
+    await page.getByTestId("park-stats-toggle").click();
+    await expect(page.getByTestId("park-stat-attractiveness")).toBeVisible();
+    await panelShot(page, "s42-review-park-stats-edit");
+    await page.getByTestId("park-stats-toggle").click();
+    // the cost bar unfolds the per-step list
+    await page.getByTestId("breakdown").click();
+    await expect(page.getByTestId("breakdown-list")).toBeVisible();
+    await page.getByTestId("breakdown").click();
+    expect(errors).toEqual([]);
+});
+
+test("s42 review: permanent changes need the OK chip beside Build", async ({ page }) => {
+    const errors = await open(page);
+    await drawPolygon(page, FIELD);
+    await page.getByTestId("primary").click();
+    await page.getByTestId("recipe-park").click();
+    await page.getByTestId("preset-pond").click();
+    await page.getByTestId("primary").click();
+    await waitPlanned(page);
+    const primary = page.getByTestId("primary");
+    await expect(page.getByTestId("permanent").first()).toBeVisible();
+    await expect(primary).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("primary-reason")).toContainText("Tick OK to build");
+    await noTextOverflow(page, "review permanent");
+    await panelShot(page, "s42-review-permanent");
+    await page.getByTestId("ack-permanent").click();
+    await expect(primary).toHaveAttribute("aria-disabled", "false");
+    expect(errors).toEqual([]);
+});
+
+test("s42 area: four tool cards, Paint area with Smart edges, keep-off chips, one summary line", async ({ page }) => {
+    const errors = await open(page);
+    await expect(page.getByTestId("area-mode-draw")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("keep-off-builds")).toBeVisible();
+    await noTextOverflow(page, "area empty");
+    await panelShot(page, "s42-area-points");
+
+    await page.getByTestId("area-mode-paint").click();
+    await expect(page.getByTestId("smart-edges")).toHaveAttribute("aria-checked", "true");
+    expect(await page.evaluate(() => (window as any).pm.backend.mode)).toBe("blockPaint");
+    await expect(page.getByTestId("brush-rule-roads")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("brush-angle-row")).toHaveCount(0);
+    await noTextOverflow(page, "paint area");
+    await panelShot(page, "s42-area-paint");
+    // Smart edges off = plain paint over anything: the stops grey out
+    await page.getByTestId("smart-edges").click();
+    expect(await page.evaluate(() => (window as any).pm.backend.mode)).toBe("paint");
+    await expect(page.getByTestId("brush-rule-roads")).toHaveAttribute("aria-disabled", "true");
+    await page.getByTestId("brush-shape-square").click();
+    await expect(page.getByTestId("brush-angle-row")).toBeVisible();
+    await panelShot(page, "s42-area-paint-free");
+    await page.getByTestId("brush-shape-round").click();
+    await page.getByTestId("smart-edges").click();
+    // the outline tools keep their own Keep off chips whatever the brush does
+    await page.getByTestId("area-mode-block").click();
+    await expect(page.getByTestId("keep-off-builds")).not.toHaveAttribute("aria-disabled", "true");
+    await panelShot(page, "s42-area-bucket");
+    await page.getByTestId("area-mode-perimeter").click();
+    await panelShot(page, "s42-area-nodes");
+
+    await page.getByTestId("area-mode-draw").click();
+    await drawPolygon(page, FIELD);
+    await expect(page.getByTestId("area-summary")).toContainText("ha");
+    await expect(page.getByTestId("area-summary")).toContainText("Corners");
+    await noTextOverflow(page, "area closed");
+    await panelShot(page, "s42-area-closed");
+    expect(errors).toEqual([]);
+});

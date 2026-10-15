@@ -20,11 +20,11 @@ import { Tip, TipDirection, TipDirectionContext } from "../lib/tips";
 import { statIcon } from "../lib/icons";
 import { walk } from "../lib/schema";
 import { requestReveal } from "../lib/reveal";
-import { AreaReadout, AreaStage, modeAvailability, modeOptions } from "../stages/AreaStage";
+import { AreaStage, modeAvailability, modeOptions, toolOf } from "../stages/AreaStage";
 import { DesignStage, markerLabel } from "../stages/DesignStage";
 import { BuildingStage, ReviewStage } from "../stages/ReviewStage";
 import { ManageStage } from "../stages/ManageStage";
-import { Btn, Icon, Keys, Segmented } from "./common";
+import { Btn, Check, Icon, Keys, Segmented } from "./common";
 import { layoutFor, MAX_SHARE, MIN_REM, NARROW_REM, PanelLayoutContext, WIDE_DEFAULT_REM, WIDE_SCREEN_PX } from "../lib/layout";
 import { AssetPickerCard, PickerContext, PickerRequest } from "./picker";
 import s from "./panel.module.scss";
@@ -455,9 +455,12 @@ function leadToEntrances(state: ToolState, lead: EntranceLead) {
     requestReveal("entrances:" + lead.path);
 }
 
+/** (s42) The "OK, permanent" tick beside Build: shown while permanent changes need an explicit OK. */
+type AckChip = { on: boolean; set: (v: boolean) => void };
+
 const Footer = ({
-    state, summary, blockedReason, lead, compact,
-}: { state: ToolState; summary: Summary; blockedReason: string | null; lead?: EntranceLead | null; compact?: boolean }) => {
+    state, summary, blockedReason, lead, compact, ack,
+}: { state: ToolState; summary: Summary; blockedReason: string | null; lead?: EntranceLead | null; compact?: boolean; ack?: AckChip | null }) => {
     const { t, tl } = useT();
     const p = state.primary;
     const enabled = p.enabled && !blockedReason;
@@ -486,6 +489,8 @@ const Footer = ({
         </div>
     ) : null;
     const label = tl(p.label, t("Placemaker.UI.Primary.Next", "Next"));
+    // s42: a blocked button says what blocks it ("Add an entrance to build"), short enough for one line.
+    const shownLabel = !enabled && reason && reason.length <= 34 ? reason : label;
     const button = (
         <button
             type="button"
@@ -499,19 +504,14 @@ const Footer = ({
                 else if (lead && !state.markerMode) leadToEntrances(state, lead);
             }}
         >
-            <div className={s.primaryLabel}>{label}</div>
+            <div className={s.primaryLabel} data-testid={!enabled && reason ? "primary-reason" : undefined}>
+                {shownLabel}
+            </div>
             {enabled && p.action !== "cancelBuild" ? <div className={s.enterKey}>{t("Placemaker.UI.Key.Enter", "Enter")}</div> : null}
         </button>
     );
     let info: React.ReactNode = null;
-    if (!enabled && reason) {
-        info = (
-            <div className={s.reason} data-testid="primary-reason">
-                <Icon name="info" size={13} tint="warn" />
-                <div className={s.reasonText}>{reason}</div>
-            </div>
-        );
-    } else if (showNumbers) {
+    if (showNumbers) {
         info = (
             <div className={s.quickWrap}>
             {busyChip}
@@ -541,19 +541,27 @@ const Footer = ({
         );
     } else if (busyChip && !compact) {
         info = busyChip;
-    } else if (state.stage === "area" && !compact) {
-        info = <AreaReadout state={state} compact />;
     }
+    // s42: the Area stage has its own one-line summary; the footer only says what blocks the button.
     return (
         <div className={classNames(s.footer, { [s.footerCompact]: compact })}>
             {info ? <div className={s.footInfo}>{info}</div> : null}
-            {!enabled && reason ? (
-                <Tip title={label} description={reason}>
-                    {button}
-                </Tip>
-            ) : (
-                button
-            )}
+            <div className={s.primaryRow}>
+                {ack ? (
+                    <Tip title={t("Placemaker.UI.Review.AckTip", "Some changes stay after you remove the build (the amber tags). Tick to allow them.")}>
+                        <div className={s.ackChip}>
+                            <Check testId="ack-permanent" checked={ack.on} onChange={ack.set} label={t("Placemaker.UI.Review.AckShort", "OK, permanent")} />
+                        </div>
+                    </Tip>
+                ) : null}
+                {!enabled && reason ? (
+                    <Tip title={label} description={reason}>
+                        {button}
+                    </Tip>
+                ) : (
+                    button
+                )}
+            </div>
         </div>
     );
 };
@@ -668,12 +676,16 @@ export const PlacemakerPanel = () => {
     if (!state.open) return null;
 
     // s33: ground paint alone (permanentNeedsAck false) is information, not a gate.
-    const needsAck =
+    const ackShown =
         state.stage === "review" &&
         summary.permanent.length > 0 &&
         summary.permanentNeedsAck !== false &&
-        !ack &&
         (state.primary.action === "build" || state.primary.action === "finishEdit");
+    const needsAck = ackShown && !ack;
+    const setAckBoth = (v: boolean) => {
+        setAck(v);
+        act.acknowledgePermanent(v);
+    };
 
     const missing = state.stage === "design" || state.stage === "review" ? missingMarkers(design.root) : null;
     const gated = state.primary.action === "toReview" || state.primary.action === "build" || state.primary.action === "finishEdit";
@@ -690,10 +702,10 @@ export const PlacemakerPanel = () => {
         const need = missing.markersRequired ?? 1;
         blockedReason =
             need > 1
-                ? t("Placemaker.UI.Markers.NeedN", "Add at least {0} entrances", [need])
-                : t("Placemaker.UI.Markers.NeedOne", "Add at least one entrance");
+                ? t("Placemaker.UI.Markers.NeedNBuild", "Add {0} entrances to build", [need])
+                : t("Placemaker.UI.Markers.NeedOneBuild", "Add an entrance to build");
     } else if (needsAck) {
-        blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick the box to confirm permanent changes");
+        blockedReason = t("Placemaker.UI.Review.AckFirst", "Tick OK to build");
     }
 
     let body: React.ReactNode = null;
@@ -706,16 +718,7 @@ export const PlacemakerPanel = () => {
             break;
         case "review":
             body = (
-                <ReviewStage
-                    catalog={catalog}
-                    state={state}
-                    summary={summary}
-                    ack={ack}
-                    setAck={(v) => {
-                        setAck(v);
-                        act.acknowledgePermanent(v);
-                    }}
-                />
+<ReviewStage catalog={catalog} state={state} summary={summary} />
             );
             break;
         case "building":
@@ -762,7 +765,7 @@ export const PlacemakerPanel = () => {
                 )}
                 {state.editingGroup != null ? <div className={s.editingPill}>{t("Placemaker.UI.Editing", "Editing")}</div> : null}
                 {state.planning && !showPreviewToggle ? (
-                    <Tip title={t("Placemaker.UI.Planning", "Updating…")}>
+                    <Tip title={t("Placemaker.UI.Planning", "Planning…")}>
                         <div className={classNames(s.spinner, s.headSpinner)} data-testid="planning" />
                     </Tip>
                 ) : null}
@@ -858,8 +861,11 @@ export const PlacemakerPanel = () => {
                                                 {state.stage === "area" ? (
                                                     <Segmented
                                                         iconOnly
-                                                        value={state.areaMode}
-                                                        onChange={(v) => modeAvailability(state, v, t, tl).enabled && act.setAreaMode(v as any)}
+                                                        value={toolOf(state.areaMode)}
+                                                        onChange={(v) => {
+                                                            const m = v === "paint" ? (state.brush.rules?.anything ? "paint" : "blockPaint") : v;
+                                                            if (modeAvailability(state, m, t, tl).enabled) act.setAreaMode(m as any);
+                                                        }}
                                                         options={modeOptions(t).map((o) => {
                                                             const av = modeAvailability(state, o.value, t, tl);
                                                             return av.enabled ? o : { ...o, description: av.reason + " — " + o.description };
@@ -897,7 +903,7 @@ export const PlacemakerPanel = () => {
                                             </div>
                                         </div>
                                         <ErrorBoundary name="footer">
-                                            <Footer state={state} summary={summary} blockedReason={blockedReason} lead={lead} />
+                                            <Footer state={state} summary={summary} blockedReason={blockedReason} lead={lead} ack={ackShown ? { on: ack, set: setAckBoth } : null} />
                                         </ErrorBoundary>
                                         <Hints state={state} />
                                     </>
