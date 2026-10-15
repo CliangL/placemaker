@@ -146,6 +146,76 @@ namespace Placemaker.Game.Suite
             try { if (UIManager.defaultUISystem != null) UIManager.defaultUISystem.enabled = true; } catch (Exception) { }
         }
 
+        /// <summary>The main camera rendered (no UI, no overlay) into a new texture; the caller destroys it.</summary>
+        public static Texture2D RenderTexture2D(int width, int height, out string error)
+        {
+            error = null;
+            RenderTexture rt = null;
+            var previous = RenderTexture.active;
+            try
+            {
+                var cam = Camera.main;
+                if (cam == null) { error = "no main camera"; return null; }
+                rt = ScreenCaptureHelper.CreateRenderTarget("Placemaker Suite Shot", width, height);
+                ScreenCaptureHelper.CaptureScreenshot(cam, rt, new MenuHelpers.SaveGamePreviewSettings());
+                RenderTexture.active = rt;
+                var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+                tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                tex.Apply(false);
+                return tex;
+            }
+            catch (Exception e) { error = e.GetType().Name + ": " + e.Message; return null; }
+            finally
+            {
+                RenderTexture.active = previous;
+                if (rt != null) { rt.Release(); UnityEngine.Object.Destroy(rt); }
+            }
+        }
+
+        /// <summary>The back buffer (call after WaitForEndOfFrame) scaled to at most maxWidth; the caller destroys it.</summary>
+        public static Texture2D GrabTexture2D(int maxWidth, out string error)
+        {
+            error = null;
+            Texture2D tex = null;
+            try
+            {
+                tex = ScreenCapture.CaptureScreenshotAsTexture();
+                if (tex == null) { error = "no screen texture"; return null; }
+                if (tex.width <= maxWidth) return tex;
+                int w = maxWidth, h = Mathf.RoundToInt(tex.height * (maxWidth / (float)tex.width));
+                var rt = RenderTexture.GetTemporary(w, h, 0);
+                Graphics.Blit(tex, rt);
+                var prev = RenderTexture.active;
+                RenderTexture.active = rt;
+                var scaled = new Texture2D(w, h, TextureFormat.RGB24, false);
+                scaled.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                scaled.Apply(false);
+                RenderTexture.active = prev;
+                RenderTexture.ReleaseTemporary(rt);
+                UnityEngine.Object.Destroy(tex);
+                return scaled;
+            }
+            catch (Exception e) { error = e.GetType().Name + ": " + e.Message; if (tex != null) UnityEngine.Object.Destroy(tex); return null; }
+        }
+
+        /// <summary>Mean absolute difference per colour channel (0-255) between two captures, on a sample grid; -1 if not comparable.</summary>
+        public static float MeanDelta(Texture2D a, Texture2D b)
+        {
+            if (a == null || b == null || a.width != b.width || a.height != b.height) return -1f;
+            var pa = a.GetPixels32();
+            var pb = b.GetPixels32();
+            long sum = 0, n = 0;
+            int step = Math.Max(1, (int)Math.Sqrt(pa.Length / 40000.0));
+            for (int y = 0; y < a.height; y += step)
+                for (int x = 0; x < a.width; x += step)
+                {
+                    int i = y * a.width + x;
+                    sum += Math.Abs(pa[i].r - pb[i].r) + Math.Abs(pa[i].g - pb[i].g) + Math.Abs(pa[i].b - pb[i].b);
+                    n += 3;
+                }
+            return n == 0 ? -1f : sum / (float)n;
+        }
+
         /// <summary>Back buffer to PNG (call after WaitForEndOfFrame). Scaled down to at most maxWidth.</summary>
         public static string GrabScreen(string path, int maxWidth)
         {

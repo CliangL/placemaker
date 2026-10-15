@@ -877,9 +877,9 @@ namespace Placemaker.Game.Suite
             foreach (var st in _states)
             {
                 if (!(st.Result["verdicts"] is JArray v)) continue;
-                var bad = v.Where(x => !(bool)x["pass"]).ToList();
+                var bad = v.Where(x => (string)x["result"] != "pass").ToList();
                 if (bad.Count == 0) continue;
-                sb.AppendLine($"- **{st.S.Id}** ({st.S.Block?.Id}): " + string.Join("; ", bad.Select(x => $"{x["id"]}: {x["detail"]}")));
+                sb.AppendLine($"- **{st.S.Id}** ({st.S.Block?.Id}): " + string.Join("; ", bad.Select(x => $"{x["id"]} [{x["result"]}]: {x["detail"]}")));
             }
             return sb.ToString();
         }

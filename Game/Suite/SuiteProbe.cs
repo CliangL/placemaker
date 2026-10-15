@@ -286,7 +286,7 @@ namespace Placemaker.Game.Suite
                 foreach (var c in drivable) best = math.min(best, MathUtils.Distance(c.xz, p, out _));
                 if (best > 9f) farStalls++;
             }
-            o["parking"] = new JObject { ["plannedStalls"] = plannedStalls, ["liveStalls"] = liveStalls, ["stallsFarFromLane"] = farStalls, ["stallPrefabs"] = new JArray(stallPrefabs) };
+            o["parking"] = new JObject { ["plannedStalls"] = plannedStalls, ["liveStalls"] = liveStalls, ["stallsFarFromLane"] = farStalls, ["carLanes"] = drivable.Count, ["stallPrefabs"] = new JArray(stallPrefabs) };
 
             // nets of the build cut off from the city
             o["nets"] = Reachability(memberEdges, memberSet);
@@ -480,26 +480,207 @@ namespace Placemaker.Game.Suite
             };
         }
 
+        /// <summary>The top of an entity's Owner chain.</summary>
+        private Entity TopOwner(Entity e)
+        {
+            for (int i = 0; i < 8 && _em.Exists(e) && _em.HasComponent<Owner>(e); i++)
+            {
+                var o = _em.GetComponentData<Owner>(e).m_Owner;
+                if (o == Entity.Null || !_em.Exists(o)) break;
+                e = o;
+            }
+            return e;
+        }
+
         /// <summary>
-        /// After a delete: what stands in the site now that was not there before the build (top-level objects, areas and
-        /// nets; road furniture owned by city streets and zoning growables outside the outline are not counted).
+        /// Something in the site that came with the build rather than the city: not there before, and not furniture of a
+        /// city street or a building that stood there before (whatever owns it, at any depth).
+        /// </summary>
+        private bool CameWithBuild(Entity e, SiteSnapshot before)
+        {
+            var top = TopOwner(e);
+            if (top == e) return true;
+            if (before.Edges.Contains(top) || before.Buildings.Contains(top) || before.Objects.Contains(top) || before.Areas.Contains(top)) return false;
+            if ((_em.HasComponent<Edge>(top) || _em.HasComponent<global::Game.Net.Node>(top)) && CityNet(top)) return false;   // a city street's furniture
+            return true;
+        }
+
+        /// <summary>A net that is a city street (a road prefab nobody built as part of a Placemaker group).</summary>
+        private bool CityNet(Entity e)
+        {
+            var pf = PrefabOf(e);
+            return pf != Entity.Null && _em.HasComponent<RoadData>(pf) && (Services.Groups == null || Services.Groups.GroupOf(e) == 0);
+        }
+
+        /// <summary>
+        /// After a delete: what stands in the site now that was not there before the build — objects, areas, nets and
+        /// lanes at any ownership depth (a prop owned by a leftover lot counts), except furniture of the city's streets and
+        /// of buildings that stood there before.
         /// </summary>
         public JObject LeftBehind(SiteSnapshot before)
         {
             var left = new Dictionary<string, int>(StringComparer.Ordinal);
+            var where = new JArray();
             int n = 0;
+            void Add(Entity e, string kind, float2 p)
+            {
+                Bump(left, kind + "|" + PrefabName(e));
+                if (where.Count < 12) where.Add(new JArray(Math.Round(p.x), Math.Round(p.y)));
+                n++;
+            }
             foreach (var e in Query<global::Game.Areas.Area>())
-                if (!before.Areas.Contains(e) && !_em.HasComponent<Owner>(e) && AreaInBox(e, before.Min, before.Max)) { Bump(left, KindOf(e) + "|" + PrefabName(e)); n++; }
+                if (!before.Areas.Contains(e) && AreaInBox(e, before.Min, before.Max) && CameWithBuild(e, before)) Add(e, KindOf(e), AreaCenter(e));
             foreach (var e in Query<global::Game.Objects.Object>())
             {
-                if (before.Objects.Contains(e) || _em.HasComponent<Owner>(e) || !_em.HasComponent<global::Game.Objects.Transform>(e)) continue;
+                if (before.Objects.Contains(e) || !_em.HasComponent<global::Game.Objects.Transform>(e)) continue;
                 if (_em.HasComponent<global::Game.Objects.Moving>(e) || !_em.HasComponent<global::Game.Objects.Static>(e)) continue;
+                if (_em.HasComponent<global::Game.Buildings.Building>(e) && !_em.HasComponent<Owner>(e)) continue;   // growables: the grow census owns them
                 var p = _em.GetComponentData<global::Game.Objects.Transform>(e).m_Position.xz;
-                if (InBox(p, before.Min, before.Max) && Poly.Contains(before.Ring, p)) { Bump(left, KindOf(e) + "|" + PrefabName(e)); n++; }
+                if (InBox(p, before.Min, before.Max) && Poly.Contains(before.Ring, p) && CameWithBuild(e, before)) Add(e, KindOf(e), p);
             }
             foreach (var e in Query<Edge>())
-                if (!before.Edges.Contains(e) && !_em.HasComponent<Owner>(e) && EdgeInBox(e, before.Min, before.Max)) { Bump(left, "net|" + PrefabName(e)); n++; }
-            return new JObject { ["count"] = n, ["byPrefab"] = TopDict(left, 20) };
+                if (!before.Edges.Contains(e) && EdgeInBox(e, before.Min, before.Max) && !CityNet(e)) Add(e, "net", MathUtils.Position(_em.GetComponentData<Curve>(e).m_Bezier, 0.5f).xz);
+            return new JObject { ["count"] = n, ["byPrefab"] = TopDict(left, 20), ["at"] = where };
+        }
+
+        private float2 AreaCenter(Entity e)
+        {
+            if (!_em.HasBuffer<global::Game.Areas.Node>(e)) return float2.zero;
+            var nodes = _em.GetBuffer<global::Game.Areas.Node>(e, true);
+            float2 c = float2.zero;
+            for (int i = 0; i < nodes.Length; i++) c += nodes[i].m_Position.xz;
+            return nodes.Length > 0 ? c / nodes.Length : c;
+        }
+
+        // ───────────── visibility: built is not the same as seen ─────────────
+
+        /// <summary>
+        /// Objects among the members that a player would actually see: alive, not Overridden (the game's overlap verdict),
+        /// not Hidden (a tool's), registered for rendering (CullingInfo with a culling index, MeshBatch entries).
+        /// </summary>
+        public JObject Visibility(IEnumerable<Entity> members)
+        {
+            int objects = 0, visible = 0, overridden = 0, hidden = 0, deleted = 0, notRendered = 0;
+            var missing = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var m in members)
+            {
+                if (!_em.Exists(m) || !_em.HasComponent<global::Game.Objects.Object>(m)) continue;
+                objects++;
+                string why = null;
+                if (_em.HasComponent<Deleted>(m)) { deleted++; why = "deleted"; }
+                else if (_em.HasComponent<Overridden>(m)) { overridden++; why = "overridden"; }
+                else if (_em.HasComponent<Hidden>(m)) { hidden++; why = "hidden"; }
+                else
+                {
+                    bool culled = _em.HasComponent<global::Game.Rendering.CullingInfo>(m) && _em.GetComponentData<global::Game.Rendering.CullingInfo>(m).m_CullingIndex != 0;
+                    bool batched = _em.HasBuffer<global::Game.Rendering.MeshBatch>(m) && _em.GetBuffer<global::Game.Rendering.MeshBatch>(m, true).Length > 0;
+                    if (!culled || !batched) { notRendered++; why = "not rendered"; }
+                    else visible++;
+                }
+                if (why != null) Bump(missing, why + " " + PrefabName(m));
+            }
+            return new JObject
+            {
+                ["objects"] = objects, ["visible"] = visible, ["overridden"] = overridden, ["hidden"] = hidden, ["deleted"] = deleted,
+                ["notRendered"] = notRendered, ["notVisible"] = TopDict(missing, 12),
+            };
+        }
+
+        // ───────────── barriers and entrances ─────────────
+
+        private static bool IsBarrierName(string n) =>
+            !string.IsNullOrEmpty(n) && (n.IndexOf("fence", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("hedge", StringComparison.OrdinalIgnoreCase) >= 0
+                || n.IndexOf("wall", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("railing", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("barrier", StringComparison.OrdinalIgnoreCase) >= 0);
+
+        /// <summary>Fence-like lanes (area/lot border fences, net fence lanes) and fence/hedge objects near a box.</summary>
+        public List<(Entity E, string Name, Bezier4x3 Curve)> Barriers(float2 min, float2 max)
+        {
+            var r = new List<(Entity, string, Bezier4x3)>();
+            foreach (var e in Query<Lane>())
+            {
+                if (!_em.HasComponent<Curve>(e)) continue;
+                var c = _em.GetComponentData<Curve>(e).m_Bezier;
+                var a = c.a.xz; var d = c.d.xz;
+                if (math.max(a.x, d.x) < min.x || math.min(a.x, d.x) > max.x || math.max(a.y, d.y) < min.y || math.min(a.y, d.y) > max.y) continue;
+                string name = PrefabName(e);
+                if (IsBarrierName(name)) r.Add((e, name, c));
+            }
+            foreach (var e in Query<global::Game.Objects.Object>())
+            {
+                if (!_em.HasComponent<global::Game.Objects.Transform>(e)) continue;
+                var p = _em.GetComponentData<global::Game.Objects.Transform>(e).m_Position;
+                if (!InBox(p.xz, min, max)) continue;
+                string name = PrefabName(e);
+                if (IsBarrierName(name)) r.Add((e, name, new Bezier4x3(p, p, p, p)));
+            }
+            return r;
+        }
+
+        /// <summary>
+        /// Every entrance, physically: a drive net of the build (an edge with car lanes) meets a city street at a node near
+        /// the entrance, and no fence/hedge/wall lane or object lies across the first metres of that drive.
+        /// </summary>
+        public JArray Entrances(IList<float3> markers, HashSet<Entity> members)
+        {
+            var a = new JArray();
+            if (markers == null) return a;
+            foreach (var m in markers)
+            {
+                var o = new JObject { ["at"] = new JArray(Math.Round(m.x, 1), Math.Round(m.z, 1)) };
+                Entity bestNode = Entity.Null, bestDrive = Entity.Null;
+                float best = 30f;
+                foreach (var e in members)
+                {
+                    if (!Alive(e) || !_em.HasComponent<Edge>(e) || !HasCarLanes(e)) continue;
+                    var edge = _em.GetComponentData<Edge>(e);
+                    foreach (var node in new[] { edge.m_Start, edge.m_End })
+                    {
+                        if (!_em.Exists(node) || !_em.HasBuffer<ConnectedEdge>(node)) continue;
+                        var ce = _em.GetBuffer<ConnectedEdge>(node, true);
+                        bool city = false;
+                        for (int i = 0; i < ce.Length && !city; i++) city = ce[i].m_Edge != e && !members.Contains(ce[i].m_Edge) && Alive(ce[i].m_Edge) && CityNet(ce[i].m_Edge);
+                        if (!city) continue;
+                        float d = math.distance(_em.GetComponentData<global::Game.Net.Node>(node).m_Position.xz, m.xz);
+                        if (d < best) { best = d; bestNode = node; bestDrive = e; }
+                    }
+                }
+                if (bestNode == Entity.Null)
+                {
+                    o["connected"] = false;
+                    o["detail"] = "no drive net of the build meets a city street within 30 m";
+                    a.Add(o);
+                    continue;
+                }
+                var np = _em.GetComponentData<global::Game.Net.Node>(bestNode).m_Position;
+                var drive = _em.GetComponentData<Curve>(bestDrive).m_Bezier;
+                o["connected"] = true;
+                o["junction"] = new JArray(Math.Round(np.x, 1), Math.Round(np.z, 1));
+                o["junctionFromMarkerM"] = Math.Round(best, 1);
+                o["drive"] = PrefabName(bestDrive);
+                // the first 15 m of the drive from the street, sampled
+                bool fromStart = math.distance(drive.a, np) < math.distance(drive.d, np);
+                float len = math.max(1f, MathUtils.Length(drive));
+                var samples = new List<float2>();
+                for (float s = 0f; s <= math.min(15f, len); s += 1f)
+                {
+                    float t = math.saturate(s / len);
+                    samples.Add(MathUtils.Position(drive, fromStart ? t : 1f - t).xz);
+                }
+                var barrier = Barriers(np.xz - 25f, np.xz + 25f)
+                    .Select(b => (b.Name, D: samples.Min(p => MathUtils.Distance(b.Curve.xz, p, out _))))
+                    .Where(x => x.D < 1.5f).OrderBy(x => x.D).FirstOrDefault();
+                if (barrier.Name != null) { o["barrier"] = barrier.Name; o["barrierM"] = Math.Round(barrier.D, 2); }
+                a.Add(o);
+            }
+            return a;
+        }
+
+        private bool HasCarLanes(Entity edge)
+        {
+            if (!_em.HasBuffer<global::Game.Net.SubLane>(edge)) return false;
+            var sl = _em.GetBuffer<global::Game.Net.SubLane>(edge, true);
+            for (int i = 0; i < sl.Length; i++) if (_em.HasComponent<global::Game.Net.CarLane>(sl[i].m_SubLane)) return true;
+            return false;
         }
 
         /// <summary>Members the game hides (Overridden: an overlap verdict) — built but invisible to the player.</summary>
