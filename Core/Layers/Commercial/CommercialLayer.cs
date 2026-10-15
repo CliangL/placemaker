@@ -92,6 +92,8 @@ namespace Placemaker.Core.Layers.Commercial
             ctx.Check();
             Compose(ctx, mall, runs);
             ctx.Check();
+            // (s40) Zoning first: street plots become their real cells before the rest is planned around them.
+            mall.SnapStreetPlotsToCells();
             FillRest(ctx, mall);
             mall.Finish(ZoneKinds.PrefabId(ctx.S("zoneKind")));
             CommonStats(ctx);

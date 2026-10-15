@@ -117,6 +117,19 @@ namespace Placemaker.Core.Layers.AddOns
             if (cutout || settings.B(CutoutSetting, false)) depth = 6 * CellSize;
             Func<float2, float> h = input.Site?.HeightAt ?? (_ => 0f);
 
+            // (s40) A plot that IS cells (zoning first, Build/ZoneLots): zone exactly those cells.
+            if (input.RegionTags != null && Array.IndexOf(input.RegionTags, Build.ZoneLots.CellsTag) >= 0 && ring.Length == 4)
+            {
+                var q = Build.ZoneLots.ZoningQuad(ring);
+                plan.Zoning.Add(new PlannedZoning
+                {
+                    A = new float3(q[0].x, h(q[0]), q[0].y), B = new float3(q[1].x, h(q[1]), q[1].y),
+                    C = new float3(q[2].x, h(q[2]), q[2].y), D = new float3(q[3].x, h(q[3]), q[3].y), ZoneId = zone,
+                });
+                plan.Stats.Add(new PlanStat("Placemaker.EdgeZoning.Stat.Area", Math.Round(ZonedArea(plan)), "m2"));
+                plan.Facts["edgeZoning.quads"] = 1;
+                return plan;
+            }
             var roads = CollectRoads(input);
             if (roads.Count == 0)
             {

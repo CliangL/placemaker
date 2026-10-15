@@ -84,7 +84,7 @@ namespace Placemaker.Core.Layers.Commercial
                 gates.Add(m.Position.xz);
             var res = StreetShops.Plan(host, ctx.Input, gates, ShopLayout(ctx.S("layout")), ctx.S("amount"), ctx.Raw("plotDepth"), Hashing.Mix(ctx.Seed, 0xD2u));
             if (res.FellBack) ctx.Issue(IssueSeverity.Info, FallbackKey);
-            foreach (var q in res.Shops) { mall.Shops.Add(q); }
+            foreach (var q in res.Shops) { mall.Shops.Add(q); if (res.CellPlots) mall.CellPlots.Add(q); }
             foreach (var q in res.Carve) mall.Taken.Add(q);
             foreach (var a in res.Alleys)
             {

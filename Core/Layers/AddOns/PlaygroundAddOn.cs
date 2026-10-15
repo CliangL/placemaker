@@ -102,6 +102,8 @@ namespace Placemaker.Core.Layers.AddOns
                     float a = math.atan2(dir.y, dir.x) + (i - (count - 1) * 0.5f) * 0.55f;
                     var p = centre + new float2(math.cos(a), math.sin(a)) * (cluster + 1.6f);
                     if (!occ.Free(p, 1.3f, 0.3f, 0.2f)) continue;
+                    // A bench on a bank tilts: the play area may sit on a slope its rim does not share.
+                    if (Common.TerrainSurvey.Grade(ctx.G, p, 1f) > global::Placemaker.Core.Build.SiteHarmony.FurnitureGrade) continue;
                     ctx.Object(p, Facing(p, centre), ObjectRole.Bench, bench, Hashing.Mix(ctx.Seed, 0xBE00u + (uint)i));
                     occ.Take(p, 1.3f, 1);
                     benches++;

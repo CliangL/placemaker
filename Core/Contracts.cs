@@ -103,6 +103,8 @@ namespace Placemaker.Core
         public bool Predicted;
         /// <summary>(s26, appended) A live block of a road this build built (its lanes): preferred like a predicted one.</summary>
         public bool Ours;
+        /// <summary>(s40, appended) Predicted for an EXISTING road (nothing captured: tests, gallery); ranks like a captured block.</summary>
+        public bool Existing;
 
         public const byte CellVisible = 1, CellBlocked = 2;
     }

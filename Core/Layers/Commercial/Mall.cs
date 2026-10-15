@@ -597,16 +597,19 @@ namespace Placemaker.Core.Layers.Commercial
                 // (s32) A plot may carry its own zone (big high-density plots on the street, small low-density ones on the lanes).
                 bag.Values[EdgeZoningAddOn.ZoneControl] = ShopZone.TryGetValue(ring, out var own) && !string.IsNullOrEmpty(own) ? (ZoneKinds.IsKind(own) ? ZoneKinds.PrefabId(own) : own) : zoneId;
                 bag.Values[EdgeZoningAddOn.CutoutSetting] = true;
+                bool cellPlot = CellPlots.Contains(ring);
                 var input = new AreaInput
                 {
                     Shape = new AreaShape { Ring = Poly.To3D(ring, Ctx.G), Source = AreaSource.Drawn },
-                    Site = Ctx.Site, Settings = bag, Reserved = reserved, RegionTags = new[] { StreetFrontage.ShopsTag },
+                    Site = Ctx.Site, Settings = bag, Reserved = reserved,
+                    RegionTags = cellPlot ? new[] { StreetFrontage.ShopsTag, Build.ZoneLots.CellsTag } : new[] { StreetFrontage.ShopsTag },
                 };
                 var z = zoning.Plan(input, Ctx.Cancel);
                 plan.Zoning.AddRange(z.Zoning);
                 foreach (var q in z.Zoning)
                     cells += (int)math.round(Pricing.PolygonArea(new[] { q.A, q.B, q.C, q.D }) / (Cell * Cell));
-                Ctx.AddRegion(ring, StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag, LayerBase.ShopsPlace);
+                if (cellPlot) Ctx.AddRegion(ring, StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag, LayerBase.ShopsPlace, Build.ZoneLots.CellsTag);
+                else Ctx.AddRegion(ring, StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag, LayerBase.ShopsPlace);
             }
             foreach (var lane in Lanes) EmitLane(lane);
             plan.Facts["shopPlots"] = Shops.Count;
@@ -619,6 +622,19 @@ namespace Placemaker.Core.Layers.Commercial
         }
 
         private void EmitLane(Lane lane)
+        {
+            var pts = LanePieces(lane);
+            for (int i = 0; i + 1 < pts.Count; i++)
+            {
+                if (math.distance(pts[i], pts[i + 1]) < 0.3f) continue;
+                var net = Ctx.StraightNet(pts[i], pts[i + 1], lane.Role, lane.Asset);
+                if (i == 0 && lane.StartAttach >= 0) { net.StartAttach = lane.StartAttach; net.StartAttachT = lane.StartT; }
+                if (i + 2 == pts.Count && lane.EndAttach >= 0) { net.EndAttach = lane.EndAttach; net.EndAttachT = lane.EndT; }
+            }
+        }
+
+        /// <summary>The node points of a lane as it is built: its corners plus the joins on it (CS2 splits the edge there).</summary>
+        private static List<float2> LanePieces(Lane lane)
         {
             // Split points per segment (joins projected onto the segment they lie on).
             var pts = new List<float2>();
@@ -643,13 +659,86 @@ namespace Placemaker.Core.Layers.Commercial
             for (int k = 0; k < pts.Count; k++)
                 foreach (var j in lane.Joins)
                     if (math.distance(pts[k], j) < 1.01f && !(k == 0 && lane.StartAttach >= 0) && !(k == pts.Count - 1 && lane.EndAttach >= 0)) pts[k] = j;
-            for (int i = 0; i + 1 < pts.Count; i++)
+            return pts;
+        }
+
+        /// <summary>
+        /// (s40) Zoning first, for the plots facing an EXISTING street: each becomes the exact cells the build will zone
+        /// for it (Build/ZoneLots: the street's real — or, with nothing captured, predicted — grid, the game's depth rule,
+        /// ≥ 2 columns), never cells of land the mall already gave to a lot, a lane, a walk or a place; a plot that gets
+        /// none is given up. Called before the rest is planned, so parks and verges fit the cells exactly.
+        /// Plots facing this mall's own lanes keep their rows: a lane's cells depend on where the rest's walks will
+        /// join (and split) it, which is not known yet — ZoneGuard snaps them at the end.
+        /// </summary>
+        /// <summary>(s40) Shop plots that are exactly cells (zoned as they are).</summary>
+        public readonly HashSet<float2[]> CellPlots = new HashSet<float2[]>();
+
+        public void SnapStreetPlotsToCells()
+        {
+            if (Shops.Count == 0 || !Build.ZoneGuard.Enabled) return;
+            var planned = new ComposedPlan();
+            var lanes = new AreaPlan { GeneratorId = Ctx.Plan.GeneratorId };
+            foreach (var lane in Lanes)
             {
-                if (math.distance(pts[i], pts[i + 1]) < 0.3f) continue;
-                var net = Ctx.StraightNet(pts[i], pts[i + 1], lane.Role, lane.Asset);
-                if (i == 0 && lane.StartAttach >= 0) { net.StartAttach = lane.StartAttach; net.StartAttachT = lane.StartT; }
-                if (i + 2 == pts.Count && lane.EndAttach >= 0) { net.EndAttach = lane.EndAttach; net.EndAttachT = lane.EndT; }
+                var pts = LanePieces(lane);
+                for (int i = 0; i + 1 < pts.Count; i++)
+                {
+                    float2 a = pts[i], b = pts[i + 1];
+                    if (math.distance(a, b) < 0.3f) continue;
+                    lanes.Nets.Add(new PlannedNet { A = Ctx.P3(a), B = Ctx.P3(math.lerp(a, b, 1f / 3f)), C = Ctx.P3(math.lerp(a, b, 2f / 3f)), D = Ctx.P3(b), Role = lane.Role, Asset = lane.Asset });
+                }
             }
+            planned.Layers.Add(lanes);
+            planned.Layers.Add(Ctx.Plan);   // walks and lot aisles close the cells they cross
+            var grids = Build.ZoneLots.SiteGrids(Ctx.Site, planned);
+            if (grids.Count == 0) return;
+            // Land already given away (lots, places, walks, lane corridors): a cell reaching into it is not the plot's.
+            var shopSet = new HashSet<float2[]>(Shops);
+            var others = new List<float2[]>();
+            foreach (var t in Taken)
+            {
+                if (shopSet.Contains(t)) continue;
+                // A shop's own carve (the shop pushed to the kerb) is the shop's land, not someone else's.
+                bool carveOfShop = false;
+                foreach (var sh in Shops) if (Poly.Contains(t, Poly.Centroid(sh))) { carveOfShop = true; break; }
+                if (!carveOfShop) others.Add(Shrink(t, 0.3f));
+            }
+            // Plots facing a lane keep their rows (below) but are zoned in the same computation: the game's depth rule
+            // sees their cells beside the street plots' (a neighbour's depth decides whether a column survives).
+            var snapped = Build.ZoneLots.Snap(new[] { Region.Ring }, Shops, grids, Ctx.Site?.NearbyNets, Build.ZoneGuard.OwnNets(planned, Ctx.Site), others);
+            if (snapped == null) return;
+            var keep = new List<float2[]>();
+            for (int i = 0; i < Shops.Count; i++)
+            {
+                var old = Shops[i];
+                if (FacesLane(old)) { keep.Add(old); continue; }
+                ShopZone.TryGetValue(old, out var zone);
+                Taken.Remove(old);
+                foreach (var rect in snapped[i])
+                {
+                    // A lane plot keeps its land (its rows are not cells yet): a street run reaching into it is left out.
+                    bool clash = false;
+                    foreach (var sh in Shops) if (sh != old && FacesLane(sh) && StreetShops.ConvexOverlap(rect, sh, 0.05f)) { clash = true; break; }
+                    if (clash) continue;
+                    keep.Add(rect);
+                    CellPlots.Add(rect);
+                    // The rest keeps 1 m off the cells (a walk edge touching a cell closes it and every cell behind).
+                    Taken.Add(Build.ZoneLots.Grow(rect, Build.ZoneLots.Clearance));
+                    if (zone != null) ShopZone[rect] = zone;
+                }
+            }
+            Shops.Clear();
+            Shops.AddRange(keep);
+        }
+
+        /// <summary>Does a plot touch one of this mall's lanes (its zoning comes from the lane)?</summary>
+        private bool FacesLane(float2[] plot)
+        {
+            foreach (var lane in Lanes)
+                for (int i = 0; i + 1 < lane.Points.Count; i++)
+                    foreach (var p in plot)
+                        if (math.sqrt(SegmentIndex.DistSq(p, lane.Points[i], lane.Points[i + 1])) < lane.Half + StreetFrontage.Tolerance) return true;
+            return false;
         }
 
         // ───────────── helpers ─────────────

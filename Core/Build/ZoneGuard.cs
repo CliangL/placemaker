@@ -160,6 +160,9 @@ namespace Placemaker.Core.Build
             for (int i = 0; i < quads.Count; i++) plan.ZoneQuads.Add(new ZoneQuad { Quad = quads[i], ZoneId = ids[i] });
             // (s26) Roads this build adds get the zone blocks the game will give them (cutouts facing a lane snap to
             // them); the build's own nets block the cells under them (and the game every cell behind).
+            // Captured blocks and the predicted blocks of the lanes this build adds. (s40: hosts plan their plots on the same
+            // grids — ZoneLots.SiteGrids; without any capture, as in tests and the gallery, the existing streets' blocks are
+            // only predicted there, and the guard keeps the plots' quads.)
             var grids = new List<ZoneGrid>();
             if (site?.ZoneGrids != null) grids.AddRange(site.ZoneGrids);
             grids.AddRange(PredictedGrids(plan, site));
@@ -307,7 +310,7 @@ namespace Placemaker.Core.Build
         private static bool Knowable(float2[] quad, SiteContext site, List<ZoneGrid> grids)
         {
             var captured = new List<ZoneGrid>(); var predicted = new List<ZoneGrid>();
-            foreach (var g in grids) (g.Predicted ? predicted : captured).Add(g);
+            foreach (var g in grids) (g.Predicted && !g.Existing ? predicted : captured).Add(g);
             if (NearAnyGrid(quad, captured)) return true;
             if (!NearAnyGrid(quad, predicted)) return false;
             var c = Poly.Centroid(quad);
@@ -432,6 +435,9 @@ namespace Placemaker.Core.Build
             if (gridList.Count > 1 && quads.Count > 0)
             {
                 var rank = new int[gridList.Count];
+                // (s40) Blocks a cell plot was snapped to come first: their plots are zoned exactly as planned.
+                var pinned = new bool[gridList.Count];
+                for (int q = 0; q < quads.Count; q++) { int ag = AlignedGrid(quads[q], gridList); if (ag >= 0) pinned[ag] = true; }
                 for (int gi = 0; gi < gridList.Count; gi++)
                 {
                     var g = gridList[gi];
@@ -446,7 +452,7 @@ namespace Placemaker.Core.Build
                         }
                     // Ties (a plot touching both a street and our lane) go to the build's own roads: the plot was
                     // planned to face its lane.
-                    rank[gi] = best * 4 + (g.Predicted || g.Ours ? 0 : 1);
+                    rank[gi] = best * 4 + ((g.Predicted && !g.Existing) || g.Ours ? 0 : 1) - (pinned[gi] ? 1000 : 0);
                 }
                 var order = new List<int>();
                 for (int i = 0; i < gridList.Count; i++) order.Add(i);
@@ -455,6 +461,10 @@ namespace Placemaker.Core.Build
                 foreach (int i in order) sorted.Add(gridList[i]);
                 gridList = sorted;
             }
+            // (s40) A quad that is exactly a rectangle of one block's cells (a cell plot, zoning first: ZoneLots) is zoned
+            // by that block only: at a street corner the crossing street's block must not take the plot's land.
+            var quadGrid = new int[quads.Count];
+            for (int q = 0; q < quads.Count; q++) quadGrid[q] = AlignedGrid(quads[q], gridList);
             var own = new List<(float2[] line, float half, float2 min, float2 max)>();
             if (ownNets != null)
                 foreach (var (line, half) in ownNets)
@@ -503,7 +513,7 @@ namespace Placemaker.Core.Build
                         foreach (var lot in lots) if (ObstacleCut.Overlaps(sq, lot)) { k[y * sx + x] = true; break; }
                         if (y >= reach) continue;
                         for (int q = 0; q < quads.Count; q++)
-                            if (InQuad(q, c)) { inQuad[y] = q; break; }
+                            if ((quadGrid[q] < 0 || quadGrid[q] == gi) && InQuad(q, c)) { inQuad[y] = q; break; }
                         if (inQuad[y] >= 0)
                         {
                             if (first < 0) first = y;
@@ -533,7 +543,7 @@ namespace Placemaker.Core.Build
                     for (int y = 0; y <= end && !taken; y++)
                     {
                         // (s26) Any overlap, not only a centre inside: blocks of two roads at a corner cross at angles.
-                        var mine = CellSquare(g, x, y, -0.5f);
+                        var mine = CellSquare(g, x, y, -0.1f);
                         foreach (var sq in columnSquares) if (ObstacleCut.Overlaps(mine, sq)) { taken = true; break; }
                     }
                     if (taken) continue;
@@ -541,7 +551,7 @@ namespace Placemaker.Core.Build
                     {
                         z[y * sx + x] = true;
                         zq[y * sx + x] = inQuad[y] >= 0 ? inQuad[y] : quad;
-                        columnSquares.Add(CellSquare(g, x, y, -0.5f));
+                        columnSquares.Add(CellSquare(g, x, y, -0.1f));
                     }
                     for (int y = 0; y < sy; y++) if (inQuad[y] >= 0 && y <= end) quadHasCell[inQuad[y]] = true;
                 }
@@ -572,7 +582,7 @@ namespace Placemaker.Core.Build
                         {
                             int idx = y * sx + nx;
                             if (!op[idx] || k[idx]) { ok = false; break; }
-                            var mine = CellSquare(g, nx, y, -0.5f);
+                            var mine = CellSquare(g, nx, y, -0.1f);
                             foreach (var sq in columnSquares) if (ObstacleCut.Overlaps(mine, sq)) { ok = false; break; }
                             var c = CellCentre(g, nx, y);
                             for (int oq = 0; oq < quads.Count && ok; oq++) if (oq != q && InQuad(oq, c)) ok = false;
@@ -586,7 +596,7 @@ namespace Placemaker.Core.Build
                     {
                         z[y * sx + best] = true;
                         zq[y * sx + best] = q;
-                        columnSquares.Add(CellSquare(g, best, y, -0.5f));
+                        columnSquares.Add(CellSquare(g, best, y, -0.1f));
                     }
                 }
             }
@@ -980,6 +990,33 @@ namespace Placemaker.Core.Build
                 }
                 if (!changed) break;
             }
+        }
+
+        /// <summary>
+        /// (s40) The block whose cells a zoning quad covers exactly (the quad = whole cells shrunk QuadShrink, edges parallel
+        /// to the block, a corner on a cell corner), or −1.
+        /// </summary>
+        private static int AlignedGrid(float2[] quad, List<ZoneGrid> grids)
+        {
+            if (quad == null || quad.Length != 4) return -1;
+            var rect = ZoneLots.Unshrink(Poly.EnsureCcw((float2[])quad.Clone()));
+            var e = math.normalizesafe(rect[1] - rect[0]);
+            for (int gi = 0; gi < grids.Count; gi++)
+            {
+                var g = grids[gi];
+                var d = math.normalizesafe(g.Direction);
+                float c = math.abs(math.dot(d, e));
+                if (c > 0.002f && c < 0.998f) continue;
+                if (math.distance(g.Position, rect[0]) > math.length((float2)g.Size) * Cell * 0.5f + Cell) continue;
+                for (int x = 0; x < g.Size.x; x++)
+                    for (int y = 0; y < g.Size.y; y++)
+                    {
+                        var sq = CellSquare(g, x, y);
+                        foreach (var p in sq)
+                            if (math.distancesq(p, rect[0]) < 0.01f && Poly.Contains(rect, CellCentre(g, x, y))) return gi;
+                    }
+            }
+            return -1;
         }
 
         /// <summary>True when the cell centre lies on a captured road (within its half width + <see cref="RoadCellReach"/>).</summary>
