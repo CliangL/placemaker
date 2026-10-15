@@ -87,6 +87,7 @@ namespace Placemaker.Core.Layers.Roads
                 case RoadsIds.LocalAsset: role = NetRole.CulDeSac; break;
                 case RoadsIds.RoundaboutAsset: role = NetRole.Roundabout; break;
                 case RoadsIds.PerimeterAsset: role = NetRole.PerimeterRoad; break;
+                case RoadsIds.LaneAsset: role = NetRole.Alley; break;
                 case RoadsIds.PathAsset: return new[] { RoadRoles.PavementPath };
                 default: return Array.Empty<string>();
             }

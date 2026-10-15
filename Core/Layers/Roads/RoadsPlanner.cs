@@ -521,6 +521,10 @@ namespace Placemaker.Core.Layers.Roads
                 Ring = Poly.To3D(ring, heightAt), Layer = TerrainMaterials.Dirt, Strength = 0.8f, Feather = 1.6f, Noise = 0.9f, NoiseScale = 5f,
                 Seed = seed ^ math.hash(new float2(curve.A.x, curve.A.z)),
             });
+            // Terrain paint stays when the roads are removed (the shared warning every painting type gives).
+            bool warned = false;
+            foreach (var i in plan.Issues) warned |= i.Key == Layers.Common.TerrainPaint.PermanentKey;
+            if (!warned) plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = Layers.Common.TerrainPaint.PermanentKey });
         }
 
         /// <summary>CS2 ships turning circles named CulDeSac{Small|Medium|Large|XL}{01 asphalt|02 grass|03 trees}.</summary>
