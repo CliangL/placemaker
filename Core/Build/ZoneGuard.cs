@@ -388,6 +388,7 @@ namespace Placemaker.Core.Build
             Result r;
             var grow = new float[quads.Count];
             var used = new List<float2[]>(quads);
+            int nearSnapped = 0;
             try
             {
                 r = Compute(plan.Footprints, quads, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
@@ -426,6 +427,21 @@ namespace Placemaker.Core.Build
                 }
                 for (int i = 0; i < quads.Count; i++) if (grow[i] > 0f || shift[i] != 0f) used[i] = Moved(quads[i], axis[i] * shift[i], grow[i]);
                 r = Compute(plan.Footprints, used, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
+                // (s60) Playtest: a plot with 6 open live cells beside it got none (counts never matched). When counting finds
+                // nothing, move the plot onto the open live cells nearest to it: a run of >= 2 columns x 2 rows from row 0 of
+                // one block, as many columns as it planned (rows / 2), not on another plot's cells.
+                var cur = CellsPerQuad(r, used.Count);
+                int snappedNear = 0;
+                for (int i = 0; i < used.Count; i++)
+                {
+                    if (planned[i] == 0 || cur[i] != 0) continue;
+                    var near = NearestOpenRun(quads[i], planned[i], liveGrids, r.ZonedSquares);
+                    if (near == null) continue;
+                    used[i] = near;
+                    snappedNear++;
+                    r = Compute(plan.Footprints, used, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
+                }
+                nearSnapped = snappedNear;
                 // A plot with no room on the live blocks (no open live cell within half a cell of it) truly cannot zone: its
                 // land is returned to the blockers (like ZoneGuard.Apply does at design time) and the preview shows it blocked.
                 var drop = new List<int>();
@@ -441,7 +457,7 @@ namespace Placemaker.Core.Build
                 for (int i = 0; i < used.Count; i++) if (final[i] != planned[i]) causes.Append($" #{i}: {Diagnose(quads[i], liveGrids)};");
                 int p = 0, f = 0, grown = 0;
                 for (int i = 0; i < used.Count; i++) { p += planned[i]; f += final[i]; if (grow[i] > 0f || shift[i] != 0f) grown++; }
-                LastRefreshReport = $"{p} planned cell(s) in {used.Count} plot(s) -> {f} on the live blocks; {grown} plot(s) matched on a shifted grid; {drop.Count} plot(s) cannot zone (land blocked)"
+                LastRefreshReport = $"{p} planned cell(s) in {used.Count} plot(s) -> {f} on the live blocks; {grown} plot(s) matched on a shifted grid; {nearSnapped} moved to the nearest open cells; {drop.Count} plot(s) cannot zone (land blocked)"
                     + (f != p ? MismatchText(planned, final) + causes : ".");
             }
             catch (Exception) { return null; }
@@ -460,6 +476,43 @@ namespace Placemaker.Core.Build
                 plan.ZoneCells.Add(m);
             }
             return zoning;
+        }
+
+        /// <summary>
+        /// (s60) The zoning quad (cells shrunk QuadShrink) of the open run of live cells nearest to <paramref name="quad"/>:
+        /// at least 2 columns x 2 rows from row 0 of one block, up to the planned cell count (2 rows), free of cells other
+        /// plots already take; null when no block has room within 3 cells of the plot.
+        /// </summary>
+        private static float2[] NearestOpenRun(float2[] quad, int plannedCells, IReadOnlyList<ZoneGrid> grids, IReadOnlyList<float2[]> taken)
+        {
+            var centre = Poly.Centroid(quad);
+            int want = math.max(2, (plannedCells + 1) / 2);
+            float bestD = 3f * Cell; float2[] best = null;
+            var roads = new List<RoadBand>();
+            foreach (var g in grids)
+            {
+                if (!Usable(g) || g.Size.y < 2) continue;
+                var ok = new bool[g.Size.x];
+                for (int x = 0; x < g.Size.x; x++)
+                {
+                    ok[x] = CellOpen(g, x, 0, null, roads) && CellOpen(g, x, 1, null, roads);
+                    if (!ok[x]) continue;
+                    foreach (var t in taken)
+                        if (Poly.Contains(t, CellCentre(g, x, 0)) || Poly.Contains(t, CellCentre(g, x, 1))) { ok[x] = false; break; }
+                }
+                for (int w = want; w >= 2; w--)
+                    for (int x0 = 0; x0 + w <= g.Size.x; x0++)
+                    {
+                        bool all = true;
+                        for (int x = x0; x < x0 + w && all; x++) all = ok[x];
+                        if (!all) continue;
+                        float d = math.distance(Poly.Centroid(CellRect(g, x0, x0 + w - 1, 0, 1)), centre);
+                        // A longer run is preferred at similar distance: closeness counts per missing column.
+                        d += (want - w) * 2f;
+                        if (d < bestD) { bestD = d; best = CellRect(g, x0, x0 + w - 1, 0, 1, -QuadShrink); }
+                    }
+            }
+            return best;
         }
 
         private static float2[] Moved(float2[] quad, float2 by, float grow)
@@ -944,6 +997,8 @@ namespace Placemaker.Core.Build
         /// or the sidewalk by more than half a metre is.
         /// </summary>
         public const float RoadCellReach = 3.5f;
+        /// <summary>(s60) Extra reach of a net end (junction node) when closing cells under the build's own nets.</summary>
+        public const float NodeReach = 1.0f;
 
         private static List<RoadBand> RoadBands(IReadOnlyList<NearbyNet> nets, float2 min, float2 max)
         {
@@ -987,6 +1042,12 @@ namespace Placemaker.Core.Build
                 if (c.x < n.min.x || c.y < n.min.y || c.x > n.max.x || c.y > n.max.y) continue;
                 for (int i = 0; i + 1 < n.line.Length; i++)
                     if (SegmentSquareDistance(n.line[i], n.line[i + 1], c, d, r, h) < n.half - 0.05f) return true;
+                // (s60) A net's end is a junction node: the game's node geometry (corners, sidewalks of the connector on the
+                // street edge) reaches past the edge's half width, closing cells a path-width test calls open (playtest:
+                // 7 blocked cells beside a park's connector, the cutout plot got none). Ends keep NodeReach extra.
+                // Walkways only (half width <= 2.5 m): a road lane's block ends are modelled, plots sit flush to them.
+                if (n.half <= 2.5f) foreach (var e in new[] { n.line[0], n.line[n.line.Length - 1] })
+                    if (SegmentSquareDistance(e, e, c, d, r, h) < n.half + NodeReach) return true;
             }
             return false;
         }
