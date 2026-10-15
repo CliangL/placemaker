@@ -1020,7 +1020,7 @@ namespace Placemaker.Core.Tool
         private static double Round(double v, int digits) => double.IsNaN(v) || double.IsInfinity(v) ? 0 : Math.Round(v, digits);
 
         public static JsonValue BrushRulesJson(Placemaker.Core.Geometry.BrushRules r) => JsonValue.Obj()
-            .Set("roads", r.Roads).Set("buildings", r.Buildings).Set("lots", r.Lots).Set("zoned", r.Zoned)
+            .Set("roads", r.Roads).Set("buildings", r.Buildings).Set("lots", r.Lots).Set("zoned", r.Zoned).Set("allZoned", r.AllZoned)
             .Set("emptyZones", r.EmptyZones).Set("water", r.Water).Set("stayInBlock", r.StayInBlock)
             .Set("builds", r.Builds).Set("anything", r.Anything).Set("drawClip", r.DrawClip)
             .Set("snap", Round(r.Snap, 1)).Set("smoothing", r.Smoothing)
@@ -1056,6 +1056,7 @@ namespace Placemaker.Core.Tool
             r.Buildings = v["buildings"].AsBool(r.Buildings);
             r.Lots = v["lots"].AsBool(r.Lots);
             r.Zoned = v["zoned"].AsBool(r.Zoned);
+            r.AllZoned = v["allZoned"].AsBool(r.AllZoned);
             r.EmptyZones = v["emptyZones"].AsBool(r.EmptyZones);
             r.Water = v["water"].AsBool(r.Water);
             r.StayInBlock = v["stayInBlock"].AsBool(r.StayInBlock);

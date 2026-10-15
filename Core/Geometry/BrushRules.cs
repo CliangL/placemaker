@@ -14,7 +14,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Geometry
 {
-    public enum BrushObstacleKind { Road = 0, Building = 1, Lot = 2, ZonedCell = 3, EmptyZoneCell = 4, PlacemakerBuild = 5 }
+    public enum BrushObstacleKind { Road = 0, Building = 1, Lot = 2, ZonedCell = 3, EmptyZoneCell = 4, PlacemakerBuild = 5, UnbuiltZonedCell = 6 }
 
     /// <summary>A polygon the brush may stop at, tagged with what it is (rules decide whether it counts).</summary>
     public struct BrushObstacle
@@ -30,7 +30,11 @@ namespace Placemaker.Core.Geometry
         public const float MaxSnap = 20f;
         public const int MaxSmoothing = 6;
 
+        // s49: Zoned = zoned cells with a building on them (or under construction); vacant zoned land stays paintable
+        // unless AllZoned is also on (parks over empty road frontage is what players want).
         public bool Roads = true, Buildings = true, Lots = true, Zoned = true, EmptyZones = false, Water = true;
+        /// <summary>(s49) Also keep off zoned cells nobody built on yet (off by default).</summary>
+        public bool AllZoned;
         /// <summary>(s27) Other Placemaker builds: their owner lot outline and zone-block lots (never the group being edited).</summary>
         public bool Builds = true;
         /// <summary>(s27) "Paint over anything": every stop and the block lock off, whatever the other toggles say.</summary>
@@ -70,13 +74,14 @@ namespace Placemaker.Core.Geometry
                 case BrushObstacleKind.Lot: return Lots;
                 case BrushObstacleKind.ZonedCell: return Zoned;
                 case BrushObstacleKind.EmptyZoneCell: return EmptyZones;
+                case BrushObstacleKind.UnbuiltZonedCell: return AllZoned;
                 case BrushObstacleKind.PlacemakerBuild: return Builds;
                 default: return true;
             }
         }
 
         /// <summary>Nothing to stop at and no block lock: the brush is plain Paint.</summary>
-        public bool AllOff => Anything || (!Roads && !Buildings && !Builds && !Lots && !Zoned && !EmptyZones && !Water && !StayInBlock);
+        public bool AllOff => Anything || (!Roads && !Buildings && !Builds && !Lots && !Zoned && !AllZoned && !EmptyZones && !Water && !StayInBlock);
         /// <summary>Water counts (brush tools).</summary>
         public bool WaterOn => !Anything && Water;
         /// <summary>The block lock counts (Block paint).</summary>
@@ -107,10 +112,10 @@ namespace Placemaker.Core.Geometry
             return ObstacleCut.Subtract(ring, ObstacleCut.Grow(active, margin), out touched, minArea);
         }
 
-        public bool Equals(BrushRules o) => o != null && Roads == o.Roads && Buildings == o.Buildings && Lots == o.Lots && Zoned == o.Zoned
+        public bool Equals(BrushRules o) => o != null && Roads == o.Roads && Buildings == o.Buildings && Lots == o.Lots && Zoned == o.Zoned && AllZoned == o.AllZoned
             && EmptyZones == o.EmptyZones && Water == o.Water && StayInBlock == o.StayInBlock && Builds == o.Builds && Anything == o.Anything && DrawClip == o.DrawClip && Snap == o.Snap && Smoothing == o.Smoothing && BucketWalls == o.BucketWalls;
         public override bool Equals(object obj) => Equals(obj as BrushRules);
-        public override int GetHashCode() => (Roads ? 1 : 0) | (Buildings ? 2 : 0) | (Lots ? 4 : 0) | (Zoned ? 8 : 0) | (EmptyZones ? 16 : 0)
+        public override int GetHashCode() => (Roads ? 1 : 0) | (Buildings ? 2 : 0) | (Lots ? 4 : 0) | (Zoned ? 8 : 0) | (AllZoned ? 8192 : 0) | (EmptyZones ? 16 : 0)
             | (Water ? 32 : 0) | (StayInBlock ? 64 : 0) | (Builds ? 1024 : 0) | (Anything ? 2048 : 0) | (DrawClip ? 4096 : 0) | (Smoothing << 7) ^ Snap.GetHashCode() ^ ((int)BucketWalls << 16);
 
         /// <summary>

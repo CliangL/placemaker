@@ -27,7 +27,9 @@ export interface BrushRules {
   roads: boolean;        // stop at the curb, keep the stroke's side of a road
   buildings: boolean;
   lots: boolean;         // parks, other Placemaker areas, other lots
-  zoned: boolean;
+  zoned: boolean;        // zoned cells with a building on them (s49); vacant zoned land is paintable
+  /** (s49) also keep off zoned cells nobody built on yet (default off) */
+  allZoned?: boolean;
   emptyZones: boolean;   // the empty zone grid along roads
   water: boolean;
   stayInBlock: boolean;  // lock a stroke to the closed block it starts in

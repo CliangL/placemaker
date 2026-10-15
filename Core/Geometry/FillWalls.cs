@@ -64,6 +64,7 @@ namespace Placemaker.Core.Geometry
                 case BrushObstacleKind.Building:
                 case BrushObstacleKind.Lot:
                 case BrushObstacleKind.PlacemakerBuild: return Has(set, FillWall.Lots);
+                case BrushObstacleKind.UnbuiltZonedCell:
                 case BrushObstacleKind.ZonedCell: return Has(set, FillWall.Zoned);
                 default: return false;
             }

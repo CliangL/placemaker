@@ -83,7 +83,7 @@ const Row = ({ label, children, off, testId, tip }: { label: string; children: R
     </div>
 );
 
-type StopKey = "roads" | "buildings" | "builds" | "lots" | "zoned" | "emptyZones" | "water";
+type StopKey = "roads" | "buildings" | "builds" | "lots" | "zoned" | "allZoned" | "emptyZones" | "water";
 
 /** Paint area settings: Smart edges + what the brush stops at, one block, snap, smooth; then the brush. */
 const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }) => {
@@ -98,7 +98,8 @@ const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }
         { key: "buildings", icon: "building", label: t("Placemaker.UI.Rules.Buildings", "Buildings"), tip: t("Placemaker.UI.Rules.BuildingsTip", "Keep off building lots.") },
         { key: "builds", icon: "otherBuilds", label: t("Placemaker.UI.Rules.MyBuilds", "My builds"), tip: t("Placemaker.UI.Rules.BuildsTip", "Keep off what you built with Placemaker.") },
         { key: "lots", icon: "area", label: t("Placemaker.UI.Rules.Lots", "Lots"), tip: t("Placemaker.UI.Rules.LotsTip2", "Keep off other lots (other mods, extractors).") },
-        { key: "zoned", icon: "edgeZoning", label: t("Placemaker.UI.Rules.Zoned", "Zoned"), tip: t("Placemaker.UI.Rules.ZonedTip", "Keep off zoned cells.") },
+        { key: "zoned", icon: "edgeZoning", label: t("Placemaker.UI.Rules.Zoned", "Zoned"), tip: t("Placemaker.UI.Rules.ZonedTip2", "Keep off zoned cells that have a building. Empty zoned land can be painted.") },
+        { key: "allZoned", icon: "edgeZoning", label: t("Placemaker.UI.Rules.AllZoned", "All zoned"), tip: t("Placemaker.UI.Rules.AllZonedTip", "Also keep off zoned cells nobody has built on yet.") },
         { key: "emptyZones", icon: "zoneEmpty", label: t("Placemaker.UI.Rules.EmptyZones", "Empty zones"), tip: t("Placemaker.UI.Rules.EmptyZonesTip", "Keep the empty zone grid free.") },
         { key: "water", icon: "water", label: t("Placemaker.UI.Rules.Water", "Water"), tip: t("Placemaker.UI.Rules.WaterTip", "Keep off deep water.") },
     ];
@@ -131,10 +132,10 @@ const PaintSettings = ({ state, rules }: { state: ToolState; rules: BrushRules }
                             key={x.key}
                             icon={x.icon}
                             label={x.label}
-                            on={rules[x.key] !== false}
+                            on={x.key === "allZoned" ? rules.allZoned === true : rules[x.key] !== false}
                             disabled={!smart}
                             tip={smart ? x.tip : offWhy}
-                            onClick={() => act.setBrushRules({ [x.key]: !(rules[x.key] !== false) })}
+                            onClick={() => act.setBrushRules({ [x.key]: !(x.key === "allZoned" ? rules.allZoned === true : rules[x.key] !== false) })}
                             testId={`brush-rule-${x.key}`}
                         />
                     ))}

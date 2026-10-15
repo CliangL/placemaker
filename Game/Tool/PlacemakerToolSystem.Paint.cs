@@ -42,7 +42,7 @@ namespace Placemaker.Game.Tool
             {
                 var r = BrushRules;
                 return r.WaterOn || r.Stops(BrushObstacleKind.Building) || r.Stops(BrushObstacleKind.PlacemakerBuild) || r.Stops(BrushObstacleKind.Lot)
-                    || r.Stops(BrushObstacleKind.ZonedCell) || r.Stops(BrushObstacleKind.EmptyZoneCell);
+                    || r.Stops(BrushObstacleKind.ZonedCell) || r.Stops(BrushObstacleKind.UnbuiltZonedCell) || r.Stops(BrushObstacleKind.EmptyZoneCell);
             }
         }
 
@@ -128,15 +128,15 @@ namespace Placemaker.Game.Tool
                 // Keep covering what is already painted (the outline is cut against all of it).
                 foreach (var p in o) { min = math.min(min, p.xz - 10f); max = math.max(max, p.xz + 10f); }
             }
-            ReadPaintBuildings(min, max);
+            ReadPaintBuildings(min, max, strokeStart);
         }
 
-        private void ReadPaintBuildings(float2 min, float2 max)
+        private void ReadPaintBuildings(float2 min, float2 max, bool fresh = false)
         {
             _bpObstacles ??= new BlockObstacles(EntityManager, World);
             var rules = BrushRules;
-            _paintBuildings = rules.Active(_bpObstacles.Gather(min, max, _editingGroup), k => k != BrushObstacleKind.Road);
-            _paintWater = rules.WaterOn ? _bpObstacles.Water(min, max, _paint.CellSize) : null;
+            _paintBuildings = rules.Active(_bpObstacles.Gather(min, max, _editingGroup, fresh), k => k != BrushObstacleKind.Road);
+            _paintWater = rules.WaterOn ? _bpObstacles.Water(min, max, _paint.CellSize, fresh) : null;
             _paintRules = rules;
             _paintBuildingsMin = min;
             _paintBuildingsMax = max;

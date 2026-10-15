@@ -68,8 +68,8 @@ namespace Placemaker.Game.Tool
             if (rules.Equals(BrushRules)) return;
             bool wallsChanged = rules.BucketWalls != BrushRules.BucketWalls;
             if (_settings != null) { _settings.SetBrushRules(rules); _settings.ApplyAndSave(); }
-            // The fence and the outline depend on the rules: rebuild them (not an undo step — it is a setting).
-            if (_mode == SelectionMode.BlockPaint && !_bpMask.IsEmpty) ShapeChanged();
+            // s49: the fence is rebuilt from the cached obstacle set on the next frame (UpdateBlockPaint) and the painted
+            // outline at the next stroke — toggling a rule or Smart edges no longer re-reads the city or re-traces the outline.
             // s43: the bucket re-traces its blocks with the new walls (a setting, not an undo step).
             if (wallsChanged && _mode == SelectionMode.Block) RepickBlocks();
             Touch();
@@ -86,6 +86,10 @@ namespace Placemaker.Game.Tool
             _cursorValid = _in.HasHit;
             if (_in.HasHit) _cursor = _in.Hit;
             float radius = _brushSize * 0.5f;
+
+            // s49: a rule / Smart edges change re-filters the cached obstacles once (shading + fence); no outline rebuild.
+            if (_gesture != Gesture.Paint && _gesture != Gesture.Erase && _bpCtx != null && BlockPaintHasTarget && IsCurrentTarget(_bpCtx) && !BrushRules.Equals(_bpCtx.Rules))
+                EnsureBlockPaintContext(false);
 
             if (_gesture == Gesture.Paint || _gesture == Gesture.Erase)
             {
@@ -210,8 +214,10 @@ namespace Placemaker.Game.Tool
                 return c;
             }
             _bpObstacles ??= new BlockObstacles(EntityManager, World);
-            c = _bpOpen ? BuildOpenContext(rules) : BuildBlockContext(rules);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            c = _bpOpen ? BuildOpenContext(rules, refresh) : BuildBlockContext(rules, refresh);
             if (c == null) return null;
+            Mod.Log.Info("Placemaker: Smart edges fence built in " + sw.Elapsed.TotalMilliseconds.ToString("0.0") + " ms (" + (refresh ? "fresh read" : "cached obstacles") + "), " + c.Obstacles.Count + " shaded, rules " + RulesLine(rules));
             c.Rules = rules;
             c.IgnoreGroup = _editingGroup;
             c.BuiltAt = UnityEngine.Time.realtimeSinceStartup;
@@ -220,7 +226,7 @@ namespace Placemaker.Game.Tool
             return c;
         }
 
-        private BlockPaintContext BuildBlockContext(BrushRules rules)
+        private BlockPaintContext BuildBlockContext(BrushRules rules, bool fresh)
         {
             AreaShape area;
             try { area = _roads.BuildArea(_bpFace, AreaSource.Painted); }
@@ -229,8 +235,8 @@ namespace Placemaker.Game.Tool
 
             var ring = area.Ring2D();
             Poly.Bounds(ring, out var min, out var max);
-            var obstacles = _bpObstacles.Gather(min - 1f, max + 1f, _editingGroup);
-            var water = rules.WaterOn ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
+            var obstacles = _bpObstacles.Gather(min - 1f, max + 1f, _editingGroup, fresh);
+            var water = rules.WaterOn ? _bpObstacles.Water(min, max, _bpMask.CellSize, fresh) : null;
             // A block target was chosen with the lock on: keep it a block even if the lock is switched off since.
             var blockRules = rules.Clone();
             blockRules.StayInBlock = true;
@@ -245,11 +251,11 @@ namespace Placemaker.Game.Tool
             return c;
         }
 
-        private BlockPaintContext BuildOpenContext(BrushRules rules)
+        private BlockPaintContext BuildOpenContext(BrushRules rules, bool fresh)
         {
             float h = BlockBrush.OpenHalfSize + 1f;
             float2 min = _bpSeed - h, max = _bpSeed + h;
-            var obstacles = _bpObstacles.Gather(min, max, _editingGroup);
+            var obstacles = _bpObstacles.Gather(min, max, _editingGroup, fresh);
             // Road footprints up to the curb: centre curve ± half the composition width (sidewalks included),
             // round caps over the nodes — the same corridors Keep-off-roads uses, without its extra margin.
             try
@@ -264,7 +270,7 @@ namespace Placemaker.Game.Tool
                 }
             }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read roads: " + e.Message); }
-            var water = rules.WaterOn ? _bpObstacles.Water(min, max, _bpMask.CellSize) : null;
+            var water = rules.WaterOn ? _bpObstacles.Water(min, max, _bpMask.CellSize, fresh) : null;
             BlockBrush brush;
             try { brush = rules.Build(_bpSeed, null, obstacles, water, _bpMask.CellSize); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint fence failed: " + e.Message); return null; }
@@ -273,6 +279,10 @@ namespace Placemaker.Game.Tool
             foreach (var o in brush.Obstacles) c.Obstacles.Add(Poly.To3D(o, q => _site.SampleHeight(q)));
             return c;
         }
+
+        private static string RulesLine(BrushRules r) =>
+            (r.Anything ? "anything " : "") + (r.Roads ? "roads " : "") + (r.Buildings ? "buildings " : "") + (r.Builds ? "builds " : "") + (r.Lots ? "lots " : "")
+            + (r.Zoned ? "zoned " : "") + (r.AllZoned ? "allZoned " : "") + (r.EmptyZones ? "emptyZones " : "") + (r.Water ? "water " : "") + (r.StayInBlock ? "oneBlock" : "");
 
         private static bool ShowsInBlock(float2[] obstacle, float2[] block)
         {

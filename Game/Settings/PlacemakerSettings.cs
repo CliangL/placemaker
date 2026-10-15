@@ -110,6 +110,10 @@ namespace Placemaker.Game.Settings
         [SettingsUISection(SectionMain, GroupBrush)]
         public bool BrushStopZoned { get; set; }
 
+        /// <summary>(s49) Also keep off zoned cells nobody built on yet (default off: vacant zoned land is paintable).</summary>
+        [SettingsUISection(SectionMain, GroupBrush)]
+        public bool BrushStopAllZoned { get; set; }
+
         /// <summary>Block paint also keeps off visible zone cells nobody zoned yet (id kept from s11).</summary>
         [SettingsUISection(SectionMain, GroupBrush)]
         public bool BlockPaintAvoidEmptyZones { get; set; }
@@ -167,7 +171,7 @@ namespace Placemaker.Game.Settings
 
         public global::Placemaker.Core.Geometry.BrushRules GetBrushRules() => new global::Placemaker.Core.Geometry.BrushRules
         {
-            Roads = BrushStopRoads, Buildings = BrushStopBuildings, Lots = BrushStopLots, Zoned = BrushStopZoned,
+            Roads = BrushStopRoads, Buildings = BrushStopBuildings, Lots = BrushStopLots, Zoned = BrushStopZoned, AllZoned = BrushStopAllZoned,
             EmptyZones = BlockPaintAvoidEmptyZones, Water = BrushStopWater, StayInBlock = BrushStayInBlock,
             Snap = BrushSnapDistance, Smoothing = BrushSmoothing,
             Builds = BrushStopBuilds, Anything = BrushPaintOverAnything, DrawClip = BrushDrawClip,
@@ -179,7 +183,7 @@ namespace Placemaker.Game.Settings
         public void SetBrushRules(global::Placemaker.Core.Geometry.BrushRules r)
         {
             r = (r ?? global::Placemaker.Core.Geometry.BrushRules.Defaults()).Normalized();
-            BrushStopRoads = r.Roads; BrushStopBuildings = r.Buildings; BrushStopLots = r.Lots; BrushStopZoned = r.Zoned;
+            BrushStopRoads = r.Roads; BrushStopBuildings = r.Buildings; BrushStopLots = r.Lots; BrushStopZoned = r.Zoned; BrushStopAllZoned = r.AllZoned;
             BlockPaintAvoidEmptyZones = r.EmptyZones; BrushStopWater = r.Water; BrushStayInBlock = r.StayInBlock;
             BrushSnapDistance = r.Snap; BrushSmoothing = r.Smoothing;
             BrushStopBuilds = r.Builds; BrushPaintOverAnything = r.Anything; BrushDrawClip = r.DrawClip;
