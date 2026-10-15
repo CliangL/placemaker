@@ -89,6 +89,8 @@ namespace Placemaker.Core.Build
             public readonly List<float2[]> ZonedSquares = new List<float2[]>();
             /// <summary>Blocker regions (may have holes) — the exact area the blockers cover.</summary>
             public readonly List<Region> BlockerRegions = new List<Region>();
+            /// <summary>(s54) Zoned cells per input quad.</summary>
+            public int[] CellsPerQuad = Array.Empty<int>();
         }
 
         // ───────────────────────── cell geometry (Game.Zones.ZoneUtils) ─────────────────────────
@@ -345,6 +347,12 @@ namespace Placemaker.Core.Build
             public string ZoneId;
         }
 
+        /// <summary>(s54) One line about the last Refresh for the game log: planned vs refreshed cells, grown quads, dropped plots.</summary>
+        public static string LastRefreshReport = "";
+
+        /// <summary>(s54) How far a plot quad may grow (m) to find its cells on a live block shifted along the road.</summary>
+        private const float RefreshMaxGrow = 4f;
+
         /// <summary>
         /// (s26) Playtest: "zoned 4 of 16 cutout cell(s) … blocked 12". The plan snaps cutouts and blockers to the zone
         /// blocks captured at design time — but the build's park paths connect to the streets and SPLIT their edges;
@@ -362,12 +370,73 @@ namespace Placemaker.Core.Build
             var ids = new List<string>();
             foreach (var q in plan.ZoneQuads)
                 if (q.Quad != null && q.Quad.Length >= 3) { quads.Add(q.Quad); ids.Add(q.ZoneId ?? ""); }
+            // (s54) Playtest (market square building its own lanes): "10 cutout cells (planned 70)". The lanes' blocks were
+            // PREDICTED (ZoneBlockPredictor models free ends; at the junctions the game trims them), so the live cells of the
+            // build's own roads sit anywhere along the road, up to half a cell off. The quads are plots of whole planned
+            // cells shrunk QuadShrink; cells are taken by centre, so on a shifted grid a plot lost a column or all of
+            // them. The planned cells per plot are counted first; every plot then grows (0.25 m steps, ≤ RefreshMaxGrow)
+            // until the live cells it takes equal the planned count (closest otherwise).
+            var planned = new int[quads.Count];
+            foreach (var c in plan.ZoneCells)
+            {
+                if (c.State != ZoneCellState.Zoned) continue;
+                var centre = 0.25f * (c.A + c.B + c.C + c.D);
+                for (int i = 0; i < quads.Count; i++) if (Poly.Contains(quads[i], centre)) { planned[i]++; break; }
+            }
             Result r;
-            try { r = Compute(plan.Footprints, quads, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false); }
+            var grow = new float[quads.Count];
+            var used = new List<float2[]>(quads);
+            try
+            {
+                r = Compute(plan.Footprints, quads, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
+                var got = CellsPerQuad(r, quads.Count);
+                var best = new int[quads.Count];
+                for (int i = 0; i < quads.Count; i++) best[i] = got[i];
+                bool any = false;
+                for (int i = 0; i < quads.Count; i++) if (planned[i] > 0 && got[i] != planned[i]) { any = true; break; }
+                for (int step = 1; any && step <= (int)(RefreshMaxGrow / 0.25f); step++)
+                {
+                    float g = step * 0.25f;
+                    var trial = new List<float2[]>(quads);
+                    bool open = false;
+                    for (int i = 0; i < quads.Count; i++)
+                    {
+                        if (planned[i] == 0 || best[i] == planned[i]) continue;
+                        trial[i] = Grow(quads[i], g);
+                        open = true;
+                    }
+                    if (!open) break;
+                    var rt = Compute(plan.Footprints, trial, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
+                    var gt = CellsPerQuad(rt, quads.Count);
+                    for (int i = 0; i < quads.Count; i++)
+                    {
+                        if (planned[i] == 0 || best[i] == planned[i]) continue;
+                        // Closer to the plan wins; never take a count above the plan when a smaller one was as close.
+                        if (math.abs(gt[i] - planned[i]) < math.abs(best[i] - planned[i])) { best[i] = gt[i]; grow[i] = g; }
+                    }
+                }
+                for (int i = 0; i < quads.Count; i++) if (grow[i] > 0f) used[i] = Grow(quads[i], grow[i]);
+                r = Compute(plan.Footprints, used, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
+                // A plot no live cell reaches although blocks exist around it truly cannot zone: its land is returned to the
+                // blockers (like ZoneGuard.Apply does at design time) and the preview shows it blocked, not as a cutout.
+                var drop = new List<int>();
+                for (int i = 0; i < used.Count; i++)
+                    if (!r.Snapped[i] && NearAnyGrid(used[i], new List<ZoneGrid>(liveGrids))) drop.Add(i);
+                if (drop.Count > 0)
+                {
+                    for (int k = drop.Count - 1; k >= 0; k--) { int i = drop[k]; used.RemoveAt(i); quads.RemoveAt(i); ids.RemoveAt(i); grow = RemoveAt(grow, i); planned = RemoveAt(planned, i); }
+                    r = Compute(plan.Footprints, used, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
+                }
+                var final = CellsPerQuad(r, used.Count);
+                int p = 0, f = 0, grown = 0;
+                for (int i = 0; i < used.Count; i++) { p += planned[i]; f += final[i]; if (grow[i] > 0f) grown++; }
+                LastRefreshReport = $"{p} planned cell(s) in {used.Count} plot(s) -> {f} on the live blocks; {grown} plot(s) matched on a shifted grid; {drop.Count} plot(s) cannot zone (land blocked)"
+                    + (f != p ? MismatchText(planned, final) : ".");
+            }
             catch (Exception) { return null; }
             var zoning = new List<ZoningQuad>();
             foreach (var zr in r.Zoning) zoning.Add(new ZoningQuad { Corners = zr.Corners, ZoneId = ids[zr.Quad] });
-            for (int i = 0; i < quads.Count; i++)
+            for (int i = 0; i < used.Count; i++)
                 if (!r.Snapped[i]) zoning.Add(new ZoningQuad { Corners = quads[i], ZoneId = ids[i] });
             plan.ZoneBlockers.Clear();
             plan.ZoneBlockers.AddRange(r.Blockers);
@@ -380,6 +449,27 @@ namespace Placemaker.Core.Build
                 plan.ZoneCells.Add(m);
             }
             return zoning;
+        }
+
+        private static string MismatchText(int[] planned, int[] final)
+        {
+            var sb = new System.Text.StringBuilder("; MISMATCH (plots ");
+            for (int i = 0; i < planned.Length; i++) if (final[i] != planned[i]) sb.Append($"#{i} {planned[i]}->{final[i]} ");
+            return sb.Append(").").ToString();
+        }
+
+        private static T[] RemoveAt<T>(T[] a, int i)
+        {
+            var r = new T[a.Length - 1];
+            for (int k = 0, j = 0; k < a.Length; k++) if (k != i) r[j++] = a[k];
+            return r;
+        }
+
+        private static int[] CellsPerQuad(Result r, int quads)
+        {
+            var n = new int[quads];
+            for (int i = 0; i < quads && i < r.CellsPerQuad.Length; i++) n[i] = r.CellsPerQuad[i];
+            return n;
         }
 
         // ───────────────────────── the computation (pure, tested) ─────────────────────────
@@ -400,6 +490,7 @@ namespace Placemaker.Core.Build
             var result = new Result();
             quads = quads ?? Array.Empty<float2[]>();
             result.Snapped = new bool[quads.Count];
+            result.CellsPerQuad = new int[quads.Count];
             // (s32) Quad bounds: the cell loops below test every cell centre against every quad (a mall district has
             // hundreds of plots and blocks); a centre outside a quad's bounds is outside the quad.
             var qb = new float4[quads.Count];
@@ -627,6 +718,7 @@ namespace Placemaker.Core.Build
                     // (s26) One rect per plot (quad): the build logs and checks each plot on its own.
                     while (x1 + 1 < sx && Depth(z, sx, sy, x1 + 1) == depth && zq[x1 + 1] == q) x1++;
                     result.Zoning.Add(new ZonedRect { Quad = q, Corners = CellRect(g, x, x1, 0, depth - 1, -QuadShrink) });
+                    if (q >= 0 && q < quads.Count) result.CellsPerQuad[q] += (x1 - x + 1) * depth;
                     for (int xx = x; xx <= x1; xx++)
                         for (int y = 0; y < depth; y++) result.ZonedSquares.Add(CellSquare(g, xx, y));
                     x = x1 + 1;
@@ -634,39 +726,19 @@ namespace Placemaker.Core.Build
             }
 
             // ── 3. blockers: footprint (inset) minus zoned cells, unsnapped quads and building lots ──
-            var subject = new List<IReadOnlyList<float2>>();
-            foreach (var f in feet)
+            // (s54) Ring repair (CutHoles bridges, PrepareSurface) can move a blocker edge into a kept cell: playtest "3 of
+            // the 10 cutout cells touched by a blocker (bug)". The blockers are verified with the game's own test (a cell
+            // shrunk 0.03 m toward its centre against the ring); touched -> the keep margin grows, last resort the touching
+            // piece is dropped (a little land stays unblocked rather than a zoned cell blocked).
+            for (int attempt = 0; attempt < 5; attempt++)
             {
-                List<float2[]> inner;
-                try { inner = Poly.Offset(f, FootprintInset); } catch (Exception) { inner = null; }
-                if (inner != null) foreach (var i in inner) if (i != null && i.Length >= 3) subject.Add(i);
+                result.BlockerRegions.Clear();
+                result.Blockers.Clear();
+                BuildBlockers(feet, result, quads, lots, KeepMargin + 0.3f * attempt);
+                if (!TouchesAny(result.Blockers, result.ZonedSquares)) break;
             }
-            var holes = new List<IReadOnlyList<float2>>();
-            foreach (var sq in result.ZonedSquares) holes.Add(Grow(sq, KeepMargin));
-            for (int q = 0; q < quads.Count; q++)
-                if (!result.Snapped[q] && quads[q] != null && quads[q].Length >= 3) holes.Add(Grow(quads[q], KeepMargin));
-            foreach (var lot in ObstacleCut.Grow(lots, LotMargin)) holes.Add(lot);
-            if (subject.Count > 0)
-            {
-                List<Region> regions;
-                try { regions = Poly.Boolean(subject, holes, BoolOp.Difference); }
-                catch (Exception) { regions = new List<Region>(); }
-                foreach (var reg in regions)
-                {
-                    if (reg?.Outer == null || reg.Outer.Length < 3 || reg.Area < MinBlockerArea) continue;
-                    result.BlockerRegions.Add(reg);
-                    List<float2[]> rings;
-                    try { rings = reg.HasHoles ? Poly.CutHoles(reg) : new List<float2[]> { Poly.EnsureCcw(reg.Outer) }; }
-                    catch (Exception) { continue; }
-                    foreach (var ring in rings)
-                    {
-                        if (ring == null || ring.Length < 3 || Poly.Area(ring) < MinBlockerArea) continue;
-                        List<float2[]> ok;
-                        try { ok = AreaRings.PrepareSurface(ring, AreaRings.SurfaceMinNodeDistance); } catch (Exception) { ok = new List<float2[]>(); }
-                        foreach (var o in ok) if (o != null && o.Length >= 3 && Poly.Area(o) >= MinBlockerArea) result.Blockers.Add(Poly.EnsureCcw(o));
-                    }
-                }
-            }
+            for (int i = result.Blockers.Count - 1; i >= 0; i--)
+                if (TouchesAny(new[] { result.Blockers[i] }, result.ZonedSquares)) result.Blockers.RemoveAt(i);
 
             // ── 4. what the game will do with every cell near the build (preview / tests) ──
             for (int gi = 0; gi < gridList.Count; gi++)
@@ -713,6 +785,54 @@ namespace Placemaker.Core.Build
                 }
             }
             return result;
+        }
+
+        /// <summary>(s54) True when a ring overlaps a kept cell square shrunk 0.03 m toward its centre (the game's blocker test).</summary>
+        public static bool TouchesAny(IReadOnlyList<float2[]> rings, IReadOnlyList<float2[]> squares)
+        {
+            foreach (var sq in squares)
+            {
+                var c = Poly.Centroid(sq);
+                var t = new float2[sq.Length];
+                for (int i = 0; i < sq.Length; i++) t[i] = sq[i] + math.normalizesafe(c - sq[i]) * 0.03f;
+                foreach (var r in rings) if (ObstacleCut.Overlaps(t, r)) return true;
+            }
+            return false;
+        }
+
+        private static void BuildBlockers(List<float2[]> feet, Result result, IReadOnlyList<float2[]> quads, List<float2[]> lots, float keep)
+        {
+            var subject = new List<IReadOnlyList<float2>>();
+            foreach (var f in feet)
+            {
+                List<float2[]> inner;
+                try { inner = Poly.Offset(f, FootprintInset); } catch (Exception) { inner = null; }
+                if (inner != null) foreach (var i in inner) if (i != null && i.Length >= 3) subject.Add(i);
+            }
+            var holes = new List<IReadOnlyList<float2>>();
+            foreach (var sq in result.ZonedSquares) holes.Add(Grow(sq, keep));
+            for (int q = 0; q < quads.Count; q++)
+                if (!result.Snapped[q] && quads[q] != null && quads[q].Length >= 3) holes.Add(Grow(quads[q], keep));
+            foreach (var lot in ObstacleCut.Grow(lots, LotMargin)) holes.Add(lot);
+            if (subject.Count == 0) return;
+            List<Region> regions;
+            try { regions = Poly.Boolean(subject, holes, BoolOp.Difference); }
+            catch (Exception) { regions = new List<Region>(); }
+            foreach (var reg in regions)
+            {
+                if (reg?.Outer == null || reg.Outer.Length < 3 || reg.Area < MinBlockerArea) continue;
+                result.BlockerRegions.Add(reg);
+                List<float2[]> rings;
+                try { rings = reg.HasHoles ? Poly.CutHoles(reg) : new List<float2[]> { Poly.EnsureCcw(reg.Outer) }; }
+                catch (Exception) { continue; }
+                foreach (var ring in rings)
+                {
+                    if (ring == null || ring.Length < 3 || Poly.Area(ring) < MinBlockerArea) continue;
+                    List<float2[]> ok;
+                    try { ok = AreaRings.PrepareSurface(ring, AreaRings.SurfaceMinNodeDistance); } catch (Exception) { ok = new List<float2[]>(); }
+                    foreach (var o in ok) if (o != null && o.Length >= 3 && Poly.Area(o) >= MinBlockerArea) result.Blockers.Add(Poly.EnsureCcw(o));
+                }
+            }
         }
 
         // ───────────────────────── s22: roads and clipping ─────────────────────────

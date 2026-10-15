@@ -250,6 +250,103 @@ namespace Placemaker.Tests
             Assert.DoesNotContain(plan.ZoneCells, c => c.State == ZoneCellState.Zoned);
         }
 
+        // ───────────── s54: build-own roads, live blocks off the prediction ─────────────
+
+        private static float2[] ShrinkedPlot(float x0, float z0, float x1, float z1) => Rect(x0 + 1, z0 + 1, x1 - 1, z1 - 1);
+
+        /// <summary>A market square: its own 8 m lane at z = 40 (x −10…130) with plots of whole cells on its south side.</summary>
+        private static (ComposedPlan plan, SiteContext site) MarketSquare()
+        {
+            var plan = new ComposedPlan();
+            plan.Footprints.Add(Rect(0, 0, 120, 80));
+            var host = new AreaPlan { GeneratorId = "marketSquare" };
+            host.Nets.Add(Net(new float2(-10, 40), new float2(130, 40), NetRole.Alley, "Alley"));
+            // Plots of whole cells of the lane's predicted south block (cell centres at multiples of 8, rows z 28…36 + 20…28),
+            // shrunk QuadShrink as ZoneLots makes them.
+            foreach (var (x0, x1) in new[] { (4f, 36f), (52f, 76f), (84f, 116f) })
+            {
+                var q = ZoneLots.ZoningQuad(Rect(x0, 20, x1, 36));
+                host.Zoning.Add(new PlannedZoning { A = new float3(q[0].x, 0, q[0].y), B = new float3(q[1].x, 0, q[1].y), C = new float3(q[2].x, 0, q[2].y), D = new float3(q[3].x, 0, q[3].y), ZoneId = "EU Commercial Low" });
+            }
+            plan.Layers.Add(host);
+            var site = new SiteContext();
+            site.NearbyNets.Add(new NearbyNet { A = new float3(-40, 0, -8), B = new float3(20, 0, -8), C = new float3(100, 0, -8), D = new float3(160, 0, -8), Width = 16f, Category = NetCategory.Road });
+            site.ZoneGrids.Add(new ZoneGrid { Position = new float2(60, 24), Direction = new float2(0, -1), Size = new int2(15, 6) });
+            return (plan, site);
+        }
+
+        [Theory]
+        [InlineData(0f)]
+        [InlineData(0.5f)]
+        [InlineData(2.5f)]
+        [InlineData(4f)]
+        [InlineData(-3.3f)]
+        [InlineData(7.2f)]
+        public void Refresh_keeps_the_planned_cell_count_when_the_lanes_live_block_is_shifted(float shift)
+        {
+            var (plan, site) = MarketSquare();
+            ZoneGuard.Apply(plan, site);
+            int planned = plan.ZoneCells.Count(c => c.State == ZoneCellState.Zoned);
+            Assert.True(planned >= 6, "the scenario must plan cells");
+            var live = new List<ZoneGrid> { site.ZoneGrids[0] };
+            // The game's blocks of our lane: same rows, but the columns sit shifted along the road and the ends are trimmed.
+            foreach (var g in ZoneGuard.PredictedGrids(plan, site))
+            {
+                var s = g;
+                s.Position += new float2(shift, 0);
+                s.Predicted = false; s.Ours = true;
+                live.Add(s);
+            }
+            // The street's own block is hidden under the lane's block there (not Visible) — the plots belong to the lane.
+            var quads = ZoneGuard.Refresh(plan, live);
+            Assert.NotNull(quads);
+            int refreshed = plan.ZoneCells.Count(c => c.State == ZoneCellState.Zoned);
+            Assert.True(planned == refreshed, $"planned {planned} != refreshed {refreshed}: {ZoneGuard.LastRefreshReport}");
+            var squares = plan.ZoneCells.Where(c => c.State == ZoneCellState.Zoned).Select(c => new[] { c.A, c.B, c.C, c.D }).ToList();
+            Assert.False(ZoneGuard.TouchesAny(plan.ZoneBlockers, squares));
+        }
+
+        [Fact]
+        public void Refresh_returns_the_land_of_a_plot_that_cannot_zone_and_the_preview_shows_it_blocked()
+        {
+            var (plan, site) = MarketSquare();
+            ZoneGuard.Apply(plan, site);
+            // Live: the lane's blocks exist only west of x = 44 (trimmed at a junction); the other plots find nothing.
+            var live = new List<ZoneGrid> { site.ZoneGrids[0] };
+            foreach (var g in ZoneGuard.PredictedGrids(plan, site))
+            {
+                if (g.Position.y > 40) continue;
+                live.Add(new ZoneGrid { Position = new float2(24, g.Position.y), Direction = g.Direction, Size = new int2(5, 6), Ours = true });
+            }
+            // the street's block is blocked in that area (under the lane block's rows)
+            var street = live[0];
+            street.Cells = Enumerable.Repeat((byte)(ZoneGrid.CellVisible | ZoneGrid.CellBlocked), 15 * 6).ToArray();
+            live[0] = street;
+            var quads = ZoneGuard.Refresh(plan, live);
+            Assert.NotNull(quads);
+            var squares = plan.ZoneCells.Where(c => c.State == ZoneCellState.Zoned).Select(c => new[] { c.A, c.B, c.C, c.D }).ToList();
+            Assert.False(ZoneGuard.TouchesAny(plan.ZoneBlockers, squares));
+            // No zoning quad is left over a plot without cells, and no cell is previewed as Zoned outside the live block.
+            Assert.All(plan.ZoneCells.Where(c => c.State == ZoneCellState.Zoned), c => Assert.True(Centre(c).x < 44f));
+            Assert.All(quads, q => Assert.True(Poly.Centroid(q.Corners).x < 44f, ZoneGuard.LastRefreshReport));
+        }
+
+        [Fact]
+        public void Blockers_never_touch_kept_cells_among_many_scattered_plots()
+        {
+            var foot = Rect(0, 0, 160, 96);
+            var grid = new ZoneGrid { Position = new float2(80, 24), Direction = new float2(0, -1), Size = new int2(10, 6) };
+            var grids = new List<ZoneGrid> { grid, new ZoneGrid { Position = new float2(0, 24), Direction = new float2(0, -1), Size = new int2(10, 6) } };
+            grids[1] = new ZoneGrid { Position = new float2(120, 24), Direction = new float2(0, -1), Size = new int2(10, 6) };
+            var quads = new List<float2[]>();
+            for (int i = 0; i < 6; i++) quads.Add(Rect(2 + i * 26 + (i % 2) * 3.3f, 1, 2 + i * 26 + 15f + (i % 2) * 3.3f, 17));
+            var ids = quads.Select(_ => "z").ToList();
+            var r = ZoneGuard.Compute(new[] { foot }, quads, ids, new List<float2[]>(), grids);
+            var zoned = r.Cells.Where(c => c.State == ZoneCellState.Zoned).Select(c => new[] { c.A, c.B, c.C, c.D }).ToList();
+            Assert.NotEmpty(zoned);
+            Assert.False(ZoneGuard.TouchesAny(r.Blockers, zoned));
+        }
+
         // ───────────── composed commercial sites (design preview == what the game zones) ─────────────
 
         [Theory]
