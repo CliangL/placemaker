@@ -2,20 +2,21 @@
 // (Common/Sculpt), emitted once as sloped quads (no flat cells, so no curtains — s20/s30), built from the FINAL road
 // network (after the connectivity pass, obstacles, city links):
 //
-//   terraces   every piece of a terrace street is a source: within its band (road + zone cells + shoulder on each side,
-//              narrowed where the next street is close — TerraceStreet.BandUp/Down) the ground is the street's level,
-//              tilted by the cross-fall away from the bank (the road strip itself level across). Beyond the band each
-//              source pulls towards its band edge with weight 1/x^p (x = distance past the band; p = 2 rounded banks,
-//              p = 1 straight "wall" faces), the natural ground with a constant weight: between two terraces this is a
-//              smooth bank, beyond the last one it eases back into the hillside, far from every street it IS the hillside.
-//              Terrace edges therefore follow the road curves exactly — nothing is blocky.
-//   corridors  every other road (links, city links, bank walks) lies on its own designed profile, level across its width
-//              plus a shoulder, blended into the terraces over a width that keeps the blend no steeper than the banks.
-//   flat       ground the survey finds flatter than the threshold is never changed (the change fades in between 60 %
-//              and 100 % of the threshold).
-//   limits     every bank node is held to the bank slope (terraces and road corridors stay put, the bank between them
-//              gives), the change dies out towards the outline, buildings and existing roads (locked nodes), and the
-//              cut/fill is capped at the earthwork limit (an Info issue says so).
+//   terraces   every terrace street is one source: within its band (road + zone cells + shoulder on each side, narrowed
+//              where the next street is close — TerraceStreet.BandUp/Down) the ground is the street's level, tilted by
+//              the cross-fall away from the bank (the road strip itself level across). Past the band the edge eases back
+//              into the hillside over the width its height difference needs at the bank slope; sources are blended with
+//              weights 1/x^p (x = distance past the band; p = 2 rounded banks, p = 1 straight "wall" faces): between two
+//              terraces a smooth bank, beyond the last one an embankment or cutting, far from every street the hillside.
+//              Terrace edges follow the road curves exactly — nothing is blocky.
+//   corridors  every other road (links, city links, lanes, bank walks) lies on its own designed profile, level across its
+//              width plus a shoulder, blended into the terraces over a width that keeps the blend no steeper than the
+//              banks; a terrace street's own road strip is a road too.
+//   flat       ground the survey finds flatter than the threshold is never terraced (the terraces fade out between 60 %
+//              and 100 % of the threshold; designed roads keep their profile).
+//   limits     every bank node is held to the bank slope; where protected ground clashes the lesser gives way (Resolve);
+//              the change dies out towards the outline, buildings and existing roads (locked nodes), and the cut/fill is
+//              capped at the earthwork limit (an Info issue says so).
 //
 // Pure and deterministic; the result's HeightAfter is the same surface the build rasters (Sculpt.HeightAfter).
 
@@ -50,6 +51,8 @@ namespace Placemaker.Core.Layers.Roads.Terraces
         public int LostCorridor, LostTerrace;
         /// <summary>Where protected ground clashed in the first round (x, z, levels k·10 + m, height step) — diagnostics.</summary>
         public readonly List<float4> Clashes = new List<float4>();
+        /// <summary>The layout the field was built for (diagnostics: its rejects, streets, routes).</summary>
+        public TerraceLayout Layout;
         /// <summary>Protection per grid node as planned and as built (0 bank, 1 terrace, 2 walk, 3 road) — diagnostics.</summary>
         public byte[] Initial, Protect;
         /// <summary>Milliseconds at the end of sources, field, limits, emit (diagnostics).</summary>
@@ -62,7 +65,9 @@ namespace Placemaker.Core.Layers.Roads.Terraces
     {
         private const float Reach = 50f;        // beyond a band, a terrace's pull fades to nothing over this (m): wider than any fringe (≤ 1.5 × 8 m / 0.25)
         /// <summary>Diagnostics (gallery, tests): called with every built ground on this thread. Never set in the mod.</summary>
+#pragma warning disable CS0649   // set by the tests and the gallery only
         [ThreadStatic] internal static Action<TerraceGround> Inspect;
+#pragma warning restore CS0649
         private const float Eps = 0.3f;
 
         private struct Src
@@ -81,7 +86,7 @@ namespace Placemaker.Core.Layers.Roads.Terraces
             RoadObstacles obstacles, List<ExistingRoad> existing, CancellationToken cancel)
         {
             var heightAt = (Func<float2, float>)ctx.H;
-            var res = new TerraceGround { HeightAfter = heightAt };
+            var res = new TerraceGround { HeightAfter = heightAt, Layout = lay };
             var clock = System.Diagnostics.Stopwatch.StartNew();
             if (!lay.Sloped || lay.Boundary == null || lay.Boundary.Length < 3) return res;
 
@@ -379,7 +384,7 @@ namespace Placemaker.Core.Layers.Roads.Terraces
                             }
                             // How far the lesser protection has to give for a bank of this step (nodes).
                             // The step between two neighbours understates what lies behind them: each round reaches further.
-                            float radius = (dh / run / sc.Cell + 1f) * (1 + round);
+                            float radius = math.min((dh / run / sc.Cell + 1f) * (1f + 0.5f * round), 60f / sc.Cell);
                             if (lk == 0 || lm == 0)
                             {
                                 // A bank node squeezed between protected ground it cannot reconcile: the terraces around it give

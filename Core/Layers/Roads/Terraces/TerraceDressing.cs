@@ -4,8 +4,8 @@
 //           steepest faces (a "wall" style face is mostly dirt) — s33 toolkit fields (one baked bank mask × noise), so a
 //           whole hillside is two paints. The terraces keep the map's lawn.
 //   trees   clumps of trees on the banks, never on a terrace, a road corridor or a walk.
-//   zones   pre-zoning only puts cells on level ground: per zone block column, as many rows from the road as lie flat
-//           (≤ the cross-fall + 2.5 %, or the flat threshold), never more than the terrace's cells.
+//   (zones: pre-zoning only puts cells on level ground, per zone block column as many rows from the road as lie flat
+//           — ≤ the cross-fall + 2.5 %, or the flat threshold — never more than the terrace's cells: RoadPreZone.Rects.)
 // Pure and deterministic.
 
 using System;

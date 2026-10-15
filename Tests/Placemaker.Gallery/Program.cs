@@ -714,7 +714,8 @@ namespace Placemaker.Gallery
                     // (s52) Hillside terraces: the terrace facts and the glitch metrics of the ground they leave.
                     if (rl.Facts.ContainsKey("terraces.sloped"))
                         res.Summary += " | " + string.Join(" ", rl.Facts.Where(kv => kv.Key.StartsWith("terraces.")).Select(kv => kv.Key.Substring(9) + "=" + kv.Value.ToString("0.##", CultureInfo.InvariantCulture)))
-                            + (res.Glitch != null ? " | " + res.Glitch : "");
+                            + (res.Glitch != null ? " | " + res.Glitch : "")
+                            + (_terraced?.Layout != null ? " | planned walks " + _terraced.Layout.Walks.Count + " | rejects " + string.Join(", ", _terraced.Layout.Rejects.OrderByDescending(kv => kv.Key.Contains("dropped") ? 1000 : kv.Value).Take(8).Select(kv => kv.Key + " " + kv.Value)) : "");
                 }
             }
             if (res.Failure == null && job.Slope != null)

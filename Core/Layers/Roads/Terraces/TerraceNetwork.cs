@@ -69,8 +69,8 @@ namespace Placemaker.Core.Layers.Roads.Terraces
             {
                 if (w.P.Count < 2) continue;
                 // A road the network design added since (a link between pieces) may now cross the walk or pass it at another height.
-                if (halfWidth != null && Blocked(net, w, halfWidth, bankSlope)) continue;
-                if (!Join(net, w.P[0], w.From, out float3 a) || !Join(net, w.P[w.P.Count - 1], w.To, out float3 d)) continue;
+                if (halfWidth != null && Blocked(net, w, halfWidth, bankSlope)) { lay.Reject("walk dropped: a road since"); continue; }
+                if (!Join(net, w.P[0], w.From, out float3 a) || !Join(net, w.P[w.P.Count - 1], w.To, out float3 d)) { lay.Reject("walk dropped: street gone"); continue; }
                 var p3 = new List<float3>(w.P.Count);
                 for (int k = 0; k < w.P.Count; k++) p3.Add(new float3(w.P[k].x, w.H[k], w.P[k].y));
                 p3[0] = a; p3[p3.Count - 1] = d;
@@ -102,7 +102,9 @@ namespace Placemaker.Core.Layers.Roads.Terraces
                 float2 mn = pts[0].xz, mx = pts[0].xz;
                 foreach (var q in pts) { mn = math.min(mn, q.xz); mx = math.max(mx, q.xz); }
                 float half = halfWidth(e.Role) + 1.5f + 2.5f;
-                bool own = e.TerraceStreet == w.From || e.TerraceStreet == w.To;
+                // The streets and links the walk was planned against have not moved: only what the network design added since.
+                if (e.TerraceStreet >= 0 || e.TerraceLink) continue;
+                bool own = false;
                 for (int k = 0; k < w.P.Count; k++)
                 {
                     if (s[k] < 12f || s[k] > total - 12f) continue;

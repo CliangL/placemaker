@@ -54,7 +54,7 @@ namespace Placemaker.Core.Layers.Roads.Terraces
         /// <summary>Smallest centre-line radius of a terrace street or a link outside the hairpins (m).</summary>
         public float StreetRadius => math.max(40f, StreetHalf * 6f);
         /// <summary>
-        /// Mean bank slope the spacing is planned with: a rounded bank's steepest point is about 1.3× its mean, a wall's about
+        /// Mean bank slope the spacing is planned with: a rounded bank's steepest point is about 1.15× its mean, a wall's about
         /// its mean (straight face). The grade limit then holds every bank at <see cref="BankSlope"/>.
         /// </summary>
         public float MeanBank => BankSlope / (Wall ? 1.0f : 1.15f);

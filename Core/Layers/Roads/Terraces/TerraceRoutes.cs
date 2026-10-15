@@ -10,8 +10,9 @@
 //               landing straight up into the next street. As many legs as fit between the two streets.
 //   spiral      long diagonals that always turn the same way round the hill, each starting where the last one arrived
 //               (a crossroads on every terrace): one road winding up the whole hill.
-// Bank walks (the walkways amount): a level path across the zone cells to the bank foot, a ramp along the bank face at
-// ≤ 7.5 % (zig-zag when long), a level path across the next terrace's cells to its street.
+// Bank walks (the walkways amount): a level path across the zone cells to the bank foot, one ramp along the bank face at
+// ≤ 7.5 % following the street's curve (a zig-zag with landings only where its legs part enough), a level path across the
+// next terrace's cells to its street; where the step is too deep for that, a straight path across the terraces at ≤ 7.5 %.
 //
 // Every route is checked: inside the area, clear of buildings, never crossing a street or another route, clear of the
 // streets between its ends, arriving at a sensible angle. Pure, deterministic.
@@ -696,7 +697,8 @@ namespace Placemaker.Core.Layers.Roads.Terraces
                 if (s[k] > endClear && s[k] < total - endClear)
                 {
                     if (c.Streets.Nearest(q, clear, null, c.Scratch, out _) < clear) { lay.Reject("check: near street"); return false; }
-                    if (c.Routes.Nearest(q, 2f * halfWidth + 2f, null, c.Scratch, out _) < 2f * halfWidth + 2f) { lay.Reject("check: near route"); return false; }
+                    if (c.Routes.Nearest(q, 2f * halfWidth + 2f, null, c.Scratch, out _) < 2f * halfWidth + 2f
+                        || (r.H.Count == n && !RouteClear(c, q, r.H[k], halfWidth + 1.5f))) { lay.Reject("check: near route"); return false; }
                 }
             }
             for (int k = 0; k + 1 < n; k++)
@@ -714,6 +716,9 @@ namespace Placemaker.Core.Layers.Roads.Terraces
         }
 
         // ───────────────────────── bank walks ─────────────────────────
+
+        /// <summary>A walk keeps this far (m, along the street) from a link's junction: the corner is the link's.</summary>
+        private const float WalkGap = 32f;
 
         private static void Walks(Ctx c, CancellationToken cancel)
         {
@@ -734,7 +739,8 @@ namespace Placemaker.Core.Layers.Roads.Terraces
                     {
                         float target = s0 + (m + 0.5f) * pitch + ((st.Level & 1) == 1 ? 0.3f * pitch : 0f);
                         if (target > s1) target -= 0.5f * pitch;
-                        for (float d = 0f; d <= pitch * 0.35f; d += 8f)
+                        // Nearest to the target first, as far as the whole run (a walk wants a gap between the links).
+                        for (float d = 0f; d <= len; d += d < pitch * 0.5f ? 8f : 16f)
                         {
                             TerraceRoute w = null;
                             for (int sign = 0; sign < 2 && w == null; sign++)
@@ -764,11 +770,10 @@ namespace Placemaker.Core.Layers.Roads.Terraces
             var lay = c.Lay; var o = c.O;
             var st = lay.Streets[i];
             s = st.Wrap(s);
-            foreach (float j in st.Junctions) if (st.Gap(j, s) < 45f) return null;
+            foreach (float j in st.Junctions) if (st.Gap(j, s) < WalkGap) { lay.Reject("walk: junction spacing"); return null; }
             if (!RayUp(c, i, s, out var hit)) return null;
             var to = lay.Streets[hit.Street];
             if (to.Level <= st.Level) return null;
-            foreach (float j in to.Junctions) if (to.Gap(j, hit.Station) < 45f) return null;
             float2 p = st.PointAt(s), T = st.TangentAt(s) * side, U = st.UpAt(s);
             float hw = o.StreetHalf, cf = o.CrossFall;
             float yf = st.BandAt(s, true);
@@ -781,31 +786,60 @@ namespace Placemaker.Core.Layers.Roads.Terraces
             float run = math.abs(dh) / TerraceOptions.WalkGrade;
             float rise = yt - yf;
             float along = run > rise ? math.sqrt(run * run - rise * rise) : 0f;
-            int legs = math.max(1, (int)math.ceil(along / 140f));
+            // One long ramp along the bank face where it fits (a path along a terrace wall), a zig-zag only beyond.
+            int legs = math.max(1, (int)math.ceil(along / 220f));
             // A zig-zag turns on a short level landing (the legs part there instead of meeting in a V).
             const float Turn = 6f;
             float riseRamps = rise - (legs - 1) * Turn;
             if (riseRamps < 3f * legs) { lay.Reject("walk: no room for the turns"); return null; }
             float legAlong = legs > 1 ? math.sqrt(math.max(0f, (run / legs) * (run / legs) - (riseRamps / legs) * (riseRamps / legs))) : along;
-            if (legAlong > 140f) return null;
+            if (legAlong > 220f) { lay.Reject("walk: bank too long"); return null; }
             // Stacked legs leave a steeper bank between them: they must part by ≥ ~25° (rise/run ≥ 0.225 per leg).
             if (legs > 1 && riseRamps / legs / math.max(1f, legAlong) < 0.225f) { lay.Reject("walk: zig-zag too flat"); return null; }
+            // The walk's frame follows its street: x along it (on the chosen side), y up the slope from it — on a hill's curving
+            // contours the ramp stays in its bank instead of cutting a chord across a terrace.
+            bool off = false;
+            float2 W(float x, float y)
+            {
+                float sx = s + side * x;
+                if (!st.Closed && (sx < 5f || sx > st.Length - 5f)) { off = true; sx = math.clamp(sx, 0f, st.Length); }
+                sx = st.Wrap(sx);
+                return st.PointAt(sx) + st.UpAt(sx) * y;
+            }
+            // On a curve the offset the ramp runs at is shorter (inside) or longer (outside) than the street: stretch the run so
+            // the real ramp climbs at the walk grade.
+            {
+                float ym = 0.5f * (yf + yt), target = legAlong;
+                for (int it = 0; it < 2 && legAlong > 1f; it++)
+                {
+                    float real = 0f; float2 prev = W(0f, ym);
+                    for (int qi = 1; qi <= 12; qi++) { float2 cur = W(legAlong * qi / 12f, ym); real += math.distance(prev, cur); prev = cur; }
+                    if (real < 1f) break;
+                    legAlong *= math.clamp(target / real, 0.6f, 2f);
+                }
+                if (legAlong > 260f) { lay.Reject("walk: bank too long"); return null; }
+                off = false;
+            }
             var r = new TerraceRoute { From = i, To = hit.Street, FromS = s, Walk = true, Kind = "walk" };
-            float2 W(float x, float y) => p + T * x + U * y;
             r.Start(p);
             r.H.Add(st.HeightAt(s));
-            void Add(float2 q, Func<float, float> h, float step)
+            float fx = 0f, fy = 0f;
+            void Add(float xB, float yB, Func<float, float> h, float step)
             {
-                float2 a = r.P[r.P.Count - 1];
-                float len = math.distance(a, q);
-                int k = math.max(1, (int)math.ceil(len / step));
+                // Dense frame points, then heights by the real distance along them (an even climb on a curve too).
+                int k = math.max(2, (int)math.ceil((math.abs(xB - fx) + math.abs(yB - fy)) / step));
+                var pts = new List<float2>(k + 1) { r.P[r.P.Count - 1] };
+                for (int u = 1; u <= k; u++) { float t = u / (float)k; pts.Add(W(math.lerp(fx, xB, t), math.lerp(fy, yB, t))); }
+                var st2 = Lines.Stations(pts);
+                float tot = math.max(1e-3f, st2[st2.Length - 1]);
                 r.Break[r.Break.Count - 1] = true;
-                for (int u = 1; u <= k; u++) { r.P.Add(math.lerp(a, q, u / (float)k)); r.H.Add(h(u / (float)k)); r.W.Add(1f); r.Break.Add(false); }
+                for (int u = 1; u <= k; u++) { r.P.Add(pts[u]); r.H.Add(h(st2[u] / tot)); r.W.Add(1f); r.Break.Add(false); }
                 r.Break[r.Break.Count - 1] = true;
+                fx = xB; fy = yB;
             }
             float h0 = st.HeightAt(s);
             // Across the cells (the terrace plane rises gently to the bank foot).
-            Add(W(0f, yf), t => h0 + cf * math.max(0f, math.lerp(0f, yf, t) - hw), 4f);
+            Add(0f, yf, t => h0 + cf * math.max(0f, math.lerp(0f, yf, t) - hw), 4f);
             float x = 0f, yCur = yf;
             for (int leg = 0; leg < legs; leg++)
             {
@@ -813,25 +847,39 @@ namespace Placemaker.Core.Layers.Roads.Terraces
                 float hA = hFoot + dh * leg / legs, hB = hFoot + dh * (leg + 1) / legs;
                 float xB = (leg & 1) == 0 ? legAlong : 0f;
                 float hAa = hA, hBb = hB;
-                Add(W(xB, yB), t => math.lerp(hAa, hBb, t), 4f);
+                Add(xB, yB, t => math.lerp(hAa, hBb, t), 4f);
                 yCur = yB;
                 x = xB;
                 if (leg < legs - 1)
                 {
-                    Add(W(xB, yCur + Turn), t => hBb, 3f);
+                    Add(xB, yCur + Turn, t => hBb, 3f);
                     yCur += Turn;
                 }
             }
+            if (off) { lay.Reject("walk: past the street end"); return null; }
+            // The ramp's real climb (the frame stretches on a curve): never past the walk grade.
+            for (int k = 1; k < r.P.Count; k++)
+            {
+                float l = math.distance(r.P[k - 1], r.P[k]);
+                if (l > 0.3f && math.abs(r.H[k] - r.H[k - 1]) / l > RoadWalkways.MaxWalkGrade) { lay.Reject("walk: steep on the curve"); return null; }
+            }
             // Up across the next terrace's cells to its street.
             float2 from = W(x, yt);
-            int seg = c.Streets.Ray(from, U, c.MaxRay, null, out float dist, c.Scratch);
+            float sxEnd = st.Wrap(s + side * x);
+            int seg = c.Streets.Ray(from, st.UpAt(sxEnd), c.MaxRay, null, out float dist, c.Scratch);
             if (seg < 0 || c.Streets.Owner[seg] != hit.Street || dist > bdTo + 12f) return null;
-            float2 q = from + U * dist;
+            float2 q = from + st.UpAt(sxEnd) * dist;
             float sq = to.StationOf(q, out _);
-            foreach (float j in to.Junctions) if (to.Gap(j, sq) < 45f) return null;
+            foreach (float j in to.Junctions) if (to.Gap(j, sq) < WalkGap) { lay.Reject("walk: junction spacing"); return null; }
             float h1 = to.HeightAt(sq);
             float hTop2 = hTop;
-            Add(to.PointAt(sq), t => math.lerp(hTop2, h1, t), 4f);
+            {
+                float2 a = r.P[r.P.Count - 1], b = to.PointAt(sq);
+                int k = math.max(1, (int)math.ceil(math.distance(a, b) / 4f));
+                r.Break[r.Break.Count - 1] = true;
+                for (int u = 1; u <= k; u++) { r.P.Add(math.lerp(a, b, u / (float)k)); r.H.Add(math.lerp(hTop2, h1, u / (float)k)); r.W.Add(1f); r.Break.Add(false); }
+                r.Break[r.Break.Count - 1] = true;
+            }
             r.ToS = sq;
             // Steepest piece.
             for (int k = 1; k < r.P.Count; k++)
@@ -850,40 +898,66 @@ namespace Placemaker.Core.Layers.Roads.Terraces
         /// </summary>
         private static TerraceRoute StairlessCut(Ctx c, int i, float s, int side)
         {
-            var lay = c.Lay;
+            var lay = c.Lay; var o = c.O;
             var st = lay.Streets[i];
             s = st.Wrap(s);
-            foreach (float j in st.Junctions) if (st.Gap(j, s) < 45f) return null;
+            foreach (float j in st.Junctions) if (st.Gap(j, s) < WalkGap) { lay.Reject("walk: junction spacing"); return null; }
             if (!RayUp(c, i, s, out var hit)) return null;
             var to = lay.Streets[hit.Street];
             if (to.Level <= st.Level) return null;
+            // A level stub straight off each street, clear of its road and verge, before the climb starts: the walk never
+            // climbs beside a road (their corridors would clash at different heights).
+            float stub = o.StreetHalf + 5f;
             float h0 = st.HeightAt(s), h1 = to.HeightAt(hit.Station);
+            float hA = h0 + o.CrossFall * math.max(0f, stub - o.StreetHalf);
+            float2 p = st.PointAt(s), pA = p + st.UpAt(s) * stub, t0 = st.TangentAt(s) * side;
             float need = math.abs(h1 - h0) / (0.96f * TerraceOptions.WalkGrade);
             // At ≥ 30° to the streets: shallower, it would run along the terrace it cuts for too long.
-            if (need > 2f * hit.Dist) { lay.Reject("walk: too steep to cut across"); return null; }
-            float2 p = st.PointAt(s), t0 = st.TangentAt(s) * side;
+            if (need > 2f * (hit.Dist - 2f * stub)) { lay.Reject("walk: too steep to cut across"); return null; }
             float along = math.dot(to.TangentAt(hit.Station), t0) >= 0f ? 1f : -1f;
-            float x = math.sqrt(math.max(0f, need * need - hit.Dist * hit.Dist)) + 4f;
-            float sq = hit.Station + along * x;
-            if (!to.Closed && (sq < 20f || sq > to.Length - 20f)) return null;
-            sq = to.Wrap(sq);
-            foreach (float j in to.Junctions) if (to.Gap(j, sq) < 45f) return null;
-            float2 q = to.PointAt(sq);
-            h1 = to.HeightAt(sq);
-            float len = math.distance(p, q);
-            if (math.abs(h1 - h0) / len > RoadWalkways.MaxWalkGrade) return null;
+            float x = math.sqrt(math.max(0f, need * need - (hit.Dist - 2f * stub) * (hit.Dist - 2f * stub))) + 4f;
+            float sq = 0f, len = 0f, hB = 0f;
+            float2 q = default, qB = default;
+            bool ok = false;
+            // On a curving street the chord to the point x along is shorter than planned: reach a little further until it climbs gently.
+            for (int tries = 0; tries < 6 && !ok; tries++)
+            {
+                sq = hit.Station + along * x;
+                if (!to.Closed && (sq < 20f || sq > to.Length - 20f)) { lay.Reject("walk: past the street end"); return null; }
+                sq = to.Wrap(sq);
+                q = to.PointAt(sq);
+                qB = q - to.UpAt(sq) * stub;
+                h1 = to.HeightAt(sq);
+                hB = h1 - o.CrossFall * math.max(0f, stub - o.StreetHalf);
+                len = math.distance(pA, qB);
+                if (math.abs(hB - hA) / len <= 0.96f * TerraceOptions.WalkGrade) ok = true;
+                else x += math.abs(hB - hA) / (0.96f * TerraceOptions.WalkGrade) - len + 5f;
+            }
+            if (!ok) { lay.Reject("walk: cut never gentle"); return null; }
+            foreach (float j in to.Junctions) if (to.Gap(j, sq) < WalkGap) { lay.Reject("walk: junction spacing"); return null; }
             var r = new TerraceRoute { From = i, To = hit.Street, FromS = s, ToS = sq, Walk = true, Kind = "walk-cut" };
             r.Start(p);
             r.H.Add(h0);
-            int k = math.max(2, (int)math.ceil(len / 4f));
-            for (int u = 1; u <= k; u++) { r.P.Add(math.lerp(p, q, u / (float)k)); r.H.Add(math.lerp(h0, h1, u / (float)k)); r.W.Add(1f); r.Break.Add(u == k); }
-            r.Grade = math.abs(h1 - h0) / len;
-            // It must leave and reach its streets at a walkable angle; it may run close to them only near its ends.
-            float2 dir = math.normalizesafe(q - p);
+            void Seg(float2 a, float2 b, float ha, float hb, float step)
+            {
+                int k = math.max(1, (int)math.ceil(math.distance(a, b) / step));
+                r.Break[r.Break.Count - 1] = true;
+                for (int u = 1; u <= k; u++) { r.P.Add(math.lerp(a, b, u / (float)k)); r.H.Add(math.lerp(ha, hb, u / (float)k)); r.W.Add(1f); r.Break.Add(false); }
+                r.Break[r.Break.Count - 1] = true;
+            }
+            Seg(p, pA, h0, hA, 3f);
+            Seg(pA, qB, hA, hB, 4f);
+            Seg(qB, q, hB, h1, 3f);
+            r.Grade = math.abs(hB - hA) / len;
+            // It must leave the stubs at a walkable angle; past them it is clear of its streets once the gap it opens (at that
+            // angle) covers both corridors and the bank its own climb needs.
+            float2 dir = math.normalizesafe(qB - pA);
             float cosOut = math.abs(math.dot(dir, st.TangentAt(s))), cosIn = math.abs(math.dot(dir, to.TangentAt(sq)));
-            if (cosOut > 0.95f || cosIn > 0.95f) return null;
+            if (cosOut > 0.97f || cosIn > 0.97f) { lay.Reject("walk: cut too shallow"); return null; }
             float sinMin = math.sqrt(1f - math.max(cosOut, cosIn) * math.max(cosOut, cosIn));
-            if (!ValidWalk(c, r, (c.O.StreetHalf + 3f) / math.max(0.3f, sinMin))) return null;
+            float opens = sinMin - TerraceOptions.WalkGrade / math.max(0.1f, o.BankSlope);
+            if (opens < 0.12f) { lay.Reject("walk: cut too shallow"); return null; }
+            if (!ValidWalk(c, r, stub + 4f)) return null;
             return r;
         }
 
