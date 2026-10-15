@@ -17,14 +17,20 @@ namespace Placemaker.Gallery
 {
     public static class ShoreSites
     {
-        public static readonly string[] Kinds = { "flat", "bank", "headland", "cliff" };
+        public static readonly string[] Kinds = { "flat", "bank", "headland", "cliff", "curved" };
         public const float Level = -0.6f;
 
         /// <summary>Coast line z(x) of a site: a gently curving shore 18 % up the site.</summary>
-        public static Func<float, float> Coast(float3[] ring)
+        public static Func<float, float> Coast(float3[] ring, string kind = null)
         {
             float zMin = ring.Min(p => p.z), zMax = ring.Max(p => p.z);
             float baseZ = zMin + (zMax - zMin) * 0.18f;
+            if (kind == "curved")
+            {
+                // (s30) A lake bay like playtest 54–57: one big curve, and a real waterline's jagged 10–25 m wiggles on it.
+                float xMin = ring.Min(p => p.x), w = ring.Max(p => p.x) - xMin;
+                return x => baseZ + 24f * math.sin(math.PI * math.saturate((x - xMin) / w)) - 10f + 1.6f * math.sin(x / 4.1f) + 1.1f * math.sin(x / 2.3f + 0.7f) + 0.6f * math.sin(x / 1.3f);
+            }
             return x => baseZ + 5f * math.sin(x / 41f) + 2.5f * math.sin(x / 17f + 1.3f);
         }
 
@@ -37,7 +43,7 @@ namespace Placemaker.Gallery
         /// <summary>Ground height of a shore site (u = metres inland of the coast line, negative = under water).</summary>
         public static Func<float2, float> Ground(float3[] ring, string kind)
         {
-            var coast = Coast(ring);
+            var coast = Coast(ring, kind);
             float xMin = ring.Min(p => p.x), xMax = ring.Max(p => p.x), w = xMax - xMin;
             float Low(float u, float2 p) => u >= 0f
                 ? Level + 0.45f + 0.014f * u + 0.25f * (ValueNoise.Clumps(p, 28f, 7u) - 0.5f) * S(0f, 12f, u)
@@ -48,6 +54,10 @@ namespace Placemaker.Gallery
             float Cliff(float u, float2 p) => u >= 0f
                 ? Level + 0.5f + 13f * S(0f, 9f, u) + 0.02f * u + 1.2f * (ValueNoise.Clumps(p, 18f, 11u) - 0.5f) * S(0f, 6f, u)
                 : math.max(Level - 8f, Level + 0.5f + 0.45f * u);
+            // (s30) Curved lake shore: a 3.5 m bank rising over 25 m, lumpy ground (playtest 56: hillside behind the promenade).
+            float Curved(float u, float2 p) => u >= 0f
+                ? Level + 0.35f + 3.5f * S(2f, 26f, u) + 0.03f * u + 0.9f * (ValueNoise.Clumps(p, 20f, 13u) - 0.5f) * S(1f, 12f, u)
+                : math.max(Level - 5f, Level + 0.35f + 0.14f * u);
             return p =>
             {
                 float u = p.y - coast(p.x);
@@ -55,6 +65,7 @@ namespace Placemaker.Gallery
                 {
                     case "bank": return Bank(u, p);
                     case "cliff": return Cliff(u, p);
+                    case "curved": return Curved(u, p);
                     case "headland":
                         float t = S(xMin + 0.42f * w, xMin + 0.62f * w, p.x);
                         return math.lerp(Low(u, p), Cliff(u, p), t);
@@ -67,9 +78,9 @@ namespace Placemaker.Gallery
         /// Water depth as the game's snapshot gives it: sampled on an 8 m grid and interpolated bilinearly (so the
         /// zero line is blurred and a cell off, like in game). The sea is everything below the level seaward of the coast.
         /// </summary>
-        public static Func<float2, float> Depth(float3[] ring, Func<float2, float> ground)
+        public static Func<float2, float> Depth(float3[] ring, Func<float2, float> ground, string kind = null)
         {
-            var coast = Coast(ring);
+            var coast = Coast(ring, kind);
             float cell = 8f;
             float2 min = new float2(ring.Min(p => p.x), ring.Min(p => p.z)) - 80f, max = new float2(ring.Max(p => p.x), ring.Max(p => p.z)) + 80f;
             int nx = (int)math.ceil((max.x - min.x) / cell) + 1, ny = (int)math.ceil((max.y - min.y) / cell) + 1;
@@ -151,6 +162,29 @@ namespace Placemaker.Gallery
             if (raster == null) return original;
             return p => raster.TrySample(p, original, out float h) ? h : original(p);
         }
+
+        /// <summary>(s30) Curtain and net-seat metrics of the final ground (TerrainMetrics), as a summary string.</summary>
+        public static string Glitches(ComposedPlan plan, Func<float2, float> original, Func<float2, float> final, float2 min, float2 max)
+        {
+            var nets = plan.Layers.Where(l => l != null).SelectMany(l => l.Nets)
+                .Where(n => n != null && n.Role != NetRole.Fence)
+                .Select(n => (n.A, n.B, n.C, n.D, Composer.DefaultHalfWidth(n.Role), n.FollowTerrain ? TerrainMetrics.SeatFollow : n.Category == AssetCategories.NetQuay ? TerrainMetrics.SeatQuay : TerrainMetrics.SeatDeck)).ToList();
+            var c = TerrainMetrics.Curtains(final, original, min, max, TerrainMetrics.Texel, TerrainMetrics.OffNets(nets));
+            var s = TerrainMetrics.Seats(nets, final);
+            string worst = "";
+            float wv = 0f;
+            foreach (var n in plan.Layers.Where(l => l != null).SelectMany(l => l.Nets).Where(n => n != null && n.Role != NetRole.Fence))
+            {
+                var one = TerrainMetrics.Seats(new[] { (n.A, n.B, n.C, n.D, Composer.DefaultHalfWidth(n.Role), n.FollowTerrain ? TerrainMetrics.SeatFollow : n.Category == AssetCategories.NetQuay ? TerrainMetrics.SeatQuay : TerrainMetrics.SeatDeck) }, final);
+                float v = math.max(one.Cross, one.Gap);
+                if (v > wv) { wv = v; worst = n.Role + "/" + (n.Category ?? "") + "/" + n.Asset.Id; }
+            }
+            LastCurtainAt = c.Count > 0 ? c.At : new float2(float.NaN);
+            LastSeatAt = math.max(s.Cross, s.Gap) > 0.3f ? s.At : new float2(float.NaN);
+            return $"curtain {c.Max:0.00}@{c.At.x:0},{c.At.y:0}/{c.Count} seat {s.Cross:0.00}/{s.Gap:0.00}@{s.At.x:0},{s.At.y:0} {worst}";
+        }
+
+        [ThreadStatic] public static float2 LastCurtainAt, LastSeatAt;
 
         /// <summary>Lambert shade factor of a height field at p (light from the north-west, 45° up).</summary>
         public static float Shade(Func<float2, float> h, float2 p, float e = 0.8f)

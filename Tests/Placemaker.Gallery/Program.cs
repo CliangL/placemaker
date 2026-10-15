@@ -10,6 +10,7 @@
 // Writes <out>/<type>/<variant>.png, <out>/index.html and <out>/gallery.json (metrics per image).
 //
 //   dotnet run -c Release --project Tests/Placemaker.Gallery -- --out docs/gallery [--only park,memorialPark] [--water beach,waterfront] [--decals]
+//   (s30) ... -- --terrain-dump <ModsData/Placemaker/debug/x.json or folder> --out <dir>: renders in-game terrain dumps
 //   --decals: also "decals-on" (100 %), "decals-max" (300 %) and "decals-gritty" per type (decals are off by default); decals are drawn in category colours with a legend.
 
 using System;
@@ -34,7 +35,7 @@ namespace Placemaker.Gallery
     {
         public static int Main(string[] args)
         {
-            string outDir = "docs/gallery", repo = null, fixture = null, dump = null;
+            string outDir = "docs/gallery", repo = null, fixture = null, dump = null, terrainDump = null;
             HashSet<string> only = null;
             for (int i = 0; i < args.Length; i++)
             {
@@ -61,10 +62,12 @@ namespace Placemaker.Gallery
                     case "--no-harmony": Variants.NoHarmony = true; break;
                     case "--no-shops": Variants.NoShops = true; break;
                     case "--dump": dump = next; i++; break;
+                    case "--terrain-dump": terrainDump = next; i++; break;   // s30: render in-game terrain dumps (DumpView)
                 }
             }
             repo ??= FindRepo();
             if (!Path.IsPathRooted(outDir)) outDir = Path.GetFullPath(Path.Combine(repo, outDir));
+            if (terrainDump != null) return DumpView.Run(terrainDump, outDir);
             fixture ??= Path.Combine(repo, "Tests", "Placemaker.Tests", "Fixtures", "catalog-bounds.json");
             var catalog = Catalog.Load(fixture);
             // s18: the player's full catalog dump (when present) decides which explicit ids exist, so designed
@@ -408,6 +411,8 @@ namespace Placemaker.Gallery
         public string Summary = "", File = "";
         public double Ms;
         public int Objects, Nets, Surfaces, Errors, Warnings, BenchesOffPath, Overlaps, Outside, Decals, EdgeSpikes;
+        /// <summary>(s30) Glitch metrics of the final ground (curtain, net seats) for terrain renders.</summary>
+        public string Glitch;
         public double PathMetres;
         public Dictionary<string, int> ByRole = new Dictionary<string, int>();
         public Dictionary<string, int> ByCategory = new Dictionary<string, int>();
@@ -532,7 +537,7 @@ namespace Placemaker.Gallery
                     // s20: a real shore — curved coast, sloped ground, the game's coarse water snapshot.
                     var g = ShoreSites.Ground(ring, job.Shore);
                     site.HeightAt = g;
-                    site.WaterDepthAt = ShoreSites.Depth(ring, g);
+                    site.WaterDepthAt = ShoreSites.Depth(ring, g, job.Shore);
                 }
             }
             _sloped = job.Slope != null && float.IsNaN(_waterZ);
@@ -589,7 +594,7 @@ namespace Placemaker.Gallery
             {
                 var fx = plan.Layers[0].Facts;
                 string F(string k) => fx.TryGetValue(k, out var v) ? v.ToString("0.##", CultureInfo.InvariantCulture) : "-";
-                res.Summary += $" | steps {F("steps")} links {F("edgeLinks")} beds {F("beds")} piers {F("piers")} | cliff {F("shoreCliffShare")} lookouts {F("lookouts")} cut {F("earthMaxCut")} fill {F("earthMaxFill")} rough {F("terrainRoughness")} | " + string.Join(" ", plan.AllIssues().Where(i => i != null && i.Severity != IssueSeverity.Info || (i != null && i.Key.Contains("Shore"))).Select(i => i.Key.Replace("Placemaker.", "")).Distinct());
+                res.Summary += $" | walk r {F("walkMinRadius")} wiggles {F("walkWiggles")} grade {F("walkMaxGrade")} edge r {F("edgeMinRadius")} runs {F("edgeRuns")} rails {F("railingRuns")} wall {F("hillsideWall")}/{F("wallHeightMax")} | {res.Glitch} | steps {F("steps")} links {F("edgeLinks")} beds {F("beds")} piers {F("piers")} | cliff {F("shoreCliffShare")} lookouts {F("lookouts")} cut {F("earthMaxCut")} fill {F("earthMaxFill")} rough {F("terrainRoughness")} | " + string.Join(" ", plan.AllIssues().Where(i => i != null && i.Severity != IssueSeverity.Info || (i != null && i.Key.Contains("Shore"))).Select(i => i.Key.Replace("Placemaker.", "")).Distinct());
             }
             return res;
         }
@@ -1010,6 +1015,18 @@ namespace Placemaker.Gallery
             var spikes = Placemaker.Core.Layers.Common.PathQuality.EdgeSpikes(plan, ring);
             res.EdgeSpikes = spikes.Count;
             foreach (var sp in spikes) cv.StrokePolyline(new[] { sp.From, sp.To }, 1.6f, Rgba.Hex("#e01010", 0.85f));
+            if (final != null)
+            {
+                res.Glitch = TerrainView.Glitches(plan, _original, final, min, max);
+                // s30: the worst curtain (red) and the worst net seat (magenta) circled.
+                foreach (var (at, col) in new[] { (TerrainView.LastCurtainAt, "#e01010"), (TerrainView.LastSeatAt, "#d020d0") })
+                    if (math.isfinite(at.x))
+                    {
+                        var circ = new float2[24];
+                        for (int k = 0; k < 24; k++) circ[k] = at + new float2(math.cos(k * 0.2618f), math.sin(k * 0.2618f)) * 5f;
+                        cv.StrokePolyline(circ, cv.Px(2.5f), Rgba.Hex(col), closed: true);
+                    }
+            }
             cv.SavePng(file);
             if (final != null)
                 try { TerrainView.Oblique(file.Replace(".png", "-3d.png"), cv, plan, cat, _original, final, _level, min, max); }

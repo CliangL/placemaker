@@ -404,6 +404,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             ctx.Plan.Facts["shoreMode"] = (int)s.Mode;
             ctx.Plan.Facts["shoreCliffShare"] = s.CliffShare;
             ctx.Plan.Facts["shoreWaterline"] = s.HasWaterline ? 1 : 0;
+            if (math.isfinite(s.WaterLevel)) ctx.Plan.Facts["shoreWaterLevel"] = s.WaterLevel;   // s30: for the terrain dump and gallery
             return s;
         }
 
@@ -523,11 +524,23 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         private float2 WaterPointAt(int k) => Chain[k] - Inward[k] * (math.isfinite(Gap[k]) ? Gap[k] : 0f);
 
+        /// <summary>(s30) Index k of the chain segment holding arc length s (binary search; was a linear scan per call).</summary>
+        private int SegmentOf(float s)
+        {
+            int lo = 0, hi = Chain.Length - 2;
+            if (hi <= 0) return 0;
+            while (lo < hi)
+            {
+                int m = (lo + hi) >> 1;
+                if (Along[m + 1] < s) lo = m + 1; else hi = m;
+            }
+            return lo;
+        }
+
         private int Segment(float s, out float t)
         {
             s = math.clamp(s, 0f, Length);
-            int k = 0;
-            while (k < Chain.Length - 2 && Along[k + 1] < s) k++;
+            int k = SegmentOf(s);
             float seg = math.max(1e-5f, Along[k + 1] - Along[k]);
             t = math.saturate((s - Along[k]) / seg);
             return k;
@@ -652,9 +665,49 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         // ───────────── queries ─────────────
 
+        // (s30) Segment bounding boxes and a warm start for Nearest on the sculpt grid (2 m nodes: ~10–20 k queries per plan).
+        private float4[] _segBox;
+        private int _lastNearest;
+
+        /// <summary>
+        /// <see cref="Nearest"/> with pruning: starts from the previous query's segment (neighbouring grid nodes share it) and
+        /// skips every segment whose bounding box is farther than the best hit. Same result.
+        /// </summary>
+        public float2 NearestFast(float2 p, out float2 inward, out float along)
+        {
+            int n = Chain.Length - 1;
+            if (n < 1) { inward = Inward.Length > 0 ? Inward[0] : new float2(0, 1); along = 0f; return Chain.Length > 0 ? Chain[0] : p; }
+            if (_segBox == null)
+            {
+                _segBox = new float4[n];
+                for (int k = 0; k < n; k++) { var mn = math.min(Chain[k], Chain[k + 1]); var mx = math.max(Chain[k], Chain[k + 1]); _segBox[k] = new float4(mn, mx); }
+            }
+            float Dist(int k, out float t)
+            {
+                var a = Chain[k]; var ab = Chain[k + 1] - a; float l2 = math.lengthsq(ab);
+                t = l2 > 1e-9f ? math.saturate(math.dot(p - a, ab) / l2) : 0f;
+                return math.distancesq(p, a + ab * t);
+            }
+            int bk = math.clamp(_lastNearest, 0, n - 1);
+            float best = Dist(bk, out float bt);
+            for (int k = 0; k < n; k++)
+            {
+                var b = _segBox[k];
+                float dx = math.max(0f, math.max(b.x - p.x, p.x - b.z)), dy = math.max(0f, math.max(b.y - p.y, p.y - b.w));
+                if (dx * dx + dy * dy > best) continue;
+                float d = Dist(k, out float t);
+                if (d < best || d == best && k < bk) { best = d; bk = k; bt = t; }
+            }
+            _lastNearest = bk;
+            inward = math.normalizesafe(math.lerp(Inward[bk], Inward[bk + 1], bt), Inward[bk]);
+            along = Along[bk] + (Along[bk + 1] - Along[bk]) * bt;
+            return Chain[bk] + (Chain[bk + 1] - Chain[bk]) * bt;
+        }
+
         /// <summary>Closest shore point, its inland normal and arc length.</summary>
         public float2 Nearest(float2 p, out float2 inward, out float along)
         {
+            if (Chain.Length >= 2) return NearestFast(p, out inward, out along);
             float best = float.MaxValue; float2 bestP = Chain[0]; inward = Inward[0]; along = 0f;
             for (int k = 0; k + 1 < Chain.Length; k++)
             {
@@ -677,8 +730,7 @@ namespace Placemaker.Core.Layers.Types.Beach
         public float2 At(float s, out float2 inward, out float2 tangent)
         {
             s = math.clamp(s, 0f, Length);
-            int k = 0;
-            while (k < Chain.Length - 2 && Along[k + 1] < s) k++;
+            int k = SegmentOf(s);
             float seg = math.max(1e-5f, Along[k + 1] - Along[k]);
             float t = math.saturate((s - Along[k]) / seg);
             inward = math.normalizesafe(math.lerp(Inward[k], Inward[k + 1], t), Inward[k]);

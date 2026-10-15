@@ -93,7 +93,8 @@ namespace Placemaker.Core.Layers.Common.Shore
             {
                 if (run.Count >= 2)
                 {
-                    var line = Smooth(run, 2);
+                    // s30: smoothed by arc length (σ 8 m): a walk, boardwalk or railing parallel to the shore never zig-zags with it.
+                    var line = run.Count >= 3 ? Types.Beach.ShoreWalk.SmoothLine(run, 8f, 2, 3f) : run.ToArray();
                     if (Shoreline.LengthOf(line) >= minLength) result.Add(line);
                 }
                 run.Clear();

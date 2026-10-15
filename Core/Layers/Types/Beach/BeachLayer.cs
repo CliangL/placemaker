@@ -182,7 +182,8 @@ namespace Placemaker.Core.Layers.Types.Beach
             ctx.LayerRegion = shore.Land;
             var b = new Work { Ctx = ctx, Shore = shore, Style = ctx.S("style") };
             b.Under = ctx.B("sandReach") ? ctx.F("underwater") : 0f;
-            b.G = ShoreGround.Create(ctx, shore, b.Under);
+            // s30: a 2 m node grid (a 4 m grid smeared the promenade bench and the access ramps into cross slopes).
+            b.G = ShoreGround.Create(ctx, shore, b.Under, 2f);
             b.Occ = new Occupancy(shore.Land, ctx.Input.Reserved, ctx.Site);
             var g = b.G;
             b.Occ.GroundOk = (p, r) => g.CanStand(p, r);
@@ -233,7 +234,8 @@ namespace Placemaker.Core.Layers.Types.Beach
             if (!allCliff) BlendGrass(b);
             Backdrop(b);
 
-            g.Finish(5f, 1.5f, 0.45f);
+            // s30: banks ≤ 33 % (45 % read as a near-vertical sheet over a 3.5 m heightmap texel once the walk bench was re-laid).
+            g.Finish(5f, 1.5f, 0.33f);
             EmitGreenRegions(ctx, b.Occ, g);
             CommonStats(ctx);
             ctx.Stat("Placemaker.Stat.Shoreline", System.Math.Round(shore.Length), Keys.UnitM);
@@ -252,6 +254,21 @@ namespace Placemaker.Core.Layers.Types.Beach
             ctx.Plan.Facts["landings"] = b.Landings.Count;
             ctx.Plan.Facts["lifeguards"] = b.Guards;
             ctx.Plan.Facts["lookouts"] = b.Lookouts;
+            // s30: how smooth the promenade came out (tests, gallery, debug dump).
+            float radius = 9999f, grade = 0f, wlen = 0f; int wig = 0;
+            for (int li = 0; li < b.Lines.Count; li++)
+            {
+                var l = b.Lines[li];
+                radius = math.min(radius, ShoreWalk.MinRadius(l)); wig += ShoreWalk.Wiggles(l); wlen += Shoreline.LengthOf(l);
+                var s = ShoreWalk.Arc(l); var h = new float[l.Length];
+                for (int i = 0; i < l.Length; i++) h[i] = b.Profiles[li](s[i]);
+                grade = math.max(grade, ShoreWalk.MaxGrade(h, s));
+            }
+            ctx.Plan.Facts["walks"] = b.Lines.Count;
+            ctx.Plan.Facts["walkLength"] = wlen;
+            ctx.Plan.Facts["walkMinRadius"] = math.min(radius, 9999f);
+            ctx.Plan.Facts["walkWiggles"] = wig;
+            ctx.Plan.Facts["walkMaxGrade"] = grade;
         }
 
         /// <summary>Green regions for the features: free land that is not cliff and not steep.</summary>
@@ -313,6 +330,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             float bankW = math.clamp(rise / 0.2f, 10f, 50f);
             ctx.Plan.Facts["bankRise"] = rise;
             float duneStart = b.PathDw + b.Hw + 2.5f, duneEnd = duneStart + ctx.F("duneDepth");
+            float bankStart = b.HasPath ? math.max(D, b.PathDw + b.Hw + 6.5f) : D;
             float duneH = ctx.F("duneHeight");
             uint seed = Hashing.Mix(ctx.Seed, 0xD00Eu);
             float phase1 = Hashing.Unit(seed) * 6.283f, phase2 = Hashing.Unit(Hashing.Mix(seed, 1u)) * 6.283f;
@@ -329,9 +347,14 @@ namespace Placemaker.Core.Layers.Types.Beach
                     else
                     {
                         float top = r0 + 0.05f + slope * D + slope * 0.5f * (dw - D);
-                        float u = Sculpt.Smooth01((dw - D) / bankW);
+                        // s30: the bank starts behind the promenade bench (it used to start at the back of the sand, under the bench,
+                        // and the bench squeezed it into a near-vertical sheet).
+                        float u = Sculpt.Smooth01((dw - bankStart) / bankW);
                         t = math.lerp(math.min(top, h0 + 0.6f), h0, u);
                     }
+                    // s30: never deeper than the earthwork limit: a carve the limit clamped afterwards left a shelf and a near-vertical
+                    // bank behind it on a high shore; held here, the beach rides up parallel to the bank instead.
+                    t = math.max(t, h0 - 4.5f);
                 }
                 if (dunes && dw > duneStart && dw < duneEnd)
                 {
@@ -339,11 +362,13 @@ namespace Placemaker.Core.Layers.Types.Beach
                     float u = (dw - duneStart) / (duneEnd - duneStart);
                     float cross = math.pow(math.sin(math.PI * math.pow(u, 0.85f)), 1.6f);
                     float swell = 0.78f + 0.16f * math.sin(along / 90f * 6.283f + phase1) + 0.06f * math.sin(along / 37f * 6.283f + phase2);
-                    t += duneH * cross * swell;
+                    // s30: dunes only where the ground is not cut deeply (a dune ridge on top of a cut bank made it a near-vertical sheet).
+                    float onCut = math.saturate(1f - math.max(0f, h0 - t - 0.3f) / 1.5f);
+                    t += duneH * cross * swell * onCut;
                 }
                 return t;
             });
-            g.Settle(5f, 1.5f, 0.45f, 10f);
+            g.Settle(5f, 1.5f, 0.33f, 10f);
         }
 
         /// <summary>
@@ -437,21 +462,26 @@ namespace Placemaker.Core.Layers.Types.Beach
 
         // ───────────── circulation ─────────────
 
+        /// <summary>(s30) The promenade's smooth curve(s) over one beach run (on land, off cliffs).</summary>
+        private static List<float2[]> BeachWalkLines(Work b, float2 run)
+        {
+            var shore = b.Shore; var g = b.G;
+            return ShoreWalk.SmoothFromWater(shore, b.PathDw, run, 24f, null, p => shore.Land.ContainsDisc(p, b.Hw + 1f) && !g.OnCliff(p), 24f);
+        }
+
         private void Paths(Work b, NetRole role, bool allCliff)
         {
             var ctx = b.Ctx; var shore = b.Shore; var occ = b.Occ; var g = b.G;
             var asset = AssetMix.One(ctx.S("pathAsset"));
             var spine = new List<(float2, float2)>();
             if (b.HasPath && !allCliff)
-                foreach (var line in shore.OffsetFromWater(b.PathDw, b.Hw + 1f, 24f, 3f, p =>
+                // s30: ONE smooth curve near the water (ShoreWalk: the waterline offset smoothed over tens of metres, radius
+                // ≥ 40 m) per beach run, on ONE level bench smoothed over ±40 m and ≤ 2 % along it; it ends where its level would
+                // have to climb to ground it may not change (the side borders, a cliff).
+                foreach (var run in b.BeachRuns)
+                foreach (var line in BeachWalkLines(b, run))
                 {
-                    shore.Nearest(p, out _, out float a);
-                    return !InBeachRun(b, a) || g.OnCliff(p);
-                }))
-                    // ONE continuous walk on a level bench: smoothed along the shore, ≤ 6 % along it, flat across; it ends
-                    // where its level would have to climb to ground it may not change (the side borders, a cliff).
-                {
-                    foreach (var (piece, profile) in g.Walk(line, b.Hw + 1.2f, 5f, 16f, 0.06f, 0.8f, 24f))
+                    foreach (var (piece, profile) in g.Walk(line, b.Hw + 1.5f, 5f, 40f, 0.02f, 0.8f, 24f))
                     {
                         var curves = Shoreline.Curves(shore.Land, piece, role);
                         if (curves.Count == 0) continue;
@@ -488,7 +518,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             {
                 var walks = new List<float2[]>(b.Lines);
                 walks.AddRange(cliffLines);
-                g.ConnectAll(occ, gates.ConvertAll(gt => gt.Position), walks, NetRole.Pathway, asset);
+                g.ConnectAll(occ, gates.ConvertAll(gt => gt.Position), walks, NetRole.Pathway, asset, b.HasPath ? b.Hw + 1.5f : 0f);
             }
             if (allCliff) return;
 
@@ -544,7 +574,10 @@ namespace Placemaker.Core.Layers.Types.Beach
             float lowH = g.H(landing);
             float botH = math.max(lowH, topH - 0.10f * len);
             if (g.HasLevel) botH = math.max(botH, g.Level + 0.35f);
-            g.Ramp(top, topH, bottom, botH, 1.6f, 2.5f);
+            // s30: level across well past the path (a 3 m flat strip on the 2 m grid), banks widening with the cut: no lip along it.
+            // The ramp starts at the bench's sea edge: from the walk centre its first metres tilted the bench beside the junction.
+            var rampTop = top - inw * math.min(b.Hw + 1.5f, len * 0.4f);
+            g.Ramp(rampTop, topH, bottom, botH, 3f, math.max(3f, math.abs(topH - g.H(math.lerp(rampTop, bottom, 0.5f))) / 0.25f));
             LeisureKit.Path(ctx, occ, top, bottom, NetRole.Pathway, asset);
             b.Access.Add((top, bottom));
             if (landings)
