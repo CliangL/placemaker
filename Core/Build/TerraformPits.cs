@@ -20,6 +20,27 @@ namespace Placemaker.Core.Build
         public static readonly float[] Radii = { 5f, 9f, 13f };
         private const int Directions = 16;
 
+        /// <summary>Layers whose design digs on purpose (excavation, ponds, basins, bunkers): the pit guard leaves their target alone.</summary>
+        private static readonly HashSet<string> PitTypes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "quarry", "pond", "wetland", "landfill", "constructionSite", "amphitheatre", "golf", "animalPark", "farmstead", "zenGarden",
+            "waterfront", "beach", "shore", "terrain", "terraceGarden", "lookoutHill", "spoilHeaps",
+        };
+
+        /// <summary>(s58) True when the plan digs a hollow by design: a type that excavates, a water surface, or a sunken/bowl terrain shape (Fact "intentionalPit").</summary>
+        public static bool Intentional(ComposedPlan plan)
+        {
+            if (plan?.Layers == null) return false;
+            foreach (var l in plan.Layers)
+            {
+                if (l == null) continue;
+                if (l.GeneratorId != null && PitTypes.Contains(l.GeneratorId)) return true;
+                if (l.Facts != null && l.Facts.ContainsKey("intentionalPit")) return true;
+                if (l.Surfaces != null) foreach (var sf in l.Surfaces) if (sf != null && sf.Role == SurfaceRole.Water) return true;
+            }
+            return false;
+        }
+
         public struct Pit
         {
             public float2 At;

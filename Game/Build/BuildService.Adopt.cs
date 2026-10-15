@@ -667,10 +667,14 @@ namespace Placemaker.Game.Build
             };
             _record = _registry.CreateRecord(rec, true);
 
-            // Carrier for parking decals (only when the plan has stalls).
+            // Carrier for parking decals; s58: every build gets one, it is the shared owner of the build's overridable objects
+            // (so the game's OverrideSystem never hides our own pieces against each other), stall markings or not.
             Entity decal = Entity.Null;
             foreach (var w in _work.Objects)
                 if (w.Category == AssetCategories.ParkingDecal && (decal = PrefabOf(w)) != Entity.Null) break;
+            if (decal == Entity.Null)
+                foreach (var w in _work.Objects)
+                    if ((decal = PrefabOf(w)) != Entity.Null) break;
             if (decal == Entity.Null) return;
             _carrier = EntityManager.CreateEntity();
             // A PrefabRef is required: validation jobs walk Owner chains and read PrefabRef unchecked.

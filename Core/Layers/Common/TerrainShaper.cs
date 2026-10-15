@@ -108,6 +108,7 @@ namespace Placemaker.Core.Layers.Common
         {
             var result = new TerrainResult { HeightAfter = ctx.H };
             if (spec.Mode == TerrainMode.None || region == null) return result;
+            if (spec.Mode == TerrainMode.Sunken || spec.Mode == TerrainMode.Bowl || (spec.Mode == TerrainMode.Terraces && spec.Down)) ctx.Plan.Facts["intentionalPit"] = 1;   // s58: the pit guard keeps off
             if (spec.Sloped) return ShapeSloped(ctx, region, spec);
             float cell = math.max(DefaultCell, math.sqrt(region.Area / MaxCells));
             int nx = math.max(1, (int)math.ceil((region.Max.x - region.Min.x) / cell));

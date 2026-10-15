@@ -640,10 +640,67 @@ namespace Placemaker.Game.Groups
                 }
             }
             if (restored > 0) Mod.Log.Info($"Placemaker restored {restored} parking aisle links after load.");
+            RestoreOwnHidden();
             foreach (var id in _records.Keys) GetRecord(id);
             SyncParkStats();
             Mod.Log.Info($"Placemaker loaded {_records.Count} groups.");
             Bump();
+        }
+
+        /// <summary>
+        /// (s58) After a load: an object of a build that shares the group owner (the carrier) is never hidden (Overridden) by our own
+        /// pieces, so one that is hidden was hidden by an older overlap pass or a stale state. The ones that sit clear of every other
+        /// building are shown again (BatchesUpdated, no Updated: that would re-run the override check). Guarded: setting "Ignore
+        /// collisions in my builds", owner == the group's carrier, and no other building within its lot radius.
+        /// </summary>
+        private void RestoreOwnHidden()
+        {
+            try
+            {
+                if (!Placemaker.Game.Build.BuildService.IgnoreOwnCollisions) return;
+                var q = GetEntityQuery(ComponentType.ReadOnly<PlacemakerMember>(), ComponentType.ReadOnly<Overridden>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(),
+                    ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+                if (q.IsEmptyIgnoreFilter) return;
+                var bq = GetEntityQuery(ComponentType.ReadOnly<global::Game.Buildings.Building>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(),
+                    ComponentType.Exclude<Temp>(), ComponentType.Exclude<Deleted>());
+                var near = new List<(Unity.Mathematics.float2 p, float r)>();
+                using (var buildings = bq.ToEntityArray(Allocator.Temp))
+                    foreach (var b in buildings)
+                    {
+                        if (EntityManager.HasComponent<PlacemakerMember>(b)) continue;
+                        float r = 12f;
+                        try
+                        {
+                            var prefab = EntityManager.GetComponentData<global::Game.Prefabs.PrefabRef>(b).m_Prefab;
+                            if (EntityManager.HasComponent<global::Game.Prefabs.BuildingData>(prefab))
+                            {
+                                var lot = EntityManager.GetComponentData<global::Game.Prefabs.BuildingData>(prefab).m_LotSize;
+                                r = Unity.Mathematics.math.max(lot.x, lot.y) * 4f + 1f;
+                            }
+                        }
+                        catch (Exception) { }
+                        near.Add((EntityManager.GetComponentData<global::Game.Objects.Transform>(b).m_Position.xz, r));
+                    }
+                int shown = 0, kept = 0;
+                using var entities = q.ToEntityArray(Allocator.Temp);
+                foreach (var e in entities)
+                {
+                    var tag = EntityManager.GetComponentData<PlacemakerMember>(e);
+                    if (tag.Kind != MemberKind.Object || tag.Role == MemberRole.ParkingBay) continue;
+                    if (!_records.TryGetValue(tag.GroupId, out var rec)) continue;
+                    var carrier = EntityManager.GetComponentData<PlacemakerGroup>(rec).Carrier;
+                    if (carrier == Entity.Null || EntityManager.GetComponentData<Owner>(e).m_Owner != carrier) continue;
+                    var pos = EntityManager.GetComponentData<global::Game.Objects.Transform>(e).m_Position.xz;
+                    bool blocked = false;
+                    foreach (var b in near) if (Unity.Mathematics.math.distance(b.p, pos) < b.r) { blocked = true; break; }
+                    if (blocked) { kept++; continue; }
+                    EntityManager.RemoveComponent<Overridden>(e);
+                    EntityManager.AddComponent<BatchesUpdated>(e);
+                    shown++;
+                }
+                if (shown > 0 || kept > 0) Mod.Log.Info($"Placemaker load: {shown} hidden object(s) of our own builds shown again, {kept} stay hidden (next to another building).");
+            }
+            catch (Exception ex) { Mod.Log.Warn("Placemaker: restoring hidden objects after load failed: " + ex.Message); }
         }
 
         private void CheckMissingAssets()
