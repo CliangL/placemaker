@@ -352,6 +352,8 @@ namespace Placemaker.Core.Build
 
         /// <summary>(s54) How far a plot quad may grow (m) to find its cells on a live block shifted along the road.</summary>
         private const float RefreshMaxGrow = 4f;
+        /// <summary>(s56) How far a plot may shift along the road (half a cell).</summary>
+        private const float RefreshMaxShift = 4f;
 
         /// <summary>
         /// (s26) Playtest: "zoned 4 of 16 cutout cell(s) … blocked 12". The plan snaps cutouts and blockers to the zone
@@ -392,46 +394,55 @@ namespace Placemaker.Core.Build
                 var got = CellsPerQuad(r, quads.Count);
                 var best = new int[quads.Count];
                 for (int i = 0; i < quads.Count; i++) best[i] = got[i];
-                bool any = false;
-                for (int i = 0; i < quads.Count; i++) if (planned[i] > 0 && got[i] != planned[i]) { any = true; break; }
-                for (int step = 1; any && step <= (int)(RefreshMaxGrow / 0.25f); step++)
+                // (s56) Playtest: a mall whose lanes' live blocks moved lost cells on 3 of 11 plots (6->2, 6->2, 8->4) with
+                // growing alone. Each deficient plot is re-snapped to the live block: first grown (cells whose centres just
+                // missed the shrunk quad), then SHIFTED along the road (+-0.5 ... +-RefreshMaxShift = half a cell, so a
+                // live column that moved or a blocked end cell is replaced by the free one beside it), then both.
+                var axis = new float2[quads.Count];
+                for (int i = 0; i < quads.Count; i++) axis[i] = RoadAxis(quads[i], liveGrids);
+                var cand = new List<(float shift, float grow)>();
+                for (float g = 0.25f; g <= RefreshMaxGrow + 1e-3f; g += 0.25f) cand.Add((0f, g));
+                for (float s = 0.5f; s <= RefreshMaxShift + 1e-3f; s += 0.5f) { cand.Add((s, 0f)); cand.Add((-s, 0f)); }
+                for (float s = 0.5f; s <= RefreshMaxShift + 1e-3f; s += 0.5f) { cand.Add((s, 1f)); cand.Add((-s, 1f)); }
+                var shift = new float[quads.Count];
+                foreach (var (sh, g) in cand)
                 {
-                    float g = step * 0.25f;
-                    var trial = new List<float2[]>(quads);
                     bool open = false;
+                    for (int i = 0; i < quads.Count; i++) if (planned[i] > 0 && best[i] != planned[i]) { open = true; break; }
+                    if (!open) break;
+                    var trial = new List<float2[]>(quads);
                     for (int i = 0; i < quads.Count; i++)
                     {
                         if (planned[i] == 0 || best[i] == planned[i]) continue;
-                        trial[i] = Grow(quads[i], g);
-                        open = true;
+                        trial[i] = Moved(quads[i], axis[i] * sh, g);
                     }
-                    if (!open) break;
                     var rt = Compute(plan.Footprints, trial, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
                     var gt = CellsPerQuad(rt, quads.Count);
                     for (int i = 0; i < quads.Count; i++)
                     {
                         if (planned[i] == 0 || best[i] == planned[i]) continue;
-                        // Closer to the plan wins; never take a count above the plan when a smaller one was as close.
-                        if (math.abs(gt[i] - planned[i]) < math.abs(best[i] - planned[i])) { best[i] = gt[i]; grow[i] = g; }
+                        if (math.abs(gt[i] - planned[i]) < math.abs(best[i] - planned[i])) { best[i] = gt[i]; grow[i] = g; shift[i] = sh; }
                     }
                 }
-                for (int i = 0; i < quads.Count; i++) if (grow[i] > 0f) used[i] = Grow(quads[i], grow[i]);
+                for (int i = 0; i < quads.Count; i++) if (grow[i] > 0f || shift[i] != 0f) used[i] = Moved(quads[i], axis[i] * shift[i], grow[i]);
                 r = Compute(plan.Footprints, used, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
-                // A plot no live cell reaches although blocks exist around it truly cannot zone: its land is returned to the
-                // blockers (like ZoneGuard.Apply does at design time) and the preview shows it blocked, not as a cutout.
+                // A plot with no room on the live blocks (no open live cell within half a cell of it) truly cannot zone: its
+                // land is returned to the blockers (like ZoneGuard.Apply does at design time) and the preview shows it blocked.
                 var drop = new List<int>();
+                var causes = new System.Text.StringBuilder();
                 for (int i = 0; i < used.Count; i++)
-                    if (!r.Snapped[i] && NearAnyGrid(used[i], new List<ZoneGrid>(liveGrids))) drop.Add(i);
+                    if (!r.Snapped[i] && NearAnyGrid(used[i], new List<ZoneGrid>(liveGrids)) && OpenCellsNear(quads[i], liveGrids, Cell * 0.5f + RefreshMaxShift) == 0) drop.Add(i);
                 if (drop.Count > 0)
                 {
-                    for (int k = drop.Count - 1; k >= 0; k--) { int i = drop[k]; used.RemoveAt(i); quads.RemoveAt(i); ids.RemoveAt(i); grow = RemoveAt(grow, i); planned = RemoveAt(planned, i); }
+                    for (int k = drop.Count - 1; k >= 0; k--) { int i = drop[k]; used.RemoveAt(i); quads.RemoveAt(i); ids.RemoveAt(i); grow = RemoveAt(grow, i); shift = RemoveAt(shift, i); planned = RemoveAt(planned, i); }
                     r = Compute(plan.Footprints, used, ids, plan.Protected, liveGrids, null, ownBlockedOpen: false);
                 }
                 var final = CellsPerQuad(r, used.Count);
+                for (int i = 0; i < used.Count; i++) if (final[i] != planned[i]) causes.Append($" #{i}: {Diagnose(quads[i], liveGrids)};");
                 int p = 0, f = 0, grown = 0;
-                for (int i = 0; i < used.Count; i++) { p += planned[i]; f += final[i]; if (grow[i] > 0f) grown++; }
+                for (int i = 0; i < used.Count; i++) { p += planned[i]; f += final[i]; if (grow[i] > 0f || shift[i] != 0f) grown++; }
                 LastRefreshReport = $"{p} planned cell(s) in {used.Count} plot(s) -> {f} on the live blocks; {grown} plot(s) matched on a shifted grid; {drop.Count} plot(s) cannot zone (land blocked)"
-                    + (f != p ? MismatchText(planned, final) : ".");
+                    + (f != p ? MismatchText(planned, final) + causes : ".");
             }
             catch (Exception) { return null; }
             var zoning = new List<ZoningQuad>();
@@ -449,6 +460,65 @@ namespace Placemaker.Core.Build
                 plan.ZoneCells.Add(m);
             }
             return zoning;
+        }
+
+        private static float2[] Moved(float2[] quad, float2 by, float grow)
+        {
+            var q = grow > 0f ? Grow(quad, grow) : (float2[])quad.Clone();
+            for (int i = 0; i < q.Length; i++) q[i] += by;
+            return q;
+        }
+
+        /// <summary>(s56) Unit vector along the road (the columns' axis) of the live block nearest the plot.</summary>
+        private static float2 RoadAxis(float2[] quad, IReadOnlyList<ZoneGrid> grids)
+        {
+            var c = Poly.Centroid(quad);
+            float best = float.MaxValue; float2 axis = new float2(1, 0);
+            foreach (var g in grids)
+            {
+                if (!Usable(g)) continue;
+                float d = math.distance(g.Position, c);
+                if (d < best) { best = d; axis = Right(math.normalizesafe(g.Direction)); }
+            }
+            return axis;
+        }
+
+        private static int OpenCellsNear(float2[] quad, IReadOnlyList<ZoneGrid> grids, float margin)
+        {
+            var g2 = Grow(quad, margin);
+            int n = 0;
+            foreach (var g in grids)
+            {
+                if (!Usable(g)) continue;
+                for (int x = 0; x < g.Size.x; x++)
+                    for (int y = 0; y < g.Size.y; y++)
+                        if (CellOpen(g, x, y, null, new List<RoadBand>()) && Poly.Contains(g2, CellCentre(g, x, y))) n++;
+            }
+            return n;
+        }
+
+        /// <summary>(s56) Why a plot lost cells: live cells whose centres lie in it (grown half a cell), by state.</summary>
+        private static string Diagnose(float2[] quad, IReadOnlyList<ZoneGrid> grids)
+        {
+            var g2 = Grow(quad, Cell * 0.5f);
+            int open = 0, blocked = 0, hidden = 0, blocks = 0;
+            foreach (var g in grids)
+            {
+                if (!Usable(g)) continue;
+                bool any = false;
+                for (int x = 0; x < g.Size.x; x++)
+                    for (int y = 0; y < g.Size.y; y++)
+                    {
+                        if (!Poly.Contains(g2, CellCentre(g, x, y))) continue;
+                        any = true;
+                        byte f = g.Cells != null && x + y * g.Size.x < g.Cells.Length ? g.Cells[x + y * g.Size.x] : (byte)ZoneGrid.CellVisible;
+                        if ((f & ZoneGrid.CellBlocked) != 0) blocked++;
+                        else if ((f & ZoneGrid.CellVisible) == 0) hidden++;
+                        else open++;
+                    }
+                if (any) blocks++;
+            }
+            return $"live cells in/near it: {open} open, {blocked} blocked, {hidden} hidden, {blocks} block(s)";
         }
 
         private static string MismatchText(int[] planned, int[] final)
