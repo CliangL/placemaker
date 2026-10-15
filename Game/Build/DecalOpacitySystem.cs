@@ -35,7 +35,7 @@ namespace Placemaker.Game.Build
 {
     public sealed partial class DecalOpacitySystem : GameSystemBase
     {
-        public const string NamePrefix = "Placemaker Decal ";
+        public const string NamePrefix = Placemaker.Core.Decals.DecalLook.ClonePrefix;
         private const int ReadyDelayFrames = 3;
 
         /// <summary>Setting "See-through decals" (default on).</summary>
@@ -60,7 +60,8 @@ namespace Placemaker.Game.Build
         private readonly SortedSet<int> _tiersMade = new SortedSet<int>();
         private bool _reportPending;
 
-        public static string CloneName(string original, int tier) => NamePrefix + tier + "% (" + original + ")";
+        /// <summary>s37: safe characters only (DecalLook.CloneName); the old "N% (…)" name broke the asset database.</summary>
+        public static string CloneName(string original, int tier) => Placemaker.Core.Decals.DecalLook.CloneName(original, tier);
 
         [Preserve]
         protected override void OnCreate()
@@ -198,7 +199,7 @@ namespace Placemaker.Game.Build
                 RenderPrefabBase mesh = mi?.m_Mesh;
                 if (mi?.m_Mesh is RenderPrefab rp && rp.GetComponent<DecalProperties>() != null)
                 {
-                    var rc = CloneRender(rp, cloneName + " #" + i, opacity, out why);
+                    var rc = CloneRender(rp, cloneName + " mesh " + i, opacity, out why);   // s37: no "#" either
                     if (rc == null) return false;   // keep the original; never half a clone
                     mesh = rc;
                     decalMeshes++;
@@ -216,6 +217,10 @@ namespace Placemaker.Game.Build
                 if (component == null || component is UIObject || component is ObsoleteIdentifiers) continue;
                 clone.AddComponentFrom(component);
             }
+            // s37: builds saved with the 16:37 build reference the old "N% (…)" clone name: keep it as an obsolete identifier
+            // (PrefabSystem maps obsolete IDs to this prefab). A prefab name is never resolved as an asset path, so this is safe.
+            var legacy = clone.AddComponent<ObsoleteIdentifiers>();
+            legacy.m_PrefabIdentifiers = new[] { new PrefabIdentifierInfo { m_Name = Placemaker.Core.Decals.DecalLook.LegacyCloneName(original.name, tier), m_Type = type.Name } };
             if (!_prefabs.AddPrefab(clone)) { UnityEngine.Object.Destroy(clone); why = "AddPrefab refused the object"; return false; }
             var entity = _prefabs.GetEntity(clone);
             _cloneOf[(originalEntity, tier)] = entity;
@@ -232,8 +237,9 @@ namespace Placemaker.Game.Build
                 var src = rp.GetSurfaceAsset(s);
                 if (src == null) { why = "render prefab " + rp.name + " has no surface " + s; return null; }
                 src.LoadProperties(useVT: true);   // our own reference on the original: keeps its data loaded
-                var path = AssetDataPath.Create("Placemaker/DecalOpacity", name + " " + s, EscapeStrategy.None);
-                var copy = AssetDatabase.user.AddAsset<SurfaceAsset>(path, Colossal.Hash128.CreateGuid(name + " " + s));
+                var assetName = Placemaker.Core.Decals.DecalLook.SafeAssetName(name + " surface " + s);   // s37: never "%" in an asset name
+                var path = AssetDataPath.Create("Placemaker/DecalOpacity", assetName, EscapeStrategy.None);
+                var copy = AssetDatabase.user.AddAsset<SurfaceAsset>(path, Colossal.Hash128.CreateGuid(assetName));
                 copy.CopyFrom(src);
                 ApplyOpacity(copy, opacity);
                 _surfaces.Add(copy);

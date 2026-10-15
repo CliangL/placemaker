@@ -27,6 +27,53 @@ namespace Placemaker.Core.Decals
             return best;
         }
 
+        // ── s37: names of the see-through clones ──
+        // The 16:37 build named clones "Placemaker Decal 15% (<original>)" and their surface assets after them. The asset
+        // database unescapes asset names with '%' as the escape character (Colossal.IO.AssetDatabase.Internal.EscapeUtils,
+        // reserved <>:"/\|?*%.), so "% (" threw UriFormatException in ManagedBatchSystem.CreateMaterial every frame. Clone,
+        // render-prefab and surface-asset names now hold only ASCII letters, digits, spaces, '-' and '_'.
+
+        public const string ClonePrefix = "Placemaker Decal ";
+
+        /// <summary>Only ASCII letters, digits, space, '-' and '_' (runs of anything else become one space). When anything had
+        /// to change, a short stable hash of the original is appended so two originals never share a name.</summary>
+        public static string SafeAssetName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "unnamed";
+            var sb = new System.Text.StringBuilder(name.Length);
+            bool changed = false, space = false;
+            foreach (char c in name)
+            {
+                bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == ' ';
+                if (!ok) changed = true;
+                if (!ok || c == ' ')
+                {
+                    if (!space && sb.Length > 0) sb.Append(' ');
+                    space = true;
+                    continue;
+                }
+                sb.Append(c);
+                space = false;
+            }
+            var r = sb.ToString().Trim();
+            if (r.Length == 0) r = "unnamed";
+            if (changed) r += " " + Fnv(name).ToString("x8");
+            return r;
+        }
+
+        /// <summary>Prefab name of the see-through clone of <paramref name="original"/> at <paramref name="tier"/> percent.</summary>
+        public static string CloneName(string original, int tier) => ClonePrefix + tier + " - " + SafeAssetName(original);
+
+        /// <summary>The 16:37-build name (kept as an obsolete identifier of the clone so builds saved with it still load).</summary>
+        public static string LegacyCloneName(string original, int tier) => ClonePrefix + tier + "% (" + original + ")";
+
+        private static uint Fnv(string s)
+        {
+            uint h = 2166136261u;
+            foreach (char c in s) { h ^= c; h *= 16777619u; }
+            return h;
+        }
+
         /// <summary>Opacity a planned object is drawn with: decorative decals per their pool, everything else 1.</summary>
         public static float OpacityOf(PlannedObject o)
         {
