@@ -90,10 +90,14 @@ namespace Placemaker.Core.Layers.Commercial
                     // (s32) A paseo through the shop row: from the lot's footpath entrance straight to the pedestrian street.
                     float2[] held = null;
                     float tp = math.min(lt * 0.5f, 40f);
+                    // (s39) Far enough up the street to leave two whole columns of plots below the paseo.
+                    tp = math.min(math.max(tp, Mall.MinStretch + Mall.PaseoWidth * 0.5f), lt - 3f);
                     float lotEdge = edge < c ? s1 : s0;
                     float laneEdge = edge < c ? c - hs : c + hs;
                     // The lot's footpath finds the street within 40 m (the parking planner's search): deeper rows get no paseo.
-                    if (spine != null && math.abs(laneEdge - lotEdge) + hs <= 38f)
+                    // (s39) …and leaves two whole cell columns of plots either side of it (the game blocks a lone column).
+                    if (spine != null && math.abs(laneEdge - lotEdge) + hs <= 38f
+                        && tp - Mall.PaseoWidth * 0.5f >= Mall.MinStretch && math.dot(spine.Points[spine.Points.Count - 1] - r.At(c, 0f), r.In) - tp - Mall.PaseoWidth * 0.5f >= Mall.MinStretch)
                     {
                         held = mall.Hold(Mall.Rect(r, math.min(lotEdge, laneEdge), math.max(lotEdge, laneEdge), tp - Mall.PaseoWidth * 0.5f, tp + Mall.PaseoWidth * 0.5f));
                         e.Add((r.At(lotEdge, tp), "footpath"));
@@ -207,6 +211,9 @@ namespace Placemaker.Core.Layers.Commercial
             if (len >= 72f) { tps.Add(math.round(len * 0.33f)); tps.Add(math.round(len * 0.7f)); } else tps.Add(math.round(len * 0.5f));
             // A paseo stays clear of the ring's back corner (a walk there would meet the bend, not the leg).
             tps.RemoveAll(tp => tp > math.min(len - Mall.Cell, tB - hr - 6f));
+            // (s39) Two whole cell columns of plots between paseos and at the ends (the game blocks a lone column).
+            tps.RemoveAll(tp => tp - Mall.PaseoWidth * 0.5f < Mall.MinStretch || len - tp - Mall.PaseoWidth * 0.5f < Mall.MinStretch);
+            if (tps.Count == 2 && tps[1] - tps[0] < Mall.MinStretch + Mall.PaseoWidth) tps.RemoveAt(1);
             foreach (float tp in tps)
                 foreach (int side in new[] { -1, 1 })
                 {

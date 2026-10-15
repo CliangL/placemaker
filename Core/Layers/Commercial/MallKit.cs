@@ -23,8 +23,12 @@ namespace Placemaker.Core.Layers.Commercial
     {
         /// <summary>A whole zone cell: what keeps a street-facing plot from being zoned by a lane beside it.</summary>
         public const float Gap = 8f;
+        /// <summary>(s39) Shortest free stretch of frontage that gets plots: two cells and a metre (two whole columns whatever the grid).</summary>
+        public const float MinStretch = 2 * Cell + 1f;
         /// <summary>Width of a paseo (a walk through a row of plots, m).</summary>
-        public const float PaseoWidth = 6f;
+        /// <remarks>(s39) Wide enough that no zone column whose centre lies on a plot touches the walk (a walk closes the column it
+        /// crosses; a 3 m walk ± 4 m of cell): the plots either side keep whole columns (game depth rule, s36).</remarks>
+        public const float PaseoWidth = 11f;
 
         /// <summary>(s32) Zone of a plot when it differs from the type's zone (reference keys: the ring arrays in Shops).</summary>
         public readonly Dictionary<float2[], string> ShopZone = new Dictionary<float2[], string>();
@@ -160,6 +164,18 @@ namespace Placemaker.Core.Layers.Commercial
             }
         }
 
+        /// <summary>
+        /// (s39) A point on a lane within 1.5 m of one of its nodes or joins becomes that node: Finish splits a lane only
+        /// more than a metre from its nodes, so a join closer than that would end short of the node.
+        /// </summary>
+        public static float2 OnNode(Lane lane, float2 p)
+        {
+            float best = 1.5f; var q = p;
+            foreach (var v in lane.Points) { float d = math.distance(v, p); if (d < best) { best = d; q = v; } }
+            foreach (var v in lane.Joins) { float d = math.distance(v, p); if (d < best) { best = d; q = v; } }
+            return q;
+        }
+
         /// <summary>The closest point of a lane's centre line.</summary>
         public static float2 Project(Lane lane, float2 p, out float dist)
         {
@@ -219,7 +235,9 @@ namespace Placemaker.Core.Layers.Commercial
                 float b = a;
                 while (b < s1 - 0.01f && Open(b)) b += step;
                 b = math.min(b, s1);
-                if (b - a >= Cell - 0.01f) made += Stretch(r, a, b, t0, cells, dir, zone, maxPiece, minCells);
+                // (s39) A stretch holds at least two whole columns of any cell grid: the game blocks a lone zoned column
+                // between unzoned ones (CellOverlapJobs depth rule, s36).
+                if (b - a >= MinStretch) made += Stretch(r, a, b, t0, cells, dir, zone, maxPiece, minCells);
                 a = b + step;
             }
             return made;
@@ -293,6 +311,14 @@ namespace Placemaker.Core.Layers.Commercial
                     if (other == lane) continue;
                     if (other.StartOn == lane) Cut(other.Points[0], other.Half);
                     if (other.EndOn == lane) Cut(other.Points[other.Points.Count - 1], other.Half);
+                }
+                // (s39) A join (lot stub, footpath) splits the lane into pieces, each with its own cell grid: a plot never
+                // straddles one (on a 16 m road the two grids meet at the join with no overlap; a plot across it could keep a
+                // lone column of each, which the game blocks).
+                foreach (var j in lane.Joins)
+                {
+                    float u = math.dot(j - a, f.Dir);
+                    if (math.abs(math.dot(j - a, f.In)) <= 0.5f && u > 0.5f && u < f.To - 0.5f) cuts.Add((u - 0.25f, u + 0.25f));
                 }
                 void Cut(float2 p, float half)
                 {
@@ -469,8 +495,8 @@ namespace Placemaker.Core.Layers.Commercial
         /// </summary>
         public bool Walk(float2 a, Lane aOn, float2 b, Lane bOn, float half = 1.5f)
         {
-            if (aOn != null) a = Project(aOn, a, out _);
-            if (bOn != null) b = Project(bOn, b, out _);
+            if (aOn != null) a = OnNode(aOn, Project(aOn, a, out _));
+            if (bOn != null) b = OnNode(bOn, Project(bOn, b, out _));
             float len = math.distance(a, b);
             if (len < 2f) return false;
             var d = (b - a) / len; var n = new float2(-d.y, d.x);
@@ -535,7 +561,7 @@ namespace Placemaker.Core.Layers.Commercial
                 foreach (var (lane, at) in laneDoors)
                 {
                     if (lane == null) continue;
-                    var p = Project(lane, at, out _);
+                    var p = OnNode(lane, Project(lane, at, out _));
                     pts.Add(p);
                     map.Add((lane, p));
                     snap = math.max(snap, lane.Half + 2f);
