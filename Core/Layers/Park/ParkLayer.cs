@@ -23,7 +23,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Park
 {
-    [AreaGenerator(30)]
+    [AreaGenerator(30, Group = "parks")]
     public sealed class ParkLayer : LayerBase, IHasFeatures
     {
         public const string LayerId = "park";

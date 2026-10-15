@@ -466,3 +466,92 @@
 .editorOff {
     pointer-events: none;
 }
+
+// ── s42: sections as fixed one-line heads in two columns; an open one unfolds full width under its pair ──
+.sections {
+    min-width: 0;
+}
+
+.secRow {
+    @include row;
+    min-width: 0;
+    margin-left: -2rem;
+    margin-right: -2rem;
+}
+
+.secCell {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 1rem 2rem;
+}
+
+.secHead {
+    @include row;
+    @include button-reset;
+    width: 100%;
+    min-width: 0;
+    height: 24rem;
+    padding: 0 6rem 0 5rem;
+    border-radius: $radius-s;
+    background-color: rgba(255, 255, 255, 0.04);
+    @include border(1rem, rgba(255, 255, 255, 0.06));
+    text-align: left;
+    overflow: hidden;
+    transition-property: background-color;
+    transition-duration: $t-fast;
+    &:hover {
+        background-color: $c-surface-hover;
+    }
+}
+
+.secCellOpen .secHead {
+    background-color: rgba(143, 209, 255, 0.12);
+    @include border-color(rgba(143, 209, 255, 0.45));
+}
+
+.secName {
+    flex: 0 0 auto;
+    max-width: 62%;
+    margin-left: 5rem;
+    font-size: $fs;
+    color: #ffffff;
+    @include ellipsis;
+}
+
+.secSummary {
+    flex: 1 1 auto;
+    margin-left: 8rem;
+    font-size: $fs-s;
+    color: $c-text-faint;
+    text-align: right;
+    @include ellipsis;
+}
+
+.secSpacer {
+    flex: 1 1 auto;
+}
+
+.secBody {
+    @include col;
+    min-width: 0;
+    margin: 2rem 0 4rem 0;
+    padding: 4rem 6rem 4rem 8rem;
+    border-radius: $radius-s;
+    background-color: rgba(0, 0, 0, 0.16);
+    border-left-width: 2rem;
+    border-left-style: solid;
+    border-left-color: rgba(143, 209, 255, 0.55);
+}
+
+.secBodyTitle {
+    margin-bottom: 2rem;
+    font-size: 11rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: $c-text-faint;
+}
+
+.sectionsNested .secHead {
+    height: 22rem;
+    background-color: rgba(255, 255, 255, 0.02);
+}

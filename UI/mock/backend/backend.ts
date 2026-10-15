@@ -211,7 +211,7 @@ export class MockBackend {
             this.layers = [...real, ...this.layers];
             // Shipped recipes first; keep fake recipes only where no real layer covers their root.
             const shipped: MockRecipe[] = (cat?.recipes ?? []).map((r: any) => ({
-                info: { id: r.id, name: r.name, icon: r.icon, custom: false, description: r.description },
+                info: { id: r.id, name: r.name, icon: r.icon, custom: false, description: r.description, group: r.group },
                 root: r.root ?? { layer: r.id },
             }));
             if (shipped.length) {
@@ -1321,7 +1321,7 @@ export class MockBackend {
     /** Adds the types other workstreams are bringing (botanical garden, dog park…) to show the Make row at scale. */
     addMoreTypes() {
         const extra: Record<string, string> = {};
-        for (const [id, name, icon] of MORE_TYPES) {
+        for (const [id, name, icon, group] of MORE_TYPES) {
             if (this.layers.some((l) => l.id === id)) continue;
             const key = "Placemaker." + id.charAt(0).toUpperCase() + id.slice(1) + ".Name";
             extra[key] = name;
@@ -1332,7 +1332,7 @@ export class MockBackend {
                     { id: "trees", kind: "slider", tier: "essential", group: "", label: "Placemaker.Park.TreeDensity", min: 0, max: 100, step: 5, unit: "%", default: 50 },
                 ],
             });
-            this.recipes.push({ info: { id, name: key, icon, custom: false }, root: { layer: id } });
+            this.recipes.push({ info: { id, name: key, icon, custom: false, group }, root: { layer: id } });
         }
         Object.assign(EN, extra);
         addStrings(extra);

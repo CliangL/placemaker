@@ -1,11 +1,10 @@
 @use "../styles/tokens" as *;
 
+// s42 Design stage: picker + editing bar (browser.module.scss), then Entrances, Shape and Extras as dense,
+// aligned one-line rows with hairline dividers. Gameface: flexbox + margins only.
+
 .stage {
     @include col;
-}
-
-.first {
-    margin-top: 0;
 }
 
 .flex {
@@ -34,10 +33,52 @@
 
 .options {
     @include col;
-    margin-top: 8rem;
 }
 
-// ── one step's options ──
+// ── section heading: "SHAPE  how it's built ─────" ──
+.heading {
+    @include row;
+    min-width: 0;
+    height: 20rem;
+    margin: 8rem 0 3rem 0;
+}
+
+.headingTitle {
+    flex-shrink: 0;
+    font-size: 11rem;
+    font-weight: bold;
+    letter-spacing: 0.6rem;
+    text-transform: uppercase;
+    color: #ffffff;
+}
+
+.headingCount {
+    flex-shrink: 0;
+    margin-left: 5rem;
+    padding: 0 4rem;
+    border-radius: 6rem;
+    background-color: rgba(143, 209, 255, 0.2);
+    font-size: 10rem;
+    color: #dff1ff;
+}
+
+.headingSub {
+    flex-shrink: 0;
+    margin-left: 6rem;
+    font-size: 11rem;
+    color: $c-text-faint;
+    white-space: nowrap;
+}
+
+.headingRule {
+    flex: 1 1 auto;
+    height: 1rem;
+    margin-left: 8rem;
+    margin-right: 4rem;
+    background-color: $c-line;
+}
+
+// ── one step ──
 .step {
     @include col;
     min-width: 0;
@@ -59,7 +100,7 @@
     @include row;
     position: relative;
     min-width: 0;
-    height: 28rem;
+    height: 26rem;
     padding: 0 0 0 8rem;
     border-radius: $radius;
     background-color: rgba(255, 255, 255, 0.05);
@@ -68,11 +109,9 @@
 .stepBar {
     position: absolute;
     left: 0;
-    top: 6rem;
+    top: 5rem;
     width: 3rem;
     height: 16rem;
-    border-top-right-radius: 2rem;
-    border-bottom-right-radius: 2rem;
 }
 
 .stepName {
@@ -93,14 +132,13 @@
 .stepBody {
     @include col;
     min-width: 0;
-    padding: 2rem 0 0 0;
 }
 
 .nextStep {
     @include row;
     min-width: 0;
     height: 22rem;
-    margin: 2rem 0;
+    margin-top: 6rem;
     padding: 0 6rem;
     border-radius: $radius;
     background-color: rgba(143, 209, 255, 0.12);
@@ -115,57 +153,84 @@
     @include ellipsis;
 }
 
-// ── entrances ──
-.required {
+.shape {
+    @include col;
+    min-width: 0;
+}
+
+// ── entrances: one compact block ──
+.entrances {
+    @include col;
+    min-width: 0;
+    margin-top: 6rem;
+    padding: 0 4rem 0 6rem;
+    border-radius: $radius;
+    background-color: rgba(255, 255, 255, 0.04);
+    @include border(1rem, $c-line);
+}
+
+.entrancesMissing {
+    background-color: rgba(255, 181, 71, 0.08);
+    @include border-color(rgba(255, 181, 71, 0.45));
+}
+
+.entrancesFlash {
+    @include border-color($c-warning);
+    background-color: rgba(255, 181, 71, 0.18);
+}
+
+.entrHead {
     @include row;
     min-width: 0;
-    height: 22rem;
-    padding: 0 6rem;
-    margin: 2rem 0 3rem 0;
-    border-radius: $radius;
-    background-color: rgba(255, 181, 71, 0.14);
-    @include border(1rem, rgba(255, 181, 71, 0.45));
-    overflow: hidden;
+    height: 30rem;
+}
+
+.entrTitle {
+    margin-left: 5rem;
+    font-size: $fs;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.entrCount {
+    margin-left: 6rem;
+    font-size: $fs-s;
+    color: $c-text-faint;
+}
+
+.required {
+    @include row;
+    flex-shrink: 0;
+    margin-left: 8rem;
 }
 
 .requiredText {
-    flex: 1 1 auto;
-    margin-left: 6rem;
+    margin-left: 4rem;
     font-size: $fs-s;
     font-weight: bold;
-    color: #ffe0b0;
-    @include ellipsis;
+    color: #ffd79a;
+    white-space: nowrap;
 }
 
 .kindRow {
-    @include row(stretch);
-    min-width: 0;
-    padding-top: 2rem;
-}
-
-.kindCell {
-    @include row(stretch);
-    flex: 1 1 0;
-    min-width: 0;
-    padding-right: 3rem;
+    @include row;
+    flex-shrink: 0;
 }
 
 .kindBtn {
     @include row;
     @include button-reset;
-    flex: 1 1 auto;
-    justify-content: center;
-    min-width: 0;
-    height: 24rem;
-    padding: 0 3rem;
-    border-radius: $radius;
+    flex-shrink: 0;
+    height: 22rem;
+    margin-left: 3rem;
+    padding: 0 6rem 0 4rem;
+    border-radius: $radius-s;
     background-color: rgba(255, 255, 255, 0.07);
-    @include border(1rem, rgba(255, 255, 255, 0.08));
-    overflow: hidden;
+    @include border(1rem, rgba(255, 255, 255, 0.1));
     transition-property: background-color;
     transition-duration: $t-fast;
     &:hover {
-        background-color: rgba(255, 255, 255, 0.13);
+        background-color: rgba(255, 255, 255, 0.14);
     }
 }
 
@@ -182,85 +247,122 @@
 }
 
 .kindLabel {
-    margin-left: 4rem;
+    margin-left: 3rem;
     font-size: $fs-s;
     color: var(--menuText1Normal);
-    @include ellipsis;
+    white-space: nowrap;
 }
 
 .markerList {
-    @include col;
+    @include row;
+    flex-wrap: wrap;
     min-width: 0;
-    margin-top: 3rem;
+    padding-bottom: 4rem;
 }
 
 .markerItem {
     @include row;
-    min-width: 0;
-    height: 22rem;
+    flex-shrink: 0;
+    height: 20rem;
+    margin: 0 4rem 2rem 0;
     padding: 0 0 0 5rem;
-    margin-bottom: 1rem;
-    border-radius: $radius;
-    background-color: rgba(255, 255, 255, 0.04);
+    border-radius: $radius-s;
+    background-color: rgba(0, 0, 0, 0.2);
 }
 
 .markerName {
-    flex: 1 1 auto;
-    margin-left: 6rem;
-    font-size: $fs;
+    margin-left: 4rem;
+    margin-right: 2rem;
+    font-size: $fs-s;
     color: var(--menuText1Normal);
-    @include ellipsis;
+    white-space: nowrap;
 }
 
 .markerBtn {
-    width: 20rem;
-    height: 20rem;
+    width: 18rem;
+    height: 18rem;
 }
 
-// ── features ──
-.features {
-    margin-top: 8rem;
-}
-
-.feature {
+// ── extras ──
+.extras {
     @include col;
     min-width: 0;
 }
 
-// Wide panel: features in a 2–3 column grid (cell widths inline), spaced by padding (no gap in Gameface).
 .featureGrid {
-    @include row(flex-start);
-    flex-wrap: wrap;
+    @include col;
     min-width: 0;
-    margin-left: -4rem;
-    margin-right: -4rem;
 }
 
-.featureCell {
+.extraRow {
+    @include row;
+    min-width: 0;
+    margin-left: -2rem;
+    margin-right: -2rem;
+}
+
+.feature {
+    @include col;
     box-sizing: border-box;
-    padding-left: 4rem;
-    padding-right: 4rem;
-    // In a narrow cell the name keeps its width; the value summary is what gets shortened.
-    .featureFold .featureName {
-        flex-shrink: 0;
-    }
+    min-width: 0;
+    padding: 1rem 2rem;
 }
 
 .featureHead {
     @include row;
     min-width: 0;
-    height: $row-h;
-    padding: 0 2rem 0 4rem;
-    border-radius: $radius;
+    height: 26rem;
+    padding: 0 3rem 0 5rem;
+    border-radius: $radius-s;
+    background-color: rgba(255, 255, 255, 0.025);
+    @include border(1rem, rgba(255, 255, 255, 0.05));
     &:hover {
         background-color: $c-surface;
     }
 }
 
-.featureName {
+.featureOn .featureHead {
+    background-color: rgba(255, 255, 255, 0.06);
+    @include border-color(rgba(255, 255, 255, 0.1));
+}
+
+.featureOpen .featureHead {
+    background-color: rgba(143, 209, 255, 0.12);
+    @include border-color(rgba(143, 209, 255, 0.45));
+}
+
+.featureFold {
+    @include row;
+    @include button-reset;
     flex: 1 1 auto;
-    margin-left: 7rem;
-    margin-right: 8rem;
+    min-width: 0;
+    height: 24rem;
+    padding: 0;
+    text-align: left;
+    overflow: hidden;
+}
+
+.chevSpace {
+    flex-shrink: 0;
+    width: 10rem;
+    height: 10rem;
+}
+
+.extraTile {
+    @include row;
+    flex-shrink: 0;
+    margin-left: 4rem;
+}
+
+.extraTileOff {
+    opacity: 0.45;
+}
+
+.featureName {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: 6rem;
+    margin-right: 6rem;
     font-size: $fs;
     color: $c-text-dim;
     @include ellipsis;
@@ -270,96 +372,95 @@
     color: #ffffff;
 }
 
-.featureBody {
-    @include col;
-    min-width: 0;
-    margin: 0 0 4rem 10rem;
-    padding-left: 8rem;
-    border-left-width: 1rem;
-    border-left-style: solid;
-    border-left-color: $c-line-strong;
-}
-
-// Feature row: [chevron icon name · summary] [fit] [switch]; options fold out under it (FEEDBACK-4b #7, #8).
-.featureFold {
-    @include row;
-    @include button-reset;
-    flex: 1 1 auto;
-    min-width: 0;
-    height: $row-h;
-    padding: 0;
-    text-align: left;
-    overflow: hidden;
-}
-
-.featureChevronSpace {
-    width: 12rem;
-    height: 12rem;
-    flex-shrink: 0;
-}
-
-.featureIcon {
-    margin-left: 4rem;
-}
-
 .featureSummary {
     flex: 1 1 auto;
     min-width: 0;
-    margin-right: 6rem;
-    font-size: $fs-s;
-    color: $c-text-dim;
+    margin-right: 5rem;
+    font-size: 11rem;
+    color: $c-text-faint;
     text-align: right;
     @include ellipsis;
 }
 
-.featureOn .featureName {
-    flex: 0 1 auto;
+.fitTag {
+    flex-shrink: 0;
+    margin-left: auto;
+    margin-right: 5rem;
+    padding: 0 4rem;
+    border-radius: $radius-s;
+    font-size: 11rem;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.fitTagReduced {
+    color: $c-warning;
+    background-color: rgba(255, 181, 71, 0.14);
+}
+
+.fitTagFailed {
+    color: $c-danger;
+    background-color: rgba(255, 107, 91, 0.14);
 }
 
 .fitIcon {
-    @include row;
-    flex-shrink: 0;
-    margin-right: 6rem;
+    width: 0;
+    height: 0;
 }
 
 .fitStale {
     opacity: 0.5;
 }
 
-.fitLine {
+.featureSwitch {
     @include row;
-    min-width: 0;
-    margin: 0 0 3rem 34rem;
-    font-size: $fs-s;
-}
-
-.fitLabel {
     flex-shrink: 0;
-    font-weight: bold;
 }
 
-.fitLineFailed .fitLabel {
-    color: $c-danger;
-}
-
-.fitLineReduced .fitLabel {
-    color: $c-warning;
-}
-
-.fitDetail {
-    flex: 1 1 auto;
+.featureBody {
+    @include col;
     min-width: 0;
-    margin-left: 6rem;
-    color: $c-text-dim;
-    @include ellipsis;
+    margin: 2rem 0 4rem 0;
+    padding: 4rem 6rem 4rem 8rem;
+    border-radius: $radius-s;
+    background-color: rgba(0, 0, 0, 0.16);
+    border-left-width: 2rem;
+    border-left-style: solid;
+    border-left-color: rgba(143, 209, 255, 0.55);
 }
 
-// "2 didn't fit" on the type header.
+.bodyTitle {
+    margin-bottom: 2rem;
+    font-size: 11rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: $c-text-faint;
+}
+
+.moreRow {
+    @include row;
+    @include button-reset;
+    min-width: 0;
+    height: 22rem;
+    margin-top: 1rem;
+    padding: 0 6rem;
+    border-radius: $radius-s;
+    &:hover {
+        background-color: $c-surface;
+    }
+}
+
+.moreText {
+    margin-left: 5rem;
+    font-size: $fs-s;
+    color: $c-text-dim;
+}
+
+// "2 didn't fit" in the Extras heading.
 .misfit {
     @include row;
     flex-shrink: 0;
     height: 18rem;
-    margin-right: 4rem;
     padding: 0 6rem 0 4rem;
     border-radius: $radius-s;
     background-color: rgba(0, 0, 0, 0.25);
@@ -367,7 +468,7 @@
 
 .misfitText {
     margin-left: 4rem;
-    font-size: $fs-s;
+    font-size: 11rem;
     white-space: nowrap;
 }
 
@@ -379,33 +480,13 @@
     color: $c-warning;
 }
 
-// Make browser (folds to "Park · Formal garden").
-.make {
-    margin-bottom: 2rem;
-}
-
-.make > div + div {
-    padding-left: 0;
-}
-
-// Entrances section, flashed when the footer leads the player here ("Add at least one entrance").
-.entrances {
-    @include col;
-    min-width: 0;
-    border-radius: $radius;
-    @include border(1rem, transparent);
-}
-
-.entrancesFlash {
-    @include border(1rem, $c-warning);
-    background-color: rgba(255, 181, 71, 0.12);
-}
-
-// s15 — a feature that does not fit this area: listed, greyed, its switch takes no clicks (reason in the tooltip).
+// s15 — an extra that does not fit this area: listed, greyed, its switch takes no clicks (reason in the tooltip).
 .featureBlocked {
     opacity: 0.5;
 }
 
 .featureSwitchOff {
+    @include row;
+    flex-shrink: 0;
     pointer-events: none;
 }

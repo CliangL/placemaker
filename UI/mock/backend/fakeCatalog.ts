@@ -239,10 +239,10 @@ export const FAKE_FEATURES: Record<string, FeatureDef[]> = {
 };
 
 export const FAKE_RECIPES: MockRecipe[] = [
-    { info: { id: "parking", name: "Placemaker.Parking.Name", icon: "parking", custom: false, description: "Placemaker.Recipe.ParkingTip" }, root: { layer: "parking" } },
-    { info: { id: "plaza", name: "Placemaker.Plaza.Name", icon: "plaza", custom: false, description: "Placemaker.Recipe.PlazaTip" }, root: { layer: "plaza" } },
-    { info: { id: "park", name: "Placemaker.Park.Name", icon: "park", custom: false, description: "Placemaker.Recipe.ParkTip" }, root: { layer: "park" } },
-    { info: { id: "roads", name: "Placemaker.Roads.Name", icon: "roads", custom: false, description: "Placemaker.Recipe.RoadsTip" }, root: { layer: "roads" } },
+    { info: { id: "parking", name: "Placemaker.Parking.Name", icon: "parking", custom: false, description: "Placemaker.Recipe.ParkingTip", group: "parking" }, root: { layer: "parking" } },
+    { info: { id: "plaza", name: "Placemaker.Plaza.Name", icon: "plaza", custom: false, description: "Placemaker.Recipe.PlazaTip", group: "squares" }, root: { layer: "plaza" } },
+    { info: { id: "park", name: "Placemaker.Park.Name", icon: "park", custom: false, description: "Placemaker.Recipe.ParkTip", group: "parks" }, root: { layer: "park" } },
+    { info: { id: "roads", name: "Placemaker.Roads.Name", icon: "roads", custom: false, description: "Placemaker.Recipe.RoadsTip", group: "roads" }, root: { layer: "roads" } },
     {
         info: { id: "roads-with-parks", name: "Placemaker.Recipe.RoadsParks", icon: "roadsParks", custom: false, description: "Placemaker.Recipe.RoadsParksTip" },
         root: { layer: "roads", children: [{ layer: "park", target: "block" }] },
@@ -255,7 +255,7 @@ export const FAKE_RECIPES: MockRecipe[] = [
         info: { id: "neighbourhood-park", name: "Placemaker.Recipe.NeighbourhoodPark", icon: "playground", custom: false, description: "Placemaker.Recipe.NeighbourhoodParkTip" },
         root: { layer: "park", children: [{ layer: "playground" }, { layer: "restrooms" }] },
     },
-    { info: { id: "campground", name: "Placemaker.Campground.Name", icon: "campground", custom: false, description: "Placemaker.Recipe.CampgroundTip" }, root: { layer: "campground" } },
+    { info: { id: "campground", name: "Placemaker.Campground.Name", icon: "campground", custom: false, description: "Placemaker.Recipe.CampgroundTip", group: "nature" }, root: { layer: "campground" } },
 ];
 
 /** English for the fake layers' keys (the real layers ship their own Lang files). */
@@ -336,14 +336,14 @@ export { fakeAssets, surfaceColor } from "./fakeAssets";
 // ───────────── more types (the Make row at scale) ─────────────
 
 /** Types other workstreams are adding: backend.addMoreTypes() puts them in the catalog (Make-row tests). */
-export const MORE_TYPES: [string, string, string][] = [
-    ["botanicalGarden", "Botanical garden", "flower"],
-    ["sportsPark", "Sports park", "people"],
-    ["dogPark", "Dog park", "park"],
-    ["picnicGrounds", "Picnic grounds", "picnic"],
-    ["natureReserve", "Nature reserve", "tree"],
-    ["formalGarden", "Formal garden", "flower"],
-    ["communityGarden", "Community garden", "leaf"],
-    ["marketSquare", "Market square", "plaza"],
-    ["parkingGarage", "Parking garage", "parking"],
+export const MORE_TYPES: [string, string, string, string][] = [
+    ["botanicalGarden", "Botanical garden", "flower", "gardens"],
+    ["sportsPark", "Sports park", "people", "sports"],
+    ["dogPark", "Dog park", "park", "parks"],
+    ["picnicGrounds", "Picnic grounds", "picnic", "parks"],
+    ["natureReserve", "Nature reserve", "tree", "nature"],
+    ["formalGarden", "Formal garden", "flower", "gardens"],
+    ["communityGarden", "Community garden", "leaf", "gardens"],
+    ["marketSquare", "Market square", "plaza", "squares"],
+    ["parkingGarage", "Parking garage", "parking", "parking"],
 ];

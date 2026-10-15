@@ -18,7 +18,7 @@ using Random = Unity.Mathematics.Random;
 
 namespace Placemaker.Core.Layers.Plaza
 {
-    [AreaGenerator(20)]
+    [AreaGenerator(20, Group = "squares")]
     public sealed class PlazaLayer : LayerBase, IHasFeatures, ILinkedControls
     {
         public const string LayerId = "plaza";
