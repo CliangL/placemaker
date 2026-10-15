@@ -257,6 +257,8 @@
   "Placemaker.UI.Review.AllGood": "No problems",
   "Placemaker.UI.Review.Breakdown": "Cost breakdown",
   "Placemaker.UI.Review.CantAffordShort": "Too expensive",
+  "Placemaker.UI.Review.CausedBy": "Caused by the setting {0}.",
+  "Placemaker.UI.Review.ChangeSetting": "Change setting",
   "Placemaker.UI.Review.ClickEdit": "Click: edit",
   "Placemaker.UI.Review.ClickShow": "Click: show on map",
   "Placemaker.UI.Review.Cost": "Cost",

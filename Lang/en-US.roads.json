@@ -397,5 +397,9 @@
   "Placemaker.Roads.Stat.HighestFill": "Highest fill",
   "Placemaker.Roads.Issue.TerraceSteep": "The hill is steeper than terraces this deep allow: they narrow in places. Fewer cells or a steeper bank fit better.",
   "Placemaker.Roads.Issue.TerraceEarthwork": "The earthwork is capped at {0} m: in places the terraces follow the hill a little.",
-  "Placemaker.Roads.Issue.TerraceFlat": "The ground here is flat: the streets are laid in rows and nothing is terraced."
+  "Placemaker.Roads.Issue.TerraceFlat": "The ground here is flat: the streets are laid in rows and nothing is terraced.",
+  "Placemaker.Roads.Issue.DroppedObstacle": "Street left out: it would cross a building, water or a pylon and no way round fitted.",
+  "Placemaker.Roads.Issue.PerimeterBlocked": "Perimeter piece left out: a building, water or a pylon sits on the outline and no way round fitted.",
+  "Placemaker.Roads.Issue.PerimeterOpen": "The perimeter road does not close here: no clean way across the gap.",
+  "Placemaker.Roads.Issue.JunctionCut": "Side street cut back from this main road: junctions here are kept this far apart."
 }

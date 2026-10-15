@@ -11,5 +11,6 @@
   "Placemaker.Legend.terrain": "Terrain change",
   "Placemaker.Legend.cutouts": "Zoning cutouts",
   "Placemaker.Legend.blocked": "Blocked for zoning",
-  "Placemaker.Legend.decals": "Decals"
+  "Placemaker.Legend.decals": "Decals",
+  "Placemaker.Legend.issues": "Issues (red: left out, orange: warning)"
 }

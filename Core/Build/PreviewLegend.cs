@@ -31,6 +31,8 @@ namespace Placemaker.Core.Build
         public const string Blocked = "blocked";
         public const string Decals = "decals";
         public const string Entrances = "entrances";
+        /// <summary>(s61) The ring markers of the plan's located issues: red = left out / blocked, orange = a warning.</summary>
+        public const string Issues = "issues";
         /// <summary>Roads by role: "road:street", "road:avenue", … (RoadRoles ids).</summary>
         public const string RoadPrefix = "road:";
 
@@ -39,7 +41,7 @@ namespace Placemaker.Core.Build
         {
             Paths, "road:" + RoadRoles.Street, "road:" + RoadRoles.Avenue, "road:" + RoadRoles.Local, "road:" + RoadRoles.Roundabout,
             "road:" + RoadRoles.Perimeter, "road:" + RoadRoles.Lane, "road:" + RoadRoles.CarFree,
-            Features, Trees, Planting, Water, Surfaces, Objects, Parking, Entrances, Terrain, Cutouts, Blocked, Decals,
+            Features, Trees, Planting, Water, Surfaces, Objects, Parking, Entrances, Issues, Terrain, Cutouts, Blocked, Decals,
         };
 
         /// <summary>Layers that start hidden (noise most of the time): the legend's click shows them.</summary>
@@ -70,12 +72,16 @@ namespace Placemaker.Core.Build
                 case Blocked: return "#d9443a";
                 case Decals: return "#bfa680";
                 case Entrances: return "#ffd633";
+                case Issues: return "#ff9a1f";   // warning; left-out / blocked = Color2
                 default: return "#cccccc";
             }
         }
 
         /// <summary>Second swatch colour (terrain: cut), or null.</summary>
-        public static string Color2(string id) => id == Terrain ? TerrainHeat.CutHex : null;
+        public static string Color2(string id) => id == Terrain ? TerrainHeat.CutHex : id == Issues ? BlockedHex : null;
+
+        /// <summary>(s61) Marker colour of an issue that dropped / blocked something.</summary>
+        public const string BlockedHex = "#e5322d";
 
         public static float3 Rgb(string id) => Hex(Color(id));
 
@@ -164,6 +170,8 @@ namespace Placemaker.Core.Build
             public double AreaM2;
             /// <summary>Terrain: deepest cut / highest fill in metres (0 when none).</summary>
             public double MinDelta, MaxDelta;
+            /// <summary>(s61) Issues: how many of them left something out or blocked it (the red ones).</summary>
+            public int Blocked;
             /// <summary>Roads: most used prefab ("" = not resolved yet) and the control that picks it.</summary>
             public string AssetId = "";
             public string Control = "";
@@ -242,6 +250,14 @@ namespace Placemaker.Core.Build
                 }
             }
             if (entrances > 0) E(Entrances).Count = entrances;
+            if (plan != null)
+                foreach (var i in plan.AllIssues())
+                {
+                    if (i?.At == null) continue;
+                    var e = E(Issues);
+                    e.Count++;
+                    if (i.Dropped || i.Severity == IssueSeverity.Error) e.Blocked++;
+                }
 
             var r = new List<Entry>();
             foreach (var id in Order)

@@ -51,6 +51,7 @@ export function legendValue(e: LegendEntry): string {
         if (e.maxDelta && e.maxDelta > 0) parts.push(signed(e.maxDelta));
         return parts.join(" / ") + " m";
     }
+    if (e.id === "issues") return e.blocked ? `${e.count} (${e.blocked} red)` : String(e.count);
     if (e.lengthM && e.lengthM > 0) return legendLength(e.lengthM);
     if ((e.id === "surfaces" || e.id === "water") && e.areaM2) return legendArea(e.areaM2);
     return String(e.count);

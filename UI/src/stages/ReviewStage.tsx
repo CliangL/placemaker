@@ -298,7 +298,7 @@ const Alerts = ({ summary }: { summary: Summary }) => {
     const rank = { error: 0, warning: 1, info: 2 } as Record<string, number>;
     const issues = summary.issues.map((i, n) => ({ i, n })).sort((a, b) => (rank[a.i.severity] ?? 3) - (rank[b.i.severity] ?? 3) || a.n - b.n);
     for (const { i } of issues)
-        raw.push({ kind: i.severity === "error" ? "error" : i.severity === "warning" ? "warn" : "info", text: "", full: tl(i.text), issue: i, loc: i.text });
+        raw.push({ kind: i.severity === "error" || i.dropped ? "error" : i.severity === "warning" ? "warn" : "info", text: "", full: tl(i.text), issue: i, loc: i.text });
     // errors first, then permanent changes, warnings, info
     const order = (a: Alert) => (a.kind === "error" ? 0 : a.permanent ? 1 : a.kind === "warn" ? 2 : 3);
     raw.sort((a, b) => order(a) - order(b));
@@ -311,8 +311,13 @@ const Alerts = ({ summary }: { summary: Summary }) => {
                 const [icon, tint] = ALERT_ICON[a.kind];
                 const i = a.issue;
                 const action = i?.at ? t("Placemaker.UI.Review.ClickShow", "Click: show on map") : i?.stepPath ? t("Placemaker.UI.Review.ClickEdit", "Click: edit") : undefined;
+                // (s61) The setting that made it happen: named with its value, one click to change it.
+                const cause = i?.cause;
+                const causeText = cause ? t(cause.label, humanize(cause.id)) + (cause.value ? " " + cause.value : "") : "";
+                const tipText = cause ? a.full + "\n" + t("Placemaker.UI.Review.CausedBy", "Caused by the setting {0}.", [causeText]) : a.full;
                 return (
-                    <Tip key={n} title={a.full} description={action}>
+                    <React.Fragment key={n}>
+                    <Tip title={tipText} description={action}>
                         <button
                             type="button"
                             className={classNames(s.alert, s["alert_" + a.kind])}
@@ -331,6 +336,23 @@ const Alerts = ({ summary }: { summary: Summary }) => {
                             {i?.at ? <Icon name="marker" size={10} tint="dim" /> : null}
                         </button>
                     </Tip>
+                    {cause && i?.stepPath ? (
+                        <Tip title={t("Placemaker.UI.Review.ChangeSetting", "Change setting")} description={causeText}>
+                            <button
+                                type="button"
+                                className={classNames(s.alert, s.alert_info)}
+                                data-testid="issue-cause"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    act.focusStep(i.stepPath!);
+                                    act.goToStage("design");
+                                }}
+                            >
+                                <div className={s.alertText}>{causeText}</div>
+                            </button>
+                        </Tip>
+                    ) : null}
+                    </React.Fragment>
                 );
             })}
             {alerts.length > ALERTS_SHOWN ? (

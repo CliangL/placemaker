@@ -79,7 +79,7 @@ namespace Placemaker.Core.Layers.Roads
         /// Rounds the bends at plain (degree-2, unattached) nodes of car roads: both edges are trimmed by R·tan(θ/2) and joined
         /// by a curve tangent to both. R by class, limited so a trim never eats more than 45 % of an edge.
         /// </summary>
-        public static int FilletBends(RoadNetwork net, Func<NetRole, float> halfWidth)
+        public static int FilletBends(RoadNetwork net, Func<NetRole, float> halfWidth, float perimeterRadius = -1f)
         {
             int count = 0;
             for (int pass = 0; pass < 3; pass++)
@@ -99,6 +99,12 @@ namespace Placemaker.Core.Layers.Roads
                     if (turn < FilletMinTurn || turn > 150f) continue;
                     var role = Rank(e0.Role) >= Rank(e1.Role) ? e0.Role : e1.Role;
                     float r = BendRadius(role, halfWidth(role));
+                    // (s61) A perimeter bend is the Corner rounding setting: 0 = a sharp corner (the outline exactly).
+                    if (perimeterRadius >= 0f && (e0.Role == NetRole.PerimeterRoad || e1.Role == NetRole.PerimeterRoad))
+                    {
+                        if (perimeterRadius < 1f) continue;
+                        r = perimeterRadius;
+                    }
                     float trim = r * math.tan(math.radians(turn) * 0.5f);
                     float l0 = RoadGraph.Length(e0), l1 = RoadGraph.Length(e1);
                     trim = math.min(trim, 0.45f * math.min(l0, l1));
@@ -164,7 +170,7 @@ namespace Placemaker.Core.Layers.Roads
         /// to the middle of the free angle around the node (its first control point moves), when the free angle allows a
         /// square meeting and the bent curve stays clear of everything else.
         /// </summary>
-        public static int SquareJunctions(RoadNetwork net)
+        public static int SquareJunctions(RoadNetwork net, RoadObstacles obstacles = null, Func<NetRole, float> halfWidth = null)
         {
             int fixedCount = 0;
             var inc = RoadGraph.Incidence(net, RoadGraph.Car);
@@ -214,7 +220,8 @@ namespace Placemaker.Core.Layers.Roads
                     var line = RoadGraph.Sample(e.Curve, 3f);
                     var ignore = new HashSet<int>(inc[e.N0]);
                     foreach (int k2 in inc[e.N1]) ignore.Add(k2);
-                    if (index.Crosses(line, 2f, ignore) || SelfFolds(e.Curve))
+                    // (s61) A street bent round an obstacle stays bent: squaring never puts it back through the building / water.
+                    if (index.Crosses(line, 2f, ignore) || SelfFolds(e.Curve) || (obstacles != null && obstacles.Blocked(e.Curve, (halfWidth != null ? halfWidth(e.Role) : 8f) + 1f)))
                     {
                         e.Curve = old;
                         continue;
