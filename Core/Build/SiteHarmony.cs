@@ -126,7 +126,7 @@ namespace Placemaker.Core.Build
         private static readonly HashSet<string> OwnGround = new HashSet<string>(StringComparer.Ordinal)
         {
             "parking", "beach", "beachBar", "waterfront", "shore", "wetland", "wildlifeHabitat", "pond", "shopsPark",
-            "roads", "split", "edgeZoning", "stripMall", "shoppingPlaza", "outdoorMall",
+            "roads", "split", "edgeZoning", "stripMall", "shoppingPlaza", "outdoorMall", "highStreet", "retailPark", "mallPark", "mallDistrict",
             "lookoutHill", "viewpoint", "golf", "puttingGreen", "quarry", "landfill", "hikingTrail", "trailCamp",
             "amphitheatre", "skateBowl", "dirtJumps", "urbanRuins", "spoilHeaps", "constructionSite", "abandonedLot", "debris",
             "logisticsYard", "scrapyard", "junkPiles", "skipRow", "yardBreak",
@@ -137,7 +137,13 @@ namespace Placemaker.Core.Build
         /// <summary>The decorative terrain layer: its change is masked out of corridors, surfaces and pads.</summary>
         public const string DecorLayer = "terrain";
 
-        public static bool Participates(string generatorId) => !string.IsNullOrEmpty(generatorId) && !OwnGround.Contains(generatorId);
+        /// <summary>
+        /// (s35) Every Commercial type grades itself (MallGrading: plots level at the grade of the road they face, lanes on
+        /// their profiles, lots in tiers) — the whole group is locked, not just the ids listed above, so a new commercial type
+        /// can never be smoothed by this pass (s32's high street / retail park / mall park / mall district were).
+        /// </summary>
+        public static bool Participates(string generatorId) =>
+            !string.IsNullOrEmpty(generatorId) && !OwnGround.Contains(generatorId) && GeneratorGroups.Of(GeneratorRegistry.Get(generatorId)) != "commercial";
 
         // ───────────────────────── context ─────────────────────────
 
