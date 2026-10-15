@@ -178,6 +178,10 @@ namespace Placemaker.Core.Layers.Commercial
             }
         }
 
-        protected override void FillRest(LayerContext ctx, Mall mall) => GreenRest(ctx, mall, "pocket", false, 0xF80u);
+        protected override void FillRest(LayerContext ctx, Mall mall)
+        {
+            OverflowLots(ctx, mall, 0xF90u);
+            GreenRest(ctx, mall, "pocket", false, 0xF80u);
+        }
     }
 }

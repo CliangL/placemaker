@@ -58,9 +58,13 @@ namespace Placemaker.Tests
             var plots = plan.Layers.SelectMany(l => l.Regions).Where(Cutouts.IsCutout).Select(g => Poly.To2D(g.Ring)).ToList();
             var zoned = plan.ZoneCells.Where(c => c.State == ZoneCellState.Zoned).ToList();
             Assert.NotEmpty(plots);
+            bool padded = plan.AllIssues().Any(i => i.Key == Placemaker.Core.Layers.Commercial.CommercialLayer.PadKey);
+            var cellPlots = plan.Layers.SelectMany(l => l.Regions).Where(g => Cutouts.IsCutout(g) && g.Tags.Contains(ZoneLots.CellsTag)).Select(g => Poly.Centroid(Poly.To2D(g.Ring))).ToList();
             foreach (var q in plots)
             {
                 if (lanePlotsExempt && FacesLane(q)) continue;
+                // (s46) A plot no cell could be zoned for stays a shop pad (warned): not cells by design.
+                if (padded && !cellPlots.Any(c => math.distance(c, Poly.Centroid(q)) < 0.5f)) continue;
                 var mine = zoned.Where(c => Poly.Contains(q, Centre(c))).ToList();
                 Assert.True(mine.Count >= 2, $"{ctx}: plot at {Poly.Centroid(q)} has {mine.Count} cells");
                 float cells = mine.Count * ZoneGuard.Cell * ZoneGuard.Cell;

@@ -35,6 +35,8 @@
   "Placemaker.Botanical.Issue.NoGlasshouse.Short": "No glasshouse",
   "Placemaker.Campground.Issue.NoPitches.Short": "No pitches fit",
   "Placemaker.Commercial.Issue.Fallback.Short": "Simpler layout",
+  "Placemaker.Commercial.Issue.Pad.Short": "Unzoned pad",
+  "Placemaker.Commercial.Issue.Rest.Short": "Rest is park",
   "Placemaker.Commercial.Issue.NoLot.Short": "No parking lot",
   "Placemaker.Commercial.Issue.NoStreet.Short": "No street for shops",
   "Placemaker.Common.Issue.AreaTooLarge.Short": "Too large",

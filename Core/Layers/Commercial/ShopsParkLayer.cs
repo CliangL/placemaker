@@ -82,7 +82,7 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var m in GeneratorRegistry.Get("park").SuggestMarkers(new AreaInput
                      { Shape = new AreaShape { Ring = Geometry.Poly.To3D(host.Ring, ctx.G) }, Site = ctx.Site, Settings = new SettingsBag() }))
                 gates.Add(m.Position.xz);
-            var res = StreetShops.Plan(host, ctx.Input, gates, ShopLayout(ctx.S("layout")), ctx.S("amount"), ctx.Raw("plotDepth"), Hashing.Mix(ctx.Seed, 0xD2u));
+            var res = StreetShops.Plan(host, ctx.Input, gates, ShopLayout(ctx.S("layout")), ctx.S("amount"), ctx.Raw("plotDepth"), Hashing.Mix(ctx.Seed, 0xD2u), true);
             if (res.FellBack) ctx.Issue(IssueSeverity.Info, FallbackKey);
             foreach (var q in res.Shops) { mall.Shops.Add(q); if (res.CellPlots) mall.CellPlots.Add(q); }
             foreach (var q in res.Carve) mall.Taken.Add(q);

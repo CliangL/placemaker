@@ -98,5 +98,68 @@ namespace Placemaker.Core.Layers.Common
             }
             return result;
         }
+
+        /// <summary>
+        /// (s46) Outline pieces facing a road, followed along a CURVE: consecutive ring edges that face the road are chained
+        /// and cut into straight chords (a chord may stray <paramref name="tolerance"/> m from the outline at most), each
+        /// chord moved inward so it lies inside the region. <see cref="Edges"/> keeps every ring edge on its own, so an
+        /// outline that follows a curved street in short chords (5 m vertices) yielded no piece of the minimum length at
+        /// all — no frontage, and the commercial types fell back to a park (playtest s46).
+        /// </summary>
+        public static List<(float2 a, float2 b)> FollowEdges(float2[] ring, List<RoadLine> roads, float minLength = 4f, float tolerance = 2.5f)
+        {
+            var result = new List<(float2, float2)>();
+            var pieces = Edges(ring, roads, 0.5f);
+            if (pieces.Count == 0) return result;
+            var chains = new List<List<float2>>();
+            foreach (var (a, b) in pieces)
+            {
+                if (chains.Count > 0 && math.distance(chains[chains.Count - 1][chains[chains.Count - 1].Count - 1], a) < 0.05f) chains[chains.Count - 1].Add(b);
+                else chains.Add(new List<float2> { a, b });
+            }
+            // The outline's start may sit inside a chain: join the last chain to the first.
+            if (chains.Count > 1 && math.distance(chains[chains.Count - 1][chains[chains.Count - 1].Count - 1], chains[0][0]) < 0.05f)
+            {
+                chains[chains.Count - 1].AddRange(chains[0].GetRange(1, chains[0].Count - 1));
+                chains.RemoveAt(0);
+            }
+            foreach (var chain in chains)
+            {
+                int last = chain.Count - 1;
+                if (last > 3 && math.distance(chain[0], chain[last]) < 0.05f)
+                {
+                    // A frontage all round the outline: cut it at the point farthest from its start.
+                    int far = 1; float fd = 0f;
+                    for (int k = 1; k < last; k++) { float dd = math.distance(chain[0], chain[k]); if (dd > fd) { fd = dd; far = k; } }
+                    Chords(chain, 0, far, minLength, tolerance, result);
+                    Chords(chain, far, last, minLength, tolerance, result);
+                }
+                else Chords(chain, 0, last, minLength, tolerance, result);
+            }
+            return result;
+        }
+
+        private static void Chords(List<float2> pts, int i, int j, float minLength, float tolerance, List<(float2, float2)> result)
+        {
+            float2 a = pts[i], b = pts[j];
+            float len = math.distance(a, b);
+            if (len < 0.01f) return;
+            var d = (b - a) / len; var n = new float2(-d.y, d.x);   // inside is on the left
+            float inward = 0f, outward = 0f; int worst = -1; float worstAbs = 0f;
+            for (int k = i + 1; k < j; k++)
+            {
+                float s = math.dot(pts[k] - a, n);
+                inward = math.max(inward, s); outward = math.max(outward, -s);
+                if (math.abs(s) > worstAbs) { worstAbs = math.abs(s); worst = k; }
+            }
+            if (worst >= 0 && inward + outward > tolerance)
+            {
+                Chords(pts, i, worst, minLength, tolerance, result);
+                Chords(pts, worst, j, minLength, tolerance, result);
+                return;
+            }
+            if (len < minLength) return;
+            result.Add((a + n * inward, b + n * inward));
+        }
     }
 }
