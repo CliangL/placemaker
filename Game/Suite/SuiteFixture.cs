@@ -7,6 +7,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Colossal.Mathematics;
 using Game.Common;
 using Game.Net;
@@ -35,10 +36,12 @@ namespace Placemaker.Game.Suite
         private readonly EntityManager _em;
         private PrefabSystem _prefabSystem;
 
-        public SuiteFixture(World world)
+        public SuiteFixture(World world, int nx = 0, int nz = 0)
         {
             _world = world;
             _em = world.EntityManager;
+            if (nx >= 5) Layout.NX = nx;
+            if (nz >= 5) Layout.NZ = nz;
             Blocks = Layout.Blocks();
         }
 
@@ -205,17 +208,39 @@ namespace Placemaker.Game.Suite
             return n;
         }
 
-        public string ApplyHeightmap()
+        /// <summary>
+        /// The base heightmap as the terrain system holds it (GPU readback of TerrainSystem.heightmap: without the road,
+        /// building and lot modifications the CPU heights include), else the CPU heights, else null.
+        /// </summary>
+        public ushort[] ReadHeightmap(out string source)
         {
             var terrain = _world.GetOrCreateSystemManaged<TerrainSystem>();
-            ushort[] existing = null;
-            var hd = terrain.GetHeightData(true);
             int n = SuiteLayout.HeightmapSize;
-            if (hd.isCreated && hd.heights.Length == n * n) existing = hd.heights.ToArray();
-            else Note($"live heights unavailable ({(hd.isCreated ? hd.heights.Length : 0)} texels): the whole map becomes the layout");
-            var data = Layout.Heightmap(existing);
-            var tex = new Texture2D(n, n, UnityEngine.Experimental.Rendering.GraphicsFormat.R16_UNorm,
-                UnityEngine.Experimental.Rendering.TextureCreationFlags.None);
+            source = null;
+            try
+            {
+                if (terrain.heightmap is RenderTexture rt && rt.width == n && rt.height == n)
+                {
+                    var req = UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0);
+                    req.WaitForCompletion();
+                    if (!req.hasError)
+                    {
+                        var px = req.GetData<ushort>();
+                        if (px.Length == n * n) { source = "gpu"; return px.ToArray(); }
+                    }
+                }
+            }
+            catch (Exception e) { Note("heightmap readback failed: " + e.Message); }
+            var hd = terrain.GetHeightData(true);
+            if (hd.isCreated && hd.heights.Length == n * n) { source = "cpu"; return hd.heights.ToArray(); }
+            return null;
+        }
+
+        private void Replace(ushort[] data)
+        {
+            int n = SuiteLayout.HeightmapSize;
+            var terrain = _world.GetOrCreateSystemManaged<TerrainSystem>();
+            var tex = new Texture2D(n, n, UnityEngine.Experimental.Rendering.GraphicsFormat.R16_UNorm, UnityEngine.Experimental.Rendering.TextureCreationFlags.None);
             try
             {
                 tex.SetPixelData(data, 0);
@@ -223,6 +248,24 @@ namespace Placemaker.Game.Suite
                 terrain.ReplaceHeightmap(tex);
             }
             finally { UnityEngine.Object.Destroy(tex); }
+        }
+
+        public string ApplyHeightmap()
+        {
+            var existing = ReadHeightmap(out var source);
+            Note(existing != null ? "map heightmap read from " + source : "map heightmap unavailable: the whole map becomes the layout");
+            Replace(Layout.Heightmap(existing));
+            return null;
+        }
+
+        /// <summary>Puts one block's ground back to the layout (after a scenario deleted its build). Returns null or the problem.</summary>
+        public string RestoreBlock(SuiteBlock b)
+        {
+            var current = ReadHeightmap(out _);
+            if (current == null) return "heightmap unavailable";
+            int changed = Layout.PatchBlock(current, b);
+            if (changed > 0) Replace(current);
+            Note($"restore {b.Id}: {changed} texels back to the layout");
             return null;
         }
 
@@ -242,10 +285,10 @@ namespace Placemaker.Game.Suite
             var probes = new[]
             {
                 new float2(Layout.LineX(5) + 40f, Layout.LineZ(2) + 50f),                    // flat
-                new float2(Layout.LineX(3) + 75f, Layout.LineZ(6) + 70f),                    // slope
-                new float2(Layout.LineX(3) + 75f, Layout.LineZ(7)),                          // slope top road
-                new float2(Layout.LineX(1) + 75f, Layout.LineZ(4) + 70f),                    // rough
-                new float2(Layout.LineX(0) + 60f, Layout.LineZ(4) + 52f),                    // rough
+                new float2(Layout.LineX(3) + 75f, Layout.LineZ(Layout.NZ - 1) + 70f),        // slope
+                new float2(Layout.LineX(3) + 75f, Layout.LineZ(Layout.NZ)),                  // slope top road
+                new float2(Layout.LineX(1) + 75f, Layout.LineZ(Layout.RoughRow) + 70f),      // rough
+                new float2(Layout.LineX(0) + 60f, Layout.LineZ(Layout.RoughRow) + 52f),      // rough
             };
             float worst = 0f;
             var sb = new System.Text.StringBuilder();
@@ -454,7 +497,13 @@ namespace Placemaker.Game.Suite
         // ───────────── block assignment ─────────────
 
         private readonly HashSet<string> _used = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _free = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _uses = new Dictionary<string, int>(StringComparer.Ordinal);
 
+        /// <summary>
+        /// A block for the next scenario: an unused block of the wanted kind, else an unused flat block, else any unused
+        /// block, else a block a scenario has deleted its build from and restored (Release), the wanted kind first.
+        /// </summary>
         public SuiteBlock Take(string site)
         {
             SuiteBlockKind? want = null;
@@ -466,15 +515,29 @@ namespace Placemaker.Game.Suite
                 case "rough": want = SuiteBlockKind.Rough; break;
                 case "survive": want = SuiteBlockKind.Survive; break;
             }
+            bool Open(SuiteBlock b) => !_used.Contains(b.Id) || _free.Contains(b.Id);
             SuiteBlock pick = null;
-            if (want.HasValue)
-                foreach (var b in Blocks) if (b.Kind == want.Value && !_used.Contains(b.Id)) { pick = b; break; }
-            if (pick == null)
-                foreach (var b in Blocks) if (b.Kind == SuiteBlockKind.Flat && !_used.Contains(b.Id)) { pick = b; break; }
-            if (pick == null)
-                foreach (var b in Blocks) if (!_used.Contains(b.Id)) { pick = b; break; }
-            if (pick != null) _used.Add(pick.Id);
+            if (want.HasValue) pick = Blocks.FirstOrDefault(b => b.Kind == want.Value && !_used.Contains(b.Id)) ?? Blocks.FirstOrDefault(b => b.Kind == want.Value && _free.Contains(b.Id));
+            if (pick == null) pick = Blocks.FirstOrDefault(b => b.Kind == SuiteBlockKind.Flat && !_used.Contains(b.Id));
+            if (pick == null) pick = Blocks.FirstOrDefault(b => !_used.Contains(b.Id));
+            if (pick == null) pick = Blocks.FirstOrDefault(b => b.Kind == SuiteBlockKind.Flat && _free.Contains(b.Id)) ?? Blocks.FirstOrDefault(Open);
+            if (pick != null)
+            {
+                _used.Add(pick.Id);
+                _free.Remove(pick.Id);
+                _uses[pick.Id] = TimesUsed(pick) + 1;
+            }
             return pick;
         }
+
+        /// <summary>The block's build was deleted and its ground restored: later scenarios may use it again (not zoned/survive blocks).</summary>
+        public void Release(SuiteBlock b)
+        {
+            if (b.Kind == SuiteBlockKind.Zoned || b.Kind == SuiteBlockKind.Survive) return;
+            _free.Add(b.Id);
+        }
+
+        public int TimesUsed(SuiteBlock b) => _uses.TryGetValue(b.Id, out int n) ? n : 0;
+
     }
 }

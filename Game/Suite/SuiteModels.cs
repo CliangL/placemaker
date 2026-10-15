@@ -38,6 +38,11 @@ namespace Placemaker.Game.Suite
         /// <summary>Log every frame while the roads apply (diagnostics).</summary>
         public bool trace;
         public int shotWidth = 1280, shotHeight = 720;
+        /// <summary>After the set: keep the game open and run scenario files dropped into &lt;run&gt;/inbox until {"command":"quit"}.</summary>
+        public bool queue;
+        public float queueIdleMinutes = 60f;
+        /// <summary>Grid size in blocks (0 = the layout default 9 x 7).</summary>
+        public int nx, nz;
     }
 
     public sealed class ValueOverride
@@ -69,6 +74,10 @@ namespace Placemaker.Game.Suite
         public List<string> skip;
         /// <summary>Limit an expansion to the first N items (0 = all).</summary>
         public int limit;
+        /// <summary>A step script (suite/README.md); without one the default steps run for layer/preset/draw/values.</summary>
+        public List<Newtonsoft.Json.Linq.JObject> steps;
+        /// <summary>Run on an earlier scenario's block, outline, build and entrances (its id) instead of a fresh block.</summary>
+        public string on;
     }
 
     public sealed class SwitchingSpec
@@ -102,6 +111,9 @@ namespace Placemaker.Game.Suite
         public List<ValueOverride> Values = new List<ValueOverride>();
         public uint Seed = 1;
         public string Note = "";
+        /// <summary>The step script; null = the default steps for Layer/Preset/Draw/Values.</summary>
+        public List<Newtonsoft.Json.Linq.JObject> Steps;
+        public string On;
         public Placemaker.Core.Suite.SuiteBlock Block;
     }
 }

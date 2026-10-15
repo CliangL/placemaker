@@ -44,6 +44,53 @@ namespace Placemaker.Game.Suite
             }
         }
 
+        /// <summary>The game camera controller's pivot is within <paramref name="tolerance"/> m of the point (x, z).</summary>
+        public static bool PivotNear(float3 p, float tolerance)
+        {
+            try
+            {
+                var c = World.DefaultGameObjectInjectionWorld?.GetExistingSystemManaged<CameraUpdateSystem>()?.gamePlayController;
+                if (c == null) return true;
+                var v = c.pivot;
+                return math.distance(new float2(v.x, v.z), p.xz) <= tolerance;
+            }
+            catch (Exception) { return true; }
+        }
+
+        /// <summary>The game camera's current zoom (distance to its pivot), 0 when unknown.</summary>
+        public static float Zoom()
+        {
+            try { return World.DefaultGameObjectInjectionWorld?.GetExistingSystemManaged<CameraUpdateSystem>()?.gamePlayController?.zoom ?? 0f; }
+            catch (Exception) { return 0f; }
+        }
+
+        private static object s_tss;
+        private static System.Reflection.PropertyInfo s_left, s_reads;
+
+        /// <summary>
+        /// Virtual texturing activity (TextureStreamingSystem, read by reflection: VT materials still to load, async tile
+        /// reads). (-1, -1) when unavailable.
+        /// </summary>
+        public static (long Left, long Reads) Streaming(World world)
+        {
+            try
+            {
+                if (s_tss == null)
+                {
+                    foreach (var s in world.Systems)
+                        if (s.GetType().Name == "TextureStreamingSystem") { s_tss = s; break; }
+                    if (s_tss == null) return (-1, -1);
+                    var t = s_tss.GetType();
+                    s_left = t.GetProperty("VTMaterialsLeftToLoadCount");
+                    s_reads = t.GetProperty("perSurfaceAsyncTileReadCount");
+                }
+                long left = s_left != null ? Convert.ToInt64(s_left.GetValue(s_tss)) : -1;
+                long reads = s_reads != null ? Convert.ToInt64(s_reads.GetValue(s_tss)) : -1;
+                return (left, reads);
+            }
+            catch (Exception) { return (-1, -1); }
+        }
+
         public static string CameraState()
         {
             try

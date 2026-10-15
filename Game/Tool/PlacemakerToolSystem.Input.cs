@@ -34,6 +34,7 @@ namespace Placemaker.Game.Tool
 
         private void ReadInput()
         {
+            if (SuiteInputOnly) { ReadSuiteInput(); return; }   // a suite run drives the tool (PlacemakerToolSystem.Suite)
             var im = InputManager.instance;
             var mouse = Mouse.current;
             var kb = Keyboard.current;
@@ -76,6 +77,7 @@ namespace Placemaker.Game.Tool
         /// <summary>Esc, Enter and undo/redo. Returns true when the frame's input was consumed.</summary>
         private bool HandleKeys()
         {
+            if (SuiteInputOnly) return false;   // a suite run: real keys are ignored
             var im = InputManager.instance;
             if (im != null && im.hasInputFieldFocus) return false;
             if (SafePressed(cancelAction)) { Escape(); return true; }

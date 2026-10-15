@@ -19,7 +19,8 @@
   -Opt 'key=value;key=value' passes extra run.json fields (world=map:Name, roads=single, trace=true, ...).
 #>
 param(
-    [ValidateSet('smoke', 'core', 'full', 'bootstrap')][string]$Set = 'smoke',
+    # smoke | core | full | steps | any suite/scenarios/<name>.json; bootstrap = fixture only; queue = no set, only the inbox
+    [string]$Set = 'smoke',
     [string]$RunId = '',
     [switch]$NoBuild,
     [ValidateSet('A', 'B')][string]$Route = 'A',
@@ -37,6 +38,10 @@ param(
     [float]$GrowSeconds = 100,
     [float]$PregrowSeconds = 75,
     [string]$Opt = '',
+    # Keep the game open after the set and run scenario files dropped into <run>/inbox (tools/suite/Send-Suite.ps1) until a quit command.
+    [switch]$Queue,
+    # Grid size in blocks, e.g. '14x9' (default 9x7 = 63 blocks).
+    [string]$Grid = '',
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
 )
 
@@ -161,14 +166,16 @@ if (-not $KeepGraphics) {
 
 # ───────────── arm ─────────────
 New-Item -ItemType Directory -Force -Path $suiteData | Out-Null
-$setName = if ($Set -eq 'bootstrap') { 'smoke' } else { $Set }
+$setName = if ($Set -in @('bootstrap', 'queue')) { 'smoke' } else { $Set }
 $scenarioFile = Join-Path $repo "suite\scenarios\$setName.json"
+if (-not (Test-Path $scenarioFile)) { Say "STOP: no scenario set $scenarioFile"; Restore-Settings 'stopped'; exit 2 }
 $cfg = [ordered]@{
     runId = $RunId; set = $Set; outDir = $runDir; scenarioFile = $scenarioFile; git = $git
     expiresUtc = (Get-Date).ToUniversalTime().AddMinutes(25).ToString('o')
     speed = 4; pregrowSeconds = $PregrowSeconds; growSeconds = $GrowSeconds; maxScenarios = $MaxScenarios
-    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = [int]$w; shotHeight = [int]$h; noTerrain = [bool]$NoTerrain
+    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = [int]$w; shotHeight = [int]$h; noTerrain = [bool]$NoTerrain; queue = [bool]$Queue
 }
+if ($Grid -match '^(\d+)x(\d+)$') { $cfg['nx'] = [int]$Matches[1]; $cfg['nz'] = [int]$Matches[2] }
 foreach ($kv in ($Opt -split ';' | Where-Object { $_ -match '=' })) {
     $k, $v = $kv -split '=', 2
     $k = $k.Trim(); $v = $v.Trim()
@@ -205,7 +212,8 @@ try {
     }
 
     $bootLimit = 420; $staleLimit = 240
-    if ($TimeoutMin -le 0) { $TimeoutMin = switch ($Set) { 'bootstrap' { 15 } 'smoke' { 25 } 'core' { 75 } 'full' { 75 } } }
+    if ($TimeoutMin -le 0) { $TimeoutMin = switch ($Set) { 'bootstrap' { 15 } 'smoke' { 25 } 'queue' { 480 } default { 75 } } }
+    if ($Queue -and $TimeoutMin -lt 480) { $TimeoutMin = 480 }
     $hb = Join-Path $runDir 'heartbeat.json'
     $ourPid = if ($proc) { $proc.Id } else { 0 }
     $lastBeat = $null; $lastBeatChange = Get-Date; $lastPhase = ''; $status = 'running'

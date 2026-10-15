@@ -6,8 +6,8 @@
 // vanilla roads. Every block of the grid hosts one scenario. Block kinds:
 //   Zoned   row 1: residential zoning on the south street side, grown before the scenarios run
 //   Survive row 2, column 4: plopped buildings that every build there must leave standing
-//   Rough   row 4, columns 0-2: ±4 m hills inside the block (the roads around stay level)
-//   Slope   rows 5-6: the ground climbs 6 % to the north (z), roads included
+//   Rough   row NZ-3 (4 in the default 9 x 7 grid), columns 0-2: ±4 m hills inside the block (the roads stay level)
+//   Slope   the last two rows: the ground climbs 6 % to the north (z), roads included
 //   Flat    everything else
 // Street types vary per grid line (4-lane avenue, 2-lane street, pedestrian street) so blocks face mixed roads.
 
@@ -75,8 +75,8 @@ namespace Placemaker.Core.Suite
 
         public SuiteBlockKind Kind(int i, int j)
         {
-            if (j >= 5) return SuiteBlockKind.Slope;
-            if (j == 4 && i <= 2) return SuiteBlockKind.Rough;
+            if (j >= NZ - 2) return SuiteBlockKind.Slope;
+            if (j == RoughRow && i <= 2) return SuiteBlockKind.Rough;
             if (j == 2 && i == 4) return SuiteBlockKind.Survive;
             if (j == 1) return SuiteBlockKind.Zoned;
             return SuiteBlockKind.Flat;
@@ -125,7 +125,10 @@ namespace Placemaker.Core.Suite
         public float2 FixtureMin => new float2(LineX(0) - Apron, LineZ(0) - Apron);
         public float2 FixtureMax => new float2(LineX(NX) + Apron, SlopeEnd + Apron);
 
-        private float SlopeStart => LineZ(5);
+        /// <summary>The rough blocks' row (the one below the two slope rows).</summary>
+        public int RoughRow => NZ - 3;
+
+        private float SlopeStart => LineZ(NZ - 2);
         private float SlopeEnd => LineZ(NZ) + 60f;
 
         public float SlopeRise(float z) => SlopeGrade * math.clamp(z - SlopeStart, 0f, SlopeEnd - SlopeStart);
@@ -133,7 +136,7 @@ namespace Placemaker.Core.Suite
         /// <summary>Hills inside the rough blocks, fading to zero 14 m inside the road centre lines.</summary>
         public float RoughBump(float x, float z)
         {
-            const int j = 4;
+            int j = RoughRow;
             if (z <= LineZ(j) || z >= LineZ(j + 1)) return 0f;
             for (int i = 0; i <= 2; i++)
             {
@@ -186,7 +189,7 @@ namespace Placemaker.Core.Suite
                 bool rowNear = z >= lo.y && z <= hi.y;
                 if (existing != null && !rowNear) { Array.Copy(existing, o, data, o, n); continue; }
                 float rise = SlopeRise(z);
-                bool roughRow = z > LineZ(4) - 1f && z < LineZ(5) + 1f;
+                bool roughRow = z > LineZ(RoughRow) - 1f && z < LineZ(RoughRow + 1) + 1f;
                 for (int px = 0; px < n; px++)
                 {
                     float x = MapOffset.x + (px + 0.5f) * cell.x;
@@ -200,6 +203,33 @@ namespace Placemaker.Core.Suite
                 }
             }
             return data;
+        }
+
+        /// <summary>
+        /// Restores one block: <paramref name="current"/> (the live heightmap) with every texel between the block's road
+        /// centre lines set back to the layout; everything else untouched. Returns the number of texels changed.
+        /// </summary>
+        public int PatchBlock(ushort[] current, SuiteBlock b)
+        {
+            int n = HeightmapSize;
+            if (current == null || current.Length != n * n) throw new ArgumentException("heightmap must be " + n + "x" + n);
+            float2 cell = MapExtent / n;
+            int px0 = math.max(0, (int)math.floor((b.X0 - MapOffset.x) / cell.x)), px1 = math.min(n - 1, (int)math.ceil((b.X1 - MapOffset.x) / cell.x));
+            int py0 = math.max(0, (int)math.floor((b.Z0 - MapOffset.y) / cell.y)), py1 = math.min(n - 1, (int)math.ceil((b.Z1 - MapOffset.y) / cell.y));
+            int changed = 0;
+            for (int py = py0; py <= py1; py++)
+            {
+                float z = MapOffset.y + (py + 0.5f) * cell.y;
+                if (z < b.Z0 || z > b.Z1) continue;
+                for (int px = px0; px <= px1; px++)
+                {
+                    float x = MapOffset.x + (px + 0.5f) * cell.x;
+                    if (x < b.X0 || x > b.X1) continue;
+                    ushort v = Encode(Height(x, z));
+                    if (current[py * n + px] != v) { current[py * n + px] = v; changed++; }
+                }
+            }
+            return changed;
         }
 
         /// <summary>The median of the given ground heights (the fixture's Base: least earth moved).</summary>

@@ -32,7 +32,7 @@ using UnityEngine;
 
 namespace Placemaker.Game.Suite
 {
-    public sealed class SuiteRunner : MonoBehaviour
+    public sealed partial class SuiteRunner : MonoBehaviour
     {
         private SuiteRunConfig _cfg;
         private string _out, _shots, _results;
@@ -69,18 +69,6 @@ namespace Placemaker.Game.Suite
         private SuiteFixture _fixture;
         private SuiteProbe _probe;
 
-        private sealed class ScenarioState
-        {
-            public Scenario S;
-            public JObject Result = new JObject();
-            public SiteSnapshot Before;
-            public ComposedPlan Plan;
-            public int Group;
-            public bool Built;
-            public float2[] Ring;
-            public float3 Focus;
-            public float Radius = 80f;
-        }
 
         // ───────────── lifecycle ─────────────
 
@@ -307,12 +295,14 @@ namespace Placemaker.Game.Suite
             if (GameManager.instance.gameMode != GameMode.Game) throw new Exception("new game did not load (mode " + GameManager.instance.gameMode + ")");
 
             _phase = "fixture";
-            _fixture = new SuiteFixture(_world);
+            PlacemakerToolSystem.SuiteInputOnly = true;   // from here the tool hears only the suite's scripted mouse
+            _fixture = new SuiteFixture(_world, _cfg.nx, _cfg.nz);
             _probe = new SuiteProbe(_world);
+            _summary["grid"] = $"{_fixture.Layout.NX} x {_fixture.Layout.NZ} blocks";
             yield return Guard(BuildFixture(), e => { Say("fixture failed: " + e); _summary["fixtureError"] = e.Message; });
             WriteSummary();
 
-            if (!_cfg.fixtureOnly)
+            if (!_cfg.fixtureOnly && _cfg.set != "queue")
             {
                 var set = LoadSet();
                 var scenarios = Expand(set);
@@ -334,21 +324,7 @@ namespace Placemaker.Game.Suite
                 for (int i = 0; i < scenarios.Count; i++)
                 {
                     _index = i + 1;
-                    var s = scenarios[i];
-                    s.Block = _fixture.Take(s.Site);
-                    var st = new ScenarioState { S = s };
-                    _states.Add(st);
-                    _scenario = s.Id;
-                    float t0 = Time.realtimeSinceStartup;
-                    yield return Guard(RunScenario(st), e =>
-                    {
-                        Say($"scenario {s.Id} threw: {e}");
-                        st.Result["status"] = "error";
-                        st.Result["exception"] = e.GetType().Name + ": " + e.Message;
-                    });
-                    st.Result["scenarioSec"] = Math.Round(Time.realtimeSinceStartup - t0, 1);
-                    WriteScenario(st, i);
-                    WriteSummary();
+                    yield return RunOne(scenarios[i]);
                 }
                 _scenario = "";
                 Mark("scenariosDoneSec");
@@ -369,10 +345,16 @@ namespace Placemaker.Game.Suite
                     _scenario = st.S.Id;
                     yield return Guard(PostGrow(st), e => { Say($"post {st.S.Id}: {e}"); st.Result["postError"] = e.Message; });
                     Verdicts(st);
-                    WriteScenario(st, i);
+                    WriteScenario(st, st.FileIndex);
                 }
                 _scenario = "";
                 Mark("postDoneSec");
+                WriteSummary();
+            }
+            if (_cfg.queue || _cfg.set == "queue")
+            {
+                yield return QueueLoop();
+                Mark("queueDoneSec");
             }
             _phase = "done";
             Mark("doneSec");
@@ -443,6 +425,12 @@ namespace Placemaker.Game.Suite
             yield return Frames(30);
             var sim = _world.GetOrCreateSystemManaged<SimulationSystem>();
             sim.selectedSpeed = 0f;
+            // Fixed early-afternoon summer light for every shot (local to this session; no setting is written).
+            var planet = _world.GetOrCreateSystemManaged<PlanetarySystem>();
+            planet.overrideTime = true;
+            planet.year = DateTime.Now.Year;
+            planet.day = 172;
+            planet.time = 13.5f;
         }
 
         private static void SharedSettingsTweaks()
@@ -613,7 +601,7 @@ namespace Placemaker.Game.Suite
                 if (beats++ % 4 == 0)
                     Say($"{what}: sim frame {sim.frameIndex} (+{sim.frameIndex - f0}), speed {sim.selectedSpeed}/{sim.smoothSpeed:F2}, pathfind pending frame {pathfind.pendingSimulationFrame}, requests {pathfind.pendingRequestCount}, buildings {n}");
                 if (n != last) { last = n; lastChange = Time.realtimeSinceStartup; }
-                if (n > start && Time.realtimeSinceStartup - lastChange > 20f && Time.realtimeSinceStartup - t0 > 30f) break;
+                if (n > start && Time.realtimeSinceStartup - lastChange > 10f && Time.realtimeSinceStartup - t0 > 15f) break;
             }
             sim.selectedSpeed = 0f;
             spawn.debugFastSpawn = false;
@@ -649,6 +637,14 @@ namespace Placemaker.Game.Suite
             _summary["catalog"] = catalog;
             foreach (var spec in set.scenarios)
             {
+                if (spec.steps != null && string.IsNullOrEmpty(spec.expand))
+                {
+                    // a step script is one scenario as written
+                    string sid = spec.id ?? ("script" + (r.Count + 1));
+                    while (r.Any(x => x.Id == sid)) sid += "+";
+                    r.Add(new Scenario { Id = sid, Layer = spec.layer ?? "", Preset = spec.preset ?? "", Site = spec.site ?? "any", Draw = spec.draw, Values = spec.values ?? new List<ValueOverride>(), Seed = spec.seed, Note = spec.note ?? "", Steps = spec.steps, On = spec.on });
+                    continue;
+                }
                 var items = new List<(string Layer, string Preset)>();
                 switch ((spec.expand ?? "").ToLowerInvariant())
                 {
@@ -671,7 +667,7 @@ namespace Placemaker.Game.Suite
                     string id = spec.id != null && items.Count == 1 ? spec.id : layer + "-" + (string.IsNullOrEmpty(preset) ? "default" : preset);
                     if (spec.draw != null && spec.id == null) id += "-small";
                     while (r.Any(x => x.Id == id)) id += "+";
-                    r.Add(new Scenario { Id = id, Layer = layer, Preset = preset, Site = spec.site ?? "any", Draw = spec.draw, Values = spec.values ?? new List<ValueOverride>(), Seed = spec.seed, Note = spec.note ?? "" });
+                    r.Add(new Scenario { Id = id, Layer = layer, Preset = preset, Site = spec.site ?? "any", Draw = spec.draw, Values = spec.values ?? new List<ValueOverride>(), Seed = spec.seed, Note = spec.note ?? "", Steps = spec.steps, On = spec.on });
                 }
             }
             return r;
@@ -726,226 +722,6 @@ namespace Placemaker.Game.Suite
         private static string LayerAliasesCanonical(string layer)
         {
             try { return Placemaker.Core.Layers.Common.LayerAliases.Canonical(layer); } catch (Exception) { return layer; }
-        }
-
-        private float3[] DrawRing(SuiteBlock b, float w, float h)
-        {
-            var c = b.Center;
-            return new[]
-            {
-                new float3(c.x - w / 2, 0, c.y - h / 2), new float3(c.x + w / 2, 0, c.y - h / 2),
-                new float3(c.x + w / 2, 0, c.y + h / 2), new float3(c.x - w / 2, 0, c.y + h / 2),
-            };
-        }
-
-        private float3 FocusOf(SuiteBlock b) => new float3(b.Center.x, _fixture.H(b.Center.x, b.Center.y), b.Center.y);
-
-        // ───────────── one scenario ─────────────
-
-        private IEnumerator RunScenario(ScenarioState st)
-        {
-            var s = st.S;
-            var res = st.Result;
-            var errMark = ErrorMark();
-            res["id"] = s.Id;
-            res["layer"] = s.Layer;
-            res["preset"] = s.Preset;
-            res["note"] = s.Note;
-            res["git"] = _cfg.git;
-            res["assembly"] = AssemblyVersion();
-            if (s.Block == null) { res["status"] = "no-block"; yield break; }
-            res["block"] = new JObject { ["id"] = s.Block.Id, ["kind"] = s.Block.Kind.ToString(), ["west"] = s.Block.West, ["east"] = s.Block.East, ["south"] = s.Block.South, ["north"] = s.Block.North, ["center"] = new JArray(s.Block.Center.x, s.Block.Center.y) };
-            st.Focus = FocusOf(s.Block);
-            st.Radius = 85f;
-            var timings = new JObject();
-            res["timings"] = timings;
-            Say($"scenario {s.Id} on {s.Block.Id} ({s.Block.Kind})");
-
-            SuiteCapture.Aim(st.Focus, 25f, 55f, 300f);
-            yield return OpenTool();
-            PlacemakerToolSystem.SuiteResetSeed(s.Seed);
-
-            // 1. outline
-            OpenWindow();
-            float t0 = Time.realtimeSinceStartup;
-            string problem;
-            bool selected = s.Draw != null && s.Draw.Length >= 2
-                ? _tool.SuiteDrawOutline(DrawRing(s.Block, s.Draw[0], s.Draw[1]), out problem)
-                : _tool.SuiteSelectBlockAt(s.Block.Center, out problem);
-            res["select"] = s.Draw != null ? $"draw {s.Draw[0]}x{s.Draw[1]}" : "block";
-            if (!selected) { res["status"] = "no-outline"; res["problem"] = problem; CloseWindow(); yield break; }
-            yield return Frames(2);
-            st.Ring = _tool.Shape?.Ring2D();
-            if (st.Ring == null || st.Ring.Length < 3) { res["status"] = "no-outline"; res["problem"] = "empty shape"; CloseWindow(); yield break; }
-            res["areaM2"] = Math.Round(math.abs(Placemaker.Core.Geometry.Poly.SignedArea(st.Ring)));
-            st.Before = _probe.Snapshot(st.Ring);
-            res["before"] = new JObject { ["buildings"] = st.Before.Buildings.Count, ["areas"] = st.Before.Areas.Count, ["objects"] = st.Before.Objects.Count, ["edges"] = st.Before.Edges.Count };
-
-            // 2. type / preset / values — the UI triggers
-            FreshType(s.Layer);
-            _tool.SelectPreset(s.Layer, s.Preset ?? "");
-            foreach (var v in s.Values) _tool.SetValue(v.path ?? "0", v.id, v.json);
-            yield return Frames(2);
-            res["recipeRoot"] = _tool.CurrentRecipe?.Root?.Layer ?? "";
-            if (res["recipeRoot"].ToString() != LayerAliasesCanonical(s.Layer)) { res["status"] = "type-not-selected"; res["flash"] = _tool.FlashText?.Key ?? ""; CloseWindow(); yield break; }
-
-            // 3. plan
-            yield return Until(() => !_tool.Planning && _tool.Plan != null && !_tool.PlanStale, 90f, "plan");
-            timings["planWaitMs"] = Math.Round((Time.realtimeSinceStartup - t0) * 1000f);
-            timings["planMs"] = Math.Round(_tool.PlanMilliseconds);
-            res["design"] = CloseWindow();
-            if (_timedOut || _tool.Plan == null) { res["status"] = "no-plan"; res["unready"] = _tool.SuiteUnreadyText(); yield break; }
-            st.Plan = _tool.Plan;
-            res["planIssues"] = new JArray(st.Plan.Issues.Concat(st.Plan.Layers.SelectMany(l => l.Issues)).Take(20).Select(i => $"{i.Severity} {i.Key}"));
-            res["planCost"] = Math.Round(_tool.PlanCost);
-
-            // 4. review: the ghost
-            OpenWindow();
-            float t1 = Time.realtimeSinceStartup;
-            var primary = _tool.SuitePrimaryInfo();
-            if (primary.Kind == "toReview" && primary.Enabled) _tool.Primary();
-            else if (primary.Kind != "build") { res["status"] = "blocked"; res["blockedAt"] = "design"; res["unready"] = _tool.SuiteUnreadyText(); res["review"] = CloseWindow(); yield return Shot(st, "preview", true); yield break; }
-            yield return Until(() => _tool.Stage == ToolStage.Review, 10f, "review stage");
-            yield return Until(() => _tool.PreviewModeEffective == PreviewMode.Ghost && !_tool.GhostPending, 45f, "ghost");
-            res["ghostShown"] = !_timedOut;
-            res["ghostDropped"] = _tool.GhostDropped;
-            yield return Frames(15);
-            timings["ghostMs"] = Math.Round((Time.realtimeSinceStartup - t1) * 1000f);
-            yield return Shot(st, "preview", true);
-            res["review"] = CloseWindow();
-
-            // 5. build
-            primary = _tool.SuitePrimaryInfo();
-            if (!primary.Enabled && primary.Reason == "Placemaker.Reason.AcknowledgePermanent")
-            {
-                _tool.AcknowledgePermanent(true);
-                yield return Frames(2);
-                primary = _tool.SuitePrimaryInfo();
-                res["acknowledgedPermanent"] = true;
-            }
-            if (primary.Kind != "build" || !primary.Enabled) { res["status"] = "blocked"; res["blockedAt"] = "review"; res["unready"] = _tool.SuiteUnreadyText(); yield break; }
-            int doneBefore = _tool.SuiteBuildsDone;
-            OpenWindow();
-            float t2 = Time.realtimeSinceStartup;
-            _tool.Primary();
-            yield return Until(() => _tool.Building, 5f, "build start");
-            yield return Until(() => !_tool.Building, 240f, "build end");
-            timings["buildMs"] = Math.Round((Time.realtimeSinceStartup - t2) * 1000f);
-            res["build"] = CloseWindow();
-            if (_tool.SuiteBuildsDone == doneBefore)
-            {
-                var f = _tool.BuildFailure;
-                res["status"] = "build-failed";
-                res["failure"] = f == null ? (_timedOut ? "timeout" : "unknown") : f.Key + (f.Args != null && f.Args.Length > 0 ? " (" + string.Join(", ", f.Args) + ")" : "");
-                yield return Frames(5);
-            }
-            else
-            {
-                st.Built = true;
-                st.Group = _tool.SuiteLastBuiltGroup;
-                res["status"] = "built";
-                res["notes"] = new JArray(_tool.BuildNotes.Select(n => n.Key + (n.Args != null && n.Args.Length > 0 ? " (" + string.Join(", ", n.Args) + ")" : "")));
-            }
-            yield return Frames(30);
-            var ground = _probe.GroundNow(st.Before);
-            res["terrain"] = _probe.Pits(st.Before, ground, st.Plan);
-            res["census"] = _probe.Census(st.Before, st.Group, st.Plan, s.Layer, _tool.BuildAudit);
-            res["errors"] = ErrorsSince(errMark);
-        }
-
-        private IEnumerator Shot(ScenarioState st, string kind, bool grab)
-        {
-            string file = Safe(st.S.Id) + "." + kind + ".png";
-            string path = Path.Combine(_shots, file);
-            float yaw = 25f, pitch = 55f, dist = st.Radius * 3.4f;
-            if (kind == "top") { yaw = 0f; pitch = 89.5f; dist = st.Radius * 3.6f; }
-            SuiteCapture.Aim(st.Focus, yaw, pitch, dist);
-            yield return Frames(20);
-            yield return Seconds(0.4f);
-            string err;
-            if (grab)
-            {
-                SuiteCapture.UiOff();
-                yield return Frames(3);
-                yield return new WaitForEndOfFrame();
-                err = SuiteCapture.GrabScreen(path, _cfg.shotWidth);
-                SuiteCapture.UiOn();
-            }
-            else err = SuiteCapture.RenderPng(path, _cfg.shotWidth, _cfg.shotHeight);
-            var shots = st.Result["shots"] as JObject ?? new JObject();
-            shots[kind] = err == null ? "shots/" + file : "ERROR " + err;
-            st.Result["shots"] = shots;
-            if (err != null) Say($"shot {kind} failed: {err}");
-        }
-
-        private static string Safe(string id)
-        {
-            foreach (var c in Path.GetInvalidFileNameChars()) id = id.Replace(c, '_');
-            return id.Replace('+', 'x');
-        }
-
-        // ───────────── after the shared grow phase ─────────────
-
-        private IEnumerator PostGrow(ScenarioState st)
-        {
-            if (st.Before != null && st.Ring != null)
-            {
-                var members = _probe.MemberSet(st.Group);
-                st.Result["growables"] = _probe.Growables(st.Before, st.Group, members);
-                int lost = 0;
-                foreach (var b in st.Before.Buildings) if (!_world.EntityManager.Exists(b) || _world.EntityManager.HasComponent<global::Game.Common.Deleted>(b)) lost++;
-                st.Result["existingLostAfterGrow"] = lost;
-            }
-            if (st.S.Block != null)
-            {
-                yield return Shot(st, "oblique", false);
-                yield return Shot(st, "top", false);
-            }
-        }
-
-        private void Verdicts(ScenarioState st)
-        {
-            var r = st.Result;
-            var v = new JArray();
-            void Check(string id, bool pass, string detail) => v.Add(new JObject { ["id"] = id, ["pass"] = pass, ["detail"] = detail });
-            string status = (string)r["status"] ?? "";
-            Check("built", status == "built", status + (r["failure"] != null ? ": " + r["failure"] : "") + (r["unready"] != null ? ": " + r["unready"] : ""));
-            var census = r["census"] as JObject;
-            if (census != null)
-            {
-                var audit = census["audit"] as JObject;
-                if (audit != null) Check("nothingLeftOut", (int)audit["leftOut"] == 0, $"left out {audit["leftOut"]}, kept despite collisions {audit["kept"]}");
-                bool farm = (bool?)census["farmType"] ?? false;
-                int crop = (int?)census["cropLikeCount"] ?? 0;
-                if (!farm) Check("noCropOrVanillaLots", crop == 0, crop == 0 ? "" : census["cropLike"].ToString(Formatting.None));
-                var fences = census["fences"] as JObject;
-                if (fences != null) Check("noForeignFences", (int)fences["notMembers"] == 0, $"fences {fences["total"]}, not members {fences["notMembers"]}");
-                var parking = census["parking"] as JObject;
-                if (parking != null && (int)parking["plannedStalls"] > 0)
-                {
-                    Check("stallsBuilt", (int)parking["liveStalls"] >= (int)parking["plannedStalls"], $"planned {parking["plannedStalls"]}, live {parking["liveStalls"]}");
-                    Check("stallsOnLanes", (int)parking["stallsFarFromLane"] == 0, $"{parking["stallsFarFromLane"]} stalls > 9 m from any drivable lane");
-                }
-                var nets = census["nets"] as JObject;
-                if (nets != null && (int)nets["edges"] > 0) Check("netsConnected", (int)(nets["isolatedEdges"] ?? 0) == 0, $"{nets["isolatedEdges"]} of {nets["edges"]} edges cut off from the city");
-                var zoning = census["zoning"] as JObject;
-                if (zoning != null && ((int)zoning["plannedQuadCells"] > 0 || (int)zoning["plannedPreviewCells"] > 0))
-                    Check("zoningLive", (int)zoning["liveZonedCells"] > 0, $"planned {zoning["plannedQuadCells"]} quad cells / {zoning["plannedPreviewCells"]} preview, live {zoning["liveZonedCells"]} (own roads {zoning["zonedFromOwnRoads"]}, city {zoning["zonedFromCityRoads"]})");
-                var ex = census["existingBuildings"] as JObject;
-                if (ex != null && (int)ex["before"] > 0) Check("existingSurvive", (int)ex["lost"] == 0, $"{ex["lost"]} of {ex["before"]} lost {ex["lostPrefabs"]?.ToString(Formatting.None)}");
-            }
-            var terrain = r["terrain"] as JObject;
-            if (terrain != null) Check("noPits", (int)terrain["pitCellsNearRoads"] == 0, $"pit cells {terrain["pitCells"]} ({terrain["pitCellsNearRoads"]} near roads), max {terrain["maxPitDepth"]} m at {terrain["worstAt"]?.ToString(Formatting.None)}");
-            var gr = r["growables"] as JObject;
-            if (gr != null && ((int)gr["facingOwnRoad"] + (int)gr["facingCityRoad"]) > 0)
-                Check("growablesFaceOwnRoad", (int)gr["facingCityRoad"] == 0, $"{gr["facingOwnRoad"]} face the build's roads, {gr["facingCityRoad"]} face city streets");
-            var errs = r["errors"] as JObject;
-            if (errs != null) Check("noErrors", (int)errs["errors"] + (int)errs["exceptions"] == 0, $"{errs["errors"]} errors, {errs["exceptions"]} exceptions");
-            float worstFrame = 0f;
-            foreach (var w in new[] { "design", "review", "build" }) if (r[w] is JObject o && o["maxMs"] != null) worstFrame = math.max(worstFrame, (float)o["maxMs"]);
-            Check("noHang", worstFrame < 1000f, $"worst frame {worstFrame:F0} ms (design/review/build)");
-            r["verdicts"] = v;
-            r["failed"] = new JArray(v.Where(x => !(bool)x["pass"]).Select(x => (string)x["id"]));
         }
 
         // ───────────── switching ─────────────
@@ -1065,7 +841,7 @@ namespace Placemaker.Game.Suite
                         ["id"] = st.S.Id, ["block"] = st.S.Block?.Id, ["kind"] = st.S.Block?.Kind.ToString(), ["status"] = r["status"],
                         ["failed"] = r["failed"], ["sec"] = r["scenarioSec"], ["failure"] = r["failure"], ["unready"] = r["unready"],
                         ["leftOut"] = r["census"]?["audit"]?["leftOut"], ["kept"] = r["census"]?["audit"]?["kept"],
-                        ["shots"] = r["shots"],
+                        ["shots"] = r["shots"], ["waitsMs"] = r["waitsMs"], ["timeouts"] = r["timeouts"],
                     });
                 }
                 _summary["scenarios"] = rows;
@@ -1086,15 +862,15 @@ namespace Placemaker.Game.Suite
             if (_summary["switching"] is JObject sw)
                 sb.AppendLine($"\nSwitching: status {sw["status"]}, worst frame {sw["worstFrameMs"]} ms, patient worst {sw["patientWorstMs"]} ms, rapid {sw["rapid"]?.ToString(Formatting.None)}");
             sb.AppendLine();
-            sb.AppendLine("| # | scenario | block | status | failed checks | shots |");
-            sb.AppendLine("|---|---|---|---|---|---|");
+            sb.AppendLine("| # | scenario | block | status | s | plan ms | failed checks | shots |");
+            sb.AppendLine("|---|---|---|---|---|---|---|---|");
             for (int i = 0; i < _states.Count; i++)
             {
                 var st = _states[i];
                 var r = st.Result;
                 string failed = r["failed"] is JArray fa && fa.Count > 0 ? string.Join(", ", fa.Select(x => (string)x)) : "";
                 string shots = r["shots"] is JObject so ? string.Join(" ", so.Properties().Select(p => (string)p.Value)) : "";
-                sb.AppendLine($"| {i + 1} | {st.S.Id} | {st.S.Block?.Id} {st.S.Block?.Kind} | {r["status"]} | {failed} | {shots} |");
+                sb.AppendLine($"| {i + 1} | {st.S.Id} | {st.S.Block?.Id} {st.S.Block?.Kind} | {r["status"]} | {r["scenarioSec"]} | {r["waitsMs"]?["plan"]} | {failed} | {shots} |");
             }
             sb.AppendLine();
             sb.AppendLine("## Failures in detail");

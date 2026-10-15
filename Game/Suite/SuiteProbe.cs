@@ -228,6 +228,7 @@ namespace Placemaker.Game.Suite
             }
             o["kinds"] = kinds;
             o["liveByKind"] = JObject.FromObject(liveByKind);
+            o["hidden"] = HiddenMembers(members);
 
             // audit
             if (audit != null)
@@ -268,15 +269,15 @@ namespace Placemaker.Game.Suite
             o["fences"] = new JObject { ["total"] = fences, ["notMembers"] = foreignFences };
 
             // parking: stalls and their lanes
+            // every car lane near the site: street lanes, lot aisles (sub-lanes of areas and buildings), drive paths
             var drivable = new List<Bezier4x3>();
-            foreach (var e in Query<Edge>())
+            foreach (var e in Query<global::Game.Net.CarLane>())
             {
                 if (!_em.HasComponent<Curve>(e)) continue;
                 var c = _em.GetComponentData<Curve>(e).m_Bezier;
                 var mid = MathUtils.Position(c, 0.5f).xz;
                 if (!InBox(mid, before.Min - 60f, before.Max + 60f)) continue;
-                var pf = PrefabOf(e);
-                if (pf != Entity.Null && (_em.HasComponent<RoadData>(pf) || PrefabName(e).IndexOf("Car", StringComparison.OrdinalIgnoreCase) >= 0)) drivable.Add(c);
+                drivable.Add(c);
             }
             int farStalls = 0;
             foreach (var p in stallPositions)
@@ -477,6 +478,38 @@ namespace Placemaker.Game.Suite
                 ["maxPitDepth"] = Math.Round(r.MaxDepth, 2), ["worstAt"] = r.Cells > 0 ? new JArray(Math.Round(r.WorstAt.x), Math.Round(r.WorstAt.y)) : null,
                 ["maxUnplannedRise"] = Math.Round(r.MaxRise, 2), ["maxGroundChange"] = Math.Round(maxChange, 2), ["plannedFrom"] = heightAfter != null ? "HeightAfter" : "Terraform",
             };
+        }
+
+        /// <summary>
+        /// After a delete: what stands in the site now that was not there before the build (top-level objects, areas and
+        /// nets; road furniture owned by city streets and zoning growables outside the outline are not counted).
+        /// </summary>
+        public JObject LeftBehind(SiteSnapshot before)
+        {
+            var left = new Dictionary<string, int>(StringComparer.Ordinal);
+            int n = 0;
+            foreach (var e in Query<global::Game.Areas.Area>())
+                if (!before.Areas.Contains(e) && !_em.HasComponent<Owner>(e) && AreaInBox(e, before.Min, before.Max)) { Bump(left, KindOf(e) + "|" + PrefabName(e)); n++; }
+            foreach (var e in Query<global::Game.Objects.Object>())
+            {
+                if (before.Objects.Contains(e) || _em.HasComponent<Owner>(e) || !_em.HasComponent<global::Game.Objects.Transform>(e)) continue;
+                if (_em.HasComponent<global::Game.Objects.Moving>(e) || !_em.HasComponent<global::Game.Objects.Static>(e)) continue;
+                var p = _em.GetComponentData<global::Game.Objects.Transform>(e).m_Position.xz;
+                if (InBox(p, before.Min, before.Max) && Poly.Contains(before.Ring, p)) { Bump(left, KindOf(e) + "|" + PrefabName(e)); n++; }
+            }
+            foreach (var e in Query<Edge>())
+                if (!before.Edges.Contains(e) && !_em.HasComponent<Owner>(e) && EdgeInBox(e, before.Min, before.Max)) { Bump(left, "net|" + PrefabName(e)); n++; }
+            return new JObject { ["count"] = n, ["byPrefab"] = TopDict(left, 20) };
+        }
+
+        /// <summary>Members the game hides (Overridden: an overlap verdict) — built but invisible to the player.</summary>
+        public JObject HiddenMembers(IEnumerable<Entity> members)
+        {
+            var by = new Dictionary<string, int>(StringComparer.Ordinal);
+            int n = 0;
+            foreach (var m in members)
+                if (Alive(m) && _em.HasComponent<Overridden>(m)) { n++; Bump(by, PrefabName(m)); }
+            return new JObject { ["count"] = n, ["byPrefab"] = TopDict(by, 10) };
         }
 
         public HashSet<Entity> MemberSet(int groupId)

@@ -1,0 +1,78 @@
+{
+  "set": "steps",
+  "description": "Step scripts: every area tool, entrances placed and moved like the UI, review issues, close-ups, edit, build, delete with the block restored and reused.",
+  "grow": false,
+  "scenarios": [
+    {
+      "id": "parking-entrance",
+      "site": "flat",
+      "note": "Paint bucket, parking, an entrance on the south street, moved to the east street, close-ups of it before and after the build, then delete.",
+      "steps": [
+        { "do": "camera", "target": "block", "view": "oblique", "shot": "empty" },
+        { "do": "area", "tool": "bucket" },
+        { "do": "type", "layer": "parking" },
+        { "do": "entrance", "side": "south", "t": 0.3 },
+        { "do": "preview", "shot": "preview" },
+        { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "entrance-preview" },
+        { "do": "moveEntrance", "index": 0, "side": "east", "t": 0.5 },
+        { "do": "preview" },
+        { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "entrance-moved" },
+        { "do": "build" },
+        { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "entrance-built", "shotMode": "render" },
+        { "do": "camera", "target": "build", "view": "top", "shot": "top", "shotMode": "render" },
+        { "do": "delete" },
+        { "do": "camera", "target": "block", "view": "oblique", "shot": "after-delete", "shotMode": "render" }
+      ]
+    },
+    {
+      "id": "plaza-points",
+      "site": "flat",
+      "note": "Points tool: an L-shaped outline, plaza civic, edit back to Design, change the preset, build.",
+      "steps": [
+        { "do": "area", "tool": "points", "points": [[-40, -30], [35, -30], [35, 0], [0, 0], [0, 30], [-40, 30]] },
+        { "do": "type", "layer": "plaza", "preset": "civic" },
+        { "do": "preview", "shot": "preview" },
+        { "do": "issues" },
+        { "do": "edit" },
+        { "do": "preset", "layer": "plaza", "preset": "market" },
+        { "do": "preview", "shot": "preview-market" },
+        { "do": "build", "shot": "built", "shotMode": "render" },
+        { "do": "delete" }
+      ]
+    },
+    {
+      "id": "park-paint",
+      "site": "flat",
+      "note": "Paint area (smart edges) stroke through the block, a park, build, delete.",
+      "steps": [
+        { "do": "area", "tool": "paint", "size": 40 },
+        { "do": "type", "layer": "park" },
+        { "do": "entrances" },
+        { "do": "preview", "shot": "preview" },
+        { "do": "build", "shot": "built", "shotMode": "render" },
+        { "do": "delete" }
+      ]
+    },
+    {
+      "id": "stripmall-nodes",
+      "site": "flat",
+      "note": "Road nodes: click the block's four junctions and back to the first, strip mall, build, keep it.",
+      "steps": [
+        { "do": "area", "tool": "nodes" },
+        { "do": "type", "layer": "stripMall", "preset": "classic" },
+        { "do": "entrances" },
+        { "do": "preview", "shot": "preview" },
+        { "do": "build" },
+        { "do": "camera", "target": "build", "view": "oblique", "shot": "oblique", "shotMode": "render" }
+      ]
+    },
+    {
+      "id": "parking-entrance-zoom",
+      "on": "parking-entrance",
+      "note": "Runs on an earlier scenario: its block, outline and entrances (the lead's 'zoom in on the entrance of X').",
+      "steps": [
+        { "do": "camera", "target": "entrance", "index": 0, "view": "low", "distance": 30, "shot": "entrance-low", "shotMode": "render" }
+      ]
+    }
+  ]
+}
