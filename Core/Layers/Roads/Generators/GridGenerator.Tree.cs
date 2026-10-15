@@ -49,6 +49,12 @@ namespace Placemaker.Core.Layers.Roads.Generators
 
             // Frame: u along the long axis (collector), v across it.
             float2 axis = LongestAxis(polygon, parameters.AngleOffsetDegrees);
+            // (s34) Follow contours: on a hillside (not a round hill) the collector runs along the slope, the branches climb off it.
+            if (parameters.FollowContours && parameters.HeightAt != null && TryContourDirection(polygon, parameters.HeightAt, out float2 contour, out float aniso) && aniso > 0.35f)
+            {
+                float a = math.atan2(contour.y, contour.x) + math.radians(parameters.AngleOffsetDegrees);
+                axis = new float2(math.cos(a), math.sin(a));
+            }
             float2 side = new float2(-axis.y, axis.x);
             float2 origin = polygon[0];
             var local = new List<float2>(polygon.Count);

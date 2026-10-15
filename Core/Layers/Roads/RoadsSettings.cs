@@ -107,6 +107,25 @@ namespace Placemaker.Core.Layers.Roads
         public const string AvenueTrees = "avenueTrees";
         public const string AvenueGrass = "avenueGrass";
         public const string AvenueBikeLanes = "avenueBikeLanes";
+
+        // s34: network design
+        /// <summary>Junction spacing on main roads (m), 0 = every side street may join.</summary>
+        public const string JunctionSpacing = "junctionSpacing";
+        /// <summary>Walkways (cul-de-sac links, cut-throughs) amount, 0..100 %.</summary>
+        public const string Walkways = "walkways";
+        public const string WalkwayStyle = "walkwayStyle";          // "paved" | "trail" | "mixed"
+        /// <summary>Back lanes through the middle of blocks, 0..100 % of the blocks that can take one.</summary>
+        public const string BackLanes = "backLanes";
+        public const string LaneStyle = "laneStyle";                // "alley" | "gravel" | "mixed"
+        /// <summary>Road of the back lanes ("" = Automatic: the vanilla Alley).</summary>
+        public const string LaneAsset = "laneAsset";
+        public const string TipStyle = "tipStyle";                  // "same" | "gravel" | "mixed"
+        /// <summary>"auto" (each pattern's own terrain toggle) | "follow" (streets along the contours) | "ignore" (strict geometry).</summary>
+        public const string TerrainFit = "terrainFit";
+        /// <summary>Steepest road the layout aims for (%): contour layouts, links and the grade check.</summary>
+        public const string MaxGrade = "maxGrade";
+        /// <summary>Pre-zone every new road's zone blocks: "none" or a zone kind (ZoneKinds).</summary>
+        public const string PreZone = "preZone";
     }
 
     /// <summary>Schema construction and settings → generator parameters.</summary>
@@ -218,11 +237,27 @@ namespace Placemaker.Core.Layers.Roads
             c.Add(Asset(RoadsIds.LocalAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
             c.Add(Asset(RoadsIds.AvenueAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
             c.Add(Asset(RoadsIds.RoundaboutAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
-            c.Add(Asset(RoadsIds.PathAsset, ControlTier.More, "roadTypes", AssetCategories.Pathway, "pattern=superblock"));
+            c.Add(Asset(RoadsIds.PathAsset, ControlTier.More, "roadTypes", AssetCategories.Pathway));   // s34: walkways use it too
             c.Add(Asset(RoadsIds.PerimeterAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
             c.Add(Choice(RoadsIds.CapStyle, ControlTier.More, "culDeSacs", "asphalt", new[] { "none", "asphalt", "grass", "trees" }));
             c.Add(Choice(RoadsIds.CapSize, ControlTier.More, "culDeSacs", "auto", new[] { "auto", "small", "medium", "large", "xl" }));
             c.Add(Slider(RoadsIds.EdgeDepth, ControlTier.More, "frontage", 16, 64, 8, "m", 48, ""));
+
+            // ── s34: network design ───────────────────────────────────────
+            c.Add(Slider(RoadsIds.JunctionSpacing, ControlTier.Essential, "connections", 0, 250, 10, "m", 120));
+            c.Add(Slider(RoadsIds.Walkways, ControlTier.Essential, "walkways", 0, 100, 5, "%", 50));
+            c.Add(Choice(RoadsIds.WalkwayStyle, ControlTier.More, "walkways", "paved", new[] { "paved", "trail", "mixed" }));
+            c.Add(Slider(RoadsIds.BackLanes, ControlTier.More, "walkways", 0, 100, 5, "%", 0));
+            c.Add(Choice(RoadsIds.LaneStyle, ControlTier.More, "walkways", "alley", new[] { "alley", "gravel", "mixed" }));
+            c.Add(Choice(RoadsIds.TipStyle, ControlTier.More, "culDeSacs", "same", new[] { "same", "gravel", "mixed" }));
+            c.Add(Asset(RoadsIds.LaneAsset, ControlTier.More, "roadTypes", AssetCategories.Road));
+            c.Add(Choice(RoadsIds.TerrainFit, ControlTier.Essential, "terrain", "auto", new[] { "auto", "follow", "ignore" }));
+            c.Add(Slider(RoadsIds.MaxGrade, ControlTier.More, "terrain", 4, 16, 1, "%", 10));
+            var preZone = Choice(RoadsIds.PreZone, ControlTier.Essential, "zoning", RoadPreZone.None, RoadPreZone.Values());
+            // The zone types read like everywhere else (Placemaker.Zone.<kind>).
+            foreach (var o in preZone.Options)
+                if (o.Value != RoadPreZone.None) { o.LabelKey = "Placemaker.Zone." + o.Value; o.TooltipKey = "Placemaker.Zone." + o.Value + ".Tooltip"; }
+            c.Add(preZone);
 
             // ── More: upgrades ────────────────────────────────────────────
             c.Add(Toggle(RoadsIds.StreetTrees, ControlTier.More, "streetUpgrades", false));
@@ -239,7 +274,7 @@ namespace Placemaker.Core.Layers.Roads
             {
                 // Pattern geometry needs a full re-plan; asset/upgrade/cap choices keep the layout.
                 ctl.Cheap = ctl.Kind == ControlKind.Asset || ctl.Group == "streetUpgrades" || ctl.Id == RoadsIds.RoadMix
-                    || ctl.Id == RoadsIds.CapStyle || ctl.Id == RoadsIds.CapSize;
+                    || ctl.Id == RoadsIds.CapStyle || ctl.Id == RoadsIds.CapSize || ctl.Id == RoadsIds.PreZone;
             }
             return c;
         }
@@ -324,6 +359,10 @@ namespace Placemaker.Core.Layers.Roads
 
             var p = GridParameters.Default;
             p.PedestrianLinks = false;   // GRG retired them: CS2 deletes free pathway stubs seconds after placement.
+            string fit = s.S(RoadsIds.TerrainFit, "auto");
+            p.MaxGrade = N(RoadsIds.MaxGrade) / 100f;
+            // s34: the organic main street (an avenue) grows its side streets no closer than the junction spacing.
+            p.MainJunctionSpacing = N(RoadsIds.JunctionSpacing) * 0.92f;
             switch (pattern)
             {
                 case RoadPattern.Grid:
@@ -400,6 +439,14 @@ namespace Placemaker.Core.Layers.Roads
                     p.RadialLayers = I(RoadsIds.RadialRings);
                     break;
             }
+            // s34: "Follow contours" turns the straight patterns along the slope and lets the winding ones steer by the
+            // terrain; "Ignore terrain" keeps the geometry strict whatever the pattern's own toggle says.
+            if (fit == "follow")
+            {
+                p.FollowContours = true;
+                if (pattern == RoadPattern.Grid || pattern == RoadPattern.Loop || pattern == RoadPattern.Superblock) p.AlignToTerrain = true;
+            }
+            else if (fit == "ignore") p.AlignToTerrain = false;
             return p;
         }
 

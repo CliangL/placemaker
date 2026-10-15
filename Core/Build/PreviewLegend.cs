@@ -38,7 +38,7 @@ namespace Placemaker.Core.Build
         public static readonly string[] Order =
         {
             Paths, "road:" + RoadRoles.Street, "road:" + RoadRoles.Avenue, "road:" + RoadRoles.Local, "road:" + RoadRoles.Roundabout,
-            "road:" + RoadRoles.Perimeter, "road:" + RoadRoles.CarFree,
+            "road:" + RoadRoles.Perimeter, "road:" + RoadRoles.Lane, "road:" + RoadRoles.CarFree,
             Features, Trees, Planting, Water, Surfaces, Objects, Parking, Entrances, Terrain, Cutouts, Blocked, Decals,
         };
 
@@ -135,7 +135,9 @@ namespace Placemaker.Core.Build
             {
                 case NetRole.Pathway: case NetRole.PathwayWide:
                     return layerGenerator == RoadsLayer.LayerId ? Road(RoadRoles.CarFree) : Paths;
-                case NetRole.DriveAisle: case NetRole.DriveConnector: case NetRole.Alley: return Parking;
+                // (s34) A roads layer's alleys are its back lanes.
+                case NetRole.Alley: return layerGenerator == RoadsLayer.LayerId ? Road(RoadRoles.Lane) : Parking;
+                case NetRole.DriveAisle: case NetRole.DriveConnector: return Parking;
                 case NetRole.Fence: return Objects;
             }
             var role = RoadRoles.Of(n.Role);

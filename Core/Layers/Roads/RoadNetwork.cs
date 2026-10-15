@@ -20,6 +20,16 @@ namespace Placemaker.Core.Layers.Roads
         /// <summary>Never part of the result (collapsed to zero length, duplicate).</summary>
         public bool Discarded;
         public int N0 = -1, N1 = -1;
+        /// <summary>(s34) Explicit prefab for this piece (gravel tips, gravel lanes), "" = the role's road.</summary>
+        public string AssetOverride = "";
+        /// <summary>(s34) Asset category for a car-free piece ("net.trail" for dirt walks), "" = the role default.</summary>
+        public string Category = "";
+        /// <summary>(s34) Added by the connectivity pass (links an island or the network to the city).</summary>
+        public bool Connector;
+        /// <summary>(s34) A walkway / cut-through of the pedestrian network (role Pathway).</summary>
+        public bool Walk;
+        /// <summary>(s34) Dirt look: the walk gets a worn-ground paint corridor (and a trail asset when one exists).</summary>
+        public bool Trail;
 
         public RoadEdge(RoadCurve curve, NetRole role, bool capAtEnd = false)
         {
@@ -28,7 +38,13 @@ namespace Placemaker.Core.Layers.Roads
 
         public bool Alive => !Removed && !Discarded;
 
-        public RoadEdge Clone(RoadCurve curve) => new RoadEdge(curve, Role, CapAtEnd);
+        /// <summary>(s34) A road cars use (everything but walkways / car-free paths).</summary>
+        public bool IsCar => Role != NetRole.Pathway && Role != NetRole.PathwayWide;
+
+        public RoadEdge Clone(RoadCurve curve) => new RoadEdge(curve, Role, CapAtEnd)
+        {
+            AssetOverride = AssetOverride, Category = Category, Connector = Connector, Walk = Walk, Trail = Trail,
+        };
     }
 
     internal sealed class RoadNode

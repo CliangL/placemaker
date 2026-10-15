@@ -57,6 +57,13 @@ namespace Placemaker.Gallery
                     case "--water": Renderer.WaterTypes = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--shores": Renderer.Shores = next.Split(','); i++; break;
                     case "--slopes": Renderer.Slopes = next.Split(','); i++; break;
+                    case "--size": Renderer.ImageSize = float.Parse(next, CultureInfo.InvariantCulture); i++; break;
+                    case "--zoom": Renderer.Zoom = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
+                    case "--roads":
+                        bool listed = next != null && !next.StartsWith("--");
+                        Renderer.RoadSiteKinds = listed ? next.Split(',') : RoadSites.Kinds;
+                        if (listed) i++;
+                        break;
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
                     case "--shapes": Variants.Shapes = next.Split(','); i++; break;
@@ -195,6 +202,8 @@ namespace Placemaker.Gallery
         public string Shore;
         /// <summary>(s25) Sloped land site kind (SlopeSites.Kinds), null = flat ground.</summary>
         public string Slope;
+        /// <summary>(s34) Road-scale site kind (RoadSites.Kinds) for the roads type, null = the default site.</summary>
+        public string RoadSite;
         public Recipe Recipe;
         public float TargetArea;
         /// <summary>Site shape (--shapes): "" = the default irregular site, else triangle, sliver, square, L.</summary>
@@ -349,6 +358,13 @@ namespace Placemaker.Gallery
                             editor.SetValue(r, RecipePaths.Root, RoadsIds.AvenueRow, true, true);
                             editor.SetValue(r, RecipePaths.Root, RoadsIds.RoadMix, mix.Id, true);
                         }));
+                // s34: "Pre-zone new roads" (the village preset with low housing).
+                if (gen.Controls.Any(c => c.Id == RoadsIds.PreZone) && gen.Presets.Any(p => p.Id == "village"))
+                    jobs.Add(Make("prezone", "Village, pre-zoned (low housing)", r =>
+                    {
+                        editor.ApplyPreset(r, RecipePaths.Root, "village");
+                        editor.SetValue(r, RecipePaths.Root, RoadsIds.PreZone, "residentialLow", true);
+                    }));
                 var features = Features.Of(gen);
                 if (ShopVariants && features.Any(f => f.Layer == "edgeZoning" && f.Target == "shops"))
                     foreach (var (layout, amount) in ShopCombos)
@@ -423,6 +439,20 @@ namespace Placemaker.Gallery
                 }
                 jobs = expanded;
             }
+            if (Renderer.RoadSiteKinds != null && Renderer.RoadSiteKinds.Length > 0)
+            {
+                // (s34) Roads on road-scale sites: 30 ha (unless --areas), two existing streets, a farm, real relief.
+                var expanded = new List<Job>();
+                foreach (var j in jobs)
+                {
+                    if (j.Type != "roads") { expanded.Add(j); continue; }
+                    if (j.Variant.StartsWith("mix-") && (PresetFilter == null || !PresetFilter.Contains("mixes"))) continue;
+                    foreach (var k in Renderer.RoadSiteKinds)
+                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "~" + k, Title = j.Title + " (" + k + ")", Recipe = j.Recipe.Clone(),
+                            TargetArea = Areas != null && Areas.Length > 0 ? j.TargetArea : 300000f, Shape = j.Shape, RoadSite = k });
+                }
+                jobs = expanded;
+            }
             if (Renderer.Slopes != null && Renderer.Slopes.Length > 0)
             {
                 var expanded = new List<Job>();
@@ -467,6 +497,8 @@ namespace Placemaker.Gallery
         public string Failure;
         /// <summary>s16: the plan's roads by role (same legend as the panel).</summary>
         public List<RoadRoles.LegendEntry> RoadLegend = new List<RoadRoles.LegendEntry>();
+        /// <summary>(s34) RoadsAudit line for roads jobs on road sites.</summary>
+        public string RoadAudit;
     }
 
     public static class Renderer
@@ -500,6 +532,14 @@ namespace Placemaker.Gallery
         public static string[] Shores;
         /// <summary>(s25) --slopes gentle,cross,steep,hilly: every land job is rendered once per sloped site (final ground, 3D view, sections).</summary>
         public static string[] Slopes;
+        /// <summary>(s34) --roads flat,gentle,hill,valley,steep: road-scale sites for the roads type.</summary>
+        public static string[] RoadSiteKinds;
+        /// <summary>(s34) --size N: longest image side in pixels (default 880).</summary>
+        public static float ImageSize = 880f;
+        /// <summary>(s34) --zoom fx0,fz0,fx1,fz1: render only this part of the site (fractions of its bounds).</summary>
+        public static float[] Zoom;
+        [ThreadStatic] private static float _contourStep;
+        [ThreadStatic] private static List<Obstacle> _obstacles;
         [ThreadStatic] private static bool _sloped;
         [ThreadStatic] private static float _level;
         [ThreadStatic] private static Func<float2, float> _original;
@@ -599,10 +639,18 @@ namespace Placemaker.Gallery
                     site.WaterDepthAt = ShoreSites.Depth(ring, g, job.Shore);
                 }
             }
-            _sloped = job.Slope != null && float.IsNaN(_waterZ);
+            _sloped = (job.Slope != null || (job.RoadSite != null && job.RoadSite != "flat")) && float.IsNaN(_waterZ);
+            _contourStep = job.RoadSite != null ? 2f : 1f;
+            _obstacles = null;
+            if (job.RoadSite != null)
+            {
+                site.NearbyNets = RoadSites.Streets(ring);
+                site.Obstacles = RoadSites.Farm(ring);
+                _obstacles = site.Obstacles;
+            }
             if (_sloped)
             {
-                var g = SlopeSites.Ground(ring, job.Slope);
+                var g = job.RoadSite != null ? RoadSites.Ground(ring, job.RoadSite) : SlopeSites.Ground(ring, job.Slope);
                 site.HeightAt = g;
                 if (site.NearbyNets != null)
                     for (int k = 0; k < site.NearbyNets.Count; k++)
@@ -647,6 +695,17 @@ namespace Placemaker.Gallery
             Draw(plan, ring, catalog, Path.Combine(dir, job.Variant + ".png"), res);
             if (res.Failure == null)
                 res.Summary = $"{res.Objects} obj, {res.Nets} nets ({res.PathMetres:0} m), {res.Surfaces} surf, {res.Errors} err, {res.Warnings} warn, {res.EdgeSpikes} spikes, {res.Ms:0} ms";
+            if (res.Failure == null && job.RoadSite != null)
+            {
+                // (s34) The roads review numbers: connected?, bare dead ends, main-road junction gaps, walkways, grades.
+                var rl = plan.Layers.FirstOrDefault(l => l != null && l.GeneratorId == "roads");
+                if (rl != null)
+                {
+                    var audit = RoadsAudit.Measure(rl, job.RoadSite == "flat" ? null : site.HeightAt, 0.1f, site.NearbyNets != null && site.NearbyNets.Count > 0, ring.Select(p => p.xz).ToArray());
+                    res.Summary += " | " + audit + " | " + string.Join(" ", rl.Facts.Where(kv => kv.Key == "roads.accessCuts" || kv.Key == "roads.links" || kv.Key == "roads.lanes").Select(kv => kv.Key.Substring(6) + "=" + kv.Value)) + " | " + string.Join(" ", rl.Issues.Select(i => i.Key.Replace("Placemaker.Roads.Issue.", "") + (i.Args != null && i.Args.Length > 0 ? "(" + string.Join(",", i.Args) + ")" : "")).Distinct());
+                    res.RoadAudit = audit.ToString();
+                }
+            }
             if (res.Failure == null && job.Slope != null)
             {
                 var gf = plan.Layers.Where(l => l != null).SelectMany(l => l.Facts).Where(kv => kv.Key.StartsWith("grade") || kv.Key.StartsWith("terrain")).Select(kv => kv.Key + "=" + kv.Value.ToString("0.##", CultureInfo.InvariantCulture));
@@ -831,8 +890,15 @@ namespace Placemaker.Gallery
             foreach (var p in ring2) { min = math.min(min, p); max = math.max(max, p); }
             float margin = math.max(Showcase ? 26f : 10f, math.cmax(max - min) * 0.06f);
             min -= margin; max += margin;
+            if (Zoom != null)
+            {
+                // (s34) --zoom fx0,fz0,fx1,fz1: a detail of the site (fractions of its bounds).
+                float2 span = max - min;
+                float2 zmin = min + span * new float2(Zoom[0], Zoom[1]), zmax = min + span * new float2(Zoom[2], Zoom[3]);
+                min = zmin; max = zmax;
+            }
             float2 ext = max - min;
-            float ppm = math.min(6f, 880f / math.cmax(ext));
+            float ppm = math.min(6f, ImageSize / math.cmax(ext));
             int w = (int)math.ceil(ext.x * ppm), h = (int)math.ceil(ext.y * ppm);
             var pal = _palette ?? Placemaker.Core.Paint.TerrainPalette.Vanilla();
             var cv = new Canvas(w, h, min, ppm, PaintView.Outside(pal));
@@ -873,7 +939,9 @@ namespace Placemaker.Gallery
                         return Rgba.Hex("#3f86c6", 0.28f + 0.6f * d);
                     }
                     float hx = fin(p + new float2(px * 1.5f, 0)), hz = fin(p + new float2(0, px * 1.5f));
-                    if (math.floor(h) != math.floor(hx) || math.floor(h) != math.floor(hz)) return new Rgba(0.25f, 0.2f, 0.15f, 0.28f);
+                    float cs = _contourStep > 0f ? _contourStep : 1f;
+                    if (math.floor(h / cs) != math.floor(hx / cs) || math.floor(h / cs) != math.floor(hz / cs))
+                        return new Rgba(0.25f, 0.2f, 0.15f, ((int)math.floor(h / cs)) % 5 == 0 ? 0.6f : 0.28f);
                     return default;
                 }, min, max);
                 // Original waterline (dashed) for reference.
@@ -886,6 +954,14 @@ namespace Placemaker.Gallery
                 }, min, max);
             }
 
+            // (s34) The surrounding streets again on top of the relief (the sloped ground view repaints the canvas).
+            if (final != null && _roads != null)
+                foreach (var r in _roads)
+                {
+                    var rp = new[] { r.A.xz, r.D.xz };
+                    cv.StrokePolyline(rp, r.Width, Rgba.Hex("#9a9aa0"));
+                    cv.DashedPolyline(rp, cv.Px(1f), 4f, 4f, Rgba.Hex("#ffffff", 0.8f));
+                }
             // Terraform: height after all layers (last plan with HeightAfter wins), tinted + 1 m contours.
             Func<float2, float> height = null;
             foreach (var l in plan.Layers) if (l?.HeightAfter != null) height = l.HeightAfter;
@@ -949,8 +1025,10 @@ namespace Placemaker.Gallery
                 foreach (var z in l.Zoning)
                 {
                     var q = new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz };
-                    cv.FillPolygon(q, Rgba.Hex("#8fb4e8", 0.75f));
-                    cv.StrokePolyline(q, cv.Px(1f), Rgba.Hex("#3d6db5"), closed: true);
+                    // (s34) A roads layer's pre-zoning: housing green, the whole blocks (8 m cells as a light grid).
+                    bool roadsZoning = l.GeneratorId == "roads";
+                    cv.FillPolygon(q, roadsZoning ? Rgba.Hex("#7cc96b", 0.45f) : Rgba.Hex("#8fb4e8", 0.75f));
+                    cv.StrokePolyline(q, cv.Px(1f), roadsZoning ? Rgba.Hex("#3f8f3a", 0.8f) : Rgba.Hex("#3d6db5"), closed: true);
                 }
             // (s26) The cells ZoneGuard zones (snapped to the roads' blocks, incl. the predicted blocks of the lanes this
             // build adds): what the game will zone, one outline per cell.
@@ -962,6 +1040,24 @@ namespace Placemaker.Gallery
                     if (g?.Ring != null && g.Tags != null && g.Tags.Contains("shops"))
                         cv.StrokePolyline(g.Ring.Select(v => v.xz).ToArray(), cv.Px(1.4f), Rgba.Hex("#1f4f99"), closed: true);
 
+            // (s34) Existing buildings of the site (road sites: the farm the roads must go around).
+            if (_obstacles != null)
+                foreach (var o in _obstacles)
+                {
+                    var q = new[] { o.A, o.B, o.C, o.D };
+                    cv.FillPolygon(q, Rgba.Hex("#b5653a", 0.9f));
+                    cv.StrokePolyline(q, cv.Px(1f), Rgba.Hex("#5a2d12"), closed: true);
+                }
+            // (s34) Turning circles under the roads: an asphalt (or grass) disc of the cap's real size.
+            foreach (var o in plan.Layers.Where(l => l != null).SelectMany(l => l.Objects))
+            {
+                if (o == null || o.Role != ObjectRole.CulDeSacCap) continue;
+                string id = o.Asset.Id ?? "";
+                float cr = id.Contains("XL") ? 17f : id.Contains("Large") ? 14f : id.Contains("Medium") ? 11.5f : 8f;
+                cv.FillCircle(o.Position.xz, cr + cv.Px(0.8f), Rgba.Hex("#4f4f55"));
+                cv.FillCircle(o.Position.xz, cr, Rgba.Hex("#8d8d93"));
+                if (id.EndsWith("02") || id.EndsWith("03")) cv.FillCircle(o.Position.xz, cr * 0.45f, Rgba.Hex(id.EndsWith("03") ? "#3c8a3c" : "#9ccc7a"));
+            }
             // Nets: edges at real width first (so junctions merge), then fill, then a thin centre line.
             var nets = plan.Layers.Where(l => l != null).SelectMany(l => l.Nets).Where(n => n != null).ToList();
             var polylines = nets.Select(n => (n, pts: Flatten(n), hw: HalfWidth(n, cat))).ToList();
@@ -1217,6 +1313,7 @@ namespace Placemaker.Gallery
                 case ObjectRole.ParkingBay:
                     cv.StrokePolyline(poly, cv.Px(1f), Rgba.Hex("#ffffff", 0.9f), closed: true);
                     return;
+                case ObjectRole.CulDeSacCap: return;   // (s34) drawn as a disc under the roads
                 case ObjectRole.Marker: case ObjectRole.AccessPoint: case ObjectRole.AnimalSpawner:
                     cv.FillCircle(p, cv.Px(2f), Rgba.Hex("#c02cc0"));
                     return;
@@ -1388,6 +1485,7 @@ namespace Placemaker.Gallery
                         if (r.EdgeSpikes > 0) flags.Add($"{r.EdgeSpikes} edge spikes");
                         if (r.Errors > 0) flags.Add($"{r.Errors} errors");
                         if (flags.Count > 0) sb.Append($"<span class=\"bad\">{string.Join(" · ", flags)}</span><br>");
+                        if (r.RoadAudit != null) sb.Append(Esc(r.RoadAudit) + "<br>");
                         if (r.IssueKeys.Count > 0) sb.Append(Esc(string.Join(", ", r.IssueKeys.Distinct().Take(6))));
                     }
                     sb.Append("</div></div>");

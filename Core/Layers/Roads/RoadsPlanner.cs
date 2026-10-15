@@ -35,6 +35,20 @@ namespace Placemaker.Core.Layers.Roads
         public const string FactRemoved = "roads.removedByObstacles";
 
         private const float MinFragmentLength = 30f;
+
+        // s34
+        public const string StatWalkways = "Placemaker.Roads.Stat.Walkways";
+        public const string StatSteepest = "Placemaker.Roads.Stat.Steepest";
+        public const string IssueIslands = "Placemaker.Roads.Issue.IslandsDropped";
+        public const string IssueNotConnected = "Placemaker.Roads.Issue.NotConnected";
+        public const string IssueSteep = "Placemaker.Roads.Issue.Steep";
+        public const string FactWalkways = "roads.walkways";
+        public const string FactLinks = "roads.links";
+        public const string FactIslandsDropped = "roads.islandsDropped";
+        public const string FactAccessCuts = "roads.accessCuts";
+        public const string FactLanes = "roads.lanes";
+        public const string FactSteepest = "roads.steepestGrade";
+        private const int MaxSteepIssues = 6;
         private const float RingClipMargin = 1.5f;
 
         public static AreaPlan Plan(AreaInput input, IReadOnlyList<ControlSchema> controls, CancellationToken cancel)
@@ -112,6 +126,16 @@ namespace Placemaker.Core.Layers.Roads
                 net.Edges.Add(new RoadEdge(curve, RoleOf(s, pattern, loopFamily), s.IsCulDeSacEnd));
             }
             net.Weld();
+            // (s34) Follow contours: the long streets of a grid / superblocks are laid onto contour lines.
+            bool followContours = settings.S(RoadsIds.TerrainFit, "auto") == "follow";
+            if (followContours && follow && (pattern == RoadPattern.Grid || pattern == RoadPattern.Superblock)
+                && GridGenerator.TryContourDirection(new List<float2>(boundary), heightAt, out float2 contourAxis, out float slopeAnisotropy) && slopeAnisotropy > 0.3f)
+            {
+                float rot = math.radians(gp.AngleOffsetDegrees);
+                float2 axis = new float2(contourAxis.x * math.cos(rot) - contourAxis.y * math.sin(rot), contourAxis.x * math.sin(rot) + contourAxis.y * math.cos(rot));
+                float pitch = pattern == RoadPattern.Grid ? gp.SpacingMeters : gp.SuperblockZoneMeters / 3f;
+                RoadContourWarp.Apply(net, heightAt, axis, pitch, boundary);
+            }
 
             var existing = connect ? RoadConnections.Collect(site) : new List<ExistingRoad>();
             var attachments = connect ? input.Shape.Attachments : null;
@@ -132,12 +156,11 @@ namespace Placemaker.Core.Layers.Roads
             {
                 Poly.Bounds(ring2, out float2 mn, out float2 mx);
                 obstacles = new RoadObstacles(site, mn, mx);
-                removedByObstacles += obstacles.RemoveBlocked(net);
-                if (removedByObstacles > 0)
-                {
-                    AnchorOutlineNodes(net, boundary, source);
-                    net.PruneStubs();
-                }
+                removedByObstacles += obstacles.RemoveBlocked(net, null, e => hw(e.Role) + 1f);
+                // (s34) No stub pruning here: on tree-like layouts (organic, superblocks) it cascaded through whole
+                // networks (the rural playtest site lost every road). Dead ends are handled once the network is final
+                // (RoadConnectivity.CleanDeadEnds: short stubs go, long ones become cul-de-sacs).
+                if (removedByObstacles > 0) AnchorOutlineNodes(net, boundary, source);
             }
             cancel.ThrowIfCancellationRequested();
 
@@ -157,7 +180,7 @@ namespace Placemaker.Core.Layers.Roads
                 }
                 net.Weld();
                 if (obstacles != null)
-                    removedByObstacles += obstacles.RemoveBlocked(net, e => e.Role == NetRole.PerimeterRoad);
+                    removedByObstacles += obstacles.RemoveBlocked(net, e => e.Role == NetRole.PerimeterRoad, e => hw(e.Role) + 1f);
             }
             cancel.ThrowIfCancellationRequested();
 
@@ -172,8 +195,25 @@ namespace Placemaker.Core.Layers.Roads
                 net.Weld();
             }
             AnchorOutlineNodes(net, boundary, source);
-            net.PruneStubs();
             net.DropFragments(MinFragmentLength);
+            cancel.ThrowIfCancellationRequested();
+
+            // ── 5b. (s34) Network design: access, connectivity, dead ends, lanes, junctions, walkways, grades ──
+            var ctx = new RoadDesign.Context
+            {
+                Boundary = boundary, Existing = existing, Obstacles = obstacles, Height = follow ? heightAt : null, HalfWidth = hw,
+                Perimeter = perimeter, JunctionSpacing = RoadsSchema.Num(settings, controls, RoadsIds.JunctionSpacing),
+                MaxGrade = RoadsSchema.Num(settings, controls, RoadsIds.MaxGrade) / 100f,
+                Walkways = RoadsSchema.Num(settings, controls, RoadsIds.Walkways) / 100f,
+                WalkwayStyle = settings.S(RoadsIds.WalkwayStyle, "paved"),
+                BackLanes = RoadsSchema.Num(settings, controls, RoadsIds.BackLanes) / 100f,
+                LaneStyle = settings.S(RoadsIds.LaneStyle, "alley"),
+                TipStyle = settings.S(RoadsIds.TipStyle, "same"),
+                Seed = input.Seed == 0 ? 1u : input.Seed,
+                FollowContours = followContours && follow,
+            };
+            if (!connect) ctx.Existing = new List<ExistingRoad>();
+            var design = RoadDesign.Run(net, ctx, cancel);
             cancel.ThrowIfCancellationRequested();
 
             // ── 6. Output nets & objects ─────────────────────────────────
@@ -185,7 +225,7 @@ namespace Placemaker.Core.Layers.Roads
                 if (degree[n] >= 3) junctions++;
                 if (degree[n] > 0 && net.Nodes[n].Attach >= 0) attachedCount++;
             }
-            float totalLength = 0f;
+            float totalLength = 0f, walkLength = 0f;
             var caps = new List<(float2 p, float r)>();
             string capStyle = settings.S(RoadsIds.CapStyle, "asphalt");
             string capSize = settings.S(RoadsIds.CapSize, "auto");
@@ -212,18 +252,21 @@ namespace Placemaker.Core.Layers.Roads
                 {
                     A = curve.A, B = curve.B, C = curve.C, D = curve.D,
                     Role = e.Role,
-                    Asset = AssetFor(e.Role, settings, street),
+                    Asset = AssetOf(e, settings, street),
                     Control = RoadRoles.ControlOf(e.Role),
                     StartAttach = sa, EndAttach = da,
                     StartAttachT = sa >= 0 ? st : 0f, EndAttachT = da >= 0 ? dt : 0f,
-                    Upgrades = RoadsSchema.Upgrades(settings, e.Role),
+                    Upgrades = e.AssetOverride.Length > 0 || e.Walk ? Array.Empty<string>() : RoadsSchema.Upgrades(settings, e.Role),
                     FollowTerrain = follow,
+                    Category = string.IsNullOrEmpty(e.Category) ? null : e.Category,
                 };
                 plan.Nets.Add(net0);
-                totalLength += curve.LengthXZ(12);
+                float len = curve.LengthXZ(12);
+                if (e.Walk) walkLength += len; else totalLength += len;
+                if (e.Walk && e.Trail) TrailPaint(plan, curve, heightAt, input.Seed);
                 if (cap && capStyle != "none")
                 {
-                    float width = 2f * hw(e.Role);
+                    float width = e.AssetOverride == RoadRoles.Gravel ? 8f : 2f * hw(e.Role);
                     float2 tangent = e.Role == NetRole.Roundabout && site.LeftHandTraffic ? -curve.TangentXZ(0f) : curve.TangentXZ(1f);
                     float3 tip = e.Role == NetRole.Roundabout && site.LeftHandTraffic ? curve.A : curve.D;
                     plan.Objects.Add(new PlannedObject
@@ -257,6 +300,33 @@ namespace Placemaker.Core.Layers.Roads
             }
             if (removedByObstacles > 0)
                 plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = IssueObstacles, Args = new object[] { removedByObstacles } });
+            // (s34) What the network design did that the player should know.
+            var conn = design.Connectivity;
+            if (conn.Dropped > 0)
+            {
+                float3? at = null;
+                if (conn.DroppedAt.Count > 0) at = new float3(conn.DroppedAt[0].x, heightAt(conn.DroppedAt[0]), conn.DroppedAt[0].y);
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Info, Key = IssueIslands, Args = new object[] { conn.Dropped, Math.Round(conn.DroppedLength) }, At = at });
+            }
+            if (conn.CityUnreached && plan.Nets.Count > 0)
+                plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = IssueNotConnected });
+            if (follow)
+            {
+                int shown = 0;
+                foreach (var (g, at) in design.Steep)
+                {
+                    if (shown++ >= MaxSteepIssues) break;
+                    plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = IssueSteep, Args = new object[] { Math.Round(g * 100f) }, At = at });
+                }
+            }
+
+            // ── 6b. (s34) Pre-zone every new road ───────────────────────
+            string zoneId = RoadPreZone.ZoneId(settings.S(RoadsIds.PreZone, RoadPreZone.None));
+            if (zoneId.Length > 0 && plan.Nets.Count > 0)
+            {
+                plan.Zoning.AddRange(RoadPreZone.Quads(plan.Nets, site, zoneId, heightAt));
+                plan.Facts[RoadPreZone.Fact] = 1;
+            }
 
             // ── 7. Regions ───────────────────────────────────────────────
             var blocks = new List<RoadBlocks.Block>();
@@ -268,7 +338,8 @@ namespace Placemaker.Core.Layers.Roads
                 var pts = new List<float3>();
                 foreach (var e in net.Edges)
                 {
-                    if (!e.Alive) continue;
+                    // Walkways cross blocks without dividing them (they are footpaths, not streets).
+                    if (!e.Alive || e.Walk) continue;
                     pts.Clear();
                     e.Curve.Flatten(pts, null, 4f, 6f);
                     var l = new List<float2>(pts.Count);
@@ -302,6 +373,14 @@ namespace Placemaker.Core.Layers.Roads
             plan.Stats.Add(new PlanStat(StatBlocks, blocks.Count, "count"));
             plan.Stats.Add(new PlanStat(StatJunctions, junctions, "count"));
             if (attachedCount > 0) plan.Stats.Add(new PlanStat(StatConnections, attachedCount, "count"));
+            if (walkLength > 0f) plan.Stats.Add(new PlanStat(StatWalkways, Math.Round(walkLength), "m"));
+            if (follow && design.SteepestGrade > 0.005f) plan.Stats.Add(new PlanStat(StatSteepest, Math.Round(design.SteepestGrade * 100f), "%"));
+            plan.Facts[FactWalkways] = walkLength;
+            plan.Facts[FactLinks] = conn.Links + conn.CityLinks;
+            plan.Facts[FactIslandsDropped] = conn.Dropped;
+            plan.Facts[FactAccessCuts] = design.AccessCuts;
+            plan.Facts[FactLanes] = design.Lanes;
+            plan.Facts[FactSteepest] = design.SteepestGrade;
             plan.Facts[FactLength] = totalLength;
             plan.Facts[FactBlocks] = blocks.Count;
             plan.Facts[FactJunctions] = junctions;
@@ -360,6 +439,7 @@ namespace Placemaker.Core.Layers.Roads
         {
             switch (role)
             {
+                case NetRole.Alley: return s.S(RoadsIds.LaneAsset, "");
                 case NetRole.Avenue: return s.S(RoadsIds.AvenueAsset, "");
                 case NetRole.Roundabout: return s.S(RoadsIds.RoundaboutAsset, "");
                 case NetRole.CulDeSac: return s.S(RoadsIds.LocalAsset, "");
@@ -393,6 +473,58 @@ namespace Placemaker.Core.Layers.Roads
             if (!string.IsNullOrEmpty(street) && street != id) fb.Add(street);
             foreach (var p in picks) if (p != id && !fb.Contains(p)) fb.Add(p);
             return new AssetRef(id, fb.ToArray());
+        }
+
+        /// <summary>(s34) The asset of a planned piece: its explicit override (gravel tips / lanes), a walkway's path, else the role's.</summary>
+        private static AssetRef AssetOf(RoadEdge e, SettingsBag s, string street)
+        {
+            if (e.Walk)
+            {
+                string path = s.S(RoadsIds.PathAsset, "");
+                return e.Trail && path.Length == 0 ? Layers.Park.ParkPathNets.Trail("") : new AssetRef(path);
+            }
+            var normal = AssetFor(e.Role, s, street);
+            if (string.IsNullOrEmpty(e.AssetOverride)) return normal;
+            var fb = new List<string>();
+            if (!string.IsNullOrEmpty(normal.Id) && normal.Id != e.AssetOverride) fb.Add(normal.Id);
+            foreach (var f in normal.Fallbacks ?? Array.Empty<string>()) if (!string.IsNullOrEmpty(f) && !fb.Contains(f) && f != e.AssetOverride) fb.Add(f);
+            return new AssetRef(e.AssetOverride, fb.ToArray());
+        }
+
+        /// <summary>
+        /// (s34) Worn ground along a dirt walkway: a feathered dirt paint corridor 5 m wide with a ragged edge.
+        /// Extension point for s33's terrain paint toolkit (painted trails): replace this with its trail brush when merged.
+        /// </summary>
+        private static void TrailPaint(AreaPlan plan, RoadCurve curve, Func<float2, float> heightAt, uint seed)
+        {
+            var pts = new List<float3>();
+            curve.Flatten(pts, null, 3f, 8f);
+            if (pts.Count < 2) return;
+            const float half = 2.5f;
+            var left = new List<float2>();
+            var right = new List<float2>();
+            for (int i = 0; i < pts.Count; i++)
+            {
+                float2 a = pts[math.max(0, i - 1)].xz, b = pts[math.min(pts.Count - 1, i + 1)].xz;
+                float2 d = math.normalizesafe(b - a);
+                float2 n = new float2(-d.y, d.x);
+                left.Add(pts[i].xz + n * half);
+                right.Add(pts[i].xz - n * half);
+            }
+            right.Reverse();
+            left.AddRange(right);
+            var ring = Poly.Clean(left.ToArray(), 0.3f);
+            if (ring.Length < 3 || !Poly.IsSimple(ring)) return;
+            if (Poly.SignedArea(ring) < 0f) Array.Reverse(ring);
+            plan.Paint.Add(new PlannedPaint
+            {
+                Ring = Poly.To3D(ring, heightAt), Layer = TerrainMaterials.Dirt, Strength = 0.8f, Feather = 1.6f, Noise = 0.9f, NoiseScale = 5f,
+                Seed = seed ^ math.hash(new float2(curve.A.x, curve.A.z)),
+            });
+            // Terrain paint stays when the roads are removed (the shared warning every painting type gives).
+            bool warned = false;
+            foreach (var i in plan.Issues) warned |= i.Key == Layers.Common.TerrainPaint.PermanentKey;
+            if (!warned) plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = Layers.Common.TerrainPaint.PermanentKey });
         }
 
         /// <summary>CS2 ships turning circles named CulDeSac{Small|Medium|Large|XL}{01 asphalt|02 grass|03 trees}.</summary>
