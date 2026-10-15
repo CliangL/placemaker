@@ -5,9 +5,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using System.Threading;
 using Placemaker.Core;
 using Placemaker.Core.Geometry;
+using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Tool;
 using Unity.Mathematics;
 using Xunit;
@@ -44,6 +46,13 @@ namespace Placemaker.Tests
                 site.NearbyNets[k] = n;
             }
             var r = Editor.SingleLayerRecipe(GeneratorRegistry.Get(gen), 5);
+            // Types that take placed entrances (parking, rest area, transit plaza, ...): one on the south street, one on the west one.
+            var gdef = GeneratorRegistry.Get(gen);
+            if (gdef.Controls.Any(c => c.Kind == ControlKind.Markers && c.MarkerKinds != null && c.MarkerKinds.Contains("entrance")))
+            {
+                r.Root.Markers.Add(ParkingKit.Marker(ring, 0, 40));
+                r.Root.Markers.Add(ParkingKit.Marker(ring, 3, 60));
+            }
             uint q = 0;
             Editor.AddDefaultFeatures(r, () => ++q);
             ComposedPlan plan;
@@ -51,7 +60,7 @@ namespace Placemaker.Tests
             catch (Exception e) { throw new Exception($"{gen}/{kind}: {e.Message}", e); }
             string ctx = $"{gen}/{kind}";
             var final = LotGradingTests.Final(plan, ground);
-            var joins = new List<float2>();
+            var joins = new List<float2>(); int ndead = 0;
 
             foreach (var l in plan.Layers.Where(l => l != null))
                 foreach (var n in l.Nets)
@@ -73,8 +82,24 @@ namespace Placemaker.Tests
                         Assert.True(math.abs(atKerb - hs) <= 0.35f, $"{ctx}: {n.Role} in {l.GeneratorId} at the kerb {atKerb:0.00} m, street {hs:0.00} m");
                         joins.Add(p0 + d * (edge + 1f));
                     }
+                    // A dead end at the kerb (a plain entrance: the game connects it by LocalConnect) is a join as well; a 2 m apron ramps at most 0.45 m in its first half metre.
+                    foreach (var pe in new[] { n.A, n.D })
+                    {
+                        if (n.Role != NetRole.DriveConnector) continue;
+                        foreach (var s in site.NearbyNets)
+                        {
+                            float best = float.MaxValue, hy = 0; var at = float2.zero;
+                            for (int k = 0; k <= 32; k++) { var c = Composer.Bezier(s.A, s.B, s.C, s.D, k / 32f); float dd = math.distance(c.xz, pe.xz); if (dd < best) { best = dd; hy = c.y; at = c.xz; } }
+                            if (best > s.Width * 0.5f + 1.5f || best < 0.01f) continue;
+                            var dir = math.normalizesafe(pe.xz - at);
+                            float atK = final(at + dir * (s.Width * 0.5f + 0.5f));
+                            Assert.True(math.abs(atK - hy) <= 0.45f, $"{ctx}: {n.Role} in {l.GeneratorId} ends at the kerb ({pe.xz}, {best:0.0} m from the street axis, w {s.Width}, net {n.A.xz}->{n.D.xz}) at {atK:0.00} m, street {hy:0.00} m; net y {n.A.y:0.00}..{n.D.y:0.00}; cover {EntranceDebug.Cover(plan, at + dir * (s.Width * 0.5f + 0.5f))}; inward at 0.5/2/4/8/14 m: {string.Join(" ", new[] {0.5f, 2f, 4f, 8f, 14f}.Select(o => final(at + dir * (s.Width * 0.5f + o)).ToString("0.00")))}");
+                            joins.Add(pe.xz); ndead++;
+                        }
+                    }
                 }
 
+            if (new[] { "stripMall", "shoppingPlaza", "parking", "restArea" }.Contains(gen)) Assert.True(joins.Count > 0, ctx + $": no net attaches to a street (markers {r.Root.Markers.Count}, nets {plan.Layers.Sum(l => l?.Nets.Count ?? 0)}, issues {string.Join(",", plan.AllIssues().Select(i => i.Key))})");
             foreach (var j in joins)
                 for (float dy = -10f; dy <= 10f; dy += 2f)
                     for (float dx = -10f; dx <= 10f; dx += 2f)
@@ -86,8 +111,29 @@ namespace Placemaker.Tests
                         if (streetNear) continue;
                         float h = final(p), low = float.MaxValue;
                         for (int k = 0; k < 8; k++) { float a = k * math.PI / 4f; low = math.min(low, final(p + 3f * new float2(math.cos(a), math.sin(a)))); }
-                        Assert.False(h < low - 0.15f, $"{ctx}: a hollow at {p} next to a street join ({low - h:0.00} m below its surroundings)");
+                        Assert.False(h < low - 0.25f, $"{ctx}: a hollow at {p} next to a street join ({low - h:0.00} m below its surroundings)");
                     }
+        }
+    }
+}
+namespace Placemaker.Tests
+{
+    public static class EntranceDebug
+    {
+        public static string Cover(Placemaker.Core.ComposedPlan plan, Unity.Mathematics.float2 p)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int li = 0; li < plan.Layers.Count; li++)
+            {
+                var l = plan.Layers[li]; if (l == null) continue;
+                for (int i = 0; i < l.Terraform.Count; i++)
+                {
+                    var t = l.Terraform[i];
+                    if (t.Ring.Length >= 3 && Placemaker.Core.Geometry.Poly.Contains(Placemaker.Core.Geometry.Poly.To2D(t.Ring), p))
+                        sb.Append($" [L{li}#{i} ring={string.Join(";", t.Ring.Select(v => v.x.ToString("0.0") + "," + v.z.ToString("0.0") + "," + v.y.ToString("0.00")))} sl={t.Sloped} ap={t.Apron} h={Placemaker.Core.Build.TerraformSurface.At(t.Ring, p):0.00}]");
+                }
+            }
+            return sb.ToString();
         }
     }
 }

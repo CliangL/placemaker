@@ -289,6 +289,45 @@ namespace Placemaker.Core.Layers.Parking
             plan.Facts["zoning.cells"] = cells;
         }
 
+        private static float KerbH(List<(double2 at, float h)> kerbs, double2 p, Func<double2, float> H)
+        {
+            foreach (var k in kerbs) if (PGeo.Len(k.at - p) < 0.01) return k.h;
+            return H(p);
+        }
+
+        /// <summary>
+        /// (s58) A connector that ends at the kerb of an existing street (the game joins the dead end by LocalConnect) leaves the street at the
+        /// street's own height: the strip between the lot edge and the kerb is graded as a sloped quad from the lot's height to the street's
+        /// (the raw ground there made a 0.4-0.7 m step next to a street on a fill or in a cut), and the connector's kerb end is that height.
+        /// </summary>
+        private static void KerbApron(AreaPlan plan, double2 from, double2 kerb, double half, Func<double2, float> H, Func<double2, float> ground, double2 axis, double streetH, List<(double2 at, float h)> kerbs)
+        {
+            if (double.IsNaN(streetH) || double.IsInfinity(streetH)) return;
+            var d = kerb - from; double len = PGeo.Len(d);
+            if (len < 0.3) return;
+            d = d / len;
+            var n = new double2(-d.y, d.x);
+            float hs = (float)streetH, h0 = H(from);
+            kerbs.Add((kerb, hs));
+            if (Math.Abs(hs - h0) < 0.25f && Math.Abs(hs - ground(axis)) < 0.25f) return;   // already (nearly) flush: nothing to grade
+            float3 V(double2 p, float h) => new float3((float)p.x, h, (float)p.y);
+            void Piece(float3[] ring, bool apron)
+            {
+                double signed = 0;
+                for (int v = 0, u = ring.Length - 1; v < ring.Length; u = v++) signed += (double)ring[u].x * ring[v].z - (double)ring[v].x * ring[u].z;
+                if (signed < 0) Array.Reverse(ring);
+                var c = Poly.Centroid(Poly.To2D(ring));
+                float th = global::Placemaker.Core.Build.TerraformSurface.At(ring, c);
+                plan.Terraform.Add(new PlannedTerraform { Ring = ring, Kind = th >= H(new double2(c.x, c.y)) ? TerraformKind.Raise : TerraformKind.Lower, TargetHeight = th, Permanent = true, Sloped = true, Apron = apron });
+            }
+            Piece(new[] { V(from - n * half, h0), V(kerb - n * half, hs), V(kerb + n * half, hs), V(from + n * half, h0) }, true);
+            // Level under the kerb and the first metres of the street, so the raster's bank falls under the road, not in the strip.
+            Piece(new[] { V(kerb - n * half, hs), V(kerb + d * 3.0 - n * half, hs), V(kerb + d * 3.0 + n * half, hs), V(kerb + n * half, hs) }, false);
+            bool has = false;
+            foreach (var i in plan.Issues) if (i.Key == Layers.Common.TerrainShaper.PermanentKey) { has = true; break; }
+            if (!has) plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = Layers.Common.TerrainShaper.PermanentKey });
+        }
+
         private static float3 P3(double2 p, Func<double2, float> H) => new float3((float)p.x, H(p), (float)p.y);
 
         private static void Issues(AreaPlan plan, Layout layout)
@@ -428,6 +467,7 @@ namespace Placemaker.Core.Layers.Parking
                         break;
                 }
             }
+            var kerbs = new List<(double2 at, float h)>();   // s58: dead-end connector ends take the street's own height
             for (int ei = 0; ei < layout.Entrances.Count; ei++)
             {
                 var e = layout.Entrances[ei];
@@ -476,7 +516,16 @@ namespace Placemaker.Core.Layers.Parking
                 {
                     // LocalConnect needs a dead end at the kerb: run the connector to the road edge (PLT NetDefinitions).
                     double gap = PGeo.Len(hit.Point - E) - roads[hit.Road].Width / 2;
-                    if (gap > 0.3) outer = E + PGeo.Norm(hit.Point - E) * gap;
+                    if (gap > 0.3)
+                    {
+                        outer = E + PGeo.Norm(hit.Point - E) * gap;
+                        KerbApron(plan, E, outer, e.Width * 0.5 + 2.0, H, q => { try { return (site?.HeightAt ?? (_ => 0f))(new float2((float)q.x, (float)q.y)); } catch (Exception) { return 0f; } }, hit.Point, Roads.HeightAt(roads, hit), kerbs);
+                    }
+                    else if (gap > -0.5)
+                    {
+                        double hk = Roads.HeightAt(roads, hit);
+                        if (!double.IsNaN(hk) && !double.IsInfinity(hk)) kerbs.Add((outer, (float)hk));   // the lot edge is on the kerb: its end is the street's height
+                    }
                 }
                 else
                 {
@@ -500,8 +549,8 @@ namespace Placemaker.Core.Layers.Parking
             }
             foreach (var sg in SplitAtJunctions(segs))
             {
-                var a = new float3((float)sg.A.x, H(sg.A), (float)sg.A.y);
-                var d = new float3((float)sg.B.x, H(sg.B), (float)sg.B.y);
+                var a = new float3((float)sg.A.x, KerbH(kerbs, sg.A, H), (float)sg.A.y);
+                var d = new float3((float)sg.B.x, KerbH(kerbs, sg.B, H), (float)sg.B.y);
                 plan.Nets.Add(new PlannedNet
                 {
                     A = a, B = math.lerp(a, d, 1f / 3f), C = math.lerp(a, d, 2f / 3f), D = d,

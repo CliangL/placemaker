@@ -106,12 +106,17 @@ namespace Placemaker.Core.Layers.Types.Transport
             }
             var plan = ctx.Plan;
             plan.Surfaces.AddRange(sub.Surfaces);
+            int netOffset = plan.Nets.Count;   // s58: objects index their net in the sub-plan
             plan.Nets.AddRange(sub.Nets);
+            // s58: the lot is graded (level tiers tied to the street): its terraform goes with its nets and objects, which already stand on the graded ground.
+            plan.Terraform.AddRange(sub.Terraform);
+            plan.Paint.AddRange(sub.Paint);
             plan.Areas.AddRange(sub.Areas);
             plan.Zoning.AddRange(sub.Zoning);
             var lot = new SubLot { Ring = ring, Cut = cut, Stalls = stalls, EvStalls = ev };
             foreach (var o in sub.Objects)
             {
+                if (o.AttachedNet >= 0) o.AttachedNet += netOffset;
                 if (o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush || o.Role == ObjectRole.Lamp) lot.Plants.Add(o);
                 plan.Objects.Add(o);
             }

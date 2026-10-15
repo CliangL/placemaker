@@ -731,6 +731,8 @@ namespace Placemaker.Core
         /// centre height for legacy readers. See Core/Build/TerraformSurface.
         /// </summary>
         public bool Sloped;
+        /// <summary>(s58, not persisted) The strip between a lot edge and the kerb of the street its connector joins: fixed ground for the host's own grading.</summary>
+        public bool Apron;
     }
 
     /// <summary>
