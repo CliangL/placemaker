@@ -168,6 +168,11 @@ namespace Placemaker.Core.Layers.Commercial
 
         protected override bool KeepsPark(LayerContext ctx) => true;
 
-        protected override void FillRest(LayerContext ctx, Mall mall) => GreenRest(ctx, mall, "pocket", false, 0x780u);
+        // The park is planned in Compose; what is left round it is lot (shops and lots ring the park).
+        protected override void FillRest(LayerContext ctx, Mall mall)
+        {
+            RestLots(ctx, mall, 0x780u, 300f);
+            LotEdges(ctx, mall, 0x7C0u);
+        }
     }
 }

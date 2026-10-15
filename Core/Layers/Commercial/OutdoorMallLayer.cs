@@ -297,7 +297,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
         }
 
-        protected override bool KeepsPark(LayerContext ctx) => ctx.S("style") == "lifestyle" || ctx.B("extraGreen");
+        protected override bool KeepsPark(LayerContext ctx) => ctx.B("extraGreen");
 
         protected override void FillRest(LayerContext ctx, Mall mall)
         {

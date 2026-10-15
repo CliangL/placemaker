@@ -54,7 +54,7 @@ namespace Placemaker.Core.Layers.Commercial
                 if (kind != 0)
                 {
                     float len = (k1 - k0 + 1) * 2f;
-                    if (len >= (kind == 1 ? 9f : 5f))
+                    if (len >= (kind == 1 ? 12f : 5f))
                     {
                         var m = pts[(first + (k0 + k1) / 2) % count];
                         var q1 = pts[(first + k0 + (k1 - k0) / 4) % count];
@@ -126,7 +126,7 @@ namespace Placemaker.Core.Layers.Commercial
                 {
                     if (c?.Outer == null || c.Outer.Length < 3) continue;
                     var ring = Poly.EnsureCcw(Poly.Clean(c.Outer, 0.3f));
-                    if (ring.Length >= 3 && Poly.Area(ring) >= 300f && c.Holes.Count == 0) list.Add(ring);
+                    if (ring.Length >= 3 && Poly.Area(ring) >= 200f && c.Holes.Count == 0) list.Add(ring);
                 }
             }
             catch (Exception) { }
@@ -143,9 +143,13 @@ namespace Placemaker.Core.Layers.Commercial
         /// </summary>
         public bool PolyLot(float2[] piece, SettingsBag parking, uint salt)
         {
-            var shapes = Smooth(piece);
-            if (shapes.Count == 0) shapes.Add(piece);
-            for (int si = 0; si < shapes.Count && si < 3; si++)
+            var shapes = new List<float2[]>();
+            foreach (var clear in KeepOffPlots(piece))
+            {
+                shapes.AddRange(Smooth(clear, 2f));
+                foreach (var s35 in Smooth(clear)) if (shapes.Count < 5) shapes.Add(s35);
+            }
+            for (int si = 0; si < shapes.Count && si < 5; si++)
             {
                 LotTry best = null; float bestScore = 0f;
                 var shape = shapes[si];
@@ -155,11 +159,12 @@ namespace Placemaker.Core.Layers.Commercial
                 float ang = math.degrees(math.atan2(tan.y, tan.x));
                 foreach (float rot in new[] { float.NaN, 0f, 90f })
                 {
-                    var bag = parking;
+                    var bag = new SettingsBag();
+                    foreach (var kv in parking.Values) bag.Values[kv.Key] = kv.Value;
+                    // Flush to the leftover piece: a surface 1 m in from a cell block would leave a strip the game cannot use (s48 snug rule).
+                    bag.Values["setback"] = 0.25;
                     if (!float.IsNaN(rot))
                     {
-                        bag = new SettingsBag();
-                        foreach (var kv in parking.Values) bag.Values[kv.Key] = kv.Value;
                         bag.Values["rowAngleMode"] = "fixed";
                         bag.Values["rowAngle"] = (double)(ang + rot);
                     }
@@ -169,7 +174,7 @@ namespace Placemaker.Core.Layers.Commercial
                     float score = t.Capacity * math.min(1f, fill / GoodFill);
                     if (score > bestScore) { bestScore = score; best = t; }
                 }
-                if (best != null && best.Capacity >= 6f) return CommitLot(best, true);
+                if (best != null && best.Capacity >= 4f) return CommitLot(best, true);
             }
             return false;
         }
@@ -235,6 +240,69 @@ namespace Placemaker.Core.Layers.Commercial
             }
             list.Sort((x, y) => Poly.Area(y).CompareTo(Poly.Area(x)));
             return list;
+        }
+
+        /// <summary>
+        /// A leftover piece shut in by shop plots (no street or lane reaches it) gets its way in: the smallest plot that touches
+        /// both the piece and a street or lane is given back (its land becomes the lot's driveway). False when there is none.
+        /// </summary>
+        public bool OpenAccess(float2[] piece)
+        {
+            var roads = _roads ?? (_roads = StreetFrontage.Roads(Ctx.Input));
+            float2[] pick = null; float pickArea = float.MaxValue;
+            foreach (var shop in Shops)
+            {
+                if (CellPlots.Contains(shop)) continue;
+                int touch = 0, street = 0;
+                foreach (var v in shop)
+                {
+                    if (Poly.DistanceToBoundary(piece, v) < 1.5f) touch++;
+                    if (Classify(roads, v) != 0) street++;
+                }
+                if (touch < 2 || street < 2) continue;
+                float a = Poly.Area(shop);
+                if (a < pickArea) { pickArea = a; pick = shop; }
+            }
+            if (pick == null) return false;
+            Shops.Remove(pick);
+            Taken.Remove(pick);
+            ShopZone.Remove(pick);
+            return true;
+        }
+
+        /// <summary>
+        /// How far a lot's aisles keep from a shop plot: an aisle (7 m) that ends beside a zone cell closes it (the game blocks a
+        /// cell a net touches; ZoneGuard drops it), so the lot stays this far from every plot — the strip between is the lot's
+        /// planted edge. Half an aisle plus the cell clearance and the repair margin of the outline.
+        /// </summary>
+        public const float PlotClear = 4.2f;
+
+        /// <summary>The piece minus everything within <see cref="PlotClear"/> of a shop plot (simple parts, largest first).</summary>
+        public List<float2[]> KeepOffPlots(float2[] piece)
+        {
+            var result = new List<float2[]>();
+            if (Shops.Count == 0) { result.Add(piece); return result; }
+            var grown = new List<IReadOnlyList<float2>>();
+            foreach (var s in Shops)
+            {
+                var c = Poly.Centroid(s);
+                bool near = false;
+                foreach (var v in s) if (Poly.DistanceToBoundary(piece, v) < PlotClear + 1f || Poly.Contains(piece, v)) { near = true; break; }
+                if (near) grown.Add(GrowConvex(s, PlotClear));
+            }
+            if (grown.Count == 0) { result.Add(piece); return result; }
+            try
+            {
+                foreach (var r in Poly.Boolean(new[] { (IReadOnlyList<float2>)piece }, grown, BoolOp.Difference))
+                {
+                    if (r?.Outer == null || r.Outer.Length < 3 || r.Holes.Count > 0) continue;
+                    var ring = Poly.EnsureCcw(Poly.Clean(r.Outer, 0.05f));
+                    if (ring.Length >= 3 && Poly.Area(ring) >= 300f) result.Add(ring);
+                }
+            }
+            catch (Exception) { result.Add(piece); }
+            result.Sort((a, b) => Poly.Area(b).CompareTo(Poly.Area(a)));
+            return result;
         }
     }
 }

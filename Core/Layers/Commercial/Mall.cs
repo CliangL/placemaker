@@ -224,6 +224,7 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var c in corridors) if (!Free(c)) return null;
             lane.Index = Lanes.Count;
             Lanes.Add(lane);
+            lane.Land = corridors;
             Taken.AddRange(corridors);
             return lane;
         }

@@ -159,7 +159,7 @@ namespace Placemaker.Tests
 
         public sealed class Share
         {
-            public float Plots, Lots, Lanes, Commercial, Grass;
+            public float Plots, Lots, Lanes, Paved, Commercial, Grass, Edges;
             public int NPlots, Trees;
         }
 
@@ -167,7 +167,7 @@ namespace Placemaker.Tests
         /// Plots (zoning cutouts) + lots (their whole ring: islands, edges and planted strips are the lot's own) + lane corridors
         /// (8 m), as a union clipped to the site — nothing counted twice — as a share of the block.
         /// </summary>
-        public static Share Measure(ComposedPlan plan, float2[] site)
+        public static Share Measure(ComposedPlan plan, float2[] site, bool countPaved = true)
         {
             var host = plan.Layers.First();
             var plots = host.Regions.Where(Cutouts.IsCutout).Select(g => Poly.To2D(g.Ring)).ToList();
@@ -187,15 +187,19 @@ namespace Placemaker.Tests
                 }
             var s = new Share { NPlots = plots.Count, Trees = host.Objects.Count(o => o.Role == ObjectRole.Tree) };
             s.Plots = UnionArea(plots, site); s.Lots = UnionArea(lots, site); s.Lanes = UnionArea(lanes, site);
-            var all = new List<float2[]>(plots); all.AddRange(lots); all.AddRange(lanes);
+            // Paved squares, paseos and forecourts are the shopping area's public realm (pedestrian street, plaza); lawns are not.
+            var paved = host.Surfaces.Where(x => countPaved && (x.Role == SurfaceRole.Plaza || x.Role == SurfaceRole.Paving)).Select(x => Poly.To2D(x.Ring)).ToList();
+            s.Paved = UnionArea(paved, site);
+            var all = new List<float2[]>(plots); all.AddRange(lots); all.AddRange(lanes); all.AddRange(paved);
             s.Commercial = UnionArea(all, site) / Poly.Area(site);
+            s.Edges = host.Facts.TryGetValue("lotEdges", out var le) ? (float)le : 0f;
             s.Grass = host.Surfaces.Where(x => x.Role == SurfaceRole.Grass).Sum(x => Poly.Area(Poly.To2D(x.Ring)));
             return s;
         }
 
         /// <summary>(s50) The least commercial share a type must reach on any realistic site: lot first, a park only where it is the type's own.</summary>
         public static float Target(string type, string preset) =>
-            type == "shopsPark" || type == "mallPark" || (type == "outdoorMall" && preset == "lifestyle") ? 0.45f : 0.75f;
+            type == "shopsPark" || type == "mallPark" || (type == "shoppingPlaza" && preset == "green") ? 0.45f : 0.75f;
 
         [Theory]
         [MemberData(nameof(Cases))]
@@ -203,8 +207,8 @@ namespace Placemaker.Tests
         {
             var plan = Run(type, preset, step, out float area, out var site);
             var ringXz = Poly.To2D(step < 0f ? TestKit.Rect(step == -1f ? 170f : step == -2f ? 122f : 200f, step == -1f ? 170f : step == -2f ? 122f : 200f) : step == 0f ? Round(out _) : Block(out _, step));
-            var m = Measure(plan, ringXz);
-            _out.WriteLine($"SHARE {type}/{preset} @ {SiteName(step)}: area {area / 10000f:0.00} ha, plots {m.NPlots} ({m.Plots:0}), lots {m.Lots:0}, lanes {m.Lanes:0} => {m.Commercial:P0} (need {Target(type, preset):P0}), grass {m.Grass:0}, trees {m.Trees}; issues {string.Join(",", plan.AllIssues().Select(i => i.Key.Substring(i.Key.LastIndexOf((char)46) + 1)).Distinct())}");
+            var m = Measure(plan, ringXz, type != "shopsPark" && type != "mallPark");
+            _out.WriteLine($"SHARE {type}/{preset} @ {SiteName(step)}: area {area / 10000f:0.00} ha, plots {m.NPlots} ({m.Plots:0}), lots {m.Lots:0}, lanes {m.Lanes:0}, paved {m.Paved:0}, lot edges {m.Edges:0} => {m.Commercial:P0} (need {Target(type, preset):P0}), grass {m.Grass:0}, trees {m.Trees}; issues {string.Join(",", plan.AllIssues().Select(i => i.Key.Substring(i.Key.LastIndexOf((char)46) + 1)).Distinct())}");
             Assert.False(plan.HasErrors);
             Assert.DoesNotContain(plan.AllIssues(), i => i.Key == CommercialLayer.NoStreetKey);
             Assert.True(m.NPlots >= 3, type + "/" + preset + ": " + m.NPlots + " plots");

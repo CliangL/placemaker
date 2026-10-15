@@ -24,7 +24,7 @@ namespace Placemaker.Tests
         private static readonly DesignEditor Editor = new DesignEditor(GeneratorRegistry.Get);
 
         /// <summary>Streets around the ring with their zone blocks "captured" (predicted like the game makes them).</summary>
-        private static SiteContext Captured(float3[] ring)
+        internal static SiteContext Captured(float3[] ring)
         {
             var site = ZoningCutoutTests.Streets(ring);
             foreach (var g in ZoneLots.SiteGrids(site, null))

@@ -99,6 +99,10 @@ namespace Placemaker.Core.Layers.Commercial
 
         protected override void FillRest(LayerContext ctx, Mall mall)
         {
+            // (s50) The park is the largest leftover; the rest of the leftovers are lot.
+            var core = HoldParkCore(mall, 0.42f);
+            RestLots(ctx, mall, 0xD90u, 300f, core == null);
+            mall.Release(core);
             var doors = Doors(mall);
             uint k = 0;
             foreach (var (piece, strip) in mall.RestSplit(150f))
