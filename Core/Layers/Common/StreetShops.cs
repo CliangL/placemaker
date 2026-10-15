@@ -208,7 +208,7 @@ namespace Placemaker.Core.Layers.Common
             var c = Poly.Centroid(q);
             var dir = math.normalizesafe(b - a); var n = new float2(-dir.y, dir.x);
             if (math.dot(n, 0.5f * (a + b) - c) < 0f) n = -n;
-            float push = math.max(0f, bestD) + 1f;
+            float push = math.max(0f, bestD) + Build.ZoneLots.Clearance;
             var r2 = (float2[])q.Clone();
             r2[best] = a + n * push; r2[(best + 1) % 4] = b + n * push;
             return r2;
