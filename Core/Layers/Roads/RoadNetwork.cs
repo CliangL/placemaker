@@ -30,6 +30,10 @@ namespace Placemaker.Core.Layers.Roads
         public bool Walk;
         /// <summary>(s34) Dirt look: the walk gets a worn-ground paint corridor (and a trail asset when one exists).</summary>
         public bool Trail;
+        /// <summary>(s52) Hillside terraces: index of the terrace street this piece belongs to (its terrace band), -1 = none.</summary>
+        public int TerraceStreet = -1;
+        /// <summary>(s52) Hillside terraces: a designed link between terraces (its heights are the designed ramp).</summary>
+        public bool TerraceLink;
 
         public RoadEdge(RoadCurve curve, NetRole role, bool capAtEnd = false)
         {
@@ -44,6 +48,7 @@ namespace Placemaker.Core.Layers.Roads
         public RoadEdge Clone(RoadCurve curve) => new RoadEdge(curve, Role, CapAtEnd)
         {
             AssetOverride = AssetOverride, Category = Category, Connector = Connector, Walk = Walk, Trail = Trail,
+            TerraceStreet = TerraceStreet, TerraceLink = TerraceLink,
         };
     }
 

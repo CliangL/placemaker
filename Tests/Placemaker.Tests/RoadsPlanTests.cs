@@ -69,7 +69,7 @@ namespace Placemaker.Tests
             Assert.Contains(RegionTags.Block, zoning.Accepts);
             var pattern = roads.Controls.Single(c => c.Id == RoadsIds.Pattern);
             Assert.Equal(ControlKind.Choice, pattern.Kind);
-            Assert.Equal(9, pattern.Options.Count);
+            Assert.Equal(10, pattern.Options.Count);   // s52: + hillside terraces
             Assert.Equal(AssetCategories.Road, roads.Controls.Single(c => c.Id == RoadsIds.StreetAsset).AssetCategory);
             Assert.Equal(AssetCategories.Zone, zoning.Controls.Single(c => c.Id == EdgeZoningAddOn.ZoneControl).AssetCategory);
             Assert.Equal(roads.Controls.Count, roads.Controls.Select(c => c.Id).Distinct().Count());

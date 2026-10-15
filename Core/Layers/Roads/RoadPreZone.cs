@@ -34,8 +34,71 @@ namespace Placemaker.Core.Layers.Roads
         public static string ZoneId(string choice) =>
             string.IsNullOrEmpty(choice) || choice == None ? "" : Common.ZoneKinds.PrefabId(choice);
 
-        /// <summary>One zoning quad per predicted zone block of every zoning road in <paramref name="nets"/>.</summary>
-        public static List<PlannedZoning> Quads(IEnumerable<PlannedNet> nets, SiteContext site, string zoneId, Func<float2, float> height)
+        /// <summary>(s52) AreaPlan facts: zone at most this many rows from the road, and only rows on ground this level (rise/run).</summary>
+        public const string FactDepth = "roads.preZoneDepth", FactLevel = "roads.preZoneLevel";
+
+        /// <summary>
+        /// (s52) Hillside terraces zone only the level part of each block: per column, the rows from the road whose cells lie
+        /// level (<see cref="Level"/>), at most <see cref="MaxDepth"/> (0 = the whole block depth).
+        /// </summary>
+        public sealed class DepthRule
+        {
+            public int MaxDepth;
+            public Func<float2, bool> Level;
+        }
+
+        /// <summary>
+        /// The plan's depth rule (null = zone whole blocks): its facts and the ground after its terraform (else
+        /// <paramref name="ground"/>). The game layer asks this for the live blocks after the build.
+        /// </summary>
+        public static DepthRule RuleOf(AreaPlan plan, Func<float2, float> ground = null)
+        {
+            if (plan?.Facts == null || !plan.Facts.TryGetValue(FactDepth, out double d) || !(d > 0)) return null;
+            var g = plan.HeightAfter ?? ground;
+            float slope = plan.Facts.TryGetValue(FactLevel, out double s) ? (float)s : 0f;
+            return new DepthRule { MaxDepth = (int)Math.Round(d), Level = slope > 0f && g != null ? LevelCell(g, slope) : null };
+        }
+
+        /// <summary>
+        /// A cell is level when the ground 3.5 m either side of its centre (both axes) differs from the centre by no more than
+        /// <paramref name="maxSlope"/> × 3.5 m (+ 5 cm).
+        /// </summary>
+        public static Func<float2, bool> LevelCell(Func<float2, float> ground, float maxSlope)
+        {
+            return c =>
+            {
+                float h = ground(c), lim = maxSlope * 3.5f + 0.05f;
+                return math.abs(ground(c + new float2(3.5f, 0)) - h) <= lim && math.abs(ground(c - new float2(3.5f, 0)) - h) <= lim
+                    && math.abs(ground(c + new float2(0, 3.5f)) - h) <= lim && math.abs(ground(c - new float2(0, 3.5f)) - h) <= lim;
+            };
+        }
+
+        /// <summary>(s52) The cell rectangles of a block the rule zones: runs of columns with the same level depth.</summary>
+        public static List<float2[]> Rects(ZoneGrid g, DepthRule rule)
+        {
+            var r = new List<float2[]>();
+            if (g.Size.x <= 0 || g.Size.y <= 0) return r;
+            if (rule == null) { r.Add(ZoneGuard.CellRect(g, 0, g.Size.x - 1, 0, g.Size.y - 1, -1f)); return r; }
+            int cap = rule.MaxDepth > 0 ? math.min(rule.MaxDepth, g.Size.y) : g.Size.y;
+            var depth = new int[g.Size.x];
+            for (int x = 0; x < g.Size.x; x++)
+            {
+                int d = 0;
+                while (d < cap && (rule.Level == null || rule.Level(ZoneGuard.CellCentre(g, x, d)))) d++;
+                depth[x] = d;
+            }
+            int x0 = 0;
+            for (int x = 1; x <= g.Size.x; x++)
+            {
+                if (x < g.Size.x && depth[x] == depth[x0]) continue;
+                if (depth[x0] > 0) r.Add(ZoneGuard.CellRect(g, x0, x - 1, 0, depth[x0] - 1, -1f));
+                x0 = x;
+            }
+            return r;
+        }
+
+        /// <summary>One zoning quad per predicted zone block of every zoning road in <paramref name="nets"/> (s52: per level part with a rule).</summary>
+        public static List<PlannedZoning> Quads(IEnumerable<PlannedNet> nets, SiteContext site, string zoneId, Func<float2, float> height, DepthRule rule = null)
         {
             var r = new List<PlannedZoning>();
             if (string.IsNullOrEmpty(zoneId) || nets == null) return r;
@@ -45,7 +108,14 @@ namespace Placemaker.Core.Layers.Roads
                 if (n == null || !ZoneBlockPredictor.Zones(n.Role)) continue;
                 if (site?.Assets != null && !string.IsNullOrEmpty(n.Asset.Id) && site.Assets.TryGetValue(n.Asset.Id, out var ai) && ai.ZoneBlocks == 2) continue;
                 foreach (var g in ZoneBlockPredictor.Blocks(n.A, n.B, n.C, n.D, ZoneGuard.NetWidth(n, site)))
-                    r.Add(Whole(g, zoneId, height));
+                {
+                    if (rule == null) { r.Add(Whole(g, zoneId, height)); continue; }
+                    foreach (var q in Rects(g, rule))
+                    {
+                        float3 P(float2 v) => new float3(v.x, height(v), v.y);
+                        r.Add(new PlannedZoning { A = P(q[0]), B = P(q[1]), C = P(q[2]), D = P(q[3]), ZoneId = zoneId });
+                    }
+                }
             }
             return r;
         }
@@ -69,7 +139,8 @@ namespace Placemaker.Core.Layers.Roads
         /// The live blocks that belong to roads of this plan (their owner edge lies on a planned zoning road: both ends and the
         /// middle within <paramref name="tolerance"/> of the same planned curve), each zoned whole.
         /// </summary>
-        public static List<ZoneGuard.ZoningQuad> FromLive(IReadOnlyList<PlannedNet> nets, IReadOnlyList<LiveBlock> blocks, string zoneId, float tolerance = 1.5f)
+        public static List<ZoneGuard.ZoningQuad> FromLive(IReadOnlyList<PlannedNet> nets, IReadOnlyList<LiveBlock> blocks, string zoneId, float tolerance = 1.5f,
+            DepthRule rule = null)
         {
             var r = new List<ZoneGuard.ZoningQuad>();
             if (nets == null || blocks == null || string.IsNullOrEmpty(zoneId)) return r;
@@ -93,7 +164,8 @@ namespace Placemaker.Core.Layers.Roads
                     if (c.DistanceXZ(a, out _) <= tolerance && c.DistanceXZ(m, out _) <= tolerance && c.DistanceXZ(d, out _) <= tolerance) { ours = true; break; }
                 }
                 if (!ours || b.Grid.Size.x <= 0 || b.Grid.Size.y <= 0) continue;
-                r.Add(new ZoneGuard.ZoningQuad { Corners = ZoneGuard.CellRect(b.Grid, 0, b.Grid.Size.x - 1, 0, b.Grid.Size.y - 1, -1f), ZoneId = zoneId });
+                // (s52) Terraces: only the level rows of the block.
+                foreach (var q in Rects(b.Grid, rule)) r.Add(new ZoneGuard.ZoningQuad { Corners = q, ZoneId = zoneId });
             }
             return r;
         }

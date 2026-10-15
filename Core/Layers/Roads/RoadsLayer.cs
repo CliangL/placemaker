@@ -219,6 +219,23 @@ namespace Placemaker.Core.Layers.Roads
                 // The straight grid, whatever the ground does.
                 P("strict-grid", null, (RoadsIds.Pattern, "grid"), (RoadsIds.GridSpacing, 100.0), (RoadsIds.TerrainFit, "ignore"),
                     (RoadsIds.Walkways, 30.0), (RoadsIds.JunctionSpacing, 0.0)),
+                // (s52) Hillside terraces. Contour streets on level terraces four cells deep, graded banks, links straight up or
+                // diagonal, stair-free bank walks, houses pre-zoned on the level cells.
+                P("terraced-hillside", "quiet", (RoadsIds.Pattern, "terraces"), (RoadsIds.TerraceCells, 4.0), (RoadsIds.TerraceLinks, "direct"),
+                    (RoadsIds.TerraceLinkSpacing, 300.0), (RoadsIds.Walkways, 60.0), (RoadsIds.WalkwayStyle, "mixed"), (RoadsIds.MaxGrade, 9.0),
+                    (RoadsIds.PreZone, Common.ZoneKinds.ResidentialLow)),
+                // Narrower terraces climbed by switchbacks, dirt trails down the banks, grassy turning circles.
+                P("serpentine-village", "quiet", (RoadsIds.Pattern, "terraces"), (RoadsIds.TerraceCells, 3.0), (RoadsIds.TerraceLinks, "serpentine"),
+                    (RoadsIds.TerraceLinkSpacing, 260.0), (RoadsIds.Walkways, 70.0), (RoadsIds.WalkwayStyle, "trail"), (RoadsIds.MaxGrade, 8.0),
+                    (RoadsIds.CapStyle, "grass")),
+                // Many narrow terraces on gravel lanes, steep worn faces, switchbacks: the hill reads as a vineyard.
+                P("vineyard-terraces", "country", (RoadsIds.Pattern, "terraces"), (RoadsIds.TerraceCells, 2.0), (RoadsIds.TerraceLinks, "serpentine"),
+                    (RoadsIds.TerraceBank, "wall"), (RoadsIds.TerraceBankSlope, 50.0), (RoadsIds.TerraceFall, 0.5), (RoadsIds.Walkways, 40.0),
+                    (RoadsIds.WalkwayStyle, "trail"), (RoadsIds.TerraceTrees, false), (RoadsIds.MaxGrade, 10.0)),
+                // Deep terraces for apartments, one tree-lined avenue winding up round the hill, paved walks everywhere.
+                P("hill-town", "boulevards", (RoadsIds.Pattern, "terraces"), (RoadsIds.TerraceCells, 5.0), (RoadsIds.TerraceLinks, "spiral"),
+                    (RoadsIds.TerraceAvenues, true), (RoadsIds.TerraceLinkSpacing, 240.0), (RoadsIds.Walkways, 80.0), (RoadsIds.WalkwayStyle, "paved"),
+                    (RoadsIds.MaxGrade, 8.0), (RoadsIds.PreZone, Common.ZoneKinds.ResidentialMedium)),
             };
         }
     }

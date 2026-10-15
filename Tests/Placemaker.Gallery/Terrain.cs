@@ -257,6 +257,69 @@ namespace Placemaker.Gallery
 
         [ThreadStatic] public static float2 LastCurtainAt, LastSeatAt;
 
+        /// <summary>(s52) Cut/fill of the plan's ground (blue cut, red fill, 0.5 m bands, 2 m contours of the final ground) with the nets.</summary>
+        internal static void CutMap(string file, ComposedPlan plan, Func<float2, float> original, Func<float2, float> final, float2 min, float2 max, float ppm,
+            Placemaker.Core.Layers.Roads.Terraces.TerraceGround g = null)
+        {
+            int w = (int)math.ceil((max.x - min.x) * ppm), h = (int)math.ceil((max.y - min.y) * ppm);
+            var cc = new Canvas(w, h, min, ppm, Rgba.Hex("#f4f4f0"), 2);
+            float px = cc.Px(1f);
+            cc.Shade(p =>
+            {
+                float f = final(p);
+                float c = f - original(p);
+                float fx = final(p + new float2(px * 1.5f, 0)), fz = final(p + new float2(0, px * 1.5f));
+                if (math.floor(f / 2f) != math.floor(fx / 2f) || math.floor(f / 2f) != math.floor(fz / 2f)) return new Rgba(0.2f, 0.2f, 0.2f, 0.35f);
+                if (math.abs(c) < 0.1f) return new Rgba(0, 0, 0, 0);
+                float k = math.saturate(math.abs(c) / 5f);
+                float band = (math.floor(math.abs(c) / 0.5f) % 2f) * 0.12f;
+                return c < 0f ? new Rgba(0.15f, 0.35f, 0.85f, 0.25f + 0.6f * k - band) : new Rgba(0.85f, 0.25f, 0.15f, 0.25f + 0.6f * k - band);
+            }, min, max);
+            foreach (var n in plan.Layers.Where(l => l != null).SelectMany(l => l.Nets).Where(n => n != null))
+            {
+                var pts = new List<float2>();
+                for (int i = 0; i <= 16; i++) pts.Add(Composer.Bezier(n.A, n.B, n.C, n.D, i / 16f).xz);
+                bool walk = n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide;
+                cc.StrokePolyline(pts, cc.Px(walk ? 1f : 2f), walk ? Rgba.Hex("#c08020", 0.9f) : Rgba.Hex("#222222", 0.8f));
+            }
+            // Where protected ground clashed (green rings) and the worst road-height gap (magenta).
+            foreach (var l in plan.Layers.Where(l => l != null && l.Facts.ContainsKey("terraces.sloped")))
+            {
+                void Ring(float2 at, float r, string col)
+                {
+                    var c = new float2[24];
+                    for (int k = 0; k < 24; k++) c[k] = at + new float2(math.cos(k * 0.2618f), math.sin(k * 0.2618f)) * r;
+                    cc.StrokePolyline(c, cc.Px(2f), Rgba.Hex(col), closed: true);
+                }
+                for (int i = 0; l.Facts.ContainsKey("terraces.clash" + i + "x"); i++)
+                    Ring(new float2((float)l.Facts["terraces.clash" + i + "x"], (float)l.Facts["terraces.clash" + i + "z"]), 6f, "#10a020");
+                if (l.Facts.TryGetValue("terraces.roadGap", out double gap) && gap > 0.5)
+                    Ring(new float2((float)l.Facts["terraces.roadGapX"], (float)l.Facts["terraces.roadGapZ"]), 9f, "#d020d0");
+            }
+            cc.SavePng(file);
+            if (g?.Grid == null || g.Initial == null || g.Protect == null) return;
+            // Protection map: as planned (terrace green, walk orange, road dark grey), what had to give way (red), locked (blue).
+            var pc = new Canvas(w, h, min, ppm, Rgba.Hex("#f4f4f0"), 1);
+            var sc = g.Grid;
+            pc.Shade(p =>
+            {
+                int i = (int)math.round((p.x - sc.Origin.x) / sc.Cell), j = (int)math.round((p.y - sc.Origin.y) / sc.Cell);
+                if (i < 0 || j < 0 || i >= sc.Nx || j >= sc.Ny) return default;
+                int k = j * sc.Nx + i;
+                if (!sc.Free[k]) return Rgba.Hex("#7090d0", 0.5f);
+                byte a0 = g.Initial[k], a1 = g.Protect[k];
+                if (a0 != 0 && a1 == 0) return Rgba.Hex("#e03020", 0.85f);
+                switch (a0)
+                {
+                    case 1: return Rgba.Hex("#60b050", 0.6f);
+                    case 2: return Rgba.Hex("#e0a030", 0.9f);
+                    case 3: return Rgba.Hex("#404040", 0.8f);
+                    default: return default;
+                }
+            }, min, max);
+            pc.SavePng(file.Replace("-cut.png", "-protect.png"));
+        }
+
         /// <summary>Lambert shade factor of a height field at p (light from the north-west, 45° up).</summary>
         public static float Shade(Func<float2, float> h, float2 p, float e = 0.8f)
         {
