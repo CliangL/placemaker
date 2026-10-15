@@ -65,8 +65,9 @@ namespace Placemaker.Tests
         [Fact]
         public void NoWearUnderAGrassSurface()
         {
-            var covered = Compose(Recipe("park", 7, Set(("groundSurface", true))));
-            var none = Compose(Recipe("park", 7, Set(("groundSurface", true), (DressingControls.PaintWearId, 0.0))));
+            // s33: the park's default lawn is painted terrain; "Grass surface" brings the surface back.
+            var covered = Compose(Recipe("park", 7, Set((DressingControls.LawnId, Lawn.Surface))));
+            var none = Compose(Recipe("park", 7, Set((DressingControls.LawnId, Lawn.Surface), (DressingControls.PaintWearId, 0.0))));
             var bare = Compose(Recipe("park", 7, Set(("groundSurface", false))));
             var bareNone = Compose(Recipe("park", 7, Set(("groundSurface", false), (DressingControls.PaintWearId, 0.0))));
             int onSurface = Paints(covered) - Paints(none), onBare = Paints(bare) - Paints(bareNone);
@@ -74,11 +75,16 @@ namespace Placemaker.Tests
             Assert.True(onSurface < onBare / 2 + 1, $"{onSurface} paints under a grass surface vs {onBare} on bare terrain");
             // Every wear paint centre is off the surfaces.
             var surfaces = covered.Layers.SelectMany(l => l.Surfaces).Where(s => s.Ring.Length >= 3).Select(s => Poly.To2D(s.Ring)).ToList();
-            foreach (var p in covered.Layers.SelectMany(l => l.Paint).Skip(Paints(none)))
+            // s33: wear is a masked field: sample the real raster at points deep inside every surface.
+            var stamps = Placemaker.Core.Build.PaintRaster.Build(covered.Layers.SelectMany(l => l.Paint).Skip(Paints(none)).ToList(),
+                new Placemaker.Core.Build.PaintRasterOptions { Cell = 1f, Align = 1f, TileCells = 1024 });
+            foreach (var s in surfaces)
             {
-                var c = Poly.To2D(p.Ring).Aggregate(float2.zero, (a, b) => a + b) / p.Ring.Length;
-                if (p.GradientFrom != null) continue;   // bands: centre is on the path
-                Assert.DoesNotContain(surfaces, s => Poly.Contains(s, c));
+                var reg = LayerRegion.From(s);
+                if (reg == null || reg.Area < 30f) continue;
+                var c = reg.DeepestPoint(out float ins, null, 8);
+                if (ins < 2.5f) continue;
+                for (int layer = 1; layer <= 4; layer++) Assert.True(Placemaker.Core.Build.PaintRaster.Sample(stamps, layer, c) < 0.05f, $"paint {layer} under a surface at {c}");
             }
         }
 
@@ -100,8 +106,13 @@ namespace Placemaker.Tests
             var gen = GeneratorRegistry.Get("park");
             var wear = gen.Controls.First(c => c.Id == DressingControls.PaintWearId);
             var desire = gen.Controls.First(c => c.Id == DressingControls.DesirePathsId);
-            Assert.Equal(DressingControls.Group, wear.Group);
-            Assert.Equal(DressingControls.Group, desire.Group);
+            // s33: they moved to the "Ground paint" section with the lawn choice, mulch, lawn variation and clear.
+            Assert.Equal(DressingControls.PaintGroup, wear.Group);
+            Assert.Equal(DressingControls.PaintGroup, desire.Group);
+            foreach (var id in new[] { DressingControls.LawnId, DressingControls.MulchId, DressingControls.LawnTintId, DressingControls.ClearPaintId })
+                Assert.Equal(DressingControls.PaintGroup, gen.Controls.First(c => c.Id == id).Group);
+            Assert.Equal(false, gen.Controls.First(c => c.Id == DressingControls.ClearPaintId).Default);
+
             Assert.Equal(ControlKind.Toggle, desire.Kind);
             // A clean formal garden does not trample desire lines by default.
             Assert.Equal(false, GeneratorRegistry.Get("formalGarden").Controls.First(c => c.Id == DressingControls.DesirePathsId).Default);

@@ -1,17 +1,21 @@
 // Placemaker — terrain texture paint as strength fields and brush stamps (GPL-3.0).
 //
-// CS2's material brush (TerrainMaterialSystem.ApplyBrush) blits a brush TEXTURE into the user splatmap with
-// per-texel weight = texture × brush strength (dithered by the PaintSplatmap compute shader, which is what gives
-// the vanilla tool its noisy feathered edge). So any per-point strength can be painted in one call per square
-// stamp: the plan describes a field (PlannedPaint: ring, feather, noise, gradient), this file rasterises it.
+// CS2's material brush (TerrainMaterialSystem.ApplyBrush) blits a brush TEXTURE into the user splatmap. The
+// PaintSplatmap kernel (s33: DXBC disassembled, docs/TERRAIN-PAINT.md) keeps ONE 4-BIT WEIGHT PER MATERIAL per texel
+// (R8 = Extra1 | Extra2 << 4, G8 = Extra3 | Extra4 << 4): PaintDither writes w = max(old, brushAlpha × opacity) for the
+// painted material only, quantised floor(w·15 + 0.25|0.75) with a 2×2 checkerboard; EraseDither writes
+// w = min(old, 1 − brushAlpha) for the tool's channels (Clear: all four). Materials are independent channels, painting
+// is a max (repainting the same value changes nothing), and the terrain shader blends the weights over the procedural
+// base. So any per-point strength is one call per square stamp: the plan describes a field (PlannedPaint ring +
+// feather/noise/gradient, or a Core/Paint PaintShape), this file rasterises it.
 //
 //   * One grid per terrain layer, world aligned (origin on a multiple of Align = one splatmap texel, 3.5 m on a
 //     14.336 km map, cells 1.75 m = half a texel), so stamps of one layer never overlap and their borders fall
-//     between splatmap texels. Paints of the same layer merge by max (painting twice would dither twice).
+//     between splatmap texels. Paints of the same layer merge by max (as the kernel does).
 //   * Square stamps of at most TileCells cells; empty stamps are dropped. If the stamp or cell budget is
 //     exceeded the cell doubles (coarser but bounded) — a build never applies more than MaxStamps brushes.
-//   * Order: erase (layer 0) first, then layers in order of first appearance in the plan (later wins where
-//     two materials overlap, as with the vanilla tool).
+//   * Order: erases first (clear-all, then per-material erases), then paints. Overlapping materials keep both weights;
+//     a Knockout paint weakens the OTHER materials under it so a path through a tinted lawn stays clean.
 // Pure and deterministic: the game builds the stamps on a worker thread and applies one per frame.
 
 using System;
@@ -26,6 +30,8 @@ namespace Placemaker.Core.Build
     public sealed class PaintStamp
     {
         public int Layer;
+        /// <summary>(s33) Erase this material (Layer 1..4) instead of painting it; Layer 0 always clears everything.</summary>
+        public bool Erase;
         public float2 Min;
         public float Cell;
         public int N;
@@ -103,10 +109,11 @@ namespace Placemaker.Core.Build
         /// <summary>Distance inside the ring beyond which the edge factor is 1 (for capped distance queries).</summary>
         public static float InsideReach(PlannedPaint p) => p.Feather > 0f ? p.Feather + 2f * math.max(0f, p.Noise) + 0.01f : LegacyEdge;
 
-        /// <summary>Reference (slow, exact) strength at a point: Strength × edge × gradient.</summary>
+        /// <summary>Reference (slow, exact) strength at a point: Strength × edge × gradient (or Strength × Shape).</summary>
         public static float StrengthAt(PlannedPaint p, float2 at)
         {
             if (p?.Ring == null || p.Ring.Length < 3) return 0f;
+            if (p.Shape != null) return math.saturate(p.Strength) * p.Shape.Sample(at);
             var ring = new float2[p.Ring.Length];
             for (int i = 0; i < ring.Length; i++) ring[i] = p.Ring[i].xz;
             float d = TerraformDabs.DistanceToBoundary(ring, at);
@@ -134,8 +141,34 @@ namespace Placemaker.Core.Build
         private sealed class LayerGrid
         {
             public int Layer, Order;
+            public bool Erase;
             public float2 BMin, BMax;
             public List<PlannedPaint> Paints = new List<PlannedPaint>();
+            public float[] Grid, Knock;
+            public float2 Origin;
+            public int W, H;
+        }
+
+        /// <summary>Support box of one paint (ring, intersected with a bounded shape), padded by what the legacy edge paints outside.</summary>
+        internal static bool Support(PlannedPaint p, out float2 mn, out float2 mx)
+        {
+            mn = float.MaxValue; mx = float.MinValue;
+            foreach (var v in p.Ring)
+            {
+                if (!math.isfinite(v.x) || !math.isfinite(v.z)) return false;
+                mn = math.min(mn, v.xz); mx = math.max(mx, v.xz);
+            }
+            if (p.Shape != null)
+            {
+                if (p.Shape.Bounded) { mn = math.max(mn, p.Shape.Min); mx = math.min(mx, p.Shape.Max); }
+                mn -= 0.5f; mx += 0.5f;
+            }
+            else
+            {
+                float reach = PaintField.OutsideReach(p) + 0.5f;
+                mn -= reach; mx += reach;
+            }
+            return mx.x > mn.x && mx.y > mn.y;
         }
 
         /// <summary>Stamps for every paint, budgeted (see file header). Never null; invalid paints are skipped.</summary>
@@ -152,21 +185,17 @@ namespace Placemaker.Core.Build
                 var p = paints[i];
                 if (p?.Ring == null || p.Ring.Length < 3 || !(p.Strength > 0f)) continue;
                 int layer = math.clamp(p.Layer, 0, 4);
+                bool erase = layer == 0 || p.Erase;
+                if (!Support(p, out var smin, out var smax)) continue;
                 LayerGrid g = null;
-                foreach (var l in layers) if (l.Layer == layer) { g = l; break; }
+                foreach (var l in layers) if (l.Layer == layer && l.Erase == erase) { g = l; break; }
                 if (g == null)
                 {
-                    g = new LayerGrid { Layer = layer, Order = layer == 0 ? -1 : layers.Count, BMin = float.MaxValue, BMax = float.MinValue };
+                    // Erases first (clear-all, then per material), then paints by first appearance.
+                    g = new LayerGrid { Layer = layer, Erase = erase, Order = layer == 0 ? -100 : erase ? -50 + layer : layers.Count, BMin = float.MaxValue, BMax = float.MinValue };
                     layers.Add(g);
                 }
-                float reach = PaintField.OutsideReach(p) + 0.5f;
-                bool finite = true;
-                foreach (var v in p.Ring)
-                {
-                    if (!math.isfinite(v.x) || !math.isfinite(v.z)) { finite = false; break; }
-                }
-                if (!finite) continue;
-                foreach (var v in p.Ring) { g.BMin = math.min(g.BMin, v.xz - reach); g.BMax = math.max(g.BMax, v.xz + reach); }
+                g.BMin = math.min(g.BMin, smin); g.BMax = math.max(g.BMax, smax);
                 g.Paints.Add(p);
             }
             layers.RemoveAll(l => l.Paints.Count == 0);
@@ -190,18 +219,55 @@ namespace Placemaker.Core.Build
                 cell *= 2f;
             }
 
-            // 3. Rasterise each layer (max-merge), cut into square stamps.
+            // 3. Rasterise each layer (max-merge); knockout paints also into the layer's knockout grid.
             foreach (var l in layers)
             {
                 o.Cancel.ThrowIfCancellationRequested();
-                Frame(l, cell, o.Align, out var origin, out int w, out int h);
-                var grid = new float[(long)w * h];
-                foreach (var p in l.Paints) Rasterise(p, grid, origin, cell, w, h, o.Cancel);
+                Frame(l, cell, o.Align, out l.Origin, out l.W, out l.H);
+                l.Grid = new float[(long)l.W * l.H];
+                foreach (var p in l.Paints)
+                {
+                    Rasterise(p, l.Grid, l.Origin, cell, l.W, l.H, o.Cancel);
+                    if (p.Knockout && !l.Erase)
+                    {
+                        l.Knock = l.Knock ?? new float[(long)l.W * l.H];
+                        Rasterise(p, l.Knock, l.Origin, cell, l.W, l.H, o.Cancel);
+                    }
+                }
+            }
+            // 4. Knockouts (s33): a paint marked Knockout weakens every OTHER material under it (other × (1 − k)).
+            //    Grids share cell and alignment, so another layer's cell is an integer offset away.
+            foreach (var l in layers)
+            {
+                if (l.Erase) continue;
+                foreach (var k in layers)
+                {
+                    if (k == l || k.Erase || k.Knock == null) continue;
+                    int dx = (int)math.round((k.Origin.x - l.Origin.x) / cell), dy = (int)math.round((k.Origin.y - l.Origin.y) / cell);
+                    for (int y = 0; y < l.H; y++)
+                    {
+                        int ky = y - dy;
+                        if (ky < 0 || ky >= k.H) continue;
+                        for (int x = 0; x < l.W; x++)
+                        {
+                            int kx = x - dx;
+                            if (kx < 0 || kx >= k.W) continue;
+                            float kv = k.Knock[(long)ky * k.W + kx];
+                            if (kv > 0f) l.Grid[(long)y * l.W + x] *= 1f - kv;
+                        }
+                    }
+                }
+            }
+            // 5. Cut into square stamps.
+            foreach (var l in layers)
+            {
+                var origin = l.Origin; int w = l.W, h = l.H; var grid = l.Grid;
+                l.Knock = null;
                 int t = TileSide(w, h, tile);
                 for (int ty = 0; ty < h; ty += t)
                     for (int tx = 0; tx < w; tx += t)
                     {
-                        var s = new PaintStamp { Layer = l.Layer, Cell = cell, N = t, Min = origin + new float2(tx, ty) * cell, Mask = new float[t * t] };
+                        var s = new PaintStamp { Layer = l.Layer, Erase = l.Erase, Cell = cell, N = t, Min = origin + new float2(tx, ty) * cell, Mask = new float[t * t] };
                         for (int y = 0; y < t && ty + y < h; y++)
                             for (int x = 0; x < t && tx + x < w; x++)
                             {
@@ -213,6 +279,7 @@ namespace Placemaker.Core.Build
                             }
                         if (s.Painted > 0) result.Add(s);
                     }
+                l.Grid = null;
             }
             return result;
         }
@@ -233,6 +300,7 @@ namespace Placemaker.Core.Build
         /// <summary>Writes max(existing, strength) for one paint into the grid.</summary>
         public static void Rasterise(PlannedPaint p, float[] grid, float2 origin, float cell, int w, int h, CancellationToken cancel = default)
         {
+            if (p.Shape != null) { RasteriseShape(p, grid, origin, cell, w, h, cancel); return; }
             var ring = new float2[p.Ring.Length];
             float2 mn = float.MaxValue, mx = float.MinValue;
             for (int i = 0; i < ring.Length; i++) { ring[i] = p.Ring[i].xz; mn = math.min(mn, ring[i]); mx = math.max(mx, ring[i]); }
@@ -288,6 +356,31 @@ namespace Placemaker.Core.Build
             }
         }
 
+        /// <summary>(s33) A shape paint: Strength × Shape at every cell centre of its support box (max-merge).</summary>
+        private static void RasteriseShape(PlannedPaint p, float[] grid, float2 origin, float cell, int w, int h, CancellationToken cancel)
+        {
+            if (!Support(p, out var mn, out var mx)) return;
+            float strength = math.saturate(p.Strength);
+            if (!(strength > 0f)) return;
+            var shape = p.Shape;
+            int x0 = math.max(0, (int)math.floor((mn.x - origin.x) / cell));
+            int x1 = math.min(w - 1, (int)math.ceil((mx.x - origin.x) / cell));
+            int y0 = math.max(0, (int)math.floor((mn.y - origin.y) / cell));
+            int y1 = math.min(h - 1, (int)math.ceil((mx.y - origin.y) / cell));
+            for (int y = y0; y <= y1; y++)
+            {
+                if ((y & 31) == 0) cancel.ThrowIfCancellationRequested();
+                float cz = origin.y + (y + 0.5f) * cell;
+                for (int x = x0; x <= x1; x++)
+                {
+                    float v = strength * shape.Sample(new float2(origin.x + (x + 0.5f) * cell, cz));
+                    if (!(v > 0f)) continue;
+                    long idx = (long)y * w + x;
+                    if (v > grid[idx]) grid[idx] = v;
+                }
+            }
+        }
+
         /// <summary>Area (m²) actually painted (strength above 1/255), for summaries.</summary>
         public static double PaintedArea(IReadOnlyList<PaintStamp> stamps)
         {
@@ -296,11 +389,11 @@ namespace Placemaker.Core.Build
             return a;
         }
 
-        /// <summary>Composite strength of a layer at a point (stamps of one layer never overlap).</summary>
+        /// <summary>Composite strength of a layer at a point (stamps of one layer never overlap). Erase stamps are ignored.</summary>
         public static float Sample(IReadOnlyList<PaintStamp> stamps, int layer, float2 p)
         {
             float v = 0f;
-            foreach (var s in stamps) if (s.Layer == layer) v = math.max(v, s.Sample(p));
+            foreach (var s in stamps) if (s.Layer == layer && !s.Erase) v = math.max(v, s.Sample(p));
             return v;
         }
 
@@ -340,7 +433,7 @@ namespace Placemaker.Core.Build
                             {
                                 var a = s.Min + new float2(runStart, y) * c;
                                 var e = s.Min + new float2(x, y + 1) * c;
-                                result.Add((s.Layer, runLevel, new[] { a, new float2(e.x, a.y), e, new float2(a.x, e.y) }));
+                                result.Add((s.Erase ? 0 : s.Layer, runLevel, new[] { a, new float2(e.x, a.y), e, new float2(a.x, e.y) }));
                             }
                             runStart = x; runLevel = level;
                         }

@@ -101,7 +101,7 @@ namespace Placemaker.Core.Layers.Leisure
                         _occ.Paths.Add(n.A.xz, n.D.xz, hw, 100);
                     }
             }
-            ctx.Surface(_region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            Lawn.Cover(ctx, _region.Ring, AssetMix.One(""));
             ctx.Check();
 
             Frame();

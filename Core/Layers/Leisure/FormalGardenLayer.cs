@@ -63,7 +63,7 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One(""));
             var pts = LeisureKit.Points(gates);
             LeisureKit.FrameToward(region, pts, out var centre, out var axis, out var side, out _, out _);
             region.DeepestPoint(out float ins, null, 12);

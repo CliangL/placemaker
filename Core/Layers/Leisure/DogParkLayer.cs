@@ -60,13 +60,13 @@ namespace Placemaker.Core.Layers.Leisure
 
             // Ground.
             string ground = ctx.S("ground");
-            if (ground == "grass") ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            if (ground == "grass") Lawn.Cover(ctx, region.Ring, AssetMix.One("", ParkArt.Grass));
             else if (ground == "dirt")
             {
                 string cat = LeisureKit.Category(ctx, ctx.S("groundSurface"), AssetCategories.SurfaceDirt, AssetCategories.SurfaceNatural);
                 ctx.Surface(region.Ring, SurfaceRole.Ground, AssetMix.One(ctx.S("groundSurface"), DogArt.Worn), cat ?? AssetCategories.SurfaceNatural);
             }
-            else ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            else Lawn.Cover(ctx, region.Ring, AssetMix.One("", ParkArt.Grass));
 
             // Perimeter fence with openings at the entrances.
             Fence(ctx, gates, fence, 1.6f);

@@ -113,7 +113,7 @@ namespace Placemaker.Core.Layers.Park
             c.Choice("pathStyle", "auto", ControlTier.Essential, "layout", ParkPathStyles.Styles).Tip();
             c.Slider("treeDensity", 26, 0, 150, 1, "perHa", ControlTier.Essential, "planting").Tip();
             c.Slider("furniture", 4, 0, 10, 0.5, "per100m", ControlTier.Essential, "furniture").Tip();
-            c.Asset("surface", AssetCategories.SurfaceGrass, ControlTier.Essential, "ground");
+            c.Asset("surface", AssetCategories.SurfaceGrass, ControlTier.Essential, "ground").When(Lawn.ControlId + "=" + Lawn.Surface);
             c.RandomRange("treeDensity", 10, 60);
             c.RandomRange("furniture", 1.5, 5);
 
@@ -143,7 +143,9 @@ namespace Placemaker.Core.Layers.Park
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "furniture");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "furniture").When("lamps=true");
             c.Asset("binAsset", AssetCategories.Bin, ControlTier.More, "furniture").When("bins=true");
-            c.Toggle("groundSurface", true, ControlTier.More, "ground");
+            // s33: the Lawn choice (Ground paint section) decides; this older toggle only shows (and still turns the surface off) with Lawn = Grass surface.
+            var legacyLawn = c.Toggle("groundSurface", true, ControlTier.More, "ground").When(Lawn.ControlId + "=" + Lawn.Surface);
+            legacyLawn.HideWhenOff = true;
             c.Toggle("naturalGround", false, ControlTier.More, "ground").Tip();
             c.Slider("naturalLayer", 1, 1, 4, 1, "count", ControlTier.More, "ground").When("naturalGround=true").Tip();
             c.Toggle("fence", false, ControlTier.More, "boundary");
@@ -172,7 +174,7 @@ namespace Placemaker.Core.Layers.Park
             c.Chance("bins", 0.9f);
             c.Chance("belt", 0.8f);
             c.Chance("curvedPaths", 0.8f);
-            c.Chance("groundSurface", 0.95f);
+            c.Fixed("groundSurface");
             c.RandomRange("bushDensity", 15, 90);
             c.Chance("bikePath", 0.15f);
             c.RandomRange("smallPaths", 0, 2);
@@ -512,7 +514,7 @@ namespace Placemaker.Core.Layers.Park
             ctx.Check();
 
             // 6. Emit everything.
-            if (ctx.B("groundSurface")) ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(ctx.S("surface")));
+            if (ctx.B("groundSurface")) Lawn.Cover(ctx, region.Ring, AssetMix.One(ctx.S("surface")));
             if (ctx.B("naturalGround")) NaturalGround(ctx, s, lawns, style, amenities);
             float pathLength = ParkPaths.Emit(ctx, s.Curves, s.Gates, TierAssets(ctx));
             if (ctx.B("fence"))

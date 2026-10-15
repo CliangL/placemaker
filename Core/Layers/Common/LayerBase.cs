@@ -327,6 +327,9 @@ namespace Placemaker.Core.Layers.Common
             // s21: a preset promises a look, decals included (an abandoned lot is gritty, a formal garden clean).
             if (Control(Decals.DressingControls.StyleId) != null)
                 p.Values.Values[Decals.DressingControls.StyleId] = Decals.DressingControls.Styles[(int)Decals.DressingProfiles.StyleFor(Id, id)];
+            // s33: and its lawn (a formal park keeps the grass surface, a natural one paints the bare terrain).
+            if (Control(Decals.DressingControls.LawnId) != null && Lawn.DefaultFor(Id, id) is string lawn)
+                p.Values.Values[Decals.DressingControls.LawnId] = lawn;
             foreach (var (k, v) in values) p.Values.Values[k] = v;
             _presets.Add(p);
         }

@@ -161,7 +161,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
             string style = ctx.S("style");
             float spacing = ctx.F("spacing");
             string pathMode = ctx.S("paths");
-            if (ctx.B("lawn")) ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            if (ctx.B("lawn")) Lawn.Cover(ctx, region.Ring, AssetMix.One("", ParkArt.Grass));
 
             // Row frame.
             var rowDir = axis;
@@ -181,7 +181,7 @@ namespace Placemaker.Core.Layers.Types.OrchardPark
                 if (placed.Ok)
                 {
                     glade = placed.Ring; gladeC = placed.Center; gladeR = placed.Size * 0.5f;
-                    if (!ctx.B("lawn")) ctx.Surface(glade, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+                    if (!ctx.B("lawn")) Lawn.Cover(ctx, glade, AssetMix.One("", ParkArt.Grass));
                 }
                 else ctx.Issue(IssueSeverity.Info, "Placemaker.OrchardPark.Issue.NoGlade");
             }

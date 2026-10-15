@@ -918,7 +918,7 @@ namespace Placemaker.Core.Tool
                 }
                 if (l.Paint != null)
                     foreach (var p in l.Paint)
-                        if (p != null) paint += Pricing.PolygonArea(p.Ring ?? Array.Empty<float3>());
+                        if (p != null) paint += p.AreaEstimate > 0f ? p.AreaEstimate : Pricing.PolygonArea(p.Ring ?? Array.Empty<float3>());
             }
             if (ground > 0) list.Add(new LocText("Placemaker.Permanent.Terraform", RoundArea(ground)));
             if (water > 0) list.Add(new LocText("Placemaker.Permanent.Water", RoundArea(water)));

@@ -137,7 +137,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                 axis = region.InwardNormal(gates[0].Segment);
                 side = new float2(-axis.y, axis.x);
             }
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("Grass Surface 01"));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One("Grass Surface 01"));
 
             // 1. Boundary: a natural hedge (hedgerow on) or a tall wooden fence — never the automatic brick wall.
             bool hedgerow = ctx.B("hedgerow");

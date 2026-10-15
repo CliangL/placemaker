@@ -138,6 +138,11 @@ namespace Placemaker.Core
         /// the outline and its paths/layout. Object clearances stay footprint-based on top of it.
         /// </summary>
         public float EdgeMargin = DefaultEdgeMargin;
+        /// <summary>
+        /// (s33) The map's four terrain paint materials (texture names, measured colours, blend settings), captured by the
+        /// game; null = assume the vanilla slots. See Core/Paint/TerrainPalette and docs/TERRAIN-PAINT.md.
+        /// </summary>
+        public Paint.TerrainPalette Terrain;
 
         public const float LayoutScaleMin = 0.25f, LayoutScaleMax = 1.5f, DefaultEdgeMargin = 2f, DefaultLayoutScale = 0.5f;
 
@@ -160,7 +165,7 @@ namespace Placemaker.Core
         public SiteContext WithHeight(Func<float2, float> heightAt) => new SiteContext
         {
             HeightAt = heightAt ?? HeightAt, WaterDepthAt = WaterDepthAt, NearbyNets = NearbyNets, Obstacles = Obstacles, ZoneGrids = ZoneGrids,
-            LeftHandTraffic = LeftHandTraffic, Assets = Assets, LayoutScale = LayoutScale, EdgeMargin = EdgeMargin,
+            LeftHandTraffic = LeftHandTraffic, Assets = Assets, LayoutScale = LayoutScale, EdgeMargin = EdgeMargin, Terrain = Terrain,
         };
     }
 
@@ -760,13 +765,45 @@ namespace Placemaker.Core
         public float GradientFull;
         public float GradientFade;
         public float GradientMin;
+
+        // ── s33: paint toolkit (Core/Paint; docs/TERRAIN-PAINT.md). All optional; not persisted. ──
+
+        /// <summary>
+        /// (s33) Strength field of this paint: strength(p) = Strength × Shape(p). When set, Feather/Noise/Gradient are ignored
+        /// (the shape carries them) and <see cref="Ring"/> is only the support outline (bounds, permanent-area estimate,
+        /// cutting). Immutable and thread-safe (see Core/Paint/PaintShape).
+        /// </summary>
+        public Paint.PaintShape Shape;
+        /// <summary>
+        /// (s33) Erase instead of paint: lowers this material's weight to at most 1 − strength (Layer 1..4: that material only,
+        /// CS2's EraseDither with the material's channel; Layer 0 always clears every material). Erases run before paints.
+        /// </summary>
+        public bool Erase;
+        /// <summary>
+        /// (s33) Where this paint is strong, OTHER materials of the plan are weakened (other × (1 − this)): a dirt path
+        /// through a lush lawn tint stays dirt instead of a muddy mix. The splatmap keeps one 4-bit weight per material.
+        /// </summary>
+        public bool Knockout;
+        /// <summary>(s33) Area (m²) a shape paint actually covers (Core/Paint/PaintKit probes it); 0 = use the ring's area.</summary>
+        public float AreaEstimate;
+
+        /// <summary>(s33) Copy with another outline (cutting); the shape, flags and field settings are kept.</summary>
+        public PlannedPaint WithRing(float3[] ring)
+        {
+            var c = (PlannedPaint)MemberwiseClone();
+            c.Ring = ring ?? Array.Empty<float3>();
+            return c;
+        }
     }
 
     /// <summary>
     /// The terrain texture layers of CS2's "Paint texture" tool (TerraformingPrefabs "Terrain Material Extra 1..4" and
-    /// "Terrain Material Clear"). The four textures come from the map's TerrainRenderSettingsPrefab; on vanilla maps they
-    /// are Dry grass, Lush grass, Dirt and Sand (localised tool names "Material Dry/Lush/Dirt/Sand"). There is no rock
-    /// material: rock is procedural (slope). Custom maps may ship other textures in the same slots.
+    /// "Terrain Material Clear"). The four textures come from the map's TerrainRenderSettingsPrefab; on vanilla maps
+    /// (DefaultTerrainRenderSettings, s33 census) they are 1 Dry grass (grey-olive), 2 "Lush" = a dark FOREST FLOOR
+    /// (darker than the base grass: mulch, woodland, shade), 3 light Dirt (grey-brown, like the procedural base dirt) and
+    /// 4 Sand (grey-beige temperate sand, not yellow). There is no rock material: rock is procedural (slope). Custom maps
+    /// may put other textures in the slots: plans write these vanilla intents and Paint.TerrainPalette.Remap sends them to
+    /// the matching slot of the current map. See docs/TERRAIN-PAINT.md.
     /// </summary>
     public static class TerrainMaterials
     {

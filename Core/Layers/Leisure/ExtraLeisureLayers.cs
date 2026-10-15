@@ -51,7 +51,7 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One(""));
             var c = region.DeepestPoint(out float ins, null, 14);
             float r = math.max(6f, ins * math.sqrt(ctx.F("paved") / 100f));
             var pad = region.InsetVertices(math.max(1f, ins - r));
@@ -147,7 +147,7 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One("", ParkArt.Grass));
             var graph = ParkPathStyles.Formal(region, LeisureKit.Points(gates), p => region.ContainsDisc(p, 2f));
             var curves = ParkPaths.Build(graph, region, false, "narrow");
             ParkPaths.Index(curves, occ.Corridors, 100);
@@ -270,7 +270,7 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, new AssetRef("", "Grass Surface 01"));
+            Lawn.Cover(ctx, region.Ring, new AssetRef("", "Grass Surface 01"));
             string picked = ctx.S("pathAsset");
             var spineAsset = string.IsNullOrEmpty(picked) ? new AssetRef("", "PedestrianPathWithBikeLanes") : AssetMix.One(picked);
             var spine = NaturalPaths(ctx, occ, gates, 0, 4f, 40f, string.IsNullOrEmpty(picked) ? "wide" : "narrow", spineAsset);

@@ -60,7 +60,7 @@ namespace Placemaker.Core.Layers.Leisure
             var region = ctx.LayerRegion;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One(""));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One(""));
             var pathAsset = AssetMix.One(ctx.S("pathAsset"));
             LeisureKit.Frame(region, out var centre, out var axis, out var side, out _, out float minor);
             float w = ctx.F("plotWidth"), d = ctx.F("plotDepth");

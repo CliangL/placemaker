@@ -170,7 +170,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 PathAsset = AssetMix.One(ctx.S("pathAsset")),
             };
             var gates = Gates(ctx);
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("", ParkArt.Grass));
+            Lawn.Cover(ctx, region.Ring, AssetMix.One("", ParkArt.Grass));
             bool trail = ctx.S("style") == "sculpture";
             float vista = 0f;
             float2 vistaA = default, vistaB = default;
