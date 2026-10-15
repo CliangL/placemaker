@@ -167,11 +167,5 @@ namespace Placemaker.Core.Layers.Commercial
             }
             if (!ok && !mall.FillOpen(strip, "plaza", null, doors, null, 0xE06u)) mall.Green(strip, 0xE07u, 8f);
         }
-
-        protected override void FillRest(LayerContext ctx, Mall mall)
-        {
-            OverflowLots(ctx, mall, 0xE90u);
-            GreenRest(ctx, mall, "pocket", false, 0xE80u);
-        }
     }
 }

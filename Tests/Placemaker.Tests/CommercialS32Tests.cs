@@ -69,7 +69,7 @@ namespace Placemaker.Tests
                             yield return new object[] { t, p, s };
         }
 
-        private static ComposedPlan Compose(string type, string preset, string siteName, out SiteContext site, uint seed = 5)
+        internal static ComposedPlan Compose(string type, string preset, string siteName, out SiteContext site, uint seed = 5)
         {
             var ring = Site(siteName);
             site = ZoningCutoutTests.Streets(ring);

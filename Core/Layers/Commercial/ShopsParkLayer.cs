@@ -43,7 +43,7 @@ namespace Placemaker.Core.Layers.Commercial
             c.Choice("parkStyle", "urban", ControlTier.More, "layout", "urban", "pocket", "natural", "formal", "modern").Tip();
             Shared(c.Choice("lot", "small", ControlTier.Essential, "parking", "none", "small")).Tip();
             // The car park is always one aisle deep (no lot size); its options only matter while there is one.
-            CommonControls(c, ZoneKinds.CommercialLow, 16, null, true, "lot=small");
+            CommonControls(c, ZoneKinds.CommercialLow, 16, null, true, "lot=small", green: false);
             c.Fixed("layout");
         }
 
@@ -95,17 +95,27 @@ namespace Placemaker.Core.Layers.Commercial
             mall.Doors.AddRange(res.Doors);
         }
 
+        protected override bool KeepsPark(LayerContext ctx) => true;
+
         protected override void FillRest(LayerContext ctx, Mall mall)
         {
+            // (s50) The park is the largest leftover; the rest of the leftovers are lot.
+            var core = HoldParkCore(mall, 0.42f);
+            RestLots(ctx, mall, 0xD90u, 300f, core == null);
+            mall.Release(core);
             var doors = Doors(mall);
             uint k = 0;
             foreach (var (piece, strip) in mall.RestSplit(150f))
             {
                 ctx.Check();
                 bool main = k == 0 && !strip;
-                if (strip || (!main && mall.IsStrip(piece)) || !mall.Fill(piece, "park", main ? ctx.S("parkStyle") : "pocket", doors, 0xD00u + k)) mall.Buffer(piece, 0xD80u + k);
+                // A walk along the park's edge must not touch the zone cells of a plot beside it: the park keeps off the plots.
+                var apart = strip ? new List<float2[]>() : mall.KeepOffPlots(piece, 3.2f);
+                var parkRing = apart.Count > 0 ? apart[0] : piece;
+                if (strip || (!main && mall.IsStrip(piece)) || !mall.Fill(parkRing, "park", main ? ctx.S("parkStyle") : "pocket", doors, 0xD00u + k)) mall.Buffer(piece, 0xD80u + k);
                 k++;
             }
+            LotEdges(ctx, mall, 0xDC0u);
         }
     }
 }

@@ -42,7 +42,7 @@ namespace Placemaker.Core.Layers.Commercial
         protected override string[] DefaultFeatures => Array.Empty<string>();
 
         /// <summary>Zone type, plot depth and the parking options shared by every commercial type.</summary>
-        protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "", double maxDepth = 40)
+        protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "", double maxDepth = 40, bool green = true)
         {
             var z = EdgeZoningAddOn.ZoneKindControl("zoneKind", "shops", zone);
             c.List.Add(z);
@@ -55,6 +55,8 @@ namespace Placemaker.Core.Layers.Commercial
                 Shared(c.Slider("evShare", 4, 0, 30, 1, "%", ControlTier.More, "parking")).Tip().When(lotWhen);
                 Shared(c.Toggle("lamps", true, ControlTier.More, "parking")).When(lotWhen);
             }
+            // (s50) The park is not part of a shopping area: an optional extra, off unless the type has a park by design.
+            if (green) Shared(c.Toggle("extraGreen", false, ControlTier.More, "layout")).Tip();
             c.Fixed("zoneKind");
             c.Fixed("plotDepth");
         }
@@ -96,6 +98,9 @@ namespace Placemaker.Core.Layers.Commercial
             Compose(ctx, mall, runs);
             if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * 0.25f) ComposeMore(ctx, mall, runs);
             ctx.Check();
+            // (s50) Lot first: the shop rows, access alleys and lots the composition did not reach.
+            LotFirst(ctx, mall, runs);
+            ctx.Check();
             // (s40) Zoning first: street plots become their real cells before the rest is planned around them.
             mall.SnapStreetPlotsToCells();
             FillRest(ctx, mall);
@@ -112,7 +117,7 @@ namespace Placemaker.Core.Layers.Commercial
         /// (s46) The composition only works one frontage (the longest). When most of the site is still free afterwards (a
         /// block with curved or angled streets, whose straight pieces are short), the same composition is tried on the
         /// other frontages, longest first — whatever fits (lot, lane and shops, or at least the shop row) — so the site is
-        /// not left to a park. A piece that finds its land taken is skipped (every kit call checks the land it needs).
+        /// not left over. A piece that finds its land taken is skipped (every kit call checks the land it needs).
         /// </summary>
         private void ComposeMore(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
         {
@@ -130,7 +135,6 @@ namespace Placemaker.Core.Layers.Commercial
                 for (int i = 0; i < runs.Count; i++) if (i != k) order.Add(runs[i]);
                 Compose(ctx, mall, order);
             }
-            if (mall.TakenArea() < total * 0.5f) ctx.Issue(IssueSeverity.Info, RestKey);
         }
 
         /// <summary>Compose another frontage while less than this share of the site is taken.</summary>
@@ -138,19 +142,184 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>A longest straight frontage shorter than this (m) is a curved or cut-up block: every frontage gets its composition.</summary>
         private const float CurvedFrontage = 110f;
 
-        /// <summary>What is left becomes small parks (pocket style); slivers stay bare ground.</summary>
-        protected virtual void FillRest(LayerContext ctx, Mall mall)
+        // ───────────── (s50) lot first ─────────────
+
+        /// <summary>The planted strip between a street and the first plots of an access alley leaving it (m).</summary>
+        public const float AlleyForecourt = 4f;
+        /// <summary>Shortest free stretch of street frontage that gets plots in the lot-first pass (m).</summary>
+        private const float StreetRowMin = 48f;
+
+        /// <summary>Does this type put a park in what is left over (by design, or the "Green" extra)?</summary>
+        protected virtual bool KeepsPark(LayerContext ctx) => ctx.B("extraGreen");
+
+        /// <summary>Does the lot-first pass put plot rows on the street frontage the composition left free? (The retail park keeps its pads and boxes as designed.)</summary>
+        protected virtual bool RowsOnFreeFrontage => true;
+
+        /// <summary>
+        /// (s50) The lot is the base of a commercial site: every street frontage the composition left free gets shop rows
+        /// round an access alley (shops on both sides, running in from the street to the lot behind), the free frontage
+        /// between the alleys gets plots, and the land behind is planned as a parking lot of its own shape, entered from the
+        /// alley's end (or a street). What no lot can use stays for <see cref="FillRest"/>.
+        /// </summary>
+        protected virtual void LotFirst(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
         {
-            OverflowLots(ctx, mall);
-            uint k = 0;
-            foreach (var (piece, strip) in mall.RestSplit(150f))
+            int cells = Cells(ctx);
+            var alleys = AccessAlleys(ctx, mall, runs, cells);
+            ctx.Check();
+            if (RowsOnFreeFrontage) mall.StreetRows(runs, cells, null, 3, 2, StreetRowMin);
+            // A type with a park keeps its biggest leftover for it: lots come after the park is chosen (FillRest).
+            if (KeepsPark(ctx)) { DropDeadAlleys(mall, alleys, runs, cells); return; }
+            RestLots(ctx, mall, 0xB00u, 400f, false, true);
+            if (DropDeadAlleys(mall, alleys, runs, cells)) RestLots(ctx, mall, 0xB40u, 400f, false, true);
+        }
+
+        /// <summary>An access alley and the plots along it (so it can be taken back).</summary>
+        protected sealed class Alley
+        {
+            public Mall.Lane Lane;
+            public List<float2[]> Rows = new List<float2[]>();
+        }
+
+        /// <summary>
+        /// A car lane never dead-ends: an access alley whose end no lot joined (no lot behind it could be planned, or a stall was in
+        /// the way of its stub) is taken back with its plots, and the frontage it held goes to street plots instead.
+        /// </summary>
+        private static bool DropDeadAlleys(Mall mall, List<Alley> alleys, List<StreetShops.Run> runs, int cells)
+        {
+            bool dropped = false;
+            foreach (var a in alleys)
+            {
+                var end = a.Lane.Points[a.Lane.Points.Count - 1];
+                bool joined = false;
+                foreach (var n in mall.Ctx.Plan.Nets)
+                    if (math.distance(n.A.xz, end) < 0.3f || math.distance(n.D.xz, end) < 0.3f) { joined = true; break; }
+                if (joined) continue;
+                mall.Remove(a.Lane);
+                foreach (var r in a.Rows) { mall.Shops.Remove(r); mall.Taken.Remove(r); mall.ShopZone.Remove(r); }
+                dropped = true;
+            }
+            if (dropped) mall.StreetRows(runs, cells, null, 3, 2, StreetRowMin);
+            return dropped;
+        }
+
+        /// <summary>
+        /// Access alleys: on every run, one every ~100 m, a short lane straight in from the street with a row of plots on each
+        /// side, ending where the land behind is deep enough for a lot (the lot is planned later from the leftover piece).
+        /// </summary>
+        protected List<Alley> AccessAlleys(LayerContext ctx, Mall mall, List<StreetShops.Run> runs, int cells)
+        {
+            var list = new List<Alley>();
+            var (asset, h) = Mall.ShopLane(ctx);
+            float d = cells * Mall.Cell;
+            foreach (var r in runs)
             {
                 ctx.Check();
-                // Thin arms (beside a lane leg, behind a row) are a planted buffer, not a park with paths hugging the edge.
-                if (strip || mall.IsStrip(piece) || !mall.Fill(piece, "park", "pocket", Doors(mall), 0x900u + k)) mall.Buffer(piece, 0x980u + k);
-                k++;
+                float from = r.From + (r.StartCorner ? Mall.CornerClear : 2f), to = r.To - (r.EndCorner ? Mall.CornerClear : 2f);
+                float span = to - from;
+                float need = 2f * (h + d) + 2f * Mall.Cell;
+                if (span < need + 8f) continue;
+                int n = span > 280f ? 3 : span > 150f ? 2 : 1;
+                for (int k = 0; k < n; k++)
+                {
+                    float m = from + span * (k + 0.5f) / n;
+                    float reach = mall.ReachAt(r, m);
+                    // The alley needs the rows' depth and a lot (one aisle at least) behind it.
+                    float lane = math.min(math.floor((reach - Mall.LotDepth(1) - 2f) / Mall.Cell) * Mall.Cell, 6f * Mall.Cell);
+                    if (lane < d + Mall.Cell) continue;
+                    var foot = Mall.Rect(r, m - h - d - 1f, m + h + d + 1f, 0f, lane);
+                    if (!mall.Fits(foot)) continue;
+                    var al = mall.AddLane(r.At(m, 0f), -r.In, new[] { r.At(m, lane) }, null, default, NetRole.Alley, asset, h);
+                    if (al == null) continue;
+                    var entry = new Alley { Lane = al };
+                    int before = mall.Shops.Count;
+                    mall.LaneRows(al, cells, null, 0, mall.GateTrim(al, true, AlleyForecourt), 0f, 3, 2);
+                    for (int i = before; i < mall.Shops.Count; i++) entry.Rows.Add(mall.Shops[i]);
+                    list.Add(entry);
+                }
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Lots on what is left: every piece of at least <paramref name="minArea"/> that a street or lane can reach becomes a
+        /// parking lot of its own shape (largest first; each lot changes what is left, so the pieces are found again).
+        /// <paramref name="keepLargest"/>: the largest piece stays free (for a park).
+        /// </summary>
+        protected static void RestLots(LayerContext ctx, Mall mall, uint salt, float minArea = 500f, bool keepLargest = false, bool openAccess = false)
+        {
+            var failed = new HashSet<long>();
+            for (int pass = 0; pass < 24; pass++)
+            {
+                ctx.Check();
+                bool any = false;
+                var pieces = mall.RestPieces(minArea);
+                int skip = keepLargest ? 1 : 0;
+                for (int i = skip; i < pieces.Count; i++)
+                {
+                    var piece = pieces[i];
+                    var c = Poly.Centroid(piece);
+                    long key = ((long)(Poly.Area(piece) * 10f) * 73856093L) ^ ((long)(c.x * 100f) * 19349663L) ^ ((long)(c.y * 100f) * 83492791L);
+                    if (failed.Contains(key)) continue;
+                    // Shut in by plots: give back the smallest plot that touches it and a street.
+                    if (openAccess && Poly.Area(piece) >= 1200f) { var parts = Mall.Smooth(piece); var basis = parts.Count > 0 ? parts[0] : piece; if (Poly.Area(basis) >= 1200f && mall.Entries(basis).Count == 0 && mall.OpenAccess(basis)) { any = true; break; } }
+                    if (mall.PolyLot(piece, Mall.Parking(ctx), salt + (uint)pass * 0x10u + (uint)i)) { any = true; break; }
+                    failed.Add(key);
+                }
+                if (!any) break;
             }
         }
+
+        /// <summary>
+        /// (s50) A park by design may take at most <paramref name="maxShare"/> of the site: when the largest leftover is bigger, its
+        /// middle (the leftover shrunk until it fits the share) is held for the park and the band round it goes to lots and
+        /// shops. Returns the held ring (give it to <see cref="Mall.Release"/> before planting the park), or null.
+        /// </summary>
+        protected static float2[] HoldParkCore(Mall mall, float maxShare)
+        {
+            var pieces = mall.RestPieces(500f);
+            if (pieces.Count == 0) return null;
+            var big = pieces[0];
+            float cap = mall.Region.Area * maxShare;
+            if (Poly.Area(big) <= cap) return null;
+            for (float w = 8f; w <= 64f; w += 4f)
+            {
+                float2[] best = null; float bestA = 0f;
+                try
+                {
+                    foreach (var c in Poly.Offset(big, w, OffsetJoin.Miter))
+                        if (c?.Outer != null && c.Outer.Length >= 3 && Poly.Area(c.Outer) > bestA) { bestA = Poly.Area(c.Outer); best = c.Outer; }
+                }
+                catch (System.Exception) { }
+                if (best == null) return null;
+                if (bestA <= cap) return mall.Hold(best);
+            }
+            return null;
+        }
+
+        /// <summary>The lots' planted edges: what no lot could use is lawn and trees, never paths (a buffer, not a park).</summary>
+        protected static void LotEdges(LayerContext ctx, Mall mall, uint salt = 0x980u)
+        {
+            uint k = 0;
+            foreach (var piece in mall.Rest(60f))
+            {
+                ctx.Check();
+                mall.Buffer(piece, salt + k++);
+                ctx.Plan.Facts["lotEdges"] = (ctx.Plan.Facts.TryGetValue("lotEdges", out var le) ? le : 0.0) + Poly.Area(piece);
+            }
+        }
+
+        /// <summary>
+        /// (s50) What is left after the lots: more lot, then planted edges. A park only where the type has one by design
+        /// (they override this) or the "Green" extra asks for one (the largest wide leftover piece, like the s32 types').
+        /// </summary>
+        protected virtual void FillRest(LayerContext ctx, Mall mall)
+        {
+            bool park = KeepsPark(ctx);
+            RestLots(ctx, mall, 0xB80u, 220f, park);
+            if (park) GreenRest(ctx, mall, "pocket", false, 0x900u);
+            LotEdges(ctx, mall);
+        }
+
 
         /// <summary>
         /// (s32) What is left, for the s32 types: wide parts become parks whose walks open onto the lanes beside them (the
@@ -184,92 +353,6 @@ namespace Placemaker.Core.Layers.Commercial
             return list;
         }
 
-
-        /// <summary>
-        /// (s46) Overflow parking: a wide part of what is left that touches a lane (or a street) of the mall becomes one more
-        /// car park entered from it — a strip mall is mostly lot, lane and shops, the park only takes the true leftovers
-        /// (playtest s46: a 3 ha block came out 95 % park). Pieces under <paramref name="minArea"/> stay for the green fill.
-        /// </summary>
-        protected static void OverflowLots(LayerContext ctx, Mall mall, uint salt = 0xB00u, float minArea = 1400f)
-        {
-            for (int pass = 0; pass < 4; pass++)
-                if (!OverflowPass(ctx, mall, salt + (uint)pass * 0x10u, minArea)) break;
-        }
-
-        private static bool OverflowPass(LayerContext ctx, Mall mall, uint salt, float minArea)
-        {
-            var roads = StreetFrontage.Roads(ctx.Input);
-            bool any = false;
-            uint k = 0;
-            foreach (var (piece, strip) in mall.RestSplit(150f))
-            {
-                ctx.Check();
-                k++;
-                if (strip || mall.IsStrip(piece) || Poly.Area(piece) < minArea) continue;
-                // The nearest thing to enter from: a lane of the mall (alley stub) or a street (connector).
-                float2 at = default, dir = default; string kind = null; float bestD = float.MaxValue;
-                foreach (var lane in mall.Lanes)
-                {
-                    if (lane.Role != NetRole.Alley) continue;
-                    for (int i = 0; i + 1 < lane.Points.Count; i++)
-                        Nearest(piece, lane.Points[i], lane.Points[i + 1], lane.Half, 6f, "alley", ref bestD, ref at, ref dir, ref kind);
-                }
-                if (kind == null)
-                    foreach (var r in roads)
-                        Nearest(piece, r.A, r.B, r.HalfWidth, 10f, "entrance", ref bestD, ref at, ref dir, ref kind);
-                if (kind == null) continue;
-                var n = new float2(-dir.y, dir.x);
-                if (!Poly.Contains(piece, at + n * 6f)) n = -n;
-                if (!Poly.Contains(piece, at + n * 6f)) continue;
-                // The biggest rectangle with one side on the entrance line that fits the piece and the free land.
-                float2[] best = null; float bestArea = 0f;
-                for (float w = 140f; w >= 32f; w -= 12f)
-                    for (float t = 96f; t >= 24f; t -= 12f)
-                    {
-                        if (w * t <= bestArea) continue;
-                        for (float off = -w * 0.5f + 8f; off <= w * 0.5f - 8f + 0.01f; off += w * 0.25f)
-                        {
-                            float s0 = off - w * 0.5f;
-                            var rect = Poly.EnsureCcw(new[] { at + dir * s0, at + dir * (s0 + w), at + dir * (s0 + w) + n * t, at + dir * s0 + n * t });
-                            if (!mall.Fits(rect)) continue;
-                            if (!InsidePiece(piece, rect)) continue;
-                            best = rect; bestArea = w * t; break;
-                        }
-                    }
-                if (best == null) continue;
-                if (mall.Lot(best, new List<(float2, string)> { (at, kind) }, Mall.Parking(ctx), salt + k)) any = true;
-            }
-            return any;
-        }
-
-        private static bool InsidePiece(float2[] piece, float2[] rect)
-        {
-            foreach (var p in rect) if (!Poly.Contains(piece, p + math.normalizesafe(Poly.Centroid(rect) - p) * 0.3f)) return false;
-            try
-            {
-                var common = Poly.Boolean(new[] { (IReadOnlyList<float2>)piece }, new[] { (IReadOnlyList<float2>)rect }, BoolOp.Intersection);
-                float a = 0f;
-                foreach (var g in common) a += Poly.Area(g.Outer);
-                return a >= Poly.Area(rect) - 2f;
-            }
-            catch (Exception) { return false; }
-        }
-
-        /// <summary>Is the outline of <paramref name="piece"/> within <paramref name="reach"/> m of the kerb of this segment? Keeps the closest.</summary>
-        private static void Nearest(float2[] piece, float2 a, float2 b, float half, float reach, string kind, ref float bestD, ref float2 at, ref float2 dir, ref string bestKind)
-        {
-            for (int i = 0; i < piece.Length; i++)
-            {
-                float2 p0 = piece[i], p1 = piece[(i + 1) % piece.Length];
-                int n = math.max(1, (int)math.ceil(math.distance(p0, p1) / 2f));
-                for (int s = 0; s <= n; s++)
-                {
-                    var p = math.lerp(p0, p1, (float)s / n);
-                    float d = math.sqrt(SegmentIndex.DistSq(p, a, b)) - half;
-                    if (d < reach && d < bestD) { bestD = d; at = p; dir = math.normalizesafe(b - a); bestKind = kind; }
-                }
-            }
-        }
 
         protected static int Cells(LayerContext ctx) => Mall.Cells(ctx.Raw("plotDepth"));
 

@@ -21,6 +21,7 @@ namespace Placemaker.Core.Layers.Commercial
         public override string Icon => "Media/Game/Icons/ZoneCommercial.svg";
         public override float MinArea => 9000f;
         protected override float GradeTolerance => 0.04f;
+        protected override bool RowsOnFreeFrontage => false;
 
         public static readonly string[] Styles = { "horseshoe", "twin" };
         public static readonly string[] Units = { "small", "medium", "large" };
@@ -176,12 +177,6 @@ namespace Placemaker.Core.Layers.Commercial
                 if (half < Mall.Cell * 0.5f) continue;
                 mall.Row(r, mid - half, mid + half, 0f, 3, 1f, ZoneKinds.CommercialLow, 2, 2);
             }
-        }
-
-        protected override void FillRest(LayerContext ctx, Mall mall)
-        {
-            OverflowLots(ctx, mall, 0xF90u);
-            GreenRest(ctx, mall, "pocket", false, 0xF80u);
         }
     }
 }

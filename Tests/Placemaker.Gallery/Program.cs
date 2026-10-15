@@ -67,6 +67,7 @@ namespace Placemaker.Gallery
                     case "--scale": Renderer.LayoutScale = float.Parse(next, System.Globalization.CultureInfo.InvariantCulture); i++; break;
                     case "--areas": Variants.Areas = next.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture)).ToArray(); i++; break;
                     case "--shapes": Variants.Shapes = next.Split(','); i++; break;
+                    case "--sites": Variants.Sites = next.Split(','); i++; break;   // (s50) commercial review sites: square, halfcurved, curved
                     case "--palettes": Variants.Palettes = true; break;
                     case "--presets": Variants.PresetFilter = new HashSet<string>(next.Split(','), StringComparer.OrdinalIgnoreCase); i++; break;
                     case "--no-features": Variants.NoFeatureVariants = true; break;
@@ -208,6 +209,8 @@ namespace Placemaker.Gallery
         public float TargetArea;
         /// <summary>Site shape (--shapes): "" = the default irregular site, else triangle, sliver, square, L.</summary>
         public string Shape = "";
+        /// <summary>(s50) Commercial review site (CommercialSites.Kinds), null = the default / shaped site.</summary>
+        public string Site;
         /// <summary>(s33) Map palette for this job (PaintView.ForMap), null = --map / vanilla.</summary>
         public string Map;
         /// <summary>(s33) A hand-built plan instead of a recipe (the toolkit sheet).</summary>
@@ -220,6 +223,8 @@ namespace Placemaker.Gallery
         public static float[] Areas;
         /// <summary>--shapes triangle,sliver,square,L: render every job on each of these site shapes (s18).</summary>
         public static string[] Shapes;
+        /// <summary>(s50) --sites square,halfcurved,curved: every job on each of these commercial review sites (CommercialSites: streets all round, captured zone blocks).</summary>
+        public static string[] Sites;
         /// <summary>--palettes: one image per ground palette for every type with a "palette" control (s18).</summary>
         public static bool Palettes;
         /// <summary>--presets a,b: only these preset variants (plus default) — keeps size/shape sweeps small.</summary>
@@ -394,6 +399,15 @@ namespace Placemaker.Gallery
                 foreach (var j in jobs)
                     foreach (var ha in Areas)
                         expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "-" + ha.ToString("0.###", CultureInfo.InvariantCulture) + "ha", Title = j.Title + " " + ha + " ha", Recipe = j.Recipe.Clone(), TargetArea = ha * 10000f });
+                jobs = expanded;
+            }
+            if (Sites != null && Sites.Length > 0)
+            {
+                // (s50) The commercial review sites: square (the job's area, 2.9 ha unless --areas), half curved, fully curved.
+                var expanded = new List<Job>();
+                foreach (var j in jobs)
+                    foreach (var s in Sites)
+                        expanded.Add(new Job { Type = j.Type, Variant = s + "-" + j.Variant, Title = s + " " + j.Title, Recipe = j.Recipe.Clone(), TargetArea = Areas != null && Areas.Length > 0 ? j.TargetArea : 29000f, Site = s });
                 jobs = expanded;
             }
             if (Shapes != null && Shapes.Length > 0)
@@ -611,7 +625,8 @@ namespace Placemaker.Gallery
         {
             var res = new Result();
             bool shaped = !string.IsNullOrEmpty(job.Shape);
-            var ring = shaped ? Shaped(job.Shape, job.TargetArea) : Showcase ? Square(job.TargetArea) : Site(job.TargetArea);
+            SiteContext siteKind = null;
+            var ring = job.Site != null ? CommercialSites.Make(job.Site, job.TargetArea, out siteKind) : shaped ? Shaped(job.Shape, job.TargetArea) : Showcase ? Square(job.TargetArea) : Site(job.TargetArea);
             (float3[] ring, ComposedPlan plan) custom = default;
             if (job.Custom != null) { custom = job.Custom(); ring = custom.ring; }
             _toolkit = job.Custom != null;
@@ -621,7 +636,8 @@ namespace Placemaker.Gallery
             string map = job.Map ?? MapPalette;
             _palette = PaintView.ForMap(map);
             if (!string.IsNullOrEmpty(map)) site.Terrain = _palette;
-            if (Showcase || shaped) site.NearbyNets = RoadsAround(ring);
+            if (siteKind != null) { site.NearbyNets = siteKind.NearbyNets; site.ZoneGrids = siteKind.ZoneGrids; }
+            else if (Showcase || shaped) site.NearbyNets = RoadsAround(ring);
             _waterZ = float.NaN;
             if (WaterTypes != null && (WaterTypes.Contains(job.Type) || WaterTypes.Contains(job.Type + "/" + job.Variant)))
             {
@@ -672,7 +688,7 @@ namespace Placemaker.Gallery
                 if (job.Custom != null) plan = custom.plan;
                 else
                 {
-                    if (Showcase || shaped) ApplySuggestedMarkers(job.Recipe, ring, site);
+                    if (Showcase || shaped || siteKind != null) ApplySuggestedMarkers(job.Recipe, ring, site);
                     AddMarkersIfNeeded(job.Recipe, ring);
 
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));

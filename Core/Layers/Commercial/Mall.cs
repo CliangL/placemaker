@@ -82,7 +82,6 @@ namespace Placemaker.Core.Layers.Commercial
         public int Stalls, EvStalls;
         /// <summary>Extra outline points green pieces should open towards (lane dead ends of a shop layout).</summary>
         public readonly List<float2> Doors = new List<float2>();
-        private readonly Dictionary<long, (Lane lane, int seg)> _synthetic = new Dictionary<long, (Lane, int)>();
         private readonly List<(float2[] ring, Func<float2, float> height)> _lotGround = new List<(float2[], Func<float2, float>)>();
         /// <summary>(s25) Off: the mall keeps the ground as it is (tests compare against the ungraded plan).</summary>
         public bool Grading = true;
@@ -225,6 +224,7 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var c in corridors) if (!Free(c)) return null;
             lane.Index = Lanes.Count;
             Lanes.Add(lane);
+            lane.Land = corridors;
             Taken.AddRange(corridors);
             return lane;
         }
@@ -261,14 +261,31 @@ namespace Placemaker.Core.Layers.Commercial
         /// A parking lot on <paramref name="ring"/> (∩ the site), with entrances at the given outline points: "entrance"
         /// for one facing an existing street, "alley" for one facing a lane of this mall. Merged into the plan.
         /// </summary>
-        public bool Lot(float2[] ring, List<(float2 at, string kind)> entrances, SettingsBag parking, uint salt)
+        public bool Lot(float2[] ring, List<(float2 at, string kind)> entrances, SettingsBag parking, uint salt, bool leftover = false)
+        {
+            var t = PlanLot(ring, entrances, parking, salt, leftover);
+            return t != null && CommitLot(t, leftover);
+        }
+
+        /// <summary>(s50) A planned but not yet merged lot (so several variants can be tried and the best kept).</summary>
+        public sealed class LotTry
+        {
+            public AreaPlan Sub;
+            public float2[] Ring;
+            public float Capacity, Ev;
+            public Dictionary<long, (Lane lane, int seg)> Synthetic;
+            public SiteContext Site;
+        }
+
+        /// <summary>Plans a lot on <paramref name="ring"/> (see <see cref="Lot"/>) without merging it; null when it cannot be planned or holds no stall.</summary>
+        public LotTry PlanLot(float2[] ring, List<(float2 at, string kind)> entrances, SettingsBag parking, uint salt, bool leftover = false)
         {
             var gen = GeneratorRegistry.Get("parking");
-            if (gen == null || ring == null) return false;
+            if (gen == null || ring == null) return null;
             float2[] lot;
             try { lot = Largest(Poly.Intersection(Region.Ring, Poly.EnsureCcw(ring)), 300f); }
             catch (Exception) { lot = null; }
-            if (lot == null || !Free(Shrink(lot, 0.3f))) return false;
+            if (lot == null || (!leftover && !Free(Shrink(lot, 0.3f)))) return null;
             var bag = gen.Defaults();
             foreach (var kv in parking.Values) bag.Values[kv.Key] = kv.Value;
             // The lot's own frontage zoning stays off: the mall zones its shop rows itself.
@@ -277,7 +294,7 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var (at, kind) in entrances) markers.Add(new EdgeMarker { Kind = kind, Position = Ctx.P3(at) });
             var site = Ctx.Site.WithHeight(Ctx.Site.HeightAt);
             site.NearbyNets = new List<NearbyNet>(Ctx.Site.NearbyNets);
-            _synthetic.Clear();
+            var synthetic = new Dictionary<long, (Lane, int)>();
             foreach (var lane in Lanes)
             {
                 // (s41) The lane at the height it will be graded to (street-pinned ends, ≤ 8 % ramps), not the raw terrain: the
@@ -295,7 +312,7 @@ namespace Placemaker.Core.Layers.Commercial
                 for (int i = 0; i + 1 < lane.Points.Count; i++)
                 {
                     long id = SyntheticBase - lane.Index * 100 - i;
-                    _synthetic[id] = (lane, i);
+                    synthetic[id] = (lane, i);
                     var pa = lane.Points[i]; var pb = lane.Points[i + 1];
                     float3 a = At(pa), b = At(pb);
                     site.NearbyNets.Add(new NearbyNet { ExternalId = id, A = a, B = At(math.lerp(pa, pb, 1f / 3f)), C = At(math.lerp(pa, pb, 2f / 3f)), D = b, Width = lane.Half * 2f, Category = NetCategory.Road, HasSidewalk = true });
@@ -311,25 +328,33 @@ namespace Placemaker.Core.Layers.Commercial
             try { sub = gen.Plan(input, Ctx.Cancel); }
             catch (OperationCanceledException) { throw; }
             catch (Exception) { sub = null; }
-            if (sub == null || sub.HasErrors) return false;
+            if (sub == null || sub.HasErrors) return null;
             sub.Facts.TryGetValue("capacity", out var cap);
             sub.Facts.TryGetValue("evCapacity", out var ev);
-            if (cap <= 0) return false;
+            if (cap <= 0) return null;
+            return new LotTry { Sub = sub, Ring = lot, Capacity = (float)cap, Ev = (float)ev, Synthetic = synthetic, Site = site };
+        }
+
+        /// <summary>Merges a planned lot into the plan and takes its land.</summary>
+        public bool CommitLot(LotTry t, bool leftover = false)
+        {
+            var sub = t.Sub; var lot = t.Ring;
             // Alley stubs into a lane: CS2 joins nets only at identical nodes — drop the synthetic attachment and
             // split the lane at the stub's end instead.
             foreach (var n in sub.Nets)
             {
-                if (_synthetic.TryGetValue(n.StartAttach, out var s0)) { SnapOnto(s0.lane, s0.seg, ref n.A, ref n.B); s0.lane.Joins.Add(n.A.xz); n.StartAttach = -1; }
-                if (_synthetic.TryGetValue(n.EndAttach, out var s1)) { SnapOnto(s1.lane, s1.seg, ref n.D, ref n.C); s1.lane.Joins.Add(n.D.xz); n.EndAttach = -1; }
+                if (t.Synthetic.TryGetValue(n.StartAttach, out var s0)) { SnapOnto(s0.lane, s0.seg, ref n.A, ref n.B); s0.lane.Joins.Add(n.A.xz); n.StartAttach = -1; }
+                if (t.Synthetic.TryGetValue(n.EndAttach, out var s1)) { SnapOnto(s1.lane, s1.seg, ref n.D, ref n.C); s1.lane.Joins.Add(n.D.xz); n.EndAttach = -1; }
             }
             sub.Regions.Clear();
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error || i.Key == "Placemaker.Parking.Issue.NoEntrance");
             Merge(sub);
             // (s25) The lot graded itself (level tiers on a slope): the rest of the mall plans on that ground.
             if (sub.HeightAfter != null) _lotGround.Add((lot, sub.HeightAfter));
-            Stalls += (int)cap; EvStalls += (int)ev;
+            Stalls += (int)t.Capacity; EvStalls += (int)t.Ev;
             Lots.Add(lot);
-            Taken.Add(lot);
+            if (leftover && !Poly.IsConvex(lot)) { var parts = ConvexDecomposition.Decompose(lot); if (parts.Count > 0) Taken.AddRange(parts); else Taken.Add(lot); }
+            else Taken.Add(lot);
             return true;
         }
 
