@@ -212,6 +212,60 @@ namespace Placemaker.Game.Build
             try { return Services.Assets?.InfoMap(); } catch (Exception) { return null; }
         }
 
+        // ───────────── zoning per plot: preview vs planned vs live vs built ─────────────
+
+        private readonly List<float2> _previewZoned = new List<float2>();
+
+        private static float2[] ExpandRing(float2[] ring, float by)
+        {
+            var c = Poly.Centroid(ring);
+            var r = new float2[ring.Length];
+            for (int i = 0; i < r.Length; i++) { var d = ring[i] - c; float l = math.length(d); r[i] = l > 1e-4f ? c + d * ((l + by) / l) : ring[i]; }
+            return r;
+        }
+
+        /// <summary>The zoned cells the Design preview showed (before the post-Apply re-snap changes plan.ZoneCells).</summary>
+        private void SnapshotPreviewZoning()
+        {
+            _previewZoned.Clear();
+            var cells = _request?.Plan?.ZoneCells;
+            if (cells == null) return;
+            foreach (var c in cells) if (c.State == ZoneCellState.Zoned) _previewZoned.Add(0.25f * (c.A + c.B + c.C + c.D));
+        }
+
+        /// <summary>
+        /// (s53) Per plot (original cutout quad): cells shown in the preview, cells planned for zoning (after the re-snap), cells the
+        /// game really has zoned (state 4 of VerifyZoning) and buildings / construction sites standing on it. One log line per plot;
+        /// a plot whose preview cells are not all live-zoned is an audit entry ("shown in preview, not zoned").
+        /// </summary>
+        private void AuditZonePlots(ComposedPlan plan, List<float2> planned, int[] state)
+        {
+            if (plan?.ZoneQuads == null || plan.ZoneQuads.Count == 0) return;
+            var buildings = new List<float2>();
+            using (var all = GetEntityQuery(ComponentType.ReadOnly<global::Game.Buildings.Building>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(),
+                ComponentType.Exclude<Temp>(), ComponentType.Exclude<Deleted>()).ToEntityArray(Allocator.Temp))
+                for (int i = 0; i < all.Length; i++) buildings.Add(EntityManager.GetComponentData<global::Game.Objects.Transform>(all[i]).m_Position.xz);
+            int bad = 0;
+            for (int q = 0; q < plan.ZoneQuads.Count; q++)
+            {
+                var quad = ExpandRing(plan.ZoneQuads[q].Quad, 1.5f);
+                int preview = 0, plannedN = 0, live = 0, built = 0;
+                foreach (var p in _previewZoned) if (Poly.Contains(quad, p)) preview++;
+                for (int k = 0; k < planned.Count; k++)
+                    if (Poly.Contains(quad, planned[k])) { plannedN++; if (state[k] == 4) live++; }
+                foreach (var b in buildings) if (Poly.Contains(quad, b)) built++;
+                var c = Poly.Centroid(plan.ZoneQuads[q].Quad);
+                bool mismatch = preview != plannedN || plannedN != live;
+                if (q < 40) Mod.Log.Info($"Placemaker zoning plot {q} at ({c.x:F0}, {c.y:F0}) {plan.ZoneQuads[q].ZoneId}: preview {preview}, planned {plannedN}, live zoned {live}, buildings {built}{(mismatch ? "  <-- differs" : "")}.");
+                if (preview > live || preview > 0 && plannedN == 0)
+                {
+                    bad++;
+                    Audit.Add("zoning", $"plot {q}: preview {preview}, planned {plannedN}, live {live}, buildings {built}", new float3(c.x, Height(c), c.y), AuditReason.ZoningMismatch);
+                }
+            }
+            if (bad > 0) Mod.Log.Warn($"Placemaker zoning: {bad} plot(s) shown in the preview but not zoned as shown (details per plot above).");
+        }
+
         /// <summary>Finish: totals, plan-time drops (declutter), the log block and the JSON file.</summary>
         private BuildAudit FinishAudit(int groupId)
         {

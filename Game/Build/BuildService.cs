@@ -342,6 +342,7 @@ namespace Placemaker.Game.Build
 
         private void DoPrepare()
         {
+            SnapshotPreviewZoning();
             _work = PlanWork.Flatten(_request.Plan, _excluded);
             if (_work.DefinitionCount == 0 && _work.Terraform.Count == 0 && _work.Zoning.Count == 0 && !HasPaint())
             {
