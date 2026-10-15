@@ -160,10 +160,13 @@ namespace Placemaker.Game.Build
                     // (s55) Why an error is NOT ignorable, counted for the log (playtest 89: 399 overlap errors, "anarchy: cleared" never appeared).
                     if (!EntityManager.HasComponent<Temp>(top) || !EntityManager.HasComponent<PrefabRef>(top) || !IsOwnCandidate(top, out _)) { Tally(why, "not-our-temporary"); continue; }
                     if (!TryMatch(top, out long key, out var kind) || kind != WorkKind.Object || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) { Tally(why, "no-plan-object"); continue; }
-                    if (!byOwner.TryGetValue(e, out var type) && !byOwner.TryGetValue(top, out type)) { Tally(why, "no-error-icon"); continue; }   // unknown kind of error: stays real
+                    // 2026-10-15 playtest: builds failed 9 times out of 10 on object overlaps the old rules kept "real" (no type icon,
+                    // or overlapping a city prop/tree rather than one of ours). User: "I don't care if things overlap, just place them."
+                    // With anarchy on, ANY error on one of our planned objects is ignored unless it touches an existing building.
+                    if (!byOwner.TryGetValue(e, out var type) && !byOwner.TryGetValue(top, out type)) type = "OverlapExisting";
                     if (type != "OverlapExisting" && type != "NotEnoughClearance") { Tally(why, "type-" + type); continue; }
                     var obj = ItemObject(_request.Plan, w);
-                    if (obj == null || !_ownOverlap.Overlaps(w.Layer, w.Index)) { Tally(why, "overlaps-nothing-planned"); continue; }
+                    if (obj == null) { Tally(why, "no-plan-object"); continue; }
                     if (TouchesBuilding(obj, assets, buildings)) { Tally(why, "touches-building"); continue; }
                     _anarchyErrors.Add(e);
                     _anarchyItems.Add(key);
