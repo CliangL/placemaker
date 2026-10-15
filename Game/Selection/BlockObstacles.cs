@@ -35,9 +35,12 @@ namespace Placemaker.Game.Selection
         private readonly global::Game.Zones.SearchSystem _zoneSearch;
         private readonly WaterSystem _water;
 
+        private readonly World _world;
+
         public BlockObstacles(EntityManager em, World world)
         {
             _em = em;
+            _world = world;
             _objectSearch = world.GetOrCreateSystemManaged<global::Game.Objects.SearchSystem>();
             _areaSearch = world.GetOrCreateSystemManaged<global::Game.Areas.SearchSystem>();
             _zoneSearch = world.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>();
@@ -80,10 +83,37 @@ namespace Placemaker.Game.Selection
         /// <summary>
         /// Obstacle polygons (XZ) touching the box [min, max], tagged by kind (the brush rules pick which count). ignoreGroup: Placemaker group whose members are not obstacles (0 = none).
         /// </summary>
-        public List<BrushObstacle> Gather(float2 min, float2 max, int ignoreGroup)
+        public List<BrushObstacle> Gather(float2 min, float2 max, int ignoreGroup, bool fresh = true)
         {
+            // s49: toggling a brush rule / Smart edges re-filters the cached set instead of querying the ECS again.
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            var cached = _cache.TryGet(min, max, ignoreGroup, now, fresh);
+            if (cached != null) return cached;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            // Read a little more than asked so small moves of the box hit the cache next time.
+            float2 gmin = min - 24f, gmax = max + 24f;
             var list = new List<BrushObstacle>();
-            var bounds = new Bounds2(min, max);
+            var bounds = new Bounds2(gmin, gmax);
+            GatherInto(bounds, ignoreGroup, list);
+            _cache.Store(gmin, gmax, ignoreGroup, now, list);
+            sw.Stop();
+            var result = _cache.TryGet(min, max, ignoreGroup, now, false) ?? list;
+            LastStats = ObstacleStats.Of(result);
+            LastGatherMs = (float)sw.Elapsed.TotalMilliseconds;
+            Mod.Log.Info("Placemaker: obstacle set gathered in " + LastGatherMs.ToString("0.0") + " ms (box " + (int)(max.x - min.x) + "x" + (int)(max.y - min.y) + " m, ignoring group " + ignoreGroup + "): " + LastStats);
+            return result;
+        }
+
+        private readonly ObstacleCache _cache = new ObstacleCache();
+        /// <summary>Counts per kind of the last gathered set (debug line).</summary>
+        public ObstacleStats LastStats { get; private set; }
+        public float LastGatherMs { get; private set; }
+
+        /// <summary>Forget the cached set (the city changed under it).</summary>
+        public void Invalidate() => _cache.Clear();
+
+        private void GatherInto(Bounds2 bounds, int ignoreGroup, List<BrushObstacle> list)
+        {
             try { Buildings(bounds, ignoreGroup, list); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read buildings: " + e.Message); }
             try { Lots(bounds, ignoreGroup, list); }
@@ -92,7 +122,6 @@ namespace Placemaker.Game.Selection
             catch (Exception e) { Mod.Log.Warn("Placemaker: block paint could not read zoning: " + e.Message); }
             try { BuildReceipts(bounds, ignoreGroup, list); }
             catch (Exception e) { Mod.Log.Warn("Placemaker: could not read other builds: " + e.Message); }
-            return list;
         }
 
         /// <summary>(s15) Building lots / footprints touching the box only (plain Paint, the selection overlay).</summary>
@@ -110,7 +139,21 @@ namespace Placemaker.Game.Selection
         /// Predicate "under water" for points in the box, or null when the box is dry. Sampled once into
         /// a grid (the water surface data must not be held across frames).
         /// </summary>
-        public Func<float2, bool> Water(float2 min, float2 max, float step)
+        public Func<float2, bool> Water(float2 min, float2 max, float step, bool fresh = true)
+        {
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (!fresh && _waterCache != null && _waterStep == step && _waterMin.Equals(min) && _waterMax.Equals(max) && now - _waterAt < ObstacleCache.MaxAge && now >= _waterAt)
+                return _waterCache;
+            var wet = WaterRead(min, max, step);
+            _waterCache = wet; _waterStep = step; _waterMin = min; _waterMax = max; _waterAt = now;
+            return wet;
+        }
+
+        private Func<float2, bool> _waterCache;
+        private float2 _waterMin, _waterMax;
+        private float _waterStep, _waterAt;
+
+        private Func<float2, bool> WaterRead(float2 min, float2 max, float step)
         {
             try
             {
@@ -243,10 +286,25 @@ namespace Placemaker.Game.Selection
                     for (int n = 0; n < nodes.Length; n++) ring[n] = nodes[n].m_Position.xz;
                     // (s27) Our owner lot "Placemaker Area" and the zone-block lots are members of their group: they are
                     // "other Placemaker builds", a rule of their own (they used to count as plain lots).
-                    into.Add(new BrushObstacle(GroupOf(e) != 0 ? BrushObstacleKind.PlacemakerBuild : BrushObstacleKind.Lot, ring));
+                    into.Add(new BrushObstacle(GroupOf(e) != 0 || IsHelperLot(e) ? BrushObstacleKind.PlacemakerBuild : BrushObstacleKind.Lot, ring));
                 }
             }
             finally { results.Dispose(); }
+        }
+
+        private global::Placemaker.Game.Groups.OwnerAreaPrefabSystem _ownerPrefabs;
+
+        /// <summary>(s49) Our invisible "Placemaker Zone Block" / "Placemaker Area" lots, even when the group registry does not know them (they are "My builds", never plain Lots).</summary>
+        private bool IsHelperLot(Entity e)
+        {
+            try
+            {
+                _ownerPrefabs ??= _world.GetExistingSystemManaged<global::Placemaker.Game.Groups.OwnerAreaPrefabSystem>();
+                if (_ownerPrefabs == null || !_em.HasComponent<PrefabRef>(e)) return false;
+                var prefab = _em.GetComponentData<PrefabRef>(e).m_Prefab;
+                return _ownerPrefabs.IsOwnerPrefab(prefab) || _ownerPrefabs.IsBlockerPrefab(prefab);
+            }
+            catch (Exception) { return false; }
         }
 
         private void ZoneCells(Bounds2 bounds, List<BrushObstacle> into)
@@ -285,7 +343,7 @@ namespace Placemaker.Game.Selection
                                 var b = global::Game.Zones.ZoneUtils.GetCellPosition(block, new int2(x, y - 1)).xz;
                                 // GetCellPosition steps against m_Direction as y grows: a is the road end.
                                 float2 front = a + dir * 4f, back = b - dir * 4f;
-                                into.Add(new BrushObstacle(kind == 1 ? BrushObstacleKind.ZonedCell : BrushObstacleKind.EmptyZoneCell,
+                                into.Add(new BrushObstacle(kind == 1 ? BrushObstacleKind.ZonedCell : kind == 3 ? BrushObstacleKind.UnbuiltZonedCell : BrushObstacleKind.EmptyZoneCell,
                                     new[] { front + right * 4f, front - right * 4f, back - right * 4f, back + right * 4f }));
                                 start = -1;
                             }
@@ -298,13 +356,15 @@ namespace Placemaker.Game.Selection
             finally { results.Dispose(); }
         }
 
-        /// <summary>0 = not part of the visible grid, 1 = zoned, 2 = empty (zoneable).</summary>
+        /// <summary>0 = not part of the visible grid, 1 = zoned and built on (Occupied), 2 = empty (zoneable), 3 = zoned but vacant.</summary>
         private static int CellKind(global::Game.Zones.Cell cell)
         {
             var s = cell.m_State;
             // Hidden or blocked cells (under a road, a lot, an area) are not part of the visible grid.
             if ((s & global::Game.Zones.CellFlags.Visible) == 0 || (s & global::Game.Zones.CellFlags.Blocked) != 0) return 0;
-            return cell.m_Zone.Equals(global::Game.Zones.ZoneType.None) ? 2 : 1;
+            if (cell.m_Zone.Equals(global::Game.Zones.ZoneType.None)) return 2;
+            // s49: only cells with a building on them (or under construction) are "Zoned"; vacant zoned land is its own kind.
+            return (s & global::Game.Zones.CellFlags.Occupied) != 0 ? 1 : 3;
         }
     }
 }

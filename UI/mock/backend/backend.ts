@@ -10,7 +10,7 @@ import {
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
 
-const DEFAULT_BRUSH_RULES = { builds: true, anything: false, drawClip: false, roads: true, buildings: true, lots: true, zoned: true, emptyZones: false, water: true, stayInBlock: true, snap: 6, smoothing: 1,
+const DEFAULT_BRUSH_RULES = { builds: true, anything: false, drawClip: false, roads: true, buildings: true, lots: true, zoned: true, allZoned: false, emptyZones: false, water: true, stayInBlock: true, snap: 6, smoothing: 1,
     walls: { roads: true, paths: true, bikes: true, tracks: true, water: true, lots: false, zoned: false } };
 import { addStrings } from "../cs2/l10n";
 import { BLOCKS, blocksRing, Block, cellsOutline, NODES, paintCells } from "./city";
