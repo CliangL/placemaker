@@ -60,7 +60,8 @@ namespace Placemaker.Tests.Suite
                 float h = data[py * n + px] / 65535f * SuiteLayout.HeightScale;
                 Assert.InRange(math.abs(l.Height(w.x, w.y) - h), 0f, 0.07f);
             }
-            Assert.Equal((ushort)8191, data[0]);
+            Assert.Equal(SuiteLayout.Encode(SuiteLayout.BaseHeight), data[0]);
+            Assert.True(SuiteLayout.BaseHeight > 511.7f + 25f);
         }
 
         [Fact]

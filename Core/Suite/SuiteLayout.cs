@@ -52,7 +52,12 @@ namespace Placemaker.Core.Suite
         public const string PedestrianStreet = "Pedestrian Street";
 
         /// <summary>TerrainSystem's default heightmap value (8191) on the default 4096 m height scale.</summary>
-        public const float BaseHeight = 8191f / 65535f * 4096f;
+        public const float DefaultHeight = 8191f / 65535f * 4096f;
+        /// <summary>
+        /// The whole map is lifted 30 m: the default world's sea level (WaterSystem.SetDefaults, 511.7 m) is only 0.28 m below
+        /// its ground, so the rough blocks' dips would fill with sea water.
+        /// </summary>
+        public const float BaseHeight = DefaultHeight + 30f;
         public const float HeightScale = 4096f;
         public const int HeightmapSize = 4096;
         public const float MapSize = 14336f;
@@ -146,7 +151,7 @@ namespace Placemaker.Core.Suite
         {
             int n = HeightmapSize;
             var data = new ushort[n * n];
-            ushort baseValue = 8191;
+            ushort baseValue = Encode(BaseHeight);
             float cell = MapSize / n;
             float roughX0 = LineX(0) - 1f, roughX1 = LineX(3) + 1f, roughZ0 = LineZ(4) - 1f, roughZ1 = LineZ(5) + 1f;
             for (int py = 0; py < n; py++)

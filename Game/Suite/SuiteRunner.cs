@@ -447,6 +447,7 @@ namespace Placemaker.Game.Suite
             _summary["fixture"] = fx;
 
             // terrain
+            yield return Settle("after load");
             string err = _fixture.ApplyHeightmap();
             yield return Frames(40);
             float worst = _fixture.CheckTerrain(out var detail);
@@ -456,9 +457,20 @@ namespace Placemaker.Game.Suite
             fx["terrainProbes"] = detail;
             Mark("heightmapDoneSec");
 
-            // roads
-            yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t), "roads");
+            // roads: the vertical lines in a few batches, then the cross streets onto their junction nodes
+            yield return Settle("before roads");
+            for (int i0 = 0; i0 <= _fixture.Layout.NX; i0 += 4)
+            {
+                int a = i0, b = i0 + 3;
+                yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, s => s.Vertical && s.Line >= a && s.Line <= b), $"roads x{a}-{b}");
+            }
+            for (int j0 = 0; j0 <= _fixture.Layout.NZ; j0 += 3)
+            {
+                int a = j0, b = j0 + 2;
+                yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, s => !s.Vertical && s.Line >= a && s.Line <= b), $"roads z{a}-{b}");
+            }
             yield return Frames(30);
+            yield return Settle("after roads");
             int edges = _fixture.CountEdges(out int temps);
             fx["roadEdges"] = edges;
             fx["roadTemps"] = temps;
@@ -496,6 +508,25 @@ namespace Placemaker.Game.Suite
             fx["fixtureSec"] = Math.Round(Time.realtimeSinceStartup - t0, 1);
             Mark("fixtureDoneSec");
             fx["log"] = new JArray(_fixture.Log);
+        }
+
+        /// <summary>Waits until frames are quick again (other mods index new prefabs, textures stream in after a load).</summary>
+        private IEnumerator Settle(string what, float maxMs = 120f, int count = 30, float timeout = 240f)
+        {
+            float t0 = Time.realtimeSinceStartup;
+            int ok = 0;
+            float worst = 0f;
+            while (ok < count && Time.realtimeSinceStartup - t0 < timeout)
+            {
+                yield return null;
+                worst = math.max(worst, _lastFrameMs);
+                if (_lastFrameMs < maxMs) ok++; else ok = 0;
+            }
+            float sec = Time.realtimeSinceStartup - t0;
+            var settle = _timeline["settle"] as JObject ?? new JObject();
+            settle[what] = Math.Round(sec, 1);
+            _timeline["settle"] = settle;
+            Say($"settle {what}: {sec:F1} s (worst frame {worst:F0} ms){(ok < count ? " — still slow" : "")}");
         }
 
         /// <summary>Fast spawn at the configured speed until the building count settles (or the time is up).</summary>

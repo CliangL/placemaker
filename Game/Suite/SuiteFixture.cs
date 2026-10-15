@@ -141,12 +141,18 @@ namespace Placemaker.Game.Suite
 
         // ───────────── roads ─────────────
 
-        public int EmitRoads(SuiteFixtureToolSystem tool)
+        /// <summary>
+        /// Emits the road segments the filter picks. Ends that land on an existing node attach to it (CoursePos.m_Entity, as the
+        /// vanilla net tool snaps), so the grid goes in as batches: vertical lines first, then the cross streets onto their nodes.
+        /// </summary>
+        public int EmitRoads(SuiteFixtureToolSystem tool, Func<SuiteRoadSegment, bool> filter)
         {
             int courses = 0;
             var random = new Unity.Mathematics.Random(0x5EED5u);
+            var nodes = ExistingNodes();
             foreach (var seg in Layout.Roads())
             {
+                if (filter != null && !filter(seg)) continue;
                 var prefab = Road(seg.Prefab);
                 if (prefab == Entity.Null) continue;
                 var g = _em.GetComponentData<NetGeometryData>(prefab);
@@ -173,6 +179,8 @@ namespace Placemaker.Game.Suite
                         m_CourseDelta = 1f, m_Elevation = float2.zero, m_Flags = CoursePosFlags.IsLast | CoursePosFlags.IsLeft | CoursePosFlags.IsRight,
                         m_ParentMesh = -1, m_SplitPosition = 0f,
                     };
+                    Attach(ref start, nodes);
+                    Attach(ref end, nodes);
                     var def = tool.NewDefinition();
                     _em.AddComponentData(def, new CreationDefinition { m_Prefab = prefab, m_RandomSeed = random.NextInt() });
                     _em.AddComponent<Updated>(def);
@@ -185,6 +193,24 @@ namespace Placemaker.Game.Suite
                 }
             }
             return courses;
+        }
+
+        private static long Key(float2 p) => ((long)math.round(p.x * 4f) << 32) ^ (uint)(int)math.round(p.y * 4f);
+
+        private Dictionary<long, Entity> ExistingNodes()
+        {
+            var r = new Dictionary<long, Entity>();
+            using (var q = _em.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Net.Node>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>()))
+            using (var all = q.ToEntityArray(Allocator.Temp))
+                foreach (var e in all) r[Key(_em.GetComponentData<global::Game.Net.Node>(e).m_Position.xz)] = e;
+            return r;
+        }
+
+        private void Attach(ref CoursePos pos, Dictionary<long, Entity> nodes)
+        {
+            if (!nodes.TryGetValue(Key(pos.m_Position.xz), out var node)) return;
+            pos.m_Entity = node;
+            pos.m_Position = _em.GetComponentData<global::Game.Net.Node>(node).m_Position;
         }
 
         public int CountEdges(out int temps)
