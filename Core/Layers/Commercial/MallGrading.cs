@@ -73,18 +73,26 @@ namespace Placemaker.Core.Layers.Commercial
 
             // ── lane profiles (plots read them; lanes are written last and win over plot margins) ──
             var profiles = new Dictionary<Mall.Lane, Profile>();
-            foreach (var lane in mall.Lanes)
-            {
-                if (lane.Points.Count < 2) continue;
-                var pr = Profile.Of(lane, ctx, g0, fixedLevels);
-                profiles[lane] = pr;
-                mall.LaneProfiles[lane] = pr.H;
-            }
+            // (s32) A lane ending on another lane (T / X junction) meets it at its height: hosts first.
+            var pending = new List<Mall.Lane>(mall.Lanes);
+            for (int pass = 0; pass < 6 && pending.Count > 0; pass++)
+                for (int i = 0; i < pending.Count; i++)
+                {
+                    var lane = pending[i];
+                    bool hostsReady = (lane.StartOn == null || profiles.ContainsKey(lane.StartOn)) && (lane.EndOn == null || profiles.ContainsKey(lane.EndOn));
+                    if (lane.Points.Count >= 2 && !hostsReady && pass < 5) continue;
+                    pending.RemoveAt(i--);
+                    if (lane.Points.Count < 2) continue;
+                    var pr = Profile.Of(lane, ctx, g0, fixedLevels, profiles);
+                    profiles[lane] = pr;
+                    mall.LaneProfiles[lane] = pr.H;
+                }
 
             // ── shop plots: level at the grade of the road they face ──
             // Grown by a whole cell so every sculpt cell touching the plot is level (the bank starts behind it).
             // Margins first (a cell round each plot; where two meet the lower wins), then the plots themselves.
             var plotCore = new bool[sc.Count];
+            var plotLane = new Mall.Lane[sc.Count];
             for (int stage = 0; stage < 2; stage++)
                 foreach (var shop in mall.Shops)
                 {
@@ -95,7 +103,8 @@ namespace Placemaker.Core.Layers.Commercial
                     var area = Grow(shop, stage == 0 ? Cell + 0.25f : 0.25f);
                     var dir = math.normalizesafe(b - a);
                     float len = math.distance(a, b);
-                    for (int k = 0; k < sc.Count; k++)
+                    // (s32) Only the nodes in the plot's bounds (same order: a district has hundreds of plots).
+                    foreach (int k in Nodes(sc, area, 0f))
                     {
                         if (!sc.Free[k]) continue;
                         var p = sc.Pos(k);
@@ -104,34 +113,56 @@ namespace Placemaker.Core.Layers.Commercial
                         float h = road(a + dir * t);
                         sc.Target[k] = stage == 0 && prot[k] ? math.min(sc.Target[k], h) : h;
                         prot[k] = true;
-                        if (stage == 1) plotCore[k] = true;
+                        if (stage == 1) { plotCore[k] = true; plotLane[k] = lane; }
                     }
                 }
 
             // ── lanes: level across their width and a cell beyond ──
             var laneSet = new bool[sc.Count];
+            var laneDist = new float[sc.Count];
             foreach (var kv in profiles)
             {
                 var lane = kv.Key; var pr = kv.Value;
-                float reach = lane.Half + Shoulder;
-                for (int k = 0; k < sc.Count; k++)
+                // (s32) A lane may ask for a wider level shoulder (lanes through planted gateways and gaps).
+                float reach = lane.Half + (lane.Shoulder >= 0f ? lane.Shoulder : Shoulder);
+                foreach (int k in Nodes(sc, lane.Points, reach + 1f))
                 {
                     if (!sc.Free[k]) continue;
                     var p = sc.Pos(k);
                     float dist = pr.Distance(p, out float s);
                     // A plot keeps its own level up to the lane's edge (a plot between a street and a lane faces the street).
-                    if (dist > (plotCore[k] ? lane.Half + 0.25f : reach)) continue;
+                    // (s32) A lane with its own shoulder also levels a cell of a plot that faces another of the lanes (a corner plot
+                    // beside a junction): the step between the two grades falls in the plot's side margin, not into the lane.
+                    float keep = plotCore[k] ? (lane.Shoulder >= 0f && plotLane[k] != null && plotLane[k] != lane ? lane.Half + Cell : lane.Half + 0.25f) : reach;
+                    if (dist > keep) continue;
                     float h = pr.At(s);
-                    sc.Target[k] = laneSet[k] ? 0.5f * (sc.Target[k] + h) : h;
+                    // (s32) Lanes with their own shoulder: the nearest lane sets a node (at a T or X junction the shoulder of the
+                    // crossing lane must not lay a level platform across a sloping one).
+                    if (laneSet[k] && lane.Shoulder >= 0f) { if (dist >= laneDist[k]) continue; sc.Target[k] = h; }
+                    else sc.Target[k] = laneSet[k] ? 0.5f * (sc.Target[k] + h) : h;
+                    laneDist[k] = laneSet[k] ? math.min(laneDist[k], dist) : dist;
                     prot[k] = laneSet[k] = true;
                 }
             }
 
             Bank(sc, prot, MaxBank);
             ctx.Check();
-            var res = sc.Emit(ctx, new[] { region.Ring });
+            var res = sc.Emit(ctx, new[] { region.Ring }, mall.GradeTolerance);
             ctx.Plan.Facts["gradeCells"] = res.Cells;
             if (res.Cells > 0) Sculpt.Resnap(ctx);
+        }
+
+        /// <summary>Sculpt nodes within the bounds of <paramref name="pts"/> grown by <paramref name="margin"/>, in increasing index order.</summary>
+        private static IEnumerable<int> Nodes(Sculpt sc, IReadOnlyList<float2> pts, float margin)
+        {
+            float2 mn = new float2(float.MaxValue), mx = new float2(float.MinValue);
+            foreach (var p in pts) { mn = math.min(mn, p); mx = math.max(mx, p); }
+            mn -= margin; mx += margin;
+            int i0 = math.max(0, (int)math.floor((mn.x - sc.Origin.x) / sc.Cell) - 1), i1 = math.min(sc.Nx - 1, (int)math.ceil((mx.x - sc.Origin.x) / sc.Cell) + 1);
+            int j0 = math.max(0, (int)math.floor((mn.y - sc.Origin.y) / sc.Cell) - 1), j1 = math.min(sc.Ny - 1, (int)math.ceil((mx.y - sc.Origin.y) / sc.Cell) + 1);
+            for (int j = j0; j <= j1; j++)
+                for (int i = i0; i <= i1; i++)
+                    yield return j * sc.Nx + i;
         }
 
         /// <summary>The plot side that runs along a street or a lane (the edgeZoning test, as Mall.Faces).</summary>
@@ -225,7 +256,7 @@ namespace Placemaker.Core.Layers.Commercial
             public readonly List<float> Cum = new List<float>();
             public float[] H;
 
-            public static Profile Of(Mall.Lane lane, LayerContext ctx, Func<float2, float> g0, List<(float2[] ring, Func<float2, float> height)> lots)
+            public static Profile Of(Mall.Lane lane, LayerContext ctx, Func<float2, float> g0, List<(float2[] ring, Func<float2, float> height)> lots, Dictionary<Mall.Lane, Profile> hosts = null)
             {
                 var pr = new Profile();
                 float total = 0f;
@@ -255,12 +286,16 @@ namespace Placemaker.Core.Layers.Commercial
                 // Attached ends sit on the street.
                 if (lane.StartAttach >= 0) { h[0] = ctx.H(lane.Points[0]); pinned[0] = true; }
                 if (lane.EndAttach >= 0) { h[n - 1] = ctx.H(lane.Points[lane.Points.Count - 1]); pinned[n - 1] = true; }
+                // (s32) Ends on another lane sit on that lane's profile; a closed loop meets itself.
+                if (hosts != null && lane.StartOn != null && hosts.TryGetValue(lane.StartOn, out var hs0)) { hs0.Distance(lane.Points[0], out float s0); h[0] = hs0.At(s0); pinned[0] = true; }
+                if (hosts != null && lane.EndOn != null && hosts.TryGetValue(lane.EndOn, out var hs1)) { hs1.Distance(lane.Points[lane.Points.Count - 1], out float s1); h[n - 1] = hs1.At(s1); pinned[n - 1] = true; }
+                if (lane.Closed) { float m = 0.5f * (h[0] + h[n - 1]); h[0] = h[n - 1] = m; pinned[0] = pinned[n - 1] = true; }
                 for (int pass = 0; pass < 6; pass++)
                 {
                     var o = (float[])h.Clone();
                     for (int i = 1; i + 1 < n; i++) if (!pinned[i]) h[i] = 0.25f * o[i - 1] + 0.5f * o[i] + 0.25f * o[i + 1];
                 }
-                float ds = total / (n - 1), g = LaneMaxGrade * ds;
+                float ds = total / (n - 1), g = (lane.MaxGrade > 0f ? lane.MaxGrade : LaneMaxGrade) * ds;
                 for (int pass = 0; pass < 4; pass++)
                 {
                     for (int i = 1; i < n; i++) if (!pinned[i]) h[i] = math.clamp(h[i], h[i - 1] - g, h[i - 1] + g);

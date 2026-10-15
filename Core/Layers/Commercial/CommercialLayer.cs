@@ -39,11 +39,11 @@ namespace Placemaker.Core.Layers.Commercial
         protected override string[] DefaultFeatures => Array.Empty<string>();
 
         /// <summary>Zone type, plot depth and the parking options shared by every commercial type.</summary>
-        protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "")
+        protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "", double maxDepth = 40)
         {
             var z = EdgeZoningAddOn.ZoneKindControl("zoneKind", "shops", zone);
             c.List.Add(z);
-            Shared(c.Slider("plotDepth", depth, 8, 40, 8, "m", ControlTier.Essential, "shops")).Tip();
+            Shared(c.Slider("plotDepth", depth, 8, maxDepth, 8, "m", ControlTier.Essential, "shops")).Tip();
             if (lot)
             {
                 if (lotSize != null) Shared(c.Choice("lotSize", lotSize, ControlTier.Essential, "parking", "small", "medium", "large")).Tip();
@@ -54,6 +54,18 @@ namespace Placemaker.Core.Layers.Commercial
             }
             c.Fixed("zoneKind");
             c.Fixed("plotDepth");
+        }
+
+        /// <summary>(s32) Shops on the streets round the site (a row facing each street) and their zone ("big buildings").</summary>
+        protected static void OuterRowControls(ControlSet c, string zone, bool on = true)
+        {
+            Shared(c.Toggle("outerRow", on, ControlTier.Essential, "shops")).Tip();
+            var z = EdgeZoningAddOn.ZoneKindControl("outerZone", "shops", zone);
+            z.LabelKey = K + "outerZone";
+            z.TooltipKey = K + "outerZone.Tooltip";
+            z.VisibleWhen = "outerRow=true";
+            c.List.Add(z);
+            c.Fixed("outerZone");
         }
 
         /// <summary>Points a control at the shared Placemaker.Commercial.* keys (options too).</summary>
@@ -68,7 +80,7 @@ namespace Placemaker.Core.Layers.Commercial
 
         protected override void PlanCore(LayerContext ctx)
         {
-            var mall = new Mall(ctx);
+            var mall = new Mall(ctx) { GradeTolerance = GradeTolerance };
             var runs = mall.Runs();
             if (runs.Count == 0)
             {
@@ -85,6 +97,9 @@ namespace Placemaker.Core.Layers.Commercial
             CommonStats(ctx);
         }
 
+        /// <summary>(s32) Smallest height change the site grading emits (Mall.GradeTolerance); the s32 types grade finer.</summary>
+        protected virtual float GradeTolerance => Sculpt.MinChange;
+
         protected abstract void Compose(LayerContext ctx, Mall mall, List<StreetShops.Run> runs);
 
         /// <summary>What is left becomes small parks (pocket style); slivers stay bare ground.</summary>
@@ -96,6 +111,29 @@ namespace Placemaker.Core.Layers.Commercial
                 ctx.Check();
                 // Thin arms (beside a lane leg, behind a row) are a planted buffer, not a park with paths hugging the edge.
                 if (strip || mall.IsStrip(piece) || !mall.Fill(piece, "park", "pocket", Doors(mall), 0x900u + k)) mall.Buffer(piece, 0x980u + k);
+                k++;
+            }
+        }
+
+        /// <summary>
+        /// (s32) What is left, for the s32 types: wide parts become parks whose walks open onto the lanes beside them (the
+        /// first, largest one in <paramref name="mainStyle"/>, with a playground when asked), thin arms planted verges that
+        /// keep clear of every net (Mall.Green) — gateway strips beside lane mouths, the gaps behind rows.
+        /// </summary>
+        protected static void GreenRest(LayerContext ctx, Mall mall, string mainStyle = "pocket", bool playground = false, uint salt = 0x900u)
+        {
+            uint k = 0;
+            bool first = true;
+            foreach (var (piece, strip) in mall.RestSplit(150f))
+            {
+                ctx.Check();
+                bool wide = !strip && !mall.IsStrip(piece);
+                if (wide && mall.FillOpen(piece, "park", first ? mainStyle : "pocket", mall.LaneDoors(piece), Doors(mall), salt + k))
+                {
+                    if (first && playground) mall.AddOn(piece, "playground", salt + 0x40u + k, b => b.Values["size"] = "small");
+                    first = false;
+                }
+                else mall.Green(piece, salt + 0x80u + k);
                 k++;
             }
         }

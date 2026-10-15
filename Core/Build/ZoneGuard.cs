@@ -397,6 +397,16 @@ namespace Placemaker.Core.Build
             var result = new Result();
             quads = quads ?? Array.Empty<float2[]>();
             result.Snapped = new bool[quads.Count];
+            // (s32) Quad bounds: the cell loops below test every cell centre against every quad (a mall district has
+            // hundreds of plots and blocks); a centre outside a quad's bounds is outside the quad.
+            var qb = new float4[quads.Count];
+            for (int i = 0; i < quads.Count; i++)
+            {
+                if (quads[i] == null || quads[i].Length < 3) { qb[i] = new float4(1, 1, -1, -1); continue; }
+                Poly.Bounds(quads[i], out var qmn, out var qmx);
+                qb[i] = new float4(qmn, qmx);
+            }
+            bool InQuad(int i, float2 c) => c.x >= qb[i].x && c.x <= qb[i].z && c.y >= qb[i].y && c.y <= qb[i].w && quads[i] != null && quads[i].Length >= 3 && Poly.Contains(quads[i], c);
             var feet = new List<float2[]>();
             if (footprints != null) foreach (var f in footprints) if (f != null && f.Length >= 3) feet.Add(Poly.EnsureCcw(f));
             if (feet.Count == 0) return result;
@@ -431,7 +441,7 @@ namespace Placemaker.Core.Build
                         {
                             var c = CellCentre(g, x, y);
                             bool hit = false;
-                            foreach (var q in quads) if (q != null && q.Length >= 3 && Poly.Contains(q, c)) { hit = true; break; }
+                            for (int qi = 0; qi < quads.Count; qi++) if (InQuad(qi, c)) { hit = true; break; }
                             if (hit) { best = y; break; }
                         }
                     // Ties (a plot touching both a street and our lane) go to the build's own roads: the plot was
@@ -493,7 +503,7 @@ namespace Placemaker.Core.Build
                         foreach (var lot in lots) if (ObstacleCut.Overlaps(sq, lot)) { k[y * sx + x] = true; break; }
                         if (y >= reach) continue;
                         for (int q = 0; q < quads.Count; q++)
-                            if (quads[q] != null && quads[q].Length >= 3 && Poly.Contains(quads[q], c)) { inQuad[y] = q; break; }
+                            if (InQuad(q, c)) { inQuad[y] = q; break; }
                         if (inQuad[y] >= 0)
                         {
                             if (first < 0) first = y;

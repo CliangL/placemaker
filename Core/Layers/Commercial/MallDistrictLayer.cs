@@ -1,0 +1,244 @@
+// s32 — Mall district ("all mall"): the whole block becomes shops. Deep high-density plots line every street round the
+// site (big buildings); inside, a grid of lanes — rails from the main street to the back (through to a back street, else
+// closed by a back lane into a U), rungs across them — is lined on both sides with shallow low-density plots (little
+// buildings). Where rungs cross a middle rail the four corners open into small squares; the blocks between rails and
+// rungs keep a courtyard garden in the middle, reached by a paseo from the rung below. Lane mouths on the streets get
+// planted gateway strips (a whole cell, so the street — not the lane — zones the corner plots).
+// Presets: district · pedestrian · mixedUse · dense · village.
+
+using System.Collections.Generic;
+using Placemaker.Core.Layers.Common;
+using Unity.Mathematics;
+
+namespace Placemaker.Core.Layers.Commercial
+{
+    [AreaGenerator(23, Group = Group)]
+    public sealed class MallDistrictLayer : CommercialLayer
+    {
+        protected override string Area => "MallDistrict";
+        public override string Id => "mallDistrict";
+        public override string Icon => "Media/Game/Icons/ZoneCommercial.svg";
+        public override float MinArea => 9000f;
+        protected override float GradeTolerance => 0.04f;
+
+        public static readonly string[] LaneKinds = { "mixed", "alley", "pedestrian" };
+        public static readonly string[] Blocks = { "compact", "medium", "spacious" };
+
+        protected override void DefineControls(ControlSet c)
+        {
+            c.Choice("lanes", "mixed", ControlTier.Essential, "layout", LaneKinds).Tip();
+            c.Choice("blocks", "medium", ControlTier.Essential, "layout", Blocks).Tip();
+            c.Toggle("squares", true, ControlTier.More, "layout").Tip();
+            OuterRowControls(c, ZoneKinds.CommercialHigh);
+            Shared(c.Slider("outerDepth", 32, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
+            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false);
+            c.Fixed("lanes");
+            c.Fixed("blocks");
+        }
+
+        protected override void DefinePresets()
+        {
+            Preset("district", ("lanes", "mixed"), ("blocks", "medium"));
+            Preset("pedestrian", ("lanes", "pedestrian"), ("blocks", "medium"), ("outerDepth", 24.0));
+            Preset("mixedUse", ("lanes", "mixed"), ("blocks", "spacious"), ("zoneKind", ZoneKinds.Mixed), ("plotDepth", 24.0));
+            Preset("dense", ("lanes", "alley"), ("blocks", "compact"), ("zoneKind", ZoneKinds.CommercialHigh), ("plotDepth", 24.0), ("outerDepth", 40.0), ("squares", false));
+            Preset("village", ("lanes", "pedestrian"), ("blocks", "compact"), ("plotDepth", 16.0), ("outerDepth", 16.0), ("outerZone", ZoneKinds.CommercialLow));
+        }
+
+        protected override void Compose(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
+        {
+            var r = runs[0];
+            string kinds = ctx.S("lanes");
+            var (railAsset, hr) = kinds == "pedestrian" ? Ped(ctx, out var railRole) : Lane(ctx, out railRole);
+            var (rungAsset, hp) = kinds == "alley" ? Lane(ctx, out var rungRole) : Ped(ctx, out rungRole);
+            // Lane rows stand back to back: two cells at least (a one-cell row hands the row behind it its second zone row).
+            int inner = math.max(2, Cells(ctx));
+            int outer = ctx.B("outerRow") ? Mall.Cells(ctx.Raw("outerDepth")) : 0;
+            float court = ctx.S("blocks") == "compact" ? 0f : ctx.S("blocks") == "spacious" ? 32f : 16f;
+            // Rows of neighbouring lanes stand back to back; on a slope they need a bank between them (Mall.SlopeGap).
+            court = math.max(court, mall.SlopeGap());
+
+            float s0 = r.From, s1 = r.To;
+            float reach = mall.Reach(r, s0 + 2f, s1 - 2f);
+            bool right = r.EndCorner || mall.StreetAlong(r.At(s1, 0f) + r.Dir * 0.5f, r.At(s1, reach) + r.Dir * 0.5f);
+            bool back = mall.StreetAlong(r.At(s1, reach) + r.In * 0.5f, r.At(s0, reach) + r.In * 0.5f);
+            bool left = r.StartCorner || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
+
+            // Fit: rails need a row on each side; shrink the rows until at least two rails and one block fit.
+            float d = inner * Mall.Cell, o = outer * Mall.Cell;
+            float sl = 0f, sr = 0f, tf = 0f, tb = 0f;
+            for (int guard = 0; guard < 12; guard++)
+            {
+                d = inner * Mall.Cell; o = outer * Mall.Cell;
+                sl = s0 + (left ? o : 0f) + d + hr;
+                sr = s1 - (right ? o : 0f) - d - hr;
+                tf = o + d + hp;
+                tb = reach - (back ? o : 0f) - d - hr;
+                if (sr - sl >= 2f * d + 2f * hr && tb - tf >= 2f * d + 2f * hp) break;
+                // Rows back to back stay two cells deep (a one-cell row would hand the row behind it its second zone row).
+                if (outer > 2) outer--; else if (inner > 2) inner--; else if (outer > 0) outer = 0; else break;
+            }
+            if (sr - sl < 2f * d + 2f * hr || tb - tf < d + hp)
+            {
+                mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, math.max(1, inner));
+                ctx.Issue(IssueSeverity.Info, FallbackKey);
+                return;
+            }
+
+            // Rails: evenly spaced, ~ two rows + a courtyard apart.
+            float railStep = 2f * d + 2f * hr + court;
+            int intervals = math.max(1, (int)math.round((sr - sl) / railStep));
+            while (intervals > 1 && (sr - sl) / intervals < 2f * d + 2f * hr) intervals--;
+            var xs = new List<float>();
+            for (int k = 0; k <= intervals; k++) xs.Add(math.lerp(sl, sr, (float)k / intervals));
+
+            var rails = new Mall.Lane[xs.Count];
+            Mall.Lane u = null;
+            if (back && Through(ctx, mall, r, xs))
+            {
+                for (int k = 0; k < xs.Count; k++)
+                    rails[k] = mall.Connect(Mall.End.Street(r.At(xs[k], 0f), -r.In), null, Mall.End.Street(r.At(xs[k], mall.ReachAt(r, xs[k])), r.In), railRole, railAsset, hr);
+                tb = reach - o - d - hp;
+            }
+            else
+            {
+                back = false;
+                tb = reach - d - hr;
+                u = mall.Connect(Mall.End.Street(r.At(sl, 0f), -r.In), new[] { r.At(sl, tb), r.At(sr, tb) }, Mall.End.Street(r.At(sr, 0f), -r.In), railRole, railAsset, hr);
+                if (u == null)
+                {
+                    mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, math.max(1, inner));
+                    ctx.Issue(IssueSeverity.Info, FallbackKey);
+                    return;
+                }
+                rails[0] = u; rails[xs.Count - 1] = u;
+                for (int k = 1; k + 1 < xs.Count; k++)
+                    rails[k] = mall.Connect(Mall.End.Street(r.At(xs[k], 0f), -r.In), null, Mall.End.OnLane(u, r.At(xs[k], tb)), railRole, railAsset, hr);
+            }
+
+            // Rungs: levels between the front row and the back, ~ two rows + a courtyard apart.
+            float rungStep = 2f * d + 2f * hp + court, minStep = 2f * d + 2f * hp;
+            // With a back street the last rung lies one row in front of the back plots; under a U the back lane is the last.
+            float last = back ? tb : tb - rungStep;
+            var ys = new List<float>();
+            if (last >= tf - 0.5f)
+            {
+                int m = math.max(0, (int)math.round((last - tf) / rungStep));
+                while (m > 0 && (last - tf) / m < minStep) m--;
+                for (int j = 0; j <= m; j++) ys.Add(m == 0 ? tf : math.lerp(tf, last, (float)j / m));
+            }
+            else if (!back && tb - tf >= minStep) ys.Add(tf);
+            var rungs = new List<(Mall.Lane lane, int k, float y)>();
+            foreach (float y in ys)
+                for (int k = 0; k + 1 < xs.Count; k++)
+                {
+                    if (rails[k] == null || rails[k + 1] == null) continue;
+                    var g = mall.Connect(Mall.End.OnLane(rails[k], r.At(xs[k], y)), null, Mall.End.OnLane(rails[k + 1], r.At(xs[k + 1], y)), rungRole, rungAsset, hp);
+                    if (g != null) rungs.Add((g, k, y));
+                }
+            // The middle rung reaches out to the side streets too (the district is crossed, not walled).
+            if (ys.Count > 0)
+            {
+                float ym = ys[ys.Count / 2];
+                if (left && rails[0] != null) mall.Connect(Mall.End.OnLane(rails[0], r.At(xs[0], ym)), null, Mall.End.Street(r.At(s0, ym), -r.Dir), rungRole, rungAsset, hp);
+                if (right && rails[xs.Count - 1] != null) mall.Connect(Mall.End.OnLane(rails[xs.Count - 1], r.At(xs[xs.Count - 1], ym)), null, Mall.End.Street(r.At(s1, ym), r.Dir), rungRole, rungAsset, hp);
+            }
+
+            // Squares at the crossings of middle rails nearest the centre (four corners, each a small square): one or two
+            // focal points, not a square at every corner of the grid.
+            var squares = new List<float2[]>();
+            var crossings = new List<(int k, float y, float dist)>();
+            float cxm = 0.5f * (xs[0] + xs[xs.Count - 1]), cym = ys.Count > 0 ? 0.5f * (ys[0] + ys[ys.Count - 1]) : 0f;
+            foreach (float y in ys)
+                for (int k = 1; k + 1 < xs.Count; k++)
+                    if (rails[k] != null) crossings.Add((k, y, math.abs(xs[k] - cxm) + math.abs(y - cym)));
+            crossings.Sort((p, q) => p.dist.CompareTo(q.dist));
+            // The central crossing, or the two equally central ones of an even grid.
+            int keep = crossings.Count >= 2 && crossings[1].dist - crossings[0].dist < 1f ? 2 : 1;
+            if (crossings.Count > keep) crossings.RemoveRange(keep, crossings.Count - keep);
+            if (ctx.B("squares"))
+                foreach (var (k, y, _) in crossings)
+                    {
+                        float q = math.min(14f, d + 2f);
+                        for (int sx = -1; sx <= 1; sx += 2)
+                            for (int sy = -1; sy <= 1; sy += 2)
+                            {
+                                float a0 = xs[k] + sx * hr, a1 = xs[k] + sx * (hr + q), b0 = y + sy * hp, b1 = y + sy * (hp + q);
+                                var sq = Mall.Rect(r, math.min(a0, a1), math.max(a0, a1), math.min(b0, b1), math.max(b0, b1));
+                                if (mall.Fits(sq)) squares.Add(mall.Hold(sq));
+                            }
+                    }
+
+            // Courtyards: a paseo from each rung (and the front row) up into the block it opens.
+            var paseos = new List<(float2[] rect, float2 a, float2 b)>();
+            if (court >= 12f)
+            {
+                var levels = new List<(float y, float h, bool lane)>();
+                foreach (float y in ys) levels.Add((y, hp, true));
+                for (int j = 0; j < levels.Count; j++)
+                {
+                    float y = levels[j].y;
+                    float top = j + 1 < levels.Count ? levels[j + 1].y - hp : tb - hr;
+                    if (top - y - hp - 2f * d < 12f) continue;
+                    for (int k = 0; k + 1 < xs.Count; k++)
+                    {
+                        var rung = rungs.Find(x => x.k == k && math.abs(x.y - y) < 0.1f).lane;
+                        if (rung == null || xs[k + 1] - xs[k] - 2f * hr - 2f * d < 12f) continue;
+                        float mid = 0.5f * (xs[k] + xs[k + 1]);
+                        float t0 = y + hp, t1 = y + hp + d;
+                        var rect = Mall.Rect(r, mid - Mall.PaseoWidth * 0.5f, mid + Mall.PaseoWidth * 0.5f, t0, t1);
+                        if (!mall.Free(rect)) continue;
+                        // The walk ends just inside the courtyard: its garden's walk is snapped onto that point (a door).
+                        if (!mall.Walk(r.At(mid, y), rung, r.At(mid, t1 + 0.6f), null)) continue;
+                        paseos.Add((mall.Hold(rect), r.At(mid, t0), r.At(mid, t1)));
+                        mall.Doors.Add(r.At(mid, t1 + 0.6f));
+                    }
+                }
+            }
+
+            // Plots: rails first (long, continuous), then the rungs; the streets last, a whole cell off every lane.
+            // Street mouths keep a gateway the depth of the street's own plots (planted, a cell wide beside the lane).
+            foreach (var lane in mall.Lanes.ToArray())
+                if (lane.StartAttach >= 0)
+                    mall.LaneRows(lane, inner, null, 0, mall.GateTrim(lane, true, o), mall.GateTrim(lane, false, o), 2);
+            foreach (var lane in mall.Lanes.ToArray())
+                if (lane.StartAttach < 0)
+                    mall.LaneRows(lane, inner, null, 0, mall.GateTrim(lane, true, o), mall.GateTrim(lane, false, o), 2);
+            if (outer > 0) mall.StreetRows(runs, outer, ctx.S("outerZone"), 3, 2);
+
+            uint salt = 0xD10u;
+            // The four corners of a crossing: a diagonal pair of café squares (fountain, seating), the other pair garden squares.
+            for (int i = 0; i < squares.Count; i++)
+            {
+                var sq = squares[i];
+                mall.Release(sq);
+                string look = i % 4 == 0 || i % 4 == 3 ? "cafe" : "garden";
+                if (!mall.FillOpen(sq, "plaza", look, mall.LaneDoors(sq, 6f), null, salt++, null, false)) mall.Green(sq, salt++);
+            }
+            foreach (var p in paseos) mall.DressPaseo(p.rect, p.a, p.b, salt += 4);
+        }
+
+        /// <summary>Every rail can reach a street at the back.</summary>
+        private static bool Through(LayerContext ctx, Mall mall, StreetShops.Run r, List<float> xs)
+        {
+            foreach (var x in xs)
+                if (!StreetShops.StreetEnd(ctx.Input, r.At(x, mall.ReachAt(r, x)), r.In, out _, out _, out _)) return false;
+            return true;
+        }
+
+        private static (AssetRef, float) Lane(LayerContext ctx, out NetRole role)
+        {
+            role = NetRole.Alley;
+            return Mall.ShopLane(ctx);
+        }
+
+        private static (AssetRef, float) Ped(LayerContext ctx, out NetRole role)
+        {
+            var p = Mall.PedLane(ctx, false);
+            role = p.pedestrian ? NetRole.Street : NetRole.Alley;
+            return (p.asset, p.half);
+        }
+
+        protected override void FillRest(LayerContext ctx, Mall mall) => GreenRest(ctx, mall, "pocket", false, 0xD80u);
+    }
+}
