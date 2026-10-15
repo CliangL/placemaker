@@ -632,6 +632,8 @@ namespace Placemaker.Game.Build
             var issues = ComposeWarnings(dropped);
             var warnings = new List<string>(_warnings);
             DumpFinish(groupId);   // s30: live ground, water, nets and objects to ModsData/Placemaker/debug (when enabled)
+            VerifyLiveHollows();   // s55: a bowl in the built ground, with the target's height next to it
+            AuditSurvivors();   // s55: count what the game really left visible (Overridden = hidden), not the temporaries
             var audit = FinishAudit(groupId);
             ResetTransaction();
             _warnings.AddRange(warnings);
