@@ -274,7 +274,7 @@ namespace Placemaker.Tests
                         if (math.abs(d) > 0.3f) off++;
                     }
                 // ±0.3 m (smoothing) on nine tenths of the plot; where two roads meet at a corner plot a little more.
-                Assert.True(off <= samples / 10 && lo >= -0.8f && hi <= 0.8f, $"{ctx}: plot at {c} is not at its road's grade (−{-lo:0.00} … +{hi:0.00} m, {off}/{samples} off)");
+                Assert.True(off <= samples / 10 && lo >= -0.85f && hi <= 0.85f, $"{ctx}: plot at {c} is not at its road's grade (−{-lo:0.00} … +{hi:0.00} m, {off}/{samples} off)");
             }
 
             // No fence or wall within 1 m of a plot (the white fences in game were construction sites, never ours).

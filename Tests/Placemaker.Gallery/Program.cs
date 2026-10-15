@@ -656,7 +656,9 @@ namespace Placemaker.Gallery
                     for (int k = 0; k < site.NearbyNets.Count; k++)
                     {
                         var n = site.NearbyNets[k];
-                        n.A.y = g(n.A.xz); n.B.y = g(n.B.xz); n.C.y = g(n.C.xz); n.D.y = g(n.D.xz);
+                        // (s41) fill / cut: flat ground, the streets on a 1.2 m embankment / in a 1 m cutting.
+                        float off = job.Slope == "fill" ? 1.2f : job.Slope == "cut" ? -1f : 0f;
+                        n.A.y = g(n.A.xz) + off; n.B.y = g(n.B.xz) + off; n.C.y = g(n.C.xz) + off; n.D.y = g(n.D.xz) + off;
                         site.NearbyNets[k] = n;
                     }
             }

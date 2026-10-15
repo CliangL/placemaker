@@ -276,13 +276,28 @@ namespace Placemaker.Core.Layers.Commercial
             site.NearbyNets = new List<NearbyNet>(Ctx.Site.NearbyNets);
             _synthetic.Clear();
             foreach (var lane in Lanes)
+            {
+                // (s41) The lane at the height it will be graded to (street-pinned ends, ≤ 8 % ramps), not the raw terrain: the
+                // lot ties its edges to these heights.
+                MallGrading.Profile pre = null;
+                if (lane.Points.Count >= 2)
+                    try { pre = MallGrading.Profile.Of(lane, Ctx, Ctx.H, new List<(float2[], Func<float2, float>)>()); }
+                    catch (Exception) { pre = null; }
+                float3 At(float2 p)
+                {
+                    if (pre == null) return Ctx.P3(p);
+                    pre.Distance(p, out float s);
+                    return new float3(p.x, pre.At(s), p.y);
+                }
                 for (int i = 0; i + 1 < lane.Points.Count; i++)
                 {
                     long id = SyntheticBase - lane.Index * 100 - i;
                     _synthetic[id] = (lane, i);
-                    float3 a = Ctx.P3(lane.Points[i]), b = Ctx.P3(lane.Points[i + 1]);
-                    site.NearbyNets.Add(new NearbyNet { ExternalId = id, A = a, B = math.lerp(a, b, 1f / 3f), C = math.lerp(a, b, 2f / 3f), D = b, Width = lane.Half * 2f, Category = NetCategory.Road, HasSidewalk = true });
+                    var pa = lane.Points[i]; var pb = lane.Points[i + 1];
+                    float3 a = At(pa), b = At(pb);
+                    site.NearbyNets.Add(new NearbyNet { ExternalId = id, A = a, B = At(math.lerp(pa, pb, 1f / 3f)), C = At(math.lerp(pa, pb, 2f / 3f)), D = b, Width = lane.Half * 2f, Category = NetCategory.Road, HasSidewalk = true });
                 }
+            }
             var input = new AreaInput
             {
                 Shape = new AreaShape { Ring = Poly.To3D(lot, Ctx.G), Source = AreaSource.Drawn },
