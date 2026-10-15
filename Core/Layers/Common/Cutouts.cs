@@ -118,7 +118,9 @@ namespace Placemaker.Core.Layers.Common
         // never between the park and its cutouts.
 
         /// <summary>A border piece this close to a cutout edge goes, unless it also lies this close to the outer outline.</summary>
-        public const float BorderReach = 1.0f;
+        public const float BorderReach = 1.0f + Build.ZoneLots.Clearance;   // (s40) the host keeps ZoneLots.Clearance off the cells
+        /// <summary>A border this close to the outer outline stays (the street side).</summary>
+        public const float OutlineReach = 1.0f;
 
         /// <summary>Fences, walls, hedges, railings, bollards: what reads as a border.</summary>
         public static bool IsBorder(PlannedNet n) => n != null && n.Role == NetRole.Fence;
@@ -147,7 +149,7 @@ namespace Placemaker.Core.Layers.Common
                 if (!near) return false;
                 if (outlines != null)
                     foreach (var o in outlines)
-                        if (o != null && o.Length >= 3 && Poly.DistanceToBoundary(o, p) < BorderReach) return false;
+                        if (o != null && o.Length >= 3 && Poly.DistanceToBoundary(o, p) < OutlineReach) return false;
                 return true;
             }
             int changed = 0;

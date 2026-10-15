@@ -69,6 +69,8 @@ namespace Placemaker.Core.Layers.Common
             public readonly List<float2> Doors = new List<float2>();
             /// <summary>The layout fell back to a row (no street the alley could join).</summary>
             public bool FellBack;
+            /// <summary>(s40) The shops are cell plots (snapped by Build/ZoneLots): tag them Build.ZoneLots.CellsTag.</summary>
+            public bool CellPlots;
         }
 
         /// <summary>
@@ -133,7 +135,83 @@ namespace Placemaker.Core.Layers.Common
             _water = input.Site?.WaterDepthAt;
             try { Layout(region, input, runs, layout, amount, cells, ref rng, res); }
             finally { _water = null; }
+            SnapToCells(region, input, layout, res);
             return res;
+        }
+
+        /// <summary>
+        /// (s40) Zoning first: every shop plot becomes the exact cells the build will zone for it (Build/ZoneLots: the
+        /// roads' real or predicted 8 m grids, the game's depth rule, ≥ 2 columns), as cell rectangles flush with the
+        /// curb; a plot no cell of which can be zoned is given back to the host. The carve follows, so the host plans
+        /// around exactly the cells that will zone (playtest: paving notches and grass leftovers around the shops).
+        /// </summary>
+        private static void SnapToCells(LayerRegion region, AreaInput input, string layout, Result res)
+        {
+            if (res.Shops.Count == 0 || !Build.ZoneGuard.Enabled) return;
+            var planned = new ComposedPlan();
+            var lanes = new AreaPlan();
+            foreach (var alley in res.Alleys)
+                for (int i = 0; i + 1 < alley.Points.Count; i++)
+                {
+                    float2 a = alley.Points[i], b = alley.Points[i + 1];
+                    if (math.distance(a, b) < 0.3f) continue;
+                    lanes.Nets.Add(new PlannedNet
+                    {
+                        A = new float3(a.x, 0, a.y), B = new float3(math.lerp(a, b, 1f / 3f).x, 0, math.lerp(a, b, 1f / 3f).y),
+                        C = new float3(math.lerp(a, b, 2f / 3f).x, 0, math.lerp(a, b, 2f / 3f).y), D = new float3(b.x, 0, b.y),
+                        Role = NetRole.Alley, Asset = new AssetRef(AlleyAsset, AlleyFallback),
+                    });
+                }
+            planned.Layers.Add(lanes);
+            var grids = Build.ZoneLots.SiteGrids(input.Site, planned);
+            if (grids.Count == 0) return;
+            var snapped = Build.ZoneLots.Snap(new[] { region.Ring }, res.Shops, grids, input.Site?.NearbyNets, Build.ZoneGuard.OwnNets(planned, input.Site));
+            if (snapped == null) return;
+            var shops = new List<float2[]>();
+            foreach (var list in snapped) shops.AddRange(list);
+            bool rebuild = layout == Row || layout == Speckled || layout == Clusters;
+            res.Shops.Clear();
+            res.Shops.AddRange(shops);
+            res.CellPlots = true;
+            if (rebuild) res.Carve.Clear();
+            var roads = new List<(float2 a, float2 b, float half)>();
+            if (input.Site?.NearbyNets != null)
+                foreach (var n in input.Site.NearbyNets)
+                    if (n.Category == NetCategory.Road)
+                        for (int i = 0; i < 8; i++)
+                            roads.Add((Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f).xz, Composer.Bezier(n.A, n.B, n.C, n.D, (i + 1) / 8f).xz, n.Width * 0.5f));
+            foreach (var alley in res.Alleys)
+                for (int i = 0; i + 1 < alley.Points.Count; i++) roads.Add((alley.Points[i], alley.Points[i + 1], AlleyHalf));
+            // The host keeps 1 m off the cells (a path edge touching a cell closes it and every cell behind).
+            foreach (var q in shops) res.Carve.Add(FrontToKerb(Build.ZoneLots.Grow(q, Build.ZoneLots.Clearance), roads));
+        }
+
+        /// <summary>
+        /// The carve of a cell plot: the plot with its road-side edge pushed to 1 m past the kerb. A road rounded up to
+        /// whole cells (a 12 m street counts 16 m) leaves a strip between kerb and row 0 the host must not plan on.
+        /// </summary>
+        private static float2[] FrontToKerb(float2[] q, List<(float2 a, float2 b, float half)> roads)
+        {
+            if (roads.Count == 0 || q.Length != 4) return q;
+            int best = -1; float bestD = float.MaxValue;
+            for (int e = 0; e < 4; e++)
+            {
+                var m = 0.5f * (q[e] + q[(e + 1) % 4]);
+                foreach (var r in roads)
+                {
+                    float d = math.sqrt(SegmentIndex.DistSq(m, r.a, r.b)) - r.half;
+                    if (d < bestD) { bestD = d; best = e; }
+                }
+            }
+            if (best < 0 || bestD > 6f) return q;
+            var a = q[best]; var b = q[(best + 1) % 4];
+            var c = Poly.Centroid(q);
+            var dir = math.normalizesafe(b - a); var n = new float2(-dir.y, dir.x);
+            if (math.dot(n, 0.5f * (a + b) - c) < 0f) n = -n;
+            float push = math.max(0f, bestD) + 1f;
+            var r2 = (float2[])q.Clone();
+            r2[best] = a + n * push; r2[(best + 1) % 4] = b + n * push;
+            return r2;
         }
 
         /// <summary>Water depth of the site while a plan runs (shops never stand in a lake); thread-static: plans run on workers.</summary>
@@ -232,8 +310,9 @@ namespace Placemaker.Core.Layers.Common
                 float s = r.From + rng.NextFloat(0f, gMin * 0.5f + 2f);
                 while (true)
                 {
-                    float w = rng.NextInt(1, wMax + 1) * Cell;
-                    if (s + w > r.To + 0.01f) { w = math.floor((r.To - s) / Cell) * Cell; if (w < Cell) break; }
+                    // (s40) Two cells wide at least: the game blocks a lone column of cells (ZoneGuard.ReduceDepths).
+                    float w = rng.NextInt(2, wMax + 1) * Cell;
+                    if (s + w > r.To + 0.01f) { w = math.floor((r.To - s) / Cell) * Cell; if (w < 2 * Cell) break; }
                     int d = math.min(cells, rng.NextInt(1, math.min(cells, amount == Few ? 2 : 3) + 1));
                     FrontPiece(region, r, s, s + w, d, res);
                     s += w + rng.NextFloat(gMin, gMax);

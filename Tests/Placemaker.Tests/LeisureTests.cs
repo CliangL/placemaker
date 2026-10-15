@@ -309,7 +309,9 @@ namespace Placemaker.Tests
             var park = plan.Layers.Single(l => l.GeneratorId == "park");
             var zoning = plan.Layers.Where(l => l.GeneratorId == "edgeZoning").SelectMany(l => l.Zoning).ToList();
             Assert.NotEmpty(zoning);
-            Assert.All(zoning, z => Assert.True(math.min(z.A.z, z.B.z) < 1f, "zoning not on the road side"));
+            // (s40) The zoning is the road's own cells: a 12 m road counts as two cells wide (ZoneUtils.GetCellWidth), so its
+            // row 0 starts 2 m past the kerb (z = 2; the Marquee rect is shrunk 1 m).
+            Assert.All(zoning, z => Assert.True(math.min(math.min(z.A.z, z.B.z), math.min(z.C.z, z.D.z)) < 4f, "zoning not on the road side"));
             foreach (var z in zoning)
             {
                 var quad = new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz };

@@ -759,7 +759,9 @@ namespace Placemaker.Core.Layers.Common
             ctx.LayerRegion = rest;
             // "place:shops" makes the composer reserve the shop land for the host's other features (big trees,
             // picnic…, which plan on the whole outline); the zoning feature filling a region still sees it free.
-            for (int i = 0; i < layout.Shops.Count; i++) ctx.AddRegion(layout.Shops[i], StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag, ShopsPlace);
+            for (int i = 0; i < layout.Shops.Count; i++)
+                if (layout.CellPlots) ctx.AddRegion(layout.Shops[i], StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag, ShopsPlace, Build.ZoneLots.CellsTag);
+                else ctx.AddRegion(layout.Shops[i], StreetFrontage.ShopsTag + ":" + i, StreetFrontage.ShopsTag, ShopsPlace);
             ctx.Plan.Facts["shopBands"] = layout.Shops.Count;
             ctx.Plan.Facts["shopAlleys"] = layout.Alleys.Count;
             // A lane's dead end is where the park's paths should continue it: an extra entrance there (only
