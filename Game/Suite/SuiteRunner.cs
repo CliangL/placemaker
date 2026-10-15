@@ -54,8 +54,15 @@ namespace Placemaker.Game.Suite
 
         // errors (UnityLogger events can come from worker threads)
         private readonly object _errLock = new object();
-        private int _errors, _exceptions;
+        private int _errors, _exceptions, _otherErrors;
         private readonly List<string> _errorLines = new List<string>();
+        private readonly List<string> _otherLines = new List<string>();
+
+        /// <summary>Errors are Placemaker's when its log, message or stack names it; other mods' errors are counted apart.</summary>
+        private static bool Ours(ILog log, string message, Exception e) =>
+            (log?.name ?? "").IndexOf("Placemaker", StringComparison.OrdinalIgnoreCase) >= 0
+            || (message ?? "").IndexOf("Placemaker", StringComparison.OrdinalIgnoreCase) >= 0
+            || (e?.StackTrace ?? "").IndexOf("Placemaker", StringComparison.Ordinal) >= 0;
 
         private World _world;
         private PlacemakerToolSystem _tool;
@@ -105,8 +112,9 @@ namespace Placemaker.Game.Suite
         {
             lock (_errLock)
             {
-                _errors++;
-                if (_errorLines.Count < 400) _errorLines.Add($"[{_scenario}] {log?.name}: {Trim(message)}{(e != null ? " | " + e.GetType().Name + ": " + Trim(e.Message) : "")}");
+                string line = $"[{_scenario}] {log?.name}: {Trim(message)}{(e != null ? " | " + e.GetType().Name + ": " + Trim(e.Message) : "")}";
+                if (Ours(log, message, e)) { _errors++; if (_errorLines.Count < 400) _errorLines.Add(line); }
+                else { _otherErrors++; if (_otherLines.Count < 200) _otherLines.Add(line); }
             }
         }
 
@@ -114,8 +122,10 @@ namespace Placemaker.Game.Suite
         {
             lock (_errLock)
             {
-                _exceptions++;
-                if (_errorLines.Count < 400) _errorLines.Add($"[{_scenario}] EXCEPTION {e?.GetType().Name}: {Trim(e?.Message)}");
+                string line = $"[{_scenario}] EXCEPTION {e?.GetType().Name}: {Trim(e?.Message)} @ {Trim((e?.StackTrace ?? "").Split('
+').FirstOrDefault())}";
+                if (Ours(null, null, e)) { _exceptions++; if (_errorLines.Count < 400) _errorLines.Add(line); }
+                else { _otherErrors++; if (_otherLines.Count < 200) _otherLines.Add(line); }
             }
         }
 
@@ -155,7 +165,7 @@ namespace Placemaker.Game.Suite
                 {
                     ["runId"] = _cfg.runId, ["phase"] = _phase, ["scenario"] = _scenario, ["index"] = _index, ["total"] = _total,
                     ["utc"] = DateTime.UtcNow.ToString("o"), ["sinceStart"] = Since(), ["frame"] = Time.frameCount,
-                    ["frameMs"] = Math.Round(_lastFrameMs, 1), ["worstFrameMs10s"] = Math.Round(_worstRecentMs, 1), ["errors"] = err, ["exceptions"] = exc,
+                    ["frameMs"] = Math.Round(_lastFrameMs, 1), ["worstFrameMs10s"] = Math.Round(_worstRecentMs, 1), ["errors"] = err, ["exceptions"] = exc, ["otherErrors"] = _otherErrors,
                     ["gameMode"] = GameManager.instance != null ? GameManager.instance.gameMode.ToString() : "",
                 };
                 File.WriteAllText(Path.Combine(_out, "heartbeat.json"), o.ToString(Formatting.None));
@@ -945,6 +955,8 @@ namespace Placemaker.Game.Suite
                     _summary["errorsTotal"] = _errors;
                     _summary["exceptionsTotal"] = _exceptions;
                     _summary["errorLinesFirst"] = new JArray(_errorLines.Take(60));
+                    _summary["otherModsErrors"] = _otherErrors;
+                    _summary["otherModsErrorLinesFirst"] = new JArray(_otherLines.Take(40));
                 }
                 var rows = new JArray();
                 foreach (var st in _states)

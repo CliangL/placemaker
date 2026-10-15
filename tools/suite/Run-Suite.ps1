@@ -10,7 +10,7 @@
   3. Backs up the files a session rewrites (root *.coc, launcher-settings.json, continue_game.json, ModsSettings,
      ModsData/Placemaker, Player*.log, Logs/), swaps in a light window/graphics profile, arms the run
      (ModsData/Placemaker/suite/run.json + runOnce.txt) and starts Cities2.exe directly (route A:
-     -disablePdxSdk -noSplash -placemakerSuite=<runId>, SteamAppId set). Route B goes through steam://rungameid.
+     -noSplash -placemakerSuite=<runId>, SteamAppId set). Route B goes through steam://rungameid.
   4. Watches the heartbeat; the mod quits the game itself (GameManager.QuitGame). Only the PID this script started is
      ever killed, and only when the clean quit did not happen in time or the heartbeat stopped.
   5. Copies the session logs into the run folder, restores every backed-up file and verifies the hashes.
@@ -24,6 +24,9 @@ param(
     [int]$TimeoutMin = 0,
     [int]$MaxScenarios = 0,
     [switch]$NoSwitching,
+    # 1.6.2f1: -disablePdxSdk kills the boot (EditorHierarchyUISystem.GetSystemsForContextActions dereferences the
+    # missing PdxSdk platform: FATAL NullReferenceException in CreateSystems), so the playset loads as usual by default.
+    [switch]$DisablePdxSdk,
     [switch]$KeepGraphics,
     [float]$GrowSeconds = 100,
     [float]$PregrowSeconds = 75,
@@ -140,7 +143,8 @@ $cfg = [ordered]@{
     noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = 1280; shotHeight = 720
 }
 Write-NoBom (Join-Path $suiteData 'run.json') ($cfg | ConvertTo-Json -Depth 3)
-$gameArgs = "-disablePdxSdk -noSplash -placemakerSuite=$RunId"
+$gameArgs = "-noSplash -placemakerSuite=$RunId"
+if ($DisablePdxSdk) { $gameArgs = "-disablePdxSdk " + $gameArgs }
 Set-Content -Path (Join-Path $ud 'runOnce.txt') -Value $gameArgs -Encoding ASCII -NoNewline
 
 $restored = $false
