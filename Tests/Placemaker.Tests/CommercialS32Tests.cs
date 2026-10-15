@@ -231,6 +231,15 @@ namespace Placemaker.Tests
         }
 
         [Fact]
+        public void TheHarmonyPassNeverTouchesACommercialType()
+        {
+            // (s35) Commercial types grade themselves (plots at their road's grade): SiteHarmony (s31) must lock every one.
+            foreach (var g in GeneratorRegistry.All.Where(g => GeneratorGroups.Of(g) == "commercial"))
+                Assert.False(SiteHarmony.Participates(g.Id), g.Id);
+            Assert.Equal(8, GeneratorRegistry.All.Count(g => GeneratorGroups.Of(g) == "commercial"));
+        }
+
+        [Fact]
         public void LevelSitesAreNeverGraded()
         {
             foreach (var t in NewTypes)
