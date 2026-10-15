@@ -187,6 +187,8 @@ namespace Placemaker.Game.Build
         /// copy that our piece collides with). An error on the owner lot drops only the owner lot.
         /// Returns the number of newly excluded items.
         /// </summary>
+        private readonly List<float2> _unmatchedProbes = new List<float2>();
+
         private int ExcludeErroneousItems()
         {
             int newly = 0;
@@ -229,10 +231,22 @@ namespace Placemaker.Game.Build
                     bool hit = (_netIndex != null && _netIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _))
                         || (_objectIndex != null && _objectIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _))
                         || (_areaIndex != null && _areaIndex.TryMatch(probe, 0, ErrorMatchTolerance, out key, out _));
-                    if (!hit || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) continue;
+                    if (!hit || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) { _unmatchedProbes.Add(probe); continue; }
                     newly += Exclude(w);
                 }
             }
+            // Playtest 2026-10-14: a park failed on its 2nd attempt with 25 errors none of which matched a plan item within
+            // 2 m, so the build gave up and dropped back to Review. When nothing matched, widen the search for OBJECTS only
+            // (6 m, then 12 m on later attempts) so the decorative pieces in the way go instead of the whole build.
+            if (newly == 0 && _unmatchedProbes.Count > 0 && _objectIndex != null)
+            {
+                float wide = _excludeAttempts >= 2 ? 12f : 6f;
+                foreach (var probe in _unmatchedProbes)
+                    if (_objectIndex.TryMatch(probe, 0, wide, out long key, out _) && key != OwnerKey && _itemByKey.TryGetValue(key, out var w))
+                        newly += Exclude(w);
+                if (newly > 0) Mod.Log.Info($"Placemaker: {_unmatchedProbes.Count} rejected spot(s) matched nothing within {ErrorMatchTolerance} m; left out {newly} object(s) within {wide} m.");
+            }
+            _unmatchedProbes.Clear();
             return newly;
         }
 
