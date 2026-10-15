@@ -482,11 +482,11 @@ namespace Placemaker.Tests
         {
             var s = Pattern("grid");
             s.Values[RoadsIds.TerrainFit] = "follow";
-            var input = SiteInput(s, "hill", out var site);
+            var input = SiteInput(s, "valley", out var site);
             var follow = Run(input);
             var ignore = Pattern("grid");
             ignore.Values[RoadsIds.TerrainFit] = "ignore";
-            var strict = Run(SiteInput(ignore, "hill", out _));
+            var strict = Run(SiteInput(ignore, "valley", out _));
             // Height change along the streets per metre: lower when the grid follows the contours.
             float Climb(AreaPlan p)
             {

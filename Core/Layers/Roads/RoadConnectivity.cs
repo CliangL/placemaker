@@ -428,7 +428,7 @@ namespace Placemaker.Core.Layers.Roads
         /// </summary>
         public static void CleanDeadEnds(RoadNetwork net, Options o, Result res)
         {
-            for (int pass = 0; pass < 12; pass++)
+            for (int pass = 0; pass < 400; pass++)   // a city link restarts the pass (node indices change)
             {
                 var inc = RoadGraph.Incidence(net, RoadGraph.Car);
                 bool changed = false;

@@ -429,13 +429,13 @@ namespace Placemaker.Core.Layers.Roads
             if (!(o.Density > 0.001f) && !(o.WalkDensity > 0.001f)) return 0;
             var rng = new Unity.Mathematics.Random(o.Seed == 0 ? 0x7F4A7C15u : o.Seed);
             var inc = RoadGraph.Incidence(net, RoadGraph.Car);
-            float2 axis = MainAxis(net);
+            float2 axis = MainAxis(net, o.Height);
             var chains = Chains(net, inc);
             // Candidates: chains running ACROSS the axis (lanes run along it, from one cross street to the next).
             var cands = new List<(int edge, float t, float3 p, float2 nrm)>();
             foreach (var ch in chains)
             {
-                if (ch.length < 50f || ch.length > 230f || ch.edges.Count > 3) continue;
+                if (ch.length < 50f || ch.length > 230f || ch.edges.Count > 10) continue;
                 float half = ch.length * 0.5f, acc = 0f;
                 int ei = -1; float t = 0.5f;
                 foreach (int k in ch.edges)
@@ -448,7 +448,7 @@ namespace Placemaker.Core.Layers.Roads
                 var e = net.Edges[ei];
                 if (RoadAccess.IsMain(e) || e.Role == NetRole.Roundabout || e.Role == NetRole.Alley) continue;
                 float2 tan = e.Curve.TangentXZ(t);
-                if (math.abs(math.dot(tan, axis)) > 0.35f) continue;   // runs along the axis: not a cross street
+                if (math.abs(math.dot(tan, axis)) > 0.5f) continue;   // runs along the axis: not a cross street
                 cands.Add((ei, t, e.Curve.Position(t), new float2(-tan.y, tan.x)));
             }
             cands.Sort((a, b) => a.p.x != b.p.x ? a.p.x.CompareTo(b.p.x) : a.p.z.CompareTo(b.p.z));
@@ -474,7 +474,7 @@ namespace Placemaker.Core.Layers.Roads
                     f.Curve.DistanceXZ(hit, out float ht);
                     float fl = RoadGraph.Length(f);
                     if (ht * fl < 22f || (1f - ht) * fl < 22f) continue;
-                    if (math.abs(math.dot(nrm, f.Curve.TangentXZ(ht))) > 0.35f) continue;   // the far road must be parallel (square to the lane)
+                    if (math.abs(math.dot(nrm, f.Curve.TangentXZ(ht))) > 0.5f) continue;   // the far road must be parallel (square to the lane)
                     bool dup = false;
                     foreach (var j in joined) if (math.distance(j, c.p.xz) < 25f && Near(joined, hit, 25f)) { dup = true; break; }
                     if (dup) continue;
@@ -531,29 +531,50 @@ namespace Placemaker.Core.Layers.Roads
         /// The direction the lanes run: the grid orientation of the car network (quadrupled-angle average, so the two
         /// families of a grid reinforce), then whichever of the two families has more road length.
         /// </summary>
-        public static float2 MainAxis(RoadNetwork net)
+        public static float2 MainAxis(RoadNetwork net, Func<float2, float> height = null)
         {
-            float2 acc = float2.zero;
-            foreach (var e in net.Edges)
+            // Chains (junction to junction) rather than edges: a street laid onto a contour is many short bent pieces.
+            var inc = RoadGraph.Incidence(net, RoadGraph.Car);
+            var chords = new List<(float2 a, float2 b)>();
+            foreach (var ch in Chains(net, inc))
             {
-                if (!RoadGraph.Car(e)) continue;
-                float2 d = e.Curve.D.xz - e.Curve.A.xz;
+                var ends = new Dictionary<int, int>();
+                foreach (int k in ch.edges)
+                {
+                    var e = net.Edges[k];
+                    ends[e.N0] = ends.TryGetValue(e.N0, out int c0) ? c0 + 1 : 1;
+                    ends[e.N1] = ends.TryGetValue(e.N1, out int c1) ? c1 + 1 : 1;
+                }
+                var term = new List<float2>();
+                foreach (var kv in ends) if (kv.Value == 1) term.Add(net.Nodes[kv.Key].Position.xz);
+                if (term.Count == 2) chords.Add((term[0], term[1]));
+            }
+            float2 acc = float2.zero;
+            foreach (var (a, b) in chords)
+            {
+                float2 d = b - a;
                 float l = math.length(d);
                 if (l < 1f) continue;
-                float a = math.atan2(d.y, d.x) * 4f;
-                acc += new float2(math.cos(a), math.sin(a)) * l;
+                float ang4 = math.atan2(d.y, d.x) * 4f;
+                acc += new float2(math.cos(ang4), math.sin(ang4)) * l;
             }
             float ang = math.lengthsq(acc) < 1e-6f ? 0f : math.atan2(acc.y, acc.x) * 0.25f;
             float2 u = new float2(math.cos(ang), math.sin(ang)), v = new float2(-u.y, u.x);
-            float lu = 0f, lv = 0f;
-            foreach (var e in net.Edges)
+            float lu = 0f, lv = 0f, gu = 0f, gv = 0f;
+            foreach (var (a, b) in chords)
             {
-                if (!RoadGraph.Car(e)) continue;
-                float2 d = e.Curve.D.xz - e.Curve.A.xz;
+                float2 d = b - a;
                 float l = math.length(d);
                 if (l < 1f) continue;
                 float cu = math.abs(math.dot(d / l, u)), cv = math.abs(math.dot(d / l, v));
-                if (cu > 0.9f) lu += l; else if (cv > 0.9f) lv += l;
+                float g = height != null ? math.abs(height(b) - height(a)) : 0f;
+                if (cu > 0.85f) { lu += l; gu += g; } else if (cv > 0.85f) { lv += l; gv += g; }
+            }
+            // On a slope the lanes run along the contours (the family that climbs least), else along the longer family.
+            if (height != null && lu > 1f && lv > 1f)
+            {
+                float mu = gu / lu, mv = gv / lv;
+                if (math.abs(mu - mv) > 0.015f) return mu < mv ? u : v;
             }
             return lu >= lv ? u : v;
         }

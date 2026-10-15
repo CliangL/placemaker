@@ -129,7 +129,7 @@ namespace Placemaker.Core.Layers.Roads
             // (s34) Follow contours: the long streets of a grid / superblocks are laid onto contour lines.
             bool followContours = settings.S(RoadsIds.TerrainFit, "auto") == "follow";
             if (followContours && follow && (pattern == RoadPattern.Grid || pattern == RoadPattern.Superblock)
-                && GridGenerator.TryContourDirection(new List<float2>(boundary), heightAt, out float2 contourAxis))
+                && GridGenerator.TryContourDirection(new List<float2>(boundary), heightAt, out float2 contourAxis, out float slopeAnisotropy) && slopeAnisotropy > 0.3f)
             {
                 float rot = math.radians(gp.AngleOffsetDegrees);
                 float2 axis = new float2(contourAxis.x * math.cos(rot) - contourAxis.y * math.sin(rot), contourAxis.x * math.sin(rot) + contourAxis.y * math.cos(rot));
