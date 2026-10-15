@@ -200,8 +200,8 @@ namespace Placemaker.Core.Decals
                         dry[y * gw + x] = PaintShape.Curve(Falloff.Smooth, (moist - 0.40f) / 0.12f);
                     }
                 var outline = Region.Ring;
-                if (Paint(PaintShape.Grid(origin, cell, gw, gh, lush), TerrainMaterials.Lush, 0.30f, 0.5f, false, outline) != null) R.Lawn++;
-                if (Paint(PaintShape.Grid(origin, cell, gw, gh, dry), TerrainMaterials.Dry, 0.42f, 0.6f, false, outline) != null) R.Lawn++;
+                if (Paint(PaintShape.Grid(origin, cell, gw, gh, lush), TerrainMaterials.Lush, 0.42f, 0.55f, false, outline) != null) R.Lawn++;
+                if (Paint(PaintShape.Grid(origin, cell, gw, gh, dry), TerrainMaterials.Dry, 0.5f, 0.65f, false, outline) != null) R.Lawn++;
             }
 
             // ───────────────────────── mulch ─────────────────────────
@@ -220,11 +220,24 @@ namespace Placemaker.Core.Decals
                     // Clean: a crisp round mulch bed close to the trunk; lived-in: a soft, irregular shadow of the crown.
                     var shape = clean
                         ? PaintShape.Radial(t.P, crown * 0.42f, crown * 0.62f, Falloff.Hold, 0.15f, 2f, h)
-                        : PaintShape.Radial(t.P, crown * 0.3f, crown * 1.0f, Falloff.Smooth, 0.35f + crown * 0.08f, math.max(2f, crown), h);
+                        : PaintShape.Radial(t.P, crown * 0.35f, crown * 1.1f, Falloff.Smooth, 0.35f + crown * 0.08f, math.max(2f, crown), h);
                     (t.Conifer ? needles : broad).Add(shape);
                 }
-                if (broad.Count > 0 && Paint(PaintShape.Union(broad), TerrainMaterials.Lush, clean ? 0.85f : 0.62f, 0.9f) != null) { R.Mulch++; R.MulchTrees += broad.Count; }
+                if (broad.Count > 0 && Paint(PaintShape.Union(broad), TerrainMaterials.Lush, clean ? 0.85f : 0.78f, 0.9f) != null) { R.Mulch++; R.MulchTrees += broad.Count; }
                 if (needles.Count > 0 && Paint(PaintShape.Union(needles), TerrainMaterials.Lush, 0.78f, 0.95f) != null) { R.Mulch++; R.MulchTrees += needles.Count; }
+                // Shrub beds: a mulched bed under every bush (neat in a clean style, ragged otherwise).
+                var beds = new List<PaintShape>();
+                foreach (var l in W.Plans)
+                    foreach (var o in l.Objects)
+                    {
+                        if (o == null || o.Role != ObjectRole.Bush || beds.Count >= MaxMulchTrees) continue;
+                        var p = o.Position.xz;
+                        if (!Region.Contains(p) || !Visible(p)) continue;
+                        uint h = H((int)math.floor(p.x * 2f), (int)math.floor(p.y * 2f), 43);
+                        float r = 1.9f * (o.Scale > 0.05f ? o.Scale : 1f) * (0.85f + 0.3f * U(h));
+                        beds.Add(clean ? PaintShape.Radial(p, r * 0.6f, r, Falloff.Hold, 0.1f, 2f, h) : PaintShape.Radial(p, r * 0.3f, r * 1.2f, Falloff.Smooth, 0.4f, 2.5f, h));
+                    }
+                if (beds.Count > 0 && Paint(PaintShape.Union(beds), TerrainMaterials.Lush, clean ? 0.8f : 0.6f, 0.85f) != null) R.Mulch++;
             }
 
             // ───────────────────────── verges ─────────────────────────
@@ -257,7 +270,7 @@ namespace Placemaker.Core.Decals
                         R.Verges++;
                     }
                 // One field for every verge of the step (faint: the band runs the whole path).
-                if (strokes.Count > 0) Paint(PaintShape.Union(strokes), TerrainMaterials.Dirt, 0.17f, 0.4f);
+                if (strokes.Count > 0) Paint(PaintShape.Union(strokes), TerrainMaterials.Dirt, 0.26f, 0.45f);
             }
 
             // ───────────────────────── desire paths ─────────────────────────
@@ -440,7 +453,7 @@ namespace Placemaker.Core.Decals
                 if (ring == null || ring.Length < 3) return;
                 var band = PaintShape.Stroke(Closed(ring), 14f, 6.5f, 1f, 1f, Falloff.Linear, 0f, 0.25f, 14f, H(0, 31)).Mul(PaintShape.Polygon(ring, 1.5f));
                 var dryPatches = band.Mul(PaintShape.Noise(7f, 0.5f, 0.6f, H(0, 32)));
-                if (Paint(dryPatches, TerrainMaterials.Dry, 0.24f, 0.4f, false, ring) != null) R.Edges++;
+                if (Paint(dryPatches, TerrainMaterials.Dry, 0.3f, 0.45f, false, ring) != null) R.Edges++;
                 if (S.Style == DressStyle.Gritty)
                 {
                     var dirtPatches = band.Mul(PaintShape.Noise(5f, 0.22f, 0.5f, H(0, 33)));
@@ -488,7 +501,20 @@ namespace Placemaker.Core.Decals
                             pitchHalo.Add(PaintShape.Radial(c, 3f, 7.5f, Falloff.Smooth, 1f, 4f, H2(h, 1)));
                         }
                     }
+                // Dog runs: dogs wear a track along the fence line, patchy.
+                if (S.LayerId == "dogPark" && Region.Ring != null && Region.Ring.Length >= 3)
+                {
+                    var inner = Region.InsetVertices(4.5f);
+                    if (inner != null && inner.Length >= 3 && Poly.IsSimple(inner) && Poly.SignedArea(inner) > 100f)
+                    {
+                        var run = PaintShape.Stroke(Closed(inner), 5f, 1.8f, 1f, 1f, Falloff.Linear, 0f, 0.45f, 9f, H(0, 71))
+                            .Mul(PaintShape.Noise(4f, 0.7f, 0.6f, H(0, 72)));
+                        if (Paint(run, TerrainMaterials.Dirt, 0.4f, 0.55f, true, Region.Ring) != null) R.Extras++;
+                    }
+
+                }
                 if (pitch.Count > 0 && Paint(PaintShape.Union(pitch), TerrainMaterials.Dirt, 0.42f, 0.6f, knockout: true) != null) R.Extras++;
+
                 if (pitchHalo.Count > 0 && Paint(PaintShape.Union(pitchHalo), TerrainMaterials.Dry, 0.3f, 0.45f) != null) R.Extras++;
                 // Fire rings: dark ash (forest floor) round the pit.
                 if (fire.Count > 0 && Paint(PaintShape.Union(fire), TerrainMaterials.Lush, 0.7f, 0.85f) != null) R.Extras++;

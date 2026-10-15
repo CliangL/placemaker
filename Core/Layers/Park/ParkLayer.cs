@@ -129,9 +129,12 @@ namespace Placemaker.Core.Layers.Park
             c.Asset("smallPathAsset", AssetCategories.Pathway, ControlTier.More, "paths");
             c.Slider("trails", 0, 0, 6, 1, "count", ControlTier.More, "paths").Tip();
             c.Asset("trailAsset", AssetCategories.TrailPath, ControlTier.More, "paths").Tip();
+            // s33: a dirt trail can be painted into the ground instead of being a path net (walkable when the playset has
+            // an invisible pedestrian path, else visual only).
+            c.Choice("trailStyle", "net", ControlTier.More, "paths", "net", "painted").When("trails!=0").Tip();
             c.Choice("desireLines", "none", ControlTier.More, "paths", "none", "worn", "paved").Tip();
             c.Slider("desireCount", 3, 1, 8, 1, "count", ControlTier.More, "paths");
-            c.Slider("desireLayer", 1, 1, 4, 1, "count", ControlTier.More, "paths").When("desireLines=worn").Tip();
+            c.Slider("desireLayer", 3, 1, 4, 1, "count", ControlTier.More, "paths").When("desireLines=worn").Tip();   // s33: 3 = dirt (1 was dry grass)
             EntranceKinds.WithOptions(c.Markers("entrances", ControlTier.More, EntranceKinds.Park), EntranceKinds.Park).Tip();
             c.Slider("bushDensity", 60, 0, 250, 1, "perHa", ControlTier.More, "planting");
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
@@ -182,6 +185,7 @@ namespace Placemaker.Core.Layers.Park
             c.Fixed("bikeGap");
             c.Fixed("desireCount");
             c.Fixed("desireLayer");
+            c.Fixed("trailStyle");
         }
 
         protected override void DefinePresets()
@@ -516,7 +520,13 @@ namespace Placemaker.Core.Layers.Park
             // 6. Emit everything.
             if (ctx.B("groundSurface")) Lawn.Cover(ctx, region.Ring, AssetMix.One(ctx.S("surface")));
             if (ctx.B("naturalGround")) NaturalGround(ctx, s, lawns, style, amenities);
-            float pathLength = ParkPaths.Emit(ctx, s.Curves, s.Gates, TierAssets(ctx));
+            float pathLength;
+            if (ctx.S("trailStyle") == "painted" && s.Curves.Exists(c => c.Tier == PathTier.Trail))
+            {
+                pathLength = ParkPaths.Emit(ctx, s.Curves.FindAll(c => c.Tier != PathTier.Trail), s.Gates, TierAssets(ctx));
+                PaintedTrails(ctx, s.Curves.FindAll(c => c.Tier == PathTier.Trail), s.Gates);
+            }
+            else pathLength = ParkPaths.Emit(ctx, s.Curves, s.Gates, TierAssets(ctx));
             if (ctx.B("fence"))
             {
                 var fence = AssetMix.One(ctx.S("fenceAsset"));
@@ -750,7 +760,30 @@ namespace Placemaker.Core.Layers.Park
             }
         }
 
+        /// <summary>
+        /// (s33) Trails painted into the ground (TrailPaint): a dirt stroke per trail, plus an invisible pedestrian path so
+        /// cims can walk it when the playset has one (never the drivable invisible paths); otherwise visual only (Info).
+        /// </summary>
+        private static void PaintedTrails(LayerContext ctx, List<PathCurve> trails, List<Gate> gates)
+        {
+            var kit = new Placemaker.Core.Paint.PaintKit(ctx.Plan.Paint, ctx.H, Hashing.Mix(ctx.Seed, 0x7A11u));
+            string walk = TrailPaint.WalkableNet(ctx.Site);
+            foreach (var c in trails)
+            {
+                if (c.Samples == null || c.Samples.Length < 2) continue;
+                TrailPaint.Stroke(kit, c.Samples, math.max(1.6f, c.HalfWidth * 2f + 0.4f), 0.85f);
+                if (walk == null) continue;
+                var net = ctx.CurvedNet(c.A, c.B, c.C, c.D, c.Role, new AssetRef(walk));
+                net.Category = AssetCategories.InvisiblePath;
+                if (c.GateA >= 0 && c.GateA < gates.Count && gates[c.GateA].AttachId >= 0) { net.StartAttach = gates[c.GateA].AttachId; net.StartAttachT = gates[c.GateA].AttachT; }
+                if (c.GateD >= 0 && c.GateD < gates.Count && gates[c.GateD].AttachId >= 0) { net.EndAttach = gates[c.GateD].AttachId; net.EndAttachT = gates[c.GateD].AttachT; }
+            }
+            TerrainPaint.Warn(ctx);
+            if (walk == null) ctx.Issue(IssueSeverity.Info, TrailPaint.VisualOnlyKey);
+        }
+
         /// <summary>The net asset of each path tier: main walk = pathAsset, bike/trail from their categories with name fallbacks.</summary>
+
         private static Func<PathTier, AssetRef> TierAssets(LayerContext ctx)
         {
             var main = AssetMix.One(ctx.S("pathAsset"));
