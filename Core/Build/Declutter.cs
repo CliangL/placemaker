@@ -297,7 +297,7 @@ namespace Placemaker.Core.Build
             // (s55) "Ignore collisions in my builds" on a lot with stall markings: the build gives every prop the parking carrier as owner,
             // so the game never pairs our own pieces. Then only a near-exact duplicate (same spot) is a reason to drop an object; the
             // overlaps with stall markings and neighbouring props that dropped 85 bushes, lamps and trees (playtest 89) are fine.
-            bool relax = Anarchy && PlanWork.StallMarkings(plan) > 0;
+            bool relax = Anarchy;   // s58: every plan (every build shares one group owner now)
 
             bool Free(in Footprint f, Item it)
             {

@@ -314,7 +314,8 @@ namespace Placemaker.Tests
                     float along = math.abs(final(p + t) - final(p - t)) / 2f;
                     float across = math.abs(final(p + nrm * 3f) - final(p - nrm * 3f)) / 6f;
                     Assert.True(along <= 0.13f, $"{ctx}: lane at {p} climbs {along:P0}");
-                    Assert.True(across <= 0.10f, $"{ctx}: lane at {p} falls {across:P0} across");
+                    // 8 % diagonal ground beside a lane between plots at their own roads' grades: the bank takes up to 15 % over 6 m (s58); other grounds stay at 10 %.
+                    Assert.True(across <= (ground == "steep" ? 0.15f : 0.10f), $"{ctx}: lane at {p} falls {across:P0} across");
                 }
             }
 

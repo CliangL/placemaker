@@ -67,6 +67,8 @@ namespace Placemaker.Tests
                 // (s46) A plot no cell could be zoned for stays a shop pad (warned): not cells by design.
                 if (padded && !cellPlots.Any(c => math.distance(c, Poly.Centroid(q)) < 0.5f)) continue;
                 var mine = zoned.Where(c => Poly.Contains(q, Centre(c))).ToList();
+                // (s58) A plot the guard reported as not zonable (ZoneGuard.NotZonableKey, its quad dropped) keeps its cutout but has no cells: warned, not a defect.
+                if (mine.Count == 0 && plan.AllIssues().Any(i => i.Key == ZoneGuard.NotZonableKey && math.distance(i.At.Value.xz, Poly.Centroid(q)) < 14f)) continue;
                 Assert.True(mine.Count >= 2, $"{ctx}: plot at {Poly.Centroid(q)} has {mine.Count} cells");
                 float cells = mine.Count * ZoneGuard.Cell * ZoneGuard.Cell;
                 Assert.True(math.abs(cells - Poly.Area(q)) < 1f, $"{ctx}: plot at {Poly.Centroid(q)} is {Poly.Area(q):0} m², its cells {cells:0} m²");
@@ -117,6 +119,7 @@ namespace Placemaker.Tests
             foreach (var q0 in plots)
             {
                 if (facesLane(q0)) continue;
+                if (!plan.ZoneCells.Any(c => c.State == ZoneCellState.Zoned && Poly.Contains(q0, 0.25f * (c.A + c.B + c.C + c.D)))) continue;   // s58: a reported not-zonable plot has no cell block to be snug to
                 var q = Poly.EnsureCcw((float2[])q0.Clone());
                 for (int e = 0; e < q.Length; e++)
                 {

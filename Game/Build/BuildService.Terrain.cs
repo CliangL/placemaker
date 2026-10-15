@@ -145,7 +145,8 @@ namespace Placemaker.Game.Build
         {
             try
             {
-                if (_tfRaster == null || _work == null || !_work.HasParking) return;
+                if (_tfRaster == null || _work == null || _request?.Plan == null) return;
+                if (TerraformPits.Intentional(_request.Plan)) { Mod.Log.Info("Placemaker pit guard: skipped (this build digs on purpose)."); return; }
                 int n = TerraformPits.Fill(_tfRaster, Height, PitDepth, out float deepest, out var at);
                 if (n > 0) Mod.Log.Warn($"Placemaker pit guard: raised {n} texel(s) of the target, deepest bowl {deepest:F2} m at ({at.x:F0}, {at.y:F0}) (a lot has no hollow).");
             }

@@ -351,6 +351,9 @@ namespace Placemaker.Core.Layers.Commercial
             Merge(sub);
             // (s25) The lot graded itself (level tiers on a slope): the rest of the mall plans on that ground.
             if (sub.HeightAfter != null) _lotGround.Add((lot, sub.HeightAfter));
+            // (s58) The aprons of the lot's kerb connectors (lot edge to the street's kerb) are fixed ground as well: the sculpt must not bank over them.
+            foreach (var ap in sub.Terraform)
+                if (ap.Apron && ap.Ring.Length >= 3) { var ar = ap.Ring; _lotGround.Add((Poly.EnsureCcw(Poly.To2D(ar)), p => Build.TerraformSurface.At(ar, p))); }
             Stalls += (int)t.Capacity; EvStalls += (int)t.Ev;
             Lots.Add(lot);
             if (leftover && !Poly.IsConvex(lot)) { var parts = ConvexDecomposition.Decompose(lot); if (parts.Count > 0) Taken.AddRange(parts); else Taken.Add(lot); }

@@ -290,6 +290,7 @@ namespace Placemaker.Tests.Types
             {
                 Assert.True(t.Permanent);
                 var c = Poly.Centroid(Poly.To2D(t.Ring));
+                if (plan.Areas.Any(a => a.Role == AreaRole.Lot && Poly.Contains(Poly.To2D(a.Ring), c))) continue;   // s58: the car park grades itself (level tiers), its terraform is merged now
                 float edge = Poly.DistanceToBoundary(ring, c);
                 float change = math.abs(t.TargetHeight - site.HeightAt(c));
                 Assert.True(change < edge * 0.3f + 0.3f, $"{change:0.00} m change {edge:0.0} m from the edge");

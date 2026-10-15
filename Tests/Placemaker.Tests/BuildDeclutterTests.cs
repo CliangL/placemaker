@@ -239,7 +239,11 @@ namespace Placemaker.Tests
                 // no markings on the plan: the old rule (the game would hide one of an overlapping pair)
                 var plain = Plan(Obj(ObjectRole.Tree, "Apple", 0f, 0f), Obj(ObjectRole.Bush, "Bush", 0.5f, 0.3f));
                 var repPlain = Declutter.Run(plain, Assets);
-                Assert.Equal(1, repPlain.TotalMoved + repPlain.TotalDropped);
+                Assert.Equal(0, repPlain.TotalMoved + repPlain.TotalDropped);   // s58: every build shares one group owner now, so the relaxed rule holds for every plan
+                Declutter.Anarchy = false;
+                var strict = Plan(Obj(ObjectRole.Tree, "Apple", 0f, 0f), Obj(ObjectRole.Bush, "Bush", 0.5f, 0.3f));
+                var repStrict = Declutter.Run(strict, Assets);
+                Assert.Equal(1, repStrict.TotalMoved + repStrict.TotalDropped);   // anarchy off: the game would hide one of an overlapping pair
             }
             finally { Declutter.Anarchy = was; }
         }
