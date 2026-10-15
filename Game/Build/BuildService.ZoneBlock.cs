@@ -105,6 +105,7 @@ namespace Placemaker.Game.Build
                     foreach (var g in grids) if (g.Ours) ours++;
                     Mod.Log.Info($"Placemaker zoning refresh: {grids.Count} live zone block(s) ({ours} of the build's own roads); {after} cutout cell(s) (planned {before.Count}), "
                         + $"{moved} on a moved grid (road edges split by the build), {refreshed.Count} zoning quad(s).");
+                    Mod.Log.Info("Placemaker zoning refresh (s54): " + ZoneGuard.LastRefreshReport);
                     // Which road each plot zones from (playtest: shops grew facing the street behind the plaza's lane).
                     for (int i = 0; i < refreshed.Count && i < 40; i++)
                     {
