@@ -350,7 +350,7 @@ namespace Placemaker.Game.Build
             // variations do not turn a row of one bench into a mix (FEEDBACK-2 #1).
             int? seed = AutoAssets.IsUniform(w.Category) ? AutoAssets.UniformSeed(w.Category, (uint)_groupId) : (int?)null;
             float elevation = SinkDecals && (o.Role == ObjectRole.Decal || SinkStallMarkings && PlanWork.SinkInBuild(o.Role)) ? DecalSink : 0f;
-            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation, optional: !PlanWork.IsFunctional(o.Role) && !(IgnoreOwnCollisions && SelfOverlaps(w)));
+            EmitObjectDefinition(prefab, o.Position, o.Yaw, o.Scale, o.Age, o.Variation, key, true, seed, elevation, optional: !IgnoreOwnCollisions && !PlanWork.IsFunctional(o.Role));   // (s59) anarchy: the ghost shows what the build places — nothing is cancelled
             NoteUsed(prefab);
         }
 

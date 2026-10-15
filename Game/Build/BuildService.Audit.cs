@@ -1,14 +1,7 @@
-// Placemaker — s53: build audit + "Placemaker anarchy" (ignore collisions between our own pieces).
+// Placemaker — s53: build audit; s59: the anarchy decision moved to Core/Build/BuildVerdicts (one pass, no retry loop).
 //
-// Anarchy: the game reports OverlapExisting / NotEnoughClearance on a temporary that touches another temporary of the same
-// build (stall markings 3.2 m on a 3.0 m pitch, bushes in a bed...). The vanilla tools refuse to apply while an Error exists
-// (ToolBaseSystem.GetAllowApply); our own BuildToolSystem does not — Apply/ApplyObjects/Nets/Areas never read Error — so the
-// build simply stops treating those errors as a reason to leave pieces out or to fail. An error is only ignored when
-//   * the setting "Ignore collisions in my builds" is on,
-//   * it is an overlap error (OverlapExisting / NotEnoughClearance) on an OBJECT of the plan,
-//   * that object overlaps another planned object (Core/Build/OwnOverlap), and
-//   * it touches no existing building (their lots / footprints; the game's own Warning on a building is ProtectBuildings).
-// Everything else stays an error and goes through the exclude-and-retry safety net unchanged.
+// Anarchy ("Ignore collisions in my builds", default on) builds every planned piece whatever the game's collision checks say;
+// the audit lists what was left out (with the reason) and what was kept despite a game error (AuditReason.Anarchy).
 
 using System;
 using System.Collections.Generic;
@@ -34,14 +27,10 @@ namespace Placemaker.Game.Build
         public static bool IgnoreOwnCollisions = true;
 
         private BuildAudit _audit;
-        private readonly HashSet<Entity> _anarchyErrors = new HashSet<Entity>();
-        private readonly HashSet<long> _anarchyItems = new HashSet<long>();
         private readonly HashSet<long> _auditMissing = new HashSet<long>();
-        private readonly HashSet<long> _auditKept = new HashSet<long>();
         private OwnOverlap _ownOverlap;
-        private int _anarchyCleared;
 
-        /// <summary>(s53) Anarchy: an object that overlaps another planned one is not optional in the ghost (an optional one is cancelled with its neighbour).</summary>
+        /// <summary>(s53) An object that overlaps another planned one (Core/Build/OwnOverlap, real catalog bounds).</summary>
         private bool SelfOverlaps(WorkItem w)
         {
             try
@@ -59,11 +48,7 @@ namespace Placemaker.Game.Build
         {
             _audit = null;
             _ownOverlap = null;
-            _anarchyErrors.Clear();
-            _anarchyItems.Clear();
             _auditMissing.Clear();
-            _auditKept.Clear();
-            _anarchyCleared = 0;
         }
 
         private static string AuditKind(ComposedPlan plan, WorkItem w)
@@ -130,60 +115,6 @@ namespace Placemaker.Game.Build
         }
 
         /// <summary>
-        /// Anarchy pass in Validate: fills <see cref="_anarchyErrors"/> with the errors that are only our own pieces
-        /// overlapping. Returns how many error entities remain real. Never throws.
-        /// </summary>
-        private int ClassifyOwnCollisions()
-        {
-            _anarchyErrors.Clear();
-            _anarchyItems.Clear();
-            int total = _errorQuery.CalculateEntityCount();
-            if (!IgnoreOwnCollisions || total == 0 || _request?.Plan == null) return total;
-            try
-            {
-                var byOwner = ErrorTypeByOwner();
-                var assets = SafeAssetInfo();
-                if (_ownOverlap == null) _ownOverlap = new OwnOverlap(_request.Plan, assets);
-                var buildings = ExistingBuildingPolys();
-                using var errors = _errorQuery.ToEntityArray(Allocator.Temp);
-                var why = new Dictionary<string, int>(StringComparer.Ordinal);
-                for (int i = 0; i < errors.Length; i++)
-                {
-                    var e = errors[i];
-                    var top = e;
-                    for (int depth = 0; depth < 4 && EntityManager.HasComponent<Owner>(top); depth++)
-                    {
-                        var o = EntityManager.GetComponentData<Owner>(top).m_Owner;
-                        if (o == Entity.Null || !EntityManager.Exists(o) || !EntityManager.HasComponent<Temp>(o)) break;
-                        top = o;
-                    }
-                    // (s55) Why an error is NOT ignorable, counted for the log (playtest 89: 399 overlap errors, "anarchy: cleared" never appeared).
-                    if (!EntityManager.HasComponent<Temp>(top) || !EntityManager.HasComponent<PrefabRef>(top) || !IsOwnCandidate(top, out _)) { Tally(why, "not-our-temporary"); continue; }
-                    if (!TryMatch(top, out long key, out var kind) || kind != WorkKind.Object || key == OwnerKey || !_itemByKey.TryGetValue(key, out var w)) { Tally(why, "no-plan-object"); continue; }
-                    // 2026-10-15 playtest: builds failed 9 times out of 10 on object overlaps the old rules kept "real" (no type icon,
-                    // or overlapping a city prop/tree rather than one of ours). User: "I don't care if things overlap, just place them."
-                    // With anarchy on, ANY error on one of our planned objects is ignored unless it touches an existing building.
-                    if (!byOwner.TryGetValue(e, out var type) && !byOwner.TryGetValue(top, out type)) type = "OverlapExisting";
-                    if (type != "OverlapExisting" && type != "NotEnoughClearance") { Tally(why, "type-" + type); continue; }
-                    var obj = ItemObject(_request.Plan, w);
-                    if (obj == null) { Tally(why, "no-plan-object"); continue; }
-                    if (TouchesBuilding(obj, assets, buildings)) { Tally(why, "touches-building"); continue; }
-                    _anarchyErrors.Add(e);
-                    _anarchyItems.Add(key);
-                    if (_auditKept.Add(key)) AuditItem(w, AuditReason.Anarchy);
-                }
-                if (why.Count > 0)
-                {
-                    var parts = new List<string>();
-                    foreach (var kv in why) parts.Add(kv.Key + " x" + kv.Value);
-                    Mod.Log.Info($"Placemaker anarchy: {_anarchyErrors.Count} of {total} error(s) ignorable; the rest stay real: {string.Join(", ", parts)}.");
-                }
-            }
-            catch (Exception ex) { Mod.Log.Warn("Placemaker: anarchy classification failed: " + ex.Message); _anarchyErrors.Clear(); _anarchyItems.Clear(); return total; }
-            return total - _anarchyErrors.Count;
-        }
-
-        /// <summary>
         /// (s55) What the build really leaves standing. After Apply the game's OverrideSystem hides (Overridden) any overridable object
         /// that meets another one, so "built" must not count temporaries: this scans the group's objects for Overridden, reports them
         /// as "hidden" (left out, "hidden by the game: overlap") and brings back those that are hidden only because of our own pieces.
@@ -214,9 +145,10 @@ namespace Placemaker.Game.Build
                         string name = null;
                         try { name = _catalog?.NameOf(prefab); } catch (Exception) { }
                         if (string.IsNullOrEmpty(name)) name = "?";
+                        // (s59) Anarchy: every planned piece of ours that the game hid after Apply is shown again unless it touches an existing building.
                         bool own = false;
                         if (IgnoreOwnCollisions && _objectIndex != null && _objectIndex.TryMatch(pos.xz, PrefabId(prefab), ObjectMatchTolerance, out long key, out _)
-                            && _itemByKey.TryGetValue(key, out var w) && w.Kind == WorkKind.Object && SelfOverlaps(w))
+                            && _itemByKey.TryGetValue(key, out var w) && w.Kind == WorkKind.Object)
                         {
                             var obj = ItemObject(_request.Plan, w);
                             own = obj != null && !TouchesBuilding(obj, assets, buildings);
@@ -239,7 +171,7 @@ namespace Placemaker.Game.Build
                     top.Sort((a, b) => b.Value.CompareTo(a.Value));
                     var parts = new List<string>();
                     for (int i = 0; i < top.Count && i < 6; i++) parts.Add(top[i].Key + " x" + top[i].Value);
-                    Mod.Log.Warn($"Placemaker survivors: {hiddenNow} object(s) of group {_groupId} were hidden by the game (Overridden): {restored} shown again (only our own pieces overlapped), {hiddenNow - restored} stay hidden [{string.Join("; ", parts)}].");
+                    Mod.Log.Warn($"Placemaker survivors: {hiddenNow} object(s) of group {_groupId} were hidden by the game (Overridden): {restored} shown again (anarchy: planned pieces stay visible), {hiddenNow - restored} stay hidden [{string.Join("; ", parts)}].");
                 }
                 else Mod.Log.Info($"Placemaker survivors: no object of group {_groupId} is hidden by the game (Overridden); {_carrierOwned} share the carrier owner.");
             }
@@ -363,7 +295,6 @@ namespace Placemaker.Game.Build
                 }
                 a.Planned = planned + declutter;
                 a.Built = Math.Max(0, a.Planned - a.LeftOut);
-                if (_anarchyCleared > 0) Mod.Log.Info($"Placemaker anarchy: cleared {_anarchyCleared} self-overlap error(s).");
                 Mod.Log.Info("Placemaker " + a.Summary());
                 if (a.Entries.Count > 0)
                 {

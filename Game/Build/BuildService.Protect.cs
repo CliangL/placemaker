@@ -4,10 +4,11 @@
 // capture is a snapshot: a building may have grown since, or sit outside the captured margin. The game
 // tells us exactly which existing building our temporaries would remove: Net/Areas/Objects
 // ValidationHelpers give an overlapped spawnable building (Overridable | DeleteOverridden) a
-// Game.Tools.Warning, and Apply deletes it. So before Apply, any live building carrying a Warning while
-// our build holds the tool is protected: the work items touching it are left out and the build retries
-// (the same exclude-and-retry loop as rejected pieces). If nothing can be identified, the build stops
-// rather than demolish anything.
+// Game.Tools.Warning, and Apply (ToolApplySystem) deletes every entity carrying a Warning. (s59) So before Apply:
+// the building's Warning is removed (NeutralizeVerdicts, every mode — nothing is ever demolished) and our objects,
+// decals and areas touching it are left out in place (cancelled temporaries, no retry). A NET touching it is built
+// anyway under anarchy (removing one edge would break the network; the building stays); with vanilla rules the
+// build stops and names the net.
 
 using System.Collections.Generic;
 using Game.Common;
@@ -25,7 +26,6 @@ namespace Placemaker.Game.Build
     public sealed partial class BuildService
     {
         private EntityQuery _warnedBuildingQuery;
-        private int _protectAttempts;
         private int _buildingsProtected;
 
         private void InitProtect()
@@ -40,13 +40,12 @@ namespace Placemaker.Game.Build
 
         private void ResetProtect()
         {
-            _protectAttempts = 0;
             _buildingsProtected = 0;
         }
 
         /// <summary>
-        /// Called in Validate before anything is applied. 0 = no building at risk; 1 = items were left
-        /// out (retry); -1 = buildings at risk but nothing of ours could be matched (stop the build).
+        /// Called once in Validate. 0 = go on (pieces touching a building at risk were cancelled in place, the building's
+        /// Warning goes in NeutralizeVerdicts); -1 = vanilla rules and one of our nets would remove a building (stop).
         /// </summary>
         private int ProtectBuildings()
         {
@@ -67,17 +66,42 @@ namespace Placemaker.Game.Build
             Dictionary<string, AssetInfo> assets = null;
             try { assets = Services.Assets?.InfoMap(); } catch (System.Exception) { }
             var hits = SiteSafety.ItemsTouching(_request.Plan, _work, ObstacleCut.Grow(polys, 1f), assets, 1f);
-            int newly = 0;
-            foreach (var w in hits) newly += Exclude(w, reason: AuditReason.SiteSafety);
-            if (newly > 0 && _protectAttempts++ < MaxAutoExcludeAttempts)
+            if (hits.Count == 0)
             {
-                _buildingsProtected += warned.Length;
-                Mod.Log.Info($"Placemaker: {warned.Length} existing building(s) would have been removed by this build; left out {newly} part(s) touching them and retrying.");
-                return 1;
+                Mod.Log.Info($"Placemaker: {warned.Length} existing building(s) were marked for removal; none of our pieces touches them — they are kept standing.");
+                return 0;
             }
-            Mod.Log.Warn($"Placemaker: {warned.Length} existing building(s) are marked for removal by this build and the parts responsible could not be left out; the build stops.");
-            NoteSkip("Placemaker.Build.WouldDemolish", at, IssueSeverity.Error, warned.Length);
-            return -1;
+            var hitKeys = new HashSet<long>();
+            WorkItem? net = null;
+            foreach (var w in hits)
+            {
+                if (w.Kind == WorkKind.Net) { if (!net.HasValue) net = w; continue; }
+                if (w.Kind == WorkKind.Zoning) continue;
+                hitKeys.Add(PlanWork.Key(w));
+            }
+            if (net.HasValue && !IgnoreOwnCollisions)
+            {
+                var n = net.Value;
+                Mod.Log.Warn($"Placemaker: net '{n.Asset.Id}' at ({n.Anchor.x:F0}, {n.Anchor.y:F0}) would remove {warned.Length} existing building(s); the build stops (vanilla rules).");
+                NoteSkip("Placemaker.Build.WouldDemolish", new float3(n.Anchor.x, Height(n.Anchor), n.Anchor.y), IssueSeverity.Error, warned.Length);
+                _status.ErrorPositions = new List<float3> { new float3(n.Anchor.x, Height(n.Anchor), n.Anchor.y) };
+                return -1;
+            }
+            int cancelled = 0;
+            var audited = new HashSet<long>();
+            using (var temps = _tempQuery.ToEntityArray(Allocator.Temp))
+                for (int i = 0; i < temps.Length; i++)
+                {
+                    var e = temps[i];
+                    if (!IsOwnCandidate(e, out _) || !TryMatch(e, out long key, out _) || !_itemByKey.TryGetValue(key, out var w)) continue;
+                    if (!hitKeys.Contains(PlanWork.Key(w))) continue;
+                    if (CancelTemporary(e)) cancelled++;
+                    if (audited.Add(key)) AuditItem(w, AuditReason.SiteSafety);
+                }
+            _buildingsProtected += warned.Length;
+            Mod.Log.Info($"Placemaker: {warned.Length} existing building(s) would have been removed by this build; they are kept, {cancelled} of our piece(s) touching them left out"
+                + (net.HasValue ? $"; net '{net.Value.Asset.Id}' at ({net.Value.Anchor.x:F0}, {net.Value.Anchor.y:F0}) is built anyway (anarchy)." : "."));
+            return 0;
         }
     }
 }

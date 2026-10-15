@@ -97,6 +97,11 @@ namespace Placemaker.Core
         /// </summary>
         public List<float2[]> Protected = new List<float2[]>();
         /// <summary>
+        /// (s59) Existing city roads/paths around the site (captured, ground level, full width with sidewalks). Set by Compose
+        /// (SiteSafety.Apply); Declutter keeps objects off them so the game finds nothing of ours on a street or sidewalk.
+        /// </summary>
+        public List<NearbyNet> ExistingNets = new List<NearbyNet>();
+        /// <summary>
         /// (s19) Land the build occupies as one place (CCW rings): the region of every top-most non-loose fill/split
         /// step. Road grids (loose) have none. Build/ZoneGuard blocks the road zone cells on it outside the zoning.
         /// </summary>
