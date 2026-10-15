@@ -160,6 +160,16 @@ namespace Placemaker.Core.Build
         public static bool IsFunctional(ObjectRole role) => role == ObjectRole.ParkingBay || role == ObjectRole.Charger || role == ObjectRole.Arrow;
 
         /// <summary>
+        /// (s44) Objects the build emits with a hair of negative elevation so the game never collides them (s21 decal sink,
+        /// BuildService.DecalSink): every decal, and since s44 the stall markings and lane arrows too. Playtest 77: an outdoor
+        /// mall's two lots showed "60 parts overlap" in Review and the build failed with OverlapExisting — the 3.2 m wide
+        /// ParkingLotDecal01 boxes on 3.0 m stalls (and 6.2 m deep on 5.9 m stalls) meet their neighbours; since s25 they
+        /// are never optional and never left out, so nothing could clear the errors. A marking takes no space: it only
+        /// projects onto the ground and owns its parking lane, which the game places from the object's transform.
+        /// </summary>
+        public static bool SinkInBuild(ObjectRole role) => role == ObjectRole.Decal || role == ObjectRole.ParkingBay || role == ObjectRole.Arrow;
+
+        /// <summary>
         /// (s25) May the build's collision retry leave this item out? Never a functional parking piece: the retry matches
         /// errors to plan items by position (2 m), so an errored surface, island or lamp next to a row of stalls used to take
         /// the stall markings with it. A marking that really collides is resolved by the game itself (hidden, never a stop).
