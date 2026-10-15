@@ -103,6 +103,8 @@ namespace Placemaker.Core.Build
         public const float ClusterSpan = 0.8f;
         /// <summary>Metrics: path samples within half width + this of a junction or crossing are judged as the junction (bands blend there).</summary>
         public const float JunctionZone = 5f;
+        /// <summary>(s51) A bed-sized pad this close to a pad of another kind joins it (one plane, no step between their margins).</summary>
+        public const float PadMergeReach = 3f;
         /// <summary>A sloping cluster is terraced as one plane of at most this tilt when that stays within the deviation (m).</summary>
         public const float ClusterTilt = 0.05f, ClusterPlaneDeviation = 1.5f;
         /// <summary>Surfaces up to this size touching a path's level band (beds, link strips) take the path's cross-level instead of their own plane.</summary>
@@ -643,9 +645,13 @@ namespace Placemaker.Core.Build
                 {
                     var a = list[i]; var b = list[j];
                     // Same kind only: a link strip stays its own (it conforms to the path), a plaza's paving pieces merge.
-                    if (a.graded != b.graded || a.role != b.role || math.any(a.mn - 1f > b.mx) || math.any(b.mn - 1f > a.mx)) continue;
-                    // Boxes within 1 m (checked above): pieces of one paved place tile it; a cheap test that scales to hundreds.
-                    if (a.area > 2f * SmallPadArea || b.area > 2f * SmallPadArea || Touch(a.rings[0], b.rings[0], 1f)) parent[Find(i)] = Find(j);
+                    // (s51) A bed-sized pad of ANOTHER kind within a bank's reach of a pad is part of it: two planes a few metres apart
+                    // would leave a step between them (their margins meet at different heights).
+                    bool bed = math.min(a.area, b.area) <= SmallPadArea && a.graded == b.graded;
+                    float reach = a.role == b.role ? 1f : bed ? PadMergeReach : -1f;
+                    if (a.graded != b.graded || reach < 0f || math.any(a.mn - reach > b.mx) || math.any(b.mn - reach > a.mx)) continue;
+                    // Boxes within reach (checked above): pieces of one paved place tile it; a cheap test that scales to hundreds.
+                    if ((a.role == b.role && (a.area > 2f * SmallPadArea || b.area > 2f * SmallPadArea)) || Touch(a.rings[0], b.rings[0], reach)) parent[Find(i)] = Find(j);
                 }
             var groups = new Dictionary<int, Surf>();
             var order = new List<int>();
