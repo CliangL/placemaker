@@ -445,6 +445,19 @@ namespace Placemaker.Game.Suite
                 _scenario = "";
                 Mark("scenariosDoneSec");
                 yield return Guard(CloseTool(), e => Say("close tool: " + e.Message));
+                // every standing build once more, after all the others were built next to it: did a later build hide or remove anything of it?
+                _phase = "recheck";
+                foreach (var st in _states.Where(x => x.Built && x.Before != null && x.Ring != null).ToList())
+                {
+                    _scenario = st.S.Id;
+                    var rec = new JObject();
+                    var members = _probe.MemberSet(st.Group);
+                    yield return Guard(Framed(st, rec, Do(() => st.Result["visibilityAtEnd"] = Probe("visibility", () => _probe.Visibility(members), rec))), e => st.Result["recheckError"] = e.Message);
+                    Verdicts(st, "after all scenarios");
+                    WriteScenario(st, st.FileIndex);
+                }
+                _scenario = "";
+                Mark("recheckDoneSec");
 
                 bool needGrow = set.grow && _states.Any(x => x.Built && ((int?)x.Result["census"]?["zoning"]?["plannedZonedCells"] ?? 0) > 0);
                 if (needGrow)

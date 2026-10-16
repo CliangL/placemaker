@@ -839,14 +839,16 @@ namespace Placemaker.Game.Suite
         {
             var a = new JArray();
             var seen = new List<float3>();
+            // car entries; pedestrian ones only for a build no car enters (a park, a plaza)
             foreach (bool ped in new[] { false, true })
             {
+                if (ped && a.Count > 0) break;
                 var reach = lanes.Reach(i => lanes.Lanes[i].Who == SuiteLanes.Who.City && (ped ? (lanes.Lanes[i].Mode & SuiteLanes.Mode.Pedestrian) != 0 : (lanes.Lanes[i].Mode & SuiteLanes.Mode.Car) != 0), !ped, out var prev);
                 foreach (var e in lanes.Entries(reach, prev))
                 {
                     if (seen.Any(p => math.distance(p.xz, e.At.xz) < 10f)) continue;
                     seen.Add(e.At);
-                    if (a.Count >= 12) break;
+                    if (a.Count >= 8) break;
                     a.Add(new JObject { ["at"] = new JArray(Math.Round(e.At.x, 1), Math.Round(e.At.z, 1)), ["mode"] = ped ? "pedestrian" : "car", ["lane"] = PrefabName(lanes.Lanes[e.Lane].Owner) + " / " + PrefabName(lanes.Lanes[e.Lane].E) });
                 }
             }

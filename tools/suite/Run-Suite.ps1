@@ -359,6 +359,7 @@ $body = if (Test-Path $md) { Get-Content $md -Raw } else { "# Suite run $RunId`r
 Write-NoBom $md (($top -join "`r`n") + "`r`n" + $body)
 Say "done: $status in $([math]::Round($total)) s -> $runDir"
 Say "installed now: Mods/Placemaker/Placemaker.dll $label ($([math]::Round($dllInfo.Length / 1KB)) KB) - the user's normal game loads this build"
+try { & (Join-Path $PSScriptRoot 'Contact-Suite.ps1') -RunId $RunId -ResultsRoot $ResultsRoot } catch { Say "contact sheet image failed: $($_.Exception.Message)" }
 if ($Baseline) { & (Join-Path $PSScriptRoot 'Compare-Suite.ps1') -Old $Baseline -New $RunId -ResultsRoot $ResultsRoot }
 if ($status -ne 'quit') { exit 1 }
 exit 0

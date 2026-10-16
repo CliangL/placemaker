@@ -83,8 +83,13 @@ namespace Placemaker.Game.Suite
             steps.Add(new JObject { ["do"] = "type", ["layer"] = s.Layer, ["preset"] = s.Preset ?? "" });
             foreach (var v in s.Values) steps.Add(new JObject { ["do"] = "value", ["path"] = v.path ?? "0", ["id"] = v.id, ["json"] = v.json });
             steps.Add(new JObject { ["do"] = "entrances" });
-            steps.Add(new JObject { ["do"] = "preview", ["shot"] = "preview", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "overlay" });
-            steps.Add(new JObject { ["do"] = "shot", ["name"] = "ghost", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "render" });
+            string when = (s.BuildWhen ?? "settled").ToLowerInvariant();
+            if (when == "settled")
+            {
+                steps.Add(new JObject { ["do"] = "preview", ["shot"] = "preview", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "overlay" });
+                steps.Add(new JObject { ["do"] = "shot", ["name"] = "ghost", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "render" });
+            }
+            // planReady / ghostPending: the person presses Next and Build at once (the build step does both), no preview look
             if (!string.IsNullOrEmpty(s.PreviewMode)) steps.Add(new JObject { ["do"] = "previewMode", ["mode"] = s.PreviewMode });
             steps.Add(new JObject { ["do"] = "build", ["when"] = s.BuildWhen ?? "settled" });
             steps.Add(new JObject { ["do"] = "shot", ["name"] = "built", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "render" });

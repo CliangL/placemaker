@@ -318,6 +318,12 @@ namespace Placemaker.Game.Suite
             var fid = _summary["fidelity"] as JObject ?? Fidelity();
             sb.AppendLine($"Fidelity: profile **{fid["profile"]}**, {fid["codeMods"]} code mods, catalog {fid["catalogItems"]} items, {fid["plansWithoutAssetPacks"]} plans without asset packs. {fid["caveat"]}");
             if (_summary["look"] is JObject look) sb.AppendLine("Look (readability mode, not the user's look): " + LookLine(look));
+            if (_summary["look"] is JObject lk && (string)lk["mode"] == "suite")
+            {
+                double el = (double?)lk["sunElevation"] ?? 0;
+                bool ok = el >= 55 && el <= 75 && ((bool?)lk["sunBehindCamera"] ?? false) && ((bool?)lk["windowOk"] ?? false) && lk["calibrationCameraTimeout"] == null;
+                if (!ok) sb.AppendLine($"**LOOK NOT AS INTENDED**: sun {el}° (want 55-75° behind the camera), window ok {lk["windowOk"]}, calibration camera {(lk["calibrationCameraTimeout"] == null ? "ok" : "timed out")}: shots may be dark or back-lit");
+            }
             if (_summary["placemakerSettings"] is JObject ps) sb.AppendLine($"Placemaker settings: {ps["source"]}; differs from the user's: {(ps["differsFromUser"] as JObject)?.Count ?? 0} ({Trunc(ps["differsFromUser"]?.ToString(Formatting.None), 300)})");
             sb.AppendLine($"Grid: {_summary["grid"]}; quarantined blocks: {_summary["quarantined"]?.ToString(Formatting.None) ?? "{}"}");
             if (_summary["noiseFloor"] is JObject nf) sb.AppendLine($"Shot noise floor: {nf["changed16"]} px / tile {nf["tile32"]} -> settle limits {nf["limits"]?.ToString(Formatting.None)}");

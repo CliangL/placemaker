@@ -96,6 +96,12 @@ namespace Placemaker.Game.Suite
                     Check("plannedVisible", objects == 0 ? (bool?)null : visible == objects,
                         objects == 0 ? "no member objects that are meant to be seen" : $"{visible} of {objects} built objects seen (overridden {vis["overridden"]}, hidden {vis["hidden"]}, not rendered {vis["notRendered"]}) {vis["notSeen"]?.ToString(Formatting.None)}");
                 }
+                if (r["visibilityAtEnd"] is JObject ve && ve["objects"] != null && vis != null && vis["objects"] != null)
+                {
+                    Expect("noLaterDamage");
+                    int before = (int)vis["visible"], after = (int)ve["visible"];
+                    Check("noLaterDamage", after >= before && (int)ve["objects"] >= (int)vis["objects"], $"seen right after the build {before} of {vis["objects"]}, after all later scenarios {after} of {ve["objects"]} {ve["notSeen"]?.ToString(Formatting.None)}");
+                }
                 if (r["visibilityAfterGrow"] is JObject vg && vg["objects"] != null)
                 {
                     Expect("plannedVisibleAfterSim");

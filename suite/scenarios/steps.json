@@ -6,21 +6,92 @@
     {
       "id": "parking-entrance",
       "site": "flat",
-      "note": "Paint bucket, parking, an entrance on the south street, moved to the east street (back in Design, like a person), close-ups before and after the build, top view, then a zoom scenario runs on it, then it is deleted (select, Remove, OK).",
+      "note": "Paint bucket, parking, an entrance on the south street, moved to the east street (back in Design, like a person), close-ups before and after the build, top view, then a zoom scenario runs on it, then it is deleted (select, Remove, OK). Two shots with the panel (what a person sees in Design and Review).",
       "steps": [
-        { "do": "camera", "target": "block", "view": "oblique", "shot": "empty", "shotMode": "render" },
-        { "do": "area", "tool": "bucket" },
-        { "do": "type", "layer": "parking" },
-        { "do": "entrance", "side": "south", "t": 0.3 },
-        { "do": "preview", "shot": "preview" },
-        { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "entrance-preview" },
-        { "do": "moveEntrance", "index": 0, "side": "east", "t": 0.5 },
-        { "do": "preview" },
-        { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "entrance-moved", "shotMode": "render" },
-        { "do": "build" },
-        { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "entrance-built", "shotMode": "render" },
-        { "do": "camera", "target": "connection", "index": "all", "view": "closeup", "shot": "drive", "shotMode": "render" },
-        { "do": "camera", "target": "build", "view": "top", "shot": "top", "shotMode": "render" }
+        {
+          "do": "camera",
+          "target": "block",
+          "view": "oblique",
+          "shot": "empty",
+          "shotMode": "render"
+        },
+        {
+          "do": "area",
+          "tool": "bucket"
+        },
+        {
+          "do": "type",
+          "layer": "parking"
+        },
+        {
+          "do": "shot",
+          "name": "panel-design",
+          "shotMode": "ui"
+        },
+        {
+          "do": "entrance",
+          "side": "south",
+          "t": 0.3
+        },
+        {
+          "do": "preview",
+          "shot": "preview"
+        },
+        {
+          "do": "shot",
+          "name": "panel-review",
+          "shotMode": "ui"
+        },
+        {
+          "do": "camera",
+          "target": "entrance",
+          "index": 0,
+          "view": "closeup",
+          "shot": "entrance-preview"
+        },
+        {
+          "do": "moveEntrance",
+          "index": 0,
+          "side": "east",
+          "t": 0.5
+        },
+        {
+          "do": "preview"
+        },
+        {
+          "do": "camera",
+          "target": "entrance",
+          "index": 0,
+          "view": "closeup",
+          "shot": "entrance-moved",
+          "shotMode": "render"
+        },
+        {
+          "do": "build"
+        },
+        {
+          "do": "camera",
+          "target": "entrance",
+          "index": 0,
+          "view": "closeup",
+          "shot": "entrance-built",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "connection",
+          "index": "all",
+          "view": "closeup",
+          "shot": "drive",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "top",
+          "shot": "top",
+          "shotMode": "render"
+        }
       ]
     },
     {
@@ -28,9 +99,24 @@
       "on": "parking-entrance",
       "note": "Runs on an earlier scenario's standing build: a low view of its entrance, then removes it like a person (select, Remove, OK).",
       "steps": [
-        { "do": "camera", "target": "entrance", "index": 0, "view": "low", "shot": "entrance-low", "shotMode": "render" },
-        { "do": "delete" },
-        { "do": "camera", "target": "block", "view": "oblique", "shot": "after-delete", "shotMode": "render" }
+        {
+          "do": "camera",
+          "target": "entrance",
+          "index": 0,
+          "view": "low",
+          "shot": "entrance-low",
+          "shotMode": "render"
+        },
+        {
+          "do": "delete"
+        },
+        {
+          "do": "camera",
+          "target": "block",
+          "view": "oblique",
+          "shot": "after-delete",
+          "shotMode": "render"
+        }
       ]
     },
     {
@@ -38,16 +124,79 @@
       "site": "flat",
       "note": "Points tool: an L-shaped outline, plaza civic, back to Design, market, build without waiting for the ghost (Next, Build at once), delete.",
       "steps": [
-        { "do": "camera", "target": "block", "view": "oblique", "shot": "empty", "shotMode": "render" },
-        { "do": "area", "tool": "points", "points": [[-40, -30], [35, -30], [35, 0], [0, 0], [0, 30], [-40, 30]] },
-        { "do": "type", "layer": "plaza", "preset": "civic" },
-        { "do": "preview", "shot": "preview" },
-        { "do": "issues" },
-        { "do": "edit" },
-        { "do": "preset", "layer": "plaza", "preset": "market" },
-        { "do": "build", "when": "planReady", "shot": "built", "shotMode": "render" },
-        { "do": "delete" },
-        { "do": "camera", "target": "block", "view": "oblique", "shot": "after-delete", "shotMode": "render" }
+        {
+          "do": "camera",
+          "target": "block",
+          "view": "oblique",
+          "shot": "empty",
+          "shotMode": "render"
+        },
+        {
+          "do": "area",
+          "tool": "points",
+          "points": [
+            [
+              -40,
+              -30
+            ],
+            [
+              35,
+              -30
+            ],
+            [
+              35,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              30
+            ],
+            [
+              -40,
+              30
+            ]
+          ]
+        },
+        {
+          "do": "type",
+          "layer": "plaza",
+          "preset": "civic"
+        },
+        {
+          "do": "preview",
+          "shot": "preview"
+        },
+        {
+          "do": "issues"
+        },
+        {
+          "do": "edit"
+        },
+        {
+          "do": "preset",
+          "layer": "plaza",
+          "preset": "market"
+        },
+        {
+          "do": "build",
+          "when": "planReady",
+          "shot": "built",
+          "shotMode": "render"
+        },
+        {
+          "do": "delete"
+        },
+        {
+          "do": "camera",
+          "target": "block",
+          "view": "oblique",
+          "shot": "after-delete",
+          "shotMode": "render"
+        }
       ]
     },
     {
@@ -55,14 +204,42 @@
       "site": "flat",
       "note": "Paint area (smart edges) stroke through the block, a park, Sketch preview, build, bulldozed through its owner lot (the bulldozer's delete).",
       "steps": [
-        { "do": "area", "tool": "paint", "size": 40 },
-        { "do": "type", "layer": "park" },
-        { "do": "entrances" },
-        { "do": "preview", "shot": "preview" },
-        { "do": "previewMode", "mode": "sketch" },
-        { "do": "build", "shot": "built", "shotMode": "render" },
-        { "do": "bulldoze", "target": "owner" },
-        { "do": "camera", "target": "block", "view": "top", "shot": "after-bulldoze", "shotMode": "render" }
+        {
+          "do": "area",
+          "tool": "paint",
+          "size": 40
+        },
+        {
+          "do": "type",
+          "layer": "park"
+        },
+        {
+          "do": "entrances"
+        },
+        {
+          "do": "preview",
+          "shot": "preview"
+        },
+        {
+          "do": "previewMode",
+          "mode": "sketch"
+        },
+        {
+          "do": "build",
+          "shot": "built",
+          "shotMode": "render"
+        },
+        {
+          "do": "bulldoze",
+          "target": "owner"
+        },
+        {
+          "do": "camera",
+          "target": "block",
+          "view": "top",
+          "shot": "after-bulldoze",
+          "shotMode": "render"
+        }
       ]
     },
     {
@@ -70,14 +247,38 @@
       "site": "flat",
       "note": "Road nodes: click the block's four junctions and back to the first, strip mall, build, then Edit and Remove from the vanilla info panel with the tool closed.",
       "steps": [
-        { "do": "area", "tool": "nodes" },
-        { "do": "type", "layer": "stripMall", "preset": "classic" },
-        { "do": "entrances" },
-        { "do": "preview", "shot": "preview" },
-        { "do": "build" },
-        { "do": "camera", "target": "build", "view": "oblique", "shot": "oblique", "shotMode": "render" },
-        { "do": "infoEdit" },
-        { "do": "infoRemove" }
+        {
+          "do": "area",
+          "tool": "nodes"
+        },
+        {
+          "do": "type",
+          "layer": "stripMall",
+          "preset": "classic"
+        },
+        {
+          "do": "entrances"
+        },
+        {
+          "do": "preview",
+          "shot": "preview"
+        },
+        {
+          "do": "build"
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "oblique",
+          "shot": "oblique",
+          "shotMode": "render"
+        },
+        {
+          "do": "infoEdit"
+        },
+        {
+          "do": "infoRemove"
+        }
       ]
     },
     {
@@ -85,14 +286,41 @@
       "site": "flat",
       "note": "A slider dragged like a person, read back; undo by Ctrl+Z, redo from the panel; clear; the bucket again on the same spot.",
       "steps": [
-        { "do": "area", "tool": "bucket" },
-        { "do": "type", "layer": "parking", "preset": "compact" },
-        { "do": "value", "path": "0", "id": "aisleWidth", "value": 7 },
-        { "do": "undo" },
-        { "do": "redo", "via": "panel" },
-        { "do": "clear" },
-        { "do": "area", "tool": "bucket" },
-        { "do": "type", "layer": "parking", "preset": "compact", "fresh": false }
+        {
+          "do": "area",
+          "tool": "bucket"
+        },
+        {
+          "do": "type",
+          "layer": "parking",
+          "preset": "compact"
+        },
+        {
+          "do": "value",
+          "path": "0",
+          "id": "aisleWidth",
+          "value": 7
+        },
+        {
+          "do": "undo"
+        },
+        {
+          "do": "redo",
+          "via": "panel"
+        },
+        {
+          "do": "clear"
+        },
+        {
+          "do": "area",
+          "tool": "bucket"
+        },
+        {
+          "do": "type",
+          "layer": "parking",
+          "preset": "compact",
+          "fresh": false
+        }
       ]
     }
   ]
