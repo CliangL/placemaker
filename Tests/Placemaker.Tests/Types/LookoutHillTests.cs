@@ -38,6 +38,8 @@ namespace Placemaker.Tests.Types.T04
             Out.WriteLine($"peak {plan.Facts["peak"]:0.0} m, {plan.Terraform.Count} cells");
             Assert.True(plan.Facts["peak"] >= 18f * 0.8f, "peak " + plan.Facts["peak"]);
             Assert.All(plan.Terraform, t => Assert.Equal(TerraformKind.Raise, t.Kind));
+            // (rf-nature) One continuous slope: sloped patches sharing their corners, never a staircase of levelled cells.
+            Assert.All(plan.Terraform, t => Assert.True(t.Sloped));
             // The summit is the highest planned point and lies well inside.
             var summit = Summit(plan);
             var top = plan.Terraform.OrderByDescending(t => t.TargetHeight - site.HeightAt(Poly.Centroid(Poly.To2D(t.Ring)))).First();

@@ -13,6 +13,7 @@
 
 using System;
 using System.Collections.Generic;
+using Placemaker.Core.Build;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
@@ -178,7 +179,13 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             off[i] = v;
         }
 
-        /// <summary>Emits one levelled terraform cell per changed grid cell (clipped at the outline). Returns the cell count.</summary>
+        /// <summary>
+        /// Emits one terraform patch per changed grid cell (clipped at the outline). Returns the cell count.
+        /// (rf-nature) Sloped patches through the planned ground at their corners (PlannedTerraform.Sloped, the s20
+        /// sculpt surface), not one level per cell: neighbouring patches share their corner heights, so the hill is one
+        /// continuous slope instead of a staircase of 5 m flat squares (the stepped contours, and the walls the paths cut
+        /// into the steps).
+        /// </summary>
         public int Emit(LayerContext ctx, LayerRegion region)
         {
             int cells = 0;
@@ -188,9 +195,12 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 for (int ix = 0; ix < Nx; ix++)
                 {
                     int i = iy * Nx + ix;
-                    if (!Inside[i] || Offset[i] < 0.2f) continue;
+                    if (!Inside[i]) continue;
                     var c = Min + (new float2(ix, iy) + 0.5f) * Cell;
                     float2[] ring = LayerRegion.Rect(c, new float2(1, 0), Cell * 0.5f, Cell * 0.5f);
+                    float most = Offset[i];
+                    foreach (var q in ring) most = math.max(most, OffsetAt(q));
+                    if (most < 0.2f) continue;
                     bool whole = true;
                     foreach (var q in ring) if (!region.Contains(q)) { whole = false; break; }
                     if (!whole)
@@ -199,9 +209,12 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                         if (pieces.Count == 0 || pieces[0].Outer == null || pieces[0].Outer.Length < 3) continue;
                         ring = pieces[0].Outer;
                     }
+                    // Within the edge band no corner rises faster than the band allows (cell centres outside the area count
+                    // as 0, so the interpolation alone would leave a lip at an outline that cuts a cell).
+                    var r3 = Poly.To3D(ring, p => { float d = region.BoundaryDistance(p, EdgeBand + 1f); return _ground(p) + (d < EdgeBand ? math.min(OffsetAt(p), EdgeSlope * d) : OffsetAt(p)); });
                     ctx.Plan.Terraform.Add(new PlannedTerraform
                     {
-                        Ring = Poly.To3D(ring, ctx.H), Kind = TerraformKind.Raise, TargetHeight = ctx.H(c) + Offset[i], Permanent = true,
+                        Ring = r3, Kind = TerraformKind.Raise, TargetHeight = TerraformSurface.At(r3, Poly.Centroid(ring)), Permanent = true, Sloped = true,
                     });
                     cells++;
                 }
