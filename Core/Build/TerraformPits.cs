@@ -113,6 +113,39 @@ namespace Placemaker.Core.Build
             return total;
         }
 
+        /// <summary>
+        /// (core) The deepest hollows of a ground anywhere in a box (every point <paramref name="inside"/> accepts, on a grid of
+        /// <paramref name="step"/> m): the live check after a build covers the whole outline and its rim, not only the texels the terraform
+        /// touched (a bowl under a lane or at a lot entrance has no terraform texel; teardown 07, a 6-8 m pit beside the strip mall's lane).
+        /// </summary>
+        public static List<Pit> Scan(Func<float2, float> ground, float2 min, float2 max, Func<float2, bool> inside, float minDepth, int maxPits = 3, float step = 2f)
+        {
+            var found = new List<Pit>();
+            if (ground == null || !(step > 0f)) return found;
+            int nx = (int)math.ceil((max.x - min.x) / step), ny = (int)math.ceil((max.y - min.y) / step);
+            if (nx <= 0 || ny <= 0 || (long)nx * ny > 400000) return found;
+            for (int j = 0; j <= ny; j++)
+                for (int i = 0; i <= nx; i++)
+                {
+                    var p = min + new float2(i * step, j * step);
+                    if (inside != null && !inside(p)) continue;
+                    float h = ground(p);
+                    if (!math.isfinite(h)) continue;
+                    float depth = PitDepth(ground, p, h, out _);
+                    if (depth > minDepth) found.Add(new Pit { At = p, Depth = depth, Height = h });
+                }
+            found.Sort((a, b) => b.Depth.CompareTo(a.Depth));
+            var keep = new List<Pit>();
+            foreach (var p in found)
+            {
+                bool near = false;
+                foreach (var k in keep) if (math.distance(k.At, p.At) < 12f) { near = true; break; }
+                if (!near) keep.Add(p);
+                if (keep.Count >= maxPits) break;
+            }
+            return keep;
+        }
+
         /// <summary>The deepest hollows of a ground over the texels of a raster that terraform covers (live terrain check after a build).</summary>
         public static List<Pit> Worst(TerraformRaster r, Func<float2, float> ground, float minDepth, int max = 3, int step = 2)
         {

@@ -221,7 +221,7 @@ namespace Placemaker.Game.Build
             // (PrefabSystem maps obsolete IDs to this prefab). A prefab name is never resolved as an asset path, so this is safe.
             var legacy = clone.AddComponent<ObsoleteIdentifiers>();
             legacy.m_PrefabIdentifiers = new[] { new PrefabIdentifierInfo { m_Name = Placemaker.Core.Decals.DecalLook.LegacyCloneName(original.name, tier), m_Type = type.Name } };
-            if (!_prefabs.AddPrefab(clone)) { UnityEngine.Object.Destroy(clone); why = "AddPrefab refused the object"; return false; }
+            if (!Placemaker.Game.Assets.AssetCatalogSystem.AddOwnPrefab(_prefabs, clone)) { UnityEngine.Object.Destroy(clone); why = "AddPrefab refused the object"; return false; }
             var entity = _prefabs.GetEntity(clone);
             _cloneOf[(originalEntity, tier)] = entity;
             _registeredFrame[entity] = UnityEngine.Time.frameCount;
@@ -258,7 +258,7 @@ namespace Placemaker.Game.Build
             r.manualVTRequired = rp.manualVTRequired;
             foreach (var component in rp.components)
                 if (component != null && !(component is ObsoleteIdentifiers)) r.AddComponentFrom(component);
-            if (!_prefabs.AddPrefab(r)) { UnityEngine.Object.Destroy(r); why = "AddPrefab refused the render prefab"; return null; }
+            if (!Placemaker.Game.Assets.AssetCatalogSystem.AddOwnPrefab(_prefabs, r)) { UnityEngine.Object.Destroy(r); why = "AddPrefab refused the render prefab"; return null; }
             return r;
         }
 

@@ -60,10 +60,31 @@ namespace Placemaker.Game.Build
             BlockZoning && !LooseBuild && _groupId != 0 && _request?.Plan?.Footprints != null && _request.Plan.Footprints.Count > 0
             && (_request.Plan.ZoneQuads.Count > 0 || _request.Plan.ZoneBlockers.Count > 0);
 
-        /// <summary>The step after the main Apply settled: refresh against the live blocks, blockers, zoning, finish.</summary>
+        /// <summary>(core) True while the zone-block machine builds the kerb strips (before the zoning refresh), not the main blockers.</summary>
+        private bool _kerbStage;
+
+        private bool HasKerbs =>
+            BlockZoning && !LooseBuild && _groupId != 0 && _request?.Plan?.KerbBlockers != null && _request.Plan.KerbBlockers.Count > 0;
+
+        /// <summary>The step after the main Apply settled: (kerb strips,) refresh against the live blocks, blockers, zoning, finish.</summary>
         private void GoAfterApply()
         {
             _refreshedZoning = null;
+            _kerbStage = false;
+            if (GuardsZoning && HasKerbs)
+            {
+                // (core) The city streets' columns that reach into the build are blocked first, so the refresh and the zoning find the
+                // build's own lanes holding the shop plots (the older visible city block wins every overlap otherwise: teardown 08 §3).
+                _blockerRings.Clear();
+                double m2 = 0;
+                foreach (var r in _request.Plan.KerbBlockers) if (r != null && r.Length >= 3) { _blockerRings.Add(r); m2 += Poly.Area(r); }
+                Mod.Log.Info($"Placemaker kerb blocking: {_blockerRings.Count} strip(s), {m2:F0} m², in the first row of the city streets' zone blocks along the build (before the zoning refresh).");
+                _kerbStage = true;
+                _blockerRound = 0;
+                _blockerPhase = 0;
+                Go(Step.ZoneBlock);
+                return;
+            }
             if (GuardsZoning) { Go(Step.ZoneRefresh); return; }
             // (s34) A roads build that pre-zones: zone the live blocks of the roads it just built.
             if (PreZonesRoads) { Go(Step.RoadPreZone); return; }
@@ -77,6 +98,7 @@ namespace Placemaker.Game.Build
         private void DoZoneRefresh(int frame)
         {
             if (frame - _stepFrame < ZoneRefreshFrames) return;
+            LogSaggingEdges("before the zoning refresh");
             var plan = _request.Plan;
             try
             {
@@ -197,10 +219,16 @@ namespace Placemaker.Game.Build
             GoZoning();
         }
 
-        private void GoZoning() => Go((_refreshedZoning != null ? _refreshedZoning.Count : _work.Zoning.Count) > 0 ? Step.ZoningWait : Step.Finish);
+        private void GoZoning()
+        {
+            // (core) The kerb strips are done: now the refresh against the live blocks, then the main blockers and the zoning.
+            if (_kerbStage) { _kerbStage = false; Go(Step.ZoneRefresh); return; }
+            Go((_refreshedZoning != null ? _refreshedZoning.Count : _work.Zoning.Count) > 0 ? Step.ZoningWait : Step.Finish);
+        }
 
         private void ResetZoneBlock()
         {
+            _kerbStage = false;
             _blockerRings.Clear();
             _blockerTemps.Clear();
             _blockerPrefab = Entity.Null;
@@ -284,7 +312,8 @@ namespace Placemaker.Game.Build
                     _blockersBuilt = 0;
                     foreach (var t in _blockerTemps) if (EntityManager.Exists(t) && !EntityManager.HasComponent<Temp>(t) && !EntityManager.HasComponent<Deleted>(t)) _blockersBuilt++;
                     _registry.MarkDirty();
-                    Mod.Log.Info($"Placemaker: {_blockersBuilt} zone block lot(s) keep zoned buildings off group {_groupId}.");
+                    Mod.Log.Info(_kerbStage ? $"Placemaker: {_blockersBuilt} kerb strip(s) block the city streets' zone cells along group {_groupId}."
+                        : $"Placemaker: {_blockersBuilt} zone block lot(s) keep zoned buildings off group {_groupId}.");
                     GoZoning();
                     return;
                 }

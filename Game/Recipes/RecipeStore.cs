@@ -48,8 +48,76 @@ namespace Placemaker.Game.Recipes
             return r;
         }
 
+        private static bool s_shelfLoaded;
+
+        /// <summary>
+        /// (core) Reads the central shelf (Recipes/shelf/*.json in the mod folder: one file per Make-row category) into
+        /// <see cref="Shelf.Current"/>: which categories exist and in which order, which types and styles are hidden.
+        /// </summary>
+        public static Shelf LoadShelf()
+        {
+            var files = new List<KeyValuePair<string, string>>();
+            string dir = ModPaths.ModFolder != null ? Path.Combine(ModPaths.ModFolder, "Recipes", Shelf.FolderName) : null;
+            try
+            {
+                if (dir != null && Directory.Exists(dir))
+                {
+                    var paths = Directory.GetFiles(dir, "*.json");
+                    Array.Sort(paths, StringComparer.OrdinalIgnoreCase);
+                    foreach (var p in paths) files.Add(new KeyValuePair<string, string>(Path.GetFileName(p), File.ReadAllText(p)));
+                }
+            }
+            catch (Exception e) { Mod.Log.Warn("Placemaker: cannot read the shelf in " + dir + ": " + e.Message); }
+            var shelf = Shelf.Parse(files);
+            Shelf.Current = shelf;
+            s_shelfLoaded = true;
+            int types = 0, styles = 0;
+            var shown = new List<string>();
+            foreach (var c in shelf.Categories)
+            {
+                types += c.HiddenTypes.Count;
+                foreach (var kv in c.HiddenStyles) styles += kv.Value.Count;
+                shown.Add(c.Hidden ? c.Id + " (hidden)" : c.Id);
+            }
+            Mod.Log.Info($"Placemaker shelf: {shelf.Categories.Count} categories from {files.Count} file(s) [{string.Join(", ", shown)}], {types} hidden type(s), {styles} hidden style(s).");
+            foreach (var w in shelf.Warnings) Mod.Log.Warn("Placemaker shelf: " + w);
+            return shelf;
+        }
+
+        /// <summary>(core) A shipped type the shelf hides (its category is hidden or it is in hiddenTypes). Player recipes never are.</summary>
+        public bool IsShelved(string id)
+        {
+            var e = Find(id);
+            if (e == null || e.Custom) return false;
+            var g = GeneratorRegistry.Get(e.Recipe?.Root?.Layer ?? id) ?? GeneratorRegistry.Get(id);
+            return g != null && Shelf.Current.IsTypeShelved(g.Id, GeneratorGroups.Of(g));
+        }
+
+        /// <summary>(core) The first type the Make row shows: the first category in shelf order, then the recipe order.</summary>
+        public string FirstShown()
+        {
+            string best = null;
+            int bestOrder = int.MaxValue;
+            foreach (var e in _entries)
+            {
+                if (e.Custom || e.Recipe == null) continue;
+                var g = GeneratorRegistry.Get(e.Recipe.Id);
+                if (g == null || g.Kind != LayerKind.Fill || GeneratorRegistry.IsHidden(g)) continue;
+                var grp = GeneratorGroups.Of(g);
+                if (string.IsNullOrEmpty(grp) || Shelf.Current.IsTypeShelved(g.Id, grp)) continue;
+                var cat = Shelf.Current.Category(Shelf.Current.CategoryOf(g.Id, grp));
+                int order = cat != null ? cat.Order : int.MaxValue - 1;
+                if (order < bestOrder) { bestOrder = order; best = e.Recipe.Id; }
+            }
+            return best;
+        }
+
+        /// <summary>The shelf, read once (the game runner may need it before the tool opens).</summary>
+        public static Shelf EnsureShelf() => s_shelfLoaded ? Shelf.Current : LoadShelf();
+
         public void Reload()
         {
+            LoadShelf();
             _entries.Clear();
             var seen = new HashSet<string>(StringComparer.Ordinal);
 

@@ -140,6 +140,8 @@ export function normalizeCatalog(raw: unknown): Catalog {
             presets: arr<any>(l.presets).filter((x) => isObj(x) && typeof x.id === "string" && x.id),
         })),
         recipes: arr<any>(v.recipes).filter(isObj),
+        // (core) The central shelf's categories in Make-row order (Recipes/shelf/*.json).
+        categories: arr<any>(v.categories).filter((c) => isObj(c) && typeof c.id === "string" && c.id),
     } as Catalog;
 }
 

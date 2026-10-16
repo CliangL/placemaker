@@ -142,6 +142,7 @@ namespace Placemaker.Core.Build
             if (plan == null) return;
             plan.ZoneBlockers.Clear();
             plan.ZoneCells.Clear();
+            plan.KerbBlockers.Clear();
             if (!Enabled || plan.Footprints == null || plan.Footprints.Count == 0) return;
 
             var quads = new List<float2[]>();
@@ -241,6 +242,92 @@ namespace Placemaker.Core.Build
                 m.Height = h(0.25f * (c.A + c.B + c.C + c.D));
                 plan.ZoneCells.Add(m);
             }
+            try { plan.KerbBlockers.AddRange(KerbStrips(plan, site)); } catch (Exception) { /* never fail a plan over it */ }
+        }
+
+        /// <summary>Width (m) of a kerb strip, and how far inside the footprint every corner must lie.</summary>
+        public const float KerbWidth = 2f, KerbInset = 0.5f;
+
+        /// <summary>
+        /// (core) Kerb strips (see <see cref="ComposedPlan.KerbBlockers"/>): for every captured block of an existing street, each run of
+        /// columns whose first rows lie in the build and that zone no plot planned on that street's own cells gets one thin strip in
+        /// row 0 (or row 1, the shallowest band fully inside the build). CellBlockJobs blocks a cell under a physical lot and every
+        /// cell behind it, and row 0 when row 1 is (CleanBlockedCells): the whole column dies, nothing outside the build changes.
+        /// Only in plans that zone plots.
+        /// </summary>
+        public static List<float2[]> KerbStrips(ComposedPlan plan, SiteContext site)
+        {
+            var strips = new List<float2[]>();
+            if (plan?.ZoneQuads == null || plan.ZoneQuads.Count == 0 || site?.ZoneGrids == null || plan.Footprints == null) return strips;
+            var feet = new List<float2[]>();
+            foreach (var f in plan.Footprints) if (f != null && f.Length >= 3) feet.Add(Poly.EnsureCcw(f));
+            if (feet.Count == 0) return strips;
+            var city = new List<ZoneGrid>();
+            foreach (var g in site.ZoneGrids) if (Usable(g) && !g.Predicted && !g.Ours) city.Add(g);
+            if (city.Count == 0) return strips;
+            var quads = new List<float2[]>();
+            var onGrid = new List<int>();
+            foreach (var q in plan.ZoneQuads)
+            {
+                if (q.Quad == null || q.Quad.Length < 3) continue;
+                quads.Add(q.Quad);
+                onGrid.Add(AlignedGrid(q.Quad, city));
+            }
+            bool Inside(float2[] poly)
+            {
+                foreach (var p in poly)
+                {
+                    bool any = false;
+                    foreach (var f in feet) if (Poly.Contains(f, p) && Poly.DistanceToBoundary(f, p) >= KerbInset - 1e-3f) { any = true; break; }
+                    if (!any) return false;
+                }
+                return true;
+            }
+            for (int gi = 0; gi < city.Count; gi++)
+            {
+                var g = city[gi];
+                float2 d = math.normalizesafe(g.Direction), r = Right(d);
+                int sx = g.Size.x, sy = g.Size.y;
+                // Per column: the band (offset of its outer edge from the road edge, m) of the strip, or -1.
+                var band = new float[sx];
+                for (int x = 0; x < sx; x++)
+                {
+                    band[x] = -1f;
+                    bool spared = false;
+                    for (int y = 0; y < sy && !spared; y++)
+                    {
+                        var c = CellCentre(g, x, y);
+                        for (int q = 0; q < quads.Count; q++)
+                            if (onGrid[q] == gi && Poly.Contains(quads[q], c)) { spared = true; break; }   // a plot planned on this street's cells
+                    }
+                    if (spared) continue;
+                    var c0 = CellCentre(g, x, 0);
+                    var edge = c0 + d * (Cell * 0.5f);   // the road side of row 0
+                    for (float o = 0.5f; o + KerbWidth <= 2f * Cell - 0.5f + 1e-3f; o += 1f)
+                    {
+                        var a = edge - d * o + r * (Cell * 0.5f - 0.25f);
+                        var b = edge - d * o - r * (Cell * 0.5f - 0.25f);
+                        var strip = new[] { a, b, b - d * KerbWidth, a - d * KerbWidth };
+                        if (Inside(strip)) { band[x] = o; break; }
+                    }
+                }
+                // Runs of neighbouring columns with the same band: one strip each.
+                int s = 0;
+                while (s < sx)
+                {
+                    if (band[s] < 0f) { s++; continue; }
+                    int e = s;
+                    while (e + 1 < sx && math.abs(band[e + 1] - band[s]) < 1e-3f) e++;
+                    float o = band[s];
+                    var edgeS = CellCentre(g, s, 0) + d * (Cell * 0.5f);
+                    var edgeE = CellCentre(g, e, 0) + d * (Cell * 0.5f);
+                    var a = edgeS - d * o + r * (Cell * 0.5f - 0.25f);
+                    var b = edgeE - d * o - r * (Cell * 0.5f - 0.25f);
+                    strips.Add(Poly.EnsureCcw(new[] { a, b, b - d * KerbWidth, a - d * KerbWidth }));
+                    s = e + 1;
+                }
+            }
+            return strips;
         }
 
         /// <summary>(s26) Issue: a planned plot faces no road's zone block (no cell of it can be zoned).</summary>
@@ -258,8 +345,17 @@ namespace Placemaker.Core.Build
                 {
                     if (n == null || !ZoneBlockPredictor.Zones(n.Role)) continue;
                     if (site?.Assets != null && !string.IsNullOrEmpty(n.Asset.Id) && site.Assets.TryGetValue(n.Asset.Id, out var ai) && ai.ZoneBlocks == 2) continue;
+                    bool leftOff = false, rightOff = false;
+                    if (n.Upgrades != null)
+                        foreach (var u in n.Upgrades) { if (u == LaneSides.LeftOff) leftOff = true; else if (u == LaneSides.RightOff) rightOff = true; }
                     foreach (var g in ZoneBlockPredictor.Blocks(n.A, n.B, n.C, n.D, NetWidth(n, site)))
                     {
+                        // (core) A side switched off (LaneSides, vanilla ZonesDisabled) has no cells in the game.
+                        if (leftOff || rightOff)
+                        {
+                            LaneSides.SideOf(n, g.Position, out int side);
+                            if ((side > 0 && rightOff) || (side < 0 && leftOff)) continue;
+                        }
                         var p = g;
                         p.Predicted = true;
                         r.Add(p);
@@ -435,7 +531,9 @@ namespace Placemaker.Core.Build
                 for (int i = 0; i < used.Count; i++)
                 {
                     if (planned[i] == 0 || cur[i] != 0) continue;
-                    var near = NearestOpenRun(quads[i], planned[i], liveGrids, r.ZonedSquares);
+                    // (core, teardown 07 F5) A plot planned on one of the build's own lanes moves only along that lane's live cells, never
+                    // onto a city street's (that turned lane shops round to face the street).
+                    var near = NearestOpenRun(quads[i], planned[i], OwnGridsNear(quads[i], liveGrids) ?? liveGrids, r.ZonedSquares);
                     if (near == null) continue;
                     used[i] = near;
                     snappedNear++;
@@ -513,6 +611,14 @@ namespace Placemaker.Core.Build
                     }
             }
             return best;
+        }
+
+        /// <summary>(core) The live blocks of the build's own roads near a plot, or null when none is (the plot faces a city street).</summary>
+        private static IReadOnlyList<ZoneGrid> OwnGridsNear(float2[] quad, IReadOnlyList<ZoneGrid> grids)
+        {
+            var own = new List<ZoneGrid>();
+            foreach (var g in grids) if (g.Ours) own.Add(g);
+            return own.Count > 0 && NearAnyGrid(quad, own) ? own : null;
         }
 
         private static float2[] Moved(float2[] quad, float2 by, float grow)
@@ -1270,7 +1376,7 @@ namespace Placemaker.Core.Build
         /// (s40) The block whose cells a zoning quad covers exactly (the quad = whole cells shrunk QuadShrink, edges parallel
         /// to the block, a corner on a cell corner), or −1.
         /// </summary>
-        private static int AlignedGrid(float2[] quad, List<ZoneGrid> grids)
+        internal static int AlignedGrid(float2[] quad, List<ZoneGrid> grids)
         {
             if (quad == null || quad.Length != 4) return -1;
             var rect = ZoneLots.Unshrink(Poly.EnsureCcw((float2[])quad.Clone()));

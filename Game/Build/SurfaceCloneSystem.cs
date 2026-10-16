@@ -183,7 +183,7 @@ namespace Placemaker.Game.Build
             if (rendered == null) { UnityEngine.Object.Destroy(clone); return; }
             rendered.m_DecalLayerMask |= DecalLayers.Terrain | DecalLayers.Roads;
             rendered.m_RendererPriority = OverlayPriority;
-            if (!_prefabs.AddPrefab(clone))
+            if (!Placemaker.Game.Assets.AssetCatalogSystem.AddOwnPrefab(_prefabs, clone))
             {
                 UnityEngine.Object.Destroy(clone);
                 return;

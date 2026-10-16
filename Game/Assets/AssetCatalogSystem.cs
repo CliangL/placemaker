@@ -73,6 +73,46 @@ namespace Placemaker.Game.Assets
 
         public void RequestRescan() => _scanRequested = true;
 
+        /// <summary>
+        /// (core) Prefab entities Placemaker registered itself (decal see-through copies, surface overlay copies, park and parking
+        /// companions, the owner and zone-block lots). They never make the catalog rescan: teardown 09, a full synchronous Scan()
+        /// of every prefab ran within 2 s of every first use of a decal tier (a 0.2-2 s freeze when switching styles or types),
+        /// and its new version rebuilt the ghost a second time. They are never catalogue items either (ResolveName still finds
+        /// them by name through the all-prefabs map; the clone systems resolve them directly).
+        /// </summary>
+        private static int s_ownPrefabs;
+
+        /// <summary>
+        /// PrefabSystem.AddPrefab for one of our own prefabs, counting the prefab entities it really created (PrefabData, not
+        /// Deleted: the same query the rescan check counts), so the next check subtracts them.
+        /// </summary>
+        public static bool AddOwnPrefab(PrefabSystem prefabs, PrefabBase prefab)
+        {
+            EntityQuery q = default;
+            int before = -1;
+            try
+            {
+                q = prefabs.World.EntityManager.CreateEntityQuery(new EntityQueryDesc
+                {
+                    All = new[] { ComponentType.ReadOnly<PrefabData>() },
+                    None = new[] { ComponentType.ReadOnly<Deleted>() },
+                });
+                before = q.CalculateEntityCount();
+            }
+            catch (Exception) { before = -1; }
+            bool ok = prefabs.AddPrefab(prefab);
+            try
+            {
+                if (before >= 0) s_ownPrefabs += math.max(0, q.CalculateEntityCount() - before);
+                if (before >= 0) q.Dispose();
+            }
+            catch (Exception) { }
+            return ok;
+        }
+
+        /// <summary>Our own prefab (registered by Placemaker): never a catalogue item.</summary>
+        public static bool IsOwnPrefabName(string name) => name != null && name.StartsWith("Placemaker ", StringComparison.Ordinal);
+
         [Preserve]
         protected override void OnUpdate()
         {
@@ -83,8 +123,11 @@ namespace Placemaker.Game.Assets
             }
             if (!_scanRequested && ++_framesSinceCheck < RecheckFrames) return;
             _framesSinceCheck = 0;
-            int count = _prefabQuery.CalculateEntityCount();
+            // (core) Our own prefabs (decal and surface copies, companions, lots) never trigger a rescan.
+            int count = _prefabQuery.CalculateEntityCount() - s_ownPrefabs;
             if (!_scanRequested && count == _lastPrefabCount) return;
+            if (!_scanRequested && _lastPrefabCount >= 0)
+                Mod.Log.Info($"Placemaker asset catalog: {count - _lastPrefabCount:+#;-#;0} prefab(s) from the game or other mods since the last scan; rescanning.");
             _scanRequested = false;
             _lastPrefabCount = count;
             try
@@ -399,6 +442,7 @@ namespace Placemaker.Game.Assets
                 {
                     if (!_prefabs.TryGetPrefab<PrefabBase>(entity, out var prefab) || prefab == null || string.IsNullOrWhiteSpace(prefab.name)) continue;
                     if (!allByName.ContainsKey(prefab.name)) allByName[prefab.name] = entity;
+                    if (IsOwnPrefabName(prefab.name)) continue;   // (core) our copies and lots are not pickable assets
                     var traits = Traits(entity, prefab);
                     var categories = AssetHeuristics.Classify(prefab.name, traits);
                     if (categories.Count == 0) continue;

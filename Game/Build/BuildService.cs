@@ -546,7 +546,10 @@ namespace Placemaker.Game.Build
 
         private void DoApply()
         {
+            ScanLivePits("before Apply, temporaries in place");
+            LogSaggingEdges("before Apply");
             TagLateTemporaries();
+            PinMarkerNets(temporaries: true);   // (core) pinned before the first terrain pass after Apply
             NeutralizeVerdicts();   // (s59) nothing of ours deleted/hidden by a verdict under anarchy; no existing building demolished
             _tool.Requested = ApplyMode.Apply;
             _applied = true;   // from here on, failures roll back through group removal
@@ -574,6 +577,8 @@ namespace Placemaker.Game.Build
             }
             ChargeNets();
             AfterApply();
+            PinMarkerNets();   // (core) no sag of marker nets (lot drives) at lane junctions: the dip
+            LogSaggingEdges("applied");
             SetProgress(0.85f);
             GoAfterApply();
         }
@@ -600,6 +605,8 @@ namespace Placemaker.Game.Build
             var warnings = new List<string>(_warnings);
             DumpFinish(groupId);   // s30: live ground, water, nets and objects to ModsData/Placemaker/debug (when enabled)
             VerifyLiveHollows();   // s55: a bowl in the built ground, with the target's height next to it
+            ScanLivePits("after the build");
+            LogSaggingEdges("after the build");   // (core) every bowl in the whole outline and its rim, with the nets standing at it
             AuditSurvivors();   // s55: count what the game really left visible (Overridden = hidden), not the temporaries
             var audit = FinishAudit(groupId);
             ResetTransaction();
@@ -716,6 +723,7 @@ namespace Placemaker.Game.Build
             _emitCursor = 0;
             _lastMatched = -1;
             _dropped = 0;
+            _refusedLots = 0;
             _warnings.Clear();
             _ownDefinitions.Clear();
             _itemPrefab.Clear();

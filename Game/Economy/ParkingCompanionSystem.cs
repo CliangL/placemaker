@@ -106,7 +106,7 @@ namespace Placemaker.Game.Economy
                 companion.Remove<ObjectSubLanes>();
                 companion.Remove<ObjectSubAreas>();
                 companion.Remove<ObsoleteIdentifiers>();
-                if (!_prefabs.AddPrefab(companion))
+                if (!Placemaker.Game.Assets.AssetCatalogSystem.AddOwnPrefab(_prefabs, companion))
                 {
                     UnityEngine.Object.Destroy(companion);
                     _attempts = int.MaxValue;

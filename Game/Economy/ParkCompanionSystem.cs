@@ -197,7 +197,7 @@ namespace Placemaker.Game.Economy
             p.Remove<EffectSource>();
             p.Remove<ObsoleteIdentifiers>();
             p.Remove<DefaultPolicies>();
-            if (!_prefabs.AddPrefab(p))
+            if (!Placemaker.Game.Assets.AssetCatalogSystem.AddOwnPrefab(_prefabs, p))
             {
                 UnityEngine.Object.Destroy(p);
                 Mod.Log.Warn($"Placemaker could not add the park companion prefab '{name}'.");

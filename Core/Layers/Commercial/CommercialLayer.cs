@@ -61,8 +61,12 @@ namespace Placemaker.Core.Layers.Commercial
             c.Fixed("plotDepth");
         }
 
-        /// <summary>(s32) Shops on the streets round the site (a row facing each street) and their zone ("big buildings").</summary>
-        protected static void OuterRowControls(ControlSet c, string zone, bool on = true)
+        /// <summary>
+        /// (s32) Shops on the streets round the site (a row facing each street) and their zone ("big buildings"). (core) Off by default
+        /// in every type: the user's playtest, "the shops got put on the wrong side ... they should have been put on the alleyway" —
+        /// a shop row facing the city street is only built when the player asks for it.
+        /// </summary>
+        protected static void OuterRowControls(ControlSet c, string zone, bool on = false)
         {
             Shared(c.Toggle("outerRow", on, ControlTier.Essential, "shops")).Tip();
             var z = EdgeZoningAddOn.ZoneKindControl("outerZone", "shops", zone);
@@ -152,8 +156,12 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>Does this type put a park in what is left over (by design, or the "Green" extra)?</summary>
         protected virtual bool KeepsPark(LayerContext ctx) => ctx.B("extraGreen");
 
-        /// <summary>Does the lot-first pass put plot rows on the street frontage the composition left free? (The retail park keeps its pads and boxes as designed.)</summary>
-        protected virtual bool RowsOnFreeFrontage => true;
+        /// <summary>
+        /// Does the lot-first pass put plot rows on the street frontage the composition left free? (core) No: plots face our lanes and
+        /// lots, never the city street (teardown 07 F4, 08 C1: the free frontage becomes lot or planting, and the city street's zoning
+        /// along the build is blocked, so nothing grows facing away from the build).
+        /// </summary>
+        protected virtual bool RowsOnFreeFrontage => false;
 
         /// <summary>
         /// (s50) The lot is the base of a commercial site: every street frontage the composition left free gets shop rows
@@ -198,7 +206,6 @@ namespace Placemaker.Core.Layers.Commercial
                 foreach (var r in a.Rows) { mall.Shops.Remove(r); mall.Taken.Remove(r); mall.ShopZone.Remove(r); }
                 dropped = true;
             }
-            if (dropped) mall.StreetRows(runs, cells, null, 3, 2, StreetRowMin);
             return dropped;
         }
 

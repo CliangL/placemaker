@@ -851,6 +851,7 @@ namespace Placemaker.Game.Suite
         {
             var r = new List<Scenario>();
             var catalog = new JArray();
+            var shelf = Placemaker.Game.Recipes.RecipeStore.EnsureShelf();
             foreach (var g in GeneratorRegistry.All)
             {
                 if (GeneratorRegistry.IsHidden(g)) continue;
@@ -869,10 +870,24 @@ namespace Placemaker.Game.Suite
                     }
                 }
                 catch (Exception) { }
-                catalog.Add(new JObject { ["layer"] = g.Id, ["group"] = grp, ["presets"] = new JArray(PresetIds(g)), ["options"] = options });
+                // (core) The central shelf (Recipes/shelf/*.json): the type's Make-row category, and what the picker hides. Hidden types
+                // and styles can still be built here by id; "expand" (types, presets) leaves them out.
+                var entry = new JObject { ["layer"] = g.Id, ["group"] = grp, ["category"] = shelf.CategoryOf(g.Id, grp), ["presets"] = new JArray(PresetIds(g)), ["options"] = options };
+                if (shelf.IsTypeShelved(g.Id, grp)) entry["shelved"] = true;
+                var hiddenStyles = PresetIds(g).Where(p => shelf.IsStyleShelved(g.Id, grp, p)).ToList();
+                if (hiddenStyles.Count > 0) entry["shelvedStyles"] = new JArray(hiddenStyles);
+                catalog.Add(entry);
             }
             _summary["catalogFile"] = "catalog.json";
-            try { File.WriteAllText(Path.Combine(_out, "catalog.json"), new JObject { ["generatedBy"] = "the in-game suite from GeneratorRegistry", ["assembly"] = AssemblyVersion(), ["types"] = catalog }.ToString(Formatting.Indented)); } catch (Exception) { }
+            var categories = new JArray();
+            foreach (var c in shelf.Categories)
+            {
+                var co = new JObject { ["id"] = c.Id, ["name"] = c.Name, ["order"] = c.Order, ["groups"] = new JArray(c.Groups) };
+                if (c.Hidden) co["hidden"] = true;
+                if (c.Types.Count > 0) co["types"] = new JArray(c.Types);
+                categories.Add(co);
+            }
+            try { File.WriteAllText(Path.Combine(_out, "catalog.json"), new JObject { ["generatedBy"] = "the in-game suite from GeneratorRegistry", ["assembly"] = AssemblyVersion(), ["categories"] = categories, ["types"] = catalog }.ToString(Formatting.Indented)); } catch (Exception) { }
             foreach (var spec in set.scenarios)
             {
                 string landError = null;
@@ -898,7 +913,8 @@ namespace Placemaker.Game.Suite
                         // limit: the first N styles of EACH type
                         foreach (var g in Generators(spec))
                         {
-                            var ids = PresetIds(g).Where(p => spec.skip == null || !spec.skip.Contains(p)).ToList();
+                            var grpOf = GeneratorGroups.Of(g);
+                            var ids = PresetIds(g).Where(p => (spec.skip == null || !spec.skip.Contains(p)) && !shelf.IsStyleShelved(g.Id, grpOf, p)).ToList();
                             if (spec.limit > 0) ids = ids.Take(spec.limit).ToList();
                             foreach (var p in ids) items.Add((g.Id, p));
                         }
@@ -937,8 +953,8 @@ namespace Placemaker.Game.Suite
                 if (GeneratorRegistry.IsHidden(g)) continue;
                 var grp = GeneratorGroups.Of(g);
                 if (!string.IsNullOrEmpty(spec.layer)) { if (g.Id == spec.layer) yield return g; continue; }
-                if (!string.IsNullOrEmpty(spec.group)) { if (grp == spec.group) yield return g; continue; }
-                if (!string.IsNullOrEmpty(grp)) yield return g;   // "types": every type offered in the Make row
+                if (!string.IsNullOrEmpty(spec.group)) { if (grp == spec.group) yield return g; continue; }   // a group named on purpose: hidden types too
+                if (!string.IsNullOrEmpty(grp) && !Placemaker.Core.Tool.Shelf.Current.IsTypeShelved(g.Id, grp)) yield return g;   // "types": every type offered in the Make row (the shelf's hidden ones left out)
             }
         }
 

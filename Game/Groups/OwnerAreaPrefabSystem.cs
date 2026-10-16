@@ -140,7 +140,7 @@ namespace Placemaker.Game.Groups
             lot.m_SelectionColor = selection;
             lot.m_SelectionEdgeColor = selectionEdge;
             lot.m_RangeColor = new Color(0f, 0f, 0f, 0f);
-            if (!_prefabs.AddPrefab(lot))
+            if (!Placemaker.Game.Assets.AssetCatalogSystem.AddOwnPrefab(_prefabs, lot))
             {
                 UnityEngine.Object.Destroy(lot);
                 Mod.Log.Warn($"Placemaker could not add the lot prefab '{name}'.");

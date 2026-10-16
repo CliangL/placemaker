@@ -1,0 +1,16 @@
+{
+  "_about": "Make-row category 'Shops & squares' (Core/Tool/Shelf.cs; one file per category). Hide, never delete: type ids in hiddenTypes, style (preset) ids per type in hiddenStyles ({\"park\": [\"pocket\"]}), types moved in from another group in types. Hidden things keep their code and the game runner still builds them by id. Squares and events fold into Shops & squares.",
+  "id": "shops",
+  "name": "Shops & squares",
+  "key": "Placemaker.UI.MakeGroup.Commercial",
+  "order": 5,
+  "hidden": false,
+  "groups": [
+    "commercial",
+    "squares",
+    "events"
+  ],
+  "types": [],
+  "hiddenTypes": [],
+  "hiddenStyles": {}
+}

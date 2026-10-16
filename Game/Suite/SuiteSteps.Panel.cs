@@ -162,6 +162,8 @@ namespace Placemaker.Game.Suite
             var catalog = Bound(rec, "catalog");
             bool tile = catalog?["recipes"] is JArray rs && rs.Any(r => (string)r["id"] == recipeId);
             rec["makeRowTile"] = tile;
+            // (core) A type the central shelf hides has no tile on screen: it is picked by id (the panel's trigger), and recorded so.
+            if (catalog?["recipes"] is JArray rs2 && rs2.Any(r => (string)r["id"] == recipeId && (bool?)r["shelved"] == true)) rec["shelved"] = "hidden from the picker by the shelf (Recipes/shelf); picked by id";
             if (catalog != null && !tile) { rec["error"] = $"type '{layer}' (recipe {recipeId}) is not offered in the panel's Make row"; st.Result["status"] = "type-not-selected"; yield break; }
             if (fresh && RootLayer() == layer)
             {
