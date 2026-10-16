@@ -42,31 +42,35 @@ export function isMix(catalog: Catalog, r: RecipeInfo) {
 export function makeRecipes(catalog: Catalog): RecipeInfo[] {
     const fills = new Set(catalog.layers.filter((l) => l.kind === "fill" && !l.hidden).map((l) => l.id.toLowerCase()));
     const singles = catalog.recipes.filter((r) => !r.custom && fills.has(r.id.toLowerCase()));
-    return singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
+    const types = singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
+    return types.filter((r) => !SHELVED_GROUPS.has(recipeGroup(r)));
 }
 
-/** Every category the backend declares (GeneratorRegistry Group), in their default order of popularity. */
+/**
+ * The shelf (user 2026-10-15: "go tall and perfect rather than wide"). Categories folded into another one, and
+ * categories hidden from the picker and its search. The types and all their code stay; to bring one back, remove it
+ * from these two lists.
+ */
+export const MERGED_GROUPS: Record<string, string> = { gardens: "parks", water: "parks", squares: "commercial", events: "commercial" };
+export const SHELVED_GROUPS = new Set(["industrial", "transport"]);
+
+/** The categories of the Make row, in this fixed order. */
 export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
-    { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
-    { id: "squares", key: "Placemaker.UI.MakeGroup.Squares", en: "Squares" },
     { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
-    { id: "commercial", key: "Placemaker.UI.MakeGroup.Commercial", en: "Shops" },
     { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
-    { id: "gardens", key: "Placemaker.UI.MakeGroup.Gardens", en: "Gardens" },
-    { id: "water", key: "Placemaker.UI.MakeGroup.Water", en: "Water" },
+    { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
+    { id: "commercial", key: "Placemaker.UI.MakeGroup.Commercial", en: "Shops & squares" },
     { id: "nature", key: "Placemaker.UI.MakeGroup.Nature", en: "Nature" },
     { id: "sports", key: "Placemaker.UI.MakeGroup.Sports", en: "Sports" },
-    { id: "events", key: "Placemaker.UI.MakeGroup.Events", en: "Events" },
     { id: "farms", key: "Placemaker.UI.MakeGroup.Farms", en: "Farms" },
-    { id: "transport", key: "Placemaker.UI.MakeGroup.Transport", en: "Transport" },
-    { id: "industrial", key: "Placemaker.UI.MakeGroup.Industrial", en: "Industry" },
     { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
 ];
 
-/** Group of a recipe: the group its type declares, else guessed from the id. */
+/** Group of a recipe: the group its type declares (else guessed from the id), folded by the shelf. */
 export function recipeGroup(r: RecipeInfo): string {
-    if (r.group && MAKE_GROUPS.some((g) => g.id === r.group)) return r.group;
-    return makeGroupOf(r.id);
+    const raw = r.group || makeGroupOf(r.id);
+    const g = MERGED_GROUPS[raw] ?? raw;
+    return SHELVED_GROUPS.has(g) || MAKE_GROUPS.some((x) => x.id === g) ? g : "other";
 }
 
 /** Fallback group of a type id that declares none ("parking" before "park", "market square" before parks). */
@@ -208,15 +212,12 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
     const selectedRecipe = list.find((r) => r.id === design.recipeId);
     const selectedGroup = selectedRecipe ? recipeGroup(selectedRecipe) : "";
     const [chosen, setChosen] = useState<string | null>(() => load<string | null>(CATEGORY_KEY, null));
-    // Popularity snapshot at mount: chips do not jump around while the player clicks.
-    const [use] = useState(() => load<Record<string, number>>(USE_KEY, {}));
     const root = useRef<HTMLDivElement>(null);
     const q = query.trim().toLowerCase();
     const has = (text: string) => text.toLowerCase().includes(q);
 
     const cats = MAKE_GROUPS.map((g, order) => ({ id: g.id, title: t(g.key, g.en), order, types: list.filter((r) => recipeGroup(r) === g.id) }))
-        .filter((c) => c.types.length)
-        .sort((a, b) => (use[b.id] ?? 0) - (use[a.id] ?? 0) || a.order - b.order);
+        .filter((c) => c.types.length);   // fixed order: roads, parking, parks, shops, then the rest
     const exists = (id: string | null) => !!id && cats.some((c) => c.id === id);
     const category = exists(chosen) ? chosen! : exists(selectedGroup) ? selectedGroup : cats[0]?.id ?? "";
     const setCategory = (c: string) => {
