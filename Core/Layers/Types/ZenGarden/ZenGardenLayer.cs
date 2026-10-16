@@ -106,13 +106,16 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
 
         protected override void DefinePresets()
         {
+            // rf-parks: the dry garden's field is a clean pale gravel surface (the painted gravel and rake strokes read as a patchy
+            // lawn in the game) and its stones are larger, so the five groups read from the street.
             Preset("karesansui", ("style", "karesansui"), ("gravel", 55.0), ("pond", false), ("raking", "both"), ("rockGroups", 5.0), ("groupSize", "mixed"),
-                ("prunedTrees", 20.0), ("shrubs", 40.0), ("bamboo", "screen"), ("lanterns", 3.0), ("benches", 4.0));
-            Preset("stroll", ("style", "stroll"), ("gravel", 10.0), ("fieldShape", "organic"), ("raking", "ripples"), ("pond", true), ("pondSize", 22.0),
-                ("bridges", 2.0), ("bridgeStyle", "straight"), ("islands", 2.0), ("rockGroups", 5.0), ("groupSize", "three"), ("prunedTrees", 45.0),
+                ("prunedTrees", 20.0), ("shrubs", 40.0), ("bamboo", "screen"), ("lanterns", 3.0), ("benches", 4.0), ("gravelSurface", true), ("fieldShape", "organic"));
+            // rf-parks: a smaller pond that fits a city block (22 % found no room on 150 x 140 m: NoPond) and no gravel field beside it.
+            Preset("stroll", ("style", "stroll"), ("gravel", 0.0), ("fieldShape", "organic"), ("raking", "ripples"), ("pond", true), ("pondSize", 14.0),
+                ("bridges", 2.0), ("bridgeStyle", "straight"), ("islands", 2.0), ("rockGroups", 5.0), ("groupSize", "three"), ("prunedTrees", 30.0),
                 ("shrubs", 60.0), ("bamboo", "none"), ("lanterns", 10.0), ("benches", 6.0), ("wall", false));
             Preset("tea", ("style", "tea"), ("gravel", 0.0), ("pond", false), ("teaHouse", true), ("basin", true), ("rockGroups", 3.0), ("groupSize", "three"),
-                ("prunedTrees", 70.0), ("shrubs", 90.0), ("bamboo", "screen"), ("lanterns", 6.0), ("benches", 2.0), ("stoneSpacing", 0.8));
+                ("prunedTrees", 35.0), ("shrubs", 80.0), ("bamboo", "screen"), ("lanterns", 6.0), ("benches", 2.0), ("stoneSpacing", 0.8));
             Preset("moss", ("style", "moss"), ("gravel", 0.0), ("pond", true), ("pondSize", 10.0), ("bridges", 1.0), ("bridgeStyle", "zigzag"), ("islands", 1.0),
                 ("rockGroups", 3.0), ("groupSize", "three"), ("prunedTrees", 110.0), ("shrubs", 40.0), ("bamboo", "none"), ("lanterns", 5.0), ("wall", false));
             Preset("bamboo", ("style", "bamboo"), ("gravel", 0.0), ("pond", false), ("rockGroups", 1.0), ("groupSize", "five"), ("prunedTrees", 10.0),
@@ -422,11 +425,15 @@ namespace Placemaker.Core.Layers.Types.ZenGarden
 
         // ───────────────────────────── rocks ─────────────────────────────
 
+        /// <summary>(rf-parks) Vanilla boulders for the rock groups while the rock control is automatic (the automatic rock pool is small stones that read as specks).</summary>
+        private static readonly string[] Boulders = { "Boulder03", "Boulder01", "Boulder05", "Boulder02", "Boulder06", "Boulder04" };
+
         private static int Rocks(LayerContext ctx, Garden g, string style)
         {
             int wanted = ctx.I("rockGroups");
             if ((wanted & 1) == 0) wanted++;   // odd, always
             var ids = ctx.L("rockAssets");
+            if (ids == null || ids.Length == 0) ids = Boulders;
             if (wanted <= 0 || !AssetAvailability.Require(ctx.Plan, AssetCategories.Rock, ids, Keys.Category(AssetCategories.Rock))) return 0;
             string mode = ctx.S("groupSize");
             float scale = ctx.F("rockScale") / 100f;

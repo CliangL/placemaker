@@ -346,6 +346,17 @@ namespace Placemaker.Core.Layers.Common
                 }
         }
 
+        /// <summary>(rf-parks) Settings preset <paramref name="id"/> gives its <paramref name="feature"/> child (over FeatureInfo.Preset).</summary>
+        protected void PresetFeatureValues(string id, string feature, params (string key, object value)[] values)
+        {
+            foreach (var p in _presets)
+                if (p.Id == id)
+                {
+                    if (!p.FeatureValues.TryGetValue(feature, out var bag)) p.FeatureValues[feature] = bag = new SettingsBag();
+                    foreach (var (k, v) in values) bag.Values[k] = v;
+                }
+        }
+
         private Dictionary<string, ControlSchema> _byId;
 
         public ControlSchema Control(string id)

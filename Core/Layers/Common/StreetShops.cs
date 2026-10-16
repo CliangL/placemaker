@@ -83,7 +83,7 @@ namespace Placemaker.Core.Layers.Common
             {
                 { "plaza", (true, Row, Some) },
                 { "marketSquare", (true, Row, Lots) },
-                { "park", (true, Speckled, Few) },
+                { "park", (false, Speckled, Few) },   // rf-parks: shop plots left pale holes round a natural or garden park; the urban pocket turns them on
                 { "waterfront", (true, Row, Some) },
                 { "fairground", (true, Row, Few) },
                 { "amphitheatre", (true, Speckled, Few) },

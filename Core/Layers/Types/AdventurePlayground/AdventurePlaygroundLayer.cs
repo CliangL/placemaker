@@ -97,8 +97,8 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
 
         protected override void DefinePresets()
         {
-            Preset("adventure", ("style", "adventure"), ("ageZones", "byAge"), ("equipment", 18.0), ("ground", "sand"), ("waterPlay", true), ("naturePlay", true));
-            Preset("toddler", ("style", "toddler"), ("ageZones", "toddlers"), ("equipment", 10.0), ("clearance", 1.5), ("ground", "rubber"),
+            Preset("adventure", ("style", "adventure"), ("ageZones", "byAge"), ("equipment", 24.0), ("ground", "sand"), ("waterPlay", true), ("naturePlay", true));
+            Preset("toddler", ("style", "toddler"), ("ageZones", "toddlers"), ("equipment", 14.0), ("clearance", 1.5), ("ground", "rubber"),
                 ("waterPlay", true), ("jets", 4.0), ("pools", 0.0), ("naturePlay", false), ("benches", 14.0), ("shade", "shelters"), ("fence", true));
             Preset("water", ("style", "water"), ("ageZones", "mixed"), ("equipment", 8.0), ("ground", "sand"), ("waterPlay", true), ("jets", 18.0),
                 ("pools", 5.0), ("naturePlay", false), ("shade", "both"));
@@ -329,7 +329,9 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     default:
                     {
                         z.Items = math.max(2, (int)math.round(total * Weight(k) / math.max(0.1f, weights)));
-                        z.ItemRadius = k == ZoneKind.Toddler ? 1.6f : k == ZoneKind.Jungle ? 3.2f : 2.6f;
+                        // rf-parks: tighter play zones (the vanilla pieces are 2-4 m across; at 2.6 m item radii the sand discs read
+                        // as mostly empty sand).
+                        z.ItemRadius = k == ZoneKind.Toddler ? 1.4f : k == ZoneKind.Jungle ? 2.8f : 2.1f;
                         z.Spacing = z.ItemRadius * 2f + clear;
                         z.Radius = z.Spacing * 0.62f * math.sqrt(z.Items) + z.ItemRadius + clear * 0.5f + (k == ZoneKind.Jungle ? 2f : 0f);
                         break;
@@ -512,7 +514,9 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
             int n = 0;
             // Art pass (a1): never "water.jets" here: in the vanilla catalog that is an agricultural sprinkler boom.
             // Small fountains (about 3.5 m across) stand in for the jets, spaced by their real footprint.
-            string jets = chains.Get(false, AssetCategories.CenterpieceFountain, AssetCategories.Centerpiece);
+            // rf-parks: the curated fountains are named explicitly and resolve by name, so an empty fountain category (a clean game)
+            // no longer leaves the splash pad an empty disc.
+            string jets = CategoryChains.Quiet(AssetCategories.CenterpieceFountain, AssetCategories.Centerpiece) ?? AssetCategories.CenterpieceFountain;
             if (jets != null)
             {
                 const float golden = 2.39996323f;

@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+151536e-dirty",
+  "assembly": "0.1.0+2a041e4",
   "categories": [
     {
       "id": "roads",
@@ -2514,7 +2514,8 @@
         "wildflower",
         "urban",
         "riverside",
-        "greenway"
+        "greenway",
+        "picnic"
       ],
       "options": [
         {
@@ -2531,7 +2532,9 @@
             "modern",
             "wildflower",
             "urban",
-            "riverside"
+            "riverside",
+            "picnic",
+            "garden"
           ],
           "default": "natural"
         },
@@ -2835,6 +2838,15 @@
           "id": "picnicPath",
           "kind": "Toggle",
           "default": true
+        },
+        {
+          "id": "picnicSpots",
+          "kind": "Slider",
+          "min": 0.0,
+          "max": 12.0,
+          "step": 1.0,
+          "unit": "count",
+          "default": 0.0
         },
         {
           "id": "restroomsPath",
@@ -3356,6 +3368,18 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "formal",
+        "woodland",
+        "meadow",
+        "pocket",
+        "victorian",
+        "landscape",
+        "modern",
+        "wildflower",
+        "riverside",
+        "greenway"
       ]
     },
     {
@@ -3618,7 +3642,25 @@
             "trees",
             "shrubs"
           ],
-          "default": "mixed"
+          "default": "flowers"
+        },
+        {
+          "id": "showBeds",
+          "kind": "Slider",
+          "min": 0.0,
+          "max": 12.0,
+          "step": 1.0,
+          "unit": "count",
+          "default": 0.0
+        },
+        {
+          "id": "pathBorders",
+          "kind": "Slider",
+          "min": 0.0,
+          "max": 90.0,
+          "step": 10.0,
+          "unit": "%",
+          "default": 0.0
         },
         {
           "id": "bedDensity",
@@ -3848,6 +3890,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "mixed",
+        "arboretum"
       ]
     },
     {
@@ -4515,7 +4561,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "picnicGrounds",
@@ -4747,7 +4794,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "natureReserve",
@@ -5196,7 +5244,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "communityGarden",
@@ -5412,7 +5461,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "marketSquare",
@@ -5876,7 +5926,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "greenwayPark",
@@ -10705,7 +10756,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "golf",
@@ -11791,6 +11843,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "water"
       ]
     },
     {
@@ -11901,6 +11956,15 @@
           "default": ""
         },
         {
+          "id": "monumentScale",
+          "kind": "Slider",
+          "min": 100.0,
+          "max": 400.0,
+          "step": 10.0,
+          "unit": "%",
+          "default": 220.0
+        },
+        {
           "id": "sculptureAssets",
           "kind": "AssetMulti",
           "default": []
@@ -11996,6 +12060,16 @@
           "id": "flowerRing",
           "kind": "Toggle",
           "default": true
+        },
+        {
+          "id": "borders",
+          "kind": "Toggle",
+          "default": false
+        },
+        {
+          "id": "bosque",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "treeSpecies",
@@ -12178,6 +12252,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "square"
       ]
     },
     {
@@ -15643,6 +15720,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "moss",
+        "bamboo"
       ]
     }
   ]

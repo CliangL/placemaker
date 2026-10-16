@@ -161,11 +161,12 @@ namespace Placemaker.Core.Layers.Park
             c.Slider("lakeSize", 70, 20, 100, 5, "%", ControlTier.More, "pond").Tip();
             c.Toggle("playgroundPath", true, ControlTier.More, "playground").Tip();
             c.Toggle("picnicPath", true, ControlTier.More, "picnic").Tip();
+            c.Slider("picnicSpots", 0, 0, 12, 1, "count", ControlTier.More, "picnic").Tip();
             c.Toggle("restroomsPath", true, ControlTier.More, "restrooms").Tip();
             c.Toggle("fountainPath", true, ControlTier.More, "fountain").Tip();
             DefineStreetShopControls(c);
             Amenities.DefineHostControls(c, true);
-            foreach (var id in new[] { "playgroundPath", "picnicPath", "restroomsPath", "fountainPath" }) c.Fixed(id);
+            foreach (var id in new[] { "playgroundPath", "picnicPath", "restroomsPath", "fountainPath", "picnicSpots" }) c.Fixed(id);
 
             c.Chance("fence", 0.2f);
             c.Fixed("lakeSize");
@@ -193,7 +194,7 @@ namespace Placemaker.Core.Layers.Park
             Preset("natural", ("style", "natural"), ("treeDensity", 26.0), ("bushDensity", 65.0), ("furniture", 4.0), ("pathStyle", "curvy"), ("desireLines", "worn"));
             Preset("formal", ("style", "formal"), ("pathWidth", "narrow"), ("curvedPaths", false), ("treeDensity", 30.0),
                 ("bushDensity", 60.0), ("furniture", 4.5), ("paths", "network"), ("pathStyle", "formal"));
-            Preset("garden", ("style", "natural"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 70.0),
+            Preset("garden", ("style", "garden"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 95.0),
                 ("furniture", 4.0), ("pathStyle", "garden"), ("naturalGround", true));
             Preset("woodland", ("style", "woodland"), ("pathWidth", "narrow"), ("treeDensity", 80.0), ("bushDensity", 90.0),
                 ("furniture", 1.5), ("animals", true), ("lamps", false), ("pathStyle", "garden"), ("naturalGround", true), ("trails", 3.0));
@@ -219,6 +220,11 @@ namespace Placemaker.Core.Layers.Park
             Preset("greenway", ("style", "natural"), ("pathStyle", "curvy"), ("pathWidth", "narrow"), ("treeDensity", 28.0), ("bushDensity", 60.0),
                 ("furniture", 3.5), ("bikePath", true), ("smallPaths", 2.0), ("trails", 1.0), ("desireLines", "worn"), ("curvedPaths", true));
 
+            // rf-parks: picnic grounds fold into the park as a style: a gentle circuit round a big open lawn, picnic groups with
+            // shelters and grills spread over the grass, shade-tree clumps round the edge, a playground and restrooms.
+            Preset("picnic", ("style", "picnic"), ("pathStyle", "circuit"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 20.0),
+                ("furniture", 3.0), ("lamps", true), ("bins", true), ("belt", true), ("curvedPaths", true), ("picnicSpots", 7.0));
+
             // Playtest 4b: presets look complete. On top of the DefaultOn features (playground, picnic,
             // restrooms, big trees, flowerbeds, decals, shore) each idiom turns on what belongs to it.
             PresetFeatures("formal", "plaza");   // the park plaza has a fountain centre
@@ -230,7 +236,14 @@ namespace Placemaker.Core.Layers.Park
             PresetFeatures("landscape", "-flowerbeds", "pond");   // a landscape park is a lawn falling to a lake with a temple island
             PresetFeatures("modern", "plaza");
             PresetFeatures("wildflower", "-flowerbeds", "-playground");
-            PresetFeatures("urban", "plaza", "shops");
+            // rf-parks: the urban pocket is the city's park: plaza, kiosk and shops on its street edge; no picnic, playground, big trees
+            // or loose flowerbeds (they found no room on a city block and said so on every build).
+            PresetFeatures("urban", "plaza", "shops", StreetShopsLayer, "-picnic", "-flowerbeds", "-playground", "-bigtrees");
+            PresetFeatures("picnic", "-flowerbeds");
+            // The urban pocket's plaza stays an open paved square (the park's own trees already ring it; with the plaza's edge trees
+            // the canopy closed over it on a round site).
+            PresetFeatureValues("urban", "plaza", ("treeLayout", "none"));
+            PresetFeatureValues("picnic", "picnic", ("groups", 8.0), ("tables", 3.0), ("shelter", true), ("shadeTrees", true));
         }
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
@@ -608,6 +621,29 @@ namespace Placemaker.Core.Layers.Park
                     }
                 }
             }
+            // rf-parks: a picnic lawn keeps more open ground for its picnic groups (planting stays off it; no path spur to each).
+            int extra = ctx.Input.HasChild("picnic") ? ctx.I("picnicSpots") : 0;
+            int spots = 0;
+            for (int k = 0; k < extra * 3 && spots < extra; k++)
+            {
+                float r = ctx.M(13f, 8f);   // a picnic group with its shelter, grill and shade trees needs about 12 m
+                bool placed = false;
+                for (int ri = 0; ri < search.Count && !placed; ri++)
+                {
+                    var occ = new Occupancy(search[ri], null, ctx.Site);
+                    foreach (var seg in s.Occ.Corridors.Segments) occ.Corridors.Add(seg.A, seg.B, seg.HalfWidth, seg.Kind);
+                    foreach (var d in s.Occ.Discs.Items) occ.Discs.Add(d.P, d.R, d.Kind);
+                    var avoid = new List<float2>(gates);
+                    avoid.AddRange(taken);
+                    if (!Spots.Find(occ, r, Spots.Preference.Open, Hashing.Mix(ctx.Seed, 0x91C0u + (uint)k), out var c, avoid, r * 2f + 3f, 1f)) continue;
+                    if (s.InLake(c, r + 2f)) continue;
+                    s.Occ.Take(c, r, 200);
+                    taken.Add(c);
+                    placed = true; spots++;
+                }
+                if (!placed) break;
+            }
+            if (extra > 0) ctx.Plan.Facts["picnicSpots"] = spots;
             ctx.Plan.Facts["featureClearings"] = result.Count;
             return result;
         }
@@ -857,6 +893,7 @@ namespace Placemaker.Core.Layers.Park
                 case "meadow": case "wildflower": return new[] { "OakTree01", "BirchTree01", "NA_HickoryTree01" };
                 case "riverside": return new[] { "EU_AlderTree01", "EU_PoplarTree01", "BirchTree01", "OakTree01" };
                 case "pocket": return new[] { "NA_LindenTree01", "NA_LondonPlaneTree01", "BirchTree01" };
+                case "picnic": return new[] { "OakTree01", "EU_ChestnutTree01", "NA_LondonPlaneTree01", "NA_LindenTree01" };
                 default: return ParkArt.ParkTrees;
             }
         }
@@ -866,7 +903,7 @@ namespace Placemaker.Core.Layers.Park
             switch (style)
             {
                 case "formal": case "modern": case "urban": case "woodland": return ParkArt.GreenShrubs;
-                case "meadow": case "wildflower": return ParkArt.FlowerShrubs;
+                case "meadow": case "wildflower": case "garden": return ParkArt.FlowerShrubs;
                 default: return ParkArt.MixedShrubs;
             }
         }
