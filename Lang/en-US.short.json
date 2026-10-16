@@ -104,6 +104,8 @@
   "Placemaker.LookoutHill.Issue.NoRun.Short": "No sledding run",
   "Placemaker.LookoutHill.Issue.PathShort.Short": "Path stops short",
   "Placemaker.Market.Issue.Fewer.Short": "{0} of {1} stalls",
+  "Placemaker.Market.Issue.NoCarPark.Short": "No car park",
+  "Placemaker.Market.Issue.NoStreet.Short": "No service lane",
   "Placemaker.Memorial.Issue.AxisBroken.Short": "Walk cut short",
   "Placemaker.Memorial.Issue.FewerSculptures.Short": "{0} of {1} statues",
   "Placemaker.Memorial.Issue.NoAxis.Short": "Trail, not axis",

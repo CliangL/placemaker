@@ -54,7 +54,10 @@ namespace Placemaker.Tests
             var host = Big("marketSquare", "bigMarket").Layers.First();
             int stalls = host.Objects.Count(o => o.Category == AssetCategories.MarketStall);
             Assert.True(stalls >= 400, "stalls " + stalls);
-            Assert.True(host.Facts.TryGetValue("foodCourts", out var courts) && courts >= 4, "food courts " + courts);
+            // rf-shops3 (the market quarter): food courts only where side streets meet the main streets, at least 70 m apart (shops2
+            // had one at every other crossing: 4+); the blocks between get planting islands and café groves instead.
+            Assert.True(host.Facts.TryGetValue("foodCourts", out var courts) && courts >= 2, "food courts " + courts);
+            Assert.True(host.Facts["plantingIslands"] + host.Facts["cafeGroves"] >= 6, "islands and groves");
         }
     }
 }

@@ -123,6 +123,8 @@ namespace Placemaker.Core.Layers.Plaza
             public SurfaceRole Role;
             public AssetRef Asset;
             public string Category;
+            /// <summary>(rf-shops3) Claimed but not laid: bare ground in the paving (tree pits, planting islands painted instead).</summary>
+            public bool Hole;
         }
 
         private readonly List<Element> _elements = new List<Element>();
@@ -142,6 +144,19 @@ namespace Placemaker.Core.Layers.Plaza
             foreach (var r in rings) if (r != null && r.Length >= 3 && Poly.Area(r) > 0.5f) ccw.Add(Poly.EnsureCcw((float2[])r.Clone()));
             if (ccw.Count == 0) return;
             _elements.Add(new Element { Rings = ccw, Role = role, Asset = asset, Category = category });
+        }
+
+        /// <summary>
+        /// (rf-shops3) Bare ground: the shapes are kept out of everything added after them and out of the field, and nothing is laid
+        /// there (the terrain shows: tree pits and planting islands the layer paints with soil or lawn).
+        /// </summary>
+        public void Hole(List<float2[]> rings)
+        {
+            if (rings == null || rings.Count == 0) return;
+            var ccw = new List<float2[]>(rings.Count);
+            foreach (var r in rings) if (r != null && r.Length >= 3 && Poly.Area(r) > 0.5f) ccw.Add(Poly.EnsureCcw((float2[])r.Clone()));
+            if (ccw.Count == 0) return;
+            _elements.Add(new Element { Rings = ccw, Hole = true });
         }
 
         /// <summary>Direction the field's openings are split along (the square's own axis): seams run with the paving.</summary>
@@ -168,6 +183,16 @@ namespace Placemaker.Core.Layers.Plaza
                 foreach (var c in claimed)
                     if (c.min.x <= mx.x && c.max.x >= mn.x && c.min.y <= mx.y && c.max.y >= mn.y) clip.Add(c.r);
                 var part = clip.Count == 0 ? inside : Poly.Boolean(inside, clip, BoolOp.Difference);
+                if (e.Hole)
+                {
+                    foreach (var h in part)
+                    {
+                        if (h?.Outer == null || h.Outer.Length < 3) continue;
+                        Poly.Bounds(h.Outer, out var hmn, out var hmx);
+                        claimed.Add((h, hmn, hmx));
+                    }
+                    continue;
+                }
                 // s18: only what was really laid is claimed. A piece too small or too thin to lay (a sliver
                 // between two bands) stays unclaimed, so the field paves it instead of leaving bare ground.
                 var laid = new List<float2[]>();

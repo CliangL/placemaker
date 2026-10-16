@@ -144,8 +144,10 @@ namespace Placemaker.Tests
                 Assert.Equal("Placemaker.Entrance.Step.Place", r.NextStepKey);
                 Assert.True(TestKit.Gen(id).CheckReady(TestKit.Input(TestKit.Rect(100, 80), markers: new List<EdgeMarker> { M(EntranceKinds.Main, 50, 0) })).Ready, id);
             }
-            foreach (var id in new[] { "logisticsYard", "marketSquare", "plaza", "roads" })
+            foreach (var id in new[] { "logisticsYard", "plaza", "roads" })
                 Assert.True(TestKit.Gen(id).CheckReady(TestKit.Input(TestKit.Rect(100, 80))).Ready, id);
+            // rf-shops3: the market square waits for an entrance like the parking tool (MarketQuarterTests).
+            Assert.False(TestKit.Gen("marketSquare").CheckReady(TestKit.Input(TestKit.Rect(100, 80))).Ready);
         }
 
         [Fact]
