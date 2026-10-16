@@ -30,6 +30,7 @@
   "Placemaker.Fairground.layout.grid": "Grid",
   "Placemaker.Fairground.layout.court": "Court",
   "Placemaker.Fairground.stalls": "Stalls",
+  "Placemaker.Fairground.stalls.Tooltip": "Stalls on a site of 0.6 ha. A bigger site gets more, in proportion (up to three times as many), so the streets stay lined.",
   "Placemaker.Fairground.stage": "Stage",
   "Placemaker.Fairground.stage.Tooltip": "A stage at one end facing an open crowd field that features keep clear of.",
   "Placemaker.Fairground.field": "Crowd field",

@@ -30,6 +30,27 @@
     ],
     "mallPark": [
       "promenade"
+    ],
+    "plaza": [
+      "market",
+      "amphitheatre",
+      "garden",
+      "sunken",
+      "terraced",
+      "splitLevel",
+      "cascade",
+      "podium",
+      "piazza"
+    ],
+    "amphitheatre": [
+      "cinema",
+      "meadow",
+      "speakers"
+    ],
+    "fairground": [
+      "festival",
+      "funfair",
+      "foodTrucks"
     ]
   }
 }

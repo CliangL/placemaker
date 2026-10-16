@@ -508,6 +508,7 @@
   "Placemaker.Market.bushDensity": "Bush density",
   "Placemaker.Market.surface": "Surface",
   "Placemaker.Market.stalls": "Stalls",
+  "Placemaker.Market.stalls.Tooltip": "Stalls on a square of 0.4 ha. A bigger square gets more, in proportion (up to four times as many), so the market fills it.",
   "Placemaker.Market.aisle": "Aisle width",
   "Placemaker.Market.aisle.Tooltip": "Width of the aisles between the stall rows.",
   "Placemaker.Market.treeRing": "Tree ring",

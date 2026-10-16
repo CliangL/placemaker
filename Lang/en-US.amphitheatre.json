@@ -22,6 +22,7 @@
   "Placemaker.Amphitheatre.style.meadow": "Concert meadow",
   "Placemaker.Amphitheatre.style.speakers": "Speakers' corner",
   "Placemaker.Amphitheatre.rows": "Rows",
+  "Placemaker.Amphitheatre.rows.Tooltip": "Rows of seats on a site of 0.6 ha. A bigger site gets more rows (up to twice as many, on gentler steps), so the bowl fills it.",
   "Placemaker.Amphitheatre.span": "Seating arc",
   "Placemaker.Amphitheatre.span.Tooltip": "How far the seating wraps round the stage. 360° puts the stage in the middle.",
   "Placemaker.Amphitheatre.terrain": "Terrain",

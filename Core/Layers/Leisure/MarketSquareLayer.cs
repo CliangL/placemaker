@@ -43,7 +43,7 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Slider("stalls", 16, 0, 60, 1, "count", ControlTier.Essential, "market");
+            c.Slider("stalls", 16, 0, 60, 1, "count", ControlTier.Essential, "market").Tip();
             c.Slider("aisle", 4.5, 3, 8, 0.5, "m", ControlTier.Essential, "market").Tip();
             c.Toggle("treeRing", true, ControlTier.Essential, "market").Tip();
             c.Choice("centerKind", "statue", ControlTier.Essential, "market", "none", "any", "fountain", "statue");
@@ -73,6 +73,17 @@ namespace Placemaker.Core.Layers.Leisure
             Preset("farmers", ("stalls", 10.0), ("aisle", 5.5), ("treeRing", true), ("cafe", 3.0), ("centerKind", "fountain"), ("pattern", "border"));
         }
 
+        /// <summary>Square the "stalls" count is for (m²): a bigger square gets proportionally more, up to 4x.</summary>
+        public const float StallsReferenceArea = 4000f;
+
+        /// <summary>
+        /// (rf-squares) The stalls a square of <paramref name="area"/> m² holds for the "stalls" setting: the setting is the
+        /// market of a 0.4 ha square; a city block (1.5 ha) gets about four times as many, so the market fills the
+        /// square instead of a small cluster in a big empty paved field.
+        /// </summary>
+        public static int ScaledStalls(int stalls, float area) =>
+            stalls <= 0 ? 0 : math.min(240, (int)math.round(stalls * math.clamp(area / StallsReferenceArea, 1f, 4f)));
+
         protected override void PlanCore(LayerContext ctx)
         {
             var region = ctx.LayerRegion;
@@ -87,6 +98,14 @@ namespace Placemaker.Core.Layers.Leisure
             }
             LeisureKit.Frame(region, out var centre, out _, out _, out _, out _);
             var axis = PlazaDressing.SquareAxis(region);
+            // rf-squares: two main aisles across the square on its own axes, meeting at the centre: a big market reads as
+            // streets of stalls in four quarters. (Aisles to every access point cut the stall rows at odd angles.)
+            {
+                PlazaDressing.Extents(region, centre, axis, out float minA, out float maxA, out float minB, out float maxB);
+                var sideAxis = new float2(-axis.y, axis.x);
+                occ.TakeCorridor(centre + axis * minA, centre + axis * maxA, 2.4f, 6);
+                occ.TakeCorridor(centre + sideAxis * minB, centre + sideAxis * maxB, 2.4f, 6);
+            }
             region.DeepestPoint(out float ins, null, 12);
             // Art pass a2: an old-town square in setts (a fountain square in warm sandstone), framed in dark
             // flags, the market floor in a lighter stone, trees in pits — one paving tiling (PavingKit).
@@ -98,7 +117,14 @@ namespace Placemaker.Core.Layers.Leisure
 
             // Centrepiece on its own rondel: the market cross the stalls gather round.
             float coreR = 0f, rondel = 0f;
-            if (kind != "none" && ins > 10f)
+            if (kind != "none" && ins > 10f && PlazaDressing.CentreAssetsMissing(ctx))
+            {
+                // rf-squares: no fountain or statue installed (the clean game): a planted centre instead of an empty disc.
+                coreR = math.clamp(ins * 0.16f, 5f, 9f);
+                rondel = PlazaDressing.SpecimenCentre(ctx, occ, centre, coreR, pave, 0x5BE1u);
+                occ.Take(centre, coreR + 1.5f, 0);
+            }
+            else if (kind != "none" && ins > 10f)
             {
                 string sub = PlazaDressing.CenterCategory(kind);
                 string cat = LeisureKit.Category(ctx, ctx.S("centerpiece"), sub ?? AssetCategories.Centerpiece, AssetCategories.Centerpiece);
@@ -127,8 +153,9 @@ namespace Placemaker.Core.Layers.Leisure
                 var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0);
                 var ids = string.IsNullOrEmpty(ctx.S("treeAsset")) ? PlazaArt.ChestnutTrees : new[] { ctx.S("treeAsset") };
                 float spacing = math.max(7f, ctx.Raw("treeSpacing"));
-                var inner = region.InsetVertices(fw + 2.6f);
-                var ringRegion = Poly.IsSimple(inner) && Poly.SignedArea(inner) > 0f ? LayerRegion.From(inner) : null;
+                // rf-squares: a true offset (the per-vertex inset folded over on a block's chamfered corners: no ring).
+                var inner = region.InsetRing(fw + 2.6f);
+                var ringRegion = inner != null ? LayerRegion.From(inner) : null;
                 int t = 0;
                 if (ringRegion != null)
                 {
@@ -159,14 +186,15 @@ namespace Placemaker.Core.Layers.Leisure
 
             // The market block: stalls back to back round the centre, facing their aisles, on a lighter floor.
             int stalls = 0;
-            int wanted = ctx.I("stalls");
+            int asked = ctx.I("stalls");
+            int wanted = ScaledStalls(asked, region.Area);
             if (wanted > 0 && PlazaArt.Available(ctx, "stallAsset", AssetCategories.MarketStall, AssetCategories.Kiosk))
             {
                 stalls = PlazaDressing.StallBlock(ctx, occ, region, centre, axis, wanted, ctx.F("aisle"), "stallAsset", 0x5700u, out var block);
                 if (stalls > 0)
                     pave.Add(new OrientedRect { Center = block.Center, Axis = block.Axis, HalfLength = block.HalfLength + 2.5f, HalfWidth = block.HalfWidth + 1.5f }.Ring,
                         SurfaceRole.Plaza, palette.Accent, AssetCategories.SurfacePaving);
-                if (stalls < wanted) ctx.Issue(IssueSeverity.Info, "Placemaker.Market.Issue.Fewer", stalls, wanted);
+                if (stalls < asked) ctx.Issue(IssueSeverity.Info, "Placemaker.Market.Issue.Fewer", stalls, asked);
             }
             ctx.Check();
 

@@ -58,7 +58,7 @@ namespace Placemaker.Core.Layers.Types.Events
         {
             c.Choice("style", "fairground", ControlTier.Essential, "fairLayout", "fairground", "festival", "funfair", "christmas", "foodTrucks").Tip();
             c.Choice("layout", "avenue", ControlTier.Essential, "fairLayout", "avenue", "loop", "grid", "court").Tip();
-            c.Slider("stalls", 24, 0, 160, 1, "count", ControlTier.Essential, "fairLayout");
+            c.Slider("stalls", 24, 0, 160, 1, "count", ControlTier.Essential, "fairLayout").Tip();
             c.Toggle("stage", true, ControlTier.Essential, "fairLayout").Tip();
             c.Slider("field", 25, 5, 60, 5, "%", ControlTier.Essential, "fairLayout").When("stage=true").Tip();
 
@@ -77,7 +77,7 @@ namespace Placemaker.Core.Layers.Types.Events
             c.Choice("stageEnd", "far", ControlTier.More, "fairStage", "far", "near", "side").Tip();
             c.Toggle("backstage", true, ControlTier.More, "fairStage").Tip();
             c.Toggle("barrier", true, ControlTier.More, "fairStage").Tip();
-            c.Toggle("foh", true, ControlTier.More, "fairStage").Tip();
+            c.Toggle("foh", false, ControlTier.More, "fairStage").Tip();   // rf-squares: off: in the game it is a lone dark dome in the field
             c.Asset("stageAsset", AssetCategories.Stage, ControlTier.More, "fairStage");
 
             c.Slider("toilets", 8, 0, 40, 1, "count", ControlTier.More, "fairService").Tip();
@@ -114,7 +114,7 @@ namespace Placemaker.Core.Layers.Types.Events
 
         protected override void DefinePresets()
         {
-            Preset("fairground", ("style", "fairground"), ("layout", "avenue"), ("stalls", 30.0), ("rides", 3.0), ("stage", true), ("field", 20.0),
+            Preset("fairground", ("style", "fairground"), ("layout", "avenue"), ("stalls", 30.0), ("rides", 3.0), ("stage", true), ("field", 20.0), ("foh", false),
                 ("stageSize", "medium"), ("foodCourt", true), ("toilets", 6.0), ("festoons", true), ("landmark", false), ("ground", "grass"));
             Preset("festival", ("style", "festival"), ("layout", "loop"), ("stalls", 24.0), ("rides", 0.0), ("stage", true), ("field", 45.0),
                 ("stageSize", "large"), ("stallKind", "tents"), ("toilets", 24.0), ("lightSpacing", 30.0), ("backstage", true), ("barrier", true),
@@ -193,8 +193,8 @@ namespace Placemaker.Core.Layers.Types.Events
             float2[] loop = null;
             if (layout == "loop")
             {
-                loop = region.InsetVertices(loopInset);
-                bool ok = loop.Length >= 3 && Poly.IsSimple(loop) && Poly.SignedArea(loop) > 600f;
+                loop = region.InsetRing(loopInset);   // rf-squares: robust on a block's chamfered corners
+                bool ok = loop != null && Poly.SignedArea(loop) > 600f;
                 if (ok) foreach (var v in loop) if (!region.ContainsDisc(v, loopInset * 0.5f)) { ok = false; break; }
                 if (!ok) { loop = null; ctx.Issue(IssueSeverity.Info, K + "Issue.LoopFallback"); }
             }
@@ -208,8 +208,8 @@ namespace Placemaker.Core.Layers.Types.Events
                 var fit = region;
                 if (loop != null)
                 {
-                    var inner = region.InsetVertices(loopInset + ctx.F("streetWidth") * 0.5f + 6f);
-                    var innerRegion = inner.Length >= 3 && Poly.IsSimple(inner) && Poly.SignedArea(inner) > 300f ? LayerRegion.From(inner) : null;
+                    var inner = region.InsetRing(loopInset + ctx.F("streetWidth") * 0.5f + 6f);
+                    var innerRegion = inner != null && Poly.SignedArea(inner) > 300f ? LayerRegion.From(inner) : null;
                     if (innerRegion != null) fit = innerRegion;
                 }
                 st = PlanStage(ctx, occ, region, fit, centre, inDir, side, mainGate, pave);
@@ -740,10 +740,21 @@ namespace Placemaker.Core.Layers.Types.Events
             }
         }
 
+        /// <summary>Site the "stalls" count is for (m²); a bigger site gets proportionally more, up to three times as many.</summary>
+        public const float StallsReferenceArea = 6000f;
+
+        /// <summary>
+        /// (rf-squares) The stalls a site of <paramref name="area"/> m² gets for the "stalls" setting (the setting is the
+        /// fair of a 0.6 ha site): a city block gets about two and a half times as many, so the streets are lined
+        /// instead of a few stalls in a corner of an empty field.
+        /// </summary>
+        public static int ScaledStalls(int stalls, float area) =>
+            stalls <= 0 ? 0 : math.min(240, (int)math.round(stalls * math.clamp(area / StallsReferenceArea, 1f, 3f)));
+
         private static int Stalls(LayerContext ctx, LayerRegion region, Occupancy occ, List<Street> streets, OrientedRect court, bool truckRing,
             float2 centre, float2 axis, bool grid, string style)
         {
-            int wanted = ctx.I("stalls");
+            int wanted = ScaledStalls(ctx.I("stalls"), region.Area);
             if (wanted <= 0) return 0;
             string cat = StallCategory(ctx, style);
             if (cat == null) return 0;

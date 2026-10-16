@@ -54,7 +54,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         protected override void DefineControls(ControlSet c)
         {
             c.Choice("style", "classic", ControlTier.Essential, "amphiLayout", "classic", "cinema", "bandstand", "meadow", "speakers").Tip();
-            c.Slider("rows", 8, 1, 24, 1, "count", ControlTier.Essential, "amphiLayout");
+            c.Slider("rows", 8, 1, 24, 1, "count", ControlTier.Essential, "amphiLayout").Tip();
             c.Slider("span", 160, 60, 360, 10, "deg", ControlTier.Essential, "amphiLayout").Tip();
             c.Choice("terrain", "dig", ControlTier.Essential, "amphiLayout", "dig", "build", "slope", "none").Tip();
 
@@ -304,9 +304,21 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
         private static Mode ModeOf(string s) => s == "dig" ? Mode.Dig : s == "build" ? Mode.Build : Mode.Flat;
 
         /// <summary>Focal point, facing and the most rows (≤ wanted) that fit inside the outline, clear of reserved polygons.</summary>
+        /// <summary>Site the "rows" setting is for (m²); a bigger site gets more rows, up to twice as many.</summary>
+        public const float RowsReferenceArea = 6000f;
+        /// <summary>Deepest dig / highest bank the scaled bowl may reach (m): more rows get shallower steps.</summary>
+        public const float MaxBowlHeight = 5f;
+
+        /// <summary>
+        /// (rf-squares) Rows for the "rows" setting on a site of <paramref name="area"/> m²: the setting is the bowl of a
+        /// 0.6 ha site; a city block gets up to twice as many rows, so the venue fills its site instead of a small bowl in
+        /// a big empty lawn.
+        /// </summary>
+        public static int ScaledRows(int rows, float area) => math.clamp((int)math.round(rows * math.clamp(area / RowsReferenceArea, 1f, 2f)), 1, 30);
+
         private Bowl Fit(LayerContext ctx, LayerRegion region, Occupancy occ, List<Gate> gates)
         {
-            int wanted = ctx.I("rows");
+            int wanted = ScaledRows(ctx.I("rows"), region.Area);
             float span = math.radians(ctx.F("span"));
             bool straight = ctx.S("rowShape") == "straight";
             string sideMode = ctx.S("stageSide");
@@ -314,7 +326,7 @@ namespace Placemaker.Core.Layers.Types.Amphitheatre
             var proto = new Bowl
             {
                 Full = full, Straight = straight, Half = full ? math.PI : straight ? math.min(span * 0.5f, math.radians(70f)) : span * 0.5f,
-                RowDepth = ctx.F("rowDepth"), Rise = ctx.F("rise"), StageSize = ctx.F("stageSize"), Promenade = ctx.B("promenade"),
+                RowDepth = ctx.F("rowDepth"), Rise = wanted > ctx.I("rows") ? math.min(ctx.F("rise"), math.max(MaxBowlHeight / wanted, ctx.F("rise") * ctx.I("rows") / wanted)) : ctx.F("rise"), StageSize = ctx.F("stageSize"), Promenade = ctx.B("promenade"),
                 Mode = ModeOf(ctx.S("terrain")),
             };
             proto.R0 = proto.StageSize + 2f;

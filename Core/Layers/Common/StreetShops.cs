@@ -81,12 +81,15 @@ namespace Placemaker.Core.Layers.Common
         public static readonly Dictionary<string, (bool on, string layout, string amount)> Defaults =
             new Dictionary<string, (bool, string, string)>(StringComparer.Ordinal)
             {
-                { "plaza", (true, Row, Some) },
-                { "marketSquare", (true, Row, Lots) },
+                // Squares & events (rf-squares, docs/refactor/squares.md): off by default. A square or venue is not a shop row:
+                // the cutouts left empty grass where a plot did not zone, took the edge the trees and lawns need, and the
+                // shops grew facing the city street with their backs to the square. The player can still turn them on.
+                { "plaza", (false, Row, Some) },
+                { "marketSquare", (false, Row, Some) },
                 { "park", (false, Speckled, Few) },   // rf-parks: shop plots left pale holes round a natural or garden park; the urban pocket turns them on
                 { "waterfront", (true, Row, Some) },
-                { "fairground", (true, Row, Few) },
-                { "amphitheatre", (true, Speckled, Few) },
+                { "fairground", (false, Row, Few) },
+                { "amphitheatre", (false, Speckled, Few) },
                 { "greenwayPark", (true, Speckled, Few) },
                 { "sportsPark", (false, Speckled, Few) },
                 { "formalGarden", (false, Row, Some) },

@@ -82,7 +82,8 @@ namespace Placemaker.Core.Layers.Plaza
             // A fountain feature that cannot stand on the focal point (a narrow strip) leaves the focal to the square.
             float basin = 0f; bool alone = true;
             float fApron = fountainChild ? FountainAddOn.PredictApron(ctx.Site, room, PlazaTiers.FountainSize, true, out basin, out alone) : 0f;
-            bool fountainHere = fApron > 0f;
+            // rf-squares: with no fountain installed the add-on builds nothing: the square plants its focal point instead.
+            bool fountainHere = fApron > 0f && !PlazaDressing.CentreAssetsMissing(ctx);
             if (fountainHere)
             {
                 // The fountain add-on builds it (with its own bench ring); the pad matches what it will build.
