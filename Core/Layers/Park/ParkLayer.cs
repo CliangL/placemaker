@@ -240,6 +240,9 @@ namespace Placemaker.Core.Layers.Park
             // or loose flowerbeds (they found no room on a city block and said so on every build).
             PresetFeatures("urban", "plaza", "shops", StreetShopsLayer, "-picnic", "-flowerbeds", "-playground", "-bigtrees");
             PresetFeatures("picnic", "-flowerbeds");
+            // The urban pocket's plaza stays an open paved square (the park's own trees already ring it; with the plaza's edge trees
+            // the canopy closed over it on a round site).
+            PresetFeatureValues("urban", "plaza", ("treeLayout", "none"));
             PresetFeatureValues("picnic", "picnic", ("groups", 8.0), ("tables", 3.0), ("shelter", true), ("shadeTrees", true));
         }
 
