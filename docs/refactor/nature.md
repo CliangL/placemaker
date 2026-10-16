@@ -16,7 +16,9 @@ Run folders are under `.forensics/suite/runs/`.
 | Iteration 1: hiking trail on 360 x 280 m hills | `show-7-builds-1016-071200-0e69` |
 | Iteration 1: wetland, 200 x 170, grown 40 s (water filled) | `show-6-builds-1016-071211-64b0` |
 | Iteration 1: greenway on a 320 x 200 L | `show-3-builds-1016-071231-503f` |
-| Iteration 2 and AFTER | see the end of this file |
+| AFTER (iteration 2), lookout hill + hiking trail, block | `show-10-builds-1016-083407-ceaf` |
+| AFTER, lookout hill on 360 x 280 m hills | `show-4-builds-1016-083428-e4be` |
+| AFTER, hiking trail on 360 x 280 m hills | `show-4-builds-1016-083442-7d55` |
 
 Note on the BEFORE run: campground built nothing (`type-not-selected`, see below) and wetland bird reserve got no
 block (the grid ran out at 30 builds); both were built in iteration 1.
@@ -106,3 +108,36 @@ and ridge are smooth on egg-crate hills and the trail stands on the shaped groun
 `AddOnTests.CampgroundRecipeEndToEnd` (the recipe is a single type the Make row offers). Pre-existing failure, not
 ours: `FeatureTests.EveryControlHasAGroupShortLabelAndEssentialsComeFirst` (strip mall's "Shops facing the streets"
 label, from the core merge).
+
+## Done
+
+- **Lookout hill**: the path no longer hooks round the summit, starts on the street and is smooth curves; terraces use
+  the narrow path; summit plaza sized to its centrepiece; the hill is one continuous slope (no levelled staircase);
+  switchback hairpins are round U-turns (`a230877`).
+- **Campground**: offered in the Make row again (the recipe is a single type).
+- **Hiking trail**: gorge and ridge shaped on the sloped grid (no staircase, no pits beside the trail); trailhead car
+  park off by default; sculpt capped at ~2000 cells so a big ridge finishes inside the terraform time (`8e1fe52`).
+- **Kept**: all five wetland styles; lookout hilltop, sledding, terraces, kiteHill; campground forest; nature reserve
+  forest, heath; greenway leafy; hiking forestTrail, meadowWalk, ridgeHike, canyonTrail.
+- **Hidden** (shelf `Recipes/shelf/nature.json`; mundane or a duplicate, see Decisions): lookout viewpointMound;
+  campground meadow, caravan; nature reserve wildwood; greenway open; hiking summitClimb, lakeshoreLoop. No type hidden.
+- BEFORE `show-30-builds-1016-062609-9c9f`; AFTER `show-10-builds-1016-083407-ceaf` (plus the two hills runs above).
+  Pictures (under `.forensics/suite/runs/`): terraces before
+  `show-30-builds-1016-062609-9c9f/shots/16-lookoutHill-terraces.05-45-clean.png`, after
+  `show-10-builds-1016-083407-ceaf/shots/04-lookoutHill-terraces.05-45-clean.png`; hilltop after
+  `show-10-builds-1016-083407-ceaf/shots/02-lookoutHill-hilltop.06-top-clean.png`; ridge on hills after
+  `show-4-builds-1016-083442-7d55/shots/03-hikingTrail-ridgeHike.07-terrain.png`.
+
+## Not done / known problems
+
+- The last two commits (`a230877` hairpin U-turns, `8e1fe52` sculpt cap) were never seen in the game: the AFTER runs
+  were built from `975778e` plus work in progress. Unit tests only.
+- No AFTER game run of campground, wetland, nature reserve or greenway with the final code (campground was last built
+  in iteration 1, `show-10-builds-1016-071135-d9d3`).
+- AFTER logs still warn: a 6-7 m bowl on a block build (`show-10-builds-1016-083407-ceaf`, at -60, -468), ~2.7 m
+  bowls and a 1.1 m path sag on the canyon trail on hills (`show-4-builds-1016-083442-7d55`, plot P8; may be the
+  intended gorge, not checked), and rocks/bushes placed overlapping each other (OverlapExisting, kept under anarchy).
+- Greenway open and campground caravan are only hidden, not fixed (caravan walks are 8 m wide; vanilla has no
+  caravans).
+- `suite/catalog.json` changes are committed on this branch (runs regenerate it); take master's copy when merging.
+- Pre-existing failing test `FeatureTests.EveryControlHasAGroupShortLabelAndEssentialsComeFirst` (not this category).
