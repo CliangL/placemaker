@@ -20,13 +20,13 @@ namespace Placemaker.Core.Layers.Commercial
     public static class ShopEntrances
     {
         public const string ControlId = "entrances";
-        public const string TwoWay = "entrance", Entry = "entry", Exit = "exit", Alley = "alley", AlleyIn = "alleyIn", AlleyOut = "alleyOut", Footpath = "footpath";
+        public const string TwoWay = "entrance", Entry = "entry", Exit = "exit", Alley = "alley", AlleyIn = "alleyIn", AlleyOut = "alleyOut", Footpath = "footpath", BusStop = "busStop";
         /// <summary>Marker kinds in display order.</summary>
-        public static readonly string[] Kinds = { TwoWay, Entry, Exit, Alley, AlleyIn, AlleyOut, Footpath };
+        public static readonly string[] Kinds = { TwoWay, Entry, Exit, Alley, AlleyIn, AlleyOut, Footpath, BusStop };
         private const string K = "Placemaker.Commercial.";
 
         public static bool IsKind(string k) => System.Array.IndexOf(Kinds, k) >= 0;
-        public static bool ForCars(string k) => IsKind(k) && k != Footpath;
+        public static bool ForCars(string k) => IsKind(k) && k != Footpath && k != BusStop;
         public static bool IsAlley(string k) => k == Alley || k == AlleyIn || k == AlleyOut;
         public static bool OneWay(string k) => k == Entry || k == Exit || k == AlleyIn || k == AlleyOut;
         /// <summary>Cars only drive out here.</summary>

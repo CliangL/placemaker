@@ -180,7 +180,9 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var p in ring) { float a = math.dot(p, d), b = math.dot(p, n); a0 = math.min(a0, a); a1 = math.max(a1, a); b0 = math.min(b0, b); b1 = math.max(b1, b); }
             float w = a1 - a0, h = b1 - b0;
             if (math.min(w, h) < 30f) return false;
-            return Poly.Area(ring) >= 0.75f * w * h;
+            // (rf-shops3) Inside a ring drive a lot is the ring's own field (a half-round piece of a round site reads as a car park, not
+            // as stray asphalt): a rounder shape is fine there.
+            return Poly.Area(ring) >= (EntranceMode ? 0.58f : 0.75f) * w * h;
         }
 
         /// <summary>

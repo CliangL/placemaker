@@ -57,6 +57,7 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 Ctx.Check();
                 g.Landed = "none";
+                if (g.Kind == ShopEntrances.BusStop) { BusStop(g); continue; }
                 if (!g.Cars && g.Kind != ShopEntrances.Footpath) continue;
                 // The street it joins: within the usual reach, else up to 30 m further out (a site drawn short of the kerb).
                 var (street, hasStreet) = StreetFor(g);
@@ -120,6 +121,31 @@ namespace Placemaker.Core.Layers.Commercial
             int landed = 0; foreach (var g in Gates) if (g.Landed != "none") landed++;
             Ctx.Plan.Facts["gatesLanded"] = landed;
             Ctx.Plan.Facts["gateLanes"] = Lanes.Count - lanesBefore;
+        }
+
+        /// <summary>
+        /// (rf-shops3) A bus stop on the street in front of the entrance (as the parking type's: the stop stands on the site-side
+        /// sidewalk, facing the way the kerb lane runs; the game picks the vanilla stop).
+        /// </summary>
+        private void BusStop(ShopEntrances.Gate g)
+        {
+            var (street, has) = StreetFor(g);
+            if (!has) { Ctx.Plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = NoStreetKey, Args = new object[] { g.Index + 1 }, At = Ctx.P3(g.At) }); return; }
+            var roads = _roads ?? (_roads = StreetFrontage.Roads(Ctx.Input));
+            float2 dir = new float2(1f, 0f); float hw = 6f; float best = float.MaxValue;
+            foreach (var rd in roads)
+            {
+                float dd = SegmentIndex.DistSq(street.kerb, rd.A, rd.B);
+                if (dd < best) { best = dd; dir = math.normalizesafe(rd.B - rd.A); hw = rd.HalfWidth; }
+            }
+            var toSite = math.normalizesafe(g.At - street.kerb);
+            var centre = street.kerb - toSite * hw;
+            var pos = centre + toSite * math.max(0f, hw - 1.5f);
+            bool siteLeft = Poly.Cross(dir, toSite) > 0f;
+            if (siteLeft != (Ctx.Site?.LeftHandTraffic ?? false)) dir = -dir;
+            var o = Ctx.Object(pos, math.atan2(dir.x, dir.y), ObjectRole.Marker, new AssetRef(ParkingAssets.BusStop), (uint)g.Index);
+            g.Landed = "stop";
+            Ctx.Plan.Facts["busStops"] = (Ctx.Plan.Facts.TryGetValue("busStops", out var b) ? b : 0) + 1;
         }
 
         /// <summary>An invisible drive from the kerb to a node on the lane (PLT's Zufahrt), asphalt under it, arrows when one-way.</summary>

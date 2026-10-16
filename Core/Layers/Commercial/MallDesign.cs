@@ -294,6 +294,26 @@ namespace Placemaker.Core.Layers.Commercial
                     }
                 }
             }
+            if (walk != null && walk.Count >= 2)
+            {
+                // Benches looking at the street every ~28 m, a low garden light between them.
+                var reserved = Reserved();
+                float total = 0f;
+                for (int i = 0; i + 1 < walk.Count; i++) total += math.distance(walk[i], walk[i + 1]);
+                int bn = 0;
+                for (float at = 10f; at < total - 6f; at += 14f)
+                {
+                    var (p, dir) = Along(walk, at);
+                    var nrm = new float2(-dir.y, dir.x);
+                    bool bench = ((int)(at / 14f) & 1) == 0;
+                    var q = p + nrm * (bench ? 2.3f : -2.0f) * (math.dot(nrm, k.Frame.In) > 0f ? -1f : 1f);
+                    if (!region.Contains(q) || reserved.Blocks(q, 0.7f)) continue;
+                    if (bench) Ctx.Object(q, math.atan2(-k.Frame.In.x, -k.Frame.In.y), ObjectRole.Bench, AssetMix.Pick(PlazaArt.Benches, (uint)bn), Hashing.Mix(Ctx.Seed, k.Salt + 0x90u + (uint)bn));
+                    else Ctx.Object(q, 0f, ObjectRole.Lamp, AssetMix.Pick(ParkArt.LowLights, (uint)bn), Hashing.Mix(Ctx.Seed, k.Salt + 0xA0u + (uint)bn));
+                    reserved.AddDisc(q, 0.8f);
+                    bn++;
+                }
+            }
             Ctx.Plan.Facts["frontageDressed"] = (Ctx.Plan.Facts.TryGetValue("frontageDressed", out var fd) ? fd : 0) + 1;
             if (walk != null) Ctx.Plan.Facts["promenade"] = (Ctx.Plan.Facts.TryGetValue("promenade", out var pm) ? pm : 0) + walk.Count;
             Landscape(piece, k.Salt, walk, k.Frame, k.T1);
@@ -580,6 +600,58 @@ namespace Placemaker.Core.Layers.Commercial
                             n++;
                         }
                 }
+            }
+            // (rf-shops3) The player's drives too: a pair either side where the drive crosses the planted edge.
+            foreach (var (outer, inner) in Drives)
+            {
+                var d = math.normalizesafe(inner - outer); var side = new float2(-d.y, d.x);
+                foreach (float sgn in new[] { -1f, 1f })
+                    foreach (float along in new[] { 3.5f, 7.5f })
+                    {
+                        var p = outer + d * along + side * sgn * 6.2f;
+                        if (!region.Contains(p) || region.BoundaryDistance(p, 3f) < 1.3f || reserved.Blocks(p, 1.3f)) continue;
+                        Ctx.Object(p, math.atan2(d.x, d.y), ObjectRole.Planter, AssetMix.Pick(PlazaArt.Flowerbeds, (uint)n), Hashing.Mix(Ctx.Seed, salt + 0x640u + (uint)n), -1, AssetCategories.Flowerbed);
+                        reserved.AddDisc(p, 1.4f);
+                        n++;
+                    }
+            }
+        }
+
+        /// <summary>
+        /// (rf-shops3) The player's footpath entrances, dressed where they meet the street: a bollard either side of the walk, a
+        /// signpost, a short row of bike racks beside it and a bin, wherever the ground there stayed planted (never on a lot or a
+        /// plot, never on a net).
+        /// </summary>
+        public void DressGates()
+        {
+            if (Gates == null) return;
+            var reserved = Reserved();
+            bool Open(float2 p, float r)
+            {
+                if (!Region.Contains(p) || reserved.Blocks(p, r)) return false;
+                foreach (var l in Lots) if (Poly.Contains(l, p)) return false;
+                foreach (var sh in Shops) if (Poly.Contains(sh, p) || Poly.DistanceToBoundary(sh, p) < r) return false;
+                return true;
+            }
+            uint k = 0;
+            foreach (var g in Gates)
+            {
+                if (g.Kind != ShopEntrances.Footpath || g.Landed != "walk") continue;
+                var side = new float2(-g.In.y, g.In.x);
+                foreach (float sgn in new[] { -1f, 1f })
+                {
+                    var b = g.At + g.In * 1.2f + side * sgn * 2.2f;
+                    if (Open(b, 0.3f)) { Ctx.Object(b, 0f, ObjectRole.Furniture, new AssetRef("", "Bollard01", "Bollard02"), Hashing.Mix(Ctx.Seed, 0x6A0u + k++), -1, AssetCategories.Bollard); reserved.AddDisc(b, 0.3f); }
+                }
+                var sp = g.At + g.In * 3.5f + side * 2.6f;
+                if (AssetAvailability.Has(AssetCategories.Wayfinding) && Open(sp, 0.5f)) { Ctx.Object(sp, math.atan2(-g.In.x, -g.In.y), ObjectRole.Furniture, new AssetRef(""), Hashing.Mix(Ctx.Seed, 0x6B0u + k++), -1, AssetCategories.Wayfinding); reserved.AddDisc(sp, 0.5f); }
+                if (X.Racks)
+                {
+                    var rack = g.At + g.In * 4f - side * 3.2f;
+                    if (Open(rack, 0.6f) && Open(rack + g.In * 4.8f, 0.6f)) BikeRacks(rack, g.In, 4, 0x6C0u + k++);
+                }
+                var bin = g.At + g.In * 6.5f + side * 2.4f;
+                if (Open(bin, 0.4f)) Ctx.Object(bin, 0f, ObjectRole.Bin, new AssetRef(""), Hashing.Mix(Ctx.Seed, 0x6D0u + k++));
             }
         }
 

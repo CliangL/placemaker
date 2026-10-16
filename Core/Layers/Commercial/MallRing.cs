@@ -188,9 +188,10 @@ namespace Placemaker.Core.Layers.Commercial
                     if (dd < bd) { bd = dd; best = i; }
                 }
             }
-            var start = math.lerp(ring[best], ring[(best + 1) % n], 0.5f);
+            // (rf-shops3) Starting on a corner: a start in the middle of an edge split it into two short runs of shops.
+            var start = ring[best];
             var corners = new List<float2>();
-            for (int k = 1; k <= n; k++) corners.Add(ring[(best + k) % n]);
+            for (int k = 1; k < n; k++) corners.Add(ring[(best + k) % n]);
             return Loop(start, corners, role, asset, h);
         }
 

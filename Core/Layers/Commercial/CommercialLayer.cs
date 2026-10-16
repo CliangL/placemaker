@@ -212,6 +212,7 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>(rf-shops3) The plots' ground and planting, last (the plots are final): building sites, plot trees; the extras' counts.</summary>
         private static void FinishDesign(LayerContext ctx, Mall mall)
         {
+            mall.DressGates();
             mall.PaintSites();
             mall.PlantPlots();
             if (mall.BikeRackCount > 0) ctx.Plan.Facts["bikeRacks"] = mall.BikeRackCount;
