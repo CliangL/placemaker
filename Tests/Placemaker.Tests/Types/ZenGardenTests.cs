@@ -69,7 +69,14 @@ namespace Placemaker.Tests.Types
         [Fact]
         public void DryGardenHasOddRockGroupsInRakedGravel()
         {
-            var plan = PlanPreset(Id, "karesansui", FiveHa, TestKit.RoadAlongBottom(250));
+            // rf-parks: the dry garden style lays its field as a gravel surface; the painted raking is the "gravel surface: off" look.
+            var dry = PlanPreset(Id, "karesansui", FiveHa, TestKit.RoadAlongBottom(250));
+            Assert.Equal(5, (int)dry.Facts["fieldGroups"]);
+            Assert.Contains(dry.Surfaces, s => s.Role == SurfaceRole.Ground);
+            var preset = TestKit.Gen(Id).Presets.Single(p => p.Id == "karesansui");
+            var values = preset.Values.Clone();
+            values.Values["gravelSurface"] = false;
+            var plan = TestKit.Gen(Id).Plan(TestKit.Input(FiveHa, values, 7, null, TestKit.RoadAlongBottom(250)), System.Threading.CancellationToken.None);
             Assert.Equal(5, (int)plan.Facts["fieldGroups"]);
             Assert.True(plan.Facts["gravelArea"] > 2000);
             Assert.True(plan.Facts["rakeStrokes"] > 30, "strokes " + plan.Facts["rakeStrokes"]);

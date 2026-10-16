@@ -21,6 +21,7 @@
     "park": ["formal", "woodland", "meadow", "pocket", "victorian", "landscape", "modern", "wildflower", "riverside", "greenway"],
     "botanicalGarden": ["mixed", "arboretum"],
     "memorialPark": ["square"],
-    "adventurePlayground": ["water"]
+    "adventurePlayground": ["water"],
+    "zenGarden": ["moss", "bamboo"]
   }
 }

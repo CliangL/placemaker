@@ -193,7 +193,7 @@ namespace Placemaker.Core.Layers.Park
             Preset("natural", ("style", "natural"), ("treeDensity", 26.0), ("bushDensity", 65.0), ("furniture", 4.0), ("pathStyle", "curvy"), ("desireLines", "worn"));
             Preset("formal", ("style", "formal"), ("pathWidth", "narrow"), ("curvedPaths", false), ("treeDensity", 30.0),
                 ("bushDensity", 60.0), ("furniture", 4.5), ("paths", "network"), ("pathStyle", "formal"));
-            Preset("garden", ("style", "natural"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 70.0),
+            Preset("garden", ("style", "garden"), ("pathWidth", "narrow"), ("treeDensity", 22.0), ("bushDensity", 95.0),
                 ("furniture", 4.0), ("pathStyle", "garden"), ("naturalGround", true));
             Preset("woodland", ("style", "woodland"), ("pathWidth", "narrow"), ("treeDensity", 80.0), ("bushDensity", 90.0),
                 ("furniture", 1.5), ("animals", true), ("lamps", false), ("pathStyle", "garden"), ("naturalGround", true), ("trails", 3.0));
@@ -876,7 +876,7 @@ namespace Placemaker.Core.Layers.Park
             switch (style)
             {
                 case "formal": case "modern": case "urban": case "woodland": return ParkArt.GreenShrubs;
-                case "meadow": case "wildflower": return ParkArt.FlowerShrubs;
+                case "meadow": case "wildflower": case "garden": return ParkArt.FlowerShrubs;
                 default: return ParkArt.MixedShrubs;
             }
         }

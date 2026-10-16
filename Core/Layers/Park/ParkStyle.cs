@@ -32,7 +32,7 @@ namespace Placemaker.Core.Layers.Park
         public float GroundPatches = 1f;
 
         /// <summary>Every style id, in control order.</summary>
-        public static readonly string[] Ids = { "natural", "formal", "woodland", "meadow", "pocket", "victorian", "landscape", "modern", "wildflower", "urban", "riverside", "picnic" };
+        public static readonly string[] Ids = { "natural", "formal", "woodland", "meadow", "pocket", "victorian", "landscape", "modern", "wildflower", "urban", "riverside", "picnic", "garden" };
 
         public static readonly ParkStyle Natural = new ParkStyle
         {
@@ -113,6 +113,13 @@ namespace Placemaker.Core.Layers.Park
             BushGroveShare = 0.45f, BushBeltShare = 0.5f, ClearingFactor = 1f, Curved = true,
         };
 
+        /// <summary>(rf-parks) Garden walk: natural groves, but the walks are lined with flowering shrub borders and a few specimen trees.</summary>
+        public static readonly ParkStyle Garden = new ParkStyle
+        {
+            Id = "garden", GroveCoverage = 0.2f, TreeGroveShare = 0.45f, TreeBeltShare = 0.25f, TreeSolitaireCap = 0.15f, TreePathShare = 0.15f,
+            BushGroveShare = 0.2f, BushBeltShare = 0.2f, BushPathShare = 0.55f, ClearingFactor = 0.6f, Curved = true,
+        };
+
         public static ParkStyle Get(string id)
         {
             switch (id)
@@ -124,6 +131,7 @@ namespace Placemaker.Core.Layers.Park
                 case "urban": return Urban;
                 case "riverside": return Riverside;
                 case "picnic": return Picnic;
+                case "garden": return Garden;
                 case "formal": return FormalStyle;
                 case "woodland": return Woodland;
                 case "meadow": return Meadow;

@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+151536e-dirty",
+  "assembly": "0.1.0+a71a842-dirty",
   "categories": [
     {
       "id": "roads",
@@ -2513,9 +2513,9 @@
         "modern",
         "wildflower",
         "urban",
-        "picnic",
         "riverside",
-        "greenway"
+        "greenway",
+        "picnic"
       ],
       "options": [
         {
@@ -2532,7 +2532,8 @@
             "modern",
             "wildflower",
             "urban",
-            "riverside"
+            "riverside",
+            "picnic"
           ],
           "default": "natural"
         },
