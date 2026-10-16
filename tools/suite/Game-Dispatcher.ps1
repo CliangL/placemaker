@@ -1056,6 +1056,7 @@ try {
                             }
                         }
                     }
+                    if ($hj -and [int]$hj.pid -gt 0) { D-CountLaunch "ended before it was ready (status $how)" }   # it did start (once per game)
                     if ($fromOutside) {
                         $script:userGraceUntil = $now.AddSeconds($UserGraceSec)
                         $script:userGraceNote = "the queue's game was stopped from outside at $($now.ToString('HH:mm:ss')) (status $how): the queue waits $(Q-Duration $UserGraceSec) before launching again (time for the user to start their own game)"
