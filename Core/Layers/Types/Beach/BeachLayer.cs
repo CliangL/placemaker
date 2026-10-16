@@ -139,7 +139,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             // Promenade beach: tidy rows, one wide promenade on a level bench with benches and kiosks, palms on a lawn.
             // rf-beach: denser rows (110 -> 150 /ha), a palm avenue along the promenade (Backdrop), a long pier with a T-head.
             Preset("resort", ("style", "sandy"), ("beachDepth", 52.0), ("sandBlend", 6.0), ("umbrellas", 150.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "none"),
-                ("pathWidth", "wide"), ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 2.0), ("slope", 4.0), ("treeDensity", 15.0), ("accessSpacing", 45.0),
+                ("pathWidth", "wide"), ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 2.0), ("slope", 4.0), ("treeDensity", 30.0), ("accessSpacing", 45.0),
                 ("jetties", 1.0), ("jettyLength", 44.0), ("jettyHead", true));
             // Rocky cove: dirt texture with sand pockets, rocks along the waterline, tide pools, a wide rough blend.
             Preset("rocky", ("style", "rocky"), ("umbrellas", 5.0), ("sandSurface", false), ("paintLayer", (double)TerrainMaterials.Dirt), ("backdrop", "none"),

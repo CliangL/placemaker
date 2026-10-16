@@ -149,8 +149,9 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             Preset("pier", ("style", "pier"), ("edge", "walkway"), ("promWidth", 12.0), ("pathWidth", "wide"), ("surface", "paved"), ("steps", "none"), ("piers", 2.0),
                 ("pierLength", 50.0), ("pierHeads", true), ("nautical", true), ("trees", "row"), ("benchSpacing", 12.0), ("backdrop", "park"), ("railings", true));
             // Harbour quay: a wide quay at the water, a paved apron at deck level with kiosks, lamps and benches, an avenue behind.
-            Preset("harbor", ("style", "harbor"), ("edge", "quay"), ("promWidth", 22.0), ("railings", false), ("moorings", false), ("nautical", true), ("kiosks", 3.0),
-                ("lampSpacing", 16.0), ("trees", "row"), ("treeSpacing", 14.0), ("piers", 1.0), ("steps", "none"), ("backdrop", "lawn"), ("deckHeight", 1.8));
+            // rf-beach: two T-headed piers off the quay (the quay used to block its own pier), bollards along it, a park behind instead of a bare lawn.
+            Preset("harbor", ("style", "harbor"), ("edge", "quay"), ("promWidth", 22.0), ("railings", false), ("moorings", true), ("nautical", true), ("kiosks", 3.0),
+                ("lampSpacing", 16.0), ("trees", "row"), ("treeSpacing", 14.0), ("piers", 2.0), ("pierLength", 36.0), ("pierHeads", true), ("steps", "none"), ("backdrop", "park"), ("deckHeight", 1.8));
             // River steps: a low walkway quay along the river, paved flights on the smooth bank down to it from a tree-lined promenade.
             Preset("riverSteps", ("style", "riverSteps"), ("edge", "walkway"), ("promWidth", 16.0), ("railings", true), ("steps", "spots"), ("stepCount", 3.0),
                 ("stepWidth", 10.0), ("stepLevels", 4.0), ("trees", "double"), ("backdrop", "park"), ("lampSpacing", 22.0), ("piers", 0.0), ("deckHeight", 0.9));
@@ -967,7 +968,13 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 for (float l = 2f; l <= maxLen; l += 2f)
                 {
                     var q = root + dir * l;
-                    if (!(beyond || shore.Outline.ContainsDisc(q, 3f)) || !shore.IsWet(q)) break;
+                    if (!(beyond || shore.Outline.ContainsDisc(q, 3f)) || !shore.IsWet(q))
+                    {
+                        // (rf-beach) the first metres may still be under the edge deck itself (a wide quay's centre line is
+                        // on land): look past its width before giving up. The harbour's pier was never built for this.
+                        if (l <= w.EdgeHw + 2f && len == 0f) continue;
+                        break;
+                    }
                     len = l;
                 }
                 if (len < 8f) continue;
