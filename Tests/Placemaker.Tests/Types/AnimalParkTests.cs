@@ -65,13 +65,13 @@ namespace Placemaker.Tests.Types
         }
 
         [Fact]
-        public void PondStaysInsideOnePen()
+        public void PettingPondSitsInTheMeadowOutsideEveryPen()
         {
+            // rf-farms: petting pens line the walk a pen deep; the pond is in the open meadow in the middle.
             var plan = Preset("pettingFarm");
             var lake = plan.Terraform.Single(t => !float.IsNaN(t.WaterLevel));
-            var c = Poly.Centroid(Poly.To2D(lake.Ring));
-            var pen = Pens(plan).Single(r => Poly.Contains(r, c));
-            foreach (var v in lake.Ring) Assert.True(Poly.Contains(pen, v.xz), "pond pokes out of its pen");
+            foreach (var pen in Pens(plan))
+                foreach (var v in lake.Ring) Assert.False(Poly.Contains(pen, v.xz), "pond inside a pen");
         }
 
         [Fact]

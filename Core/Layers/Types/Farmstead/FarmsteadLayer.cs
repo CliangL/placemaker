@@ -25,6 +25,7 @@ using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
 using Placemaker.Core.Layers.Park;
+using Placemaker.Core.Layers.Types.UrbanFarm;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Types.Farmstead
@@ -345,6 +346,27 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 }
             }
 
+            // 2b. The track lines are claimed before the pond and the paddocks, so the spine (and the grid) run unbroken
+            // from the yard to the outline: placed afterwards they were cut into stubs that ended in the grass (rf-farms).
+            string trackMode = ctx.S("tracks");
+            float fieldArea = ctx.F("fieldSize") * 10000f;
+            // Small farms still get a few fields; huge ones never exceed the field budget.
+            fieldArea = math.clamp(fieldArea, region.Area / MaxFields, math.max(1500f, region.Area / 4f));
+            float Lf = math.sqrt(fieldArea * 1.6f), Wf = Lf / 1.6f;
+            if (trackMode != "none")
+            {
+                foreach (var (a, b) in Line(region, origin, axis))
+                    drive.Add(LayerRegion.Rect((a + b) * 0.5f, axis, math.distance(a, b) * 0.5f, 3.5f));
+                if (trackMode == "grid")
+                {
+                    Lattice(region, origin, axis, side, Lf, Wf, out int ja0, out int ja1, out _, out _);
+                    for (int ia = ja0 + 1; ia <= ja1; ia++)
+                        if (ia % 2 == 0)
+                            foreach (var (a, b) in Line(region, origin + axis * (ia * Lf), side))
+                                drive.Add(LayerRegion.Rect((a + b) * 0.5f, side, math.distance(a, b) * 0.5f, 3.5f));
+                }
+            }
+
             // 3. Pond.
             float2 pondC = default; float pondR = 0f;
             if (ctx.B("pond") && FindPond(ctx, region, occ, hard, drive, hasYard ? yard.Center : centre, out pondC, out pondR))
@@ -361,11 +383,6 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             ctx.Check();
 
             // 5. Tracks: spine along the farm's axis through the yard, cross tracks every second field.
-            string trackMode = ctx.S("tracks");
-            float fieldArea = ctx.F("fieldSize") * 10000f;
-            // Small farms still get a few fields; huge ones never exceed the field budget.
-            fieldArea = math.clamp(fieldArea, region.Area / MaxFields, math.max(1500f, region.Area / 4f));
-            float Lf = math.sqrt(fieldArea * 1.6f), Wf = Lf / 1.6f;
             Func<float2, bool> trackBlocked = p => hard.Hits(p, 1.5f) || !region.ContainsDisc(p, 3f);
             var trackLinesB = new HashSet<int>();   // lattice lines along the axis carrying a track
             var trackLinesA = new HashSet<int>();   // lattice lines across the axis carrying a track
@@ -399,7 +416,9 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             var cropIds = ctx.L("cropAssets");
             string cropMode = ctx.S("cropProps");
             bool needCrops = cropMode != "none" || fields.Exists(f => f.Kind == FieldKind.Veg);
-            string cropCat = needCrops ? LeisureKit.Category(ctx, cropIds.Length > 0 ? "x" : "", AssetCategories.FieldCrop, AssetCategories.GardenCrop) : null;
+            // Real field crops only (installed or picked): no garden-crop fallback, which in vanilla is raised-bed corner
+            // pieces (rows of grey boxes). Without crop plants a field is its crop surface and wheel ruts — no note.
+            string cropCat = needCrops && (cropIds.Length > 0 || AssetAvailability.Has(AssetCategories.FieldCrop)) ? AssetCategories.FieldCrop : null;
             bool hasHay = fields.Exists(f => f.Kind == FieldKind.Hay) || ctx.B("hayStacks");
             string hayCat = hasHay ? LeisureKit.Category(ctx, "", AssetCategories.FarmHay) : null;
             float rs = ctx.F("rowSpacing");
@@ -411,7 +430,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             int arableFields = 0;
             foreach (var f in fields) if (f.Kind == FieldKind.Grain || f.Kind == FieldKind.Veg) arableFields++;
             int perField = math.max(8, cropBudget / math.max(1, arableFields));
-            int fieldSurfaces = 0;
+            int fieldSurfaces = 0, irrigation = 0;
             for (int i = 0; i < fields.Count; i++)
             {
                 var f = fields[i];
@@ -420,6 +439,13 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 {
                     case FieldKind.Grain:
                         if (GroundCover.Field(ctx, f.Ring, GroundCover.Straw)) fieldSurfaces++;
+                        // Arable farms water their big fields: an irrigation rig standing across the rows.
+                        if (sub == "arable" && irrigation < 3 && f.Region.Area > 2500f)
+                        {
+                            var at = f.Region.DeepestPoint(out float clear, null, 10);
+                            if (clear > 9f && LeisureKit.Put(ctx, occ, at, FarmKit.Yaw(f.RowDir), ObjectRole.Furniture, AssetMix.One(FarmArt.Irrigation),
+                                AssetCategories.FarmMachinery, 8.6f, Hashing.Mix(v, 0x1A6u), 0.5f, 0.3f)) irrigation++;
+                        }
                         else if (paint)
                         {
                             TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 0.85f, 3f);
@@ -502,6 +528,23 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 hedgeItems += FieldHedges(ctx, region, occ, hard, origin, axis, side, Lf, Wf, trackLinesA, trackLinesB, hedgeCat, hedgeIds, treeIds,
                     treeEvery, MaxHedgeItems - hedgeItems, ref hedgeLen);
             ctx.Check();
+            // Ranch: the pastures are fenced range, a gate toward the yard (the grass alone read as one empty lawn, rf-farms).
+            if (sub == "ranch")
+            {
+                int fenced = 0;
+                foreach (var f in fields)
+                {
+                    if ((f.Kind != FieldKind.Pasture && f.Kind != FieldKind.Hay) || fenced >= 24) continue;
+                    var gp = f.Region.ClosestOnBoundary(origin, out int gs, out float gt);
+                    foreach (var run in Fences.Runs(f.Region, new List<Gate> { new Gate { Position = gp, Segment = gs, T = gt } }, 2f))
+                    {
+                        ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fenceAsset);
+                        occ.TakeCorridor(run.c0, run.c1, 0.45f, 5);
+                    }
+                    fenced++;
+                }
+                ctx.Plan.Facts["fencedPastures"] = fenced;
+            }
 
             // 11. Regions for features: yard, fields and paddocks (places), free grass as green/core.
             if (hasYard) ctx.AddRegion(yard.Ring, YardTag, YardTag);
@@ -803,8 +846,13 @@ namespace Placemaker.Core.Layers.Types.Farmstead
 
             // Silo battery at the +u end (claims its strip first so the barns stop short of it).
             int wantSilos = ctx.I("silos");
-            string siloCat = wantSilos > 0 ? LeisureKit.Category(ctx, ctx.S("siloAsset"), AssetCategories.FarmSilo) : null;
-            var siloAsset = AssetMix.One(ctx.S("siloAsset"));
+            // Vanilla has no silo prop: a battery of tall water tanks (feed bins) stands in, without a "missing" note.
+            string siloCat = null; var siloAsset = AssetMix.One(ctx.S("siloAsset"));
+            if (wantSilos > 0)
+            {
+                if (!string.IsNullOrEmpty(ctx.S("siloAsset")) || AssetAvailability.Has(AssetCategories.FarmSilo)) siloCat = AssetCategories.FarmSilo;
+                else if (AssetAvailability.Has(AssetCategories.GardenShed)) { siloCat = AssetCategories.GardenShed; siloAsset = FarmArt.SiloStandIn; }
+            }
             float siloR = AssetMix.FootprintRadius(ctx.Site, siloAsset, 2.6f);
             float siloStrip = 0f;
             if (siloCat != null)
@@ -850,7 +898,10 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                     for (int k = 0, n = 0; k < 8 && n < want; k++)
                     {
                         var p = yard.Local(-yard.HalfLength + 4f + k * 6.5f, frontSign * (yard.HalfWidth - 3.2f));
-                        if (LeisureKit.Put(ctx, yo, p, yawBack, ObjectRole.Furniture, AssetMix.One(""), cat, 2.5f, Hashing.Mix(ctx.Seed, 0x7EC0u + (uint)k), 0.3f, 0.3f))
+                        uint mv = Hashing.Mix(ctx.Seed, 0x7EC0u + (uint)k);
+                        // Tractor trailers with their loads, never the 16 m irrigation rig (that one stands in the fields).
+                        var machine = AssetMix.Pick(FarmArt.Trailers, mv);
+                        if (LeisureKit.Put(ctx, yo, p, yawBack, ObjectRole.Furniture, machine, cat, 2.5f, mv, 0.3f, 0.3f))
                             n++;
                     }
             }
@@ -924,12 +975,10 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 LeisureKit.Put(ctx, occ, r.Center, r.Yaw, ObjectRole.Furniture, AssetMix.One(""), hayCat, 1.2f, Hashing.Mix(v, 2u), 0.5f, 0.2f);
             if (ctx.B("shelters"))
             {
-                string cat = LeisureKit.Category(ctx, "", AssetCategories.Shelter, AssetCategories.FarmBarn, AssetCategories.GardenShed);
-                if (cat != null)
-                {
-                    var far = r.Center + inward * (math.min(r.HalfLength, r.HalfWidth) - 4f) + along * (math.max(r.HalfLength, r.HalfWidth) * 0.5f);
-                    LeisureKit.Put(ctx, occ, far, math.atan2(-inward.x, -inward.y), ObjectRole.Furniture, AssetMix.One(""), cat, 3f, Hashing.Mix(v, 3u), 0.5f, 0.3f);
-                }
+                // A field shelter (installed animal shelter, else the wooden campground shelter): never a gazebo.
+                var (shelter, cat) = AnimalPark.AnimalParkArt.Prop("", AssetCategories.AnimalParkShelter, AnimalPark.AnimalParkArt.ShelterStandIn("paddocks"), AssetCategories.Shelter);
+                var far = r.Center + inward * (math.min(r.HalfLength, r.HalfWidth) - 4f) + along * (math.max(r.HalfLength, r.HalfWidth) * 0.5f);
+                LeisureKit.Put(ctx, occ, far, math.atan2(-inward.x, -inward.y), ObjectRole.Furniture, shelter, cat, 3f, Hashing.Mix(v, 3u), 0.5f, 0.3f);
             }
             int spawners = 0;
             if (ctx.B("animals"))
@@ -975,6 +1024,48 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             }
         }
 
+        /// <summary>
+        /// A hedgerow as the game's own hedge net (one continuous hedge per straight run), not 2.6 m hedge pieces that
+        /// the declutter pass thinned into a dotted line (rf-farms). Runs break at gates, gaps and corners.
+        /// </summary>
+        private sealed class HedgeLine
+        {
+            private readonly LayerContext _ctx;
+            private readonly Occupancy _occ;
+            private bool _open;
+            private float2 _start, _last, _dir;
+            public float Length;
+            public static readonly AssetRef Net = AnimalPark.AnimalParkArt.Boundary("", true);
+
+            public HedgeLine(LayerContext ctx, Occupancy occ) { _ctx = ctx; _occ = occ; }
+
+            public void Add(float2 p, float2 tangent, bool ok)
+            {
+                if (!ok) { Flush(); return; }
+                if (_open && math.dot(math.normalizesafe(tangent), _dir) < 0.985f) Flush();
+                if (!_open) { _start = p; _dir = math.normalizesafe(tangent); _open = true; }
+                _last = p;
+            }
+
+            public void Flush()
+            {
+                if (!_open) return;
+                _open = false;
+                float len = math.distance(_start, _last);
+                if (len < 4f) return;
+                // Half a sample step past each end closes the gap to the next run, never past the outline.
+                var region = _ctx.LayerRegion;
+                var a = region.ContainsDisc(_start - _dir * 1.2f, 1f) ? _start - _dir * 1.2f : _start;
+                var b = region.ContainsDisc(_last + _dir * 1.2f, 1f) ? _last + _dir * 1.2f : _last;
+                _ctx.StraightNet(a, b, NetRole.Fence, Net);
+                _occ.TakeCorridor(a, b, 0.8f, 5);
+                Length += math.distance(a, b);
+            }
+        }
+
+        private static bool HedgeTree(LayerContext ctx, Occupancy occ, float2 p, string[] treeIds, uint v) =>
+            ctx.LayerRegion.Contains(p) && LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.28f, ObjectRole.Tree, AssetMix.Pick(treeIds, v), null, 2.4f, v, 0.5f, 0.3f, 3, 2);
+
         private static int HedgeItem(LayerContext ctx, Occupancy occ, float2 p, float2 tangent, string cat, string[] bushIds, string[] treeIds,
             bool tree, uint v)
         {
@@ -990,18 +1081,29 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             var region = ctx.LayerRegion;
             int n = 0;
             float nextTree = treeEvery * 0.5f;
+            var line = bushIds.Length == 0 ? new HedgeLine(ctx, occ) : null;
             for (float s = 1.3f; s < region.Perimeter && n < budget; s += 2.6f)
             {
                 var p = region.PointAt(s, out var tangent, out var inward, out _);
                 p += inward * 1.6f;
                 bool nearGate = false;
                 foreach (var g in gates) if (math.distancesq(g.Position, p) < 49f) { nearGate = true; break; }
-                if (nearGate || hard.Hits(p, 0.5f)) continue;
+                bool ok = !nearGate && !hard.Hits(p, 0.5f);
+                uint v = Hashing.Mix(ctx.Seed, 0xED6Eu + (uint)n);
+                if (line != null)
+                {
+                    line.Add(p, tangent, ok);
+                    if (ok && s >= nextTree && HedgeTree(ctx, occ, p + inward * 2.8f, treeIds, v)) nextTree = s + treeEvery;
+                    if (ok) n++;
+                    continue;
+                }
+                if (!ok) continue;
                 bool tree = s >= nextTree;
-                int r = HedgeItem(ctx, occ, p, tangent, cat, bushIds, treeIds, tree, Hashing.Mix(ctx.Seed, 0xED6Eu + (uint)n));
+                int r = HedgeItem(ctx, occ, p, tangent, cat, bushIds, treeIds, tree, v);
                 if (r == 2) nextTree = s + treeEvery;
                 if (r > 0) { n++; length += 2.6f; }
             }
+            if (line != null) { line.Flush(); length += line.Length; }
             return n;
         }
 
@@ -1020,19 +1122,31 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                     float len = math.distance(a, b);
                     var d = (b - a) / math.max(1e-3f, len);
                     float nextTree = treeEvery * 0.5f;
+                    var hedge = bushIds.Length == 0 ? new HedgeLine(ctx, occ) : null;
                     for (float s = 1.3f; s < len && n < budget; s += 2.6f)
                     {
                         var p = a + d * s;
                         // Field gateway: a gap in the middle of every field side.
                         float k = math.dot(p - origin, dir) / pitch;
                         float frac = k - math.floor(k);
-                        if (math.abs(frac - 0.5f) * pitch < 3.5f) continue;
-                        if (region.BoundaryDistance(p, 4f) < 3.5f || hard.Hits(p, 1f)) continue;
+                        bool ok = math.abs(frac - 0.5f) * pitch >= 3.5f && region.BoundaryDistance(p, 4f) >= 3.5f && !hard.Hits(p, 1f);
+                        uint v = Hashing.Mix(ctx.Seed, 0xF1EDu + (uint)n);
+                        if (hedge != null)
+                        {
+                            // Never across a track or a field gate: the hedge stops 1.5 m short of any path.
+                            ok = ok && !occ.Corridors.Overlaps(p, 1.5f);
+                            hedge.Add(p, d, ok);
+                            if (ok && s >= nextTree && HedgeTree(ctx, occ, p + nrm * 2.8f, treeIds, v)) nextTree = s + treeEvery;
+                            if (ok) n++;
+                            continue;
+                        }
+                        if (!ok) continue;
                         bool tree = s >= nextTree;
-                        int r = HedgeItem(ctx, occ, p, d, cat, bushIds, treeIds, tree, Hashing.Mix(ctx.Seed, 0xF1EDu + (uint)n));
+                        int r = HedgeItem(ctx, occ, p, d, cat, bushIds, treeIds, tree, v);
                         if (r == 2) nextTree = s + treeEvery;
                         if (r > 0) { n++; walked += 2.6f; }
                     }
+                    if (hedge != null) { hedge.Flush(); walked += hedge.Length; }
                 }
             }
             // Lines carrying a track are already a boundary (the track itself): no hedge there.

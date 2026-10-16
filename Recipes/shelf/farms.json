@@ -8,6 +8,15 @@
     "farms"
   ],
   "types": [],
-  "hiddenTypes": [],
-  "hiddenStyles": {}
+  "hiddenTypes": [
+    "urbanFarm"
+  ],
+  "hiddenStyles": {
+    "animalPark": [
+      "aviaryGarden"
+    ],
+    "farmstead": [
+      "hobby"
+    ]
+  }
 }

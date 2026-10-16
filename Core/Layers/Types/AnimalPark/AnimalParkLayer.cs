@@ -38,6 +38,8 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
         protected override int WantedEntrances(LayerRegion region) => region.Area > 30000f ? 2 : 1;
 
         private const int MaxPens = 12;
+        /// <summary>Depth of a petting pen from its walk (m); the rest of the enclosure space is meadow.</summary>
+        private const float PettingPenDepth = 20f;
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
@@ -61,7 +63,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             c.Toggle("hay", true, ControlTier.More, "enclosures");
             c.Toggle("arena", false, ControlTier.More, "enclosures").Tip();
             c.Slider("jumps", 6, 0, 10, 1, "count", ControlTier.More, "enclosures").When("arena=true");
-            c.Slider("aviaries", 2, 0, 12, 1, "count", ControlTier.More, "enclosures").Tip();
+            c.Slider("aviaries", 0, 0, 12, 1, "count", ControlTier.More, "enclosures").Tip();   // vanilla aviaries are gazebos: none unless asked (rf-farms)
             c.Toggle("animals", true, ControlTier.Essential, "animals").Tip();
             c.Slider("animalsPerPen", 2, 1, 6, 1, "count", ControlTier.More, "animals").When("animals=true");
             c.Toggle("pond", true, ControlTier.More, "animals").Tip();
@@ -91,7 +93,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("pens", 2, 7);
-            c.RandomRange("aviaries", 0, 4);
+            c.RandomRange("aviaries", 0, 1);
             c.RandomRange("woodland", 0, 30);
             c.Fixed("terrain");
             c.Fixed("wornGround");
@@ -102,8 +104,8 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
 
         protected override void DefinePresets()
         {
-            Preset("pettingFarm", ("kind", "petting"), ("pens", 6.0), ("layout", "loop"), ("walkIn", true), ("aviaries", 2.0), ("animalsPerPen", 2.0),
-                ("pond", true), ("pondSize", 14.0), ("viewpoints", 2.0), ("benchSpacing", 30.0), ("shadeTrees", 20.0), ("hedgerow", true));
+            Preset("pettingFarm", ("kind", "petting"), ("pens", 6.0), ("layout", "loop"), ("walkIn", true), ("aviaries", 0.0), ("animalsPerPen", 2.0),
+                ("pond", true), ("pondSize", 20.0), ("viewpoints", 2.0), ("benchSpacing", 30.0), ("shadeTrees", 20.0), ("hedgerow", true));
             Preset("paddocks", ("kind", "paddocks"), ("pens", 4.0), ("layout", "spine"), ("walkIn", false), ("aviaries", 0.0), ("animalsPerPen", 3.0),
                 ("pond", false), ("viewpoints", 4.0), ("benchSpacing", 50.0), ("shadeTrees", 15.0), ("hedgerow", true));
             Preset("horsePaddock", ("kind", "horses"), ("pens", 3.0), ("layout", "loop"), ("walkIn", false), ("arena", true), ("jumps", 6.0),
@@ -398,8 +400,30 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                     }
                     lines.Add((o + ax * t, sd));
                 }
-                foreach (var cell in FarmKit.SplitByLines(space, lines, 32, ctx.Cancel))
+                // Petting pens line the walk, a pen deep; the middle of the space stays a farm meadow (pond, trees,
+                // the features) instead of six 40 x 60 m bare pens filling the whole site (rf-farms).
+                float2[] meadow = null;
+                if (kind == "petting")
                 {
+                    try { meadow = FarmKit.Largest(Poly.Offset(space, PettingPenDepth)); } catch (Exception) { }
+                    if (meadow != null && Poly.Area(meadow) < 400f) meadow = null;
+                }
+                foreach (var whole in FarmKit.SplitByLines(space, lines, 32, ctx.Cancel))
+                {
+                    var cell = whole;
+                    if (meadow != null)
+                    {
+                        float2[] best = null;
+                        try
+                        {
+                            foreach (var d in Poly.Difference(cell, meadow))
+                                foreach (var r in Poly.CutHoles(d))
+                                    if (best == null || Poly.Area(r) > Poly.Area(best)) best = r;
+                        }
+                        catch (Exception) { best = null; }
+                        if (best == null) continue;
+                        cell = best;
+                    }
                     List<float2[]> inset;
                     try { inset = Poly.Offset(cell, 1.3f); } catch (Exception) { continue; }
                     var ring = FarmKit.Largest(inset);
@@ -438,7 +462,6 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             string troughCat = ctx.B("troughs") && (!string.IsNullOrEmpty(ctx.S("troughAsset")) || AssetAvailability.Has(AssetCategories.AnimalParkTrough)) ? AssetCategories.AnimalParkTrough : null;
             var (hayAsset, hayCat) = AnimalParkArt.Prop(ctx.S("hayAsset"), AssetCategories.AnimalParkHay, AnimalParkArt.Hay, AssetCategories.FarmHay);
             if (!ctx.B("hay")) hayCat = null;
-            string dirt = AssetAvailability.Has(AssetCategories.SurfaceDirt) ? AssetCategories.SurfaceDirt : AssetCategories.SurfaceNatural;
             bool worn = ctx.B("wornGround");
             int layer = math.clamp(ctx.I("groundLayer"), 1, 4);
             var spawnerAsset = new AssetRef(ctx.S("spawnerAsset"), SpawnerFallbacks(kind));
@@ -481,7 +504,14 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
 
                 // Ground: worked earth in small pens, worn patches by the gate in paddocks.
                 // Straw-bedded petting pens (mud, then sand without the farming pack).
-                if (kind == "petting") ctx.Surface(pen.Ring, SurfaceRole.Decorative, AssetMix.One(AnimalParkArt.Straw, "EAI - Surface Pack Ground Mud Surface", "Sand Surface 02"), dirt);
+                // Without a straw / mud surface pack the vanilla fallback was grey "Sand Surface 02" slabs (rf-farms): then
+                // the pen is grass worn to earth by terrain paint instead.
+                if (kind == "petting")
+                {
+                    if (AssetAvailability.Has(AssetCategories.SurfaceDirt))
+                        ctx.Surface(pen.Ring, SurfaceRole.Decorative, AssetMix.One(AnimalParkArt.Straw, "EAI - Surface Pack Ground Mud Surface"), AssetCategories.SurfaceDirt);
+                    else if (worn && patches < 40) { TerrainPaint.Patch(ctx, pen.Ring, layer, 0.55f, 1.5f); patches++; }
+                }
                 if (worn && patches < 40)
                 {
                     var patch = LeisureKit.Blob(gate + inward * 4f, math.min(5f, math.sqrt(pr.Area) * 0.25f), Hashing.Mix(v, 5u), 12, 0.25f);

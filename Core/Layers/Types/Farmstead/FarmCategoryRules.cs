@@ -75,7 +75,9 @@ namespace Placemaker.Core.Build
                 case AssetCategories.FarmTrough:
                 case AssetCategories.FruitCrate:
                 case AssetCategories.FieldCrop:
-                    return !Has(lower, "advert", "logo", "placeholder");
+                    // A field crop is a plant, never a raised-bed corner piece: vanilla "GardenBed01CornerHigh" read as
+                    // rows of grey boxes across every farmstead field (rf-farms, 2026-10-16).
+                    return !Has(lower, "advert", "logo", "placeholder", "gardenbed", "garden bed", "planter");
                 case AssetCategories.FruitTree:
                     return !Has(lower, "dead", "stump", "placeholder");
                 default:
