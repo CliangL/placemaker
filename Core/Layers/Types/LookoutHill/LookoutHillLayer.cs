@@ -120,7 +120,11 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
 
             // ── Summit & landform ──
             var summit = Summit(ctx, region, gates, inscribed);
-            float plateau = math.min(ctx.F("plateau"), inscribed * 0.45f);
+            // (rf-nature) The summit plaza holds its centrepiece with room to walk round it and benches on its rim:
+            // the 9 m plateau gave the hilltop gazebo (7.6 x 6.5 m) a plaza barely wider than itself, with the benches
+            // jammed against it. The plateau grows to fit, as far as the area allows.
+            float centreFit = CentreRadius(ctx.S("viewpoint"));
+            float plateau = math.min(math.max(ctx.F("plateau"), centreFit > 0f ? (centreFit + 4.5f) / 0.85f : 0f), inscribed * 0.45f);
             var spec = new HillSpec
             {
                 Height = ctx.F("height"), Shape = HillSpec.Parse(ctx.S("shape")), Summit = summit, Plateau = plateau,
@@ -261,6 +265,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 var pts = HillPaths.Climb(field, region, occ, g.Position, g.Position + inward * (hw + 2.5f), spec);
                 if (pts.Count < 3) continue;
                 if (!HillPaths.Reached(pts, spec)) ctx.Issue(IssueSeverity.Info, "Placemaker.LookoutHill.Issue.PathShort");
+                Relax(pts, region, hw);
                 var simple = Poly.SimplifyPolyline(pts, 0.6f);
                 int n = simple.Length;
                 for (int i = 0; i + 1 < n; i++)
@@ -288,6 +293,26 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 if (main.Count == 0) main.AddRange(simple);
             }
             return total;
+        }
+
+        /// <summary>
+        /// (rf-nature) Rounds the walker's corners (it steps 4 m at a time and turns where the hill's contours turn, so a
+        /// hill on a square block gave a square spiral with sharp elbows): a few passes of neighbour averaging over the
+        /// inner points; the street end, its entry point and the last steps onto the plaza stay put, and no point leaves the outline.
+        /// </summary>
+        private static void Relax(List<float2> pts, LayerRegion region, float hw)
+        {
+            if (pts.Count < 5) return;
+            var tmp = new float2[pts.Count];
+            for (int pass = 0; pass < 4; pass++)
+            {
+                for (int i = 0; i < pts.Count; i++) tmp[i] = pts[i];
+                for (int i = 2; i < pts.Count - 3; i++)
+                {
+                    var q = tmp[i] * 0.5f + (tmp[i - 1] + tmp[i + 1]) * 0.25f;
+                    if (region.ContainsDisc(q, hw + 1f)) pts[i] = q;
+                }
+            }
         }
 
         private static void AttachStart(PlannedNet net, Gate g)
@@ -339,9 +364,10 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             if (chain != null)
             {
                 string cat = LeisureKit.Category(ctx, "", chain);
-                if (cat != null && res.Free(summit, math.min(r * 0.45f, 3.5f), 0.5f, 0.2f) && !occ.Paths.Overlaps(summit, math.min(r * 0.45f, 3.5f), 0.2f))
+                float fit = math.min(CentreRadius(ctx.S("viewpoint")), math.max(2f, r - 2.5f));
+                if (cat != null && res.Free(summit, fit, 0.5f, 0.2f) && !occ.Paths.Overlaps(summit, fit, 0.2f))
                 {
-                    centreR = math.min(r * 0.45f, 3.5f);
+                    centreR = fit;
                     var o = ctx.Object(summit, Hashing.Unit(v) * 6.283f, ObjectRole.Furniture, centre, v, -1, cat);
                     if (ctx.S("viewpoint") == "cairn")
                     {
@@ -376,6 +402,18 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                     var p = summit + new float2(math.cos(a), math.sin(a)) * math.max(centreR + 1.2f, r - 0.8f);
                     Spot(ctx, occ, res, p, LeisureKit.Yaw(summit, p), ObjectRole.Furniture, scope, 0.5f, Hashing.Mix(v, 40u + (uint)i), AssetMix.One(""));
                 }
+        }
+
+        /// <summary>Half the footprint of the summit centrepiece (its bounding circle), 0 for none.</summary>
+        private static float CentreRadius(string viewpoint)
+        {
+            switch (viewpoint)
+            {
+                case "tower": return 5f;      // Gazebo03, 7.6 x 6.5 m
+                case "pavilion": return 4.5f; // CampgroundShelter02 / Gazebo01
+                case "cairn": return 2.5f;    // a boulder with stones heaped round its foot
+                default: return 0f;
+            }
         }
 
         /// <summary>Puts an object on the summit plaza (inside the reserved plaza disc, clear of what is already there).</summary>
