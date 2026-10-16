@@ -27,6 +27,13 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>Drives made from car gates (kerb → lane), for the flowerbeds beside them.</summary>
         public readonly List<(float2 outer, float2 inner)> Drives = new List<(float2, float2)>();
 
+        /// <summary>
+        /// (rf-shops3) The invisible drives from the kerb (Drive): the kerb point, the lane node, the street and its curve parameter,
+        /// the lane. MallGrading ramps the ground along each from the street's height to the lane's (a drive left a street on a
+        /// fill or in a cut at the raw ground: a step at the kerb).
+        /// </summary>
+        public readonly List<(float2 kerb, float2 at, long street, float t, Lane lane)> KerbDrives = new List<(float2, float2, long, float, Lane)>();
+
         /// <summary>Spine front ends (where a walk from the street should arrive): point on the lane and the lane.</summary>
         public readonly List<(float2 at, Lane lane)> SpineFronts = new List<(float2, Lane)>();
 
@@ -86,13 +93,18 @@ namespace Placemaker.Core.Layers.Commercial
                     continue;
                 }
                 hit = OnNode(target, Project(target, hit, out _));
-                // The gap: through held rows a paseo wide enough to keep whole zone columns either side; else the drive's width.
+                // The gap: through held rows a paseo wide enough to keep whole zone columns either side, right up to the lane's
+                // edge (a sliver of the row left along the lane blocked a driveway's junction lane: it fell back to a drive); else
+                // the drive's width, a driveway's lane width (its junction lane needs its whole corridor).
+                bool alley = ShopEntrances.IsAlley(g.Kind);
                 float half = walk ? 2f : 4.5f;
-                float rowHalf = walk ? PaseoWidth * 0.5f : 5f;
+                float gapHalf = alley ? math.max(half, ShopLane(Ctx).half + 0.5f) : half;
+                float rowHalf = walk ? PaseoWidth * 0.5f : math.max(5f, gapHalf + 0.5f);
                 var corridor = Strip(g.At - g.In * 1f, hit, half, target.Half + 1.2f);
-                var rowCorridor = Strip(g.At - g.In * 1f, hit, rowHalf, target.Half + 1.2f);
+                var keptGap = alley ? Strip(g.At - g.In * 1f, hit, gapHalf, target.Half + 1.2f) : corridor;
+                var rowCorridor = Strip(g.At - g.In * 1f, hit, rowHalf, target.Half - 0.5f);
                 if (corridor == null) continue;
-                CutHolds(rowCorridor, corridor);
+                CutHolds(rowCorridor, keptGap);
                 if (!FreeExcept(corridor, target))
                 {
                     Ctx.Plan.Facts["gateFail" + g.Index] = 3;
@@ -174,6 +186,7 @@ namespace Placemaker.Core.Layers.Commercial
                 Ctx.Object(mid, math.atan2(dir.x, dir.y), ObjectRole.Arrow, new AssetRef(ParkingAssets.Arrows[0], ParkingAssets.Arrows[1], ParkingAssets.Arrows[2]), (uint)g.Index);
             }
             Drives.Add((g.At, hit));
+            KerbDrives.Add((kerb, hit, street.id, street.t, target));
             g.Landed = "drive";
         }
 

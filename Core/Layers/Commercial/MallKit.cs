@@ -130,6 +130,27 @@ namespace Placemaker.Core.Layers.Commercial
             end += d; control += d;
         }
 
+        /// <summary>
+        /// (rf-shops3) A lot's stub ending within 1.5 m of a join already on its lane (another net's end) ends on that join: a stub 0.3 m
+        /// from a driveway's junction made Finish move both split points onto one, and the driveway's lane ended beside the node (a
+        /// dead end). (Near a corner of the lane Finish moves the corner onto the stub's end instead.)
+        /// </summary>
+        private static void OntoNode(Lane lane, ref float3 end, ref float3 control)
+        {
+            float best = 1.5f; var q = end.xz;
+            foreach (var j in lane.Joins) { float dj = math.distance(j, end.xz); if (dj < best) { best = dj; q = j; } }
+            if (math.distance(q, end.xz) <= 0.01f) return;
+            var d = new float3(q.x - end.x, 0f, q.y - end.z);
+            end += d; control += d;
+        }
+
+        /// <summary>A join on <paramref name="lane"/>, once (a repeated join would split the lane twice at one point).</summary>
+        private static void AddJoin(Lane lane, float2 p)
+        {
+            foreach (var j in lane.Joins) if (math.distance(j, p) <= 0.01f) return;
+            lane.Joins.Add(p);
+        }
+
         /// <summary>Takes back a lane made by <see cref="Connect"/> (before anything was planned against it).</summary>
         public void Remove(Lane lane)
         {
@@ -259,9 +280,16 @@ namespace Placemaker.Core.Layers.Commercial
             if (AnchorWeight > 0f)
             {
                 n = math.max(1, math.min((int)math.floor(len / (2f * Cell) + 0.01f), (int)math.round(len / (maxPiece * Cell))));
-                cut = new float[n + 1];
                 float total = 0f;
-                for (int k = 0; k < n; k++) total += n >= 3 && (k == 0 || k == n - 1) ? AnchorWeight : 1f;
+                // The inline pieces between the anchors keep two cells too (a 68 m row of three gave the middle shop 14.7 m: one
+                // zone column, which the game blocks): fewer pieces until they do.
+                for (; ; n--)
+                {
+                    total = 0f;
+                    for (int k = 0; k < n; k++) total += n >= 3 && (k == 0 || k == n - 1) ? AnchorWeight : 1f;
+                    if (n <= 1 || len / total >= 2f * Cell - 0.01f) break;
+                }
+                cut = new float[n + 1];
                 float acc = 0f;
                 for (int k = 0; k <= n; k++)
                 {
