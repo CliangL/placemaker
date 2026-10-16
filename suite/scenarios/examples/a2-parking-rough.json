@@ -1,0 +1,17 @@
+{
+  "_goal": "Parking lot on rough ground; stalls on usable ground (no pits or mounds), entrance usable; low views across the lot from two sides.",
+  "id": "a2-parking-rough",
+  "site": "rough",
+  "steps": [
+    { "do": "area", "tool": "bucket" },
+    { "do": "type", "layer": "parking", "preset": "compact" },
+    { "do": "entrance", "side": "south", "t": 0.5 },
+    { "do": "preview", "shot": "preview" },
+    { "do": "issues" },
+    { "do": "build" },
+    { "do": "camera", "target": "build", "view": "top", "shot": "top", "shotMode": "render" },
+    { "do": "camera", "target": "point", "at": [0, 0], "view": "low", "shot": "centre-low", "shotMode": "render" },
+    { "do": "camera", "target": "point", "at": [0, 0], "view": "low", "yaw": 115, "shot": "centre-low-side", "shotMode": "render" },
+    { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "entrance", "shotMode": "render" }
+  ]
+}

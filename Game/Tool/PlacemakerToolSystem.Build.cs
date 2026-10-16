@@ -60,7 +60,8 @@ namespace Placemaker.Game.Tool
             };
             bool started;
             // Instant Build from the ghost when it shows exactly this plan; otherwise the ghost is hidden first.
-            try { started = TryBuildFromGhost(request) || svc.Start(request); }
+            bool instant = false;
+            try { instant = TryBuildFromGhost(request); started = instant || svc.Start(request); }
             catch (Exception e)
             {
                 Mod.Log.Error(e, "Placemaker: build service failed to start");
@@ -75,6 +76,7 @@ namespace Placemaker.Game.Tool
                 Touch();
                 return;
             }
+            SuiteLastBuildPath = instant ? "instant" : "start";
             _building = true;
             _buildStatus = default;
             CancelGesture();

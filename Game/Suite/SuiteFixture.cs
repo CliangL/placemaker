@@ -498,46 +498,123 @@ namespace Placemaker.Game.Suite
 
         private readonly HashSet<string> _used = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _free = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _dirty = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _uses = new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _lastUser = new Dictionary<string, string>(StringComparer.Ordinal);
+        public string Spacing = "checker";
 
-        /// <summary>
-        /// A block for the next scenario: an unused block of the wanted kind, else an unused flat block, else any unused
-        /// block, else a block a scenario has deleted its build from and restored (Release), the wanted kind first.
-        /// </summary>
-        public SuiteBlock Take(string site)
+        public static SuiteBlockKind? KindOf(string site)
         {
-            SuiteBlockKind? want = null;
             switch ((site ?? "any").ToLowerInvariant())
             {
-                case "flat": want = SuiteBlockKind.Flat; break;
-                case "zoned": want = SuiteBlockKind.Zoned; break;
-                case "slope": want = SuiteBlockKind.Slope; break;
-                case "rough": want = SuiteBlockKind.Rough; break;
-                case "survive": want = SuiteBlockKind.Survive; break;
+                case "flat": return SuiteBlockKind.Flat;
+                case "zoned": return SuiteBlockKind.Zoned;
+                case "slope": return SuiteBlockKind.Slope;
+                case "rough": return SuiteBlockKind.Rough;
+                case "survive": return SuiteBlockKind.Survive;
             }
-            bool Open(SuiteBlock b) => !_used.Contains(b.Id) || _free.Contains(b.Id);
-            SuiteBlock pick = null;
-            if (want.HasValue) pick = Blocks.FirstOrDefault(b => b.Kind == want.Value && !_used.Contains(b.Id)) ?? Blocks.FirstOrDefault(b => b.Kind == want.Value && _free.Contains(b.Id));
-            if (pick == null) pick = Blocks.FirstOrDefault(b => b.Kind == SuiteBlockKind.Flat && !_used.Contains(b.Id));
-            if (pick == null) pick = Blocks.FirstOrDefault(b => !_used.Contains(b.Id));
-            if (pick == null) pick = Blocks.FirstOrDefault(b => b.Kind == SuiteBlockKind.Flat && _free.Contains(b.Id)) ?? Blocks.FirstOrDefault(Open);
-            if (pick != null)
+            return null;
+        }
+
+        /// <summary>Checker spacing: flat blocks only on one colour of the board, so no scenario's neighbours hide or shade it.</summary>
+        private bool Preferred(SuiteBlock b) => !string.Equals(Spacing, "checker", StringComparison.OrdinalIgnoreCase) || ((b.I + b.J) & 1) == 0;
+
+        private bool Allowed(SuiteBlock b) => b.Kind != SuiteBlockKind.Flat || Preferred(b);
+
+        private bool Open(SuiteBlock b) => !_dirty.ContainsKey(b.Id) && (!_used.Contains(b.Id) || _free.Contains(b.Id));
+
+        private static bool StreetsMatch(SuiteBlock b, Dictionary<string, string> want)
+        {
+            if (want == null) return true;
+            foreach (var kv in want)
             {
-                _used.Add(pick.Id);
-                _free.Remove(pick.Id);
-                _uses[pick.Id] = TimesUsed(pick) + 1;
+                string have = kv.Key.ToLowerInvariant() switch { "west" => b.West, "east" => b.East, "south" => b.South, "north" => b.North, _ => null };
+                if (have == null || !string.Equals(have, kv.Value, StringComparison.OrdinalIgnoreCase)) return false;
             }
+            return true;
+        }
+
+        /// <summary>
+        /// A block for a scenario: the given block id, else the next open block of the wanted kind (and streets) — never a
+        /// block of another kind unless the scenario allows a fallback (recorded in note).
+        /// </summary>
+        public SuiteBlock Take(string site, string blockId, Dictionary<string, string> streets, bool fallback, string user, out string note)
+        {
+            note = null;
+            SuiteBlock pick = null;
+            var want = KindOf(site);
+            if (!string.IsNullOrEmpty(blockId))
+            {
+                pick = Blocks.FirstOrDefault(b => string.Equals(b.Id, blockId, StringComparison.OrdinalIgnoreCase));
+                if (pick == null) { note = $"no block {blockId} in this grid"; return null; }
+                if (_dirty.TryGetValue(pick.Id, out var why)) { note = $"block {blockId} is quarantined: {why}"; return null; }
+                if (!Open(pick)) { note = $"block {blockId} is in use by {(_lastUser.TryGetValue(pick.Id, out var u) ? u : "?")}"; return null; }
+            }
+            else
+            {
+                IEnumerable<SuiteBlock> cands = Blocks.Where(b => Open(b) && StreetsMatch(b, streets) && Allowed(b));
+                if (want.HasValue) cands = cands.Where(b => b.Kind == want.Value);
+                else cands = cands.Where(b => b.Kind == SuiteBlockKind.Flat);
+                pick = cands.OrderBy(b => _used.Contains(b.Id) ? 1 : 0).ThenBy(b => Preferred(b) ? 0 : 1).ThenBy(b => b.J).ThenBy(b => b.I).FirstOrDefault();
+                if (pick == null && (fallback || !want.HasValue))
+                {
+                    pick = Blocks.Where(b => Open(b) && StreetsMatch(b, streets) && Allowed(b) && b.Kind != SuiteBlockKind.Survive && b.Kind != SuiteBlockKind.Zoned)
+                        .OrderBy(b => _used.Contains(b.Id) ? 1 : 0).ThenBy(b => b.Kind == SuiteBlockKind.Flat ? 0 : 1).ThenBy(b => b.J).ThenBy(b => b.I).FirstOrDefault();
+                    if (pick != null) note = $"wanted {site}, none left: fell back to {pick.Kind} (siteFallback)";
+                }
+                if (pick == null)
+                {
+                    int total = Blocks.Count(b => (!want.HasValue || b.Kind == want.Value) && Allowed(b));
+                    note = $"no block: wanted {site}{(streets != null ? " with streets " + string.Join(",", streets.Select(kv => kv.Key + "=" + kv.Value)) : "")}, none left ({total} in this grid, {_dirty.Count} quarantined)";
+                    return null;
+                }
+            }
+            _used.Add(pick.Id);
+            _free.Remove(pick.Id);
+            _uses[pick.Id] = TimesUsed(pick) + 1;
+            if (_lastUser.TryGetValue(pick.Id, out var prev)) note = (note == null ? "" : note + "; ") + "reused after " + prev;
+            _lastUser[pick.Id] = user ?? "";
             return pick;
         }
 
-        /// <summary>The block's build was deleted and its ground restored: later scenarios may use it again (not zoned/survive blocks).</summary>
+        /// <summary>How many blocks of each kind the grid offers to scenarios (with the spacing).</summary>
+        public int Capacity(SuiteBlockKind kind) => Blocks.Count(b => b.Kind == kind && Allowed(b));
+
+        /// <summary>The block's build was deleted, nothing was left behind and the ground is back: later scenarios may use it again.</summary>
         public void Release(SuiteBlock b)
         {
-            if (b.Kind == SuiteBlockKind.Zoned || b.Kind == SuiteBlockKind.Survive) return;
+            if (b.Kind == SuiteBlockKind.Zoned || b.Kind == SuiteBlockKind.Survive || _dirty.ContainsKey(b.Id)) return;
             _free.Add(b.Id);
         }
 
+        /// <summary>The block is not clean (leftovers, ground not restored, delete timed out): nobody gets it again.</summary>
+        public void Quarantine(SuiteBlock b, string why)
+        {
+            _dirty[b.Id] = why;
+            _free.Remove(b.Id);
+        }
+
+        public IReadOnlyDictionary<string, string> Quarantined => _dirty;
+
         public int TimesUsed(SuiteBlock b) => _uses.TryGetValue(b.Id, out int n) ? n : 0;
+
+        /// <summary>Largest difference between the live ground and the layout over the block (sampled every 6 m inside the kerbs).</summary>
+        public float BlockGroundError(SuiteBlock b, Func<string, float> halfWidth, out float2 worstAt)
+        {
+            float worst = 0f;
+            worstAt = b.Center;
+            var terrain = _world.GetOrCreateSystemManaged<TerrainSystem>();
+            var h = terrain.GetHeightData(true);
+            // inside the kerbs (+4 m): roads level the ground under themselves, that is not the block's ground
+            float x0 = b.X0 + halfWidth(b.West) + 4f, x1 = b.X1 - halfWidth(b.East) - 4f, z0 = b.Z0 + halfWidth(b.South) + 4f, z1 = b.Z1 - halfWidth(b.North) - 4f;
+            for (float x = x0; x <= x1; x += 6f)
+                for (float z = z0; z <= z1; z += 6f)
+                {
+                    float d = math.abs(TerrainUtils.SampleHeight(ref h, new float3(x, 0f, z)) - Layout.Height(x, z));
+                    if (d > worst) { worst = d; worstAt = new float2(x, z); }
+                }
+            return worst;
+        }
 
     }
 }

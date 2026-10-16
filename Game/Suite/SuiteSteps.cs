@@ -1,10 +1,12 @@
 // In-game test suite: scenarios as step scripts (suite/README.md has the vocabulary with an example per step).
-// A scenario is a list of steps that drive the real tool the way a person does: the area tools get scripted mouse input
-// (PlacemakerToolSystem.SuiteQueue: the same per-mode update code a real click or stroke runs, minus the raycast), the
-// panel's actions are the same calls the UI makes (type/preset, option values, Next/Build button, Edit, Delete), entrances
-// are clicks on the outline. Every wait is on readiness, never a fixed delay: the plan of the current input revision, the
-// ghost emitted and settled, the camera arrived and still, textures streamed — each with a generous timeout that is
-// recorded ("timed out waiting for X") and each with its duration in the step's result. Any step can take a screenshot.
+// A scenario is a list of steps that drive the real tool the way a person does:
+//   * world clicks: the point is projected to the screen (panned into view like a person would, refused under the
+//     panel), the GAME's raycast at that screen point decides what is hit, the cursor glides there, then clicks;
+//   * panel actions: the panel's real elements are clicked (data-testid) or its triggers fired through the UI view,
+//     in the stage whose panel shows that control (the person's way there is taken and recorded);
+//   * keys go through the tool's own key handling (Enter, Esc, Ctrl+Z/Y).
+// Every action checks its effect (a step that changed nothing fails with the reason). Waits are on readiness and
+// recorded; shots go through the settle gate (SuiteShots). This file: the scenario loop, step dispatch, waits.
 
 using System;
 using System.Collections;
@@ -38,16 +40,39 @@ namespace Placemaker.Game.Suite
             public float3 Focus;
             public float Radius = 80f;
             public int FileIndex;
-            public readonly List<float3> Markers = new List<float3>();
+            /// <summary>Entrances as the script placed them (position, kind, step path), in script order.</summary>
+            public readonly List<(float3 At, string Kind, string Path)> Markers = new List<(float3, string, string)>();
             public JObject Shots => Result["shots"] as JObject ?? (JObject)(Result["shots"] = new JObject());
+            public JArray Builds => Result["builds"] as JArray ?? (JArray)(Result["builds"] = new JArray());
             /// <summary>Hard failure (no outline, type not selected, build failed): the remaining steps are skipped.</summary>
             public bool Stop;
+            public string Pace = "human";
+            public Dictionary<string, int> Ghost;
+            public int GhostTotal;
+            /// <summary>The plan revision the ghost census was taken for, and the one that was built.</summary>
+            public int GhostRevision = -1, BuiltRevision = -2;
+            public bool PermanentTerraform;
+            public int BuildCount;
+            public int StepIndex;
+            /// <summary>The block's ground was restored (the after-delete restore ran).</summary>
+            public bool Restored;
+            public JObject LastLeftBehind;
         }
 
         private readonly Dictionary<string, ScenarioState> _byId = new Dictionary<string, ScenarioState>(StringComparer.Ordinal);
         private EntityQuery _tempQuery;
 
-        // ───────────── defaults: the old one-line scenarios become step lists ─────────────
+        // what happened last (for the settle gate's wall-clock floor)
+        private float _eventAt;
+        private string _event = "load";
+
+        private void Event(string what)
+        {
+            _event = what;
+            _eventAt = Time.realtimeSinceStartup;
+        }
+
+        // ───────────── defaults: one-line scenarios become step lists ─────────────
 
         private static List<JObject> DefaultSteps(Scenario s)
         {
@@ -58,8 +83,12 @@ namespace Placemaker.Game.Suite
             steps.Add(new JObject { ["do"] = "type", ["layer"] = s.Layer, ["preset"] = s.Preset ?? "" });
             foreach (var v in s.Values) steps.Add(new JObject { ["do"] = "value", ["path"] = v.path ?? "0", ["id"] = v.id, ["json"] = v.json });
             steps.Add(new JObject { ["do"] = "entrances" });
-            steps.Add(new JObject { ["do"] = "preview", ["shot"] = "preview" });
-            steps.Add(new JObject { ["do"] = "build" });
+            steps.Add(new JObject { ["do"] = "preview", ["shot"] = "preview", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "overlay" });
+            steps.Add(new JObject { ["do"] = "shot", ["name"] = "ghost", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "render" });
+            if (!string.IsNullOrEmpty(s.PreviewMode)) steps.Add(new JObject { ["do"] = "previewMode", ["mode"] = s.PreviewMode });
+            steps.Add(new JObject { ["do"] = "build", ["when"] = s.BuildWhen ?? "settled" });
+            steps.Add(new JObject { ["do"] = "shot", ["name"] = "built", ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "render" });
+            steps.Add(new JObject { ["do"] = "shot", ["name"] = "top", ["camera"] = new JObject { ["target"] = "build", ["view"] = "top" }, ["shotMode"] = "render" });
             return steps;
         }
 
@@ -76,19 +105,40 @@ namespace Placemaker.Game.Suite
             res["note"] = s.Note;
             res["git"] = _cfg.git;
             res["assembly"] = AssemblyVersion();
-            if (s.Block == null) { res["status"] = "no-block"; yield break; }
+            st.Pace = (s.Pace ?? _cfg.pace ?? "human").ToLowerInvariant();
+            res["pace"] = st.Pace;
+            res["seed"] = s.Seed;
+            if (s.Block == null) { res["status"] = "no-block"; res["siteNote"] = s.SiteNote; yield break; }
             var b = s.Block;
-            res["block"] = new JObject { ["id"] = b.Id, ["kind"] = b.Kind.ToString(), ["west"] = b.West, ["east"] = b.East, ["south"] = b.South, ["north"] = b.North, ["center"] = new JArray(b.Center.x, b.Center.y), ["reused"] = _fixture.TimesUsed(b) > 1 };
+            res["block"] = new JObject
+            {
+                ["id"] = b.Id, ["kind"] = b.Kind.ToString(), ["requested"] = s.Site, ["west"] = b.West, ["east"] = b.East, ["south"] = b.South, ["north"] = b.North,
+                ["center"] = new JArray(b.Center.x, b.Center.y), ["reused"] = _fixture.TimesUsed(b) > 1, ["note"] = s.SiteNote,
+                ["size"] = $"{b.X1 - b.X0:F0} x {b.Z1 - b.Z0:F0} m between road centre lines",
+            };
             if (st.Focus.Equals(float3.zero)) st.Focus = FocusOf(b);
-            Say($"scenario {s.Id} on {b.Id} ({b.Kind}){(s.On != null ? " on scenario " + s.On : "")}");
+            Say($"scenario {s.Id} on {b.Id} ({b.Kind}){(s.On != null ? " on scenario " + s.On : "")}, pace {st.Pace}");
             _byId[s.Id] = st;
+            _look?.Reassert();
 
             yield return OpenTool();
+            // a clean slate: no leftover clicks, no history of the previous scenario, nothing still planning or building
+            int leftover = PlacemakerToolSystem.SuiteResetInput();
+            if (leftover > 0) res["leftoverInputFrames"] = leftover;
+            yield return Idle(res);
+            if ((string)res["status"] == "tool-not-idle") yield break;
             if (s.On == null)
             {
                 if (_tool.Stage == ToolStage.Manage) _tool.GoToStage(ToolStage.Area);
-                _tool.ClearArea();
+                if (_tool.SuiteHasSelection) _tool.ClearArea();
+                _tool.SuiteResetHistory();
                 yield return Frames(2);
+            }
+            else
+            {
+                // an 'on' scenario starts from the host's build: its receipt is loaded the way a person edits it, or
+                // only camera/shot/issue/select/delete steps run (checked in RunOne)
+                _tool.SuiteResetHistory();
             }
             PlacemakerToolSystem.SuiteResetSeed(s.Seed);
 
@@ -101,42 +151,97 @@ namespace Placemaker.Game.Suite
                 var step = steps[i];
                 string what = ((string)step["do"] ?? "").Trim();
                 var rec = new JObject { ["i"] = i, ["do"] = what };
-                foreach (var p in step.Properties()) if (p.Name != "do" && p.Name != "shot" && p.Name != "camera") rec[p.Name] = p.Value.DeepClone();
+                foreach (var p in step.Properties()) if (p.Name != "do" && p.Name != "shot" && p.Name != "camera" && !p.Name.StartsWith("_")) rec[p.Name] = p.Value.DeepClone();
                 outSteps.Add(rec);
+                st.StepIndex = i;
                 _scenario = s.Id + "#" + i + ":" + what;
+                var bad = Schema.CheckStep(step);
+                if (bad != null) { rec["error"] = bad; if (IsHard(what)) st.Stop = true; continue; }
+                int pending = PlacemakerToolSystem.SuiteResetInput();
+                if (pending > 0) rec["staleInputFramesDropped"] = pending;
                 float t0 = Time.realtimeSinceStartup;
-                OpenWindow();
-                yield return Guard(Step(st, step, rec), e => { rec["error"] = e.GetType().Name + ": " + e.Message; Say($"step {i} {what} threw: {e}"); });
-                rec["frames"] = CloseWindow();
+                OpenWindow(i, what);
+                yield return Guard(Step(st, step, rec), e => { rec["error"] = "suite error: " + e.GetType().Name + ": " + e.Message; rec["suiteError"] = true; Say($"step {i} {what} threw: {e}"); });
+                if (PlacemakerToolSystem.SuiteFramesPending > 0)
+                {
+                    rec["error"] = (rec["error"] != null ? rec["error"] + "; " : "") + $"{PlacemakerToolSystem.SuiteFramesPending} scripted input frames never ran (the tool did not take them)";
+                    PlacemakerToolSystem.SuiteResetInput();
+                }
                 rec["ms"] = Math.Round((Time.realtimeSinceStartup - t0) * 1000f);
                 string shot = (string)step["shot"];
-                if (!string.IsNullOrEmpty(shot) && what != "shot")
-                    yield return Guard(StepShot(st, step, rec, shot), e => rec["shotError"] = e.Message);
-                if (rec["error"] != null && IsHard(what)) st.Stop = true;
+                if (!string.IsNullOrEmpty(shot) && what != "shot" && what != "camera")
+                {
+                    // the step's own shot: frames what the step asks for, else what the step is about (never an automatic close-up)
+                    var cam = step["camera"] as JObject ?? DefaultShotCamera(what);
+                    var sstep = new JObject { ["camera"] = cam, ["shotMode"] = step["shotMode"] };
+                    var srec = new JObject();
+                    yield return Guard(StepShot(st, sstep, srec, shot), e => srec["error"] = "suite error: " + e.Message);
+                    rec["shotRecord"] = srec;
+                    if (srec["error"] != null && rec["error"] == null) rec["shotError"] = srec["error"];
+                }
+                rec["frames"] = CloseWindow();
+                if (rec["error"] != null && IsHard(what) && !((bool?)rec["suiteError"] ?? false)) st.Stop = true;
             }
             _scenario = s.Id;
+            // the build's ground goes back only now (an after-delete shot shows what the delete left, not the suite's repair)
+            if (st.Deleted && !st.Restored && s.On == null)
+            {
+                var rrec = new JObject { ["i"] = steps.Count, ["do"] = "restore", ["implicit"] = true };
+                outSteps.Add(rrec);
+                yield return Guard(StepRestore(st, rrec), e => rrec["error"] = "suite error: " + e.Message);
+            }
+            yield return Frames(30);   // errors of the last step land in this scenario's window
             res["errors"] = ErrorsSince(errMark);
             if ((string)res["status"] == "running") res["status"] = st.Deleted ? "deleted" : st.Built ? "built" : "designed";
             Totals(res);
         }
 
-        private static bool IsHard(string what) => what == "area" || what == "type" || what == "build" || what == "preview";
-        private static bool Passive(string what) => what == "camera" || what == "shot" || what == "wait" || what == "grow";
+        /// <summary>The shot of a step without its own camera: the build for build/preview/delete steps, else the current view.</summary>
+        private static JObject DefaultShotCamera(string what)
+        {
+            switch (what)
+            {
+                case "build": case "preview": case "delete": case "edit": case "bulldoze": case "area":
+                    return new JObject { ["target"] = "build", ["view"] = "oblique" };
+            }
+            return null;
+        }
 
-        /// <summary>Sum of each wait kind over the steps (plan, ghost, camera, streaming, build) for the summary.</summary>
+        private static bool IsHard(string what) => what == "area" || what == "type" || what == "build" || what == "preview";
+
+        /// <summary>The tool takes no new scene until nothing is building, planning or emitting a ghost (bounded).</summary>
+        private IEnumerator Idle(JObject res)
+        {
+            float t0 = Time.realtimeSinceStartup;
+            yield return Until(() => !_tool.Building && !_tool.Planning && !_tool.GhostPending, 60f, "tool idle");
+            res["idleWaitMs"] = Math.Round((Time.realtimeSinceStartup - t0) * 1000f);
+            if (_timedOut)
+            {
+                res["status"] = "tool-not-idle";
+                res["refused"] = $"tool not idle after 60 s (building {_tool.Building}, planning {_tool.Planning}, ghost pending {_tool.GhostPending})";
+                if (_tool.Building) _abortBatch = "a build was still running when the next scenario started: every later result would be contaminated";
+            }
+        }
+
+        private string _abortBatch;
+
+        /// <summary>Sum of each wait kind over the steps (nested records included) and every timeout, for the summary.</summary>
         private static void Totals(JObject res)
         {
             var t = new JObject();
             var timeouts = new JArray();
-            if (res["steps"] is JArray steps)
-                foreach (var s in steps.OfType<JObject>())
-                {
-                    if (s["waits"] is JObject w) foreach (var p in w.Properties()) t[p.Name] = Math.Round(((double?)t[p.Name] ?? 0) + (double)p.Value);
-                    if (s["timeouts"] is JArray to) foreach (var x in to) timeouts.Add(x);
-                    if (s["planComputeMs"] != null) t["planComputeMs"] = Math.Max((double?)t["planComputeMs"] ?? 0, (double)s["planComputeMs"]);
-                }
+            void Walk(JObject s)
+            {
+                if (s["waits"] is JObject w) foreach (var p in w.Properties()) t[p.Name] = Math.Round(((double?)t[p.Name] ?? 0) + (double)p.Value);
+                if (s["timeouts"] is JArray to) foreach (var x in to) timeouts.Add(x);
+                if (s["planComputeMs"] != null) t["planComputeMs"] = Math.Max((double?)t["planComputeMs"] ?? 0, (double)s["planComputeMs"]);
+                foreach (var key in new[] { "shotRecord" }) if (s[key] is JObject n) Walk(n);
+                foreach (var key in new[] { "shots", "placed", "sub" }) if (s[key] is JArray a) foreach (var n in a.OfType<JObject>()) Walk(n);
+            }
+            if (res["steps"] is JArray steps) foreach (var s in steps.OfType<JObject>()) Walk(s);
+            if (res["postShots"] is JArray ps) foreach (var s in ps.OfType<JObject>()) Walk(s);
             res["waitsMs"] = t;
-            if (timeouts.Count > 0) res["timeouts"] = timeouts;
+            res["timeouts"] = timeouts;
         }
 
         private IEnumerator Step(ScenarioState st, JObject step, JObject rec)
@@ -145,38 +250,39 @@ namespace Placemaker.Game.Suite
             switch (what)
             {
                 case "area": yield return StepArea(st, step, rec); break;
-                case "clear": _tool.ClearArea(); yield return Frames(3); break;
+                case "clear": yield return StepClear(st, step, rec); break;
                 case "type": yield return StepType(st, step, rec); break;
-                case "value":
-                    _tool.SetValue((string)step["path"] ?? "0", (string)step["id"], step["json"] != null ? (string)step["json"] : step["value"]?.ToString(Formatting.None));
-                    yield return WaitPlan(rec);
-                    break;
+                case "value": yield return StepValue(st, step, rec); break;
                 case "entrance": yield return StepEntrance(st, step, rec); break;
                 case "entrances": yield return StepEntrancesAuto(st, step, rec); break;
                 case "moveEntrance": yield return StepMoveEntrance(st, step, rec, false); break;
                 case "removeEntrance": yield return StepMoveEntrance(st, step, rec, true); break;
                 case "preview": yield return StepPreview(st, step, rec); break;
+                case "previewMode": yield return StepPreviewMode(st, step, rec); break;
                 case "issues": rec["issues"] = Issues(); break;
                 case "edit": yield return StepEdit(st, step, rec); break;
                 case "build": yield return StepBuild(st, step, rec); break;
+                case "select": yield return StepSelect(st, step, rec); break;
                 case "delete": yield return StepDelete(st, step, rec); break;
+                case "bulldoze": yield return StepBulldoze(st, step, rec); break;
+                case "infoEdit": yield return StepInfo(st, step, rec, edit: true); break;
+                case "infoRemove": yield return StepInfo(st, step, rec, edit: false); break;
                 case "restore": yield return StepRestore(st, rec); break;
-                case "camera": yield return CameraStep(st, step, rec); break;
+                case "camera": yield return StepCameraAndShot(st, step, rec); break;
                 case "shot": yield return StepShot(st, step, rec, (string)step["name"] ?? (string)step["shot"] ?? "shot" + rec["i"]); break;
                 case "wait":
                     if (step["frames"] != null) yield return Frames((int)step["frames"]);
                     else yield return Seconds((float?)step["seconds"] ?? 1f);
                     break;
-                case "grow":
-                    yield return Grow((float?)step["seconds"] ?? 30f, "grow-" + st.S.Id);
-                    rec["grow"] = _summary["grow-" + st.S.Id];
-                    if (st.Before != null && st.Built) st.Result["growables"] = _probe.Growables(st.Before, st.Group, _probe.MemberSet(st.Group));
-                    break;
-                case "undo": _tool.Undo(); yield return Frames(2); yield return WaitPlan(rec); break;
-                case "redo": _tool.Redo(); yield return Frames(2); yield return WaitPlan(rec); break;
-                case "anarchy": _tool.SetAnarchy((bool?)step["on"] ?? true); yield return Frames(2); yield return WaitPlan(rec); break;
-                case "preset": _tool.SelectPreset((string)step["layer"] ?? st.S.Layer, (string)step["preset"] ?? ""); yield return Frames(2); yield return WaitPlan(rec); break;
-                default: rec["error"] = "unknown step '" + what + "'"; break;
+                case "grow": yield return StepGrow(st, step, rec); break;
+                case "undo": yield return StepUndoRedo(st, step, rec, true); break;
+                case "redo": yield return StepUndoRedo(st, step, rec, false); break;
+                case "key": yield return StepKey(st, step, rec); break;
+                case "anarchy": yield return StepAnarchy(st, step, rec); break;
+                case "setting": yield return StepSetting(st, step, rec); break;
+                case "preset": yield return StepPreset(st, step, rec); break;
+                case "compare": StepCompare(st, step, rec); break;
+                default: rec["error"] = "unknown step '" + what + "' (suite/schema.json lists the steps)"; break;
             }
         }
 
@@ -202,10 +308,11 @@ namespace Placemaker.Game.Suite
 
         private bool PlanReady() => _tool.Shape == null || (!_tool.Planning && _tool.Plan != null && _tool.PlanRevision == _tool.InputRevision);
 
-        /// <summary>The plan for the current input revision is finished (the planner idle, the plan's revision = the input's).</summary>
-        private IEnumerator WaitPlan(JObject rec, float timeout = 240f)
+        /// <summary>The plan for the current input revision is finished. At "user" pace a person does not wait: a few frames only.</summary>
+        private IEnumerator WaitPlan(ScenarioState st, JObject rec, float timeout = 240f, bool always = false)
         {
             yield return Frames(2);   // the change reaches the planner's input revision on the next tool update
+            if (st != null && st.Pace == "user" && !always) { yield return Frames(4); rec["planWait"] = "skipped (user pace)"; yield break; }
             yield return WaitFor(rec, "plan", PlanReady, timeout);
             if (_tool.Plan != null) rec["planComputeMs"] = Math.Round(_tool.PlanMilliseconds);
             rec["planRevision"] = _tool.PlanRevision;
@@ -236,930 +343,9 @@ namespace Placemaker.Game.Suite
             Waited(rec, "ghost", Time.realtimeSinceStartup - t0, timedOut ? timeout : 0f);
             rec["ghostTemps"] = last;
             rec["ghostDropped"] = _tool.GhostDropped;
+            Event("ghost");
         }
 
-        // ───────────── area tools (scripted mouse) ─────────────
-
-        private float2 Pt(JToken t, SuiteBlock b, bool abs) =>
-            t is JArray a && a.Count >= 2 ? (abs ? new float2((float)a[0], (float)a[1]) : b.Center + new float2((float)a[0], (float)a[1])) : b.Center;
-
-        private float3 P3(float2 p) => new float3(p.x, _fixture.H(p.x, p.y), p.y);
-
-        private IEnumerator Feed(JObject rec)
-        {
-            yield return WaitFor(rec, "input", () => PlacemakerToolSystem.SuiteFramesPending == 0, 20f);
-            yield return Frames(3);
-        }
-
-        private IEnumerator StepArea(ScenarioState st, JObject step, JObject rec)
-        {
-            var b = st.S.Block;
-            bool abs = (bool?)step["abs"] ?? false;
-            string tool = ((string)step["tool"] ?? "bucket").ToLowerInvariant();
-            // a person looks at what they select (and the tool's grab radius follows the camera distance)
-            yield return CameraTo(FocusOf(b), 25f, 55f, 320f, rec);
-            if (_tool.Stage == ToolStage.Manage) _tool.GoToStage(ToolStage.Area);
-            _tool.ClearArea();
-            yield return Frames(2);
-            switch (tool)
-            {
-                case "bucket":
-                case "block":
-                    _tool.SetAreaMode(SelectionMode.Block);
-                    yield return Frames(2);
-                    PlacemakerToolSystem.SuiteClick(P3(Pt(step["at"], b, abs)));
-                    break;
-                case "points":
-                case "draw":
-                {
-                    _tool.SetAreaMode(SelectionMode.Draw);
-                    yield return Frames(2);
-                    var pts = new List<float2>();
-                    if (step["points"] is JArray list) foreach (var p in list) pts.Add(Pt(p, b, abs));
-                    else
-                    {
-                        var wh = step["rect"] as JArray;
-                        float w = wh != null ? (float)wh[0] : 60f, h = wh != null ? (float)wh[1] : 40f;
-                        var c = Pt(step["at"], b, abs);
-                        pts.Add(c + new float2(-w / 2, -h / 2)); pts.Add(c + new float2(w / 2, -h / 2)); pts.Add(c + new float2(w / 2, h / 2)); pts.Add(c + new float2(-w / 2, h / 2));
-                    }
-                    foreach (var p in pts) PlacemakerToolSystem.SuiteClick(P3(p));
-                    PlacemakerToolSystem.SuiteClick(P3(pts[0]));   // click the first corner again: closes the outline
-                    rec["clicks"] = pts.Count + 1;
-                    break;
-                }
-                case "paint":
-                case "paintanything":
-                {
-                    _tool.SetAreaMode(tool == "paint" ? SelectionMode.BlockPaint : SelectionMode.Paint);
-                    float size = (float?)step["size"] ?? math.min(b.X1 - b.X0, b.Z1 - b.Z0) * 0.45f;
-                    _tool.SetBrush((bool?)step["square"] ?? false, size, (float?)step["angle"] ?? 0f);
-                    yield return Frames(2);
-                    var path = new List<float3>();
-                    if (step["stroke"] is JArray stroke) foreach (var p in stroke) path.Add(P3(Pt(p, b, abs)));
-                    else
-                    {
-                        float hw = (b.X1 - b.X0) * 0.25f, hh = (b.Z1 - b.Z0) * 0.2f;
-                        foreach (var d in new[] { new float2(-hw, -hh), new float2(hw, -hh), new float2(hw, hh), new float2(-hw, hh) }) path.Add(P3(b.Center + d));
-                    }
-                    int per = (int)math.ceil(math.max(1f, path.Count > 1 ? math.distance(path[0], path[1]) / math.max(2f, size * 0.25f) : 1f));
-                    PlacemakerToolSystem.SuiteDrag(path.ToArray(), per);
-                    rec["brush"] = size;
-                    break;
-                }
-                case "nodes":
-                case "perimeter":
-                {
-                    _tool.SetAreaMode(SelectionMode.Perimeter);
-                    yield return Frames(2);
-                    var targets = new List<float2>();
-                    if (step["nodes"] is JArray list) foreach (var p in list) targets.Add(Pt(p, b, abs));
-                    else { targets.Add(new float2(b.X0, b.Z0)); targets.Add(new float2(b.X1, b.Z0)); targets.Add(new float2(b.X1, b.Z1)); targets.Add(new float2(b.X0, b.Z1)); }
-                    var nodes = new JArray();
-                    var first = Entity.Null;
-                    float3 firstAt = default;
-                    foreach (var p in targets)
-                    {
-                        var n = NearestNode(p, out var at);
-                        if (n == Entity.Null) { rec["error"] = $"no road node near ({p.x:F0},{p.y:F0})"; st.Result["status"] = "no-outline"; yield break; }
-                        if (first == Entity.Null) { first = n; firstAt = at; }
-                        PlacemakerToolSystem.SuiteClick(at, n);
-                        nodes.Add(new JArray(Math.Round(at.x), Math.Round(at.z)));
-                    }
-                    PlacemakerToolSystem.SuiteClick(firstAt, first);   // back to the first node: closes the loop
-                    rec["nodes"] = nodes;
-                    break;
-                }
-                default:
-                    rec["error"] = "unknown area tool '" + tool + "'";
-                    st.Result["status"] = "no-outline";
-                    yield break;
-            }
-            yield return Feed(rec);
-            // Paint area ends in the Area stage: a person presses Next
-            yield return WaitFor(rec, "outline", () => _tool.Shape != null && !_tool.Painting, 20f);
-            if (_tool.Shape != null && _tool.Stage == ToolStage.Area && _tool.SuitePrimaryInfo().Kind == "toDesign") { _tool.Primary(); yield return Frames(2); }
-            if (_tool.Shape == null)
-            {
-                rec["error"] = "no outline" + (_tool.FlashText != null ? ": " + _tool.FlashText.Key : "");
-                st.Result["status"] = "no-outline";
-                yield break;
-            }
-            st.Ring = _tool.Shape.Ring2D();
-            rec["mode"] = _tool.Mode.ToString();
-            rec["areaM2"] = Math.Round(math.abs(Placemaker.Core.Geometry.Poly.SignedArea(st.Ring)));
-            rec["corners"] = st.Ring.Length;
-            st.Result["areaM2"] = rec["areaM2"];
-            st.Before = _probe.Snapshot(st.Ring);
-            st.Result["before"] = new JObject { ["buildings"] = st.Before.Buildings.Count, ["areas"] = st.Before.Areas.Count, ["objects"] = st.Before.Objects.Count, ["edges"] = st.Before.Edges.Count };
-            yield return WaitPlan(rec);
-        }
-
-        private Entity NearestNode(float2 p, out float3 at)
-        {
-            at = default;
-            var em = _world.EntityManager;
-            var best = Entity.Null;
-            float bestD = 20f;
-            using (var q = em.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Net.Node>(), ComponentType.ReadOnly<global::Game.Net.ConnectedEdge>(),
-                ComponentType.Exclude<global::Game.Common.Deleted>(), ComponentType.Exclude<global::Game.Tools.Temp>(), ComponentType.Exclude<global::Game.Common.Owner>()))
-            using (var all = q.ToEntityArray(Allocator.Temp))
-                foreach (var e in all)
-                {
-                    var pos = em.GetComponentData<global::Game.Net.Node>(e).m_Position;
-                    float d = math.distance(pos.xz, p);
-                    if (d < bestD) { bestD = d; best = e; at = pos; }
-                }
-            return best;
-        }
-
-        // ───────────── type, entrances ─────────────
-
-        private IEnumerator StepType(ScenarioState st, JObject step, JObject rec)
-        {
-            string layer = (string)step["layer"] ?? st.S.Layer;
-            string preset = (string)step["preset"] ?? st.S.Preset ?? "";
-            FreshType(layer);
-            _tool.SelectPreset(layer, preset);
-            yield return Frames(2);
-            rec["recipeRoot"] = _tool.CurrentRecipe?.Root?.Layer ?? "";
-            if ((string)rec["recipeRoot"] != LayerAliasesCanonical(layer))
-            {
-                rec["error"] = "type not selected" + (_tool.FlashText != null ? ": " + _tool.FlashText.Key : "");
-                st.Result["status"] = "type-not-selected";
-                yield break;
-            }
-            if (string.IsNullOrEmpty(st.S.Layer)) st.S.Layer = layer;
-            yield return WaitPlan(rec);
-            if (_tool.Plan == null && _tool.Shape != null) { rec["error"] = "no plan: " + _tool.SuiteUnreadyText(); st.Result["status"] = "no-plan"; }
-        }
-
-        /// <summary>Where an entrance goes: a side of the block (t along it), a point, or the outline nearest the south street.</summary>
-        private float2 EntranceTarget(JObject step, SuiteBlock b)
-        {
-            bool abs = (bool?)step["abs"] ?? false;
-            if (step["at"] is JArray) return Pt(step["at"], b, abs);
-            float t = (float?)step["t"] ?? 0.5f;
-            switch (((string)step["side"] ?? "south").ToLowerInvariant())
-            {
-                case "north": return new float2(math.lerp(b.X0, b.X1, t), b.Z1);
-                case "east": return new float2(b.X1, math.lerp(b.Z0, b.Z1, t));
-                case "west": return new float2(b.X0, math.lerp(b.Z0, b.Z1, t));
-                default: return new float2(math.lerp(b.X0, b.X1, t), b.Z0);
-            }
-        }
-
-        private float3 OnOutline(float2 p)
-        {
-            var ring = _tool.Shape.Ring;
-            if (!Composer.ClosestSegment(ring, p, out int seg, out float t, out _)) return P3(p);
-            var at = math.lerp(ring[seg], ring[(seg + 1) % ring.Length], t);
-            return new float3(at.x, _fixture.H(at.x, at.z), at.z);
-        }
-
-        /// <summary>Starts marker placement the way the panel does: an explicit step/kind, else the main button's request.</summary>
-        private bool StartPlacement(JObject step, JObject rec)
-        {
-            string path = (string)step["path"], kind = (string)step["kind"];
-            if (path != null) { _tool.SetMarkerKind(path, kind ?? "entrance"); rec["via"] = "panel"; }
-            else
-            {
-                var req = _tool.SuiteMarkerRequest();
-                if (req.Path != null) { _tool.Primary(); rec["via"] = "button"; }   // "Add at least one entrance": pressing starts placement
-                else if (kind != null || _tool.SuiteMarkers().Count > 0)
-                {
-                    var last = _tool.SuiteMarkers().LastOrDefault();
-                    _tool.SetMarkerKind(last.Path ?? "0", kind ?? last.Kind ?? "entrance");
-                    rec["via"] = "panel";
-                }
-            }
-            return _tool.MarkerKind != null;
-        }
-
-        private IEnumerator StepEntrance(ScenarioState st, JObject step, JObject rec)
-        {
-            if (_tool.Shape == null) { rec["error"] = "no outline"; yield break; }
-            if (!StartPlacement(step, rec)) { rec["error"] = "entrance placement did not start (no step asks for markers)"; yield break; }
-            yield return Frames(2);
-            rec["path"] = _tool.MarkerPath;
-            rec["kind"] = _tool.MarkerKind;
-            int before = _tool.SuiteMarkers().Count;
-            var at = OnOutline(EntranceTarget(step, st.S.Block));
-            PlacemakerToolSystem.SuiteClick(at);
-            yield return Feed(rec);
-            _tool.ExitMarkerMode();   // Esc: done placing
-            int after = _tool.SuiteMarkers().Count;
-            rec["at"] = new JArray(Math.Round(at.x, 1), Math.Round(at.z, 1));
-            if (after <= before) { rec["error"] = "the click placed no marker"; yield break; }
-            st.Markers.Add(at);
-            yield return WaitPlan(rec);
-        }
-
-        /// <summary>Default scripts: while the main button asks for entrances, add one on the south street side (then east, north, west).</summary>
-        private IEnumerator StepEntrancesAuto(ScenarioState st, JObject step, JObject rec)
-        {
-            var placed = new JArray();
-            string[] sides = { "south", "east", "north", "west" };
-            for (int k = 0; k < sides.Length && _tool.SuiteMarkerRequest().Path != null; k++)
-            {
-                var sub = new JObject { ["side"] = sides[k] };
-                var r = new JObject();
-                yield return StepEntrance(st, sub, r);
-                placed.Add(r);
-                if (r["waits"] is JObject w) foreach (var p in w.Properties()) Waited(rec, p.Name, (float)(double)p.Value / 1000f, 0f);
-                if (r["error"] != null) { rec["error"] = r["error"]; break; }
-            }
-            rec["placed"] = placed;
-        }
-
-        /// <summary>Move = the UI's way: in placement mode right-click the marker (removes it), left-click the new spot.</summary>
-        private IEnumerator StepMoveEntrance(ScenarioState st, JObject step, JObject rec, bool removeOnly)
-        {
-            var markers = _tool.SuiteMarkers();
-            int index = (int?)step["index"] ?? 0;
-            if (index < 0 || index >= markers.Count) { rec["error"] = $"no marker {index} (have {markers.Count})"; yield break; }
-            var m = markers[index];
-            _tool.SetMarkerKind(m.Path, m.Kind);
-            yield return Frames(2);
-            PlacemakerToolSystem.SuiteClick(m.At, default, right: true);
-            float3 to = default;
-            if (!removeOnly)
-            {
-                to = OnOutline(EntranceTarget(step, st.S.Block));
-                PlacemakerToolSystem.SuiteClick(to);
-            }
-            yield return Feed(rec);
-            _tool.ExitMarkerMode();
-            rec["from"] = new JArray(Math.Round(m.At.x, 1), Math.Round(m.At.z, 1));
-            if (!removeOnly) rec["to"] = new JArray(Math.Round(to.x, 1), Math.Round(to.z, 1));
-            rec["markers"] = _tool.SuiteMarkers().Count;
-            if (index < st.Markers.Count) { if (removeOnly) st.Markers.RemoveAt(index); else st.Markers[index] = to; }
-            yield return WaitPlan(rec);
-        }
-
-        // ───────────── review, edit, build, delete ─────────────
-
-        private JArray Issues()
-        {
-            var a = new JArray();
-            var plan = _tool.Plan;
-            if (plan == null) return a;
-            foreach (var i in plan.Issues.Concat(plan.Layers.SelectMany(l => l.Issues)).Take(60))
-            {
-                var o = new JObject { ["severity"] = i.Severity.ToString(), ["key"] = i.Key };
-                if (i.Args != null && i.Args.Length > 0) o["args"] = new JArray(i.Args.Select(x => x?.ToString() ?? ""));
-                if (i.At.HasValue) o["at"] = new JArray(Math.Round(i.At.Value.x, 1), Math.Round(i.At.Value.z, 1));
-                if (!string.IsNullOrEmpty(i.Cause)) o["cause"] = i.Cause + (string.IsNullOrEmpty(i.CauseValue) ? "" : " = " + i.CauseValue);
-                if (i.Dropped) o["dropped"] = true;
-                a.Add(o);
-            }
-            return a;
-        }
-
-        private IEnumerator StepPreview(ScenarioState st, JObject step, JObject rec)
-        {
-            yield return WaitPlan(rec);
-            var primary = _tool.SuitePrimaryInfo();
-            if (_tool.Stage != ToolStage.Review)
-            {
-                if (primary.Kind == "toReview" && primary.Enabled) _tool.Primary();
-                else
-                {
-                    rec["error"] = "cannot preview: " + primary.Kind + (primary.Enabled ? "" : " disabled") + " " + _tool.SuiteUnreadyText();
-                    st.Result["status"] = "blocked";
-                    st.Result["blockedAt"] = "design";
-                    st.Result["unready"] = _tool.SuiteUnreadyText();
-                    yield break;
-                }
-            }
-            yield return WaitFor(rec, "review", () => _tool.Stage == ToolStage.Review, 15f);
-            yield return WaitPlan(rec);
-            yield return WaitGhost(rec);
-            st.Plan = _tool.Plan;
-            rec["issues"] = Issues();
-            rec["planCost"] = Math.Round(_tool.PlanCost);
-            st.Result["planIssues"] = rec["issues"];
-            st.Result["planCost"] = rec["planCost"];
-        }
-
-        private IEnumerator StepEdit(ScenarioState st, JObject step, JObject rec)
-        {
-            if ((bool?)step["build"] ?? false)
-            {
-                if (st.Group == 0) { rec["error"] = "no built group to edit"; yield break; }
-                _tool.EditGroup(st.Group);
-                rec["group"] = st.Group;
-            }
-            else if (!_tool.GoToStage(ToolStage.Design)) { rec["error"] = "cannot go back to Design from " + _tool.Stage; yield break; }
-            yield return Frames(2);
-            rec["stage"] = _tool.Stage.ToString();
-            yield return WaitPlan(rec);
-        }
-
-        private IEnumerator StepBuild(ScenarioState st, JObject step, JObject rec)
-        {
-            var res = st.Result;
-            if (_tool.Stage != ToolStage.Review)
-            {
-                var r = new JObject();
-                yield return StepPreview(st, step, r);
-                if (r["waits"] is JObject w) foreach (var p in w.Properties()) Waited(rec, p.Name, (float)(double)p.Value / 1000f, 0f);
-                if (r["error"] != null) { rec["error"] = r["error"]; yield break; }
-            }
-            yield return WaitPlan(rec);
-            st.Plan = _tool.Plan;
-            var primary = _tool.SuitePrimaryInfo();
-            if (!primary.Enabled && primary.Reason == "Placemaker.Reason.AcknowledgePermanent")
-            {
-                _tool.AcknowledgePermanent(true);
-                yield return Frames(2);
-                primary = _tool.SuitePrimaryInfo();
-                rec["acknowledgedPermanent"] = true;
-            }
-            if ((primary.Kind != "build" && primary.Kind != "finishEdit") || !primary.Enabled)
-            {
-                rec["error"] = "build button: " + primary.Kind + (primary.Enabled ? "" : " disabled") + " " + _tool.SuiteUnreadyText();
-                res["status"] = "blocked";
-                res["blockedAt"] = "review";
-                res["unready"] = _tool.SuiteUnreadyText();
-                yield break;
-            }
-            int doneBefore = _tool.SuiteBuildsDone;
-            float t0 = Time.realtimeSinceStartup;
-            _tool.Primary();
-            yield return WaitFor(rec, "buildStart", () => _tool.Building, 10f);
-            yield return WaitFor(rec, "build", () => !_tool.Building, 300f);
-            res["buildMs"] = Math.Round((Time.realtimeSinceStartup - t0) * 1000f);
-            if (_tool.SuiteBuildsDone == doneBefore)
-            {
-                var f = _tool.BuildFailure;
-                res["status"] = "build-failed";
-                res["failure"] = f == null ? (_timedOut ? "timeout" : "unknown") : f.Key + (f.Args != null && f.Args.Length > 0 ? " (" + string.Join(", ", f.Args) + ")" : "");
-                rec["error"] = "build failed: " + res["failure"];
-                yield break;
-            }
-            st.Built = true;
-            st.Deleted = false;
-            st.Group = _tool.SuiteLastBuiltGroup;
-            rec["group"] = st.Group;
-            res["status"] = "built";
-            res["notes"] = new JArray(_tool.BuildNotes.Select(n => n.Key + (n.Args != null && n.Args.Length > 0 ? " (" + string.Join(", ", n.Args) + ")" : "")));
-            // the world settles: no temporaries left, then what the player sees stops changing (overlap verdicts, batches)
-            yield return WaitFor(rec, "settle", () => TempCount() == 0, 30f);
-            yield return BuildVisibleSettled(st, rec);
-            if (st.Before != null)
-            {
-                var ground = _probe.GroundNow(st.Before);
-                res["terrain"] = _probe.Pits(st.Before, ground, st.Plan);
-                res["census"] = _probe.Census(st.Before, st.Group, st.Plan, st.S.Layer, _tool.BuildAudit);
-            }
-            var members = _probe.MemberSet(st.Group);
-            res["visibility"] = _probe.Visibility(members);
-            if (st.Markers.Count > 0)
-            {
-                res["entrances"] = _probe.Entrances(st.Markers, members);
-                // the lead's question for every entrance: does the picture show the gap?
-                if ((bool?)step["entranceShots"] ?? true)
-                    for (int k = 0; k < st.Markers.Count; k++)
-                    {
-                        var r = new JObject();
-                        yield return StepShot(st, new JObject { ["camera"] = new JObject { ["target"] = "entrance", ["index"] = k, ["view"] = "closeup" }, ["shotMode"] = "render" }, r, "entrance" + k + "-built");
-                        var shots = rec["shots"] as JArray ?? (JArray)(rec["shots"] = new JArray());
-                        shots.Add(r);
-                    }
-            }
-        }
-
-        /// <summary>After a build: the members' visibility (visible / overridden / not rendered) unchanged over 3 polls 10 frames apart.</summary>
-        private IEnumerator BuildVisibleSettled(ScenarioState st, JObject rec)
-        {
-            float t0 = Time.realtimeSinceStartup;
-            string last = null;
-            int same = 0;
-            bool ok = false;
-            var members = _probe.MemberSet(st.Group);
-            while (Time.realtimeSinceStartup - t0 < 30f)
-            {
-                yield return Frames(10);
-                var v = _probe.Visibility(members);
-                string key = $"{v["visible"]}/{v["overridden"]}/{v["hidden"]}/{v["notRendered"]}/{v["deleted"]}";
-                same = key == last ? same + 1 : 0;
-                last = key;
-                if (same >= 3) { ok = true; break; }
-            }
-            Waited(rec, "visibleSettled", Time.realtimeSinceStartup - t0, ok ? 0f : 30f);
-        }
-
-        private IEnumerator StepDelete(ScenarioState st, JObject step, JObject rec)
-        {
-            if (!st.Built || st.Group == 0) { rec["error"] = "nothing built to delete (loose builds have no group)"; yield break; }
-            int g = st.Group;
-            _tool.ManageGroup(g);   // a person clicks the build, then Delete in its panel
-            yield return Frames(2);
-            _tool.RemoveGroup(g);
-            yield return WaitFor(rec, "delete", () => Services.Groups == null || Services.Groups.Get(g) == null, 60f);
-            yield return WaitFor(rec, "settle", () => TempCount() == 0, 20f);
-            yield return Frames(10);
-            st.Deleted = true;
-            st.Built = false;
-            st.Result["status"] = "deleted";
-            if (_tool.Stage == ToolStage.Manage) _tool.GoToStage(ToolStage.Area);
-            // what the build left behind in its site (it should be nothing)
-            if (st.Before != null) rec["leftBehind"] = _probe.LeftBehind(st.Before);
-            if ((bool?)step["restore"] ?? true) yield return StepRestore(st, rec);
-        }
-
-        private IEnumerator StepRestore(ScenarioState st, JObject rec)
-        {
-            var b = st.S.Block;
-            float t0 = Time.realtimeSinceStartup;
-            string err = _fixture.RestoreBlock(b);
-            yield return Frames(20);
-            Waited(rec, "restore", Time.realtimeSinceStartup - t0, 0f);
-            rec["restored"] = err ?? b.Id;
-            if (err == null && st.Deleted) _fixture.Release(b);
-        }
-
-        // ───────────── camera and screenshots ─────────────
-
-        private float3 FocusOf(SuiteBlock b) => new float3(b.Center.x, _fixture.H(b.Center.x, b.Center.y), b.Center.y);
-
-        /// <summary>
-        /// Frames the camera and waits until it arrived: the controller holds the requested pivot and the rendered camera
-        /// stopped moving (5 still frames after it was told). The game camera's eye sits a little farther out than the
-        /// controller's zoom (it lifts over the terrain), so the distance is recorded, not tested.
-        /// </summary>
-        private IEnumerator CameraTo(float3 pivot, float yaw, float pitch, float distance, JObject rec)
-        {
-            float t0 = Time.realtimeSinceStartup;
-            SuiteCapture.Aim(pivot, yaw, pitch, distance);
-            Vector3 lastP = Vector3.positiveInfinity;
-            Quaternion lastR = Quaternion.identity;
-            int still = 0, frames = 0;
-            bool arrived = false;
-            float until = Time.realtimeSinceStartup + 20f;
-            while (Time.realtimeSinceStartup < until)
-            {
-                yield return null;
-                frames++;
-                var cam = Camera.main;
-                if (cam == null) continue;
-                var tr = cam.transform;
-                bool moved = (tr.position - lastP).sqrMagnitude > 0.0004f || Quaternion.Angle(tr.rotation, lastR) > 0.02f;
-                lastP = tr.position;
-                lastR = tr.rotation;
-                still = moved ? 0 : still + 1;
-                if (frames >= 3 && still >= 5 && SuiteCapture.PivotNear(pivot, 1f)) { arrived = true; break; }
-            }
-            Waited(rec, "camera", Time.realtimeSinceStartup - t0, arrived ? 0f : 20f);
-            rec["cameraState"] = SuiteCapture.CameraState();
-            if (Camera.main != null) rec["cameraDistance"] = Math.Round(math.distance((float3)Camera.main.transform.position, pivot), 1);
-        }
-
-        /// <summary>Resolves a camera request: target (block, area, build, entrance, point, issue, overview) and view.</summary>
-        private IEnumerator CameraStep(ScenarioState st, JObject c, JObject rec)
-        {
-            var b = st.S.Block;
-            string target = ((string)c["target"] ?? "block").ToLowerInvariant();
-            float3 pivot = FocusOf(b);
-            float radius = 85f;
-            switch (target)
-            {
-                case "area":
-                case "build":
-                    if (st.Ring != null && st.Ring.Length > 0)
-                    {
-                        float2 lo = st.Ring[0], hi = st.Ring[0];
-                        foreach (var p in st.Ring) { lo = math.min(lo, p); hi = math.max(hi, p); }
-                        var m = (lo + hi) * 0.5f;
-                        pivot = P3(m);
-                        radius = math.max(25f, math.length(hi - lo) * 0.5f);
-                    }
-                    break;
-                case "entrance":
-                {
-                    int i = (int?)c["index"] ?? 0;
-                    var markers = st.Markers.Count > 0 ? st.Markers : _tool.SuiteMarkers().Select(x => x.At).ToList();
-                    if (i < 0 || i >= markers.Count) { rec["cameraError"] = $"no entrance {i} (have {markers.Count})"; break; }
-                    pivot = markers[i];
-                    radius = 15f;
-                    break;
-                }
-                case "issue":
-                {
-                    int i = (int?)c["index"] ?? 0;
-                    var at = (_tool.Plan?.Issues.Concat(_tool.Plan.Layers.SelectMany(l => l.Issues)) ?? Enumerable.Empty<PlanIssue>()).Where(x => x.At.HasValue).Select(x => x.At.Value).ToList();
-                    if (i < 0 || i >= at.Count) { rec["cameraError"] = $"no issue marker {i} (have {at.Count})"; break; }
-                    pivot = at[i];
-                    radius = 15f;
-                    break;
-                }
-                case "point":
-                    pivot = P3(Pt(c["at"], b, (bool?)c["abs"] ?? false));
-                    radius = 20f;
-                    break;
-                case "overview":
-                    pivot = new float3((_fixture.Layout.LineX(0) + _fixture.Layout.LineX(_fixture.Layout.NX)) * 0.5f, _fixture.Layout.Base, (_fixture.Layout.LineZ(0) + _fixture.Layout.LineZ(_fixture.Layout.NZ)) * 0.5f);
-                    radius = 600f;
-                    break;
-            }
-            float yaw = 25f, pitch = 55f, dist = radius * 3.4f;
-            switch (((string)c["view"] ?? (target == "entrance" || target == "issue" || target == "point" ? "closeup" : "oblique")).ToLowerInvariant())
-            {
-                case "top": yaw = 0f; pitch = 89.5f; dist = radius * 3.6f; break;
-                case "closeup": yaw = 30f; pitch = 38f; dist = math.max(30f, radius * 3f); break;
-                case "low": yaw = 25f; pitch = 18f; dist = radius * 2.2f; break;
-            }
-            if (c["yaw"] != null) yaw = (float)c["yaw"];
-            if (c["pitch"] != null) pitch = (float)c["pitch"];
-            if (c["distance"] != null) dist = (float)c["distance"];
-            rec["camera"] = new JObject { ["target"] = target, ["pivot"] = new JArray(Math.Round(pivot.x, 1), Math.Round(pivot.y, 1), Math.Round(pivot.z, 1)), ["yaw"] = yaw, ["pitch"] = pitch, ["distance"] = Math.Round(dist, 1) };
-            yield return CameraTo(pivot, yaw, pitch, dist, rec);
-        }
-
-        /// <summary>The textures around the new view have streamed in (virtual texturing quiet for a few frames).</summary>
-        private IEnumerator WaitStreaming(JObject rec, float timeout = 20f)
-        {
-            float t0 = Time.realtimeSinceStartup;
-            int quiet = 0;
-            long last = -1;
-            bool ok = false;
-            while (Time.realtimeSinceStartup - t0 < timeout)
-            {
-                yield return null;
-                var (left, reads) = SuiteCapture.Streaming(_world);
-                bool calm = left <= 0 && (reads < 0 || reads == last || reads == 0) && _lastFrameMs < 100f;
-                last = reads;
-                quiet = calm ? quiet + 1 : 0;
-                if (quiet >= 6) { ok = true; break; }
-            }
-            Waited(rec, "streaming", Time.realtimeSinceStartup - t0, ok ? 0f : timeout);
-        }
-
-        private Texture2D _capture;
-        private string _captureError;
-
-        private IEnumerator CaptureOnce(bool grab)
-        {
-            _capture = null;
-            if (grab)
-            {
-                SuiteCapture.UiOff();
-                yield return Frames(2);
-                yield return new WaitForEndOfFrame();
-                _capture = SuiteCapture.GrabTexture2D(_cfg.shotWidth, out _captureError);
-                SuiteCapture.UiOn();
-            }
-            else
-            {
-                yield return new WaitForEndOfFrame();
-                _capture = SuiteCapture.RenderTexture2D(_cfg.shotWidth, _cfg.shotHeight, out _captureError);
-            }
-        }
-
-        /// <summary>
-        /// A settled screenshot: the camera arrived and streaming is quiet, then captures ~1 s apart until two consecutive
-        /// ones differ by less than SettleDelta (mean per channel, 0-255) — camera smoothing, LOD and texture streaming,
-        /// object fade-in, the ghost's fade and the terrain/decal blend after a build all show up as differences. The last
-        /// capture is saved; the deltas and the settle time are recorded, unsettled after SettleTimeout.
-        /// </summary>
-        private IEnumerator StepShot(ScenarioState st, JObject step, JObject rec, string name)
-        {
-            if (step["camera"] is JObject cam) yield return CameraStep(st, cam, rec);
-            yield return WaitStreaming(rec);
-            string mode = ((string)step["shotMode"] ?? (string)step["mode"] ?? "").ToLowerInvariant();
-            bool grab = mode == "grab" || (mode != "render" && _tool.IsActive && _tool.Stage != ToolStage.Manage);
-            string file = Safe(st.S.Id) + "." + Safe(name) + ".png";
-            string path = Path.Combine(_shots, file);
-            float t0 = Time.realtimeSinceStartup;
-            var deltas = new JArray();
-            Texture2D prev = null, last = null;
-            bool settled = false;
-            string err = null;
-            yield return CaptureOnce(grab);
-            prev = _capture;
-            err = _captureError;
-            while (prev != null && Time.realtimeSinceStartup - t0 < SettleTimeout)
-            {
-                yield return Seconds(SettleInterval);
-                yield return CaptureOnce(grab);
-                last = _capture;
-                if (last == null) { err = _captureError; break; }
-                float d = SuiteCapture.MeanDelta(prev, last);
-                deltas.Add(Math.Round(d, 2));
-                UnityEngine.Object.Destroy(prev);
-                prev = last;
-                if (d >= 0f && d < SettleDelta) { settled = true; break; }
-            }
-            if (prev != null)
-            {
-                try { File.WriteAllBytes(path, prev.EncodeToPNG()); }
-                catch (Exception e) { err = e.Message; }
-                UnityEngine.Object.Destroy(prev);
-            }
-            Waited(rec, "shotSettle", Time.realtimeSinceStartup - t0, 0f);
-            string rel = err == null ? "shots/" + file : "ERROR " + err;
-            rec["shot"] = rel;
-            rec["shotMode"] = grab ? "grab" : "render";
-            rec["shotDeltas"] = deltas;
-            rec["shotSettled"] = settled;
-            if (!settled && err == null)
-            {
-                var t = rec["timeouts"] as JArray ?? (JArray)(rec["timeouts"] = new JArray());
-                t.Add($"shot {name} unsettled after {SettleTimeout:F0} s (deltas {deltas.ToString(Formatting.None)})");
-            }
-            if (st.Built && st.Group > 0) rec["visibility"] = _probe.Visibility(_probe.MemberSet(st.Group));
-            st.Shots[name] = rel;
-            var settledShots = st.Result["shotsSettled"] as JObject ?? (JObject)(st.Result["shotsSettled"] = new JObject());
-            settledShots[name] = settled;
-            if (err != null) Say($"shot {name} failed: {err}");
-        }
-
-        private const float SettleDelta = 1.0f, SettleInterval = 1.0f, SettleTimeout = 15f;
-
-        private static string Safe(string id)
-        {
-            foreach (var c in Path.GetInvalidFileNameChars()) id = id.Replace(c, '_');
-            return id.Replace('+', 'x');
-        }
-
-        // ───────────── after the shared grow phase ─────────────
-
-        private IEnumerator PostGrow(ScenarioState st)
-        {
-            if (st.Before != null && st.Ring != null && st.Built)
-            {
-                var members = _probe.MemberSet(st.Group);
-                st.Result["growables"] = _probe.Growables(st.Before, st.Group, members);
-                int lost = 0;
-                foreach (var b in st.Before.Buildings) if (!_world.EntityManager.Exists(b) || _world.EntityManager.HasComponent<global::Game.Common.Deleted>(b)) lost++;
-                st.Result["existingLostAfterGrow"] = lost;
-            }
-            if (st.S.Block != null && st.Built && st.S.Steps == null)
-            {
-                var r = new JObject();
-                yield return StepShot(st, new JObject { ["camera"] = new JObject { ["target"] = "block", ["view"] = "oblique" }, ["shotMode"] = "render" }, r, "oblique");
-                var r2 = new JObject();
-                yield return StepShot(st, new JObject { ["camera"] = new JObject { ["target"] = "block", ["view"] = "top" }, ["shotMode"] = "render" }, r2, "top");
-                st.Result["postShots"] = new JArray(r, r2);
-            }
-        }
-
-        /// <summary>
-        /// Checks are sceptical: "pass" only when the thing was measured and is right, "fail" when measured and wrong,
-        /// "unknown" when it could not be measured (no census, no samples, no lanes found, a shot that never settled).
-        /// </summary>
-        private void Verdicts(ScenarioState st)
-        {
-            var r = st.Result;
-            var v = new JArray();
-            void Check(string id, bool? pass, string detail) =>
-                v.Add(new JObject { ["id"] = id, ["result"] = pass == null ? "unknown" : pass.Value ? "pass" : "fail", ["detail"] = detail });
-            string status = (string)r["status"] ?? "";
-            bool scripted = st.S.Steps != null;
-            bool wantsBuild = !scripted || st.S.Steps.Any(x => (string)x["do"] == "build");
-            bool built = status == "built" || status == "deleted";
-            if (status == "refused") Check("ran", false, (string)r["refused"]);
-            if (wantsBuild) Check("built", built, status + (r["failure"] != null ? ": " + r["failure"] : "") + (r["unready"] != null ? ": " + r["unready"] : ""));
-            if (r["steps"] is JArray steps)
-                foreach (var s in steps.OfType<JObject>().Where(x => x["error"] != null))
-                    Check("step" + s["i"] + ":" + s["do"], false, (string)s["error"]);
-            var timeouts = (r["timeouts"] as JArray ?? new JArray()).Select(x => (string)x).Where(x => !x.StartsWith("shot ")).ToList();
-            Check("noTimeouts", timeouts.Count == 0, string.Join("; ", timeouts));
-            if (r["shotsSettled"] is JObject ss)
-            {
-                var unsettled = ss.Properties().Where(p => !(bool)p.Value).Select(p => p.Name).ToList();
-                Check("shotsSettled", unsettled.Count == 0 ? (bool?)true : null, unsettled.Count == 0 ? "" : "unsettled: " + string.Join(", ", unsettled));
-            }
-            var census = r["census"] as JObject;
-            if (built && wantsBuild && census == null) Check("census", null, "no census was taken");
-            if (census != null)
-            {
-                var audit = census["audit"] as JObject;
-                Check("nothingLeftOut", audit == null ? (bool?)null : (int)audit["leftOut"] == 0, audit == null ? "no build audit" : $"left out {audit["leftOut"]}, kept despite collisions {audit["kept"]}");
-                bool farm = (bool?)census["farmType"] ?? false;
-                int crop = (int?)census["cropLikeCount"] ?? 0;
-                if (!farm) Check("noCropOrVanillaLots", crop == 0, crop == 0 ? "" : census["cropLike"].ToString(Formatting.None));
-                var fences = census["fences"] as JObject;
-                if (fences != null) Check("noForeignFences", (int)fences["notMembers"] == 0, $"fences {fences["total"]}, not members {fences["notMembers"]}");
-                var parking = census["parking"] as JObject;
-                if (parking != null && (int)parking["plannedStalls"] > 0)
-                {
-                    Check("stallsBuilt", (int)parking["liveStalls"] >= (int)parking["plannedStalls"], $"planned {parking["plannedStalls"]}, live {parking["liveStalls"]}");
-                    int lanes = (int?)parking["carLanes"] ?? -1;
-                    Check("stallsOnLanes", lanes <= 0 ? (bool?)null : (int)parking["stallsFarFromLane"] == 0,
-                        lanes <= 0 ? "no car lane found near the site: not measurable" : $"{parking["stallsFarFromLane"]} stalls > 9 m from any car lane ({lanes} lanes)");
-                }
-                var nets = census["nets"] as JObject;
-                if (nets != null && (int)nets["edges"] > 0) Check("netsConnected", (int)(nets["isolatedEdges"] ?? 0) == 0, $"{nets["isolatedEdges"]} of {nets["edges"]} edges cut off from the city");
-                var zoning = census["zoning"] as JObject;
-                if (zoning != null && ((int)zoning["plannedQuadCells"] > 0 || (int)zoning["plannedPreviewCells"] > 0))
-                    Check("zoningLive", (int)zoning["liveZonedCells"] > 0, $"planned {zoning["plannedQuadCells"]} quad cells / {zoning["plannedPreviewCells"]} preview, live {zoning["liveZonedCells"]} (own roads {zoning["zonedFromOwnRoads"]}, city {zoning["zonedFromCityRoads"]})");
-                var ex = census["existingBuildings"] as JObject;
-                if (ex != null && (int)ex["before"] > 0) Check("existingSurvive", (int)ex["lost"] == 0, $"{ex["lost"]} of {ex["before"]} lost {ex["lostPrefabs"]?.ToString(Formatting.None)}");
-            }
-            // built is not seen: every member object visible after the build settled (and at every later shot)
-            if (r["visibility"] is JObject vis)
-            {
-                int objects = (int)vis["objects"], visible = (int)vis["visible"];
-                int worstVisible = visible;
-                foreach (var s in (r["steps"] as JArray ?? new JArray()).OfType<JObject>())
-                    if (s["visibility"] is JObject sv && (int)sv["objects"] == objects) worstVisible = Math.Min(worstVisible, (int)sv["visible"]);
-                Check("plannedVisible", objects == 0 ? (bool?)null : worstVisible == objects,
-                    objects == 0 ? "no member objects to see" : $"{worstVisible} of {objects} built objects visible (overridden {vis["overridden"]}, hidden {vis["hidden"]}, not rendered {vis["notRendered"]}) {vis["notVisible"]?.ToString(Formatting.None)}");
-            }
-            else if (built && wantsBuild) Check("plannedVisible", null, "visibility not measured");
-            // entrances, physically: a drive of the build meets a city street near each entrance, nothing fenced across it
-            if (r["entrances"] is JArray ents && ents.Count > 0)
-            {
-                var bad = ents.OfType<JObject>().Where(e => !(bool)e["connected"] || e["barrier"] != null).ToList();
-                Check("entrancesOpen", bad.Count == 0, bad.Count == 0 ? $"{ents.Count} entrances open" :
-                    string.Join("; ", bad.Select(e => $"entrance at {e["at"]?.ToString(Formatting.None)}: " + (!(bool)e["connected"] ? (string)e["detail"] : $"{e["barrier"]} {e["barrierM"]} m across the drive"))));
-            }
-            else if (built && st.Markers.Count > 0) Check("entrancesOpen", null, "entrances placed but not measured");
-            var terrain = r["terrain"] as JObject;
-            if (terrain != null)
-            {
-                int samples = (int?)terrain["samples"] ?? 0;
-                Check("noPits", samples == 0 ? (bool?)null : (int)terrain["pitCellsNearRoads"] == 0,
-                    samples == 0 ? "no ground samples" : $"pit cells {terrain["pitCells"]} ({terrain["pitCellsNearRoads"]} near roads), max {terrain["maxPitDepth"]} m at {terrain["worstAt"]?.ToString(Formatting.None)}");
-            }
-            var gr = r["growables"] as JObject;
-            if (gr != null && ((int)gr["facingOwnRoad"] + (int)gr["facingCityRoad"]) > 0)
-                Check("growablesFaceOwnRoad", (int)gr["facingCityRoad"] == 0, $"{gr["facingOwnRoad"]} face the build's roads, {gr["facingCityRoad"]} face city streets");
-            var errs = r["errors"] as JObject;
-            Check("noErrors", errs == null ? (bool?)null : (int)errs["errors"] + (int)errs["exceptions"] == 0, errs == null ? "error log not read" : $"{errs["errors"]} errors, {errs["exceptions"]} exceptions");
-            float worstFrame = 0f;
-            string worstAt = "";
-            if (r["steps"] is JArray all)
-                foreach (var s in all.OfType<JObject>())
-                    if (s["frames"] is JObject f && f["maxMs"] != null && (float)f["maxMs"] > worstFrame && !Passive((string)s["do"])) { worstFrame = (float)f["maxMs"]; worstAt = $"step {s["i"]} {s["do"]}"; }
-            Check("noHang", worstFrame < 1000f, $"worst frame {worstFrame:F0} ms ({worstAt}; camera/shot/wait/grow steps not counted)");
-            foreach (var s in (r["steps"] as JArray ?? new JArray()).OfType<JObject>().Where(x => x["leftBehind"] is JObject))
-            {
-                var lb = (JObject)s["leftBehind"];
-                Check("deleteLeavesNothing", (int)lb["count"] == 0, lb.ToString(Formatting.None));
-            }
-            r["verdicts"] = v;
-            r["failed"] = new JArray(v.Where(x => (string)x["result"] == "fail").Select(x => (string)x["id"]));
-            r["unknown"] = new JArray(v.Where(x => (string)x["result"] == "unknown").Select(x => (string)x["id"]));
-        }
-
-        // ───────────── one scenario, batch or queue ─────────────
-
-        private IEnumerator RunOne(Scenario s)
-        {
-            ScenarioState st;
-            ScenarioState host = null;
-            string refused = null;
-            if (s.On != null)
-            {
-                // runs on an earlier scenario's block, outline, build and entrances — only while that build still stands
-                if (!_byId.TryGetValue(s.On, out host)) refused = $"'on' target {s.On} has not run in this session";
-                else if (host.Deleted) refused = $"'on' target {s.On} was deleted";
-                else if (!host.Built && host.S.Steps != null && host.S.Steps.Any(x => (string)x["do"] == "build")) refused = $"'on' target {s.On} has no build";
-                st = new ScenarioState { S = s };
-                if (host != null)
-                {
-                    st.Ring = host.Ring; st.Group = host.Group; st.Built = host.Built; st.Before = host.Before; st.Plan = host.Plan; st.Focus = host.Focus;
-                    st.Markers.AddRange(host.Markers);
-                    s.Block = host.S.Block;
-                }
-            }
-            else
-            {
-                st = new ScenarioState { S = s };
-                s.Block = _fixture.Take(s.Site);
-            }
-            st.FileIndex = _states.Count;
-            _states.Add(st);
-            _scenario = s.Id;
-            float t0 = Time.realtimeSinceStartup;
-            if (refused != null)
-            {
-                st.Result["id"] = s.Id;
-                st.Result["status"] = "refused";
-                st.Result["refused"] = refused;
-                Say($"scenario {s.Id} refused: {refused}");
-            }
-            else
-                yield return Guard(RunScenario(st), e =>
-                {
-                    Say($"scenario {s.Id} threw: {e}");
-                    st.Result["status"] = "error";
-                    st.Result["exception"] = e.GetType().Name + ": " + e.Message;
-                });
-            if (host != null && refused == null)
-            {
-                // what the steps did to the build belongs to its scenario too
-                host.Built = st.Built; host.Deleted = st.Deleted; host.Group = st.Group; host.Ring = st.Ring ?? host.Ring;
-                host.Markers.Clear();
-                host.Markers.AddRange(st.Markers);
-            }
-            st.Result["scenarioSec"] = Math.Round(Time.realtimeSinceStartup - t0, 1);
-            WriteScenario(st, st.FileIndex);
-            WriteSummary();
-            _lastRun = st;
-        }
-
-        private ScenarioState _lastRun;
-
-        // ───────────── live queue ─────────────
-
-        /// <summary>
-        /// Waits for scenario files in &lt;run&gt;/inbox (a scenario, a list {"scenarios": [...]}, or {"command": "quit"}), runs
-        /// them in name order, writes &lt;file&gt;.result.json beside them and moves each processed file to inbox/done.
-        /// </summary>
-        private IEnumerator QueueLoop()
-        {
-            _phase = "queue";
-            string inbox = Path.Combine(_out, "inbox"), done = Path.Combine(inbox, "done");
-            Directory.CreateDirectory(done);
-            _summary["inbox"] = inbox;
-            WriteSummary();
-            Say("queue: waiting for scenario files in " + inbox);
-            float idleSince = Time.realtimeSinceStartup;
-            bool quit = false;
-            while (!quit)
-            {
-                _scenario = "";
-                var files = Directory.GetFiles(inbox, "*.json").Where(f => !f.EndsWith(".result.json", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f, StringComparer.Ordinal).ToList();
-                if (files.Count == 0)
-                {
-                    if (Time.realtimeSinceStartup - idleSince > _cfg.queueIdleMinutes * 60f) { Say("queue: idle timeout"); break; }
-                    yield return Seconds(0.4f);
-                    continue;
-                }
-                foreach (var file in files)
-                {
-                    string name = Path.GetFileNameWithoutExtension(file);
-                    JObject doc;
-                    try
-                    {
-                        if ((DateTime.UtcNow - File.GetLastWriteTimeUtc(file)).TotalSeconds < 0.3) continue;   // still being written
-                        doc = JObject.Parse(File.ReadAllText(file));
-                    }
-                    catch (Exception e)
-                    {
-                        File.WriteAllText(Path.Combine(inbox, name + ".result.json"), new JObject { ["file"] = name, ["error"] = "unreadable: " + e.Message }.ToString(Formatting.Indented));
-                        MoveDone(file, done);
-                        continue;
-                    }
-                    var report = new JObject { ["file"] = name, ["startedUtc"] = DateTime.UtcNow.ToString("o") };
-                    string cmd = (string)doc["command"];
-                    if (cmd == "quit") { report["command"] = "quit"; quit = true; }
-                    else if (cmd == "grow")
-                    {
-                        _phase = "grow";
-                        yield return Guard(Grow((float?)doc["seconds"] ?? 30f, "grow-" + name), e => report["error"] = e.Message);
-                        report["grow"] = _summary["grow-" + name];
-                        _phase = "queue";
-                    }
-                    else
-                    {
-                        ScenarioSet set;
-                        try { set = doc["scenarios"] != null ? doc.ToObject<ScenarioSet>() : new ScenarioSet { scenarios = new List<ScenarioSpec> { doc.ToObject<ScenarioSpec>() } }; }
-                        catch (Exception e) { set = null; report["error"] = "bad scenario file: " + e.Message; }
-                        var rows = new JArray();
-                        if (set != null)
-                        {
-                            _phase = "queue-run";
-                            foreach (var s in Expand(set))
-                            {
-                                yield return RunOne(s);
-                                var st = _lastRun;
-                                Verdicts(st);
-                                WriteScenario(st, st.FileIndex);
-                                rows.Add(new JObject
-                                {
-                                    ["id"] = s.Id, ["status"] = st.Result["status"], ["failed"] = st.Result["failed"], ["sec"] = st.Result["scenarioSec"],
-                                    ["result"] = Path.Combine(_results, $"{st.FileIndex + 1:D2}-{Safe(s.Id)}.json"), ["shots"] = st.Result["shots"], ["waitsMs"] = st.Result["waitsMs"],
-                                });
-                            }
-                            _phase = "queue";
-                        }
-                        report["scenarios"] = rows;
-                    }
-                    report["finishedUtc"] = DateTime.UtcNow.ToString("o");
-                    File.WriteAllText(Path.Combine(inbox, name + ".result.json"), report.ToString(Formatting.Indented));
-                    MoveDone(file, done);
-                    WriteSummary();
-                    idleSince = Time.realtimeSinceStartup;
-                    if (quit) break;
-                }
-            }
-            yield return Guard(CloseTool(), e => Say("close tool: " + e.Message));
-        }
-
-        private static void MoveDone(string file, string done)
-        {
-            try
-            {
-                var to = Path.Combine(done, Path.GetFileName(file));
-                if (File.Exists(to)) File.Delete(to);
-                File.Move(file, to);
-            }
-            catch (Exception) { try { File.Delete(file); } catch (Exception) { } }
-        }
+        private static float StepPause(ScenarioState st) => st == null ? 0f : st.Pace == "human" ? 0.4f : st.Pace == "user" ? 0.05f : 0f;
     }
 }

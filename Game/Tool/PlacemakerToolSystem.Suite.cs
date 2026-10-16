@@ -45,16 +45,25 @@ namespace Placemaker.Game.Tool
             /// <summary>The entity under the cursor (a road node for Road nodes), Entity.Null for plain ground.</summary>
             public global::Unity.Entities.Entity Entity;
             public bool LeftDown, LeftHeld, RightDown, RightHeld, Shift, Ctrl, Alt;
+            /// <summary>The cursor is not over the world (on the panel, off the map): no hit, the hover clears.</summary>
+            public bool Away;
+            /// <summary>The game's own raycast result at the cursor's screen point (used instead of a hit built from At).</summary>
+            public bool HasRaw;
+            public global::Game.Common.RaycastHit Raw;
         }
 
         public static bool SuiteInputOnly;
         private static readonly System.Collections.Generic.Queue<SuiteFrame> s_suiteFrames = new System.Collections.Generic.Queue<SuiteFrame>();
         private static SuiteFrame s_suiteLast;
         private static bool s_suiteHasLast;
+        private static string s_suiteKey;
 
         public static int SuiteFramesPending => s_suiteFrames.Count;
 
         public static void SuiteQueue(SuiteFrame f) => s_suiteFrames.Enqueue(f);
+
+        /// <summary>Where the scripted cursor rests (null when it is away from the world, e.g. on the panel).</summary>
+        public static float3? SuiteCursor => s_suiteHasLast && !s_suiteLast.Away ? s_suiteLast.At : (float3?)null;
 
         /// <summary>A click: press at the point, then release there.</summary>
         public static void SuiteClick(float3 at, global::Unity.Entities.Entity entity = default, bool right = false, bool shift = false, bool ctrl = false)
@@ -62,6 +71,91 @@ namespace Placemaker.Game.Tool
             SuiteQueue(new SuiteFrame { At = at, Entity = entity, LeftDown = !right, LeftHeld = !right, RightDown = right, RightHeld = right, Shift = shift, Ctrl = ctrl });
             SuiteQueue(new SuiteFrame { At = at, Entity = entity, Shift = shift, Ctrl = ctrl });
         }
+
+        /// <summary>A click with the game's raycast result at the cursor (what a real click hits there).</summary>
+        /// <summary>(The tool reads a raycast result as ToolBaseSystem.GetRaycastResult does: the entity is the result's owner, the hit is its hit.)</summary>
+        public static void SuiteClickHit(global::Unity.Entities.Entity owner, global::Game.Common.RaycastHit hit, bool right = false, bool shift = false)
+        {
+            var at = hit.m_HitPosition;
+            SuiteQueue(new SuiteFrame { At = at, Entity = owner, HasRaw = true, Raw = hit, LeftDown = !right, LeftHeld = !right, RightDown = right, RightHeld = right, Shift = shift });
+            SuiteQueue(new SuiteFrame { At = at, Entity = owner, HasRaw = true, Raw = hit, Shift = shift });
+        }
+
+        /// <summary>The cursor glides over the world (hover frames, no buttons) from one point to another.</summary>
+        public static void SuiteHover(float3 from, float3 to, int frames)
+        {
+            for (int k = 1; k <= frames; k++) SuiteQueue(new SuiteFrame { At = math.lerp(from, to, k / (float)frames) });
+        }
+
+        /// <summary>The cursor leaves the world (moves onto the panel): no hit until the next scripted frame.</summary>
+        public static void SuiteCursorAway()
+        {
+            s_suiteLast = new SuiteFrame { Away = true };
+            s_suiteHasLast = true;
+        }
+
+        /// <summary>A scene starts clean: no queued frames, no key, the cursor off the world. Returns the frames that were still queued.</summary>
+        public static int SuiteResetInput()
+        {
+            int n = s_suiteFrames.Count;
+            s_suiteFrames.Clear();
+            s_suiteKey = null;
+            SuiteCursorAway();
+            return n;
+        }
+
+        /// <summary>A key press handled like the real one in HandleKeys: "enter", "esc", "undo", "redo".</summary>
+        public static void SuiteKey(string key) => s_suiteKey = key;
+
+        public static bool SuiteKeyPending => s_suiteKey != null;
+
+        /// <summary>HandleKeys for a suite run: the scripted key, with the same guards as the real key path.</summary>
+        private bool HandleSuiteKey()
+        {
+            var k = s_suiteKey;
+            if (k == null) return false;
+            s_suiteKey = null;
+            switch (k)
+            {
+                case "esc": Escape(); return true;
+                case "enter": Primary(); return true;
+                case "undo": if (_gesture == Gesture.None) { Undo(); return true; } return false;
+                case "redo": if (_gesture == Gesture.None) { Redo(); return true; } return false;
+            }
+            return false;
+        }
+
+        /// <summary>How the last build started: "instant" (adopted the shown ghost) or "start" (the build service ran the plan).</summary>
+        public string SuiteLastBuildPath { get; private set; } = "";
+
+        /// <summary>A scene starts with no history of the previous one (the undo stack holds only the current state).</summary>
+        public void SuiteResetHistory()
+        {
+            CancelGesture();
+            ExitMarkerMode();
+            _history.Reset(Capture());
+        }
+
+        /// <summary>The selection is not empty.</summary>
+        public bool SuiteHasSelection => HasSelection();
+
+        /// <summary>The value the design holds for a control, null when the step or value is missing.</summary>
+        public object SuiteValue(string path, string controlId)
+        {
+            var step = RecipePaths.Resolve(_recipe, path ?? "0");
+            if (step == null || step.Settings == null) return null;
+            return step.Settings.Values.TryGetValue(controlId ?? "", out var v) ? v : null;
+        }
+
+        /// <summary>The control schema for a design step (null when the step or control is unknown).</summary>
+        public ControlSchema SuiteControl(string path, string controlId)
+        {
+            var step = RecipePaths.Resolve(_recipe, path ?? "0");
+            return step == null ? null : DesignEditor.FindControl(GeneratorRegistry.Get(step.Layer), controlId);
+        }
+
+        /// <summary>The Make-row recipe id of a type (the tile a person clicks), null when none.</summary>
+        public string SuiteRecipeFor(string layerId) => RecipeFor(Placemaker.Core.Layers.Common.LayerAliases.Canonical(layerId));
 
         /// <summary>A drag: press at the first point, held through the rest (steps per segment), released at the last.</summary>
         public static void SuiteDrag(float3[] path, int stepsPerSegment, bool right = false)
@@ -82,13 +176,14 @@ namespace Placemaker.Game.Tool
             _in.OverWorld = true;
             SuiteFrame f;
             if (s_suiteFrames.Count > 0) { f = s_suiteFrames.Dequeue(); s_suiteLast = f; s_suiteHasLast = true; }
-            else if (s_suiteHasLast) f = new SuiteFrame { At = s_suiteLast.At, Entity = s_suiteLast.Entity };
-            else { _in.LeftReleased = true; return; }
+            else if (s_suiteHasLast) f = new SuiteFrame { At = s_suiteLast.At, Entity = s_suiteLast.Entity, Away = s_suiteLast.Away, HasRaw = s_suiteLast.HasRaw, Raw = s_suiteLast.Raw };
+            else { _in.LeftReleased = true; _in.OverWorld = false; return; }
+            if (f.Away) { _in.OverWorld = false; _in.LeftReleased = true; return; }   // on the panel: no hit, the hover clears
             var at = math.isfinite(f.At.y) ? f.At : WithHeight(new float3(f.At.x, 0f, f.At.z));
             _in.HasHit = true;
             _in.Hit = at;
             _in.HitEntity = f.Entity;
-            _in.RawHit = new global::Game.Common.RaycastHit { m_HitEntity = f.Entity, m_Position = at, m_HitPosition = at };
+            _in.RawHit = f.HasRaw ? f.Raw : new global::Game.Common.RaycastHit { m_HitEntity = f.Entity, m_Position = at, m_HitPosition = at };
             _in.LeftPressed = f.LeftDown;
             _in.LeftHeld = f.LeftHeld;
             _in.LeftReleased = !f.LeftHeld;

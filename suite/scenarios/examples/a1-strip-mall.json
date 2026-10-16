@@ -1,0 +1,18 @@
+{
+  "_goal": "Strip mall on a block between an avenue (south) and a small street (north); after growth the shops must face the build's own lane; every drive connection gets a close-up.",
+  "id": "a1-strip-mall",
+  "site": "flat",
+  "streets": { "south": "Medium Road", "north": "Small Road" },
+  "steps": [
+    { "do": "area", "tool": "bucket" },
+    { "do": "type", "layer": "stripMall", "preset": "classic" },
+    { "do": "entrances" },
+    { "do": "preview", "shot": "preview" },
+    { "do": "build" },
+    { "do": "camera", "target": "build", "view": "top", "shot": "built-top", "shotMode": "render" },
+    { "do": "camera", "target": "connection", "index": "all", "view": "closeup", "shot": "drive", "shotMode": "render" },
+    { "do": "grow", "seconds": 60 },
+    { "do": "camera", "target": "build", "view": "oblique", "shot": "grown-oblique", "shotMode": "render" },
+    { "do": "camera", "target": "build", "view": "top", "shot": "grown-top", "shotMode": "render" }
+  ]
+}

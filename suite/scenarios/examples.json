@@ -1,0 +1,299 @@
+{
+  "set": "examples",
+  "description": "The four architect scenarios (suite/scenarios/examples) as one set.",
+  "grow": false,
+  "scenarios": [
+    {
+      "_goal": "Strip mall on a block between an avenue (south) and a small street (north); after growth the shops must face the build's own lane; every drive connection gets a close-up.",
+      "id": "a1-strip-mall",
+      "site": "flat",
+      "streets": {
+        "south": "Medium Road",
+        "north": "Small Road"
+      },
+      "steps": [
+        {
+          "do": "area",
+          "tool": "bucket"
+        },
+        {
+          "do": "type",
+          "layer": "stripMall",
+          "preset": "classic"
+        },
+        {
+          "do": "entrances"
+        },
+        {
+          "do": "preview",
+          "shot": "preview"
+        },
+        {
+          "do": "build"
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "top",
+          "shot": "built-top",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "connection",
+          "index": "all",
+          "view": "closeup",
+          "shot": "drive",
+          "shotMode": "render"
+        },
+        {
+          "do": "grow",
+          "seconds": 60
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "oblique",
+          "shot": "grown-oblique",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "top",
+          "shot": "grown-top",
+          "shotMode": "render"
+        }
+      ]
+    },
+    {
+      "_goal": "Parking lot on rough ground; stalls on usable ground (no pits or mounds), entrance usable; low views across the lot from two sides.",
+      "id": "a2-parking-rough",
+      "site": "rough",
+      "steps": [
+        {
+          "do": "area",
+          "tool": "bucket"
+        },
+        {
+          "do": "type",
+          "layer": "parking",
+          "preset": "compact"
+        },
+        {
+          "do": "entrance",
+          "side": "south",
+          "t": 0.5
+        },
+        {
+          "do": "preview",
+          "shot": "preview"
+        },
+        {
+          "do": "issues"
+        },
+        {
+          "do": "build"
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "top",
+          "shot": "top",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "point",
+          "at": [
+            0,
+            0
+          ],
+          "view": "low",
+          "shot": "centre-low",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "point",
+          "at": [
+            0,
+            0
+          ],
+          "view": "low",
+          "yaw": 115,
+          "shot": "centre-low-side",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "entrance",
+          "index": 0,
+          "view": "closeup",
+          "shot": "entrance",
+          "shotMode": "render"
+        }
+      ]
+    },
+    {
+      "_goal": "On one block, switch through every plaza style like a person (Design, the style chips) and record each plan time and frame hitch; summary.md lists them per step.",
+      "id": "a3-plaza-presets",
+      "site": "flat",
+      "steps": [
+        {
+          "do": "area",
+          "tool": "bucket"
+        },
+        {
+          "do": "type",
+          "layer": "plaza",
+          "preset": "civic"
+        },
+        {
+          "do": "preset",
+          "preset": "fountain"
+        },
+        {
+          "do": "preset",
+          "preset": "market"
+        },
+        {
+          "do": "preset",
+          "preset": "garden"
+        },
+        {
+          "do": "preset",
+          "preset": "sunken"
+        },
+        {
+          "do": "preset",
+          "preset": "amphitheatre"
+        },
+        {
+          "do": "preset",
+          "preset": "terraced"
+        },
+        {
+          "do": "preset",
+          "preset": "cafe"
+        },
+        {
+          "do": "preset",
+          "preset": "splitLevel"
+        },
+        {
+          "do": "preset",
+          "preset": "cascade"
+        },
+        {
+          "do": "preset",
+          "preset": "podium"
+        },
+        {
+          "do": "preset",
+          "preset": "sunkenCourt"
+        },
+        {
+          "do": "preset",
+          "preset": "piazza"
+        },
+        {
+          "do": "preset",
+          "preset": "green",
+          "shot": "last-style",
+          "camera": {
+            "target": "build",
+            "view": "oblique"
+          }
+        }
+      ]
+    },
+    {
+      "_goal": "Build a parking lot, edit the build (select it, Edit), move its entrance to the east street, rebuild, and compare: census before/after, nothing of the first build left behind (noUntrackedPieces), before/after pictures from the same cameras.",
+      "id": "a4-edit-rebuild",
+      "site": "flat",
+      "steps": [
+        {
+          "do": "area",
+          "tool": "bucket"
+        },
+        {
+          "do": "type",
+          "layer": "parking",
+          "preset": "compact"
+        },
+        {
+          "do": "entrance",
+          "side": "south",
+          "t": 0.5
+        },
+        {
+          "do": "build"
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "top",
+          "shot": "before-top",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "entrance",
+          "index": 0,
+          "view": "closeup",
+          "shot": "before-entrance",
+          "shotMode": "render"
+        },
+        {
+          "do": "edit",
+          "build": true
+        },
+        {
+          "do": "moveEntrance",
+          "index": 0,
+          "side": "east",
+          "t": 0.5
+        },
+        {
+          "do": "preview",
+          "shot": "after-preview"
+        },
+        {
+          "do": "build"
+        },
+        {
+          "do": "camera",
+          "target": "build",
+          "view": "top",
+          "shot": "after-top",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "entrance",
+          "index": 0,
+          "view": "closeup",
+          "shot": "after-entrance",
+          "shotMode": "render"
+        },
+        {
+          "do": "camera",
+          "target": "point",
+          "at": [
+            0,
+            -70
+          ],
+          "view": "closeup",
+          "shot": "old-entrance-spot",
+          "shotMode": "render"
+        },
+        {
+          "do": "compare",
+          "a": 1,
+          "b": 2
+        }
+      ]
+    }
+  ]
+}

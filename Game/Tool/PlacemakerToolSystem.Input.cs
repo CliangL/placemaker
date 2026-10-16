@@ -77,7 +77,7 @@ namespace Placemaker.Game.Tool
         /// <summary>Esc, Enter and undo/redo. Returns true when the frame's input was consumed.</summary>
         private bool HandleKeys()
         {
-            if (SuiteInputOnly) return false;   // a suite run: real keys are ignored
+            if (SuiteInputOnly) return HandleSuiteKey();   // a suite run: real keys are ignored, scripted keys take the same path
             var im = InputManager.instance;
             if (im != null && im.hasInputFieldFocus) return false;
             if (SafePressed(cancelAction)) { Escape(); return true; }

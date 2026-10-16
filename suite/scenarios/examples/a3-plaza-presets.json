@@ -1,0 +1,22 @@
+{
+  "_goal": "On one block, switch through every plaza style like a person (Design, the style chips) and record each plan time and frame hitch; summary.md lists them per step.",
+  "id": "a3-plaza-presets",
+  "site": "flat",
+  "steps": [
+    { "do": "area", "tool": "bucket" },
+    { "do": "type", "layer": "plaza", "preset": "civic" },
+    { "do": "preset", "preset": "fountain" },
+    { "do": "preset", "preset": "market" },
+    { "do": "preset", "preset": "garden" },
+    { "do": "preset", "preset": "sunken" },
+    { "do": "preset", "preset": "amphitheatre" },
+    { "do": "preset", "preset": "terraced" },
+    { "do": "preset", "preset": "cafe" },
+    { "do": "preset", "preset": "splitLevel" },
+    { "do": "preset", "preset": "cascade" },
+    { "do": "preset", "preset": "podium" },
+    { "do": "preset", "preset": "sunkenCourt" },
+    { "do": "preset", "preset": "piazza" },
+    { "do": "preset", "preset": "green", "shot": "last-style", "camera": { "target": "build", "view": "oblique" } }
+  ]
+}
