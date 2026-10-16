@@ -22,20 +22,36 @@ namespace Placemaker.Tests
         {
             var plan = CommercialS32Tests.Compose(type, "", site, out var ctx);
             var nets = plan.Layers.SelectMany(l => l.Nets).Where(n => ZoneBlockPredictor.Zones(n.Role)).ToList();
-            var plots = plan.Layers.SelectMany(l => l.Zoning).Select(z => 0.25f * (z.A.xz + z.B.xz + z.C.xz + z.D.xz)).ToList();
+            var plots = plan.Layers.SelectMany(l => l.Zoning).Select(z => new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz }).ToList();
             Assert.NotEmpty(plots);
-            // Every plot whose nearest road is one of our lanes keeps that side zoning.
-            foreach (var p in plots)
+            // Every plot keeps zoning on the side of the lane its front runs along (shops3: not the lane nearest its centre, which
+            // at a row's end is the lane crossing it). The front: the plot side lying closest along a road (beyond its half width).
+            float Along(float2 a, float2 b, float3 A, float3 B, float3 C, float3 D, float half)
             {
-                PlannedNet best = null; float bd = float.MaxValue; int bs = 0;
-                foreach (var n in nets)
+                var dir = math.normalizesafe(b - a);
+                float sum = 0f;
+                foreach (float u in new[] { 0.2f, 0.5f, 0.8f })
                 {
-                    float d = LaneSides.SideOf(n, p, out int s) - ZoneGuard.NetWidth(n, ctx) * 0.5f;
-                    if (d < bd) { bd = d; best = n; bs = s; }
+                    var p = math.lerp(a, b, u);
+                    int bk = 0; float bd = float.MaxValue;
+                    for (int k = 0; k <= 64; k++) { float d = math.distance(Composer.Bezier(A, B, C, D, k / 64f).xz, p); if (d < bd) { bd = d; bk = k; } }
+                    var tan = math.normalizesafe(Composer.Bezier(A, B, C, D, math.min(1f, bk / 64f + 0.01f)).xz - Composer.Bezier(A, B, C, D, math.max(0f, bk / 64f - 0.01f)).xz);
+                    if (bd - half > LaneSides.FrontReach || math.abs(math.dot(tan, dir)) < 0.9f) return float.MaxValue;
+                    sum += math.max(0f, bd - half);
                 }
-                if (best == null || bd > LaneSides.BlockDepth) continue;
-                bool cityNearer = ctx.NearbyNets.Any(c => Enumerable.Range(0, 17).Min(k => math.distance(Composer.Bezier(c.A, c.B, c.C, c.D, k / 16f).xz, p)) - c.Width * 0.5f < bd);
-                if (cityNearer) continue;
+                return sum / 3f;
+            }
+            foreach (var q in plots)
+            {
+                PlannedNet best = null; float bd = float.MaxValue;
+                for (int e = 0; e < 4; e++)
+                {
+                    float2 a = q[e], b = q[(e + 1) % 4];
+                    foreach (var n in nets) { float d = Along(a, b, n.A, n.B, n.C, n.D, ZoneGuard.NetWidth(n, ctx) * 0.5f); if (d < bd) { bd = d; best = n; } }
+                    foreach (var c in ctx.NearbyNets) { float d = Along(a, b, c.A, c.B, c.C, c.D, c.Width * 0.5f); if (d < bd) { bd = d; best = null; } }
+                }
+                if (best == null) continue;   // a street plot (or no road along it)
+                LaneSides.SideOf(best, 0.25f * (q[0] + q[1] + q[2] + q[3]), out int bs);
                 Assert.DoesNotContain(bs > 0 ? LaneSides.RightOff : LaneSides.LeftOff, best.Upgrades ?? new string[0]);
             }
         }

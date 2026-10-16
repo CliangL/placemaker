@@ -30,7 +30,7 @@ namespace Placemaker.Tests
         private static Dictionary<string, AssetInfo> _catalog;
 
         /// <summary>The gallery's asset fixture (net widths, footprints): what the planners see in the game.</summary>
-        private static Dictionary<string, AssetInfo> Catalog()
+        internal static Dictionary<string, AssetInfo> Catalog()
         {
             if (_catalog != null) return _catalog;
             var root = JsonNode.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(TestKit.RepoRoot(), "Tests", "Placemaker.Tests", "Fixtures", "catalog-bounds.json")));
