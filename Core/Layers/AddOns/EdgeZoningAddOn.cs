@@ -247,11 +247,20 @@ namespace Placemaker.Core.Layers.AddOns
         private static float Seg2DistanceTo(float2 c0, float2 c1, float2 a, float2 b) =>
             math.min(math.min(Dist(a, c0, c1), Dist(b, c0, c1)), math.min(Dist(c0, a, b), Dist(c1, a, b)));
 
+        /// <summary>
+        /// A proper crossing: each segment's ends lie more than 1 cm on either side of the other's line. (shops3) Distances, not the
+        /// raw cross products: a quad side running along the outline (collinear) a little askew, hundreds of metres from the origin,
+        /// leaves ~1e-3 m² of float noise in the products; against the old 1e-4 that read as a crossing and cut half a strip mall
+        /// row's quads to one cell (game run show-6-builds-1016-140401: plots "preview 8, 4, 8, 4", 46 cells planned for ~64).
+        /// </summary>
         private static bool StrictCross(float2 p, float2 q, float2 a, float2 b)
         {
-            float d1 = Poly.Cross(b - a, p - a), d2 = Poly.Cross(b - a, q - a);
-            float d3 = Poly.Cross(q - p, a - p), d4 = Poly.Cross(q - p, b - p);
-            return ((d1 > 1e-4f && d2 < -1e-4f) || (d1 < -1e-4f && d2 > 1e-4f)) && ((d3 > 1e-4f && d4 < -1e-4f) || (d3 < -1e-4f && d4 > 1e-4f));
+            const float eps = 0.01f;
+            float lab = math.length(b - a), lpq = math.length(q - p);
+            if (lab < 1e-6f || lpq < 1e-6f) return false;
+            float d1 = Poly.Cross(b - a, p - a) / lab, d2 = Poly.Cross(b - a, q - a) / lab;
+            float d3 = Poly.Cross(q - p, a - p) / lpq, d4 = Poly.Cross(q - p, b - p) / lpq;
+            return ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) && ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps));
         }
 
         private static float Dist(float2 p, float2 a, float2 b)
