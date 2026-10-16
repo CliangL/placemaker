@@ -120,7 +120,9 @@ namespace Placemaker.Core.Layers.Leisure
             foreach (var st in _streets) Take(st);
             Crossings();
             _ctx.Check();
-            Hub();
+            // The market cross is open paving where the streets meet: its benches and trees may stand where the streets run through it.
+            _streetMode = true;
+            try { Hub(); } finally { _streetMode = false; }
             Courts();
             Terminus();
             Gates();
@@ -231,7 +233,7 @@ namespace Placemaker.Core.Layers.Leisure
             _spine = new Street { Line = line, Half = half, Rank = 0 };
             if (_spineOnGrid) { _spine.AlongAxis = true; _spine.Coord = math.dot(_hub - _hub, _s); }
             _streets.Add(_spine);
-            _hubR = math.clamp(_ins * 0.12f, 9f, 14f);
+            _hubR = math.clamp(_ins * 0.16f, 11f, 15f);
             if (_ins < 30f) _hubR = math.max(6f, _ins * 0.3f);
         }
 
@@ -496,7 +498,8 @@ namespace Placemaker.Core.Layers.Leisure
             string kind = ctx.S("centerKind");
             if (string.IsNullOrEmpty(kind) || kind == "none") kind = "fountain";
             float coreR = math.clamp(_ins * 0.1f, 4.5f, 7.5f);
-            coreR = math.min(coreR, _hubR - 3.5f);
+            // Room round the centre for a ring of benches and the four trees (at hubR − 1.8, 1.2 m crowns).
+            coreR = math.min(coreR, _hubR - 4.6f);
             if (coreR < 3f) coreR = 3f;
             bool planted = PlazaDressing.CentreAssetsMissing(ctx);
             string sub = PlazaDressing.CenterCategory(kind == "any" ? "fountain" : kind);
@@ -509,6 +512,8 @@ namespace Placemaker.Core.Layers.Leisure
             else
             {
                 var asset = PlazaDressing.CenterAsset(ctx, kind == "any" ? "fountain" : kind);
+                // A small market cross takes the small fountain (the grand one is 9 m across).
+                if (kind != "statue" && coreR < 5.5f && string.IsNullOrEmpty(ctx.S("centerpiece"))) asset = PlazaArt.SmallFountain;
                 ctx.Object(_hub, math.atan2(_a.x, _a.y), ObjectRole.Centerpiece, asset, Hashing.Mix(ctx.Seed, 0xCE0u), -1, cat);
                 _occ.Take(_hub, coreR, 0);
                 _inlayPieces.Add(LayerRegion.Circle(_hub, coreR, 32, 0f));
@@ -517,7 +522,7 @@ namespace Placemaker.Core.Layers.Leisure
                 {
                     float ang = math.atan2(_a.y, _a.x) + (k + 0.5f) * 2f * math.PI / benches;
                     var dir = new float2(math.cos(ang), math.sin(ang));
-                    if (LeisureKit.Put(ctx, _occ, _hub + dir * (coreR + 1.6f), math.atan2(-dir.x, -dir.y), ObjectRole.Bench, PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0), null, 0.9f,
+                    if (Put(_hub + dir * (coreR + 1.6f), math.atan2(-dir.x, -dir.y), ObjectRole.Bench, PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0), null, 0.9f,
                         Hashing.Mix(ctx.Seed, 0xCE10u + (uint)k), 0.2f, 0.1f)) _benches++;
                 }
             }
@@ -526,15 +531,15 @@ namespace Placemaker.Core.Layers.Leisure
             {
                 float ang = math.atan2(_a.y, _a.x) + math.PI * 0.25f + k * math.PI * 0.5f;
                 var dir = new float2(math.cos(ang), math.sin(ang));
-                Tree(_hub + dir * (_hubR - 2.2f), 0x7500u + (uint)k, true);
-                var lp = _hub + dir * (_hubR - 2.2f) + new float2(-dir.y, dir.x) * 2.6f;
-                if (LeisureKit.Put(ctx, _occ, lp, 0f, ObjectRole.Lamp, PlazaArt.Or(ctx, "lampAsset", PlazaArt.ParkLamp), null, 0.4f, Hashing.Mix(ctx.Seed, 0x7510u + (uint)k), 0.2f, 0.1f)) _lamps++;
+                Tree(_hub + dir * (_hubR - 1.8f), 0x7500u + (uint)k, true);
+                var lp = _hub + dir * (_hubR - 1.8f) + new float2(-dir.y, dir.x) * 2.6f;
+                if (Put(lp, 0f, ObjectRole.Lamp, PlazaArt.Or(ctx, "lampAsset", PlazaArt.ParkLamp), null, 0.4f, Hashing.Mix(ctx.Seed, 0x7510u + (uint)k), 0.2f, 0.1f)) _lamps++;
             }
             for (int k = 0; k < 2; k++)
             {
                 float ang = math.atan2(_a.y, _a.x) + math.PI * 0.25f + k * math.PI;
                 var dir = new float2(math.cos(ang), math.sin(ang));
-                LeisureKit.Put(ctx, _occ, _hub + dir * (_hubR - 4.6f), 0f, ObjectRole.Bin, PlazaArt.Bin, null, 0.4f, Hashing.Mix(ctx.Seed, 0x7520u + (uint)k), 0.2f, 0.1f);
+                Put(_hub + dir * (_hubR - 4.6f), 0f, ObjectRole.Bin, PlazaArt.Bin, null, 0.4f, Hashing.Mix(ctx.Seed, 0x7520u + (uint)k), 0.2f, 0.1f);
             }
             _occ.Take(_hub, _hubR, 0);
             _focalPieces.Add(PavingShapes.Polygon(_hub, _hubR, 40, math.atan2(_a.y, _a.x)));
