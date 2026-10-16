@@ -162,7 +162,7 @@ namespace Placemaker.Core.Layers.Commercial
             switch (centre)
             {
                 case "farmers": ok = mall.FillOpen(strip, "marketSquare", "farmers", doors, null, 0xE01u); break;
-                case "cafe": ok = mall.FillOpen(strip, "plaza", "cafe", doors, null, 0xE02u); break;
+                case "cafe": ok = mall.FillOpen(strip, "plaza", "cafe", doors, null, 0xE02u, b => b.Values["palette"] = GroundPalettes.Classic); break;   // (shops) grey paving, not a sand strip
                 case "garden": ok = mall.FillOpen(strip, "plaza", "garden", doors, null, 0xE03u); break;
                 case "trees": mall.Green(strip, 0xE04u, 8f); ok = true; break;
                 default: ok = mall.FillOpen(strip, "marketSquare", "weekly", doors, null, 0xE05u); break;

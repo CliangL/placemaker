@@ -141,7 +141,7 @@ namespace Placemaker.Core.Layers.Commercial
                 // The plaza is as wide as the shop block (the rows end on it); its fountain on the street's axis.
                 float pw = math.max(plaza, 2f * (hs + d));
                 var square = Mall.Rect(r, c - pw * 0.5f, c + pw * 0.5f, len, len + plaza);
-                if (!mall.FillOpen(square, "plaza", "fountain", null, new[] { r.At(c, len) }, 0xC1u, null, false)
+                if (!mall.FillOpen(square, "plaza", "fountain", null, new[] { r.At(c, len) }, 0xC1u, Paved, false)
                     && !mall.Fill(square, "plaza", null, new[] { r.At(c, len) }, 0xC5u))
                     ctx.Issue(IssueSeverity.Info, FallbackKey);
             }
@@ -172,7 +172,7 @@ namespace Placemaker.Core.Layers.Commercial
             Leg(mall, r, rr - hs, -1f, 0f, depth, cells);
             mall.ShopRow(r, l + hs + d, rr - hs - d, depth, cells, -1f);
             var court = Mall.Rect(r, l + hs + d, rr - hs - d, 0f, depth - d);
-            if (!mall.FillOpen(court, "plaza", "fountain", null, null, 0xC2u) && !mall.Fill(court, "plaza", null, null, 0xC6u)) mall.Fill(court, "park", "pocket", null, 0xC3u);
+            if (!mall.FillOpen(court, "plaza", "fountain", null, null, 0xC2u, Paved) && !mall.Fill(court, "plaza", null, null, 0xC6u)) mall.Fill(court, "park", "pocket", null, 0xC3u);
             blockL = l - hs - d; blockR = rr + hs + d;
             return true;
         }
@@ -269,7 +269,7 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 mall.Release(square);
                 var sd = green != null ? new[] { r.At(c, len), r.At(c, g0) } : new[] { r.At(c, len) };
-                if (!mall.FillOpen(square, "plaza", "fountain", null, sd, 0xC21u, null, false)) mall.Fill(square, "plaza", null, sd, 0xC22u);
+                if (!mall.FillOpen(square, "plaza", "fountain", null, sd, 0xC21u, Paved, false)) mall.Fill(square, "plaza", null, sd, 0xC22u);
             }
             if (green != null)
             {
@@ -298,6 +298,9 @@ namespace Placemaker.Core.Layers.Commercial
                     if (mall.Shop(Mall.Rect(r, edge, edge + dir * dd * Mall.Cell, a, b))) break;
             }
         }
+
+        /// <summary>(shops) The plaza in grey paving: the fountain style's sandstone read as a sand lot in the game.</summary>
+        private static void Paved(SettingsBag b) => b.Values["palette"] = GroundPalettes.Classic;
 
         protected override bool KeepsPark(LayerContext ctx) => ctx.B("extraGreen");
 
