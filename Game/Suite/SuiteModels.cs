@@ -33,6 +33,8 @@ namespace Placemaker.Game.Suite
         /// <summary>Stop after the fixture (bootstrap check).</summary>
         public bool fixtureOnly;
         public bool quit = true;
+        /// <summary>Playground for the user: build the fixture, frame the grid, give the mouse and keys back, run nothing, never quit.</summary>
+        public bool playground;
         /// <summary>Keep the map's terrain as it is (no heightmap replacement: no flat, slope or rough blocks).</summary>
         public bool noTerrain;
         /// <summary>"map:&lt;display name&gt;": the vanilla map the new game starts on (the fixture area is reshaped in place).</summary>

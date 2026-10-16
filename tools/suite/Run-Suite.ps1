@@ -51,6 +51,7 @@ param(
     # Compare with an earlier run when done (writes compare-<Baseline>.md).
     [string]$Baseline = '',
     [switch]$RestoreOnly,
+    [switch]$Playground,
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
 )
 
@@ -112,6 +113,7 @@ function Restore-Settings([string]$why) {
 function Release-Lock { if (Test-Path $lockFile) { try { $l = Get-Content $lockFile -Raw | ConvertFrom-Json; if ($l.pid -eq $PID) { Remove-Item $lockFile -Force } } catch { } } }
 
 if ($RestoreOnly) { Restore-Settings 'restore only'; exit 0 }
+if ($Playground) { $UserModSettings = $true }   # the user plays with their own Placemaker options
 
 # ───────────── 1. lock and preflight ─────────────
 if (Test-Path $lockFile) {
@@ -239,7 +241,7 @@ $cfg = [ordered]@{
     runId = $RunId; set = $Set; outDir = $runDir; scenarioFile = $scenarioFile; schemaFile = $schemaFile; git = $git; dllHash = $dllHash
     expiresUtc = (Get-Date).ToUniversalTime().AddMinutes(25).ToString('o')
     speed = 4; pregrowSeconds = $PregrowSeconds; growSeconds = $GrowSeconds; maxScenarios = $MaxScenarios
-    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap'); quit = $true; shotWidth = [int]$w; shotHeight = [int]$h; noTerrain = [bool]$NoTerrain; queue = [bool]$Queue
+    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap' -or [bool]$Playground); quit = (-not $Playground); playground = [bool]$Playground; shotWidth = [int]$w; shotHeight = [int]$h; noTerrain = [bool]$NoTerrain; queue = [bool]$Queue
     userModSettings = [bool]$UserModSettings; look = $Look; pace = $Pace; profile = $(if ($AllMods) { 'full' } else { 'clean' })
 }
 if ($Grid -match '^(\d+)x(\d+)$') { $cfg['nx'] = [int]$Matches[1]; $cfg['nz'] = [int]$Matches[2] }
@@ -303,6 +305,7 @@ try {
         }
         $elapsed = ($now - $launchedAt).TotalSeconds
         if (-not $everBeat -and $elapsed -gt $bootLimit) { $status = 'boot-timeout'; Say "no heartbeat after $bootLimit s"; break }
+        if ($Playground -and $lastPhase -eq 'playground') { continue }   # the user plays: no watchdog, no timeout; wait for the game to close
         if ($everBeat -and ($now - $lastBeatChange).TotalSeconds -gt $staleLimit) { $status = 'hung'; Say "heartbeat stale for $staleLimit s in phase '$lastPhase'"; break }
         if ($elapsed -gt $TimeoutMin * 60) { $status = 'timeout'; Say "overall timeout ($TimeoutMin min)"; break }
         if ($beat -and $beat.phase -eq 'quit') {

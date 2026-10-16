@@ -421,6 +421,12 @@ namespace Placemaker.Game.Suite
             PinSettings(set);
             WriteSummary();
 
+            if (_cfg.playground)
+            {
+                yield return Playground();
+                yield break;
+            }
+
             if (scenarios != null)
             {
                 _total = scenarios.Count;
@@ -509,6 +515,27 @@ namespace Placemaker.Game.Suite
             string git = (_cfg.git ?? "").Replace("-dirty", "");
             if (asmHash.Length > 0 && git.Length > 0 && !asmHash.StartsWith(git, StringComparison.OrdinalIgnoreCase) && !git.StartsWith(asmHash, StringComparison.OrdinalIgnoreCase))
                 _summary["gitMismatch"] = $"the run is labelled git {_cfg.git} but the assembly says {asm}";
+        }
+
+        /// <summary>The user's playground: frame the grid at 45°, hand the mouse and keys back, unpause, and stay out of the way.</summary>
+        private IEnumerator Playground()
+        {
+            _phase = "playground";
+            var L = _fixture.Layout;
+            var pivot = new float3((L.LineX(0) + L.LineX(L.NX)) * 0.5f, L.Base, (L.LineZ(0) + L.LineZ(L.NZ)) * 0.5f);
+            float span = math.max(math.abs(L.LineX(L.NX) - L.LineX(0)), math.abs(L.LineZ(L.NZ) - L.LineZ(0)));
+            var rec = new JObject();
+            yield return Guard(CameraTo(pivot, 25f, 45f, math.max(400f, span * 0.9f), rec, null), e => Say("playground camera: " + e.Message));
+            PlacemakerToolSystem.SuiteInputOnly = false;   // the user's mouse and keys work again
+            try { _world.GetOrCreateSystemManaged<SimulationSystem>().selectedSpeed = 1f; } catch (Exception e) { Say("playground speed: " + e.Message); }
+            _summary["playground"] = rec;
+            Say("playground ready: the grid is framed, the controls are yours; the suite does nothing more");
+            WriteSummary();
+            while (true)
+            {
+                Beat();
+                yield return new WaitForSecondsRealtime(5f);
+            }
         }
 
         private IEnumerator Quit()
