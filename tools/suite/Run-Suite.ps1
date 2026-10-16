@@ -232,7 +232,7 @@ if (-not $KeepGraphics) {
 # ───────────── arm ─────────────
 New-Item -ItemType Directory -Force -Path $suiteData | Out-Null
 $setName = if ($Set -in @('bootstrap', 'queue')) { 'smoke' } else { $Set }
-$scenarioFile = if (Test-Path $setName) { (Resolve-Path $setName).Path } else { Join-Path $repo "suite\scenarios\$setName.json" }
+$scenarioFile = if ($setName -match "[\/.]" -and (Test-Path $setName -PathType Leaf)) { (Resolve-Path $setName).Path } else { Join-Path $repo "suite\scenarios\$setName.json" }
 if (-not (Test-Path $scenarioFile)) { Say "STOP: no scenario set $scenarioFile"; Restore-Settings 'stopped'; exit 2 }
 $schemaFile = Join-Path $repo 'suite\schema.json'
 $cfg = [ordered]@{
