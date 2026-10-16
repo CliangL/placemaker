@@ -243,6 +243,8 @@ namespace Placemaker.Core.Layers.Leisure
                 var net = ctx.StraightNet(g.StreetPoint, end, NetRole.Alley, LaneAsset);
                 net.StartAttach = g.StreetId;
                 net.StartAttachT = g.StreetT;
+                // It runs through the market: no zone cells either side of it (vanilla ZonesDisabled, as LaneSides gives our lanes).
+                net.Upgrades = new[] { Build.LaneSides.LeftOff, Build.LaneSides.RightOff };
                 g.Landed = "lane";
                 result.Add(new ServiceLane { Ring = ring, Mouth = g.At, End = end, Inward = g.In });
             }

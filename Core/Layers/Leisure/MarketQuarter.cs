@@ -188,7 +188,7 @@ namespace Placemaker.Core.Layers.Leisure
                 var A = first.Value;
                 _farEnd = true;
                 _hub = _focal;
-                if (math.distance(A.At, _hub) < 24f) _hub = A.At + A.In * 24f;
+                if (math.distance(A.At, _hub) < 24f && _r.Contains(A.At + A.In * 24f)) _hub = A.At + A.In * 24f;
                 T = math.normalizesafe(math.lerp(A.In, math.normalizesafe(_hub - A.At, A.In), 0.6f), A.In);
                 float dA = math.distance(A.At, _hub);
                 Sample(line, A.At, A.At + A.In * dA / 3f, _hub - T * dA / 3f, _hub, true);

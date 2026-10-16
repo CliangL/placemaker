@@ -201,6 +201,22 @@ namespace Placemaker.Tests
             Assert.Contains(plain.Surfaces, s => s.Role == SurfaceRole.Grass);
         }
 
+        [Theory]
+        [InlineData("small")]
+        [InlineData("triangle")]
+        [InlineData("sliver")]
+        [InlineData("noEntrance")]
+        public void OddSitesStillPlanAMarket(string id)
+        {
+            float3[] ring = id == "small" ? TestKit.Rect(32, 30)
+                : id == "triangle" ? new[] { new float3(0, 0, 0), new float3(200, 0, 0), new float3(40, 0, 160) }
+                : id == "sliver" ? TestKit.Rect(260, 26)
+                : TestKit.Rect(150, 140);
+            var p = id == "noEntrance" ? Market(ring, "bigMarket") : Market(ring, "bigMarket", At(ring, "access", 30, 0));
+            Assert.True(Stalls(p).Count >= 4, id + ": " + Stalls(p).Count);
+            TestKit.AssertObjectsInside(p, ring, 0.6f);
+        }
+
         [Fact]
         public void TheHiddenStylesStillBuild()
         {
