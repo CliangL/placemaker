@@ -70,6 +70,10 @@ param(
     [string]$Heightmap = '',
     [double]$Range = 0,
     [string]$Land = '',
+    # several lands in one request: a JSON array (a file or the text) of land objects, each with a "name" (the build ids get
+    # -<name>); {"name":"block"} alone is the grid block. Every build is made on every land, e.g.
+    # [{"name":"block"},{"name":"big","size":[300,280]},{"name":"long","size":[360,110]},{"name":"l","shape":"l","size":[280,260]}]
+    [string]$Lands = '',
     [switch]$AllMods,
     [switch]$NoBuild,
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs',
@@ -183,6 +187,22 @@ if ($Type.Count -eq 1 -and $Type[0] -ieq 'all') {
         $types += $t
     }
 }
+$landList = @([pscustomobject]@{ Name = ''; Spec = $landSpec })
+if ($Lands) {
+    $text = if (Test-Path -LiteralPath $Lands -PathType Leaf) { Get-Content -LiteralPath $Lands -Raw } else { $Lands }
+    try { $arr = @($text | ConvertFrom-Json) } catch { Stop-With "-Lands is not a JSON array: $text" }
+    $schema = Get-Content (Join-Path $repo 'suite\schema.json') -Raw | ConvertFrom-Json
+    $landList = @(foreach ($o in $arr) {
+            $spec = [ordered]@{}
+            if ($landSpec) { foreach ($k in $landSpec.Keys) { $spec[$k] = $landSpec[$k] } }
+            foreach ($p in $o.PSObject.Properties) {
+                if ($p.Name -eq 'name') { continue }
+                if (-not (@($schema.land.keys) -contains $p.Name)) { Stop-With "-Lands: unknown key '$($p.Name)' (keys: $(@($schema.land.keys) -join ', '))" }
+                $spec[$p.Name] = $p.Value
+            }
+            [pscustomobject]@{ Name = "$($o.name)"; Spec = $(if ($spec.Count) { $spec } else { $null }) }
+        })
+}
 $builds = @()
 foreach ($t in $types) {
     $hiddenStyles = HiddenStyles $t
@@ -191,14 +211,17 @@ foreach ($t in $types) {
         $preset = if ($s -and $s -ine 'default') { @($t.presets) | Where-Object { $_ -ieq $s } | Select-Object -First 1 } else { '' }
         if ($s -and $s -ine 'default' -and -not $preset) { Stop-With "'$($t.layer)' has no style '$s'. Styles: default, $(@($t.presets) -join ', ')" }
         if ($preset -and $hiddenStyles -contains $preset -and -not ($Style.Count -eq 1 -and $Style[0] -ieq 'all')) { Write-Host "Note: style '$preset' of '$($t.layer)' is hidden by Recipes/shelf/$(CategoryOf $t).json; building it by id." }
-        $builds += [pscustomobject]@{ Layer = $t.layer; Category = (CategoryOf $t); Preset = $preset; Id = $t.layer + '-' + $(if ($preset) { $preset } else { 'default' }) }
+        foreach ($ln in $landList) {
+            $builds += [pscustomobject]@{ Layer = $t.layer; Category = (CategoryOf $t); Preset = $preset; Land = $ln.Spec
+                Id = $t.layer + '-' + $(if ($preset) { $preset } else { 'default' }) + $(if ($ln.Name) { '-' + $ln.Name } else { '' }) }
+        }
     }
 }
 
 $first = $viewSteps[$Views[0]]
 $scenarios = foreach ($b in $builds) {
     $steps = @(
-        [ordered]@{ do = 'area'; tool = $(if ($landSpec) { 'land' } else { 'bucket' }) }
+        [ordered]@{ do = 'area'; tool = $(if ($b.Land) { 'land' } else { 'bucket' }) }
         [ordered]@{ do = 'type'; layer = $b.Layer; preset = $b.Preset }
         [ordered]@{ do = 'entrances' }
     )
@@ -219,7 +242,7 @@ $scenarios = foreach ($b in $builds) {
     }
     if ($terrainMap) { $steps += [ordered]@{ do = 'terrain'; name = 'terrain' } }
     $sc = [ordered]@{ id = $b.Id; site = $Site; pace = 'settled'; steps = $steps }
-    if ($landSpec) { $sc['land'] = $landSpec }
+    if ($b.Land) { $sc['land'] = $b.Land }
     $sc
 }
 
