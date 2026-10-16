@@ -52,7 +52,8 @@ namespace Placemaker.Core.Layers.Commercial
             if (ped) { var p = Mall.PedLane(ctx, false); asset = p.asset; h = p.half; role = p.pedestrian ? NetRole.Street : NetRole.Alley; }
             else { var p = Mall.ShopLane(ctx); asset = p.asset; h = p.half; role = NetRole.Alley; }
             int inner = Cells(ctx);
-            int outer = ctx.B("outerRow") ? Mall.Cells(ctx.Raw("outerDepth")) : 0;
+            // (shops) The outer rows face the city streets: only with "Shops facing the streets"; else the ring rows take the land.
+            int outer = ctx.B("outerRow") && ctx.B("streetShops") ? Mall.Cells(ctx.Raw("outerDepth")) : 0;
 
             // The site in the main street's frame: s along it, t inward; which sides have a street.
             float s0 = r.From, s1 = r.To;
@@ -74,7 +75,7 @@ namespace Placemaker.Core.Layers.Commercial
             for (int guard = 0; guard < 12; guard++)
             {
                 // (shops) With no outer row a ring row backs onto the street: it keeps clear of the street's first zone row (Mall.KerbBand).
-                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h + (street[k] && outer == 0 ? Mall.KerbBand : 0f);
+                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h + (street[k] && outer == 0 ? Mall.KerbBand - 2f : 0f);
                 parkW = (s1 - s0) - inset[1] - inset[3] - 2f * h;
                 parkD = reach - inset[0] - inset[2] - 2f * h;
                 if (parkW >= 36f && parkD >= 30f) break;

@@ -473,7 +473,8 @@ namespace Placemaker.Core.Layers.Commercial
             var d = (b - a) / math.max(len, 1e-4f);
             float s = 0f;
             while (s < len && !Region.Contains(a + d * s)) s += 0.5f;
-            return s + gate;
+            // (shops) Never inside the street's first zone row (the outline sits ~2 m off the kerb): a kerb strip there kills the plot.
+            return s + math.max(gate, KerbBand - 2f);
         }
 
         private readonly Dictionary<float2[], float4> _bounds = new Dictionary<float2[], float4>();
