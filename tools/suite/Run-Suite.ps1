@@ -301,7 +301,7 @@ try {
         }
         $elapsed = ($now - $launchedAt).TotalSeconds
         if (-not $everBeat -and $elapsed -gt $bootLimit) { $status = 'boot-timeout'; Say "no heartbeat after $bootLimit s"; break }
-        if ($Playground -and $lastPhase -eq 'playground') { continue }   # the user plays: no watchdog, no timeout; wait for the game to close
+        if ($Playground -and $phaseTimes.Contains('playground')) { continue }   # the user plays (and later quits): no watchdog, no timeout, never killed; wait for the game to close
         if ($everBeat -and ($now - $lastBeatChange).TotalSeconds -gt $staleLimit) { $status = 'hung'; Say "heartbeat stale for $staleLimit s in phase '$lastPhase'"; break }
         if ($elapsed -gt $TimeoutMin * 60) { $status = 'timeout'; Say "overall timeout ($TimeoutMin min)"; break }
         if ($beat -and $beat.phase -eq 'quit') {
