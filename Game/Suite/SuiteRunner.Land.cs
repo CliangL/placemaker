@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using Placemaker.Core.Suite;
@@ -45,6 +46,7 @@ namespace Placemaker.Game.Suite
                 yield return ApplyWithFixtureTool(t => _fixture.EmitRoads(t, seg => Inside(seg.A) && Inside(seg.B)), $"land {plot.Name} ring road");
                 yield return Frames(30);
             }
+            if (plot.HasWater) yield return FillWater(new[] { plot });
             yield return Settle("land " + plot.Name);
             _phase = phase;
             s.Block = _fixture.PlotBlock(plot);
@@ -53,6 +55,40 @@ namespace Placemaker.Game.Suite
             rec.Add(new JObject { ["plot"] = plot.Name, ["scenario"] = s.Id, ["sec"] = Math.Round(Time.realtimeSinceStartup - t0, 1), ["texels"] = texels, ["heightmap"] = err ?? "patched", ["cleared"] = cleared });
             _summary["landLaidOutLater"] = rec;
             Say($"land {plot.Name} laid out in the running session for {s.Id}: {plot.Shape} {plot.Size.x:F0} x {plot.Size.y:F0} m, ground {plot.Ground}, {texels} texels, cleared {cleared}, {Time.realtimeSinceStartup - t0:F1} s");
+        }
+
+        /// <summary>
+        /// (rf-beach) Puts the plots' lakes in: their water sources, then the simulation runs (speed as for growing, no fast
+        /// spawn) until the water next to each shore is about as deep as the lake bed asks for (at most 90 s), and pauses.
+        /// </summary>
+        private IEnumerator FillWater(IEnumerable<SuitePlot> plots)
+        {
+            var wet = plots.Where(p => p != null && p.HasWater).ToList();
+            if (wet.Count == 0) yield break;
+            int sources = 0;
+            foreach (var p in wet) sources += _fixture.AddWater(p);
+            yield return Frames(10);
+            var sim = _world.GetOrCreateSystemManaged<global::Game.Simulation.SimulationSystem>();
+            sim.selectedSpeed = _cfg.speed > 0 ? _cfg.speed : 4f;
+            float t0 = Time.realtimeSinceStartup, full = -1f;
+            string seen = "";
+            while (Time.realtimeSinceStartup - t0 < 90f)
+            {
+                yield return Seconds(1f);
+                var probes = wet.SelectMany(p => _fixture.WaterProbe(p)).ToList();
+                seen = string.Join(", ", probes.Select(q => $"{q.have:F2}/{q.want:F1}"));
+                bool ok = probes.Count > 0 && probes.All(q => q.have >= q.want * 0.8f);
+                if (ok && full < 0f) full = Time.realtimeSinceStartup;
+                if (full > 0f && Time.realtimeSinceStartup - full > 4f) break;
+            }
+            sim.selectedSpeed = 0f;
+            yield return Frames(10);
+            string what = $"water for {string.Join(", ", wet.Select(p => p.Name))}: {sources} source(s), "
+                + (full > 0f ? $"full after {full - t0:F0} s" : "NOT full after 90 s") + $"; depth/expected at the shore: {seen}";
+            var rec = _summary["water"] as JArray ?? new JArray();
+            rec.Add(what);
+            _summary["water"] = rec;
+            Say(what);
         }
     }
 }

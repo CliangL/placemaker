@@ -746,6 +746,7 @@ namespace Placemaker.Game.Suite
             yield return Frames(20);
             fx["buildingsAfterPlop"] = _fixture.CountAllBuildings();
             Mark("plopsDoneSec");
+            yield return FillWater(_fixture.Layout.Plots);   // (rf-beach) the lakes beside land made to order
 
             if (pregrow && _cfg.pregrowSeconds > 0 && (int)fx["zonedCells"] > 0) yield return Pregrow();
             else fx["pregrow"] = "skipped: no scenario asks for a zoned block";
