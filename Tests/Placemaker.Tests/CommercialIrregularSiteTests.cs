@@ -221,7 +221,8 @@ namespace Placemaker.Tests
             Assert.DoesNotContain(plan.AllIssues(), i => i.Key == CommercialLayer.NoStreetKey);
             // (shops) A strip mall needs a straight street of 50 m; the fully curved block has none, so only its fallback row is planned.
             // (shops2) The strip mall's stores are big plots (four cells wide, five deep): two on a small block.
-            Assert.True(m.NPlots >= (type == "stripMall" ? 2 : 3), type + "/" + preset + ": " + m.NPlots + " plots");
+            // (big box: one big store on a small block)
+            Assert.True(m.NPlots >= (type == "stripMall" ? (preset == "bigBox" ? 1 : 2) : 3), type + "/" + preset + ": " + m.NPlots + " plots");
             Assert.True(m.Lots <= LotCap(type) * area, $"{type}/{preset} @ {SiteName(step)}: lots cover {m.Lots / area:P0} of the block (cap {LotCap(type):P0})");
             Assert.True(m.Commercial >= Target(type, preset, step), $"{type}/{preset} @ {SiteName(step)}: only {m.Commercial:P0} commercial (need {Target(type, preset, step):P0})");
         }

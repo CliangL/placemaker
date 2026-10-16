@@ -34,16 +34,16 @@ namespace Placemaker.Core.Layers.Commercial
         {
             c.Choice("style", "classic", ControlTier.Essential, "layout", Styles).Tip();
             c.Slider("frontage", 240, 60, 240, 10, "m", ControlTier.More, "layout").Tip().When("style!=corner");
-            // (shops2) The default is the classic strip mall: big stores (high-density commercial, 40 m deep) round a big lot.
-            CommonControls(c, ZoneKinds.CommercialHigh, 40, "large", maxDepth: 48);
+            // (shops2) The default is the classic strip mall: a long row of single-storey shops (low-density commercial, 32 m deep) round a big lot.
+            CommonControls(c, ZoneKinds.CommercialLow, 32, "large", maxDepth: 48);
             c.Fixed("style");
         }
 
         protected override void DefinePresets()
         {
-            // (shops2) The Megastores look of the retail park (the user: A-, "should just be what the regular strip mall is"): big
-            // stores, deep plots, high-density commercial, a big lot; on a big site several rows round a grid of lots.
-            Preset("classic", ("style", "classic"), ("lotSize", "large"), ("plotDepth", 40.0), ("zoneKind", ZoneKinds.CommercialHigh), ("evShare", 10.0), ("frontage", 240.0));
+            // (shops2) The layout of the retail park's Megastores (the user: A-, "should just be what the regular strip mall is"), grown as
+            // low-rise shops (a real strip mall is one storey, not office blocks): a big lot; on a big site several rows round a grid of lots.
+            Preset("classic", ("style", "classic"), ("lotSize", "large"), ("plotDepth", 32.0), ("zoneKind", ZoneKinds.CommercialLow), ("evShare", 10.0), ("frontage", 240.0));
             Preset("corner", ("style", "corner"), ("lotSize", "medium"), ("plotDepth", 24.0), ("zoneKind", ZoneKinds.CommercialLow));
             Preset("rearAlley", ("style", "rearAlley"), ("lotSize", "medium"), ("plotDepth", 16.0), ("zoneKind", ZoneKinds.CommercialLow));
             Preset("neighbourhood", ("style", "classic"), ("lotSize", "small"), ("frontage", 90.0), ("plotDepth", 16.0), ("lotGreen", "medians"), ("zoneKind", ZoneKinds.CommercialLow));
@@ -105,7 +105,8 @@ namespace Placemaker.Core.Layers.Commercial
             }
             var (asset, h) = Mall.ShopLane(ctx);
             int cells = Cells(ctx);
-            int maxPiece = ctx.Raw("plotDepth") >= 44f ? 6 : 4;
+            // Shopfronts: three cells wide for the strip mall's small shops, six for the big boxes.
+            int maxPiece = ctx.Raw("plotDepth") >= 44f ? 6 : 3;
             if (tMax < 60f || sMax - sMin < 90f) return Fail(1);
 
             // Where a rail's line is inside the site (its front and back ends; the first stretch from the front).
