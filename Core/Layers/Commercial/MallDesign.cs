@@ -263,6 +263,14 @@ namespace Placemaker.Core.Layers.Commercial
                 float amp = math.clamp(0.5f * (k.T1 - k.T0) - 2.6f, 0f, 3.2f);
                 var a = k.Frame.At(k.S0 + 2.5f, mid); var b = k.Frame.At(k.S1 - 2.5f, mid);
                 var line = Meander(a, b, amp, 44f, k.Anchors, Hashing.Mix(Ctx.Seed, k.Salt));
+                // Never along the street's edge: the swing stays 4.5 m in from the street side of the band (a walk running a few
+                // metres off the outline reads as a spike along the kerb), 2 m from the lot side.
+                float tLo = k.T0 + 4.5f, tHi = math.max(tLo, k.T1 - 2f);
+                for (int i = 0; i < line.Count; i++)
+                {
+                    float su = math.dot(line[i] - k.Frame.A, k.Frame.Dir), tv = math.dot(line[i] - k.Frame.A, k.Frame.In);
+                    line[i] = k.Frame.At(su, math.clamp(tv, tLo, tHi));
+                }
                 // A curved frontage (a round site): the walk keeps to the piece, its ends where the piece narrows.
                 while (line.Count > 2 && (!region.Contains(line[0]) || region.BoundaryDistance(line[0], 4f) < 2.2f)) line.RemoveAt(0);
                 while (line.Count > 2 && (!region.Contains(line[line.Count - 1]) || region.BoundaryDistance(line[line.Count - 1], 4f) < 2.2f)) line.RemoveAt(line.Count - 1);
