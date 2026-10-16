@@ -57,7 +57,11 @@ param(
     [string]$Label = '',
     # The queue's game host: install this frozen build (a bundle's mod\) once the suite lock is held and no other game
     # runs, and put the user's build back the moment the game has exited (ModsInstall.ps1). A playground's build stays.
-    [string]$DeployFrom = ''
+    [string]$DeployFrom = '',
+    # The queue's game host runs from the dispatcher's own checked copy of this script (and of ModsInstall.ps1): only the
+    # game's inputs come from the request's frozen build (a bundle's host\: suite\schema.json, suite\scenarios\). The code
+    # that saves, switches and restores the user's settings and Mods\Placemaker is never a requester's copy.
+    [string]$HostData = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,7 +76,11 @@ if (-not $Direct -and -not $RestoreOnly) {
             NoTerrain = $NoTerrain; Window = $Window; PregrowSeconds = $PregrowSeconds; Opt = $Opt; Grid = $Grid; UserModSettings = $UserModSettings; Look = $Look; Pace = $Pace
             Playground = $Playground; ResultsRoot = $ResultsRoot; Who = $Who })
 }
-$gameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II'
+if ($HostData) { $repo = (Resolve-Path -LiteralPath $HostData).Path }   # the game's inputs from the frozen build
+# Mods\Placemaker's install state machine and the Paradox launcher check: this script's own copy (the dispatcher's, for
+# the queue's game host)
+. (Join-Path $PSScriptRoot 'ModsInstall.ps1')
+$gameDir ='C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II'
 $exe = Join-Path $gameDir 'Cities2.exe'
 $ud = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
 $suiteData = Join-Path $ud 'ModsData\Placemaker\suite'
@@ -92,13 +100,14 @@ function Say([string]$m) {
     if ($script:hostLog) { try { [IO.File]::AppendAllText($script:hostLog, "$line`r`n", (New-Object Text.UTF8Encoding $false)) } catch { } }
 }
 
-# Games that are not this run's: every Cities2.exe but ours, and the Paradox launcher (Launcher\dowser.exe: the user is
-# starting the game). Checked again right before the settings are switched and right before the game is started.
+# Games that are not this run's: every Cities2.exe but ours, and CS2's Paradox launcher (the user is starting the game;
+# MI-Launchers: another Paradox game's launcher does not count). Checked again right before the settings are switched
+# and right before the game is started.
 $script:ourPid = 0
 function Get-OtherGames {
     $r = @()
     foreach ($p in @(Get-Process -Name 'Cities2' -ErrorAction SilentlyContinue)) { if ($p.Id -ne $script:ourPid) { $r += "Cities2.exe PID $($p.Id)" } }
-    foreach ($p in @(Get-Process -Name 'dowser', 'Paradox Launcher' -ErrorAction SilentlyContinue)) { $r += "the Paradox launcher PID $($p.Id)" }
+    foreach ($id in @(MI-Launchers)) { $r += "the Paradox launcher of Cities: Skylines II PID $id" }
     return $r
 }
 
@@ -120,10 +129,32 @@ function Disarm {
     $ro = Join-Path $ud 'runOnce.txt'; if (Test-Path -LiteralPath $ro) { Remove-Item -LiteralPath $ro -Force -ErrorAction SilentlyContinue }
     foreach ($f in @('run.json', 'run.active.json')) { $p = Join-Path $suiteData $f; if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue } }
 }
-function Restore-Settings([string]$why) {
+# Files the suite run itself changes (the suite profile, Placemaker's pinned options and data): the saved copy always
+# comes back, even when a game the user started later saved them again (that game ran on the suite profile).
+function Test-SuiteWritten([string]$rel) {
+    $r = $rel.ToLowerInvariant()
+    return ($r -in @('settings.coc', 'launcher-settings.json', 'continue_game.json')) -or $r.StartsWith('modssettings\placemaker') -or $r.StartsWith('modsdata\placemaker\')
+}
+# When the run's game was last there: ended.txt (written by the host the moment its game is gone), else the run's last
+# heartbeat (a host that was cut off) plus a margin for the game's own exit; $null when not known.
+function Get-RunEnd {
+    $e = Join-Path $saved 'ended.txt'
+    if (Test-Path -LiteralPath $e) { try { return [datetime]::Parse((Get-Content -LiteralPath $e -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToLocalTime() } catch { } }
+    try {
+        $rid = (Get-Content -LiteralPath (Join-Path $saved 'pending.txt') -Raw).Trim()
+        $hbf = Join-Path (Join-Path $ResultsRoot $rid) 'heartbeat.json'
+        if ($rid -and (Test-Path -LiteralPath $hbf)) { return (Get-Item -LiteralPath $hbf).LastWriteTime.AddSeconds(30) }
+    } catch { }
+    return $null
+}
+# -RunEnded: the caller's game is gone now (the host's own restore): recorded first, so a restore that has to wait (a
+# game the user started) later knows which files changed after the run.
+function Restore-Settings([string]$why, [switch]$RunEnded) {
     $pending = Join-Path $saved 'pending.txt'
     if (-not (Test-Path -LiteralPath $pending)) { return }
     Disarm
+    $endFile = Join-Path $saved 'ended.txt'
+    if ($RunEnded -and -not (Test-Path -LiteralPath $endFile)) { Set-Content -LiteralPath $endFile -Value (Get-Date).ToString('o') -Encoding ASCII }
     $other = @(Get-OtherGames | Where-Object { $_ -like 'Cities2.exe*' })
     $foreignMark = Join-Path $saved 'foreign.txt'
     if ($other.Count -gt 0) {
@@ -132,12 +163,15 @@ function Restore-Settings([string]$why) {
         return
     }
     $keepNew = Test-Path -LiteralPath $foreignMark
+    # a restore that comes late (a host cut off, then the user played): what changed after the run is the user's
+    $endAt = Get-RunEnd
     $list = @(Get-Content -LiteralPath (Join-Path $saved 'files.txt'))
     $n = 0
     foreach ($rel in $list) {
         $src = Join-Path $saved "files\$rel"
         $dst = Join-Path $ud $rel
         if (-not (Test-Path -LiteralPath $src)) { continue }
+        if ($endAt -and -not (Test-SuiteWritten $rel) -and (Test-Path -LiteralPath $dst) -and (Get-Item -LiteralPath $dst).LastWriteTime -gt $endAt) { Say "kept $rel (the user's game changed it after the run)"; continue }
         New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
         Copy-Item -LiteralPath $src -Destination $dst -Force
         $n++
@@ -147,9 +181,12 @@ function Restore-Settings([string]$why) {
         $rel = $f.FullName.Substring($ud.Length + 1)
         if ($known.ContainsKey($rel.ToLowerInvariant())) { continue }
         if ($keepNew) { Say "kept new settings file $rel (the user's game ran meanwhile)"; continue }
+        if (-not $endAt) { Say "kept new settings file $rel (when the run ended is not known)"; continue }
+        if ($f.LastWriteTime -gt $endAt) { Say "kept new settings file $rel (made after the run, by the user's game)"; continue }
         Remove-Item -LiteralPath $f.FullName -Force; Say "removed new settings file $rel"
     }
     Remove-Item -LiteralPath $pending -Force
+    Remove-Item -LiteralPath $endFile -Force -ErrorAction SilentlyContinue
     if ($keepNew) { Remove-Item -LiteralPath $foreignMark -Force -ErrorAction SilentlyContinue }
     Say "user settings and Placemaker data put back ($n files, $why)"
 }
@@ -177,7 +214,6 @@ function Restore-UserBuild([string]$why) {
     else { Say "the user's build is not back yet: $($r.message) (the game queue's dispatcher puts it back once no game runs)" }
 }
 
-if ($RestoreOnly) { Restore-Settings 'restore only'; exit 0 }
 if ($Playground) { $UserModSettings = $true }   # the user plays with their own Placemaker options
 
 # ───────────── 1. lock and preflight ─────────────
@@ -194,9 +230,11 @@ catch {
 $l = $null; try { $buf = New-Object byte[] ([int]$script:lockStream.Length); [void]$script:lockStream.Read($buf, 0, $buf.Length); $l = [Text.Encoding]::UTF8.GetString($buf) | ConvertFrom-Json } catch { }
 if ($l -and $l.pid -and [int]$l.pid -ne $PID -and (Test-LockHolder $l)) { Release-Lock; Write-Host "STOP: another Run-Suite (PID $($l.pid), run $($l.runId)) holds the suite lock"; exit 2 }
 try {
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes((@{ pid = $PID; procStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks; runId = $RunId; start = (Get-Date).ToString('o') } | ConvertTo-Json -Compress))
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes((@{ pid = $PID; procStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks; runId = $(if ($RestoreOnly) { 'restore-only' } else { $RunId }); start = (Get-Date).ToString('o') } | ConvertTo-Json -Compress))
     $script:lockStream.SetLength(0); $script:lockStream.Write($bytes, 0, $bytes.Length); $script:lockStream.Flush()
 } catch { Release-Lock; Write-Host "STOP: could not take the suite lock: $($_.Exception.Message)"; exit 2 }
+# -RestoreOnly also holds the suite lock (a run that starts meanwhile cannot save its settings under this restore)
+if ($RestoreOnly) { try { Restore-Settings 'restore only' } finally { Release-Lock }; exit 0 }
 
 try {
 if (-not $RunId) { $RunId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + ([IO.Path]::GetFileNameWithoutExtension($Set)) }
@@ -277,6 +315,7 @@ foreach ($f in Get-SettingsFiles) {
     $rels += $rel
 }
 Set-Content -Path (Join-Path $saved 'files.txt') -Value $rels -Encoding UTF8
+Remove-Item -LiteralPath (Join-Path $saved 'ended.txt') -Force -ErrorAction SilentlyContinue   # the new run has not ended
 Set-Content -Path (Join-Path $saved 'pending.txt') -Value $RunId -Encoding ASCII
 Say ("saved {0} settings and data files" -f $rels.Count)
 $auditBefore = @{}
@@ -287,7 +326,7 @@ $w, $h = $Window -split 'x'
 if (-not $KeepGraphics) {
     $ls = Join-Path $ud 'launcher-settings.json'
     if (Test-Path $ls) {
-        $j = Get-Content $ls -Raw | ConvertFrom-Json
+        $j = Get-Content -LiteralPath $ls -Raw -Encoding UTF8 | ConvertFrom-Json
         $j.system.display_mode = 'windowed'
         $j.system.windowed_resolution = $Window
         $j.system.vsync = $false
@@ -295,7 +334,7 @@ if (-not $KeepGraphics) {
     }
     $sc = Join-Path $ud 'Settings.coc'
     if (Test-Path $sc) {
-        $t = Get-Content $sc -Raw
+        $t = Get-Content -LiteralPath $sc -Raw -Encoding UTF8
         $t = $t -replace '"masterVolume":\s*[0-9.]+', '"masterVolume": 0'
         $t = $t -replace '"vSync":\s*true', '"vSync": false'
         $t = $t -replace '"displayMode":\s*"[A-Za-z]+"', '"displayMode": "Window"'
@@ -318,7 +357,7 @@ if (-not $KeepGraphics) {
 New-Item -ItemType Directory -Force -Path $suiteData | Out-Null
 $setName = if ($Set -in @('bootstrap', 'queue')) { 'smoke' } else { $Set }
 $scenarioFile = if ($setName -match "[\/.]" -and (Test-Path -LiteralPath $setName -PathType Leaf)) { (Resolve-Path -LiteralPath $setName).Path } else { Join-Path $repo "suite\scenarios\$setName.json" }
-if (-not (Test-Path -LiteralPath $scenarioFile)) { Say "STOP: no scenario set $scenarioFile"; Restore-Settings 'stopped'; exit 2 }
+if (-not (Test-Path -LiteralPath $scenarioFile)) { Say "STOP: no scenario set $scenarioFile"; Restore-Settings 'stopped' -RunEnded; exit 2 }
 $schemaFile = Join-Path $repo 'suite\schema.json'
 $cfg = [ordered]@{
     runId = $RunId; set = $Set; outDir = $runDir; scenarioFile = $scenarioFile; schemaFile = $schemaFile; git = $git; dllHash = $dllHash
@@ -374,8 +413,8 @@ try {
         $now = Get-Date
         $alive = [bool](Get-Process -Id $ourPid -ErrorAction SilentlyContinue)
         $beat = $null
-        if (Test-Path $hb) {
-            try { $beat = Get-Content $hb -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $beat = $null }
+        if (Test-Path -LiteralPath $hb) {
+            try { $beat = Get-Content -LiteralPath $hb -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $beat = $null }
             if ($beat -and ($beat.runId -ne $RunId -or ($beat.pid -and $beat.pid -ne $ourPid))) { $beat = $null }
         }
         if ($beat) {
@@ -423,21 +462,21 @@ finally {
     # ───────────── collect logs, classify, put the settings back ─────────────
     # first, the moment the game is gone, before the user can start theirs: the user's build and settings
     Restore-UserBuild "game $RunId exited"
-    Restore-Settings "after run $RunId"
+    Restore-Settings "after run $RunId" -RunEnded
     $logs = Join-Path $runDir 'logs'
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
     foreach ($f in @('Player.log')) { $p = Join-Path $ud $f; if (Test-Path $p) { Copy-Item $p $logs -Force } }
     Get-ChildItem (Join-Path $ud 'Logs') -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $launchedAt.AddSeconds(-5) } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $logs -Force }
     if (Test-Path $auditDir) {
         $moved = 0
-        Get-ChildItem $auditDir -File | Where-Object { -not $auditBefore.ContainsKey($_.Name) } | ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $runDir 'audit') | Out-Null; Move-Item $_.FullName (Join-Path $runDir 'audit') -Force; $moved++ }
+        Get-ChildItem -LiteralPath $auditDir -File | Where-Object { -not $auditBefore.ContainsKey($_.Name) } | ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $runDir 'audit') | Out-Null; Move-Item -LiteralPath $_.FullName -Destination (Join-Path $runDir 'audit') -Force; $moved++ }
         if ($moved -gt 0) { Say "moved $moved build audit files the run wrote into the run folder" }
     }
     if ($status -eq 'gone') {
         $player = Join-Path $logs 'Player.log'
         $crashDir = Join-Path $env:TEMP 'Colossal Order\Cities Skylines II\Crashes'
         $newCrash = (Test-Path $crashDir) -and @(Get-ChildItem $crashDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $launchedAt }).Count -gt 0
-        $text = if (Test-Path $player) { Get-Content $player -Raw } else { '' }
+        $text = if (Test-Path -LiteralPath $player) { Get-Content -LiteralPath $player -Raw } else { '' }
         # Unity's crash marker, and Mono's native crash report (a crash in the game's own native code)
         if ($newCrash -or $text -match 'Crash!!!|Native Crash Reporting|Got a SIG[A-Z]+ while executing native code') { $status = 'crashed' }
         elseif ($text -match 'Game terminated successfully') { $status = 'closed-externally' }
@@ -449,15 +488,15 @@ finally {
 
 $total = ((Get-Date) - $t0).TotalSeconds
 $hostInfo = [ordered]@{ runId = $RunId; set = $Set; git = $git; dllHash = $dllHash; label = $label; status = $status; launchedAt = $launchedAt.ToString('o'); totalSec = [math]::Round($total, 1); phaseAtSec = $phaseTimes; pid = $ourPid; profile = $cfg.profile }
-($hostInfo | ConvertTo-Json -Depth 4) | Set-Content -Path (Join-Path $runDir 'host.json') -Encoding UTF8
+($hostInfo | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath (Join-Path $runDir 'host.json') -Encoding UTF8
 # the catalog of types, presets and options this build offers (for scenario writers)
 $cat = Join-Path $runDir 'catalog.json'
-if (Test-Path $cat) { Copy-Item $cat (Join-Path $repo 'suite\catalog.json') -Force }
+if (Test-Path -LiteralPath $cat) { Copy-Item -LiteralPath $cat -Destination (Join-Path $repo 'suite\catalog.json') -Force -ErrorAction SilentlyContinue }
 $md = Join-Path $runDir 'summary.md'
 $top = @("> **Host: $status** (label $label, profile $($cfg.profile), total $([math]::Round($total)) s; phases s after launch: $(($phaseTimes.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '))")
 if ($status -ne 'quit') { $top += "> **The run did not end with the suite's own quit: results after phase '$lastPhase' are missing.**" }
 $top += ''
-$body = if (Test-Path $md) { Get-Content $md -Raw -Encoding UTF8 } else { "# Game run $RunId`r`n(no summary written by the game)`r`n" }
+$body = if (Test-Path -LiteralPath $md) { Get-Content -LiteralPath $md -Raw -Encoding UTF8 } else { "# Game run $RunId`r`n(no summary written by the game)`r`n" }
 Write-NoBom $md (($top -join "`r`n") + "`r`n" + $body)
 Say "done: $status in $([math]::Round($total)) s -> $runDir"
 if ($DeployFrom) { Say "installed now: $(MI-StatusLine)" }

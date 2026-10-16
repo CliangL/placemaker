@@ -28,18 +28,23 @@ session) and wait their turn. Ten agents share one game, launched once per build
   picture (taken from the game's own timings; per type once a type has 3 measured builds: parks settle their pictures
   slower than plazas), so 22 builds with 14 pictures each are estimated as such; the request in the game is followed
   build by build (`over its estimate` when one takes longer; `over its usual boot` for a slow start). `waiting: the
-  user's own game is open`, `the user is starting the game` (the Paradox launcher) or `the user's playground is open`:
-  the line waits until the user closes the game, and the ETA is unknown.
+  user's own game is open`, `the user is starting the game` (the Paradox launcher of Cities: Skylines II; another
+  Paradox game's launcher does not count, and one left open for over an hour without a game is no longer waited for)
+  or `the user's playground is open`: the line waits until the user closes the game, and the ETA is unknown.
 * **Your build is frozen when you ask.** The command builds your worktree without installing it (unless `-NoBuild`)
-  and copies what Deploy would install (`bin\Release`, `UI\build`) plus the runner scripts into the queue. The hash of
-  the frozen mod and of the scripts the game run uses (Run-Suite, ModsInstall, Contact-Suite, schema) is the build's
-  identity. Keep working while you wait: later edits do not change your request.
+  and copies what Deploy would install (`bin\Release`, `UI\build`) plus the game's inputs (`suite\schema.json`,
+  `suite\scenarios\smoke.json`) into the queue. Their hash is the build's identity. Keep working while you wait: later
+  edits do not change your request. The game host that installs it, switches and restores the user's settings and puts
+  the user's build back is always the dispatcher's own checked copy of `Run-Suite.ps1` and `ModsInstall.ps1`, never
+  yours: an edited `Run-Suite.ps1` does not change what the queue runs (debug the runner with `-Direct`).
 * **Batching.** The game stays open with a build. Requests with that build run back to back in it without a relaunch
   (land made to order is laid out in the open game when its request comes). Another build waits for the request in
   the game, then the game quits cleanly and relaunches with it (about 60 s). The oldest request with the open game's
   build goes first, but only while the head of the line would still start within 10 minutes of asking (its relaunch
-  counted); once a head has been kept first it stays first, so places in line do not flip. A request that does not
-  fit the open game's test grid gets a fresh launch.
+  counted); once the dispatcher has kept a head first it stays first, so places in line do not flip (the plan behind
+  the progress lines only predicts: it never keeps a head first by itself). A request that does not fit the open
+  game's test grid gets a fresh launch, and so does one that would still run when the game has been open 7.5 hours.
+  A request whose build makes no progress for 5 times its estimate (at least 6 min) is stopped like one over its time.
 * **The user comes first.** `Play.ps1` goes next after the request in the game; the line then waits until the user
   closes the playground. A game the user started themselves (or the Paradox launcher) is never touched: the line waits
   for it. If the user starts one while the queue's game is open, the request in it finishes and the queue's game quits
@@ -51,7 +56,10 @@ session) and wait their turn. Ten agents share one game, launched once per build
   request's frozen build in right before it launches the game (after it holds the suite lock and has checked that no
   other game runs) and swaps the user's build back the moment that game has exited. Nothing is written while any
   Cities2.exe runs: if the user starts a game in that moment, the user's build goes back once it is closed (the
-  dispatcher stays up until then); the user's game settings likewise. A build installed on purpose (`dotnet build -c
+  dispatcher stays up until then); the user's game settings likewise (a settings file the user's game changed or made
+  after the run is kept, except the ones the suite profile itself switches). `install.json` records the version of the
+  install code that wrote it: an older copy (a stale worktree's `Deploy-Mod.ps1`) then refuses to touch the folder, and
+  a state file that cannot be read stops every change until it can. A build installed on purpose (`dotnet build -c
   Release`, a `-Direct` run) becomes the user's build, once nothing has been written into the folder for 10 s; so does
   the build the user played in `Play.ps1`, once the playground has opened (it stays installed, as it always did). The
   user's build before that is kept in `user-build.prev`.
@@ -76,7 +84,7 @@ session) and wait their turn. Ten agents share one game, launched once per build
 * `powershell -File tools/suite/Queue.ps1` shows the line (`-Watch`, `-Log 40`, `-Cancel <id>`) and what
   `Mods\Placemaker` holds. Use it rather than reading `status.json` yourself (it is replaced while you read). In the
   queue folder: `requests\`, `active\`, `done\<id>\result.json`, `dispatcher.log`, `launches.log` (one line per game
-  launch), `install.json` and `user-build\` (the user's build), `bundles\` (frozen builds, 6 h after last use).
+  launch), `install.json` and `user-build\` (the user's build), `bundles\` (frozen builds, 2 h after last use).
 * `-Direct` on any of the commands launches the game here and now, outside the line: for debugging the runner only.
   It is refused while any game is open. `Run-Suite -Queue`, `-Set queue` and `-Set bootstrap` (a game of your own
   kept open) need `-Direct`.

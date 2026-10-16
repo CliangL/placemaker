@@ -24,7 +24,13 @@ $script:MIRoot = if ($env:PLACEMAKER_GAME_QUEUE) { $env:PLACEMAKER_GAME_QUEUE } 
 $script:MITest = [bool]($env:PLACEMAKER_GAME_QUEUE -and $env:PLACEMAKER_GAME_QUEUE_MODS)
 # a stand-in queue root without a stand-in Mods folder would keep a second install.json over the real Mods\Placemaker
 $script:MIRefuse = if ($env:PLACEMAKER_GAME_QUEUE -and -not $env:PLACEMAKER_GAME_QUEUE_MODS) { 'PLACEMAKER_GAME_QUEUE is set without PLACEMAKER_GAME_QUEUE_MODS: a stand-in queue never touches the real Mods\Placemaker' } else { '' }
-$script:MIRuns = if ($env:PLACEMAKER_GAME_QUEUE_RUNS) { $env:PLACEMAKER_GAME_QUEUE_RUNS } else { 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs' }
+# tests: a stand-in runs folder, only together with a stand-in queue root (a variable left in a shell never moves the
+# real queue's suite lock)
+$script:MIRuns = if ($env:PLACEMAKER_GAME_QUEUE -and $env:PLACEMAKER_GAME_QUEUE_RUNS) { $env:PLACEMAKER_GAME_QUEUE_RUNS } else { 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs' }
+# The version of this install state machine, written into install.json: a copy older than the one that last wrote it
+# refuses to touch Mods\Placemaker (two versions never take turns on the same state).
+# 2: install.json carries 'mi'; unreadable state files stop every change instead of reading as missing.
+$script:MIVersion = 2
 $script:MI = @{
     Root = $script:MIRoot
     Mods = $(if ($script:MITest) { $env:PLACEMAKER_GAME_QUEUE_MODS } else { Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\Placemaker' })
@@ -51,11 +57,38 @@ function MI-Games {
     }
     return @(Get-Process -Name 'Cities2' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
-# The Paradox launcher (Launcher\dowser.exe): the user is starting the game. The queue installs nothing meanwhile (a
-# restore of the user's build still goes ahead: it is what their game should load).
+# The Paradox launcher of Cities: Skylines II: the user is starting the game. The queue installs and launches nothing
+# meanwhile (a restore of the user's build still goes ahead: it is what their game should load). Only CS2's counts:
+# Crusader Kings III, Europa Universalis IV, Hearts of Iron IV, Stellaris and Victoria 3 ship a dowser.exe of their own,
+# and all of them start the one shared 'Paradox Launcher.exe'. So: dowser.exe only from the game's folder
+# (...\Cities Skylines II\Launcher\dowser.exe), and the shared launcher (and its bootstrapper) only when its command line
+# names that folder (--pdxlGameDir ...\Cities Skylines II\Launcher, as the launcher's own log shows for every launch).
+# A process whose path and command line cannot be read counts (the user first). The launcher closes itself a few seconds
+# after it starts the game, so one open for over $MILauncherMaxMin minutes without a game is no longer waited for.
+$script:MILauncherMaxMin = 60
+$script:MILauncherCache = @{}
+function MI-IsCs2Launcher($p) {
+    $k = "$($p.Id)/$(try { $p.StartTime.Ticks } catch { 0 })"
+    if ($script:MILauncherCache.ContainsKey($k)) { return $script:MILauncherCache[$k] }
+    $where = ''
+    if ($p.ProcessName -eq 'dowser') { try { $where = "$($p.Path)" } catch { } }
+    if (-not $where) {
+        try { $c = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.Id)" -ErrorAction Stop; $where = "$($c.ExecutablePath) $($c.CommandLine)".Trim() } catch { }
+    }
+    $cs2 = (-not $where) -or ($where -match 'Cities Skylines II')
+    if ($script:MILauncherCache.Count -gt 200) { $script:MILauncherCache.Clear() }
+    $script:MILauncherCache[$k] = $cs2
+    return $cs2
+}
 function MI-Launchers {
     if ($script:MITest) { return @(if (Test-Path -LiteralPath (Join-Path $script:MI.Root 'fake-launcher')) { 0 }) }
-    return @(Get-Process -Name 'dowser', 'Paradox Launcher' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+    $r = @()
+    foreach ($p in @(Get-Process -Name 'dowser', 'Paradox Launcher', 'bootstrapper-v2' -ErrorAction SilentlyContinue)) {
+        if (-not (MI-IsCs2Launcher $p)) { continue }
+        try { if (((Get-Date) - $p.StartTime).TotalMinutes -gt $script:MILauncherMaxMin) { continue } } catch { }
+        $r += $p.Id
+    }
+    return $r
 }
 
 function MI-Hash([string]$s) {
@@ -114,6 +147,24 @@ function MI-ReadJson([string]$p) {
     }
     return $null
 }
+# The same, for the install state read under install.lock: a file that is there but cannot be read (an antivirus or a
+# backup tool holding it) throws, so it is never taken for a missing one (a queue build saved as the user's).
+function MI-ReadJsonStrict([string]$p) {
+    if (-not (Test-Path -LiteralPath $p)) { return $null }
+    $err = ''
+    for ($i = 0; $i -lt 10; $i++) {
+        try {
+            $fs = [IO.File]::Open($p, 'Open', 'Read', 'ReadWrite, Delete')
+            try { $text = (New-Object IO.StreamReader($fs, [Text.Encoding]::UTF8)).ReadToEnd() } finally { $fs.Dispose() }
+            $o = $text | ConvertFrom-Json
+            if ($null -ne $o) { return $o }
+            $err = 'it is empty'
+        } catch { $err = $_.Exception.Message }
+        if (-not (Test-Path -LiteralPath $p)) { return $null }
+        Start-Sleep -Milliseconds 200
+    }
+    throw "$p is there but cannot be read ($err): nothing is changed until it can"
+}
 
 # Seconds since anything in $dir was created or written (files and folders); a large number when it does not exist.
 function MI-QuietFor([string]$dir) {
@@ -146,13 +197,16 @@ function MI-WriteJson([string]$p, $o) {
     throw "could not write $p"
 }
 
-function MI-State {
-    $s = MI-ReadJson $script:MI.State
+# -Strict (under install.lock): an install.json that is there but cannot be read throws. Without it (a look from
+# outside the lock), such a file reads as 'unreadable', which counts as pending (a reconcile under the lock follows).
+function MI-State([switch]$Strict) {
+    $s = if ($Strict) { MI-ReadJsonStrict $script:MI.State } else { MI-ReadJson $script:MI.State }
+    if (-not $s -and -not $Strict -and (Test-Path -LiteralPath $script:MI.State)) { return [pscustomobject]@{ state = 'unreadable'; queueHash = ''; queueDll = ''; label = ''; by = ''; at = '' } }
     if (-not $s -or -not $s.state) { return [pscustomobject]@{ state = 'user'; queueHash = ''; queueDll = ''; label = ''; by = ''; at = '' } }
     return $s
 }
 function MI-SetState([string]$state, [hashtable]$extra = @{}) {
-    $o = [ordered]@{ state = $state; queueHash = ''; queueDll = ''; label = ''; by = "$PID"; at = (Get-Date).ToString('o') }
+    $o = [ordered]@{ state = $state; mi = $script:MIVersion; queueHash = ''; queueDll = ''; label = ''; by = "$PID"; at = (Get-Date).ToString('o') }
     foreach ($k in $extra.Keys) { $o[$k] = $extra[$k] }
     MI-WriteJson $script:MI.State $o
 }
@@ -166,7 +220,12 @@ function MI-WithLock([scriptblock]$block) {
         try { $fs = [IO.File]::Open($script:MI.Lock, 'OpenOrCreate', 'ReadWrite', 'None') } catch { Start-Sleep -Milliseconds 200 }
     }
     if (-not $fs) { throw 'install.lock: another process has held it for 2 min' }
-    try { return (& $block) } finally { $fs.Dispose() }
+    try {
+        # a newer install state machine wrote the state last: this (older) copy changes nothing
+        $cur = MI-ReadJsonStrict $script:MI.State
+        if ($cur -and [int]$cur.mi -gt $script:MIVersion) { throw "install.json was written by a newer ModsInstall.ps1 (v$([int]$cur.mi); this one, in $PSScriptRoot, is v$($script:MIVersion)): it does not touch Mods\Placemaker. Merge master into that worktree" }
+        return (& $block)
+    } finally { $fs.Dispose() }
 }
 
 function MI-Move([string]$from, [string]$to) {
@@ -206,12 +265,12 @@ function MI-SwapIn([string]$stage) {
 }
 
 function MI-ReadUser {
-    $m = MI-ReadJson (Join-Path $script:MI.User 'manifest.json')
+    $m = MI-ReadJsonStrict (Join-Path $script:MI.User 'manifest.json')   # under install.lock: unreadable is not missing
     if ($m) { return $m }
     if (-not (Test-Path -LiteralPath $script:MI.User)) {
         # a replacement cut off between its two renames: the previous copy is still in staging
         $old = Get-ChildItem -LiteralPath $script:MI.Stage -Directory -Filter 'user-old-*' -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'manifest.json') } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if ($old) { MI-Move $old.FullName $script:MI.User; MI-Log 'recovered the copy of the user''s build from an interrupted replacement'; return (MI-ReadJson (Join-Path $script:MI.User 'manifest.json')) }
+        if ($old) { MI-Move $old.FullName $script:MI.User; MI-Log 'recovered the copy of the user''s build from an interrupted replacement'; return (MI-ReadJsonStrict (Join-Path $script:MI.User 'manifest.json')) }
     }
     return $null
 }
@@ -282,7 +341,7 @@ function MI-PutBackUser($ub) {
 # build someone installed on purpose as the user's. Call with install.lock held (MI-Reconcile takes it).
 function MI-ReconcileLocked([string]$why) {
     $g = @(MI-Games)
-    $st = MI-State
+    $st = MI-State -Strict
     if ($g.Count -gt 0) {
         if ($st.state -ne 'user') { return @{ ok = $false; pending = $true; message = "a game is running (Cities2.exe PID $($g -join ', ')): the user's build goes back when it has closed" } }
         return @{ ok = $true; pending = $false; message = '' }
@@ -400,7 +459,7 @@ function MI-DeployOnPurpose([string[]]$sources, [int]$allowPid = 0) {
         return (MI-WithLock {
             $g = @(MI-Games)
             if ($g.Count -gt 0) { return @{ ok = $false; message = "a game is running (Cities2.exe PID $($g -join ', ')): close it first. Nothing was installed (the build is in bin\Release; the game queue takes it from there: build with -p:Deploy=false)" } }
-            $st = MI-State
+            $st = MI-State -Strict
             if ($st.state -ne 'user') {
                 $h = MI-SuiteLockHolder
                 if ($h -and (-not $allowPid -or [int]$h.pid -ne $allowPid)) { return @{ ok = $false; message = "the game queue's game host (run $($h.runId), PID $($h.pid)) has its build $($st.label) in Mods\Placemaker for its game: install when that game has closed (tools\suite\Queue.ps1 shows the line). Nothing was installed" } }

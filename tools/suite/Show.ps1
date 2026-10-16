@@ -226,15 +226,15 @@ $runDir = Join-Path $ResultsRoot $runId
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ what to look at â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $summaryFile = Join-Path $runDir 'summary.json'
-if (-not (Test-Path $summaryFile)) {
+if (-not (Test-Path -LiteralPath $summaryFile)) {
     Write-Host 'The run did not get as far as the game. Last lines:'
     $hostOut | Select-Object -Last 15 | ForEach-Object { Write-Host "  $_" }
     if ($runCode -eq 2) { Remove-Item -LiteralPath $setFile -Force -ErrorAction SilentlyContinue; exit 2 }   # left the line (or a usage error)
     exit 1
 }
-$rows = @((Get-Content $summaryFile -Raw -Encoding UTF8 | ConvertFrom-Json).scenarios)
+$rows = @((Get-Content -LiteralPath $summaryFile -Raw -Encoding UTF8 | ConvertFrom-Json).scenarios)
 $log = Join-Path $runDir 'logs\Placemaker.log'
-$lines = if (Test-Path $log) { @(Get-Content $log -Encoding UTF8) } else { @() }
+$lines = if (Test-Path -LiteralPath $log) { @(Get-Content -LiteralPath $log -Encoding UTF8) } else { @() }
 $pictures = 0
 Write-Host ''
 $k = 0
