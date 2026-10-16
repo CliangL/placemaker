@@ -180,6 +180,8 @@ namespace Placemaker.Core.Layers.Commercial
             // Depth pattern over the rails' common stretch: lot, then n pairs (rung, row, row, rung, lot), then optionally a last
             // rung and row (needed when there is no street behind: it is the U's back run).
             float lotMin1 = Mall.LotDepth(1) + 4f, lotBetween = MinLotBetween(ctx);
+            // A last row backing onto a street stops short of its first zone row (else the row is cut shallower and a lawn is left).
+            float kbBack = through ? mall.KerbMargin(r.At(0.5f * (xs[0] + xs[xs.Count - 1]), t1 + 1f), r.Dir) : 0f;
             int bestRows = 0, bestN = 0, bestCells = cells; bool bestEnd = false; float bestLot = 0f;
             for (int c = cells; c >= 2 && bestRows == 0; c--)
             {
@@ -190,7 +192,7 @@ namespace Placemaker.Core.Layers.Commercial
                         if (!through && !end) continue;
                         int nRows = 2 * n + (end ? 1 : 0);
                         if (nRows == 0) continue;
-                        float fixedT = n * (4f * h + 2f * d) + (end ? 2f * h + d : 0f);
+                        float fixedT = n * (4f * h + 2f * d) + (end ? 2f * h + d + kbBack : 0f);
                         float lot = (D - fixedT) / (n + 1);
                         if (lot < (nRows >= 2 ? lotBetween : lotMin1)) continue;
                         // more rows first; then a last row backing onto the back (stores' backs to the neighbours, not a lot)
