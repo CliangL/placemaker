@@ -1,16 +1,17 @@
-// (core) The central shelf for the mock backend without the host (Recipes/shelf/*.json, the same files the game reads through
-// Core/Tool/Shelf.cs). With the host up, its catalog already carries each type's category, the shelved flags and the categories.
+// (core) The central shelf for the mock backend without the host. (shops2) The mock's own fixed test shelf (UI/mock/shelf/*.json,
+// read by the mock host too), not the product's Recipes/shelf: hiding a type or style in the product never breaks the UI tests.
+// With the host up, its catalog already carries each type's category, the shelved flags and the categories.
 import type { CategoryInfo, RecipeInfo } from "../../src/contract";
-import roads from "../../../Recipes/shelf/roads.json";
-import parking from "../../../Recipes/shelf/parking.json";
-import parks from "../../../Recipes/shelf/parks.json";
-import beach from "../../../Recipes/shelf/beach.json";
-import shops from "../../../Recipes/shelf/shops.json";
-import nature from "../../../Recipes/shelf/nature.json";
-import farms from "../../../Recipes/shelf/farms.json";
-import sports from "../../../Recipes/shelf/sports.json";
-import industry from "../../../Recipes/shelf/industry.json";
-import transport from "../../../Recipes/shelf/transport.json";
+import roads from "../shelf/roads.json";
+import parking from "../shelf/parking.json";
+import parks from "../shelf/parks.json";
+import beach from "../shelf/beach.json";
+import shops from "../shelf/shops.json";
+import nature from "../shelf/nature.json";
+import farms from "../shelf/farms.json";
+import sports from "../shelf/sports.json";
+import industry from "../shelf/industry.json";
+import transport from "../shelf/transport.json";
 
 type ShelfFile = {
     id: string;

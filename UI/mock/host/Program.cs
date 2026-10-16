@@ -107,11 +107,14 @@ namespace Placemaker.MockHost
     {
         // ───────────── catalog ─────────────
 
-        /// <summary>(core) The central shelf (Recipes/shelf/*.json), read as the game reads it (Core/Tool/Shelf.cs).</summary>
+        /// <summary>(core) The shelf, read as the game reads it (Core/Tool/Shelf.cs). (shops2) The mock's own fixed test shelf
+        /// (UI/mock/shelf/*.json) when it is there, so the product's shelf decisions (Recipes/shelf: hidden types and styles) never
+        /// change what the UI tests see; else the product's.</summary>
         private static Placemaker.Core.Tool.Shelf Shelf(string repo)
         {
             var files = new List<KeyValuePair<string, string>>();
-            var dir = Path.Combine(repo ?? ".", "Recipes", Placemaker.Core.Tool.Shelf.FolderName);
+            var dir = Path.Combine(repo ?? ".", "UI", "mock", Placemaker.Core.Tool.Shelf.FolderName);
+            if (!Directory.Exists(dir)) dir = Path.Combine(repo ?? ".", "Recipes", Placemaker.Core.Tool.Shelf.FolderName);
             if (Directory.Exists(dir))
                 foreach (var f in Directory.GetFiles(dir, "*.json").OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                     files.Add(new KeyValuePair<string, string>(Path.GetFileName(f), File.ReadAllText(f)));
