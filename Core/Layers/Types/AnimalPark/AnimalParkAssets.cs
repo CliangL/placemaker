@@ -108,7 +108,8 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                 case "petting": return AssetMix.One("ToolShed03", "FirewoodShelter02");
                 case "aviary": return AssetMix.One("ToolShed02", "ToolShed03");
                 case "deer": return AssetMix.One("FirewoodShelter02", "CampgroundShelter01");
-                default: return AssetMix.One("CampgroundShelter02", "CampgroundShelter01");
+                // Open wooden field shelter; the campground shelter read as a black dome in the paddocks (rf-farms).
+                default: return AssetMix.One("FirewoodShelter02", "ToolShed03");
             }
         }
 

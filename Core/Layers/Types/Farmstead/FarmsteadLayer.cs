@@ -440,10 +440,10 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                     case FieldKind.Grain:
                         if (GroundCover.Field(ctx, f.Ring, GroundCover.Straw)) fieldSurfaces++;
                         // Arable farms water their big fields: an irrigation rig standing across the rows.
-                        if (sub == "arable" && irrigation < 3 && f.Region.Area > 6000f)
+                        if (sub == "arable" && irrigation < 3 && f.Region.Area > 2500f)
                         {
                             var at = f.Region.DeepestPoint(out float clear, null, 10);
-                            if (clear > 10f && LeisureKit.Put(ctx, occ, at, FarmKit.Yaw(f.RowDir), ObjectRole.Furniture, AssetMix.One(FarmArt.Irrigation),
+                            if (clear > 9f && LeisureKit.Put(ctx, occ, at, FarmKit.Yaw(f.RowDir), ObjectRole.Furniture, AssetMix.One(FarmArt.Irrigation),
                                 AssetCategories.FarmMachinery, 8.6f, Hashing.Mix(v, 0x1A6u), 0.5f, 0.3f)) irrigation++;
                         }
                         else if (paint)
