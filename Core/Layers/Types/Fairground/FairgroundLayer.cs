@@ -77,7 +77,7 @@ namespace Placemaker.Core.Layers.Types.Events
             c.Choice("stageEnd", "far", ControlTier.More, "fairStage", "far", "near", "side").Tip();
             c.Toggle("backstage", true, ControlTier.More, "fairStage").Tip();
             c.Toggle("barrier", true, ControlTier.More, "fairStage").Tip();
-            c.Toggle("foh", true, ControlTier.More, "fairStage").Tip();
+            c.Toggle("foh", false, ControlTier.More, "fairStage").Tip();   // rf-squares: off: in the game it is a lone dark dome in the field
             c.Asset("stageAsset", AssetCategories.Stage, ControlTier.More, "fairStage");
 
             c.Slider("toilets", 8, 0, 40, 1, "count", ControlTier.More, "fairService").Tip();
@@ -114,7 +114,7 @@ namespace Placemaker.Core.Layers.Types.Events
 
         protected override void DefinePresets()
         {
-            Preset("fairground", ("style", "fairground"), ("layout", "avenue"), ("stalls", 30.0), ("rides", 3.0), ("stage", true), ("field", 20.0),
+            Preset("fairground", ("style", "fairground"), ("layout", "avenue"), ("stalls", 30.0), ("rides", 3.0), ("stage", true), ("field", 20.0), ("foh", false),
                 ("stageSize", "medium"), ("foodCourt", true), ("toilets", 6.0), ("festoons", true), ("landmark", false), ("ground", "grass"));
             Preset("festival", ("style", "festival"), ("layout", "loop"), ("stalls", 24.0), ("rides", 0.0), ("stage", true), ("field", 45.0),
                 ("stageSize", "large"), ("stallKind", "tents"), ("toilets", 24.0), ("lightSpacing", 30.0), ("backstage", true), ("barrier", true),
