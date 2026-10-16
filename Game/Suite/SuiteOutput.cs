@@ -48,6 +48,7 @@ namespace Placemaker.Game.Suite
                     st.GhostTotal = host.GhostTotal;
                     s.Block = host.S.Block;
                     foreach (var key in new[] { "entrances", "terrain" }) if (host.Result[key] != null) st.Result["host" + key] = host.Result[key].DeepClone();
+                    if (host.Result["census"]?["connections"] != null) st.Result["hostconnections"] = host.Result["census"]["connections"].DeepClone();
                 }
             }
             else

@@ -126,9 +126,7 @@ namespace Placemaker.Game.Suite
                 }
                 case "connection":
                 {
-                    var ents = (st.Result["entrances"] ?? st.Result["hostentrances"]) as JArray;
-                    var pts = new List<float3>();
-                    if (ents != null) foreach (var e in ents.OfType<JObject>()) if (e["entry"] is JArray a) pts.Add(P3(new float2((float)a[0], (float)a[1])));
+                    var pts = ConnectionPoints(st);
                     if (i < 0 || i >= pts.Count) { err = $"no connection {i} (the build has {pts.Count} measured entries)"; break; }
                     pivot = pts[i];
                     radius = 15f;
@@ -222,12 +220,21 @@ namespace Placemaker.Game.Suite
             if (ok && !string.IsNullOrEmpty(shot)) yield return StepShot(st, new JObject { ["shotMode"] = step["shotMode"] }, rec, shot);
         }
 
+        /// <summary>Where the build is entered from the city (the census's connections; for an 'on' scenario, its host's).</summary>
+        private List<float3> ConnectionPoints(ScenarioState st)
+        {
+            var pts = new List<float3>();
+            var c = (st.Result["census"]?["connections"] ?? st.Result["hostconnections"]) as JArray;
+            if (c != null) foreach (var e in c.OfType<JObject>()) if (e["at"] is JArray a) pts.Add(P3(new float2((float)a[0], (float)a[1])));
+            return pts;
+        }
+
         private int CountTargets(ScenarioState st, string target)
         {
             switch ((target ?? "").ToLowerInvariant())
             {
                 case "entrance": return st.Markers.Count > 0 ? st.Markers.Count : _tool.SuiteMarkers().Count;
-                case "connection": return ((st.Result["entrances"] ?? st.Result["hostentrances"]) as JArray)?.OfType<JObject>().Count(e => e["entry"] != null) ?? 0;
+                case "connection": return ConnectionPoints(st).Count;
                 case "issue": return (_tool.Plan?.Issues.Concat(_tool.Plan.Layers.SelectMany(l => l.Issues)) ?? Enumerable.Empty<PlanIssue>()).Count(x => x.At.HasValue);
                 case "growable": return ((st.Result["growablesAfterGrow"] ?? st.Result["growablesAtStep"])?["list"] as JArray)?.Count ?? 0;
             }
@@ -386,7 +393,11 @@ namespace Placemaker.Game.Suite
             Texture2D a = null, b = null;
             string err = null;
             int good = 0;
-            yield return CaptureOnce(mode);
+            // the proof is about the scene: always on clean render captures (the overlay and the panel may animate: a
+            // pulsing marker, a spinner); the picture in the asked mode is taken once the scene is proven still
+            string proof = "render";
+            settle["proofMode"] = proof;
+            yield return CaptureOnce(proof);
             a = _capture;
             err = _captureError;
             SuiteCapture.Diff lastDiff = default;
@@ -395,7 +406,7 @@ namespace Placemaker.Game.Suite
                 float ta = Time.realtimeSinceStartup;
                 yield return Frames(15);
                 while (Time.realtimeSinceStartup - ta < 0.25f) yield return null;
-                yield return CaptureOnce(mode);
+                yield return CaptureOnce(proof);
                 b = _capture;
                 if (b == null) { err = _captureError; break; }
                 var d = SuiteCapture.Compare(a, b, topExclude);
@@ -419,19 +430,27 @@ namespace Placemaker.Game.Suite
             settle["limits"] = new JArray(ChangedLimit, Math.Round(TileLimit, 1));
             settle["totalMs"] = Math.Round((Time.realtimeSinceStartup - t0) * 1000f);
             var keep = b ?? a;
+            Texture2D final = null;
+            if (keep != null && mode != proof)
+            {
+                yield return CaptureOnce(mode);
+                final = _capture;
+                if (final == null) err = _captureError;
+            }
             if (keep != null)
             {
-                try { File.WriteAllBytes(path, keep.EncodeToPNG()); }
+                try { File.WriteAllBytes(path, (final ?? keep).EncodeToPNG()); }
                 catch (Exception e) { err = e.Message; }
                 if (!settled && a != null && b != null)
                 {
                     string heat = Path.Combine(_shots, Path.GetFileNameWithoutExtension(file) + ".unsettled-heat.png");
                     if (SuiteCapture.Heatmap(a, b, heat) == null) settle["heatmap"] = "shots/" + Path.GetFileName(heat);
                 }
-                if (mode != "ui") settle["luma"] = Math.Round(SuiteCapture.MeanLuma(keep), 1);
+                settle["luma"] = Math.Round(SuiteCapture.MeanLuma(keep), 1);
             }
             if (a != null) UnityEngine.Object.Destroy(a);
             if (b != null) UnityEngine.Object.Destroy(b);
+            if (final != null) UnityEngine.Object.Destroy(final);
             if (labels) SuiteCapture.Labels(false);
             string rel = err == null ? "shots/" + file : "ERROR " + err;
             rec["shot"] = rel;

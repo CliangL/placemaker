@@ -615,6 +615,9 @@ namespace Placemaker.Game.Suite
             // zone cells: what changed in the neighbourhood, against the plan's zoned cells
             o["zoning"] = Zoning(before, plan);
 
+            // where the build is entered from the city (car, then pedestrian), whether or not it has entrance markers
+            if (lanes != null) o["connections"] = Connections(lanes);
+
             // entrances, physically
             if (lanes != null && markers != null && markers.Count > 0) o["entrances"] = Entrances(markers, lanes, members, groupId);
 
@@ -790,6 +793,24 @@ namespace Placemaker.Game.Suite
             return a;
         }
 
+        private JArray Connections(SuiteLanes lanes)
+        {
+            var a = new JArray();
+            var seen = new List<float3>();
+            foreach (bool ped in new[] { false, true })
+            {
+                var reach = lanes.Reach(i => lanes.Lanes[i].Who == SuiteLanes.Who.City && (ped ? (lanes.Lanes[i].Mode & SuiteLanes.Mode.Pedestrian) != 0 : (lanes.Lanes[i].Mode & SuiteLanes.Mode.Car) != 0), !ped, out var prev);
+                foreach (var e in lanes.Entries(reach, prev))
+                {
+                    if (seen.Any(p => math.distance(p.xz, e.At.xz) < 10f)) continue;
+                    seen.Add(e.At);
+                    if (a.Count >= 12) break;
+                    a.Add(new JObject { ["at"] = new JArray(Math.Round(e.At.x, 1), Math.Round(e.At.z, 1)), ["mode"] = ped ? "pedestrian" : "car", ["lane"] = PrefabName(lanes.Lanes[e.Lane].Owner) + " / " + PrefabName(lanes.Lanes[e.Lane].E) });
+                }
+            }
+            return a;
+        }
+
         private static bool IsPedestrianKind(string kind)
         {
             if (string.IsNullOrEmpty(kind)) return false;
@@ -946,11 +967,13 @@ namespace Placemaker.Game.Suite
                 var c = _em.GetComponentData<Curve>(e).m_Bezier;
                 if (InBox(MathUtils.Position(c, 0.5f).xz, site.Min - 100f, site.Max + 100f)) roads.Add(c);
             }
+            // near a road: only asked for samples that are pits (the distance test is the expensive part)
             var near = new List<bool>(site.Samples.Count);
-            foreach (var p in site.Samples)
+            for (int i = 0; i < site.Samples.Count; i++)
             {
                 bool n = false;
-                foreach (var c in roads) if (MathUtils.Distance(c.xz, p, out _) <= 14f) { n = true; break; }
+                if (i < after.Count && math.isfinite(after[i]) && plannedLo[i] - after[i] > 1.5f)
+                    foreach (var c in roads) if (MathUtils.Distance(c.xz, site.Samples[i], out _) <= 14f) { n = true; break; }
                 near.Add(n);
             }
             var r = SuiteVerdicts.PitsAndMounds(site.Samples, after, plannedLo, plannedHi, near, site.Inside);

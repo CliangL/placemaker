@@ -1,10 +1,10 @@
 {
   "set": "core",
-  "description": "Every parking preset, every commercial type x preset, small plazas, a couple of parks, road grids, hillside terraces on a slope; plus the switching run (every commercial type's first two presets, parking, plaza).",
+  "description": "Every parking preset, every commercial type x preset (each type's first style next to grown housing), small plazas, parks (around plopped buildings, on rough ground), road grids, hillside terraces on a slope; both build paths (instant from the settled ghost, and Build pressed while the plan is ready but before the ghost, and from Sketch); a second build of the same type with the kept design; two user-paced variants; plus the switching run.",
   "grow": true,
   "switching": {
     "site": "flat",
-    "settleSeconds": 2.5,
+    "settleFrames": 150,
     "rapidMs": 300,
     "steps": [
       { "expand": "presets", "group": "commercial", "limit": 2 },
@@ -15,16 +15,42 @@
   },
   "scenarios": [
     { "expand": "presets", "layer": "parking", "site": "flat" },
-    { "expand": "presets", "group": "commercial", "site": "zoned" },
+    { "id": "parking-kept-design", "site": "flat", "note": "The next build of the same type: the design and recipe stay (the UI's path); no fresh type pick.",
+      "steps": [
+        { "do": "area", "tool": "bucket" },
+        { "do": "type", "layer": "parking", "fresh": false },
+        { "do": "entrances" },
+        { "do": "preview", "shot": "preview", "camera": { "target": "build", "view": "oblique" } },
+        { "do": "build" },
+        { "do": "shot", "name": "top", "camera": { "target": "build", "view": "top" }, "shotMode": "render" } ] },
+    { "layer": "parking", "preset": "", "site": "flat", "id": "parking-planready", "buildWhen": "planReady", "note": "Next and Build at once: the build service plans it (no ghost adopted)." },
+    { "layer": "parking", "preset": "", "site": "flat", "id": "parking-sketch", "previewMode": "sketch", "note": "Review set to Sketch, then Build." },
+    { "layer": "parking", "preset": "", "site": "flat", "id": "parking-user-pace", "pace": "user", "note": "A person who does not wait for 'Planning...'." },
+    { "layer": "parking", "preset": "", "site": "slope", "id": "parking-default-slope" },
+
+    { "expand": "presets", "group": "commercial", "limit": 1, "site": "zoned" },
+    { "expand": "presets", "layer": "stripMall", "site": "flat", "skip": ["classic"] },
+    { "expand": "presets", "layer": "shoppingPlaza", "site": "flat", "skip": ["plaza"] },
+    { "expand": "presets", "layer": "outdoorMall", "site": "flat", "skip": ["promenade"] },
+    { "expand": "presets", "layer": "shopsPark", "site": "flat", "skip": ["clusters"] },
+    { "expand": "presets", "layer": "mallPark", "site": "flat", "skip": ["commons"] },
+    { "expand": "presets", "layer": "highStreet", "site": "flat", "skip": ["market"] },
+    { "expand": "presets", "layer": "retailPark", "site": "flat", "skip": ["classic"] },
+    { "expand": "presets", "layer": "mallDistrict", "site": "flat", "skip": ["district"] },
+    { "layer": "stripMall", "preset": "classic", "site": "rough", "id": "stripMall-classic-rough" },
+
     { "layer": "plaza", "preset": "", "site": "flat", "draw": [44, 32] },
     { "layer": "plaza", "preset": "market", "site": "flat", "draw": [60, 40] },
+    { "layer": "plaza", "preset": "market", "site": "flat", "draw": [60, 40], "id": "plaza-market-planready", "buildWhen": "planReady" },
+    { "layer": "plaza", "preset": "civic", "site": "flat", "draw": [60, 40], "id": "plaza-civic-user-pace", "pace": "user" },
+    { "layer": "plaza", "preset": "terraced", "site": "slope", "id": "plaza-terraced-slope" },
+
     { "layer": "park", "preset": "", "site": "survive" },
     { "layer": "park", "preset": "", "site": "rough", "id": "park-default-rough" },
+    { "layer": "park", "preset": "", "site": "flat", "id": "park-sketch", "previewMode": "sketch" },
+
     { "layer": "roads", "preset": "strict-grid", "site": "flat" },
     { "layer": "roads", "preset": "superblocks", "site": "flat" },
-    { "layer": "plaza", "preset": "terraced", "site": "slope", "id": "plaza-terraced-slope" },
-    { "layer": "roads", "preset": "terraced-hillside", "site": "slope", "id": "roads-terraced-hillside-slope" },
-    { "layer": "parking", "preset": "", "site": "slope", "id": "parking-default-slope" },
-    { "layer": "stripMall", "preset": "classic", "site": "rough", "id": "stripMall-classic-rough" }
+    { "layer": "roads", "preset": "terraced-hillside", "site": "slope", "id": "roads-terraced-hillside-slope" }
   ]
 }

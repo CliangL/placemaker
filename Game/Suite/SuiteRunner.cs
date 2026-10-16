@@ -166,9 +166,10 @@ namespace Placemaker.Game.Suite
         {
             float ms = Time.unscaledDeltaTime * 1000f;   // the frame that just ended
             _lastFrameMs = ms;
-            if (_openAtFrameStart) _window.Add((ms, _overheadPrevFrame, Time.frameCount - 1));
-            _overheadPrevFrame = _probeMsThisFrame;
+            // the suite work done in the coroutines of the frame that just ended belongs to that frame
+            float overhead = _probeMsThisFrame;
             _probeMsThisFrame = 0f;
+            if (_openAtFrameStart) _window.Add((ms, overhead, Time.frameCount - 1));
             _openAtFrameStart = _windowOpen;
             if (_tracing) Say($"frame {Time.frameCount} {ms:F1} ms sim {_world?.GetExistingSystemManaged<SimulationSystem>()?.frameIndex}");
             if (ms > _worstRecentMs || Time.realtimeSinceStartup - _worstRecentAt > 10f) { _worstRecentMs = ms; _worstRecentAt = Time.realtimeSinceStartup; }
@@ -910,9 +911,13 @@ namespace Placemaker.Game.Suite
                 switch ((spec.expand ?? "").ToLowerInvariant())
                 {
                     case "presets":
+                        // limit: the first N styles of EACH type
                         foreach (var g in Generators(spec))
-                            foreach (var p in PresetIds(g))
-                                if (spec.skip == null || !spec.skip.Contains(p)) items.Add((g.Id, p));
+                        {
+                            var ids = PresetIds(g).Where(p => spec.skip == null || !spec.skip.Contains(p)).ToList();
+                            if (spec.limit > 0) ids = ids.Take(spec.limit).ToList();
+                            foreach (var p in ids) items.Add((g.Id, p));
+                        }
                         break;
                     case "types":
                         foreach (var g in Generators(spec)) items.Add((g.Id, spec.preset ?? ""));
@@ -921,7 +926,7 @@ namespace Placemaker.Game.Suite
                         items.Add((spec.layer, spec.preset ?? ""));
                         break;
                 }
-                if (spec.limit > 0 && items.Count > spec.limit) items = items.Take(spec.limit).ToList();
+                if (spec.limit > 0 && (spec.expand ?? "") != "presets" && items.Count > spec.limit) items = items.Take(spec.limit).ToList();
                 foreach (var (layer, preset) in items)
                 {
                     if (string.IsNullOrEmpty(layer)) continue;
