@@ -374,14 +374,43 @@ namespace Placemaker.Game.Suite
         // ───────────── visibility: built is not the same as seen ─────────────
 
         /// <summary>
-        /// Member objects a player would see. "alive" = exists, not Deleted (camera-independent). Seen = alive, not
-        /// Overridden (the game's overlap verdict), not Hidden, not Unspawned, and registered for drawing (a culling index
-        /// and mesh batches). Objects nobody is meant to see (carriers, markers, mesh-less) are listed apart, not counted.
+        /// Whether the game would draw an object from the current camera: inside the view and big enough on the screen
+        /// (at least 4 pixels) — the condition under which a missing draw is a defect, not distance culling.
+        /// </summary>
+        public bool ExpectedDrawn(Entity e, UnityEngine.Plane[] planes, UnityEngine.Camera cam)
+        {
+            if (cam == null || planes == null || !_em.HasComponent<global::Game.Rendering.CullingInfo>(e)) return false;
+            var ci = _em.GetComponentData<global::Game.Rendering.CullingInfo>(e);
+            var b = ci.m_Bounds;
+            var center = (b.min + b.max) * 0.5f;
+            var size = b.max - b.min;
+            if (!math.all(math.isfinite(size)) || math.lengthsq(size) < 1e-6f) return false;
+            if (!UnityEngine.GeometryUtility.TestPlanesAABB(planes, new UnityEngine.Bounds(center, size))) return false;
+            float dist = math.max(1f, math.distance((float3)cam.transform.position, center));
+            float px = math.cmax(size) / (2f * dist * math.tan(math.radians(cam.fieldOfView) * 0.5f)) * UnityEngine.Screen.height;
+            return px >= 4f;
+        }
+
+        /// <summary>Not hidden by the game or a tool (camera-independent).</summary>
+        private bool NotHidden(Entity e) => !_em.HasComponent<Overridden>(e) && !_em.HasComponent<Hidden>(e) && !_em.HasComponent<global::Game.Objects.Unspawned>(e);
+
+        private bool Drawn(Entity e) =>
+            _em.HasComponent<global::Game.Rendering.CullingInfo>(e) && _em.GetComponentData<global::Game.Rendering.CullingInfo>(e).m_CullingIndex != 0
+            && _em.HasBuffer<global::Game.Rendering.MeshBatch>(e) && _em.GetBuffer<global::Game.Rendering.MeshBatch>(e, true).Length > 0;
+
+        /// <summary>
+        /// Member objects a player would see, measured at the current camera (the runner frames the build the same
+        /// standard way every time). Camera-independent: alive, not Overridden (the overlap verdict of the game), not
+        /// Hidden, not Unspawned. Camera-dependent, but only where it must hold: every object that is inside the view
+        /// and big enough on the screen is registered for drawing (a culling index and mesh batches). Objects nobody is
+        /// meant to see (carriers, markers, mesh-less, underground) are listed apart.
         /// </summary>
         public JObject Visibility(IEnumerable<Entity> members)
         {
-            int objects = 0, visible = 0, overridden = 0, hidden = 0, deleted = 0, notRendered = 0, unspawned = 0, byDesign = 0;
-            var rows = new Dictionary<string, int[]>(StringComparer.Ordinal);   // prefab -> [objects, visible, overridden, hidden, notRendered]
+            var cam = UnityEngine.Camera.main;
+            var planes = cam != null ? UnityEngine.GeometryUtility.CalculateFrustumPlanes(cam) : null;
+            int objects = 0, visible = 0, overridden = 0, hidden = 0, deleted = 0, notRendered = 0, unspawned = 0, byDesign = 0, expected = 0, outOfView = 0;
+            var rows = new Dictionary<string, int[]>(StringComparer.Ordinal);   // prefab -> [objects, ok, overridden, hidden, notRendered, expected]
             var design = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var m in members)
             {
@@ -390,54 +419,66 @@ namespace Placemaker.Game.Suite
                 if (why != null) { byDesign++; Bump(design, PrefabName(m) + " (" + why + ")"); continue; }
                 objects++;
                 string name = Normalize(PrefabName(m));
-                if (!rows.TryGetValue(name, out var row)) rows[name] = row = new int[5];
+                if (!rows.TryGetValue(name, out var row)) rows[name] = row = new int[6];
                 row[0]++;
                 if (_em.HasComponent<Deleted>(m)) { deleted++; continue; }
                 if (_em.HasComponent<Overridden>(m)) { overridden++; row[2]++; continue; }
                 if (_em.HasComponent<Hidden>(m)) { hidden++; row[3]++; continue; }
                 if (_em.HasComponent<global::Game.Objects.Unspawned>(m)) { unspawned++; row[3]++; continue; }
-                bool culled = _em.HasComponent<global::Game.Rendering.CullingInfo>(m) && _em.GetComponentData<global::Game.Rendering.CullingInfo>(m).m_CullingIndex != 0;
-                bool batched = _em.HasBuffer<global::Game.Rendering.MeshBatch>(m) && _em.GetBuffer<global::Game.Rendering.MeshBatch>(m, true).Length > 0;
-                if (!culled || !batched) { notRendered++; row[4]++; continue; }
+                bool exp = ExpectedDrawn(m, planes, cam);
+                if (exp) { expected++; row[5]++; }
+                if (exp && !Drawn(m)) { notRendered++; row[4]++; continue; }
+                if (!exp) outOfView++;
                 visible++;
                 row[1]++;
             }
             var notSeen = new JObject();
             foreach (var kv in rows.Where(kv => kv.Value[1] < kv.Value[0]).OrderByDescending(kv => kv.Value[0] - kv.Value[1]).Take(15))
-                notSeen[kv.Key] = $"{kv.Value[1]}/{kv.Value[0]} seen (overridden {kv.Value[2]}, hidden {kv.Value[3]}, not rendered {kv.Value[4]})";
+                notSeen[kv.Key] = $"{kv.Value[1]}/{kv.Value[0]} seen (overridden {kv.Value[2]}, hidden {kv.Value[3]}, not drawn although in view {kv.Value[4]})";
             return new JObject
             {
                 ["objects"] = objects, ["visible"] = visible, ["overridden"] = overridden, ["hidden"] = hidden, ["unspawned"] = unspawned, ["deleted"] = deleted,
-                ["notRendered"] = notRendered, ["notSeen"] = notSeen, ["invisibleByDesign"] = byDesign, ["invisibleByDesignPrefabs"] = TopDict(design, 10),
+                ["notRendered"] = notRendered, ["expectedInView"] = expected, ["tooSmallOrOutOfView"] = outOfView, ["notSeen"] = notSeen,
+                ["invisibleByDesign"] = byDesign, ["invisibleByDesignPrefabs"] = TopDict(design, 10),
+                ["camera"] = cam != null ? $"{cam.transform.position} fov {cam.fieldOfView:F1}" : "none",
             };
         }
 
-        /// <summary>Seen objects per normalized prefab: the members and everything they own (stall parts, sub-objects).</summary>
+        /// <summary>Drawn objects per normalized prefab at the current camera: the members and everything they own (stall parts, sub-objects); street furniture left out.</summary>
         public Dictionary<string, int> SeenByPrefab(HashSet<Entity> members, int groupId, float2 min, float2 max)
         {
+            var cam = UnityEngine.Camera.main;
+            var planes = cam != null ? UnityEngine.GeometryUtility.CalculateFrustumPlanes(cam) : null;
             var d = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var e in Query<global::Game.Objects.Object>())
             {
                 if (!_em.HasComponent<global::Game.Objects.Transform>(e) || Mobile(e)) continue;
                 if (!InBox(_em.GetComponentData<global::Game.Objects.Transform>(e).m_Position.xz, min, max)) continue;
-                if (MemberOf(e, members, groupId) == Entity.Null) continue;
-                if (InvisibleByDesign(e) != null || !Seen(e)) continue;
+                if (MemberOf(e, members, groupId) == Entity.Null || StreetFurniture(e)) continue;
+                if (InvisibleByDesign(e) != null || _em.HasComponent<Overridden>(e) || _em.HasComponent<Hidden>(e) || _em.HasComponent<global::Game.Objects.Unspawned>(e)) continue;
+                if (!ExpectedDrawn(e, planes, cam) || !Drawn(e)) continue;
                 Bump(d, Normalize(PrefabName(e)));
             }
             return d;
         }
 
-        private bool Seen(Entity e) =>
-            !_em.HasComponent<Overridden>(e) && !_em.HasComponent<Hidden>(e) && !_em.HasComponent<global::Game.Objects.Unspawned>(e)
-            && _em.HasComponent<global::Game.Rendering.CullingInfo>(e) && _em.GetComponentData<global::Game.Rendering.CullingInfo>(e).m_CullingIndex != 0
-            && _em.HasBuffer<global::Game.Rendering.MeshBatch>(e) && _em.GetBuffer<global::Game.Rendering.MeshBatch>(e, true).Length > 0;
+        /// <summary>An object owned (at any depth) by a net of a city street kind (arrows, markings, street lights of a street).</summary>
+        private bool StreetFurniture(Entity e)
+        {
+            var top = TopOwner(e);
+            if (top == e || (!_em.HasComponent<Edge>(top) && !_em.HasComponent<global::Game.Net.Node>(top))) return false;
+            string n = PrefabName(top);
+            return n == SuiteLayout.SmallRoad || n == SuiteLayout.MediumRoad || n == SuiteLayout.PedestrianStreet;
+        }
 
         /// <summary>
-        /// The ghost a person looks at in Review: temporary objects (not hidden, not marked for deletion) with a mesh, per
-        /// normalized prefab — what the build is expected to show.
+        /// The ghost a person looks at in Review: temporary objects (not hidden, not marked for deletion, not copies of
+        /// existing city things, no street furniture) drawn at the current camera, per normalized prefab.
         /// </summary>
         public Dictionary<string, int> GhostByPrefab(float2 min, float2 max, out int total)
         {
+            var cam = UnityEngine.Camera.main;
+            var planes = cam != null ? UnityEngine.GeometryUtility.CalculateFrustumPlanes(cam) : null;
             var d = new Dictionary<string, int>(StringComparer.Ordinal);
             total = 0;
             using (var q = _em.CreateEntityQuery(ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<global::Game.Objects.Object>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(), ComponentType.Exclude<Deleted>()))
@@ -451,7 +492,8 @@ namespace Placemaker.Game.Suite
                     if (!InBox(_em.GetComponentData<global::Game.Objects.Transform>(e).m_Position.xz, min, max)) continue;
                     var pf = PrefabOf(e);
                     if (pf == Entity.Null || _em.HasComponent<global::Game.Objects.Marker>(e) || _em.HasComponent<SpawnLocationData>(pf) || _em.HasComponent<UtilityObjectData>(pf) || !_em.HasBuffer<SubMesh>(pf) || _em.GetBuffer<SubMesh>(pf, true).Length == 0) continue;
-                    if (ReplacesExisting(e)) continue;   // a temporary copy of a city street (split for a junction) and its furniture: not the build
+                    if (ReplacesExisting(e) || StreetFurniture(e)) continue;   // a temporary copy of a city street (split for a junction) and its furniture: not the build
+                    if (!ExpectedDrawn(e, planes, cam) || !Drawn(e)) continue;
                     total++;
                     Bump(d, Normalize(PrefabName(e)));
                 }
@@ -515,12 +557,12 @@ namespace Placemaker.Game.Suite
                 Bump(live, key);
                 Bump(liveByKind, kind);
                 bool isObj = kind == "object" || kind == "building";
-                if (!isObj || Seen(m)) Bump(seen, key);
+                if (!isObj || NotHidden(m)) Bump(seen, key);
                 if (kind == "net") memberEdges.Add(m);
                 if (kind == "object" && stallPrefabs.Contains(name))
                 {
                     liveStalls++;
-                    if (Seen(m)) seenStalls++;
+                    if (NotHidden(m)) seenStalls++;
                     stalls.Add(m);
                 }
             }

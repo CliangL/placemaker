@@ -828,7 +828,7 @@ namespace Placemaker.Game.Suite
             var rec = new JObject();
             var members = _probe.MemberSet(st.Group);
             st.Result["growablesAfterGrow"] = Probe("growables", () => _probe.Growables(st.Before, st.Group, members, st.Plan), rec);
-            st.Result["visibilityAfterGrow"] = Probe("visibility", () => _probe.Visibility(members), rec);
+            yield return Framed(st, rec, Do(() => st.Result["visibilityAfterGrow"] = Probe("visibility", () => _probe.Visibility(members), rec)));
             st.Result["existingAfterGrow"] = Probe("existing", () => _probe.Census(st.Before, st.Group, st.Plan, st.S.Layer, null, null, null)["existingBuildings"], rec);
             if (((int?)st.Result["census"]?["zoning"]?["plannedZonedCells"] ?? 0) > 0)
             {

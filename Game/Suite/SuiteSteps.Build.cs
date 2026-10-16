@@ -23,6 +23,34 @@ namespace Placemaker.Game.Suite
 {
     public sealed partial class SuiteRunner
     {
+        /// <summary>
+        /// Runs measurements with the build framed the standard way (oblique, the same distance every time), so what is
+        /// "in view and big enough to be drawn" means the same for the ghost, the result and after a grow; the camera
+        /// goes back to where it was afterwards.
+        /// </summary>
+        private IEnumerator Framed(ScenarioState st, JObject rec, params IEnumerator[] body)
+        {
+            var c = _world.GetExistingSystemManaged<global::Game.Rendering.CameraUpdateSystem>()?.gamePlayController;
+            Vector3 pivot = c != null ? c.pivot : Vector3.zero;
+            float2 angle = c != null ? c.angle : float2.zero;
+            float zoom = c != null ? c.zoom : 0f;
+            var crec = new JObject();
+            bool ok = false;
+            if (st.Ring != null) yield return CameraStep(st, new JObject { ["target"] = "build", ["view"] = "oblique" }, crec, x => ok = x);
+            yield return Frames(20);   // culling and batches for the new view
+            rec["measuredAt"] = crec["camera"]?["effective"]?.DeepClone();
+            foreach (var b in body) yield return b;
+            if (c != null)
+            {
+                SuiteCapture.Fov(null);
+                SuiteCapture.Aim(new float3(pivot.x, pivot.y, pivot.z), angle.x, angle.y, zoom);
+                Event("camera");
+                yield return Frames(5);
+            }
+        }
+
+        private IEnumerator Do(Action a) { a(); yield break; }
+
         /// <summary>Suite work measured into the frame-time accounting (it is not Placemaker's).</summary>
         private T Timed<T>(Func<T> f)
         {
@@ -132,10 +160,7 @@ namespace Placemaker.Game.Suite
             res["notes"] = new JArray(_tool.BuildNotes.Select(n => n.Key + (n.Args != null && n.Args.Length > 0 ? " (" + string.Join(", ", n.Args) + ")" : "")));
             // the world settles: no temporaries left, the members' visibility unchanged over 5 polls spanning at least 3 s
             yield return WaitFor(rec, "settle", () => TempCount() == 0, 30f);
-            yield return BuildVisibleSettled(st, rec);
-            yield return GroundStable(st, rec);
-            yield return Frames(1);
-            yield return Judge(st, rec, rebuild ? "rebuild" : "build");
+            yield return Framed(st, rec, BuildVisibleSettled(st, rec), GroundStable(st, rec), Frames(1), Judge(st, rec, rebuild ? "rebuild" : "build"));
         }
 
         /// <summary>The probes after a build (or rebuild), recorded per build in result.builds[] and as the scenario's latest.</summary>
@@ -476,7 +501,7 @@ namespace Placemaker.Game.Suite
                 var gr = Probe("growables", () => _probe.Growables(st.Before, st.Group, members, st.Plan), rec);
                 rec["growables"] = gr;
                 st.Result["growablesAtStep"] = gr.DeepClone();
-                rec["visibilityAfterGrow"] = Probe("visibility", () => _probe.Visibility(members), rec);
+                yield return Framed(st, rec, Do(() => rec["visibilityAfterGrow"] = Probe("visibility", () => _probe.Visibility(members), rec)));
                 st.Result["visibilityAfterGrow"] = rec["visibilityAfterGrow"].DeepClone();
                 rec["existingAfterGrow"] = Probe("existing", () => _probe.Census(st.Before, st.Group, st.Plan, st.S.Layer, null, null, null)["existingBuildings"], rec);
             }
