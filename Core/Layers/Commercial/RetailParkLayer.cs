@@ -22,6 +22,8 @@ namespace Placemaker.Core.Layers.Commercial
         public override float MinArea => 9000f;
         protected override float GradeTolerance => 0.04f;
         protected override bool RowsOnFreeFrontage => false;
+        /// <summary>(shops) The big shared car park is the type.</summary>
+        protected override float LotShare => 0.6f;
 
         public static readonly string[] Styles = { "horseshoe", "twin" };
         public static readonly string[] Units = { "small", "medium", "large" };
@@ -64,8 +66,12 @@ namespace Placemaker.Core.Layers.Commercial
             // leaves room for the back terrace.
             float side = zo + cells * Mall.Cell;
             float w = math.min(to - from - 2f * (h + side), 150f);
-            while (w < 56f && cells > 3) { cells--; side = zo + cells * Mall.Cell; w = math.min(to - from - 2f * (h + side), 150f); }
-            float backNeed = twin ? 12f : h + side;
+            int wanted = cells;
+            while (w < 56f && cells > 2) { cells--; side = zo + cells * Mall.Cell; w = math.min(to - from - 2f * (h + side), 150f); }
+            // (shops) A block too narrow for boxes on the legs (the default 150 m city block): the road hugs the sides and the boxes
+            // stand along its back run only, as deep as asked (a big-box terrace facing the lot), instead of a street row.
+            if (w < 56f && !twin) { cells = wanted; side = 0f; w = math.min(to - from - 2f * h, 150f); }
+            float backNeed = twin ? 12f : h + zo + cells * Mall.Cell;
             int aisles = math.clamp((int)math.floor((reach - 1f - Verge - h - backNeed) / Mall.LotDepth(1)), 1, maxAisles);
             while (!twin && cells > 2 && Verge + Mall.LotDepth(aisles) + 2f * h + zo + cells * Mall.Cell > reach - 1f) cells--;
             float lt = Mall.LotDepth(aisles);

@@ -89,7 +89,7 @@ namespace Placemaker.Core.Layers.Commercial
 
         protected override void PlanCore(LayerContext ctx)
         {
-            var mall = new Mall(ctx) { GradeTolerance = GradeTolerance };
+            var mall = NewMall(ctx);
             var runs = mall.Runs();
             if (runs.Count == 0)
             {
@@ -99,9 +99,39 @@ namespace Placemaker.Core.Layers.Commercial
                 return;
             }
             ctx.Check();
-            Compose(ctx, mall, runs);
-            if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * 0.25f) ComposeMore(ctx, mall, runs);
-            ctx.Check();
+            // (shops) The composition is laid out from one main frontage. On a curved or cut-up block the longest straight run may
+            // not hold it (the mall district, mall park and retail park fell back to a row of street plots and a sea of lots): the
+            // next longest runs are tried as the main frontage, from a clean plan each time; when none holds it, the longest
+            // run's fallback is kept as before.
+            var mark = PlanMark.Of(ctx.Plan);
+            var all = runs;
+            int tries = math.min(all.Count, MainRunTries);
+            bool held = false;
+            for (int k = 0; k < tries && !held; k++)
+            {
+                if (k > 0)
+                {
+                    if (all[k].Length < MinMainRun) continue;
+                    mark.Restore(ctx.Plan);
+                    mall = NewMall(ctx);
+                    runs = new List<StreetShops.Run> { all[k] };
+                    for (int i = 0; i < all.Count; i++) if (i != k) runs.Add(all[i]);
+                }
+                Compose(ctx, mall, runs);
+                if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * 0.25f) ComposeMore(ctx, mall, runs);
+                ctx.Check();
+                held = mall.Lanes.Count > 0 && !mark.IssuedSince(ctx.Plan, FallbackKey);
+            }
+            if (!held && !ReferenceEquals(runs, all))
+            {
+                // None held it: back to the longest run's composition (what the type always did).
+                mark.Restore(ctx.Plan);
+                mall = NewMall(ctx);
+                runs = all;
+                Compose(ctx, mall, runs);
+                if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * 0.25f) ComposeMore(ctx, mall, runs);
+                ctx.Check();
+            }
             // (s50) Lot first: the shop rows, access alleys and lots the composition did not reach.
             LotFirst(ctx, mall, runs);
             ctx.Check();
@@ -112,6 +142,49 @@ namespace Placemaker.Core.Layers.Commercial
             FillRest(ctx, mall);
             mall.Finish(ZoneKinds.PrefabId(ctx.S("zoneKind")));
             CommonStats(ctx);
+        }
+
+        /// <summary>
+        /// (shops) Most of the site all lots together may take (the user: "the parking lots look weird"; lot first filled every
+        /// leftover with asphalt). The composition's own lots always go in; leftover lots stop at this share and the rest is planted.
+        /// </summary>
+        protected virtual float LotShare => 0.35f;
+
+        private Mall NewMall(LayerContext ctx)
+        {
+            var m = new Mall(ctx) { GradeTolerance = GradeTolerance };
+            m.LotBudget = m.Region.Area * LotShare;
+            return m;
+        }
+
+        /// <summary>(shops) How many frontage runs are tried as the main one, and the shortest run tried (m).</summary>
+        private const int MainRunTries = 4;
+        private const float MinMainRun = 60f;
+
+        /// <summary>(shops) The lengths of a plan's lists (and a copy of its facts), so a composition that fell back can be taken out again.</summary>
+        private sealed class PlanMark
+        {
+            private int _regions, _surfaces, _nets, _objects, _areas, _terraform, _paint, _zoning, _stats, _issues;
+            private Dictionary<string, double> _facts;
+            public static PlanMark Of(AreaPlan p) => new PlanMark
+            {
+                _regions = p.Regions.Count, _surfaces = p.Surfaces.Count, _nets = p.Nets.Count, _objects = p.Objects.Count, _areas = p.Areas.Count,
+                _terraform = p.Terraform.Count, _paint = p.Paint.Count, _zoning = p.Zoning.Count, _stats = p.Stats.Count, _issues = p.Issues.Count,
+                _facts = new Dictionary<string, double>(p.Facts, StringComparer.Ordinal),
+            };
+            private static void Cut<T>(List<T> l, int n) { if (l.Count > n) l.RemoveRange(n, l.Count - n); }
+            public void Restore(AreaPlan p)
+            {
+                Cut(p.Regions, _regions); Cut(p.Surfaces, _surfaces); Cut(p.Nets, _nets); Cut(p.Objects, _objects); Cut(p.Areas, _areas);
+                Cut(p.Terraform, _terraform); Cut(p.Paint, _paint); Cut(p.Zoning, _zoning); Cut(p.Stats, _stats); Cut(p.Issues, _issues);
+                p.Facts.Clear();
+                foreach (var kv in _facts) p.Facts[kv.Key] = kv.Value;
+            }
+            public bool IssuedSince(AreaPlan p, string key)
+            {
+                for (int i = _issues; i < p.Issues.Count; i++) if (p.Issues[i].Key == key) return true;
+                return false;
+            }
         }
 
         /// <summary>(s32) Smallest height change the site grading emits (Mall.GradeTolerance); the s32 types grade finer.</summary>
@@ -266,6 +339,8 @@ namespace Placemaker.Core.Layers.Commercial
                     var c = Poly.Centroid(piece);
                     long key = ((long)(Poly.Area(piece) * 10f) * 73856093L) ^ ((long)(c.x * 100f) * 19349663L) ^ ((long)(c.y * 100f) * 83492791L);
                     if (failed.Contains(key)) continue;
+                    // (shops) The parking budget: a leftover that would take the lots past it stays planted.
+                    if (mall.LotArea() + 0.7f * Poly.Area(piece) > mall.LotBudget) { failed.Add(key); continue; }
                     // Shut in by plots: give back the smallest plot that touches it and a street.
                     if (openAccess && Poly.Area(piece) >= 1200f) { var parts = Mall.Smooth(piece); var basis = parts.Count > 0 ? parts[0] : piece; if (Poly.Area(basis) >= 1200f && mall.Entries(basis).Count == 0 && mall.OpenAccess(basis)) { any = true; break; } }
                     if (mall.PolyLot(piece, Mall.Parking(ctx), salt + (uint)pass * 0x10u + (uint)i)) { any = true; break; }

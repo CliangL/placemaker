@@ -79,6 +79,10 @@ namespace Placemaker.Core.Layers.Commercial
         public readonly List<float2[]> Shops = new List<float2[]>();
         public readonly List<Lane> Lanes = new List<Lane>();
         public readonly List<float2[]> Lots = new List<float2[]>();
+        /// <summary>(shops) Most land (m²) all the lots together may take: leftover lots (CommercialLayer.RestLots) stop here and the rest is planted.</summary>
+        public float LotBudget = float.MaxValue;
+        /// <summary>(shops) Land the lots take so far (m²).</summary>
+        public float LotArea() { float a = 0f; foreach (var l in Lots) a += Poly.Area(l); return a; }
         public int Stalls, EvStalls;
         /// <summary>Extra outline points green pieces should open towards (lane dead ends of a shop layout).</summary>
         public readonly List<float2> Doors = new List<float2>();
@@ -127,6 +131,39 @@ namespace Placemaker.Core.Layers.Commercial
             float m = float.MaxValue;
             for (int k = 0; k <= 4; k++) m = math.min(m, ReachAt(r, math.lerp(s0, s1, k / 4f)));
             return m;
+        }
+
+        /// <summary>
+        /// (shops) The stretch of a run that holds the largest rectangle reaching straight in (span × smallest reach, reach
+        /// sampled every 4 m), at least <paramref name="minLen"/> long and <paramref name="minReach"/> deep. On a block with an
+        /// angled or curved side the whole run's smallest reach can be a fraction of the land behind most of it (the mall
+        /// district on a 3 ha half-curved block saw 52 m of 150 and fell back to a street row). The whole run is kept when it
+        /// holds at least 85 % of the best. Null when no stretch qualifies.
+        /// </summary>
+        public (float s0, float s1, float reach)? BestSpan(StreetShops.Run r, float minLen, float minReach, float from, float to)
+        {
+            float len = to - from;
+            if (len < minLen) return null;
+            int n = math.max(2, (int)math.ceil(len / 4f));
+            var reach = new float[n + 1];
+            for (int i = 0; i <= n; i++) reach[i] = ReachAt(r, math.lerp(from, to, (float)i / n));
+            float whole = float.MaxValue; foreach (var x in reach) whole = math.min(whole, x);
+            float bestArea = -1f; int bi = 0, bj = n; float bReach = whole;
+            for (int i = 0; i < n; i++)
+            {
+                float m = reach[i];
+                for (int j = i + 1; j <= n; j++)
+                {
+                    m = math.min(m, reach[j]);
+                    float span = len * (j - i) / n;
+                    if (span < minLen || m < minReach) continue;
+                    float a = span * m;
+                    if (a > bestArea) { bestArea = a; bi = i; bj = j; bReach = m; }
+                }
+            }
+            if (bestArea < 0f) return null;
+            if (whole >= minReach && len * whole >= 0.85f * bestArea) return (from, to, whole);
+            return (math.lerp(from, to, (float)bi / n), math.lerp(from, to, (float)bj / n), bReach);
         }
 
         public static float2[] Rect(StreetShops.Run r, float s0, float s1, float t0, float t1) =>
@@ -189,13 +226,37 @@ namespace Placemaker.Core.Layers.Commercial
             int made = 0;
             float len = s1 - s0;
             if (len < Cell - 0.01f) return 0;
-            int n = math.max(1, (int)math.ceil(len / (3 * Cell)));
-            for (int k = 0; k < n; k++)
+            // (shops) A join on the lane the row faces (a lot's alley stub, a footpath) splits that lane into edges, each with its
+            // own cell grid: a plot straddling one keeps a lone column of each, which the game blocks (the strip mall's middle
+            // plots were never zoned: "CutoutNotZonable"). The row is cut at every join along its front, as LaneRows does.
+            var cuts = new List<float>();
+            foreach (var l in Lanes)
+                foreach (var j in l.Joins)
+                {
+                    float u = math.dot(j - r.A, r.Dir), t = math.dot(j - r.A, r.In);
+                    if (u <= s0 + 0.5f || u >= s1 - 0.5f) continue;
+                    // the join lies on the lane whose edge is the row's front (the lane centre is half a lane off t0, on the far side)
+                    if (math.abs(t - (t0 - dir * l.Half)) <= 1.0f) cuts.Add(u);
+                }
+            if (cuts.Count == 0)
             {
-                float a = math.lerp(s0, s1, (float)k / n), b = math.lerp(s0, s1, (float)(k + 1) / n);
-                for (int d = cells; d >= 1; d--)
-                    if (Shop(Rect(r, a, b, t0, t0 + dir * d * Cell))) { made++; break; }
+                int n = math.max(1, (int)math.ceil(len / (3 * Cell)));
+                for (int k = 0; k < n; k++)
+                {
+                    float a = math.lerp(s0, s1, (float)k / n), b = math.lerp(s0, s1, (float)(k + 1) / n);
+                    for (int d = cells; d >= 1; d--)
+                        if (Shop(Rect(r, a, b, t0, t0 + dir * d * Cell))) { made++; break; }
+                }
+                return made;
             }
+            cuts.Sort();
+            float from = s0;
+            foreach (var u in cuts)
+            {
+                if (u - 0.25f - from >= MinStretch) made += Row(r, from, u - 0.25f, t0, cells, dir, null, 3, math.min(2, cells));
+                from = math.max(from, u + 0.25f);
+            }
+            if (s1 - from >= MinStretch) made += Row(r, from, s1, t0, cells, dir, null, 3, math.min(2, cells));
             return made;
         }
 

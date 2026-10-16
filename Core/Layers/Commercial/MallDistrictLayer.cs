@@ -60,9 +60,13 @@ namespace Placemaker.Core.Layers.Commercial
 
             float s0 = r.From, s1 = r.To;
             float reach = mall.Reach(r, s0 + 2f, s1 - 2f);
-            bool right = r.EndCorner || mall.StreetAlong(r.At(s1, 0f) + r.Dir * 0.5f, r.At(s1, reach) + r.Dir * 0.5f);
+            // (shops) On an angled or curved block the stretch of the run with the most land straight behind it, not the whole run.
+            var span = mall.BestSpan(r, 60f, 60f, r.From + 2f, r.To - 2f);
+            if (span.HasValue && (span.Value.s0 > r.From + 3f || span.Value.s1 < r.To - 3f)) { s0 = span.Value.s0 - 2f; s1 = span.Value.s1 + 2f; reach = span.Value.reach; }
+            bool atStart = s0 <= r.From + 0.5f, atEnd = s1 >= r.To - 0.5f;
+            bool right = (atEnd && r.EndCorner) || mall.StreetAlong(r.At(s1, 0f) + r.Dir * 0.5f, r.At(s1, reach) + r.Dir * 0.5f);
             bool back = mall.StreetAlong(r.At(s1, reach) + r.In * 0.5f, r.At(s0, reach) + r.In * 0.5f);
-            bool left = r.StartCorner || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
+            bool left = (atStart && r.StartCorner) || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
 
             // Fit: rails need a row on each side; shrink the rows until at least two rails and one block fit.
             float d = inner * Mall.Cell, o = outer * Mall.Cell;
