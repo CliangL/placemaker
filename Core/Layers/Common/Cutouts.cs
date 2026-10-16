@@ -78,7 +78,7 @@ namespace Placemaker.Core.Layers.Common
             {
                 if (l == null || l.GeneratorId == ZoningLayer) continue;
                 // ── objects: footprint (roughly) must stay off the cutout ──
-                changed += l.Objects.RemoveAll(o => o != null && In(o.Position.xz, Pad(o.Role)));
+                changed += l.Objects.RemoveAll(o => o != null && !KeepsOnPlot(o) && In(o.Position.xz, Pad(o.Role)));
                 // ── nets: keep only the stretches outside. (s26) Never roads/lanes: a cutout faces them, and a lane cut
                 // by a zoned cell reaching across it ended in dead-end caps and let the street behind zone the plots. ──
                 var roads = new List<PlannedNet>();
@@ -126,6 +126,9 @@ namespace Placemaker.Core.Layers.Common
 
         /// <summary>Fences, walls, hedges, railings, bollards: what reads as a border.</summary>
         public static bool IsBorder(PlannedNet n) => n != null && n.Role == NetRole.Fence;
+
+        /// <summary>(rf-shops3) Plot planting (trees and shrubs the shops types put on their own plots: a growing building clears what is in its way).</summary>
+        public static bool KeepsOnPlot(PlannedObject o) => o != null && (o.Category == "tree.plot" || o.Category == "bush.plot");
 
         public static bool IsBorder(PlannedObject o)
         {

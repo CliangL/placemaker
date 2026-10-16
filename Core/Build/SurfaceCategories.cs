@@ -115,6 +115,9 @@ namespace Placemaker.Core.Build
             // Park path tiers (g3): custom bike / trail nets fall back to the footpath pool.
             { "net.bike", AssetCategories.Pathway },
             { "net.trail", AssetCategories.Pathway },
+            // (rf-shops3) Plot planting (trees and shrubs on the shops types' own plots) is ordinary planting.
+            { "tree.plot", AssetCategories.Tree },
+            { "bush.plot", AssetCategories.Bush },
         };
 
         public static void Register(string category, string parent)

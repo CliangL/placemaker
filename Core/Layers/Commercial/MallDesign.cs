@@ -52,12 +52,14 @@ namespace Placemaker.Core.Layers.Commercial
             public bool Worn;
             /// <summary>"water": none | pond | rainGardens | both.</summary>
             public string Water = "none";
+            /// <summary>"plotTrees": trees and shrubs at the back of every plot (a building that grows clears what is in its way; the rest stays green).</summary>
+            public bool PlotTrees;
 
             public bool Racks => Bikes == "racks" || Bikes == "paths";
             public bool BikePaths => Bikes == "paths";
             public bool Pond => Water == "pond" || Water == "both";
             public bool RainGardens => Water == "rainGardens" || Water == "both";
-            public bool Paint => Sites || Worn || RainGardens;
+            public bool Paint => Sites || Worn || RainGardens || PlotTrees;
 
             public static Extras Read(LayerContext ctx)
             {
@@ -75,6 +77,7 @@ namespace Placemaker.Core.Layers.Commercial
                     Sites = s.B("buildingSites", false),
                     Worn = s.B("wornGround", false),
                     Water = s.S("water", "none"),
+                    PlotTrees = s.B("plotTrees", false),
                 };
             }
         }
@@ -294,7 +297,7 @@ namespace Placemaker.Core.Layers.Commercial
                 // A tree on each side of the walk every ~9 m, a lamp every other gap, a bench pair halfway.
                 float total = 0f;
                 for (int i = 0; i + 1 < k.Walk.Count; i++) total += math.distance(k.Walk[i], k.Walk[i + 1]);
-                float off = math.min(0.5f * (k.T1 - k.T0) - 1.2f, 3.4f);
+                float off = math.clamp(0.5f * (k.S1 - k.S0) - 1.0f, 2.2f, 3.2f);
                 int n = math.max(1, (int)math.floor((total - 6f) / 9f));
                 int placed = 0;
                 for (int j = 0; j <= n; j++)
@@ -629,17 +632,92 @@ namespace Placemaker.Core.Layers.Commercial
         /// </summary>
         public int PaintSites()
         {
-            if (!X.Sites || Shops.Count == 0) return 0;
+            if ((!X.Sites && !X.PlotTrees) || Shops.Count == 0) return 0;
             var kit = PaintKit();
             int n = 0;
             foreach (var s in Shops)
             {
-                var r = Shrink(s, 0.9f);
-                if (Poly.Area(r) < 30f) continue;
-                if (kit.Fill(r, TerrainMaterials.Dirt, 0.72f, 1.6f, 0.7f, 5f) != null) n++;
+                if (!PlotFrame(s, out var f, out float w, out float dep)) continue;
+                // The front of the plot (where the building stands) is a prepared site; with plot trees the back is a lawn.
+                float siteDepth = X.PlotTrees && dep >= 3f * Cell - 0.5f ? dep - 1.5f * Cell : dep;
+                if (X.Sites)
+                {
+                    var r = Rect(f, 0.9f, w - 0.9f, 0.6f, siteDepth - 0.6f);
+                    if (Poly.Area(r) >= 30f && kit.Fill(r, TerrainMaterials.Dirt, 0.62f, 1.6f, 0.7f, 5f) != null) n++;
+                }
+                if (X.PlotTrees && siteDepth < dep - 1f)
+                    kit.Fill(Rect(f, 0.6f, w - 0.6f, siteDepth - 1f, dep - 0.5f), TerrainMaterials.Lush, 0.55f, 2f, 0.8f, 6f);
             }
             Ctx.Plan.Facts["buildingSites"] = n;
             return n;
+        }
+
+        /// <summary>Plot planting: plot trees and shrubs as their own categories, kept on the zoning cutouts (Cutouts.KeepsOnPlot).</summary>
+        public const string PlotTree = "tree.plot", PlotBush = "bush.plot";
+
+        /// <summary>
+        /// (rf-shops3, the user via the lead) Trees and shrubs ON the plots: a plot drawn 3 x 3 may grow a 2 x 2 building; the
+        /// growing building is placed over what is in its way (the game hides overridable trees under it) and the rest stays
+        /// green, which reads better than bare ground. Trees along the back of plots three cells deep or more, a shrub in each
+        /// back corner. Never surfaces on plots (buildings cannot grow on them). Returns the trees planted.
+        /// </summary>
+        public int PlantPlots()
+        {
+            if (!X.PlotTrees || Shops.Count == 0) return 0;
+            int trees = 0, bushes = 0;
+            foreach (var s in Shops)
+            {
+                if (!PlotFrame(s, out var f, out float w, out float dep)) continue;
+                var cen = Poly.Centroid(s);
+                uint v = Hashing.Mix(Ctx.Seed, (uint)(int)(cen.x * 13f) ^ (uint)(int)(cen.y * 7f));
+                if (dep >= 3f * Cell - 0.5f)
+                {
+                    int n = math.max(1, (int)math.floor((w - 3f) / 7.5f));
+                    for (int i = 0; i < n; i++)
+                    {
+                        float u = w * (i + 0.5f) / n + (Hashing.Unit(v + (uint)i) - 0.5f) * 1.6f;
+                        var p = f.At(math.clamp(u, 2.2f, w - 2.2f), dep - 2.6f - Hashing.Unit(v + 31u + (uint)i) * 1.2f);
+                        Ctx.Object(p, Hashing.Unit(v + 7u + (uint)i) * 6.283f, ObjectRole.Tree, AssetMix.Pick(ParkArt.ParkTrees, v + (uint)i), Hashing.Mix(v, (uint)i), 1 + (int)((v >> (i + 3)) % 3u), PlotTree);
+                        trees++;
+                    }
+                }
+                if (w >= 6f)
+                    foreach (float u in new[] { 1.3f, w - 1.3f })
+                    {
+                        Ctx.Object(f.At(u, dep - 1.3f), Hashing.Unit(v + 77u) * 6.283f, ObjectRole.Bush, new AssetRef(""), Hashing.Mix(v, 0x88u + (uint)(u > 2f ? 1 : 0)), -1, PlotBush);
+                        bushes++;
+                    }
+            }
+            Ctx.Plan.Facts["plotTrees"] = trees;
+            Ctx.Plan.Facts["plotBushes"] = bushes;
+            return trees;
+        }
+
+        /// <summary>
+        /// A plot's frame: s along its front (the edge nearest a lane or a street, where the building stands), t into the plot;
+        /// its width and depth. False when the plot is not a four-sided ring.
+        /// </summary>
+        public bool PlotFrame(float2[] plot, out StreetShops.Run frame, out float width, out float depth)
+        {
+            frame = default; width = depth = 0f;
+            if (plot == null || plot.Length != 4) return false;
+            var roads = _roads ?? (_roads = StreetFrontage.Roads(Ctx.Input));
+            var ring = Poly.EnsureCcw((float2[])plot.Clone());
+            int best = -1; float bestD = float.MaxValue;
+            for (int i = 0; i < 4; i++)
+            {
+                var m = math.lerp(ring[i], ring[(i + 1) % 4], 0.5f);
+                float dm = float.MaxValue;
+                foreach (var l in Lanes)
+                    for (int j = 0; j + 1 < l.Points.Count; j++) dm = math.min(dm, math.sqrt(SegmentIndex.DistSq(m, l.Points[j], l.Points[j + 1])) - l.Half);
+                foreach (var rd in roads) dm = math.min(dm, math.sqrt(SegmentIndex.DistSq(m, rd.A, rd.B)) - rd.HalfWidth);
+                if (dm < bestD) { bestD = dm; best = i; }
+            }
+            if (best < 0) return false;
+            frame = Frame(ring[best], ring[(best + 1) % 4]);   // In = left of a CCW edge = into the plot
+            width = frame.To;
+            depth = math.abs(math.dot(ring[(best + 2) % 4] - ring[best], frame.In));
+            return width > 1f && depth > 1f;
         }
 
         // ───────────── helpers ─────────────

@@ -29,6 +29,36 @@ namespace Placemaker.Core.Layers.Commercial
         public override string[] Emits => new[] { RegionTags.Green, RegionTags.Paved, StreetFrontage.ShopsTag };
 
         /// <summary>
+        /// (rf-shops3) The type is planned from the player's entrances (ShopEntrances, as in ParkingLotTool): an "entrances" control,
+        /// nothing suggested, Build waits for a way in for cars, and the layout joins the streets only where the player said.
+        /// </summary>
+        protected virtual bool UsesEntrances => false;
+
+        public override Readiness CheckReady(AreaInput input) => UsesEntrances ? ShopEntrances.Ready(input) : base.CheckReady(input);
+
+        public override List<EdgeMarker> SuggestMarkers(AreaInput input) => UsesEntrances ? new List<EdgeMarker>() : base.SuggestMarkers(input);
+
+        /// <summary>
+        /// (rf-shops3) The architect's extras (panel group "Extras", shared keys Placemaker.Commercial.*; Mall.Extras): each type passes
+        /// its defaults, each style may override them in its preset.
+        /// </summary>
+        protected static void ExtrasControls(ControlSet c, bool walkways = true, bool plaza = true, string bikes = "racks", int trucks = 2, bool pads = false,
+            bool designed = true, bool hedges = true, bool sites = true, bool worn = true, string water = "none", bool plotTrees = true)
+        {
+            Shared(c.Toggle("walkways", walkways, ControlTier.More, "extras")).Tip();
+            Shared(c.Toggle("pocketPlaza", plaza, ControlTier.More, "extras")).Tip();
+            Shared(c.Choice("bikes", bikes, ControlTier.More, "extras", "none", "racks", "paths")).Tip();
+            Shared(c.Slider("foodTrucks", trucks, 0, 6, 1, "count", ControlTier.More, "extras")).Tip();
+            Shared(c.Toggle("pads", pads, ControlTier.More, "extras")).Tip();
+            Shared(c.Choice("landscape", designed ? "designed" : "plain", ControlTier.More, "extras", "plain", "designed")).Tip();
+            Shared(c.Toggle("hedges", hedges, ControlTier.More, "extras")).Tip();
+            Shared(c.Toggle("buildingSites", sites, ControlTier.More, "extras")).Tip();
+            Shared(c.Toggle("plotTrees", plotTrees, ControlTier.More, "extras")).Tip();
+            Shared(c.Toggle("wornGround", worn, ControlTier.More, "extras")).Tip();
+            Shared(c.Choice("water", water, ControlTier.More, "extras", "none", "pond", "rainGardens", "both")).Tip();
+        }
+
+        /// <summary>
         /// Few, cheap features: the composition itself is the type. (s25) The "flatten terrain" feature is gone: one plane
         /// over lanes, lots and plots on a slope dug the plots in and banked the lanes; the type grades itself now
         /// (MallGrading, the lots' LotGrading). Decal sprinkles are off by default: the lots' own dressing (s21) is enough,
@@ -46,6 +76,7 @@ namespace Placemaker.Core.Layers.Commercial
         /// street rows are planted), on for the types whose shops stand on the streets by design (shops park, retail park).</param>
         protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "", double maxDepth = 40, bool green = true, bool streetShops = false)
         {
+            if (UsesEntrances) ShopEntrances.Control(c);
             var z = EdgeZoningAddOn.ZoneKindControl("zoneKind", "shops", zone);
             c.List.Add(z);
             Shared(c.Slider("plotDepth", depth, 8, maxDepth, 8, "m", ControlTier.Essential, "shops")).Tip();
@@ -91,6 +122,27 @@ namespace Placemaker.Core.Layers.Commercial
         {
             var mall = NewMall(ctx);
             var runs = mall.Runs();
+            if (UsesEntrances)
+            {
+                // (rf-shops3) Planned from the player's entrances: the composition lays out its own network (whatever the site
+                // touches: a circle inside a block too) and joins the streets only at the entrances.
+                mall.Gates = ShopEntrances.Resolve(ctx);
+                if (ComposeFromEntrances(ctx, mall, runs))
+                {
+                    ctx.Check();
+                    LotFirst(ctx, mall, runs);
+                    ctx.Check();
+                    mall.PlantStreetPlots(ctx.B("streetShops"));
+                    FillRest(ctx, mall);
+                    FinishDesign(ctx, mall);
+                    mall.Finish(ZoneKinds.PrefabId(ctx.S("zoneKind")));
+                    CommonStats(ctx);
+                    return;
+                }
+                // The site could not hold it: the type's older layout (its lanes join the streets themselves).
+                mall = NewMall(ctx);
+                ctx.Issue(IssueSeverity.Info, FallbackKey);
+            }
             if (runs.Count == 0)
             {
                 // Nothing to zone from: a pocket park keeps the site useful until a street is built.
@@ -141,8 +193,21 @@ namespace Placemaker.Core.Layers.Commercial
             // (s40) Zoning first: street plots become their real cells before the rest is planned around them.
             mall.SnapStreetPlotsToCells();
             FillRest(ctx, mall);
+            FinishDesign(ctx, mall);
             mall.Finish(ZoneKinds.PrefabId(ctx.S("zoneKind")));
             CommonStats(ctx);
+        }
+
+        /// <summary>(rf-shops3) The type's entrance composition (UsesEntrances): true when it laid out the site; false falls back to Compose.</summary>
+        protected virtual bool ComposeFromEntrances(LayerContext ctx, Mall mall, List<StreetShops.Run> runs) => false;
+
+        /// <summary>(rf-shops3) The plots' ground and planting, last (the plots are final): building sites, plot trees; the extras' counts.</summary>
+        private static void FinishDesign(LayerContext ctx, Mall mall)
+        {
+            mall.PaintSites();
+            mall.PlantPlots();
+            if (mall.BikeRackCount > 0) ctx.Plan.Facts["bikeRacks"] = mall.BikeRackCount;
+            if (mall.FoodCartCount > 0) ctx.Plan.Facts["foodCarts"] = mall.FoodCartCount;
         }
 
         /// <summary>
@@ -412,11 +477,13 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>The lots' planted edges: what no lot could use is lawn and trees, never paths (a buffer, not a park).</summary>
         protected static void LotEdges(LayerContext ctx, Mall mall, uint salt = 0x980u)
         {
+            // (rf-shops3) The kept land (frontage, spine, plaza, pond) is dressed first, then every leftover is designed planting.
+            mall.DressKept();
             uint k = 0;
             foreach (var piece in mall.Rest(60f))
             {
                 ctx.Check();
-                mall.Buffer(piece, salt + k++);
+                mall.Landscape(piece, salt + k++);
                 ctx.Plan.Facts["lotEdges"] = (ctx.Plan.Facts.TryGetValue("lotEdges", out var le) ? le : 0.0) + Poly.Area(piece);
             }
         }

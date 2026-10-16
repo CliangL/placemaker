@@ -58,6 +58,116 @@ namespace Placemaker.Core.Layers.Commercial
         }
 
         /// <summary>
+        /// (rf-shops3) Like <see cref="RingLine"/>, but each side of the outline keeps its own distance: <paramref name="insetFor"/>
+        /// (a point of the outline, its outward normal) → metres. The outline is simplified first (edges under 10 m merged), every
+        /// edge moved in by its own inset and the corners rebuilt as the meeting points of the moved edges (nearly straight
+        /// corners take the mean). Falls back to a uniform inset of the largest distance when the result is not a clean loop.
+        /// </summary>
+        public float2[] RingLineVar(Func<float2, float2, float> insetFor, float round, float minEdge)
+        {
+            var simp = new List<float2>(Poly.EnsureCcw(Poly.Simplify(Region.Ring, 2.5f)));
+            for (int guard = 0; guard < 64 && simp.Count > 3; guard++)
+            {
+                int n0 = simp.Count, worst = -1; float shortest = float.MaxValue;
+                for (int i = 0; i < n0; i++) { float l = math.distance(simp[i], simp[(i + 1) % n0]); if (l < shortest) { shortest = l; worst = i; } }
+                if (shortest >= 10f) break;
+                simp.RemoveAt((worst + 1) % n0);
+            }
+            int n = simp.Count;
+            if (n < 3) return null;
+            var off = new float[n];
+            var nrm = new float2[n];
+            float maxInset = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                var a = simp[i]; var b = simp[(i + 1) % n];
+                var d = math.normalizesafe(b - a);
+                nrm[i] = new float2(d.y, -d.x);   // outward (CCW: inside is on the left)
+                off[i] = insetFor(math.lerp(a, b, 0.5f), nrm[i]);
+                maxInset = math.max(maxInset, off[i]);
+            }
+            var pts = new List<float2>();
+            for (int i = 0; i < n; i++)
+            {
+                int p = (i + n - 1) % n;
+                // Line of the moved edge p: point simp[i] - nrm[p]·off[p], direction dp; of edge i: simp[i] - nrm[i]·off[i], di.
+                var dp = new float2(-nrm[p].y, nrm[p].x); var di = new float2(-nrm[i].y, nrm[i].x);
+                var qp = simp[i] - nrm[p] * off[p]; var qi = simp[i] - nrm[i] * off[i];
+                float cr = Poly.Cross(dp, di);
+                if (math.abs(cr) < 0.34f) pts.Add(simp[i] - math.normalizesafe(nrm[p] + nrm[i]) * (0.5f * (off[p] + off[i])));
+                else
+                {
+                    float t = Poly.Cross(qi - qp, di) / cr;
+                    pts.Add(qp + dp * t);
+                }
+            }
+            var ring = Poly.EnsureCcw(pts.ToArray());
+            bool ok = ring.Length >= 3 && Poly.IsSimple(ring) && Poly.Area(ring) >= 900f;
+            if (ok) foreach (var p in ring) if (!Region.Contains(p)) { ok = false; break; }
+            if (!ok) return RingLine(maxInset, round, minEdge);
+            return Soften(ring, round, minEdge);
+        }
+
+        /// <summary>Short edges merged (each at least <paramref name="minEdge"/>), corners sharper than 40° chamfered by <paramref name="round"/> m.</summary>
+        private static float2[] Soften(float2[] ring, float round, float minEdge)
+        {
+            var simp = new List<float2>(Poly.EnsureCcw(ring));
+            for (int guard = 0; guard < 64 && simp.Count > 4; guard++)
+            {
+                int n = simp.Count, worst = -1; float shortest = float.MaxValue;
+                for (int i = 0; i < n; i++)
+                {
+                    float l = math.distance(simp[i], simp[(i + 1) % n]);
+                    if (l < shortest) { shortest = l; worst = i; }
+                }
+                if (shortest >= minEdge) break;
+                int a = worst, b = (worst + 1) % n;
+                float TriArea(int k) { var p = simp[(k + n - 1) % n]; var q = simp[k]; var r = simp[(k + 1) % n]; return math.abs(Poly.Cross(q - p, r - p)) * 0.5f; }
+                simp.RemoveAt(TriArea(a) <= TriArea(b) ? a : b);
+            }
+            if (simp.Count < 3) return null;
+            var res = new List<float2>();
+            int m = simp.Count;
+            for (int i = 0; i < m; i++)
+            {
+                var p = simp[(i + m - 1) % m]; var q = simp[i]; var r = simp[(i + 1) % m];
+                var d1 = math.normalizesafe(q - p); var d2 = math.normalizesafe(r - q);
+                float turn = math.degrees(math.acos(math.clamp(math.dot(d1, d2), -1f, 1f)));
+                float c = math.min(round, 0.3f * math.min(math.distance(p, q), math.distance(q, r)));
+                if (turn > 40f && c >= 3f) { res.Add(q - d1 * c); res.Add(q + d2 * c); }
+                else res.Add(q);
+            }
+            var outRing = Poly.EnsureCcw(res.ToArray());
+            return Poly.IsSimple(outRing) && Poly.Area(outRing) >= 900f ? outRing : null;
+        }
+
+        /// <summary>
+        /// The longest chord of a closed loop along the line through <paramref name="p"/> in direction <paramref name="dir"/>
+        /// (the two crossing points, the first at the smaller coordinate along dir). False when the line misses the loop.
+        /// </summary>
+        public static bool Chord(List<float2> loop, float2 p, float2 dir, out float2 a, out float2 b)
+        {
+            a = b = p;
+            var hits = new List<float>();
+            for (int i = 0; i + 1 < loop.Count; i++)
+            {
+                var u = loop[i]; var v = loop[i + 1];
+                var e = v - u;
+                float den = Poly.Cross(dir, e);
+                if (math.abs(den) < 1e-6f) continue;
+                float t = Poly.Cross(u - p, e) / den;      // along dir
+                float w = Poly.Cross(u - p, dir) / den;    // along the edge
+                if (w >= 0f && w < 1f) hits.Add(t);
+            }
+            if (hits.Count < 2) return false;
+            hits.Sort();
+            float best = 0f;
+            for (int i = 0; i + 1 < hits.Count; i += 2)
+                if (hits[i + 1] - hits[i] > best) { best = hits[i + 1] - hits[i]; a = p + dir * hits[i]; b = p + dir * hits[i + 1]; }
+            return best > 1f;
+        }
+
+        /// <summary>
         /// A closed loop lane along <paramref name="ring"/> (CCW), starting in the middle of its longest edge. Null when its
         /// corridors are not free or a corner leaves the site.
         /// </summary>

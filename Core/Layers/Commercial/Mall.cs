@@ -82,7 +82,7 @@ namespace Placemaker.Core.Layers.Commercial
 
         /// <summary>(shops2) The lengths of the mall's lists (a composition that gives up late is taken back with <see cref="Rewind"/>,
         /// together with CommercialLayer.PlanMark for the plan). Only for lists appended to since the mark.</summary>
-        public int[] Mark() => new[] { Taken.Count, Shops.Count, Lanes.Count, Lots.Count, Doors.Count, _lotGround.Count, Walks.Count, Stalls, EvStalls };
+        public int[] Mark() => new[] { Taken.Count, Shops.Count, Lanes.Count, Lots.Count, Doors.Count, _lotGround.Count, Walks.Count, Stalls, EvStalls, KeptLand.Count, RowHolds.Count, SpineFronts.Count, Drives.Count };
 
         public void Rewind(int[] m)
         {
@@ -96,6 +96,7 @@ namespace Placemaker.Core.Layers.Commercial
             for (int i = m[1]; i < Shops.Count; i++) { ShopZone.Remove(Shops[i]); CellPlots.Remove(Shops[i]); }
             Cut(Taken, m[0]); Cut(Shops, m[1]); Cut(Lanes, m[2]); Cut(Lots, m[3]); Cut(Doors, m[4]); Cut(_lotGround, m[5]); Cut(Walks, m[6]);
             Stalls = m[7]; EvStalls = m[8];
+            if (m.Length > 12) { Cut(KeptLand, m[9]); Cut(RowHolds, m[10]); Cut(SpineFronts, m[11]); Cut(Drives, m[12]); }
         }
         /// <summary>(shops) True while another frontage is composed (CommercialLayer.ComposeMore): a composition that does not fit there leaves nothing behind (no fallback street row).</summary>
         public bool Extra;

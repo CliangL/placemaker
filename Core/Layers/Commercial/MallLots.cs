@@ -51,6 +51,8 @@ namespace Placemaker.Core.Layers.Commercial
                 int kind = kinds[(first + k0) % count];
                 int k1 = k0;
                 while (k1 + 1 < count && kinds[(first + k1 + 1) % count] == kind) k1++;
+                // (rf-shops3) In entrance mode no lot is entered from a street by itself: only the placed entrances do that.
+                if (kind == 1 && EntranceMode) kind = 0;
                 if (kind != 0)
                 {
                     float len = (k1 - k0 + 1) * 2f;

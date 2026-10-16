@@ -333,12 +333,14 @@ namespace Placemaker.Core.Layers.Commercial
         /// Rows on both sides (or one: side = ±1, 0 = both) of every segment of a lane, from its edge, <paramref name="trimStart"/>
         /// / <paramref name="trimEnd"/> metres kept clear at the lane's ends (a street mouth's gateway, a plaza).
         /// </summary>
-        public int LaneRows(Lane lane, int cells, string zone, int side = 0, float trimStart = 0f, float trimEnd = 0f, int maxPiece = 3, int minCells = 2)
+        public int LaneRows(Lane lane, int cells, string zone, int side = 0, float trimStart = 0f, float trimEnd = 0f, int maxPiece = 3, int minCells = 2, Func<int, bool> segment = null)
         {
             int made = 0;
             int last = lane.Points.Count - 2;
             for (int i = 0; i <= last; i++)
             {
+                // (rf-shops3) Only the segments asked for (a ring drive carries rows on its back and sides, not on its front).
+                if (segment != null && !segment(i)) continue;
                 var a = lane.Points[i]; var b = lane.Points[i + 1];
                 var f = Frame(a, b);
                 float s0 = 0f, s1 = f.To;
