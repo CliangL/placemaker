@@ -38,6 +38,8 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
         protected override int WantedEntrances(LayerRegion region) => region.Area > 30000f ? 2 : 1;
 
         private const int MaxPens = 12;
+        /// <summary>Depth of a petting pen from its walk (m); the rest of the enclosure space is meadow.</summary>
+        private const float PettingPenDepth = 20f;
 
         protected override List<FeatureInfo> BuildFeatures() => new List<FeatureInfo>
         {
@@ -103,7 +105,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
         protected override void DefinePresets()
         {
             Preset("pettingFarm", ("kind", "petting"), ("pens", 6.0), ("layout", "loop"), ("walkIn", true), ("aviaries", 2.0), ("animalsPerPen", 2.0),
-                ("pond", true), ("pondSize", 14.0), ("viewpoints", 2.0), ("benchSpacing", 30.0), ("shadeTrees", 20.0), ("hedgerow", true));
+                ("pond", true), ("pondSize", 20.0), ("viewpoints", 2.0), ("benchSpacing", 30.0), ("shadeTrees", 20.0), ("hedgerow", true));
             Preset("paddocks", ("kind", "paddocks"), ("pens", 4.0), ("layout", "spine"), ("walkIn", false), ("aviaries", 0.0), ("animalsPerPen", 3.0),
                 ("pond", false), ("viewpoints", 4.0), ("benchSpacing", 50.0), ("shadeTrees", 15.0), ("hedgerow", true));
             Preset("horsePaddock", ("kind", "horses"), ("pens", 3.0), ("layout", "loop"), ("walkIn", false), ("arena", true), ("jumps", 6.0),
@@ -398,8 +400,30 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
                     }
                     lines.Add((o + ax * t, sd));
                 }
-                foreach (var cell in FarmKit.SplitByLines(space, lines, 32, ctx.Cancel))
+                // Petting pens line the walk, a pen deep; the middle of the space stays a farm meadow (pond, trees,
+                // the features) instead of six 40 x 60 m bare pens filling the whole site (rf-farms).
+                float2[] meadow = null;
+                if (kind == "petting")
                 {
+                    try { meadow = FarmKit.Largest(Poly.Offset(space, PettingPenDepth)); } catch (Exception) { }
+                    if (meadow != null && Poly.Area(meadow) < 400f) meadow = null;
+                }
+                foreach (var whole in FarmKit.SplitByLines(space, lines, 32, ctx.Cancel))
+                {
+                    var cell = whole;
+                    if (meadow != null)
+                    {
+                        float2[] best = null;
+                        try
+                        {
+                            foreach (var d in Poly.Difference(cell, meadow))
+                                foreach (var r in Poly.CutHoles(d))
+                                    if (best == null || Poly.Area(r) > Poly.Area(best)) best = r;
+                        }
+                        catch (Exception) { best = null; }
+                        if (best == null) continue;
+                        cell = best;
+                    }
                     List<float2[]> inset;
                     try { inset = Poly.Offset(cell, 1.3f); } catch (Exception) { continue; }
                     var ring = FarmKit.Largest(inset);
