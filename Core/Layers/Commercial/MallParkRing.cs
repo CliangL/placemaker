@@ -143,7 +143,7 @@ namespace Placemaker.Core.Layers.Commercial
             mall.LotBudget = float.MaxValue;
             int courts = 0;
             foreach (var (lot, at) in gateCourts)
-                if (mall.Lot(lot, new List<(float2, string)> { (at, "alley") }, Mall.Parking(ctx), 0x7E0u + (uint)courts)) courts++;
+                if (mall.CleanLot(lot, new List<(float2, string)> { (at, "alley") }, Mall.Parking(ctx), 0x7E0u + (uint)courts)) courts++;
             ctx.Plan.Facts["gateCourts"] = courts;
             RestLots(ctx, mall, 0x7B0u, 400f, false, false);
             mall.ReleaseRows();

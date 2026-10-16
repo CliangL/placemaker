@@ -108,6 +108,23 @@ namespace Placemaker.Core.Layers.Commercial
             return best;
         }
 
+        /// <summary>(rf-shops3) A lot whose way in reaches its aisles (a court that would warn "this entrance has no path" is not built).</summary>
+        public bool CleanLot(float2[] ring, List<(float2 at, string kind)> entrances, SettingsBag parking, uint salt)
+        {
+            var t = PlanLot(ring, entrances, parking, salt);
+            if (t == null) return false;
+            return !Warns(t) && CommitLot(t);
+        }
+
+        /// <summary>(rf-shops3) A planned lot the player would be warned about: a way in reaching no aisle, stalls no car can reach.</summary>
+        public static bool Warns(LotTry t)
+        {
+            if (t?.Sub?.Issues == null) return false;
+            foreach (var i in t.Sub.Issues)
+                if (i.Key != null && (i.Key.EndsWith("EntranceNoPath") || i.Key.EndsWith("UnreachableStalls"))) return true;
+            return false;
+        }
+
         public int CornerCourts(Lane loop, SettingsBag parking, uint salt, Func<int, bool> skip = null)
         {
             int n = loop.Points.Count - 1, made = 0;
@@ -131,13 +148,13 @@ namespace Placemaker.Core.Layers.Commercial
                 foreach (var q in RestPieces(150f)) if (Poly.Contains(q, probe)) { piece = q; break; }
                 if (piece == null) continue;
                 var entry = new List<(float2, string)> { (ClosestOnRing(piece, f.At(0.5f * f.To, 0f)), "alley") };
-                if (Lot(piece, entry, parking, salt + (uint)i * 7u)) { made++; continue; }
+                if (CleanLot(piece, entry, parking, salt + (uint)i * 7u)) { made++; continue; }
                 float z = loop.Half + 1.5f;
-                var square = Rect(f, -0.5f * f.To, 1.5f * f.To, -z, -(z + 2f * f.To));
+                var square = Rect(f, 0.5f * f.To - 13f, 0.5f * f.To + 13f, -z, -(z + 30f));
                 try
                 {
                     var cut = Largest(Poly.Intersection(Poly.EnsureCcw(piece), Poly.EnsureCcw(square)), 250f);
-                    if (cut != null && Lot(cut, new List<(float2, string)> { (ClosestOnRing(cut, f.At(0.5f * f.To, 0f)), "alley") }, parking, salt + (uint)i * 7u + 3u)) made++;
+                    if (cut != null && CleanLot(cut, new List<(float2, string)> { (ClosestOnRing(cut, f.At(0.5f * f.To, 0f)), "alley") }, parking, salt + (uint)i * 7u + 3u)) made++;
                 }
                 catch (Exception) { }
             }

@@ -357,6 +357,7 @@ namespace Placemaker.Core.Layers.Commercial
                     var t = PlanLot(shape, entries, bag, salt + (uint)(si * 3), true);
                     if (t == null || NetFit.Violations(t.Sub.Nets, t.Site).Count > 0) continue;   // a connector the game would fold (InvalidShape)
                     if (StubFolds(t)) continue;   // (rf-shops3) or a lane piece between its stub and a node of the lane
+                    if (Warns(t)) continue;       // (rf-shops3) or a way in that reaches no aisle, stalls no car can reach: planted instead
                     float fill = t.Capacity * 26f / math.max(1f, Poly.Area(t.Ring));
                     float score = t.Capacity * math.min(1f, fill / GoodFill);
                     if (score > bestScore) { bestScore = score; best = t; }

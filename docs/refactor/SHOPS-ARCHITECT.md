@@ -128,6 +128,8 @@ What is built (control ids `Placemaker.Commercial.<id>`, group "Extras" unless s
 | Water (`water`: none / pond / rainGardens / both) | a retention pond in a front corner of the big box (rain-garden margin, lush ground); the mall park's pond (Garden square, Family park); rain gardens: wet trees and lush ground on strips along the lots | strip mall rain gardens; big box both; garden and family pond |
 | Lot medians (`lotMedian`, group Parking) | wider planted strips between the bays | big box 3.5 m |
 | Service yards (with designed planting) | a dumpster behind every other deep shop | with designed planting |
+| Corner courts (ring styles) | a small car park turned to each soft corner of the ring drive, entered from the chamfer (the street corners were lawn) | strip mall back corners, mall park, district |
+| Gate courts (mall park) | a car park off the alley loop on the park side, straight on from each car entrance (two at most) | mall park with an alley loop |
 
 ## The styles
 

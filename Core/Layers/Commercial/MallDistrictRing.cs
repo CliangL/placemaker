@@ -43,7 +43,7 @@ namespace Placemaker.Core.Layers.Commercial
             mall.AnchorWeight = 1.4f;
 
             float InsetFor(float2 p, float2 nOut) => mall.RowInset(p, nOut, hl, d);
-            var line = mall.RingLineVar(InsetFor, 10f, 26f);
+            var line = mall.RingLineVar(InsetFor, 7f, 26f);
             if (line == null) return Fail(1);
             var loop = mall.RingLoop(line, NetRole.Alley, loopAsset, hl, r.At(0f, 0f) + r.In * 1e5f);
             if (loop == null) return Fail(2);
@@ -198,6 +198,23 @@ namespace Placemaker.Core.Layers.Commercial
                 else if (mall.X.Trucks > 0 && look == "cafe") mall.FoodCarts(Poly.Centroid(sq), r.Dir, 1, 4f, r.In, salt++);
             }
             foreach (var p in paseos) { mall.Release(p.rect); mall.DressPaseo(p.rect, p.a, p.b, salt += 4); mall.Taken.Add(p.rect); }
+            // A ring too small for lanes inside (a normal block): the middle, inside the inner rows, is the quarter's square (café
+            // tables, a fountain or a tree ring, food trucks), not a lawn; walks come in between the rows from the ring.
+            if (rails.Count == 0 && rungs.Count == 0 && ctx.B("squares"))
+            {
+                var mid = Poly.Centroid(loop.Points.ToArray());
+                foreach (var piece in mall.RestPieces(250f))
+                {
+                    if (!Poly.Contains(piece, mid)) continue;
+                    var doors = mall.LaneDoors(piece, 4f);
+                    if (mall.FillOpen(piece, "plaza", "cafe", doors, null, salt++, null, false))
+                    {
+                        ctx.Plan.Facts["districtSquare"] = 1;
+                        if (mall.X.Trucks > 0) mall.FoodCarts(Poly.Centroid(piece), r.Dir, math.min(2, mall.X.Trucks), 4f, r.In, salt++);
+                    }
+                    break;
+                }
+            }
             ctx.Plan.Facts["paseos"] = paseos.Count;
             ctx.Plan.Facts[RingFact] = 1;
             ctx.Plan.Facts["districtRails"] = rails.Count;
