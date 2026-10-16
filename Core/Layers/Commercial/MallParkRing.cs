@@ -95,7 +95,9 @@ namespace Placemaker.Core.Layers.Commercial
             }
             catch (System.Exception) { park = null; }
             if (park == null) return Fail(5);
-            mall.Taken.Add(park);
+            int before = mall.Taken.Count;
+            mall.Take(park);
+            var parkParts = mall.Taken.GetRange(before, mall.Taken.Count - before);
 
             // The player's entrances: drives and driveways to the loop, walks to it (and on into the park).
             mall.RouteGates();
@@ -105,7 +107,7 @@ namespace Placemaker.Core.Layers.Commercial
             RestLots(ctx, mall, 0x7B0u, 400f, false, false);
             mall.ReleaseRows();
             int rows = mall.LaneRows(loop, inner, null, -1, 0f, 0f, 3, 2, RowSeg);
-            mall.Taken.Remove(park);
+            foreach (var p in parkParts) mall.Taken.Remove(p);
             ctx.Check();
 
             // Doors of the park: where walks from the entrances meet the loop, and the middle of every long side.

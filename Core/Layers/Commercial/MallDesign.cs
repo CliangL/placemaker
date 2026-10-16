@@ -399,7 +399,7 @@ namespace Placemaker.Core.Layers.Commercial
                     }
                 }
             }
-            Taken.Add(Poly.EnsureCcw(k.Ring));
+            Take(k.Ring);
         }
 
         private void DressPlaza(Kept k)
@@ -469,7 +469,7 @@ namespace Placemaker.Core.Layers.Commercial
                 Ctx.Object(f.At(math.lerp(k.S0 + 1f, k.S1 - 1f, u), k.T0 + 1f), 0f, ObjectRole.Lamp, new AssetRef(""), Hashing.Mix(Ctx.Seed, salt + 0x30u + (uint)(u * 5f)));
             // Bike racks along one side, food carts along the other.
             if (X.Racks) BikeRacks(f.At(k.S0 + 1.3f, k.T0 + d * 0.55f), f.In, math.min(5, (int)(d / 1.8f)), salt + 0x50u);
-            Taken.Add(Poly.EnsureCcw(ring));
+            Take(ring);
         }
 
         private void DressPond(Kept k)
@@ -612,7 +612,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
             // Flowerbeds where a drive (a lane mouth) enters beside the piece: a pair either side of the mouth's first metres.
             FlowerbedsAtMouths(region, reserved, salt);
-            Taken.Add(Poly.EnsureCcw(piece));
+            Take(piece);
         }
 
         /// <summary>Two flowerbeds beside every lane mouth (a lane starting on a street) that runs along this piece.</summary>

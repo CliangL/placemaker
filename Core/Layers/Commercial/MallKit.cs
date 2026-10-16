@@ -740,7 +740,7 @@ namespace Placemaker.Core.Layers.Commercial
             if (clearance < 7f)
             {
                 // A strip: one even line along its spine (the long axis of its bounds), as street trees.
-                if (clearance < 2.6f) { Taken.Add(Poly.EnsureCcw(ring)); return; }
+                if (clearance < 2.6f) { Take(ring); return; }
                 var size = region.Max - region.Min;
                 bool alongX = size.x >= size.y;
                 float len = alongX ? size.x : size.y;
@@ -768,7 +768,7 @@ namespace Placemaker.Core.Layers.Commercial
                     for (float x = region.Min.x + spacing * 0.5f; x < region.Max.x; x += spacing * 0.8f)
                         Try(new float2(x, y) + new float2(rng.NextFloat(-2f, 2f), rng.NextFloat(-2f, 2f)), 3.2f);
             }
-            Taken.Add(Poly.EnsureCcw(ring));
+            Take(ring);
         }
 
         /// <summary>

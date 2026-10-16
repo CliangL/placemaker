@@ -224,6 +224,20 @@ namespace Placemaker.Core.Layers.Commercial
 
         public bool Fits(float2[] poly) => StreetShops.Fits(Region, poly) && Free(poly);
 
+        /// <summary>
+        /// (rf-shops3) Takes a polygon of any shape: Taken is tested piece by piece as convex (separating axes), so a concave piece
+        /// (an L-shaped park, a planted leftover) goes in as its convex parts — whole, its hull took the land in its inner corner.
+        /// </summary>
+        public void Take(float2[] ring)
+        {
+            if (ring == null || ring.Length < 3) return;
+            var r = Poly.EnsureCcw(ring);
+            if (Poly.IsConvex(r)) { Taken.Add(r); return; }
+            List<float2[]> parts = null;
+            try { parts = ConvexDecomposition.Decompose(r); } catch (Exception) { parts = null; }
+            if (parts == null || parts.Count == 0) Taken.Add(r); else Taken.AddRange(parts);
+        }
+
         /// <summary>(s46) Area of everything planned so far (the pieces of Taken are disjoint, up to the 5 cm touching tolerance).</summary>
         public float TakenArea() { float a = 0f; foreach (var t in Taken) a += Poly.Area(t); return a; }
 
@@ -672,7 +686,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error);
             Merge(sub);
-            Taken.Add(Poly.EnsureCcw(ring));
+            Take(ring);
             return true;
         }
 
@@ -705,7 +719,7 @@ namespace Placemaker.Core.Layers.Commercial
                     placed.Add(p);
                     Ctx.Object(p, rng.NextFloat(0f, 6.283f), ObjectRole.Tree, new AssetRef(""), Hashing.Mix(Ctx.Seed, salt + (uint)placed.Count), 1 + (int)(rng.NextUInt() % 2));
                 }
-            Taken.Add(Poly.EnsureCcw(ring));
+            Take(ring);
         }
 
         private void Merge(AreaPlan sub)
