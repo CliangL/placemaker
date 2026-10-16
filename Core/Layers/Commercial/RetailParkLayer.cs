@@ -36,7 +36,7 @@ namespace Placemaker.Core.Layers.Commercial
             c.Choice("unit", "large", ControlTier.Essential, "shops", Units).Tip();
             c.Choice("road", "street", ControlTier.More, "layout", "street", "lane").Tip();
             c.Toggle("pads", true, ControlTier.More, "shops").Tip();
-            CommonControls(c, ZoneKinds.CommercialHigh, 40, "large", maxDepth: 48, streetShops: true);
+            CommonControls(c, ZoneKinds.CommercialHigh, 40, "large", maxDepth: 48);
             c.Fixed("style");
         }
 

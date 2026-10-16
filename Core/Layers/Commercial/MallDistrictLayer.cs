@@ -31,7 +31,7 @@ namespace Placemaker.Core.Layers.Commercial
             c.Toggle("squares", true, ControlTier.More, "layout").Tip();
             OuterRowControls(c, ZoneKinds.CommercialHigh);
             Shared(c.Slider("outerDepth", 32, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
-            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false, streetShops: true);
+            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false);
             c.Fixed("lanes");
             c.Fixed("blocks");
         }

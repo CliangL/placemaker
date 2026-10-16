@@ -36,7 +36,7 @@ namespace Placemaker.Core.Layers.Commercial
             c.Choice("grain", "fine", ControlTier.More, "shops", Grains).Tip();
             c.Toggle("sideLots", true, ControlTier.More, "parking").Tip();
             OuterRowControls(c, ZoneKinds.CommercialLow);
-            CommonControls(c, ZoneKinds.CommercialLow, 16, "medium", streetShops: true);
+            CommonControls(c, ZoneKinds.CommercialLow, 16, "medium");
             c.Fixed("centre");
             c.Fixed("lane");
         }
