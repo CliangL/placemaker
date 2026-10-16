@@ -48,6 +48,7 @@ param(
     [ValidateSet('human', 'settled', 'user')][string]$Pace = 'human',
     [switch]$RestoreOnly,
     [switch]$Playground,
+    [switch]$DevMode,   # the game's developer mode (-developerMode: debug menus)
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs',
     # The game queue (GameQueue.ps1): by default the run waits its turn in the machine-wide line and the queue's game runs
     # it; -Direct launches the game here and now (debugging; refused while any other game is open). -Who names you in line.
@@ -377,6 +378,7 @@ Say ("run.json: " + (($cfg.GetEnumerator() | Where-Object { $_.Key -notin @('out
 $modFlags = if ($AllMods) { '' } else { '-disableModding -disableCodeModding- ' }
 $windowFlags = "-screen-fullscreen 0 -screen-width $w -screen-height $h"
 $gameArgs = "$modFlags-noSplash $windowFlags -placemakerSuite=$RunId"
+if ($DevMode) { $gameArgs += ' -developerMode' }
 Set-Content -Path (Join-Path $ud 'runOnce.txt') -Value "-placemakerSuite=$RunId" -Encoding ASCII -NoNewline
 
 # ───────────── launch ─────────────
