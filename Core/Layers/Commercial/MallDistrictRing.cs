@@ -99,6 +99,25 @@ namespace Placemaker.Core.Layers.Commercial
                 }
             }
 
+            // Paseos: from each rung a walk through the row into the courtyard garden behind it (a door in the middle of the block).
+            var paseos = new List<(float2[] rect, float2 a, float2 b)>();
+            if (court >= 12f)
+                foreach (var (g, y, k) in rungs)
+                {
+                    float len = math.distance(g.Points[0], g.Points[g.Points.Count - 1]);
+                    if (len < 2f * Mall.PaseoWidth + 4f * Mall.Cell) continue;
+                    var f = Mall.Frame(g.Points[0], g.Points[g.Points.Count - 1]);
+                    float mid = 0.5f * f.To;
+                    // the courtyard lies on the deeper side (frame In of a rung running along r.Dir is r.In)
+                    float sgn = math.dot(f.In, r.In) >= 0f ? 1f : -1f;
+                    var rect = Mall.Rect(f, mid - Mall.PaseoWidth * 0.5f, mid + Mall.PaseoWidth * 0.5f, sgn * hp, sgn * (hp + d));
+                    if (!mall.Fits(rect)) continue;
+                    var end = f.At(mid, sgn * (hp + d + 0.6f));
+                    if (!mall.Walk(f.At(mid, 0f), g, end, null)) continue;
+                    paseos.Add((mall.Hold(rect), f.At(mid, sgn * hp), f.At(mid, sgn * (hp + d))));
+                    mall.Doors.Add(end);
+                }
+
             // The square: the four corners of the crossing nearest the middle.
             var squares = new List<float2[]>();
             if (ctx.B("squares") && rails.Count > 0 && ys.Count > 0)
@@ -170,6 +189,8 @@ namespace Placemaker.Core.Layers.Commercial
                 if (!mall.FillOpen(sq, "plaza", look, mall.LaneDoors(sq, 6f), null, salt++, null, false)) mall.Green(sq, salt++);
                 else if (mall.X.Trucks > 0 && look == "cafe") mall.FoodCarts(Poly.Centroid(sq), r.Dir, 1, 4f, r.In, salt++);
             }
+            foreach (var p in paseos) { mall.Release(p.rect); mall.DressPaseo(p.rect, p.a, p.b, salt += 4); mall.Taken.Add(p.rect); }
+            ctx.Plan.Facts["paseos"] = paseos.Count;
             ctx.Plan.Facts[RingFact] = 1;
             ctx.Plan.Facts["districtRails"] = rails.Count;
             ctx.Plan.Facts["districtRungs"] = rungs.Count;
