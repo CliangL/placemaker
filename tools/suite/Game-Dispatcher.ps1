@@ -961,6 +961,8 @@ try {
             D-SaveGrace
             D-Log $script:userGraceNote
             $script:userSeen = $null
+            # what the queue still owes goes back now, before the user can start the game again (not on the next check)
+            if (-not $script:sess) { D-RestoreUserBuild 'the user''s game closed' -Now | Out-Null; D-RestoreSettings 'the user''s game closed' -Now }
         }
 
         if ($script:sess) {
