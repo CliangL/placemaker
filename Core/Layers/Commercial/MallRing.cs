@@ -128,9 +128,18 @@ namespace Placemaker.Core.Layers.Commercial
         public static bool Warns(LotTry t)
         {
             if (t?.Sub?.Issues == null) return false;
+            int noRoad = 0;
             foreach (var i in t.Sub.Issues)
-                if (i.Key != null && (i.Key.EndsWith("EntranceNoPath") || i.Key.EndsWith("UnreachableStalls"))) return true;
-            return false;
+            {
+                if (i.Key == null) continue;
+                if (i.Key.EndsWith("EntranceNoPath") || i.Key.EndsWith("UnreachableStalls")) return true;
+                if (i.Key.EndsWith("EntranceNoRoad")) noRoad++;
+            }
+            if (noRoad == 0) return false;
+            // ways in that reach no lane: a lot no car can enter when none of them does
+            int ways = 0;
+            foreach (var n in t.Sub.Nets) if (n != null && n.Role == NetRole.DriveConnector) ways++;
+            return noRoad >= ways;
         }
 
         public int CornerCourts(Lane loop, SettingsBag parking, uint salt, Func<int, bool> skip = null)

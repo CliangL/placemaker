@@ -76,7 +76,7 @@ namespace Placemaker.Core.Layers.Commercial
             float d = inner * Mall.Cell;
             mall.AnchorWeight = 1.3f;
             float InsetFor(float2 p, float2 nOut) => mall.RowInset(p, nOut, h, d);
-            var line = mall.RingLineVar(InsetFor, 14f, 30f);
+            var line = mall.RingLineVar(InsetFor, 8f, 30f);
             if (line == null) return Fail(1);
             // The park needs room: at least 30 m across inside the loop.
             var parkRegion = LayerRegion.From(line);

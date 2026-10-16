@@ -324,6 +324,16 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>(shops) The main street's direction (the composition's frame): leftover lots lay their rows square to it.</summary>
         public float2? MainDir;
 
+        /// <summary>(rf-shops3) The entrances (0-based) of a planned lot that reach no road or lane.</summary>
+        private static HashSet<int> Dangling(LotTry t)
+        {
+            var r = new HashSet<int>();
+            if (t?.Sub?.Issues == null) return r;
+            foreach (var i in t.Sub.Issues)
+                if (i.Key != null && i.Key.EndsWith("EntranceNoRoad") && i.Args != null && i.Args.Length > 0 && i.Args[0] is int n) r.Add(n - 1);
+            return r;
+        }
+
         public bool PolyLot(float2[] piece, SettingsBag parking, uint salt)
         {
             var shapes = new List<float2[]>();
@@ -355,6 +365,16 @@ namespace Placemaker.Core.Layers.Commercial
                         bag.Values["rowAngle"] = (double)(ang + rot);
                     }
                     var t = PlanLot(shape, entries, bag, salt + (uint)(si * 3), true);
+                    // (rf-shops3) Ways in that reach no lane (the lot's edge runs askew to it) are dropped and the lot planned again
+                    // with the rest: a dangling connector is a warning in the panel and a dead end in the game.
+                    var dangling = Dangling(t);
+                    if (dangling.Count > 0 && dangling.Count < entries.Count)
+                    {
+                        var kept = new List<(float2 at, string kind)>();
+                        for (int ei = 0; ei < entries.Count; ei++) if (!dangling.Contains(ei)) kept.Add(entries[ei]);
+                        var t2 = PlanLot(shape, kept, bag, salt + (uint)(si * 3), true);
+                        if (t2 != null && Dangling(t2).Count == 0) t = t2;
+                    }
                     if (t == null || NetFit.Violations(t.Sub.Nets, t.Site).Count > 0) continue;   // a connector the game would fold (InvalidShape)
                     if (StubFolds(t)) continue;   // (rf-shops3) or a lane piece between its stub and a node of the lane
                     if (Warns(t)) continue;       // (rf-shops3) or a way in that reaches no aisle, stalls no car can reach: planted instead
