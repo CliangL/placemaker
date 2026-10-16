@@ -87,7 +87,7 @@ session) and wait their turn. Ten agents share one game, launched once per build
   queue folder: `requests\`, `active\`, `done\<id>\result.json`, `dispatcher.log`, `launches.log` (one line per game
   launch), `install.json` and `user-build\` (the user's build), `bundles\` (frozen builds, 2 h after last use).
 * **A branch older than the queue** (master before `932753b`) has the old commands, which launch the game themselves
-  outside the line and can close or clash with the queue's game: merge master into it before running any of them.
+  outside the line and ignore the queue's game and its install lock: merge master into it before running any of them.
 * `-Direct` on any of the commands launches the game here and now, outside the line: for debugging the runner only.
   It is refused while any game is open. `Run-Suite -Queue`, `-Set queue` and `-Set bootstrap` (a game of your own
   kept open) need `-Direct`.
