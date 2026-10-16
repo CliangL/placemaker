@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+151536e-dirty",
+  "assembly": "0.1.0+39605c3",
   "categories": [
     {
       "id": "roads",
@@ -2088,6 +2088,17 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "market",
+        "garden",
+        "sunken",
+        "amphitheatre",
+        "terraced",
+        "splitLevel",
+        "cascade",
+        "podium",
+        "piazza"
       ]
     },
     {
@@ -5596,7 +5607,7 @@
             "some",
             "lots"
           ],
-          "default": "lots"
+          "default": "some"
         },
         {
           "id": "shopLayout",
@@ -8853,6 +8864,11 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "festival",
+        "funfair",
+        "foodTrucks"
       ]
     },
     {
@@ -9270,6 +9286,11 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "cinema",
+        "meadow",
+        "speakers"
       ]
     },
     {

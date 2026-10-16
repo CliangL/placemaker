@@ -85,6 +85,44 @@ unless said otherwise). Grades are mine, from the pictures and the logs.
 | christmas | C- | keep | Stall grid, Christmas tree, cobbles: distinctive. |
 | foodTrucks | D | keep | Food carts round a dining court: distinctive, too sparse. |
 
-## What changed
+## What is kept
 
-(see below, filled in per iteration)
+| Type | Kept styles | Hidden styles |
+|---|---|---|
+| Plaza | civic, fountain, cafe, sunkenCourt, green (+ the type's default) | market, garden, sunken, amphitheatre, terraced, splitLevel, cascade, podium, piazza |
+| Market square | weekly, bigMarket, farmers | none |
+| Amphitheatre | classic, bandstand | cinema, meadow, speakers |
+| Fairground | fairground, christmas | festival, funfair, foodTrucks |
+
+All in `Recipes/shelf/shops.json` (`hiddenStyles`, my four types only); no type is hidden, nothing was deleted, and every
+hidden style can still be built by id. Why each cut: plaza market and amphitheatre duplicate the market square and the
+amphitheatre types; garden and piazza are weaker twins of green and cafe; the level variants (sunken, terraced, split
+level, cascade, podium) read as flat empty slabs from any normal camera; cinema, meadow and speakers were the three Fs of
+the amphitheatre; festival and funfair need assets nobody has; food trucks stayed a sparse gravel field.
+
+## What changed (all seen in the game runner, see the runs below)
+
+1. **Street shops are off by default** for plaza, market square, amphitheatre and fairground
+   (`Core/Layers/Common/StreetShops.cs` `Defaults`, my four rows only; market square's amount when turned on is now
+   "some", not "lots"). The feature still works when the player turns it on; then the shops face the city street, by
+   design (a square has no lane of its own). Shared code, minimal: four table entries.
+2. **A planted centre when no centrepiece is installed** (`PlazaDressing.SpecimenCentre`, used by plaza, compact plaza
+   and market square): a round lawn in the rondel with a specimen oak (three on a big rondel), flowering shrubs round its
+   rim and benches looking out. Only when the player chose no centrepiece and the catalog has none (the clean game); the
+   user's game has fountains and statues and keeps them (asserted in `SquaresTests`).
+3. **Counts scale with the site.** Market stalls (`MarketSquareLayer.ScaledStalls`: the setting is for 0.4 ha, up to
+   4x), fair stalls (`FairgroundLayer.ScaledStalls`: 0.6 ha, up to 3x) and the amphitheatre's rows
+   (`AmphitheatreLayer.ScaledRows`: 0.6 ha, up to 2x, with gentler steps so a scaled bowl stays within 5 m). Tooltips
+   say so.
+4. **Tree rings survive a city block's corners.** The bucket tool outlines a block with short chamfers at the junctions
+   (8 corners); the per-vertex inset (`LayerRegion.InsetVertices`) folds over on edges shorter than about 3.5 m at a
+   5.8 m inset, `Poly.IsSimple` failed and the plaza allée and the market tree ring were silently dropped on every
+   block. New `LayerRegion.InsetRing` (a true polygon offset, the largest ring) is used for the plaza allée, the plaza
+   level planters, the market tree ring and the fair's loop. Shared code, additive: one new method.
+5. **Lawns wherever the entrances are.** The plaza's quarter parterres need the walks on the square's axes; the access
+   points the tool suggests round a block (6 to 8, anywhere) cross every quarter, so "green" built a bare slab. When no
+   quarter fits, the lawns now fill the free ground between the walks, the centre and the allée, shrunk evenly to the
+   asked share, with a tree and flowerbeds in the big ones (`PlazaDressing.FreeLawns`).
+6. **Market cross aisles** on the square's own axes (two 4.8 m aisles meeting at the centre) instead of aisles to every
+   access point, which cut the stall rows at odd angles.
+7. **Fair: the front-of-house tent is off by default** (a lone dark dome in the crowd field).
