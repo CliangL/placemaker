@@ -76,6 +76,28 @@ namespace Placemaker.Core.Layers.Commercial
 
         // ───────────── (shops2) rows of stores round a grid of lots ─────────────
 
+        /// <summary>
+        /// (shops2) The strip mall fronts the busiest street: of the runs nearly as long as the longest, the one along the widest
+        /// street. The lot faces the main road (as real strip malls do) and the last row of stores backs onto the quieter street
+        /// (in the game a row backing onto a four-lane road lost its cells to that road's deep zone block).
+        /// </summary>
+        private static StreetShops.Run MainStreet(LayerContext ctx, List<StreetShops.Run> runs)
+        {
+            var roads = StreetFrontage.Roads(ctx.Input);
+            float Width(StreetShops.Run r)
+            {
+                var p = r.At(0.5f * (r.From + r.To), 0f);
+                float best = float.MaxValue, w = 0f;
+                foreach (var rd in roads) { float d = math.sqrt(SegmentIndex.DistSq(p, rd.A, rd.B)); if (d < best) { best = d; w = rd.HalfWidth; } }
+                return w;
+            }
+            var main = runs[0];
+            float mw = Width(main);
+            foreach (var r in runs)
+                if (r.Length >= 0.7f * runs[0].Length && Width(r) > mw + 0.5f) { main = r; mw = Width(r); }
+            return main;
+        }
+
         /// <summary>(shops2) A lot band at least this deep (two double-loaded aisles) between rows when there are several rows of stores.</summary>
         private static float MinLotBetween(LayerContext ctx) => Mall.LotDepth(math.max(2, Mall.Aisles(ctx.S("lotSize"))));
 
