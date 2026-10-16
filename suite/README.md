@@ -1,21 +1,30 @@
 # Placemaker game runner
 
-## See one build: `Show.ps1`
+## See builds: `Show.ps1`
 
 ```
-powershell -File tools/suite/Show.ps1                                    # the categories, types and styles
-powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal
+powershell -File tools/suite/Show.ps1                                          # the categories, types and styles
+powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal # the usual: 2 pictures
+powershell -File tools/suite/Show.ps1 -Category parking -Type parking -Style all -Views top -Modes clean,zoning
+powershell -File tools/suite/Show.ps1 -Category shops -Type all -NoPlan
 ```
 
-One launch (about 75 s, the game must be closed). It builds the type on a flat test block the way a person does
-(bucket the block, pick type and style, entrances, Review, Build), quits, and prints:
+One launch for everything asked (about 70 s, then about 10 s per build; the game must be closed). Each build gets its
+own flat test block and is built the way a person does (bucket the block, pick type and style, entrances, Review,
+Build). It prints, per build, its pictures and its lines in `Placemaker.log`; `Player.log` has the game's own errors.
 
-* **Final picture**: the finished build at 45°, framed on the build.
-* **Plan picture**: the same view in Review before building, the plan the build came from.
-* **Log**: `Placemaker.log` and the lines of this build; `Player.log` for the game's own errors.
+**Start with the default two pictures**: `plan` (Review before building: the outline and the ghost) and `45-clean`
+(the finished build at 45°). Ask for more only when those did not show what you needed; don't dump pictures.
 
-That is the whole loop. Anything else (more pictures, other angles, several builds in one launch, edits, deletes) is a
-scenario file you write yourself, below.
+* `-Type`, `-Style`: one or more (`a,b`), or `all` (with `-Category` for types). Every type x every style is built.
+* `-Views`: `45` (default), `top`, `low`, `close`. Framed on the build (`close` looks at its middle).
+* `-Modes`: `clean` (default, no overlays), `zoning` (the game's zone grid: zoned cells in their zone colour, the way
+  the road and zoning tools show it), `overlay` (Placemaker's and the game's overlays), `ui` (the real screen).
+* Every view x every mode is taken after the build (`<view>-<mode>.png`); `-NoPlan` skips the plan picture.
+* `-Site slope|rough|zoned|survive` for a block other than flat.
+
+Anything else (edits, deletes, entrances in given places, growth, several steps) is a scenario file you write
+yourself, below.
 
 ## What it is
 
@@ -137,7 +146,8 @@ Keys starting with `_` are comments.
 ## Steps
 
 Every step can add `"shot": "<name>"` (a settled PNG after the step), `"camera": {...}` (the framing of that shot;
-without one a build/preview/delete/edit/bulldoze/area step frames the build, oblique) and `"shotMode"`.
+without one a build/preview/delete/edit/bulldoze/area step frames the build, oblique), `"shotMode"` and `"zones": true`
+(the game's zone grid in the picture, as the road and zoning tools show it).
 
 Panel actions click the panel's real element when it is on the screen (recorded per action in `ui`: `click`), else
 fire the panel's own trigger through the UI view (`trigger`), and only when the UI view does not answer call the tool

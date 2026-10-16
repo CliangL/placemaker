@@ -1,7 +1,8 @@
-// In-game test suite: an invisible tool that applies the fixture's definitions (roads, zoning, plopped buildings).
+// Game runner: an invisible tool that applies the fixture's definitions (roads, zoning, plopped buildings).
 // CS2 applies temporaries only through the ACTIVE tool's applyMode (same reason as Game/Build/BuildToolSystem), so the
 // runner activates this tool, queues work that runs inside its OnUpdate (ToolUpdate phase: the definitions are created
-// where vanilla tools create theirs), asks for Apply a few frames later and gives the tool slot back.
+// where vanilla tools create theirs), asks for Apply a few frames later and gives the tool slot back. It also draws the
+// game's zone grid while a zoning picture is taken (the grid is drawn only while the active tool asks for it).
 // Registered only when the suite gate is open (Game/Suite/SuiteGate).
 
 using System;
@@ -23,6 +24,8 @@ namespace Placemaker.Game.Suite
 
         internal ApplyMode Requested = ApplyMode.None;
         internal int Updates;
+        /// <summary>While active: the game draws the zone grid (zoned cells in their zone colour), as with the zoning tool.</summary>
+        internal bool ShowZones;
         private readonly Queue<Action> _work = new Queue<Action>();
         private readonly List<Entity> _definitions = new List<Entity>();
 
@@ -72,6 +75,7 @@ namespace Placemaker.Game.Suite
             }
             applyMode = Requested;
             Requested = ApplyMode.None;
+            requireZones = ShowZones;
             return inputDeps;
         }
 
@@ -80,6 +84,7 @@ namespace Placemaker.Game.Suite
         {
             applyMode = ApplyMode.None;
             Requested = ApplyMode.None;
+            requireZones = false;
             base.OnStopRunning();
         }
     }

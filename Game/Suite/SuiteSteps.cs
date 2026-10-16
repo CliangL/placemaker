@@ -169,7 +169,8 @@ namespace Placemaker.Game.Suite
                 {
                     // the step's own shot: frames what the step asks for, else what the step is about (never an automatic close-up)
                     var cam = step["camera"] as JObject ?? DefaultShotCamera(what);
-                    var sstep = new JObject { ["camera"] = cam, ["shotMode"] = step["shotMode"] };
+                    var sstep = ShotOptions(step);
+                    sstep["camera"] = cam;
                     var srec = new JObject();
                     yield return Guard(StepShot(st, sstep, srec, shot), e => srec["error"] = "suite error: " + e.Message);
                     rec["shotRecord"] = srec;

@@ -158,7 +158,7 @@ namespace Placemaker.Game.Suite
             if (c["pitch"] != null) pitch = (float)c["pitch"];
             if (c["fov"] != null) fov = (float)c["fov"];
             // the build fills the picture: first guess from the geometry, then framed on what the camera really shows
-            bool fit = (target == "build" || target == "area") && (view == "oblique" || view == "low") && st.Ring != null && st.Ring.Length > 0 && c["distance"] == null;
+            bool fit = (target == "build" || target == "area") && (view == "oblique" || view == "low" || view == "top") && st.Ring != null && st.Ring.Length > 0 && c["distance"] == null;
             if (fit) dist = FitDistance(st.Ring, pivot, yaw, pitch, fov);
             if (c["distance"] != null) dist = (float)c["distance"];
             var cr = rec["camera"] as JObject ?? (JObject)(rec["camera"] = new JObject());
@@ -260,7 +260,7 @@ namespace Placemaker.Game.Suite
                     var r = new JObject();
                     bool okk = false;
                     yield return CameraStep(st, c, r, x => okk = x, k);
-                    if (okk && !string.IsNullOrEmpty(shot)) yield return StepShot(st, new JObject { ["shotMode"] = step["shotMode"] }, r, shot + "-" + k);
+                    if (okk && !string.IsNullOrEmpty(shot)) yield return StepShot(st, ShotOptions(step), r, shot + "-" + k);
                     shots.Add(r);
                 }
                 rec["shots"] = shots;
@@ -268,8 +268,11 @@ namespace Placemaker.Game.Suite
             }
             bool ok = false;
             yield return CameraStep(st, c, rec, x => ok = x);
-            if (ok && !string.IsNullOrEmpty(shot)) yield return StepShot(st, new JObject { ["shotMode"] = step["shotMode"] }, rec, shot);
+            if (ok && !string.IsNullOrEmpty(shot)) yield return StepShot(st, ShotOptions(step), rec, shot);
         }
+
+        /// <summary>The picture options of a step (mode, street names, zone grid), without its camera.</summary>
+        private static JObject ShotOptions(JObject step) => new JObject { ["shotMode"] = step["shotMode"], ["labels"] = step["labels"], ["zones"] = step["zones"] };
 
         private int CountTargets(ScenarioState st, string target)
         {
@@ -391,6 +394,21 @@ namespace Placemaker.Game.Suite
             if (mode != "ui") PlacemakerToolSystem.SuiteCursorAway();   // the person moved the mouse off the map to look
             bool labels = (bool?)step["labels"] ?? false;
             if (labels) SuiteCapture.Labels(true);
+            // zones: the game's zone grid is drawn only while the active tool asks for it; the runner's own tool does, for this picture
+            bool zones = (bool?)step["zones"] ?? false;
+            global::Game.Tools.ToolBaseSystem toolBefore = null;
+            if (zones)
+            {
+                if (mode == "render") mode = "overlay";   // the clean capture hides overlays, and the zone grid is one (no outline: our tool draws none)
+                var ft = FixtureTool;
+                toolBefore = ft.Tools.activeTool;
+                ft.ShowZones = true;
+                int u0 = ft.Updates;
+                ft.Tools.activeTool = ft;
+                yield return Until(() => ft.Tools.activeTool == ft && ft.Updates > u0, 5f, "zone grid");
+                yield return Frames(20);   // culling and batches pick the zone blocks up
+                Event("camera");
+            }
             if (!_look.WindowOk) rec["windowMismatch"] = $"{Screen.width}x{Screen.height} (shots are {_cfg.shotWidth}x{_cfg.shotHeight})";
             string file = ShotFile(st, name);
             string path = Path.Combine(_shots, file);
@@ -486,6 +504,15 @@ namespace Placemaker.Game.Suite
             if (b != null) UnityEngine.Object.Destroy(b);
             if (final != null) UnityEngine.Object.Destroy(final);
             if (labels) SuiteCapture.Labels(false);
+            if (zones)
+            {
+                var ft = FixtureTool;
+                ft.ShowZones = false;
+                bool wasOurs = toolBefore == _tool;
+                ft.Tools.activeTool = wasOurs || toolBefore == null ? ft.DefaultTool : toolBefore;
+                yield return Frames(5);
+                if (wasOurs) yield return OpenTool();
+            }
             string rel = err == null ? "shots/" + file : "ERROR " + err;
             rec["shot"] = rel;
             rec["shotName"] = name;
