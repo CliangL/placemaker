@@ -48,11 +48,23 @@ param(
     [ValidateSet('human', 'settled', 'user')][string]$Pace = 'human',
     [switch]$RestoreOnly,
     [switch]$Playground,
-    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
+    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs',
+    # The game queue (GameQueue.ps1): by default the run waits its turn in the machine-wide line and the queue's game runs
+    # it; -Direct launches the game here and now (debugging; refused while any other game is open). -Who names you in line.
+    [switch]$Direct,
+    [string]$Who = '',
+    # The run's label instead of this checkout's git hash (the queue runs a frozen copy of the requester's build).
+    [string]$Label = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+if (-not $Direct -and -not $RestoreOnly -and -not $Queue -and $Set -notin @('bootstrap', 'queue')) {
+    . (Join-Path $PSScriptRoot 'GameQueue.ps1')
+    exit (Invoke-QueuedRun $repo @{ Set = $Set; RunId = $RunId; NoBuild = $NoBuild; TimeoutMin = $TimeoutMin; MaxScenarios = $MaxScenarios; AllMods = $AllMods; KeepGraphics = $KeepGraphics
+            NoTerrain = $NoTerrain; Window = $Window; PregrowSeconds = $PregrowSeconds; Opt = $Opt; Grid = $Grid; UserModSettings = $UserModSettings; Look = $Look; Pace = $Pace
+            Playground = $Playground; ResultsRoot = $ResultsRoot; Who = $Who })
+}
 $gameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II'
 $exe = Join-Path $gameDir 'Cities2.exe'
 $ud = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
@@ -158,8 +170,8 @@ Restore-Settings 'left over from an earlier run'
 # ───────────── 2. build + deploy, identity ─────────────
 Push-Location $repo
 try {
-    $git = (git rev-parse --short HEAD).Trim()
-    $dirty = (git status --porcelain --untracked-files=no)
+    $git = if ($Label) { $Label } else { (git rev-parse --short HEAD).Trim() }
+    $dirty = if ($Label) { $null } else { (git status --porcelain --untracked-files=no) }
     if ($dirty) {
         $git = "$git-dirty"
         git diff HEAD | Out-File -FilePath (Join-Path $runDir 'dirty.patch') -Encoding utf8

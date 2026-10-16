@@ -15,8 +15,11 @@
   powershell -File tools/suite/Show.ps1 -Type plaza -Land '{"points":[[0,0],[90,0],[90,40],[30,70],[0,60]],"ground":"bumpy"}'
 
 .DESCRIPTION
-  Launches the game (about 70 s, then about 10 s per build; the game must be closed), builds each one on its own test
-  land the way a person does (select the area, pick the type and style, entrances, Review, Build) and quits.
+  Goes through the machine-wide game queue (suite/README.md, "The game queue"): it waits its turn, printing its place in
+  line, who is ahead and an ETA; the queue's game builds each one on its own test land the way a person does (select
+  the area, pick the type and style, entrances, Review, Build). Run it as a background command: it exits when the
+  results are back. A new game takes about 60 s to start, then about 10-15 s per build; a game already open with the
+  same build is reused. -Direct launches the game here and now instead (debugging; the game must be closed).
 
   Land. Without land options each build gets a flat 150 x 140 m city block of the test grid (-Site for another kind).
   With any of them each build gets its own land, made to order before the roads go in:
@@ -67,7 +70,10 @@ param(
     [string]$Land = '',
     [switch]$AllMods,
     [switch]$NoBuild,
-    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
+    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs',
+    # the game queue (default): waits its turn in the machine-wide line, printing its place and an ETA; -Direct launches now
+    [switch]$Direct,
+    [string]$Who = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -209,8 +215,10 @@ Write-Host ("Building {0} in the game {1}: {2}; {3} picture(s) each (about {4} s
 $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Run-Suite.ps1'), '-Set', $setFile, '-RunId', $runId)
 if ($AllMods) { $runArgs += '-AllMods' }
 if ($NoBuild) { $runArgs += '-NoBuild' }
+if ($Direct) { $runArgs += '-Direct' }
+if ($Who) { $runArgs += @('-Who', $Who) }
 $ErrorActionPreference = 'Continue'   # the game writes to stderr; that is not a failure
-$hostOut = & powershell @runArgs 2>&1 | ForEach-Object { "$_" }
+$hostOut = & powershell @runArgs 2>&1 | ForEach-Object { $l = "$_"; if ($l -like 'queue: *' -or $l -like 'STOP*') { Write-Host $l }; $l }   # the queue's place-in-line and ETA lines as they come
 $ErrorActionPreference = 'Stop'
 $runDir = Join-Path $ResultsRoot $runId
 
