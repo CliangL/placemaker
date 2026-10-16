@@ -142,10 +142,13 @@ namespace Placemaker.Tests
             Assert.True(Hidden("amphitheatre", "events", "cinema"));
             Assert.True(Hidden("fairground", "events", "funfair"));
             Assert.False(Hidden("plaza", "squares", "fountain"));
-            Assert.False(Hidden("marketSquare", "squares", "weekly"));
+            Assert.True(Hidden("marketSquare", "squares", "weekly"));
+            Assert.False(Hidden("marketSquare", "squares", "bigMarket"));
+            Assert.True(shelf.IsTypeShelved("fairground", "events"));
+            Assert.True(shelf.IsTypeShelved("plaza", "squares"));
             Assert.False(Hidden("amphitheatre", "events", "classic"));
             Assert.False(shelf.IsTypeShelved("amphitheatre", "events"));
-            Assert.Equal("shops", shelf.CategoryOf("amphitheatre", "events"));
+            Assert.Equal("parks", shelf.CategoryOf("amphitheatre", "events"));
         }
     }
 }
