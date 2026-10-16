@@ -20,7 +20,9 @@
   Views: 45 (default; 45 degrees from the south), top (straight down), low (20 degrees), close (a close look at the
   middle). Every view but close is framed on the build.
   Modes: clean (default; no overlays), zoning (the game's zone grid: zoned cells in their zone colour), overlay
-  (Placemaker's and the game's overlays), ui (the real screen, with the game's bars).
+  (Placemaker's and the game's overlays), ui (the real screen, with the game's bars), terrain (a map of the ground's
+  height from above, once per build whatever the views: blue below the outline's typical ground, red above, contour
+  lines every 0.5 m, the outline in white; no buildings, trees or roads).
 
   Logs: Placemaker.log and the lines of each build; Player.log for the game's own errors; suite.log for the runner's
   steps with timings. Everything is in the run folder it prints; contact.html shows every picture in order.
@@ -60,7 +62,7 @@ $viewSteps = @{
     'low' = [ordered]@{ view = 'low' }
     'close' = [ordered]@{ view = 'closeup' }
 }
-$modeSteps = @{ clean = @('render', $false); zoning = @('render', $true); overlay = @('overlay', $false); ui = @('ui', $false) }
+$modeSteps = @{ clean = @('render', $false); zoning = @('render', $true); overlay = @('overlay', $false); ui = @('ui', $false); terrain = $null }
 $catalog = (Get-Content (Join-Path $repo 'suite\catalog.json') -Raw | ConvertFrom-Json).types
 function CategoryOf($t) { foreach ($k in $categories.Keys) { if ($categories[$k] -contains $t.group) { return $k } }; return $null }
 function ListCategory($k) {
@@ -78,7 +80,9 @@ if ($Type.Count -eq 0) {
     exit 0
 }
 foreach ($v in $Views) { if (-not $viewSteps.ContainsKey($v)) { Stop-With "No view '$v'. Views: 45, top, low, close" } }
-foreach ($m in $Modes) { if (-not $modeSteps.ContainsKey($m)) { Stop-With "No mode '$m'. Modes: clean, zoning, overlay, ui" } }
+foreach ($m in $Modes) { if (-not $modeSteps.ContainsKey($m)) { Stop-With "No mode '$m'. Modes: clean, zoning, overlay, ui, terrain" } }
+$viewModes = @($Modes | Where-Object { $_ -ne 'terrain' })
+$terrainMap = $Modes -contains 'terrain'
 
 # ───────────── the builds: every type x every style ─────────────
 $types = @()
@@ -117,7 +121,7 @@ $scenarios = foreach ($b in $builds) {
     else { $steps += [ordered]@{ do = 'preview'; shot = 'plan'; shotMode = 'overlay'; camera = $planCam } }
     $steps += [ordered]@{ do = 'build' }
     foreach ($v in $Views) {
-        foreach ($m in $Modes) {
+        foreach ($m in $viewModes) {
             $st = [ordered]@{ do = 'camera'; target = 'build' }
             foreach ($k in $viewSteps[$v].Keys) { $st[$k] = $viewSteps[$v][$k] }
             $st['shot'] = "$v-$m"
@@ -126,6 +130,7 @@ $scenarios = foreach ($b in $builds) {
             $steps += $st
         }
     }
+    if ($terrainMap) { $steps += [ordered]@{ do = 'terrain'; name = 'terrain' } }
     [ordered]@{ id = $b.Id; site = $Site; pace = 'settled'; steps = $steps }
 }
 
@@ -136,7 +141,7 @@ New-Item -ItemType Directory -Force -Path $setDir | Out-Null
 $setFile = Join-Path $setDir "$runId.json"
 [IO.File]::WriteAllText($setFile, ([ordered]@{ scenarios = @($scenarios) } | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding $false))
 
-$perBuild = (@($Views).Count * @($Modes).Count) + $(if ($NoPlan) { 0 } else { 1 })
+$perBuild = (@($Views).Count * $viewModes.Count) + $(if ($terrainMap) { 1 } else { 0 }) + $(if ($NoPlan) { 0 } else { 1 })
 Write-Host ("Building {0} in the game: {1}; {2} picture(s) each (about {3} s)..." -f $builds.Count, (($builds | ForEach-Object { $_.Id }) -join ', '), $perBuild, (70 + 12 * $builds.Count))
 $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Run-Suite.ps1'), '-Set', $setFile, '-RunId', $runId)
 if ($AllMods) { $runArgs += '-AllMods' }
@@ -171,6 +176,11 @@ foreach ($sc in $rows) {
             Write-Host ("  {0,-14} {1}" -f $p.Name, (Join-Path $runDir $p.Value))
             if ("$($p.Value)" -notlike 'ERROR*') { $pictures++ }
         }
+    }
+    if ($terrainMap) {
+        $scFile = Get-ChildItem (Join-Path $runDir 'scenarios') -Filter "*-$($sc.id).json" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $tm = if ($scFile) { @((Get-Content $scFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).steps) | Where-Object { $_.do -eq 'terrain' -and $_.terrain } | Select-Object -First 1 } else { $null }
+        if ($tm) { Write-Host ("  {0,-14} ground {1} m to +{2} m around its typical level; colours +/-{3} m; contours every {4} m" -f 'heights', $tm.terrain.minM, $tm.terrain.maxM, $tm.terrain.rangeM, $tm.terrain.contourM) }
     }
     Write-Host ("  {0,-14} {1}{2}" -f 'log', $log, $(if ($from -and $to) { ", lines $from-$to" } else { '' }))
 }

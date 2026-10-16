@@ -19,7 +19,11 @@ Build). It prints, per build, its pictures and its lines in `Placemaker.log`; `P
 * `-Type`, `-Style`: one or more (`a,b`), or `all` (with `-Category` for types). Every type x every style is built.
 * `-Views`: `45` (default), `top`, `low`, `close`. Framed on the build (`close` looks at its middle).
 * `-Modes`: `clean` (default, no overlays), `zoning` (the game's zone grid: zoned cells in their zone colour, the way
-  the road and zoning tools show it), `overlay` (Placemaker's and the game's overlays), `ui` (the real screen).
+  the road and zoning tools show it), `overlay` (Placemaker's and the game's overlays), `ui` (the real screen),
+  `terrain` (a map of the ground's height from above, once per build: blue below the outline's typical ground, red
+  above, shaded by slope, contour lines every 0.5 m and darker every 2 m, the outline in white; only the ground, no
+  buildings, trees or roads. Flat ground is a pale area without lines; pits and mounds are rings. Show.ps1 prints
+  the lowest and highest ground in metres).
 * Every view x every mode is taken after the build (`<view>-<mode>.png`); `-NoPlan` skips the plan picture.
 * `-Site slope|rough|zoned|survive` for a block other than flat.
 
@@ -177,6 +181,7 @@ after a failed `area`, `type`, `preview` or `build` the scenario's remaining ste
 | `infoEdit` / `infoRemove` | – | the Placemaker tool closed, the build selected the vanilla way, its info panel's Edit / Remove |
 | `camera` | `target`, `view`, `index` (or `"all"`), `yaw`, `pitch`, `distance`, `fov`, `at`, `abs` | frames the camera (below); a target that does not exist is an error and no picture is taken |
 | `shot` | `name`, `shotMode`, `labels` (false: street names stay off) | a settled PNG of the current view |
+| `terrain` | `name` (`terrain`), `margin` (20 m) | not a camera picture: a map of the ground's height over the outline and the margin, from the game's height data (see `-Modes terrain` above); the step's record has the typical ground level and the lowest and highest ground |
 | `wait` | `seconds` (1) or `frames` | a plain wait |
 | `grow` | `seconds` (30), `fast` (true) | the simulation with debug fast spawn at speed 4 (`fast: false` = speed 1 with real demand) until the building count is still for 8 s; grows the whole city |
 | `undo` / `redo` | `via`: `key` (Ctrl+Z / Ctrl+Y, default), `panel` | says so when there is nothing to undo or redo |

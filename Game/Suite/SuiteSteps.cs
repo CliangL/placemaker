@@ -258,6 +258,7 @@ namespace Placemaker.Game.Suite
                 case "infoEdit": yield return StepInfo(st, step, rec, edit: true); break;
                 case "infoRemove": yield return StepInfo(st, step, rec, edit: false); break;
                 case "camera": yield return StepCameraAndShot(st, step, rec); break;
+                case "terrain": yield return StepTerrainMap(st, step, rec); break;
                 case "shot": yield return StepShot(st, step, rec, (string)step["name"] ?? (string)step["shot"] ?? "shot" + rec["i"]); break;
                 case "wait":
                     if (step["frames"] != null) yield return Frames((int)step["frames"]);
