@@ -59,7 +59,7 @@
   "Placemaker.Waterfront.stepLevels": "Step levels",
   "Placemaker.Waterfront.stepLevels.Tooltip": "Unused since s30: the flights lie on the smooth bank (no terraces).",
   "Placemaker.Waterfront.piers": "Piers",
-  "Placemaker.Waterfront.piers.Tooltip": "Piers built as paths out over the water. Draw the area out over the water to get them.",
+  "Placemaker.Waterfront.piers.Tooltip": "Piers built as paths out over the water. They reach past the outline over the water when the area is drawn along the shore.",
   "Placemaker.Waterfront.pierLength": "Pier length",
   "Placemaker.Waterfront.pierHeads": "T-heads",
   "Placemaker.Waterfront.pierHeads.Tooltip": "A cross walk at the end of each pier.",
@@ -97,7 +97,7 @@
   "Placemaker.Waterfront.Preset.riverSteps": "River steps",
   "Placemaker.Waterfront.Preset.fishing": "Natural bank",
 
-  "Placemaker.Waterfront.Issue.PiersNeedWater": "Piers need water inside the area: draw the outline out over the water.",
+  "Placemaker.Waterfront.Issue.PiersNeedWater": "Piers need water beside or inside the area: draw it along the shore or out over the water.",
 
   "Placemaker.Stat.Piers": "Piers",
   "Placemaker.Stat.Steps": "Step flights",

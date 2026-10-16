@@ -28,7 +28,7 @@ namespace Placemaker.Tests.Types
         {
             var g = TestKit.Gen("beach");
             Assert.InRange(g.Presets.Count, 4, 6);
-            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 48);   // s13: sand blend, sand to water, landings, lifeguard/landing assets
+            Assert.InRange(g.Controls.Count(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)), 15, 54);   // s13: sand blend, sand to water, landings, lifeguard/landing assets; rf-beach: jetties
             Assert.InRange(g.Controls.Where(c => !Placemaker.Core.Decals.DressingControls.IsDressingId(c.Id)).Select(c => c.Group).Distinct().Count(), 4, 10);
             Assert.Equal("water", GeneratorGroups.Of(g));
             Assert.Contains(g.Controls, c => c.Id == "style" && c.Kind == ControlKind.Choice);
@@ -124,7 +124,7 @@ namespace Placemaker.Tests.Types
             Assert.False(plan.HasErrors);
             Assert.Equal((double)(int)Placemaker.Core.Layers.Types.Beach.ShoreMode.Inside, plan.Facts["shoreMode"]);
             Assert.All(plan.Objects, o => Assert.False(site.WaterDepthAt(o.Position.xz) > 0f, $"{o.Category} in the water at {o.Position.xz}"));
-            Assert.All(plan.Nets, n => Assert.True(n.A.z > 58f && n.D.z > 58f, "net in the water"));
+            Assert.All(plan.Nets.Where(n => n.Category != AssetCategories.NetPier), n => Assert.True(n.A.z > 58f && n.D.z > 58f, "net in the water"));   // rf-beach: jetties go out over it
             Assert.Contains(plan.Objects, o => o.Category == AssetCategories.BeachUmbrella && o.Position.z < 95f);
         }
 
@@ -182,15 +182,17 @@ namespace Placemaker.Tests.Types
             Assert.Contains(cove.Objects, o => o.Category == AssetCategories.Rock && o.Position.x < 25f);
             Assert.Contains(cove.Objects, o => o.Category == AssetCategories.Rock && o.Position.x > 225f);
             Assert.True(cove.Facts["firePits"] >= 1, "stone fire rings");   // built from small rocks: no vanilla fire pit
-            Assert.True(cove.Objects.Count(o => o.Role == ObjectRole.Tree) > P("sandy").Objects.Count(o => o.Role == ObjectRole.Tree));
+            // rf-beach: wild dunes are dunes (marram grass), not woods
+            Assert.True(cove.Objects.Count(o => o.Role == ObjectRole.Bush) > P("sandy").Objects.Count(o => o.Role == ObjectRole.Bush));
 
             var river = P("river");
             Assert.Contains(river.Objects, o => o.Category == AssetCategories.BeachBoat);
-            Assert.Contains(river.Surfaces, s => s.Role == SurfaceRole.Grass);
+            Assert.Contains(river.Paint, p => p.Layer == TerrainMaterials.Lush);   // rf-beach: the lawn is painted
 
             var resort = P("resort");
             Assert.DoesNotContain(resort.Objects, o => o.Category == AssetCategories.BeachHut);   // no vanilla beach hut (pool = a 40 m building)
-            Assert.Contains(resort.Surfaces, s => s.Role == SurfaceRole.Grass);
+            Assert.Contains(resort.Paint, p => p.Layer == TerrainMaterials.Lush);   // rf-beach: the lawn is painted
+            Assert.True(resort.Facts["jetties"] >= 1 && P("sandy").Facts["jetties"] >= 1, "a pier / swimming jetty");
             Assert.True(resort.Objects.Count(o => o.Category == AssetCategories.BeachUmbrella) > P("sandy").Objects.Count(o => o.Category == AssetCategories.BeachUmbrella));
 
             var sandy = P("sandy");
@@ -232,7 +234,7 @@ namespace Placemaker.Tests.Types
             var landings = plan.Surfaces.Where(s => s.Role == SurfaceRole.Paving).Select(s => Poly.Centroid(Poly.To2D(s.Ring))).ToList();
             // Every access path ends at a landing (its seaward end touches one).
             // (the accesses drop off the promenade; an entrance connector coming down from the street ends on the promenade)
-            foreach (var n in plan.Nets.Where(n => n.Role == NetRole.Pathway && math.abs(n.A.x - n.D.x) < 0.5f && n.A.z > n.D.z + 3f && n.A.z < (float)plan.Facts["beachDepth"] + 6f))
+            foreach (var n in plan.Nets.Where(n => n.Role == NetRole.Pathway && n.Category != AssetCategories.NetPier && math.abs(n.A.x - n.D.x) < 0.5f && n.A.z > n.D.z + 3f && n.A.z < (float)plan.Facts["beachDepth"] + 6f))
                 Assert.Contains(landings, c => math.distance(c, n.D.xz) < 3f);
             Assert.Single(plan.Objects.Where(o => o.Category == AssetCategories.BeachUmbrella).Select(o => o.Asset.Id).Distinct());
             Assert.Single(plan.Objects.Where(o => o.Category == AssetCategories.BeachLounger).Select(o => o.Asset.Id).Distinct());
