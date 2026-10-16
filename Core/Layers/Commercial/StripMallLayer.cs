@@ -25,14 +25,19 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>(shops) A second strip on the back street when the first leaves half the block (a lot, a lane and two cells of shops: ~45 m).</summary>
         protected override float ComposeMoreBelow => 0.6f;
         protected override float MoreReach => 44f;
+        /// <summary>(shops2) A strip mall is mostly parking: the lots take what the rows of stores leave (the user: "basically all parking").</summary>
+        protected override float LotShare => 0.95f;
+        /// <summary>(shops2) Plan fact set when the whole site was laid out as rows of stores round lots (<see cref="Rows"/>): the number of store rows.</summary>
+        public const string RowsFact = "stripRows";
 
         public static readonly string[] Styles = { "classic", "corner", "rearAlley" };
 
         protected override void DefineControls(ControlSet c)
         {
             c.Choice("style", "classic", ControlTier.Essential, "layout", Styles).Tip();
-            c.Slider("frontage", 140, 60, 240, 10, "m", ControlTier.More, "layout").Tip().When("style!=corner");
-            CommonControls(c);
+            c.Slider("frontage", 240, 60, 240, 10, "m", ControlTier.More, "layout").Tip().When("style!=corner");
+            // (shops2) The default is the classic strip mall: big stores (high-density commercial, 40 m deep) round a big lot.
+            CommonControls(c, ZoneKinds.CommercialHigh, 40, "large", maxDepth: 48);
             c.Fixed("style");
         }
 
@@ -54,6 +59,13 @@ namespace Placemaker.Core.Layers.Commercial
             if (style == "corner" && Corner(ctx, mall, runs)) return;
             if (style == "rearAlley" && RearAlley(ctx, mall, runs[0])) return;
             if (style != "classic") ctx.Issue(IssueSeverity.Info, FallbackKey);
+            // (shops2) The whole site as rows of stores facing a grid of lots (a real strip mall / retail centre); another frontage
+            // adds nothing to it (ComposeMore).
+            if (style == "classic")
+            {
+                if (mall.Extra) { if (ctx.Plan.Facts.ContainsKey(RowsFact)) return; }
+                else if (Rows(ctx, mall, runs[0])) return;
+            }
             if (!Classic(ctx, mall, runs[0], runs))
             {
                 if (mall.Extra) return;
@@ -62,6 +74,221 @@ namespace Placemaker.Core.Layers.Commercial
                 mall.ShopRow(r, r.From + 2f, r.To - 2f, 0f, Cells(ctx));
                 ctx.Issue(IssueSeverity.Info, NoLotKey);
             }
+        }
+
+        // ───────────── (shops2) rows of stores round a grid of lots ─────────────
+
+        /// <summary>(shops2) A lot band at least this deep (two double-loaded aisles) between rows when there are several rows of stores.</summary>
+        private static float MinLotBetween(LayerContext ctx) => Mall.LotDepth(math.max(2, Mall.Aisles(ctx.S("lotSize"))));
+
+        /// <summary>
+        /// (shops2) The user: "if I zone a big area and say strip mall, I should get a giant strip mall with multiple rows of buildings
+        /// and a labyrinth of parking". The site, seen from its main street (frame: s along it, t inward), becomes:
+        ///   • rails: lanes from the main street straight to the back street (or a U closed by the last rung when there is none),
+        ///     the outer two a store depth in from the side streets, more between them every ~180 m;
+        ///   • depth bands, front to back: a lot on the main street, then pairs of store rows back to back between two rungs
+        ///     (each row faces its rung and the lot beyond it), lots between, and a last row backing onto the back of the site
+        ///     when the depth fits it; the lots stay at least two aisles deep (big lots: three) between rows;
+        ///   • rows of big stores along the outer rails' outer sides (the horseshoe of the retail park's Megastores);
+        ///   • everything else becomes lots (LotFirst/FillRest), entered from the streets, the rails and the rungs.
+        /// False when the site cannot take it (the old composition is used then).
+        /// </summary>
+        private static bool Rows(LayerContext ctx, Mall mall, StreetShops.Run r)
+        {
+            // Why the rows did not fit (plan fact stripRowsFail: the step that gave up), for the gallery and the logs.
+            bool Fail(int step) { ctx.Plan.Facts["stripRowsFail"] = step; return false; }
+            var ring = mall.Region.Ring;
+            float sMin = float.MaxValue, sMax = float.MinValue, tMax = float.MinValue;
+            foreach (var p in ring)
+            {
+                float s = math.dot(p - r.A, r.Dir), t = math.dot(p - r.A, r.In);
+                sMin = math.min(sMin, s); sMax = math.max(sMax, s); tMax = math.max(tMax, t);
+            }
+            var (asset, h) = Mall.ShopLane(ctx);
+            int cells = Cells(ctx);
+            int maxPiece = ctx.Raw("plotDepth") >= 44f ? 6 : 4;
+            if (tMax < 60f || sMax - sMin < 90f) return Fail(1);
+
+            // Where a rail's line is inside the site (its front and back ends; the first stretch from the front).
+            (float a, float b) Span(float x)
+            {
+                float a = float.NaN, b = float.NaN;
+                for (float t = -2f; t <= tMax + 2f; t += 1f)
+                    if (mall.Region.Contains(r.At(x, t))) { if (float.IsNaN(a)) a = t; b = t; }
+                    else if (!float.IsNaN(a)) break;
+                return (a, b);
+            }
+            // The outer rails: the pair of lines that hold the largest rectangle between them (the whole site for a rectangle, the
+            // inscribed square of a round block, the long arm of an L).
+            var cand = new List<(float x, float a, float b)>();
+            for (float x = sMin + 2f; x <= sMax - 2f; x += 4f) { var sp = Span(x); if (!float.IsNaN(sp.a) && sp.b - sp.a >= 40f) cand.Add((x, sp.a, sp.b)); }
+            float bestArea = 0f, xL = 0f, xR = 0f;
+            for (int i = 0; i < cand.Count; i++)
+            {
+                float lo = cand[i].a, hi = cand[i].b;
+                for (int j = i + 1; j < cand.Count; j++)
+                {
+                    lo = math.max(lo, cand[j].a); hi = math.min(hi, cand[j].b);
+                    if (hi - lo < 40f) break;
+                    float w = cand[j].x - cand[i].x;
+                    if (w < 90f) continue;
+                    if (w * (hi - lo) > bestArea) { bestArea = w * (hi - lo); xL = cand[i].x; xR = cand[j].x; }
+                }
+            }
+            if (bestArea <= 0f) return Fail(2);
+            // Rows of stores outside the outer rails where the land beyond them is a store deep (moving the rail in for it).
+            float dd0 = cells * Mall.Cell;
+            float Outside(float x, float dir, float t)
+            {
+                float w = 0f;
+                for (float s = 1f; s < 200f; s += 1f) { if (!mall.Region.Contains(r.At(x + dir * s, t))) break; w = s; }
+                return w;
+            }
+            bool sideRowsL, sideRowsR;
+            {
+                var sl = Span(xL); var sr = Span(xR);
+                float mid = 0.5f * (math.max(sl.a, sr.a) + math.min(sl.b, sr.b));
+                float wl = Outside(xL, -1f, mid), wr = Outside(xR, 1f, mid);
+                float needL = dd0 + h + mall.KerbMargin(r.At(xL - wl, mid), r.In) + 1f;
+                float needR = dd0 + h + mall.KerbMargin(r.At(xR + wr, mid), r.In) + 1f;
+                sideRowsL = false; sideRowsR = false;
+                if (wl >= needL) sideRowsL = true;
+                else if (xR - (xL + needL - wl) >= 140f) { xL += needL - wl; sideRowsL = true; }
+                if (wr >= needR) sideRowsR = true;
+                else if ((xR - (needR - wr)) - xL >= 140f) { xR -= needR - wr; sideRowsR = true; }
+                if (!sideRowsL) xL = math.max(xL, sMin + h + 3f);
+                if (!sideRowsR) xR = math.min(xR, sMax - h - 3f);
+            }
+            int intervals = math.max(1, (int)math.round((xR - xL) / 180f));
+            var xs = new List<float>();
+            for (int k = 0; k <= intervals; k++) xs.Add(math.lerp(xL, xR, (float)k / intervals));
+            var spans = new (float a, float b)[xs.Count];
+            bool through = true;
+            float t0 = float.MinValue, t1 = float.MaxValue;
+            for (int k = 0; k < xs.Count; k++)
+            {
+                spans[k] = Span(xs[k]);
+                if (float.IsNaN(spans[k].a)) return Fail(3);
+                if (!StreetShops.StreetEnd(ctx.Input, r.At(xs[k], spans[k].b), r.In, out _, out _, out _)) through = false;
+                if (!StreetShops.StreetEnd(ctx.Input, r.At(xs[k], spans[k].a), -r.In, out _, out _, out _)) return Fail(4);
+                if (k == 0 || k == xs.Count - 1) { t0 = math.max(t0, spans[k].a); t1 = math.min(t1, spans[k].b); }
+            }
+            float D = t1 - t0;
+            if (D < 60f) return Fail(5);
+
+            // Depth pattern over the rails' common stretch: lot, then n pairs (rung, row, row, rung, lot), then optionally a last
+            // rung and row (needed when there is no street behind: it is the U's back run).
+            float lotMin1 = Mall.LotDepth(1) + 4f, lotBetween = MinLotBetween(ctx);
+            int bestRows = 0, bestN = 0, bestCells = cells; bool bestEnd = false; float bestLot = 0f;
+            for (int c = cells; c >= 2 && bestRows == 0; c--)
+            {
+                float d = c * Mall.Cell;
+                for (int n = 0; n <= 12; n++)
+                    foreach (bool end in new[] { true, false })
+                    {
+                        if (!through && !end) continue;
+                        int nRows = 2 * n + (end ? 1 : 0);
+                        if (nRows == 0) continue;
+                        float fixedT = n * (4f * h + 2f * d) + (end ? 2f * h + d : 0f);
+                        float lot = (D - fixedT) / (n + 1);
+                        if (lot < (nRows >= 2 ? lotBetween : lotMin1)) continue;
+                        // more rows first; then a last row backing onto the back (stores' backs to the neighbours, not a lot)
+                        if (nRows > bestRows || (nRows == bestRows && end && !bestEnd))
+                        { bestRows = nRows; bestN = n; bestEnd = end; bestLot = lot; bestCells = c; }
+                    }
+            }
+            if (bestRows == 0) return Fail(6);
+            cells = bestCells;
+            float dd = cells * Mall.Cell;
+            var levels = new List<(float y, int side)>();   // rung centre lines and the side their row stands on (+1 deeper, -1 nearer)
+            {
+                float t = t0 + bestLot;
+                for (int k = 0; k < bestN; k++)
+                {
+                    levels.Add((t + h, +1));
+                    levels.Add((t + 3f * h + 2f * dd, -1));
+                    t += 4f * h + 2f * dd + bestLot;
+                }
+                if (bestEnd) levels.Add((t + h, +1));
+            }
+
+            var rails = new Mall.Lane[xs.Count];
+            Mall.Lane u = null;
+            if (through)
+            {
+                for (int k = 0; k < xs.Count; k++)
+                    rails[k] = mall.Connect(Mall.End.Street(r.At(xs[k], spans[k].a), -r.In), null, Mall.End.Street(r.At(xs[k], spans[k].b), r.In), NetRole.Alley, asset, h);
+            }
+            else
+            {
+                // No street behind: the last rung closes the outer rails into a U; the stores of the last row back onto the site's edge.
+                if (!bestEnd) return Fail(7);
+                float yU = levels[levels.Count - 1].y;
+                u = mall.Connect(Mall.End.Street(r.At(xs[0], spans[0].a), -r.In), new[] { r.At(xs[0], yU), r.At(xs[xs.Count - 1], yU) },
+                    Mall.End.Street(r.At(xs[xs.Count - 1], spans[xs.Count - 1].a), -r.In), NetRole.Alley, asset, h);
+                if (u == null) return Fail(8);
+                rails[0] = u; rails[xs.Count - 1] = u;
+                for (int k = 1; k + 1 < xs.Count; k++)
+                    rails[k] = mall.Connect(Mall.End.Street(r.At(xs[k], spans[k].a), -r.In), null, Mall.End.OnLane(u, r.At(xs[k], yU)), NetRole.Alley, asset, h);
+            }
+            int railCount = 0; foreach (var rl in rails) if (rl != null) railCount++;
+            if (railCount < 2)
+            {
+                foreach (var rl in rails) mall.Remove(rl);
+                return Fail(9);
+            }
+
+            // Rungs between neighbouring rails at every level both rails reach.
+            var rungs = new List<(Mall.Lane lane, int side)>();
+            for (int li = 0; li < levels.Count; li++)
+            {
+                var (y, side) = levels[li];
+                if (u != null && li == levels.Count - 1) continue;   // the U's back run is this rung
+                for (int k = 0; k + 1 < xs.Count; k++)
+                {
+                    if (rails[k] == null || rails[k + 1] == null) continue;
+                    bool In(int i) => y >= spans[i].a + h + 6f && y <= spans[i].b - h - 6f;
+                    if (!In(k) || !In(k + 1)) continue;
+                    // (a rail ending on a street at an angle runs a little askew: the rung meets it where it really is)
+                    var pa = Mall.Project(rails[k], r.At(xs[k], y), out _); var pb = Mall.Project(rails[k + 1], r.At(xs[k + 1], y), out _);
+                    var g = mall.Connect(Mall.End.OnLane(rails[k], pa), null, Mall.End.OnLane(rails[k + 1], pb), NetRole.Alley, asset, h);
+                    if (g != null) rungs.Add((g, side));
+                }
+            }
+
+            // Store rows: along the rungs (facing the lot across them), then the U's back run, then outside the outer rails.
+            int rows = 0;
+            foreach (var (lane, side) in rungs) rows += mall.LaneRows(lane, cells, null, side, 0f, 0f, maxPiece, 2) > 0 ? 1 : 0;
+            if (u != null)
+                mall.LaneRows(u, cells, null, +1, mall.GateTrim(u, true, Mall.Cell), mall.GateTrim(u, false, Mall.Cell), maxPiece, 2);
+            {
+                if (u == null)
+                {
+                    if (rails[0] != null && sideRowsL) mall.LaneRows(rails[0], cells, null, +1, mall.GateTrim(rails[0], true, Mall.Cell), mall.GateTrim(rails[0], false, Mall.Cell), maxPiece, 2);
+                    var last = rails[xs.Count - 1];
+                    if (last != null && sideRowsR) mall.LaneRows(last, cells, null, -1, mall.GateTrim(last, true, Mall.Cell), mall.GateTrim(last, false, Mall.Cell), maxPiece, 2);
+                }
+            }
+            if (mall.Shops.Count == 0)
+            {
+                foreach (var g in rungs) mall.Remove(g.lane);
+                foreach (var rl in rails) mall.Remove(rl);
+                return Fail(10);
+            }
+            ctx.Plan.Facts[RowsFact] = bestRows;
+            ctx.Plan.Facts["stripRails"] = railCount;
+            ctx.Plan.Facts["stripRungs"] = rungs.Count;
+            return true;
+        }
+
+        /// <summary>(shops2) After the rows of stores, the rest of the site is lots (no access alleys or street rows across the front lot).</summary>
+        protected override void LotFirst(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
+        {
+            if (!ctx.Plan.Facts.ContainsKey(RowsFact)) { base.LotFirst(ctx, mall, runs); return; }
+            // Every bay between the rails and rungs is a whole lot: no budget shared out (a share cut a bay's lot short by the
+            // crescents beside a round block that never become lots, and planted the rest).
+            mall.LotBudget = float.MaxValue;
+            RestLots(ctx, mall, 0xB00u, 400f, false, true);
         }
 
         /// <summary>The frontage span used: corners kept clear for lane junctions, capped and centred.</summary>

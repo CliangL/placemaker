@@ -35,6 +35,8 @@ namespace Placemaker.Core.Suite
 
         /// <summary>A ring road around the land (so entrances have a street), or open land.</summary>
         public bool RoadsAround = true;
+        /// <summary>(shops2) roads "follow": the ring road follows the outline (a round block round a circle, an L-shaped block round an L), Gap outside it.</summary>
+        public bool RoadsFollow;
         public string Road = SuiteLayout.SmallRoad;
         /// <summary>From the shape's bounding box to the ring road's centre line (m).</summary>
         public float Gap = 16f;
@@ -255,6 +257,7 @@ namespace Placemaker.Core.Suite
             var r = new List<SuiteRoadSegment>();
             if (!RoadsAround) return r;
             float piece = Ground == "flat" ? 150f : 30f;
+            if (RoadsFollow && !HasWater && Shape != "rect") return FollowRoads(piece);
             float2 a = RingMin, b = RingMax;
             // (rf-beach) with a lake the ring leaves its side out and its two legs stop on the land, short of the bank
             if (HasWater)
@@ -279,6 +282,40 @@ namespace Placemaker.Core.Suite
                         Prefab = Road, Vertical = side % 2 == 1, Line = -1,
                         A = k == 0 ? p : math.lerp(p, q, k / (float)n), B = k == n - 1 ? q : math.lerp(p, q, (k + 1) / (float)n),
                     });
+            }
+            return r;
+        }
+
+        /// <summary>(shops2) The ring road along the outline, Gap outside it (a circle: a polygon of ~12 m pieces at the grown radii).</summary>
+        private List<SuiteRoadSegment> FollowRoads(float piece)
+        {
+            var r = new List<SuiteRoadSegment>();
+            var pts = new List<float2>();
+            if (Shape == "circle")
+            {
+                float2 h = Size * 0.5f + Gap;
+                int n = math.clamp((int)math.round(math.PI * (h.x + h.y) / 24f), 16, 64);
+                for (int k = 0; k < n; k++) { float a = 2f * math.PI * k / n; pts.Add(Center + new float2(math.cos(a) * h.x, math.sin(a) * h.y)); }
+            }
+            else
+            {
+                var outline = Outline();
+                var grown = Placemaker.Core.Geometry.Poly.Offset(Placemaker.Core.Geometry.Poly.EnsureCcw(outline), -Gap);
+                float2[] best = null; float area = 0f;
+                foreach (var g in grown) { float a = Placemaker.Core.Geometry.Poly.Area(g); if (a > area) { area = a; best = g; } }
+                if (best == null) return r;
+                foreach (var p in best)
+                {
+                    // long sides in pieces, as the box ring has them
+                    if (pts.Count > 0) { var q = pts[pts.Count - 1]; int m = math.max(1, (int)math.ceil(math.distance(q, p) / piece)); for (int k = 1; k < m; k++) pts.Add(math.lerp(q, p, k / (float)m)); }
+                    pts.Add(p);
+                }
+                { var q = pts[pts.Count - 1]; var p0 = pts[0]; int m = math.max(1, (int)math.ceil(math.distance(q, p0) / piece)); for (int k = 1; k < m; k++) pts.Add(math.lerp(q, p0, k / (float)m)); }
+            }
+            for (int k = 0; k < pts.Count; k++)
+            {
+                float2 a = pts[k], b = pts[(k + 1) % pts.Count];
+                r.Add(new SuiteRoadSegment { Prefab = Road, Vertical = math.abs(b.x - a.x) < math.abs(b.y - a.y), Line = -1, A = a, B = b });
             }
             return r;
         }
