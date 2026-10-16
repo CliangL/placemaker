@@ -329,7 +329,9 @@ namespace Placemaker.Core.Layers.Types.AdventurePlayground
                     default:
                     {
                         z.Items = math.max(2, (int)math.round(total * Weight(k) / math.max(0.1f, weights)));
-                        z.ItemRadius = k == ZoneKind.Toddler ? 1.6f : k == ZoneKind.Jungle ? 3.2f : 2.6f;
+                        // rf-parks: tighter play zones (the vanilla pieces are 2-4 m across; at 2.6 m item radii the sand discs read
+                        // as mostly empty sand).
+                        z.ItemRadius = k == ZoneKind.Toddler ? 1.4f : k == ZoneKind.Jungle ? 2.8f : 2.1f;
                         z.Spacing = z.ItemRadius * 2f + clear;
                         z.Radius = z.Spacing * 0.62f * math.sqrt(z.Items) + z.ItemRadius + clear * 0.5f + (k == ZoneKind.Jungle ? 2f : 0f);
                         break;

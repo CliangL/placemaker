@@ -9,7 +9,8 @@ Everything below was judged in the game runner (`tools/suite/Show.ps1`, clean pr
 said otherwise). Grades are mine, from the BEFORE pictures and logs.
 
 - BEFORE: `show-62-builds-1016-062604-a794` (every type and style; 45-degree, top, plan, terrain). The grid ran out of
-  blocks for the five zen styles; they were built separately in `ZEN_BEFORE_RUN`.
+  blocks for the five zen styles; they were built separately in `show-6-builds-1016-070019-2a26` (same request otherwise;
+  that build already had the picnic preset added, which does not touch the zen garden).
 - AFTER: `AFTER_RUN`.
 
 ## What is kept
@@ -20,7 +21,7 @@ said otherwise). Grades are mine, from the BEFORE pictures and logs.
 | Botanical garden | Flower show, Shrubbery | mixed, arboretum |
 | Memorial park | Memorial garden, War memorial, Reflection garden, Sculpture park | square (monument square) |
 | Adventure playground | Adventure, Toddler, Nature, Jungle | water |
-| Zen garden | ZEN_KEPT | ZEN_HIDDEN |
+| Zen garden | Dry garden (karesansui), Stroll garden, Tea garden | moss, bamboo |
 
 Hidden types: dog park, picnic grounds (now the Park's Picnic lawn style), cemetery grounds, orchard park, formal
 garden, community garden. All of it is in `Recipes/shelf/parks.json`; nothing was deleted, and every hidden type and
@@ -94,14 +95,28 @@ grey slab for a pool (no water-look surface in a clean game).
 
 ### Zen garden
 
-ZEN_TABLE
+| Style | Grade | Keep? | Why |
+|---|---|---|---|
+| karesansui | C+ | keep | The signature dry garden; but its painted gravel read as a patchy dead lawn and the rock groups were specks. |
+| stroll | C | keep (fixed) | The pond garden; on a city block its 22 % pond found no room (NoPond), leaving a bare oval. |
+| tea | C+ | keep | Tea house, basin, stepping stones; planted so densely (70 pruned trees per ha) it read as a forest. |
+| moss | C | hide | Same dense forest as tea with a small pond; nothing of its own in a clean game. |
+| bamboo | D+ | hide | Vanilla has no bamboo: the grove is scattered shrubs. |
+
+The zen garden depends on Japanese assets (lanterns, pruned pines, bamboo, basins) that come from asset packs; in a clean
+game those categories are empty (NoAssets zen.basin and friends), so the clean pictures undersell it. The user's
+"okay" is from their own playset.
 
 ## What changed (to make the survivors better)
 
 ### Park
 - **Picnic lawn** (new style `picnic`, ParkStyle `Picnic`): picnic grounds folded into the park. A gentle circuit walk
   round a big open lawn (clearing factor 1), broad shade-tree clumps round the edge, eight picnic groups (tables,
-  shelters, grills, bins), a playground and restrooms; no loose flowerbeds or street shops.
+  shelters, grills, bins), a playground and restrooms; no loose flowerbeds or street shops. The first try planted the
+  lawn full before the picnic feature ran (one group showed); the park now keeps seven more open spots for it
+  (`picnicSpots`).
+- **Garden walk** gets its own planting (ParkStyle `garden`): flowering shrub borders line the walks (55 % of the shrubs
+  beside the paths) with a few specimen trees, on top of the garden meander and the grass surface.
 - **Street shops off by default** for the park (`StreetShops.Defaults["park"]`): they zoned seven commercial plots into
   every natural or garden park's edge (the pale rectangles). The Urban pocket turns them on with its kiosk and plaza.
 - Urban pocket: no picnic and loose flowerbeds (there was never room for them; the panel said so on every build).
@@ -118,9 +133,11 @@ ZEN_TABLE
 - **Open lawns**: lawn trees cut from 20-35 to 6-10 per ha on the axial styles, and the big-trees and loose-flowerbeds
   features are off by default, so the axis, the rooms and the monument read.
 - **A signature per style**: Memorial garden gets flower borders along the procession and a cross axis; War memorial
-  gets poppy borders, 10 flags, 12 plaques and a 300 % monument on its raised forecourt; Reflection garden gets a
-  fountain rill down its pool (`poolFountains`), which also turns the grey slab into water in a clean game; Sculpture
-  park finally has its sculptures.
+  gets poppy borders, 10 flags, 12 plaques and a 350 % monument on its raised forecourt; every pool gets a fountain rill
+  down its middle, which also turns the grey slab into water in a clean game; Sculpture park finally has its sculptures.
+- **Memorial groves** (`bosque`, on for garden, war and reflection): the side lawns beyond the hedged rooms are planted
+  as regular groves, mirrored across the axis, in place of loose lawn trees (which clumped into a diagonal band and left
+  half the site an empty lawn). The Memorial garden lost its cross axis (with an end monument it ran along the outline).
 
 ### Adventure playground
 - The splash pad's fountains are placed by name when the fountain category is empty (it was an empty disc).
@@ -128,7 +145,11 @@ ZEN_TABLE
 
 ### Zen garden
 
-ZEN_CHANGES
+- Dry garden: the field is a clean gravel surface (`gravelSurface` on; the painted raking is still there with it off)
+  and the stones are 170 % (`rockScale`), so the five odd-numbered groups read from the street.
+- Stroll garden: a pond that fits a city block (`pondSize` 14 %, was 22 %: NoPond) and no gravel field competing for room.
+- Tea garden: half the pruned trees (35 per ha, was 70), so the tea house, basin and stepping stones show.
+- Moss and bamboo are hidden.
 
 ## Shared code touched (kept minimal)
 
