@@ -464,6 +464,10 @@ namespace Placemaker.Core.Layers.Commercial
                         if (split) { any = true; break; }
                     }
                     failed.Add(key);
+                    // (rf-shops3) What was left unparked, for the run logs (a corner that stayed lawn: why).
+                    ctx.Plan.Facts["restLotFail"] = (ctx.Plan.Facts.TryGetValue("restLotFail", out var rf) ? rf : 0) + 1;
+                    ctx.Plan.Facts["restLotFailM2"] = (ctx.Plan.Facts.TryGetValue("restLotFailM2", out var rm) ? rm : 0) + math.round(Poly.Area(piece));
+                    if (mall.Entries(piece).Count == 0) ctx.Plan.Facts["restLotNoEntry"] = (ctx.Plan.Facts.TryGetValue("restLotNoEntry", out var rn) ? rn : 0) + 1;
                 }
                 if (!any) break;
             }

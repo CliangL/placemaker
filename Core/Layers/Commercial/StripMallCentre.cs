@@ -247,7 +247,7 @@ namespace Placemaker.Core.Layers.Commercial
                         ctx.Plan.Facts["padHold"] = (ctx.Plan.Facts.TryGetValue("padHold", out var ph) ? ph : 0) + (held != null ? 1 : 100);
                         if (held != null) pads.Add((held, f));
                     }
-                    if (pond && flen >= 90f && tB - tF > 0f)
+                    if (pond && flen >= 80f && tB - tF > 0f)
                     {
                         // As big as the front lot allows (between the front drive and the first rung, a third of the front at most).
                         float frontLot = tB - tF;
@@ -297,6 +297,8 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var (rect, f) in pads)
                 if (mall.Row(f, math.dot(rect[0] - f.A, f.Dir) < math.dot(rect[1] - f.A, f.Dir) ? Min(rect, f) : Min(rect, f), Max(rect, f), Mall.ZoneOffset(loop), 3, 1f, null, 3, 2) > 0) padsMade++;
             if (mall.Shops.Count == 0) return Fail(9);
+            // the back corners outside the ring: corner courts (the front ones keep the frontage, the pads and the pond)
+            mall.CornerCourts(loop, Mall.Parking(ctx), 0xAC0u, i => Front(i));
             ctx.Plan.Facts[CentreFact] = 1;
             ctx.Plan.Facts[RowsFact] = rows;
             ctx.Plan.Facts["stripRungs"] = rungs.Count;

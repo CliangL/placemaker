@@ -184,6 +184,7 @@ namespace Placemaker.Core.Layers.Commercial
             int rows = mall.LaneRows(loop, inner, null, 0, 0f, 0f, 3, 2);
             foreach (var (rail, _) in rails) rows += mall.LaneRows(rail, inner, null, 0, 0f, 0f, 3, 2);
             foreach (var (g, _, _) in rungs) rows += mall.LaneRows(g, inner, null, 0, 0f, 0f, 3, 2);
+            if (kinds != "pedestrian") mall.CornerCourts(loop, Mall.Parking(ctx), 0xDC0u);
             if (mall.Shops.Count == 0) return Fail(9);
 
             // The square's corners: a diagonal pair of café squares, the other pair gardens.

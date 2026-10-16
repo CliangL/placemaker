@@ -115,6 +115,8 @@ namespace Placemaker.Core.Layers.Commercial
             RestLots(ctx, mall, 0x7B0u, 400f, false, false);
             mall.ReleaseRows();
             int rows = mall.LaneRows(loop, inner, null, -1, 0f, 0f, 3, 2, RowSeg);
+            // the corners outside the loop: parking for the shops and the park (a corner court facing each soft corner)
+            mall.CornerCourts(loop, Mall.Parking(ctx), 0x7D0u);
             foreach (var p in parkParts) mall.Taken.Remove(p);
             ctx.Check();
 

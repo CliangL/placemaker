@@ -89,6 +89,63 @@ namespace Placemaker.Core.Layers.Commercial
         }
 
         /// <summary>
+        /// (rf-shops3) Corner courts: outside each soft corner of a ring drive (a chamfer between two long sides) the rows of both
+        /// sides stop short and leave a square of lawn by the street corner. A small car park turned to face the chamfer takes
+        /// it (one aisle, entered from the middle of the chamfer), clipped to the site; what it cannot use stays planted.
+        /// <paramref name="skip"/> leaves out segments (a strip mall's front corners, kept for pads and the pond). Returns the count.
+        /// </summary>
+        private static float2 ClosestOnRing(float2[] ring, float2 p)
+        {
+            float2 best = ring[0]; float bd = float.MaxValue;
+            for (int k = 0; k < ring.Length; k++)
+            {
+                float2 a = ring[k], b = ring[(k + 1) % ring.Length], ab = b - a;
+                float l2 = math.lengthsq(ab);
+                var q = l2 < 1e-6f ? a : a + ab * math.saturate(math.dot(p - a, ab) / l2);
+                float d = math.distancesq(q, p);
+                if (d < bd) { bd = d; best = q; }
+            }
+            return best;
+        }
+
+        public int CornerCourts(Lane loop, SettingsBag parking, uint salt, Func<int, bool> skip = null)
+        {
+            int n = loop.Points.Count - 1, made = 0;
+            if (n < 4) return 0;
+            float Len(int k) => math.distance(loop.Points[((k % n) + n) % n], loop.Points[(((k + 1) % n) + n) % n]);
+            for (int i = 0; i < n; i++)
+            {
+                Ctx.Check();
+                if (skip != null && skip(i)) continue;
+                float l = Len(i);
+                if (l < 9f || l > 34f || Len(i - 1) < 1.4f * l || Len(i + 1) < 1.4f * l) continue;
+                var f = Frame(loop.Points[i], loop.Points[(i + 1) % n]);
+                // the chamfer turns the loop by about 45° at each end
+                var dPrev = math.normalizesafe(loop.Points[i] - loop.Points[((i - 1) % n + n) % n]);
+                if (math.dot(dPrev, f.Dir) > 0.94f || math.dot(dPrev, f.Dir) < 0.35f) continue;
+                // The leftover by this corner (the square between the two sides' rows and the street corner), entered from the
+                // middle of the chamfer; a piece too ragged for a lot is trimmed to the square facing the chamfer and tried again.
+                var outward = -f.In;
+                var probe = f.At(0.5f * f.To, 0f) + outward * (loop.Half + 3f);
+                float2[] piece = null;
+                foreach (var q in RestPieces(150f)) if (Poly.Contains(q, probe)) { piece = q; break; }
+                if (piece == null) continue;
+                var entry = new List<(float2, string)> { (ClosestOnRing(piece, f.At(0.5f * f.To, 0f)), "alley") };
+                if (Lot(piece, entry, parking, salt + (uint)i * 7u)) { made++; continue; }
+                float z = loop.Half + 1.5f;
+                var square = Rect(f, -0.5f * f.To, 1.5f * f.To, -z, -(z + 2f * f.To));
+                try
+                {
+                    var cut = Largest(Poly.Intersection(Poly.EnsureCcw(piece), Poly.EnsureCcw(square)), 250f);
+                    if (cut != null && Lot(cut, new List<(float2, string)> { (ClosestOnRing(cut, f.At(0.5f * f.To, 0f)), "alley") }, parking, salt + (uint)i * 7u + 3u)) made++;
+                }
+                catch (Exception) { }
+            }
+            Ctx.Plan.Facts["cornerCourts"] = (Ctx.Plan.Facts.TryGetValue("cornerCourts", out var c) ? c : 0) + made;
+            return made;
+        }
+
+        /// <summary>
         /// Merges edges shorter than <paramref name="minEdge"/> (while more than <paramref name="minCount"/> points are left). A short
         /// edge between two long ones that turn (a kerb return the bucket cut across a block's corner) gives way to the corner
         /// itself, where the long edges' lines meet: dropping one of its ends instead skews a whole side of the block by the
