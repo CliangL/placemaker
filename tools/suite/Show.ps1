@@ -190,7 +190,7 @@ if ($Type.Count -eq 1 -and $Type[0] -ieq 'all') {
 $landList = @([pscustomobject]@{ Name = ''; Spec = $landSpec })
 if ($Lands) {
     $text = if (Test-Path -LiteralPath $Lands -PathType Leaf) { Get-Content -LiteralPath $Lands -Raw } else { $Lands }
-    try { $arr = @($text | ConvertFrom-Json) } catch { Stop-With "-Lands is not a JSON array: $text" }
+    try { $arr = @($text | ConvertFrom-Json | ForEach-Object { $_ }) } catch { Stop-With "-Lands is not a JSON array: $text" }
     $schema = Get-Content (Join-Path $repo 'suite\schema.json') -Raw | ConvertFrom-Json
     $landList = @(foreach ($o in $arr) {
             $spec = [ordered]@{}
@@ -206,7 +206,10 @@ if ($Lands) {
 $builds = @()
 foreach ($t in $types) {
     $hiddenStyles = HiddenStyles $t
-    $styles = if ($Style.Count -eq 0) { @('') } elseif ($Style.Count -eq 1 -and $Style[0] -ieq 'all') { @('') + @($t.presets | Where-Object { $hiddenStyles -notcontains $_ }) } else { $Style }
+    # 'type:style' names a style of one type only (several types with their own styles in one request)
+    $mine = @($Style | Where-Object { $_ -notlike '*:*' -or $_ -like "$($t.layer):*" } | ForEach-Object { if ($_ -like '*:*') { $_.Split(':')[1] } else { $_ } })
+    if ($Style.Count -gt 0 -and $mine.Count -eq 0) { $mine = @('') }
+    $styles = if ($Style.Count -eq 0) { @('') } elseif ($mine.Count -eq 1 -and $mine[0] -ieq 'all') { @('') + @($t.presets | Where-Object { $hiddenStyles -notcontains $_ }) } else { $mine }
     foreach ($s in $styles) {
         $preset = if ($s -and $s -ine 'default') { @($t.presets) | Where-Object { $_ -ieq $s } | Select-Object -First 1 } else { '' }
         if ($s -and $s -ine 'default' -and -not $preset) { Stop-With "'$($t.layer)' has no style '$s'. Styles: default, $(@($t.presets) -join ', ')" }
