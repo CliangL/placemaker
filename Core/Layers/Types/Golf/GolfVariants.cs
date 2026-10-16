@@ -23,7 +23,8 @@ namespace Placemaker.Core.Layers.Types.Golf
             var gates = Gates(ctx);
             var pathAsset = GolfAssets.PathRef(ctx.S("pathAsset"));
             string theme = ctx.S("miniTheme");
-            ctx.Surface(region.Ring, SurfaceRole.Grass, AssetMix.One("Grass Surface 01"));
+            // (rf-sports) No lawn surface under the course: the felt lanes are grass surfaces too and vanished into it; on the
+            // bare ground the darker felt reads inside its white kerb.
             LeisureKit.Frame(region, out var centre, out var axis, out var side, out float major, out float minor);
             // On squarish sites the principal axis is an arbitrary diagonal: run the promenade straight in from the entrance.
             if (gates.Count > 0 && major < minor * 1.25f)
