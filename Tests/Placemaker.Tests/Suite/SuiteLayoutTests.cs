@@ -99,33 +99,10 @@ namespace Placemaker.Tests.Suite
         }
 
         [Fact]
-        public void Pits_CountOnlyBelowBothGroundAndPlan()
-        {
-            var at = new List<float2> { new float2(0, 0), new float2(1, 0), new float2(2, 0) };
-            var before = new List<float> { 10f, 10f, 10f };
-            var planned = new List<float> { 10f, 7f, 10f };   // a planned 3 m dig at sample 1
-            var after = new List<float> { 10f, 7f, 6f };      // sample 2: a 4 m unplanned pit
-            var near = new List<bool> { false, false, true };
-            var r = SuiteVerdicts.Pits(at, before, after, planned, near);
-            Assert.Equal(1, r.Cells);
-            Assert.Equal(1, r.CellsNearRoads);
-            Assert.Equal(4f, r.MaxDepth, 3);
-        }
-
-        [Fact]
-        public void CropNames()
-        {
-            Assert.True(SuiteVerdicts.IsCropLike("Agriculture Lot - Field"));
-            Assert.True(SuiteVerdicts.IsCropLike("Agriculture Surface 01"));
-            Assert.False(SuiteVerdicts.IsCropLike("Placemaker Area"));
-            Assert.True(SuiteVerdicts.IsFence("Wooden Fence 01"));
-        }
-
-        [Fact]
         public void FrameStats_P95()
         {
             var ms = Enumerable.Range(1, 100).Select(i => (float)i).ToList();
-            var (max, p95, n) = SuiteVerdicts.FrameStats(ms);
+            var (max, p95, n) = SuiteStats.FrameStats(ms);
             Assert.Equal(100f, max);
             Assert.Equal(95f, p95);
             Assert.Equal(100, n);

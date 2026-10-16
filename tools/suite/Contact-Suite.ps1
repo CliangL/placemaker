@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  Builds one contact-sheet image of a suite run: every shot in scenario and step order as a thumbnail, captioned with
-  the scenario's result, the step and shot name; unsettled shots framed in red. (contact.html in the run folder has
-  the same in full size with the camera and settle details.)
+  Builds one contact-sheet image of a game run: every shot in scenario and step order as a thumbnail, captioned with
+  the shot's name and the scenario's status. (contact.html in the run folder has the same in full size with the
+  camera and settle details.)
 
 .EXAMPLE
   powershell -File tools/suite/Contact-Suite.ps1 -RunId c3-core
@@ -22,7 +22,7 @@ $summary = Get-Content (Join-Path $run 'summary.json') -Raw | ConvertFrom-Json
 $results = @{}
 $i = 0
 foreach ($r in $summary.scenarios) { $i++; $results[('{0:D2}' -f $i)] = $r }
-$files = @(Get-ChildItem $shotsDir -Filter '*.png' | Where-Object { $_.Name -match '^\d\d-' -and $_.Name -notmatch 'heat' } | Sort-Object Name)
+$files = @(Get-ChildItem $shotsDir -Filter '*.png' | Where-Object { $_.Name -match '^\d\d-' } | Sort-Object Name)
 if ($files.Count -eq 0) { Write-Host 'no shots'; exit 1 }
 $th = [int]($ThumbWidth * 9 / 16)
 $capH = 34
@@ -36,7 +36,7 @@ $g.Clear([System.Drawing.Color]::FromArgb(30, 30, 28))
 $font = New-Object System.Drawing.Font 'Segoe UI', 8
 $bold = New-Object System.Drawing.Font 'Segoe UI', 9, ([System.Drawing.FontStyle]::Bold)
 $white = [System.Drawing.Brushes]::Gainsboro
-$g.DrawString("Suite run $RunId - $($summary.headline)", $bold, $white, 6, 10)
+$g.DrawString("Game run $RunId - $($summary.headline)", $bold, $white, 6, 10)
 $k = 0
 foreach ($f in $files) {
     $col = $k % $Columns; $row = [math]::Floor($k / $Columns)
@@ -48,12 +48,9 @@ foreach ($f in $files) {
     } catch { }
     $nn = $f.Name.Substring(0, 2)
     $res = $results[$nn]
-    $unsettled = Test-Path (Join-Path $shotsDir ($f.BaseName + '.unsettled-heat.png'))
-    $color = switch ($res.result) { 'PASS' { [System.Drawing.Color]::FromArgb(92, 194, 122) } 'FAIL' { [System.Drawing.Color]::FromArgb(255, 138, 128) } default { [System.Drawing.Color]::FromArgb(230, 195, 74) } }
-    if ($unsettled) { $g.DrawRectangle((New-Object System.Drawing.Pen ([System.Drawing.Color]::Red), 3), $x, $y, $ThumbWidth, $th) }
     $name = $f.BaseName.Substring(3)
     $g.DrawString(("{0} {1}" -f $nn, $name), $font, $white, $x, $y + $th + 2)
-    $g.DrawString(("{0}{1}" -f $res.result, $(if ($unsettled) { '  UNSETTLED' } else { '' })), $font, (New-Object System.Drawing.SolidBrush $color), $x, $y + $th + 16)
+    $g.DrawString([string]$res.status, $font, $white, $x, $y + $th + 16)
     $k++
 }
 $out = Join-Path $run 'contact.jpg'

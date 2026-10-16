@@ -1,10 +1,9 @@
 {
   "set": "examples",
   "description": "The four architect scenarios (suite/scenarios/examples) as one set.",
-  "grow": false,
   "scenarios": [
     {
-      "_goal": "Strip mall on a block between an avenue (south) and a small street (north); after growth the shops must face the build's own lane; every drive connection gets a close-up.",
+      "_goal": "Strip mall on a block between an avenue (south) and a small street (north); after growth the shops must face the build's own lane; every entrance gets a close-up.",
       "id": "a1-strip-mall",
       "site": "flat",
       "streets": {
@@ -40,7 +39,7 @@
         },
         {
           "do": "camera",
-          "target": "connection",
+          "target": "entrance",
           "index": "all",
           "view": "closeup",
           "shot": "drive",
@@ -90,9 +89,6 @@
           "shot": "preview"
         },
         {
-          "do": "issues"
-        },
-        {
           "do": "build"
         },
         {
@@ -136,7 +132,7 @@
       ]
     },
     {
-      "_goal": "On one block, switch through every plaza style like a person (Design, the style chips) and record each plan time and frame hitch; summary.md lists them per step.",
+      "_goal": "On one block, switch through every plaza style like a person (Design, the style chips) and record each plan time and frame hitch; suite.log lists them per step.",
       "id": "a3-plaza-presets",
       "site": "flat",
       "steps": [
@@ -209,7 +205,7 @@
       ]
     },
     {
-      "_goal": "Build a parking lot, edit the build (select it, Edit), move its entrance to the east street, rebuild, and compare: census before/after, nothing of the first build left behind (noUntrackedPieces), before/after pictures from the same cameras.",
+      "_goal": "Build a parking lot, edit the build (select it, Edit), move its entrance to the east street, rebuild; before/after pictures from the same cameras.",
       "id": "a4-edit-rebuild",
       "site": "flat",
       "steps": [
@@ -287,11 +283,6 @@
           "view": "closeup",
           "shot": "old-entrance-spot",
           "shotMode": "render"
-        },
-        {
-          "do": "compare",
-          "a": 1,
-          "b": 2
         }
       ]
     }

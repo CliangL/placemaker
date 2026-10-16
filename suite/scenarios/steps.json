@@ -1,7 +1,6 @@
 {
   "set": "steps",
-  "description": "Step scripts: every area tool, entrances placed and moved in Design, review issues, close-ups, edit, build both ways, select and delete, bulldoze, the info panel, a zoom on a standing build.",
-  "grow": false,
+  "description": "Step scripts: every area tool, entrances placed and moved in Design, close-ups, edit, build both ways, select and delete, bulldoze, the info panel, a zoom on a standing build.",
   "scenarios": [
     {
       "id": "parking-entrance",
@@ -79,7 +78,7 @@
         },
         {
           "do": "camera",
-          "target": "connection",
+          "target": "entrance",
           "index": "all",
           "view": "closeup",
           "shot": "drive",
@@ -169,9 +168,6 @@
         {
           "do": "preview",
           "shot": "preview"
-        },
-        {
-          "do": "issues"
         },
         {
           "do": "edit"

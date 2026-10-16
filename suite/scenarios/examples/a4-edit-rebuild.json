@@ -1,5 +1,5 @@
 {
-  "_goal": "Build a parking lot, edit the build (select it, Edit), move its entrance to the east street, rebuild, and compare: census before/after, nothing of the first build left behind (noUntrackedPieces), before/after pictures from the same cameras.",
+  "_goal": "Build a parking lot, edit the build (select it, Edit), move its entrance to the east street, rebuild; before/after pictures from the same cameras.",
   "id": "a4-edit-rebuild",
   "site": "flat",
   "steps": [
@@ -15,7 +15,6 @@
     { "do": "build" },
     { "do": "camera", "target": "build", "view": "top", "shot": "after-top", "shotMode": "render" },
     { "do": "camera", "target": "entrance", "index": 0, "view": "closeup", "shot": "after-entrance", "shotMode": "render" },
-    { "do": "camera", "target": "point", "at": [0, -70], "view": "closeup", "shot": "old-entrance-spot", "shotMode": "render" },
-    { "do": "compare", "a": 1, "b": 2 }
+    { "do": "camera", "target": "point", "at": [0, -70], "view": "closeup", "shot": "old-entrance-spot", "shotMode": "render" }
   ]
 }

@@ -1,10 +1,11 @@
-// In-game test suite runner: boot → main menu → window at the shot size → new game on a vanilla map → the readable,
-// deterministic look (SuiteLook) → the set is read, checked against the schema and the grid sized for it → fixture
-// (heightmap, road grid, zoning, plops, pre-grow only when a scenario wants grown housing) → exposure and noise-floor
-// calibration → pinned Placemaker settings → switching → every scenario on its own block, judged right after it ran →
-// one shared grow when a build planned zoning (re-judged after) → summary.json / summary.md / contact.html → the queue
-// (optional) → the game's own clean quit. If the game is closed early, the quit hook writes what is known, marked
-// incomplete. A MonoBehaviour with coroutines; exists only when SuiteGate opened (command-line token + armed run.json).
+// Game runner: boot → main menu → window at the shot size → new game on a vanilla map → the readable, deterministic
+// look (SuiteLook) → the set is read, checked against the schema and the grid sized for it → fixture (heightmap, road
+// grid, zoning, plops, pre-grow only when a scenario wants grown housing) → exposure and noise-floor calibration →
+// pinned Placemaker settings → every scenario's steps on its own block, with its pictures → summary.json / summary.md /
+// contact.html → the queue (optional) → the game's own clean quit. It does what the steps say and takes the pictures;
+// it judges nothing (the logs are the evidence). If the game is closed early, the quit hook writes what is known,
+// marked incomplete. A MonoBehaviour with coroutines; exists only when SuiteGate opened (command-line token + armed
+// run.json).
 
 using System;
 using System.Collections;
@@ -52,7 +53,7 @@ namespace Placemaker.Game.Suite
         private readonly List<(float Ms, float Suite, int Frame)> _window = new List<(float, float, int)>(4096);
         private bool _windowOpen, _openAtFrameStart, _tracing;
         private float _lastFrameMs, _worstRecentMs, _worstRecentAt;
-        private float _probeMsThisFrame, _overheadPrevFrame;
+        private float _suiteMsThisFrame;
         private string _windowStep = "";
 
         // errors (UnityLogger events can come from worker threads)
@@ -61,7 +62,7 @@ namespace Placemaker.Game.Suite
         private readonly List<string> _errorLines = new List<string>();
         private readonly List<string> _otherLines = new List<string>();
 
-        /// <summary>Errors are Placemaker's when its log, message or stack names it; every other error is counted too (and fails noErrors).</summary>
+        /// <summary>Errors are Placemaker's when its log, message or stack names it; every other error is counted too.</summary>
         private static bool Ours(ILog log, string message, Exception e) =>
             (log?.name ?? "").IndexOf("Placemaker", StringComparison.OrdinalIgnoreCase) >= 0
             || (message ?? "").IndexOf("Placemaker", StringComparison.OrdinalIgnoreCase) >= 0
@@ -74,7 +75,7 @@ namespace Placemaker.Game.Suite
         private World _world;
         private PlacemakerToolSystem _tool;
         private SuiteFixture _fixture;
-        private SuiteProbe _probe;
+        private SuiteLookup _lookup;
 
         // ───────────── lifecycle ─────────────
 
@@ -130,7 +131,6 @@ namespace Placemaker.Game.Suite
                 foreach (var st in _states)
                 {
                     if ((string)st.Result["status"] == "running") st.Result["status"] = "incomplete";
-                    if (st.Result["verdicts"] == null) { try { Verdicts(st, "aborted"); } catch (Exception) { } }
                     WriteScenario(st, st.FileIndex);
                 }
                 _phase = "aborted";
@@ -167,8 +167,8 @@ namespace Placemaker.Game.Suite
             float ms = Time.unscaledDeltaTime * 1000f;   // the frame that just ended
             _lastFrameMs = ms;
             // the suite work done in the coroutines of the frame that just ended belongs to that frame
-            float overhead = _probeMsThisFrame;
-            _probeMsThisFrame = 0f;
+            float overhead = _suiteMsThisFrame;
+            _suiteMsThisFrame = 0f;
             if (_openAtFrameStart) _window.Add((ms, overhead, Time.frameCount - 1));
             _openAtFrameStart = _windowOpen;
             if (_tracing) Say($"frame {Time.frameCount} {ms:F1} ms sim {_world?.GetExistingSystemManaged<SimulationSystem>()?.frameIndex}");
@@ -320,12 +320,12 @@ namespace Placemaker.Game.Suite
             _windowStep = step + ":" + what;
         }
 
-        /// <summary>Frame stats of the step: each frame minus the suite's own synchronous work (probes, captures) in it.</summary>
+        /// <summary>Frame stats of the step: each frame minus the suite's own synchronous work (captures) in it.</summary>
         private JObject CloseWindow()
         {
             _windowOpen = false;
             var net = _window.Select(f => math.max(0f, f.Ms - f.Suite)).ToList();
-            var (max, p95, n) = SuiteVerdicts.FrameStats(net);
+            var (max, p95, n) = SuiteStats.FrameStats(net);
             int over250 = net.Count(f => f > 250f), over1000 = net.Count(f => f > 1000f);
             int maxFrame = -1;
             float maxSuite = 0f;
@@ -358,7 +358,6 @@ namespace Placemaker.Game.Suite
         {
             Say($"FATAL in {where}: {e}");
             _summary["fatal"] = where + ": " + e.GetType().Name + ": " + e.Message;
-            foreach (var st in _states) if (st.Result["verdicts"] == null) { try { Verdicts(st, "fatal"); } catch (Exception) { } }
             WriteSummary();
             if (_cfg.quit) StartCoroutine(Quit());
         }
@@ -412,7 +411,7 @@ namespace Placemaker.Game.Suite
             int nx = _cfg.nx, nz = _cfg.nz;
             if (scenarios != null && nx == 0) nx = GridFor(scenarios, set, nz);
             _fixture = new SuiteFixture(_world, nx, nz) { Spacing = _cfg.spacing ?? "checker" };
-            _probe = new SuiteProbe(_world);
+            _lookup = new SuiteLookup(_world);
             _summary["grid"] = $"{_fixture.Layout.NX} x {_fixture.Layout.NZ} blocks, spacing {_fixture.Spacing}";
             _summary["capacity"] = new JObject { ["flat"] = _fixture.Capacity(SuiteBlockKind.Flat), ["zoned"] = _fixture.Capacity(SuiteBlockKind.Zoned), ["slope"] = _fixture.Capacity(SuiteBlockKind.Slope), ["rough"] = _fixture.Capacity(SuiteBlockKind.Rough), ["survive"] = _fixture.Capacity(SuiteBlockKind.Survive) };
             bool wantsZoned = scenarios == null || scenarios.Any(s => string.Equals(s.Site, "zoned", StringComparison.OrdinalIgnoreCase));
@@ -432,15 +431,6 @@ namespace Placemaker.Game.Suite
                 _total = scenarios.Count;
                 _summary["scenarioCount"] = scenarios.Count;
                 Say($"{scenarios.Count} scenarios: {string.Join(", ", scenarios.Select(s => s.Id))}");
-                if (set.switching != null && !_cfg.noSwitching)
-                {
-                    _phase = "switching";
-                    var block = _fixture.Take(set.switching.site, null, null, true, "switching", out var note);
-                    yield return Guard(Switching(set.switching, block), e => { Say("switching failed: " + e); _summary["switchingError"] = e.Message; });
-                    Mark("switchingDoneSec");
-                    WriteSummary();
-                }
-
                 _phase = "scenarios";
                 for (int i = 0; i < scenarios.Count; i++)
                 {
@@ -451,40 +441,6 @@ namespace Placemaker.Game.Suite
                 _scenario = "";
                 Mark("scenariosDoneSec");
                 yield return Guard(CloseTool(), e => Say("close tool: " + e.Message));
-                // every standing build once more, after all the others were built next to it: did a later build hide or remove anything of it?
-                _phase = "recheck";
-                foreach (var st in _states.Where(x => x.Built && x.Before != null && x.Ring != null).ToList())
-                {
-                    _scenario = st.S.Id;
-                    var rec = new JObject();
-                    var members = _probe.MemberSet(st.Group);
-                    yield return Guard(Framed(st, rec, Do(() => st.Result["visibilityAtEnd"] = Probe("visibility", () => _probe.Visibility(members), rec))), e => st.Result["recheckError"] = e.Message);
-                    Verdicts(st, "after all scenarios");
-                    WriteScenario(st, st.FileIndex);
-                }
-                _scenario = "";
-                Mark("recheckDoneSec");
-
-                bool needGrow = set.grow && _states.Any(x => x.Built && ((int?)x.Result["census"]?["zoning"]?["plannedZonedCells"] ?? 0) > 0);
-                if (needGrow)
-                {
-                    _phase = "grow";
-                    yield return Guard(Grow(_cfg.growSeconds, "grow", set.growFast), e => Say("grow failed: " + e));
-                    Mark("growDoneSec");
-                    _phase = "post";
-                    for (int i = 0; i < _states.Count; i++)
-                    {
-                        var st = _states[i];
-                        _index = i + 1;
-                        _scenario = st.S.Id;
-                        yield return Guard(PostGrow(st), e => { Say($"post {st.S.Id}: {e}"); st.Result["postError"] = e.Message; });
-                        Verdicts(st, "after the shared grow");
-                        WriteScenario(st, st.FileIndex);
-                    }
-                    _scenario = "";
-                    Mark("postDoneSec");
-                }
-                else _summary["grow"] = set.grow ? "skipped: no standing build planned zoning" : "off for this set";
                 WriteSummary();
             }
             if (_cfg.queue || _cfg.set == "queue")
@@ -557,7 +513,6 @@ namespace Placemaker.Game.Suite
                 var k = SuiteFixture.KindOf(s.Site) ?? SuiteBlockKind.Flat;
                 need[k] = (need.TryGetValue(k, out int n) ? n : 0) + 1;
             }
-            if (set?.switching != null) need[SuiteBlockKind.Flat] = (need.TryGetValue(SuiteBlockKind.Flat, out int f) ? f : 0) + 1;
             for (int nx = 9; nx <= 40; nx++)
             {
                 var probe = new SuiteFixture(_world, nx, nz) { Spacing = _cfg.spacing ?? "checker" };
@@ -823,7 +778,7 @@ namespace Placemaker.Game.Suite
 
         /// <summary>
         /// Grows the city: fast spawn at the configured speed (or plain speed 1 with real demand), until the building count
-        /// has not changed for <paramref name="stableSec"/> s, at most <paramref name="seconds"/>. Fails when the
+        /// has not changed for <paramref name="stableSec"/> s, at most <paramref name="seconds"/>. Notes it when the
         /// simulation did not run (fewer sim frames than the minimum).
         /// </summary>
         private IEnumerator Grow(float seconds, string what, bool fast = true, float stableSec = 8f)
@@ -848,7 +803,6 @@ namespace Placemaker.Game.Suite
             sim.selectedSpeed = 0f;
             spawn.debugFastSpawn = false;
             yield return Frames(10);
-            _probe.GrowStamp++;
             Event("grow");
             uint frames = sim.frameIndex - f0;
             var g = new JObject
@@ -860,25 +814,6 @@ namespace Placemaker.Game.Suite
             if (_fixture.CountAllBuildings() == start) g["nothingGrew"] = true;
             _summary[what] = g;
             Say($"{what}: {g.ToString(Formatting.None)}");
-        }
-
-        /// <summary>After the shared grow: growables, visibility and existing buildings again for every standing build; a grown oblique for builds that planned zoning.</summary>
-        private IEnumerator PostGrow(ScenarioState st)
-        {
-            if (st.Before == null || st.Ring == null || !st.Built) yield break;
-            var rec = new JObject();
-            var members = _probe.MemberSet(st.Group);
-            st.Result["growablesAfterGrow"] = Probe("growables", () => _probe.Growables(st.Before, st.Group, members, st.Plan), rec);
-            yield return Framed(st, rec, Do(() => st.Result["visibilityAfterGrow"] = Probe("visibility", () => _probe.Visibility(members), rec)));
-            st.Result["existingAfterGrow"] = Probe("existing", () => _probe.Census(st.Before, st.Group, st.Plan, st.S.Layer, null, null, null)["existingBuildings"], rec);
-            if (((int?)st.Result["census"]?["zoning"]?["plannedZonedCells"] ?? 0) > 0)
-            {
-                st.StepIndex = 99;
-                var r = new JObject();
-                yield return StepShot(st, new JObject { ["camera"] = new JObject { ["target"] = "build", ["view"] = "oblique" }, ["shotMode"] = "render" }, r, "grown-oblique");
-                var ps = st.Result["postShots"] as JArray ?? (JArray)(st.Result["postShots"] = new JArray());
-                ps.Add(r);
-            }
         }
 
         // ───────────── scenario sets ─────────────
@@ -1027,102 +962,6 @@ namespace Placemaker.Game.Suite
         private static string LayerAliasesCanonical(string layer)
         {
             try { return Placemaker.Core.Layers.Common.LayerAliases.Canonical(layer); } catch (Exception) { return layer; }
-        }
-
-        // ───────────── switching ─────────────
-
-        private IEnumerator Switching(SwitchingSpec spec, SuiteBlock block)
-        {
-            var res = new JObject();
-            _summary["switching"] = res;
-            res["profile"] = _cfg.profile;
-            res["note"] = _cfg.profile == "full" ? "full playset" : "clean profile (Placemaker only): the user's switching hang comes from catalog rescans that need their mods' decals; a clean 'ok' does not clear it";
-            if (block == null) { res["status"] = "no-block"; yield break; }
-            var errMark = ErrorMark();
-            _scenario = "switching";
-            res["block"] = block.Id;
-            var steps = new List<(string Layer, string Preset)>();
-            foreach (var sp in spec.steps)
-            {
-                if ((sp.expand ?? "") == "presets")
-                {
-                    foreach (var g in Generators(sp))
-                    {
-                        var ids = PresetIds(g);
-                        if (sp.limit > 0) ids = ids.Take(sp.limit).ToList();
-                        foreach (var p in ids) steps.Add((g.Id, p));
-                    }
-                }
-                else if ((sp.expand ?? "") == "types") foreach (var g in Generators(sp)) steps.Add((g.Id, ""));
-                else steps.Add((sp.layer, sp.preset ?? ""));
-            }
-            res["steps"] = steps.Count;
-            int catalog0 = Services.Assets?.Version ?? -1;
-            var st = new ScenarioState { S = new Scenario { Id = "switching", Block = block, Seed = 7 }, Pace = "human", FileIndex = -1 };
-            yield return OpenTool();
-            PlacemakerToolSystem.SuiteResetSeed(7);
-            // the area like a person: the bucket clicked on the block
-            var arec = new JObject();
-            yield return StepArea(st, new JObject { ["do"] = "area", ["tool"] = "bucket" }, arec);
-            if (_tool.Shape == null) { res["status"] = "no-outline"; res["problem"] = arec["error"]; yield break; }
-
-            var patient = new JArray();
-            float worst = 0f;
-            int frames = spec.settleFrames > 0 ? spec.settleFrames : (int)(spec.settleSeconds * 60f);
-            foreach (var (layer, preset) in steps)
-            {
-                OpenWindow(-1, "switch");
-                float t0 = Time.realtimeSinceStartup;
-                var rec = new JObject();
-                if (string.IsNullOrEmpty(preset)) { string rid = _tool.SuiteRecipeFor(layer); yield return UiAct(st, rec, "type " + layer, "recipe-" + rid, "selectRecipe", new object[] { rid }, () => RootLayer() == LayerAliasesCanonical(layer), () => _tool.SelectRecipe(rid), mustChange: false); }
-                else yield return UiAct(st, rec, "style " + preset, "preset-" + preset, "selectPreset", new object[] { layer, preset }, () => ActivePresetId() == preset, () => _tool.SelectPreset(layer, preset), mustChange: false);
-                yield return Frames(1);
-                yield return Until(() => !_tool.Planning, 30f, "switch plan");
-                float planned = Time.realtimeSinceStartup - t0;
-                yield return Frames(frames);
-                var w = CloseWindow();
-                worst = math.max(worst, (float)w["maxMs"]);
-                patient.Add(new JObject { ["layer"] = layer, ["preset"] = preset, ["planWaitMs"] = Math.Round(planned * 1000f), ["maxMs"] = w["maxMs"], ["p95Ms"] = w["p95Ms"], ["over250"] = w["over250"], ["ui"] = rec["ui"] });
-            }
-            res["patient"] = patient;
-            res["patientWorstMs"] = Math.Round(worst, 1);
-
-            // rapid: in Design (where the styles are), a click every rapidMs — once with the ghost preview, once in sketch
-            if (spec.rapid)
-            {
-                var rapid = new JObject();
-                foreach (var mode in new[] { "ghost", "sketch" })
-                {
-                    _tool.SetPreviewMode(mode);
-                    yield return Frames(3);
-                    OpenWindow(-1, "rapid " + mode);
-                    float t0 = Time.realtimeSinceStartup;
-                    foreach (var (layer, preset) in steps)
-                    {
-                        if (string.IsNullOrEmpty(preset)) { string rid = _tool.SuiteRecipeFor(layer); if (rid != null) yield return UiRun(SuiteUiSystem.TriggerJs("selectRecipe", rid), _ => { }); }
-                        else yield return UiRun(SuiteUiSystem.TriggerJs("selectPreset", layer, preset), _ => { });
-                        yield return Seconds(spec.rapidMs / 1000f);
-                    }
-                    yield return Until(() => !_tool.Planning && !_tool.GhostPending, 60f, "rapid settle");
-                    yield return Frames(frames);
-                    var w = CloseWindow();
-                    w["seconds"] = Math.Round(Time.realtimeSinceStartup - t0, 1);
-                    rapid[mode] = w;
-                    worst = math.max(worst, (float)w["maxMs"]);
-                }
-                _tool.SetPreviewMode("ghost");
-                res["rapid"] = rapid;
-            }
-            res["worstFrameMs"] = Math.Round(worst, 1);
-            res["catalogVersions"] = (Services.Assets?.Version ?? -1) - catalog0;
-            res["errors"] = ErrorsSince(errMark);
-            res["status"] = worst < 1000f ? "ok (" + _cfg.profile + " profile)" : "hang";
-            if (_tool.Stage != ToolStage.Area) _tool.GoToStage(ToolStage.Area);
-            _tool.ClearArea();
-            yield return Frames(5);
-            yield return CloseTool();
-            _scenario = "";
-            Say($"switching: worst frame {worst:F0} ms over {steps.Count} switches");
         }
     }
 }

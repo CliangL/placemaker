@@ -1,5 +1,5 @@
-// In-game test suite: run configuration (written by tools/suite/Run-Suite.ps1), scenario sets (suite/scenarios/*.json)
-// and the scenario list the runner expands from them. Results are written as JObjects (SuiteRunner / SuiteProbe).
+// Game runner: run configuration (written by tools/suite/Run-Suite.ps1), scenario sets (suite/scenarios/*.json) and
+// the scenario list the runner expands from them. What happened is written as JObjects (SuiteRunner).
 
 using System;
 using System.Collections.Generic;
@@ -23,13 +23,10 @@ namespace Placemaker.Game.Suite
         /// <summary>Simulation speed while growing (4 reaches the 8 steps/frame cap; 8 is no faster).</summary>
         public float speed = 4f;
         public float pregrowSeconds = 75f;
-        public float growSeconds = 100f;
-        /// <summary>Simulation frames a grow must reach (else it failed); 0 = no minimum.</summary>
+        /// <summary>Simulation frames a grow runs at least (fewer is noted); 0 = no minimum.</summary>
         public int growMinSimFrames = 1000;
         /// <summary>Only the first N scenarios (0 = all).</summary>
         public int maxScenarios;
-        /// <summary>Skip the switching scenario.</summary>
-        public bool noSwitching;
         /// <summary>Stop after the fixture (bootstrap check).</summary>
         public bool fixtureOnly;
         public bool quit = true;
@@ -66,7 +63,7 @@ namespace Placemaker.Game.Suite
         public int lookDay = 172;
         /// <summary>Default pace of scenarios: "human" (cursor glides, clicks at least 0.4 s apart), "settled" (no glide), "user" (no readiness waits).</summary>
         public string pace = "human";
-        /// <summary>Shot settle gate timeout (s); a shot that does not settle by then fails shotsSettled.</summary>
+        /// <summary>Shot settle gate timeout (s); a shot that does not settle by then is taken anyway and marked.</summary>
         public float settleTimeout = 10f;
         /// <summary>Profile the game runs with: "clean" (only Placemaker) or "full" (the user's playset).</summary>
         public string profile = "clean";
@@ -96,7 +93,7 @@ namespace Placemaker.Game.Suite
         public string block;
         /// <summary>Street signature the block must have, e.g. {"south":"Medium Road","north":"Small Road"}.</summary>
         public Dictionary<string, string> streets;
-        /// <summary>Allow another block kind when the wanted one has run out (recorded; the 'site' check then reports it).</summary>
+        /// <summary>Allow another block kind when the wanted one has run out (recorded in the scenario's block note).</summary>
         public bool siteFallback;
         /// <summary>Draw a rectangle of this size (m) at the block centre instead of picking the whole block.</summary>
         public float[] draw;
@@ -119,31 +116,13 @@ namespace Placemaker.Game.Suite
         public string previewMode;
     }
 
-    public sealed class SwitchingSpec
-    {
-        public string site = "flat";
-        /// <summary>Patient cycle: these steps, each followed by the plan and a settle wait.</summary>
-        public List<ScenarioSpec> steps = new List<ScenarioSpec>();
-        /// <summary>Frames to keep measuring after each patient switch (catalog rescans land up to ~120 frames later).</summary>
-        public int settleFrames = 150;
-        /// <summary>Old form (seconds); used only when settleFrames is 0.</summary>
-        public float settleSeconds;
-        /// <summary>Rapid cycle (clicks every rapidMs) in Design, ghost on, then again in sketch, over the same steps.</summary>
-        public int rapidMs = 300;
-        public bool rapid = true;
-    }
-
     public sealed class ScenarioSet
     {
         public string set = "";
         public string description = "";
         public List<ScenarioSpec> scenarios = new List<ScenarioSpec>();
-        public SwitchingSpec switching;
-        public bool grow = true;
         /// <summary>Pin Placemaker options for the run (property name = value), applied through the settings object.</summary>
         public Dictionary<string, object> settings;
-        /// <summary>Grow with debug fast spawn (true) or at plain speed 1 with real demand (false).</summary>
-        public bool growFast = true;
     }
 
     /// <summary>One concrete scenario after expansion.</summary>

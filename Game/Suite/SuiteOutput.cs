@@ -1,5 +1,5 @@
-// In-game test suite: one scenario (batch or queue), the live queue, and the run's outputs (scenario JSON, summary.json,
-// summary.md with a headline and a result per scenario, contact.html).
+// Game runner: one scenario (batch or queue), the live queue, and the run's outputs (scenario JSON, summary.json,
+// summary.md with what ran and where its pictures and logs are, contact.html).
 
 using System;
 using System.Collections;
@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Placemaker.Core.Suite;
 using Placemaker.Core.Tool;
 using UnityEngine;
 
@@ -17,7 +16,7 @@ namespace Placemaker.Game.Suite
     public sealed partial class SuiteRunner
     {
         private static readonly HashSet<string> OnSafeSteps = new HashSet<string>(StringComparer.Ordinal)
-        { "camera", "shot", "issues", "select", "delete", "bulldoze", "infoEdit", "infoRemove", "wait", "grow", "compare" };
+        { "camera", "shot", "select", "delete", "bulldoze", "infoEdit", "infoRemove", "wait", "grow" };
 
         private IEnumerator RunOne(Scenario s)
         {
@@ -35,20 +34,14 @@ namespace Placemaker.Game.Suite
                     // design steps need the host's design loaded the way a person edits a build
                     bool editFirst = s.Steps.Count > 0 && (string)s.Steps[0]["do"] == "edit" && ((bool?)s.Steps[0]["build"] ?? false);
                     var bad = s.Steps.Select(x => (string)x["do"]).FirstOrDefault(d => !OnSafeSteps.Contains(d));
-                    if (bad != null && !editFirst) refused = $"'on' scenarios may only look at or remove the build (camera, shot, issues, select, delete...); '{bad}' needs {{\"do\":\"edit\",\"build\":true}} first";
+                    if (bad != null && !editFirst) refused = $"'on' scenarios may only look at or remove the build (camera, shot, select, delete...); '{bad}' needs {{\"do\":\"edit\",\"build\":true}} first";
                 }
                 st = new ScenarioState { S = s };
                 if (host != null)
                 {
-                    st.Ring = host.Ring; st.Group = host.Group; st.Built = host.Built; st.Before = host.Before; st.Plan = host.Plan; st.Focus = host.Focus;
+                    st.Ring = host.Ring; st.Group = host.Group; st.Built = host.Built; st.Focus = host.Focus;
                     st.Markers.AddRange(host.Markers);
-                    // the host's build is judged in the host's result; here only what this scenario does is judged
-                    st.BuildCount = 0;
-                    st.Ghost = host.Ghost;
-                    st.GhostTotal = host.GhostTotal;
                     s.Block = host.S.Block;
-                    foreach (var key in new[] { "entrances", "terrain" }) if (host.Result[key] != null) st.Result["host" + key] = host.Result[key].DeepClone();
-                    if (host.Result["census"]?["connections"] != null) st.Result["hostconnections"] = host.Result["census"]["connections"].DeepClone();
                 }
             }
             else
@@ -90,10 +83,19 @@ namespace Placemaker.Game.Suite
                 host.Markers.AddRange(st.Markers);
             }
             st.Result["scenarioSec"] = Math.Round(Time.realtimeSinceStartup - t0, 1);
-            try { Verdicts(st); } catch (Exception e) { Say($"verdicts {s.Id}: {e}"); st.Result["verdictError"] = e.Message; }
+            LogScenario(st);
             WriteScenario(st, st.FileIndex);
             WriteSummary();
             _lastRun = st;
+        }
+
+        /// <summary>One line per scenario in suite.log (each step already logged its own line).</summary>
+        private void LogScenario(ScenarioState st)
+        {
+            var r = st.Result;
+            int shots = (r["shots"] as JObject)?.Count ?? 0;
+            int errors = (r["steps"] as JArray)?.OfType<JObject>().Count(x => x["error"] != null) ?? 0;
+            Say($"scenario {st.S.Id}: {r["status"]} in {r["scenarioSec"]} s on {st.S.Block?.Id}{(r["refused"] != null ? ": " + r["refused"] : "")}{(r["failure"] != null ? ": " + r["failure"] : "")}; {shots} shots, {errors} step errors");
         }
 
         private ScenarioState _lastRun;
@@ -101,9 +103,9 @@ namespace Placemaker.Game.Suite
         // ───────────── live queue ─────────────
 
         /// <summary>
-        /// Waits for scenario files in &lt;run&gt;/inbox (a scenario, a set {"scenarios": [...]} with optional switching,
-        /// {"command":"grow"} or {"command":"quit"}), runs them in name order, writes &lt;file&gt;.result.json beside them and
-        /// moves each processed file to inbox/done.
+        /// Waits for scenario files in &lt;run&gt;/inbox (a scenario, a set {"scenarios": [...]}, {"command":"grow"} or
+        /// {"command":"quit"}), runs them in name order, writes &lt;file&gt;.result.json beside them and moves each
+        /// processed file to inbox/done.
         /// </summary>
         private IEnumerator QueueLoop()
         {
@@ -149,17 +151,6 @@ namespace Placemaker.Game.Suite
                         yield return Guard(CloseTool(), e => { });
                         yield return Guard(Grow((float?)doc["seconds"] ?? 30f, "grow-" + name, (bool?)doc["fast"] ?? true), e => report["error"] = e.Message);
                         report["grow"] = _summary["grow-" + name];
-                        // every standing build is looked at again and re-judged
-                        var rows = new JArray();
-                        foreach (var st in _states.Where(x => x.Built))
-                        {
-                            _scenario = st.S.Id;
-                            yield return Guard(PostGrow(st), e => st.Result["postError"] = e.Message);
-                            Verdicts(st, "after queue grow " + name);
-                            WriteScenario(st, st.FileIndex);
-                            rows.Add(Row(st));
-                        }
-                        report["rejudged"] = rows;
                         _phase = "queue";
                     }
                     else
@@ -168,26 +159,18 @@ namespace Placemaker.Game.Suite
                         try
                         {
                             CheckSetSchema(doc["scenarios"] != null ? doc : new JObject { ["scenarios"] = new JArray(doc) });
-                            set = doc["scenarios"] != null ? doc.ToObject<ScenarioSet>() : new ScenarioSet { scenarios = new List<ScenarioSpec> { doc.ToObject<ScenarioSpec>() }, grow = false };
+                            set = doc["scenarios"] != null ? doc.ToObject<ScenarioSet>() : new ScenarioSet { scenarios = new List<ScenarioSpec> { doc.ToObject<ScenarioSpec>() } };
                         }
                         catch (Exception e) { report["error"] = "bad scenario file: " + e.Message; }
                         var rows = new JArray();
                         if (set != null)
                         {
                             _phase = "queue-run";
-                            if (set.switching != null)
-                            {
-                                var block = _fixture.Take(set.switching.site, null, null, true, "switching", out _);
-                                yield return Guard(Switching(set.switching, block), e => report["switchingError"] = e.Message);
-                                report["switching"] = _summary["switching"];
-                            }
                             foreach (var s in Expand(set))
                             {
                                 yield return RunOne(s);
                                 rows.Add(Row(_lastRun));
                             }
-                            if (set.grow && doc["scenarios"] != null && _states.Any(x => x.Built))
-                                report["grow"] = "the set's grow runs only with {\"command\":\"grow\"} in the queue (it grows the whole city)";
                             _phase = "queue";
                         }
                         report["scenarios"] = rows;
@@ -206,10 +189,10 @@ namespace Placemaker.Game.Suite
 
         private JObject Row(ScenarioState st) => new JObject
         {
-            ["id"] = st.S.Id, ["result"] = st.Result["result"], ["status"] = st.Result["status"], ["failed"] = st.Result["failed"], ["unknown"] = st.Result["unknown"],
+            ["id"] = st.S.Id, ["status"] = st.Result["status"], ["refused"] = st.Result["refused"], ["failure"] = st.Result["failure"],
             ["block"] = st.S.Block?.Id, ["kind"] = st.S.Block?.Kind.ToString(), ["sec"] = st.Result["scenarioSec"],
-            ["verdicts"] = new JArray((st.Result["verdicts"] as JArray ?? new JArray()).OfType<JObject>().Where(v => (string)v["result"] != "pass")),
-            ["resultFile"] = Path.Combine(_results, $"{st.FileIndex + 1:D2}-{Safe(st.S.Id)}.json"), ["shots"] = st.Result["shots"], ["waitsMs"] = st.Result["waitsMs"],
+            ["stepErrors"] = new JArray((st.Result["steps"] as JArray ?? new JArray()).OfType<JObject>().Where(x => x["error"] != null).Select(x => $"step {x["i"]} {x["do"]}: {x["error"]}")),
+            ["resultFile"] = Path.Combine(_results, $"{st.FileIndex + 1:D2}-{Safe(st.S.Id)}.json"), ["shots"] = st.Result["shots"],
         };
 
         private static void MoveDone(string file, string done)
@@ -233,15 +216,13 @@ namespace Placemaker.Game.Suite
 
         private string Headline()
         {
-            int pass = 0, fail = 0, unk = 0, nj = 0;
-            foreach (var st in _states)
-                switch ((string)st.Result["result"]) { case "PASS": pass++; break; case "FAIL": fail++; break; case "UNKNOWN": unk++; break; default: nj++; break; }
-            string state = _summary["aborted"] != null ? $"INCOMPLETE: the game quit in phase {_summary["aborted"]["phase"]} without the suite asking"
+            string state = _summary["aborted"] != null ? $"INCOMPLETE: the game quit in phase {_summary["aborted"]["phase"]} without the runner asking"
                 : _summary["fatal"] != null ? "FATAL: " + _summary["fatal"]
                 : _phase == "done" || _phase == "quit" ? "finished"
                 : _phase.StartsWith("queue") ? "queue session (open)" : "in progress (phase " + _phase + ")";
-            int unsettled = _contact.Count(c => !c.Settled);
-            return $"{state}. {_states.Count} scenarios: {pass} PASS, {fail} FAIL, {unk} UNKNOWN, {nj} not judged. Shots: {_contact.Count}, unsettled {unsettled}.";
+            var byStatus = _states.GroupBy(st => (string)st.Result["status"] ?? "?").Select(g => $"{g.Count()} {g.Key}");
+            int stepErrors = _states.Sum(st => (st.Result["steps"] as JArray)?.OfType<JObject>().Count(x => x["error"] != null) ?? 0);
+            return $"{state}. {_states.Count} scenarios ({string.Join(", ", byStatus)}), {stepErrors} step errors. Shots: {_contact.Count}.";
         }
 
         private void WriteSummary()
@@ -264,7 +245,6 @@ namespace Placemaker.Game.Suite
                     _summary["otherErrors"] = _otherErrors;
                     _summary["otherErrorLinesFirst"] = new JArray(_otherLines.Take(40));
                 }
-                if (_fixture != null) _summary["quarantined"] = JObject.FromObject(_fixture.Quarantined);
                 var rows = new JArray();
                 foreach (var st in _states)
                 {
@@ -272,13 +252,10 @@ namespace Placemaker.Game.Suite
                     var b = st.S.Block;
                     rows.Add(new JObject
                     {
-                        ["id"] = st.S.Id, ["result"] = r["result"] ?? "NOT JUDGED", ["block"] = b?.Id, ["kind"] = b?.Kind.ToString(), ["siteRequested"] = st.S.Site,
+                        ["id"] = st.S.Id, ["status"] = r["status"], ["block"] = b?.Id, ["kind"] = b?.Kind.ToString(), ["siteRequested"] = st.S.Site,
                         ["streets"] = b == null ? null : $"W {b.West} / E {b.East} / S {b.South} / N {b.North}",
-                        ["status"] = r["status"], ["failed"] = r["failed"], ["unknown"] = r["unknown"], ["sec"] = r["scenarioSec"], ["failure"] = r["failure"], ["unready"] = r["unready"],
-                        ["buildPath"] = r["buildPath"], ["pace"] = r["pace"],
-                        ["leftOut"] = r["census"]?["audit"]?["leftOut"], ["kept"] = r["census"]?["audit"]?["kept"],
-                        ["seen"] = r["visibility"]?["visible"], ["objects"] = r["visibility"]?["objects"], ["pitCells"] = r["terrain"]?["pitCells"], ["maxPitDepth"] = r["terrain"]?["maxPitDepth"],
-                        ["planComputeMs"] = r["waitsMs"]?["planComputeMs"], ["shots"] = r["shots"], ["waitsMs"] = r["waitsMs"], ["timeouts"] = r["timeouts"],
+                        ["sec"] = r["scenarioSec"], ["failure"] = r["failure"], ["unready"] = r["unready"], ["refused"] = r["refused"],
+                        ["buildPath"] = r["buildPath"], ["pace"] = r["pace"], ["planComputeMs"] = r["waitsMs"]?["planComputeMs"], ["shots"] = r["shots"], ["waitsMs"] = r["waitsMs"], ["timeouts"] = r["timeouts"],
                     });
                 }
                 _summary["scenarios"] = rows;
@@ -299,8 +276,7 @@ namespace Placemaker.Game.Suite
             {
                 ["profile"] = _cfg.profile, ["codeMods"] = (_summary["codeMods"] as JArray)?.Count ?? 0, ["catalogItems"] = items, ["plansWithoutAssetPacks"] = noPacks,
                 ["caveat"] = _cfg.profile == "full" ? "full playset" :
-                    "clean profile: no asset packs or other code mods are loaded. Decals, surfaces, centerpieces/fountains, park dressing and the switching hang differ from the user's game; " +
-                    "treat visual and decal claims and 'switching ok' as needing a full-playset run (Run-Suite -AllMods).",
+                    "clean profile: no asset packs or other code mods are loaded. Decals, surfaces, centerpieces/fountains and park dressing differ from the user's game (Run-Suite -AllMods loads the user's playset).",
                 ["readabilityMode"] = _look?.Enabled ?? false,
             };
         }
@@ -308,67 +284,43 @@ namespace Placemaker.Game.Suite
         private string SummaryMarkdown()
         {
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"# Suite run {_cfg.runId} ({_cfg.set})");
+            sb.AppendLine($"# Game run {_cfg.runId} ({_cfg.set})");
             sb.AppendLine();
             sb.AppendLine("**" + Headline() + "**");
             sb.AppendLine();
-            sb.AppendLine("Contact sheet: `contact.html` (every shot in order, captioned). Results per scenario: `scenarios/NN-<id>.json`.");
+            sb.AppendLine("Read the logs: `logs/Placemaker.log` (what Placemaker did: plans, the build audit, left-out pieces, errors), `logs/Player.log` (the game's own errors), `suite.log` (what the runner did, step by step, with timings).");
+            sb.AppendLine("Pictures in order: `contact.html`. Each scenario's steps: `scenarios/NN-<id>.json`.");
             sb.AppendLine();
             sb.AppendLine($"Build: git `{_cfg.git}`, assembly `{AssemblyVersion()}`, dll `{OwnDllHash()}`" + (_summary["wrongBuild"] != null ? $" — **WRONG BUILD: {_summary["wrongBuild"]}**" : "") + (_summary["gitMismatch"] != null ? $" — {_summary["gitMismatch"]}" : ""));
             var fid = _summary["fidelity"] as JObject ?? Fidelity();
-            sb.AppendLine($"Fidelity: profile **{fid["profile"]}**, {fid["codeMods"]} code mods, catalog {fid["catalogItems"]} items, {fid["plansWithoutAssetPacks"]} plans without asset packs. {fid["caveat"]}");
+            sb.AppendLine($"Profile **{fid["profile"]}**, {fid["codeMods"]} code mods, catalog {fid["catalogItems"]} items. {fid["caveat"]}");
             if (_summary["look"] is JObject look) sb.AppendLine("Look (readability mode, not the user's look): " + LookLine(look));
-            if (_summary["look"] is JObject lk && (string)lk["mode"] == "suite")
-            {
-                double el = (double?)lk["sunElevation"] ?? 0;
-                bool ok = el >= 55 && el <= 75 && ((bool?)lk["sunBehindCamera"] ?? false) && ((bool?)lk["windowOk"] ?? false) && lk["calibrationCameraTimeout"] == null;
-                if (!ok) sb.AppendLine($"**LOOK NOT AS INTENDED**: sun {el}° (want 55-75° behind the camera), window ok {lk["windowOk"]}, calibration camera {(lk["calibrationCameraTimeout"] == null ? "ok" : "timed out")}: shots may be dark or back-lit");
-            }
             if (_summary["placemakerSettings"] is JObject ps) sb.AppendLine($"Placemaker settings: {ps["source"]}; differs from the user's: {(ps["differsFromUser"] as JObject)?.Count ?? 0} ({Trunc(ps["differsFromUser"]?.ToString(Formatting.None), 300)})");
-            sb.AppendLine($"Grid: {_summary["grid"]}; quarantined blocks: {_summary["quarantined"]?.ToString(Formatting.None) ?? "{}"}");
-            if (_summary["noiseFloor"] is JObject nf) sb.AppendLine($"Shot noise floor: {nf["changed16"]} px / tile {nf["tile32"]} -> settle limits {nf["limits"]?.ToString(Formatting.None)}");
+            sb.AppendLine($"Grid: {_summary["grid"]}");
+            lock (_errLock) sb.AppendLine($"Errors in the game log during the run: {_errors} Placemaker errors, {_exceptions} exceptions, {_otherErrors} others.");
             sb.AppendLine($"Timeline (s since process start): {_timeline.ToString(Formatting.None)}");
             if (_summary["fatal"] != null) sb.AppendLine($"\n**FATAL:** {_summary["fatal"]}");
             if (_summary["batchStopped"] != null) sb.AppendLine($"\n**BATCH STOPPED:** {_summary["batchStopped"]}");
             if (_summary["schemaErrors"] is JArray se && se.Count > 0) sb.AppendLine($"\n**Schema errors:** {se.ToString(Formatting.None)}");
-            if (_summary["switching"] is JObject sw)
-                sb.AppendLine($"\nSwitching ({sw["profile"]} profile): status {sw["status"]}, worst frame {sw["worstFrameMs"]} ms, catalog versions during switching {sw["catalogVersions"]}. {sw["note"]}");
             sb.AppendLine();
-            sb.AppendLine("| # | scenario | result | block (asked) | status | build path | s | plan ms (max compute) | failed | unknown |");
-            sb.AppendLine("|---|---|---|---|---|---|---|---|---|---|");
+            sb.AppendLine("| # | scenario | block (asked) | status | build path | s | plan ms | shots |");
+            sb.AppendLine("|---|---|---|---|---|---|---|---|");
             for (int i = 0; i < _states.Count; i++)
             {
                 var st = _states[i];
                 var r = st.Result;
-                string J(JToken t) => t is JArray a && a.Count > 0 ? string.Join(", ", a.Select(x => (string)x)) : "";
-                sb.AppendLine($"| {i + 1} | {st.S.Id} | {r["result"] ?? "NOT JUDGED"} | {st.S.Block?.Id} {st.S.Block?.Kind} ({st.S.Site}) | {r["status"]} | {r["buildPath"]} | {r["scenarioSec"]} | {r["waitsMs"]?["planComputeMs"]} | {J(r["failed"])} | {J(r["unknown"])} |");
+                int shots = (r["shots"] as JObject)?.Count ?? 0;
+                sb.AppendLine($"| {i + 1} | {st.S.Id} | {st.S.Block?.Id} {st.S.Block?.Kind} ({st.S.Site}) | {r["status"]}{(r["failure"] != null ? ": " + r["failure"] : "")} | {r["buildPath"]} | {r["scenarioSec"]} | {r["waitsMs"]?["planComputeMs"]} | {shots} |");
             }
             sb.AppendLine();
-            // scenarios that switch type or style more than once: one row per switch (what an architect timing styles needs)
-            foreach (var st in _states)
+            var withErrors = _states.Where(st => (st.Result["steps"] as JArray)?.OfType<JObject>().Any(x => x["error"] != null) ?? false).ToList();
+            if (withErrors.Count > 0)
             {
-                var sws = (st.Result["steps"] as JArray)?.OfType<JObject>().Where(x => (string)x["do"] == "type" || (string)x["do"] == "preset").ToList();
-                if (sws == null || sws.Count < 2) continue;
-                sb.AppendLine($"### {st.S.Id}: type and style switches");
-                sb.AppendLine("| step | do | style | plan compute ms | plan wait ms | worst frame ms | error |");
-                sb.AppendLine("|---|---|---|---|---|---|---|");
-                foreach (var x in sws) sb.AppendLine($"| {x["i"]} | {x["do"]} | {x["activePreset"] ?? x["preset"]} | {x["planComputeMs"]} | {x["waits"]?["plan"]} | {x["frames"]?["maxMs"]} | {x["error"]} |");
+                sb.AppendLine("## Steps the runner could not do");
+                foreach (var st in withErrors)
+                    foreach (var x in ((JArray)st.Result["steps"]).OfType<JObject>().Where(x => x["error"] != null))
+                        sb.AppendLine($"- **{st.S.Id}** step {x["i"]} {x["do"]}: {Trunc((string)x["error"], 300)}");
                 sb.AppendLine();
-            }
-            var unsettled = _contact.Where(c => !c.Settled).ToList();
-            if (unsettled.Count > 0)
-            {
-                sb.AppendLine("## Unreliable evidence (shots that did not settle)");
-                foreach (var c in unsettled) sb.AppendLine($"- {c.Id} step {c.Step} {c.Name}: {c.File ?? c.Error}");
-                sb.AppendLine();
-            }
-            sb.AppendLine("## Checks that did not pass");
-            foreach (var st in _states)
-            {
-                if (!(st.Result["verdicts"] is JArray v)) { sb.AppendLine($"- **{st.S.Id}**: not judged"); continue; }
-                var bad = v.Where(x => (string)x["result"] != "pass").ToList();
-                if (bad.Count == 0) continue;
-                sb.AppendLine($"- **{st.S.Id}** ({st.S.Block?.Id}): " + string.Join("; ", bad.Select(x => $"{x["id"]} [{x["result"]}]: {Trunc((string)x["detail"], 300)}")));
             }
             return sb.ToString();
         }

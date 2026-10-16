@@ -1,5 +1,5 @@
 {
-  "_about": "The suite's scenario and step vocabulary. Checked by Send-Suite.ps1 before sending, and by the game (SuiteSchema) for every set and step. Unknown keys, steps and enum values are errors; keys starting with '_' are comments. suite/README.md explains each key.",
+  "_about": "The game runner's scenario and step vocabulary. Checked by Send-Suite.ps1 before sending, and by the game (SuiteSchema) for every set and step. Unknown keys, steps and enum values are errors; keys starting with '_' are comments. suite/README.md explains each key.",
   "scenarioKeys": ["id", "layer", "preset", "expand", "group", "site", "block", "streets", "siteFallback", "draw", "values", "seed", "note", "skip", "limit", "steps", "on", "pace", "buildWhen", "previewMode"],
   "scenarioEnums": {
     "site": ["flat", "zoned", "slope", "rough", "survive", "any"],
@@ -22,15 +22,13 @@
     "removeEntrance": { "keys": ["index"] },
     "preview": { "keys": [] },
     "previewMode": { "keys": ["mode"], "enums": { "mode": ["sketch", "ghost"] } },
-    "issues": { "keys": [] },
     "edit": { "keys": ["build"] },
-    "build": { "keys": ["when", "via", "entranceShots"], "enums": { "when": ["settled", "planReady", "ghostPending"], "via": ["panel", "enter"] } },
+    "build": { "keys": ["when", "via"], "enums": { "when": ["settled", "planReady", "ghostPending"], "via": ["panel", "enter"] } },
     "select": { "keys": [] },
     "delete": { "keys": [] },
     "bulldoze": { "keys": ["target"], "enums": { "target": ["owner", "part"] } },
     "infoEdit": { "keys": [] },
     "infoRemove": { "keys": [] },
-    "restore": { "keys": [] },
     "camera": { "keys": ["target", "view", "index", "yaw", "pitch", "distance", "fov", "at", "abs"] },
     "shot": { "keys": ["name"] },
     "wait": { "keys": ["seconds", "frames"] },
@@ -39,13 +37,12 @@
     "redo": { "keys": ["via"], "enums": { "via": ["key", "panel"] } },
     "key": { "keys": ["key"], "enums": { "key": ["enter", "esc", "undo", "redo"] } },
     "anarchy": { "keys": ["on"] },
-    "setting": { "keys": ["name", "value"] },
-    "compare": { "keys": ["a", "b"] }
+    "setting": { "keys": ["name", "value"] }
   },
   "camera": {
     "keys": ["target", "view", "index", "yaw", "pitch", "distance", "fov", "at", "abs"],
     "enums": {
-      "target": ["block", "area", "build", "entrance", "connection", "issue", "pit", "mound", "growable", "point", "overview"],
+      "target": ["block", "area", "build", "entrance", "issue", "point", "overview"],
       "view": ["oblique", "top", "closeup", "low"]
     }
   }

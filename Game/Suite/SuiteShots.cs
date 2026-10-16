@@ -1,4 +1,4 @@
-// In-game test suite: the camera and settled screenshots.
+// Game runner: the camera and settled screenshots.
 // Camera: the game camera is aimed at a target, waits until it holds still, then the angle and distance actually
 // rendered are measured (the game lifts the eye over terrain and clamps tilt) and corrected (up to 3 passes); what
 // was rendered is recorded next to what was asked. A target that does not exist is a step error and no picture.
@@ -10,8 +10,7 @@
 //      stable and no ghost pending;
 //   3. pixel proof: three captures >= 250 ms and >= 15 frames apart; both pairs differ by less than the noise floor
 //      calibrated at the start of the run (changed pixels and the worst 32x32 tile, full resolution).
-// A shot that does not settle within the timeout is saved, marked unsettled (shotsSettled fails, the summary flags it
-// as unreliable evidence) and gets a heat map of what was still changing.
+// A shot that does not settle within the timeout is saved anyway and its caption says so.
 
 using System;
 using System.Collections;
@@ -124,38 +123,12 @@ namespace Placemaker.Game.Suite
                     radius = 15f;
                     break;
                 }
-                case "connection":
-                {
-                    var pts = ConnectionPoints(st);
-                    if (i < 0 || i >= pts.Count) { err = $"no connection {i} (the build has {pts.Count} measured entries)"; break; }
-                    pivot = pts[i];
-                    radius = 15f;
-                    break;
-                }
                 case "issue":
                 {
                     var at = (_tool.Plan?.Issues.Concat(_tool.Plan.Layers.SelectMany(l => l.Issues)) ?? Enumerable.Empty<PlanIssue>()).Where(x => x.At.HasValue).Select(x => x.At.Value).ToList();
                     if (i < 0 || i >= at.Count) { err = $"no issue marker {i} (have {at.Count})"; break; }
                     pivot = at[i];
                     radius = 15f;
-                    break;
-                }
-                case "pit":
-                case "mound":
-                {
-                    var t = (st.Result["terrain"] ?? st.Result["hostterrain"]) as JObject;
-                    var a = t?[target == "pit" ? "worstPitAt" : "worstMoundAt"] as JArray;
-                    if (a == null) { err = $"no {target} was measured"; break; }
-                    pivot = P3(new float2((float)a[0], (float)a[1]));
-                    radius = 15f;
-                    break;
-                }
-                case "growable":
-                {
-                    var list = (st.Result["growablesAfterGrow"] ?? st.Result["growablesAtStep"])?["list"] as JArray;
-                    if (list == null || i < 0 || i >= list.Count) { err = $"no growable {i} (have {list?.Count ?? 0})"; break; }
-                    pivot = P3(new float2((float)list[i]["x"], (float)list[i]["z"]));
-                    radius = 20f;
                     break;
                 }
                 case "point":
@@ -167,10 +140,10 @@ namespace Placemaker.Game.Suite
                     radius = 600f;
                     break;
                 default:
-                    err = $"unknown camera target '{target}' (block, area, build, entrance, connection, issue, pit, mound, growable, point, overview)";
+                    err = $"unknown camera target '{target}' (block, area, build, entrance, issue, point, overview)";
                     break;
             }
-            string view = ((string)c["view"] ?? (target == "entrance" || target == "issue" || target == "point" || target == "connection" || target == "pit" || target == "mound" || target == "growable" ? "closeup" : "oblique")).ToLowerInvariant();
+            string view = ((string)c["view"] ?? (target == "entrance" || target == "issue" || target == "point" ? "closeup" : "oblique")).ToLowerInvariant();
             float yaw = 25f, pitch = 60f, dist = radius * 3.4f;
             float? fov = null;
             switch (view)
@@ -200,7 +173,7 @@ namespace Placemaker.Game.Suite
             var c = step["camera"] as JObject ?? step;
             if (c["index"] is JValue v && v.Type == JTokenType.String && (string)v == "all")
             {
-                // every entrance / connection / issue: one picture each, named <shot>-<n>
+                // every entrance / issue: one picture each, named <shot>-<n>
                 int count = CountTargets(st, (string)c["target"]);
                 if (count == 0) { rec["error"] = $"camera: no {(string)c["target"]} to frame"; yield break; }
                 var shots = new JArray();
@@ -220,23 +193,12 @@ namespace Placemaker.Game.Suite
             if (ok && !string.IsNullOrEmpty(shot)) yield return StepShot(st, new JObject { ["shotMode"] = step["shotMode"] }, rec, shot);
         }
 
-        /// <summary>Where the build is entered from the city (the census's connections; for an 'on' scenario, its host's).</summary>
-        private List<float3> ConnectionPoints(ScenarioState st)
-        {
-            var pts = new List<float3>();
-            var c = (st.Result["census"]?["connections"] ?? st.Result["hostconnections"]) as JArray;
-            if (c != null) foreach (var e in c.OfType<JObject>()) if (e["at"] is JArray a) pts.Add(P3(new float2((float)a[0], (float)a[1])));
-            return pts;
-        }
-
         private int CountTargets(ScenarioState st, string target)
         {
             switch ((target ?? "").ToLowerInvariant())
             {
                 case "entrance": return st.Markers.Count > 0 ? st.Markers.Count : _tool.SuiteMarkers().Count;
-                case "connection": return ConnectionPoints(st).Count;
                 case "issue": return (_tool.Plan?.Issues.Concat(_tool.Plan.Layers.SelectMany(l => l.Issues)) ?? Enumerable.Empty<PlanIssue>()).Count(x => x.At.HasValue);
-                case "growable": return ((st.Result["growablesAfterGrow"] ?? st.Result["growablesAtStep"])?["list"] as JArray)?.Count ?? 0;
             }
             return 0;
         }
@@ -325,7 +287,7 @@ namespace Placemaker.Game.Suite
             var sw = System.Diagnostics.Stopwatch.StartNew();
             if (mode == "ui") _capture = SuiteCapture.GrabTexture2D(out _captureError);
             else _capture = SuiteCapture.RenderTexture2D(_cfg.shotWidth, _cfg.shotHeight, mode == "overlay", out _captureError);
-            _probeMsThisFrame += (float)sw.Elapsed.TotalMilliseconds;
+            _suiteMsThisFrame += (float)sw.Elapsed.TotalMilliseconds;
         }
 
         private string ShotFile(ScenarioState st, string name)
@@ -411,13 +373,12 @@ namespace Placemaker.Game.Suite
                 if (b == null) { err = _captureError; break; }
                 var d = SuiteCapture.Compare(a, b, topExclude);
                 lastDiff = d;
-                bool pass = d.Comparable && SuiteVerdicts.PairSettled(d.Changed16, d.TileMax, ChangedLimit, TileLimit);
+                bool pass = d.Comparable && SuiteStats.PairSettled(d.Changed16, d.TileMax, ChangedLimit, TileLimit);
                 pairs.Add(new JArray(d.Changed16, Math.Round(d.TileMax, 1), pass ? 1 : 0));
                 if (pass) good++; else good = 0;
                 if (good >= 2) { UnityEngine.Object.Destroy(a); a = b; b = null; break; }
                 if (Time.realtimeSinceStartup - t0 >= timeout)
                 {
-                    // unsettled: keep the pair for the heat map
                     break;
                 }
                 UnityEngine.Object.Destroy(a);
@@ -441,11 +402,6 @@ namespace Placemaker.Game.Suite
             {
                 try { File.WriteAllBytes(path, (final ?? keep).EncodeToPNG()); }
                 catch (Exception e) { err = e.Message; }
-                if (!settled && a != null && b != null)
-                {
-                    string heat = Path.Combine(_shots, Path.GetFileNameWithoutExtension(file) + ".unsettled-heat.png");
-                    if (SuiteCapture.Heatmap(a, b, heat) == null) settle["heatmap"] = "shots/" + Path.GetFileName(heat);
-                }
                 settle["luma"] = Math.Round(SuiteCapture.MeanLuma(keep), 1);
             }
             if (a != null) UnityEngine.Object.Destroy(a);
@@ -465,8 +421,6 @@ namespace Placemaker.Game.Suite
                 t.Add($"shot {name} unsettled after {timeout:F0} s ({(signalsOk ? "pixels still changing: " + lastDiff.Changed16 + " px, tile " + lastDiff.TileMax.ToString("F1") : "engine not quiet: " + (lastWhy ?? "?"))})");
             }
             st.Shots[name] = rel;
-            var settledShots = st.Result["shotsSettled"] as JObject ?? (JObject)(st.Result["shotsSettled"] = new JObject());
-            settledShots[name] = settled;
             if (err != null) Say($"shot {name} failed: {err}");
             _contact.Add(new ShotRow
             {
@@ -493,11 +447,9 @@ namespace Placemaker.Game.Suite
                 yield return CaptureOnce("render");
                 var t = _capture;
                 if (t == null) break;
-                if (i == 0) { try { File.WriteAllBytes(Path.Combine(_shots, "calibration-view.png"), t.EncodeToPNG()); } catch (Exception) { } }
                 if (prev != null)
                 {
                     var d = SuiteCapture.Compare(prev, t);
-                    if (d.Changed16 > worstC) SuiteCapture.Heatmap(prev, t, Path.Combine(_shots, "calibration-noise-heat.png"));
                     worstC = Math.Max(worstC, d.Changed16);
                     worstT = Math.Max(worstT, d.TileMax);
                     pairs.Add(new JArray(d.Changed16, Math.Round(d.TileMax, 2), d.TileX, d.TileY));

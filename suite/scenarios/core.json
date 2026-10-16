@@ -1,18 +1,6 @@
 {
   "set": "core",
-  "description": "Every parking preset, every commercial type x preset (each type's first style next to grown housing), small plazas, parks (around plopped buildings, on rough ground), road grids, hillside terraces on a slope; both build paths (instant from the settled ghost, and Build pressed while the plan is ready but before the ghost, and from Sketch); a second build of the same type with the kept design; two user-paced variants; plus the switching run.",
-  "grow": true,
-  "switching": {
-    "site": "flat",
-    "settleFrames": 150,
-    "rapidMs": 300,
-    "steps": [
-      { "expand": "presets", "group": "commercial", "limit": 2 },
-      { "layer": "parking", "preset": "" },
-      { "layer": "plaza", "preset": "civic" },
-      { "layer": "park", "preset": "" }
-    ]
-  },
+  "description": "Every parking preset, every commercial type x preset (each type's first style next to grown housing), small plazas, parks (around plopped buildings, on rough ground), road grids, hillside terraces on a slope; both build paths (instant from the settled ghost, and Build pressed while the plan is ready but before the ghost, and from Sketch); a second build of the same type with the kept design; two user-paced variants.",
   "scenarios": [
     { "expand": "presets", "layer": "parking", "site": "flat" },
     { "id": "parking-kept-design", "site": "flat", "note": "The next build of the same type: the design and recipe stay (the UI's path); no fresh type pick.",

@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  Runs the Placemaker in-game test suite: one game launch, a new game on Plains reshaped into a test grid, many
-  scenarios, settled screenshots, a contact sheet.
+  Runs the Placemaker game runner: one game launch, a new game on Plains reshaped into a test grid, the steps of every
+  scenario done like a person, settled pictures in order, the game's logs collected. It judges nothing: read the logs.
 
 .DESCRIPTION
   powershell -File tools/suite/Run-Suite.ps1 -Set core
@@ -22,22 +22,20 @@
      only when the clean quit did not happen in time or the heartbeat stopped.
   5. Collects the logs, classifies how the game ended (quit / closed-externally / crashed / killed), puts the user's
      settings back, writes the status at the top of summary.md, and prints which Placemaker.dll stays installed.
-  Results: .forensics/suite/runs/<runId>/ (summary.md, summary.json, contact.html, scenarios/*.json, shots/*.png, logs/).
+  Results: .forensics/suite/runs/<runId>/ (logs/, suite.log, summary.md, contact.html, shots/*.png, scenarios/*.json).
 #>
 param(
-    # smoke | core | full | steps | examples | any suite/scenarios/<name>.json or a path to a set file; bootstrap = fixture only; queue = no set
+    # look | look-one | smoke | core | full | steps | examples | any suite/scenarios/<name>.json or a path to a set file; bootstrap = fixture only; queue = no set
     [string]$Set = 'smoke',
     [string]$RunId = '',
     [switch]$NoBuild,
     [int]$TimeoutMin = 0,
     [int]$MaxScenarios = 0,
-    [switch]$NoSwitching,
     # Only Placemaker loads (-disableModding -disableCodeModding-). -AllMods loads the user's whole playset (slow boot).
     [switch]$AllMods,
     [switch]$KeepGraphics,
     [switch]$NoTerrain,
     [string]$Window = '1600x900',
-    [float]$GrowSeconds = 100,
     [float]$PregrowSeconds = 75,
     [string]$Opt = '',
     [switch]$Queue,
@@ -48,8 +46,6 @@ param(
     # suite = readable deterministic look (noon, fixed exposure, no weather/wind/icons); game = the map's own.
     [ValidateSet('suite', 'game')][string]$Look = 'suite',
     [ValidateSet('human', 'settled', 'user')][string]$Pace = 'human',
-    # Compare with an earlier run when done (writes compare-<Baseline>.md).
-    [string]$Baseline = '',
     [switch]$RestoreOnly,
     [switch]$Playground,
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
@@ -240,8 +236,8 @@ $schemaFile = Join-Path $repo 'suite\schema.json'
 $cfg = [ordered]@{
     runId = $RunId; set = $Set; outDir = $runDir; scenarioFile = $scenarioFile; schemaFile = $schemaFile; git = $git; dllHash = $dllHash
     expiresUtc = (Get-Date).ToUniversalTime().AddMinutes(25).ToString('o')
-    speed = 4; pregrowSeconds = $PregrowSeconds; growSeconds = $GrowSeconds; maxScenarios = $MaxScenarios
-    noSwitching = [bool]$NoSwitching; fixtureOnly = ($Set -eq 'bootstrap' -or [bool]$Playground); quit = (-not $Playground); playground = [bool]$Playground; shotWidth = [int]$w; shotHeight = [int]$h; noTerrain = [bool]$NoTerrain; queue = [bool]$Queue
+    speed = 4; pregrowSeconds = $PregrowSeconds; maxScenarios = $MaxScenarios
+    fixtureOnly = ($Set -eq 'bootstrap' -or [bool]$Playground); quit = (-not $Playground); playground = [bool]$Playground; shotWidth = [int]$w; shotHeight = [int]$h; noTerrain = [bool]$NoTerrain; queue = [bool]$Queue
     userModSettings = [bool]$UserModSettings; look = $Look; pace = $Pace; profile = $(if ($AllMods) { 'full' } else { 'clean' })
 }
 if ($Grid -match '^(\d+)x(\d+)$') { $cfg['nx'] = [int]$Matches[1]; $cfg['nz'] = [int]$Matches[2] }
@@ -358,12 +354,11 @@ $md = Join-Path $runDir 'summary.md'
 $top = @("> **Host: $status** (label $label, profile $($cfg.profile), total $([math]::Round($total)) s; phases s after launch: $(($phaseTimes.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '))")
 if ($status -ne 'quit') { $top += "> **The run did not end with the suite's own quit: results after phase '$lastPhase' are missing.**" }
 $top += ''
-$body = if (Test-Path $md) { Get-Content $md -Raw } else { "# Suite run $RunId`r`n(no summary written by the game)`r`n" }
+$body = if (Test-Path $md) { Get-Content $md -Raw } else { "# Game run $RunId`r`n(no summary written by the game)`r`n" }
 Write-NoBom $md (($top -join "`r`n") + "`r`n" + $body)
 Say "done: $status in $([math]::Round($total)) s -> $runDir"
 Say "installed now: Mods/Placemaker/Placemaker.dll $label ($([math]::Round($dllInfo.Length / 1KB)) KB) - the user's normal game loads this build"
 try { & (Join-Path $PSScriptRoot 'Contact-Suite.ps1') -RunId $RunId -ResultsRoot $ResultsRoot } catch { Say "contact sheet image failed: $($_.Exception.Message)" }
-if ($Baseline) { & (Join-Path $PSScriptRoot 'Compare-Suite.ps1') -Old $Baseline -New $RunId -ResultsRoot $ResultsRoot }
 if ($status -ne 'quit') { exit 1 }
 exit 0
 }

@@ -1,13 +1,6 @@
 {
   "set": "full",
   "description": "Every type offered in the Make row with its default preset (enumerated from GeneratorRegistry at run time).",
-  "grow": true,
-  "switching": {
-    "site": "flat",
-    "settleSeconds": 2.0,
-    "rapidMs": 300,
-    "steps": [ { "expand": "types" } ]
-  },
   "scenarios": [
     { "expand": "types", "site": "any" }
   ]

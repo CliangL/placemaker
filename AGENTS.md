@@ -28,8 +28,9 @@ delete code.
 
 ## The game runner: close the loop yourself
 
-Use it on every change before telling the user anything works. Its main purpose is to run the real game so **you
-read the logs**. Pictures come second; the PASS/FAIL checks are helpers, and UNKNOWN means "not measured".
+Use it on every change before telling the user anything works. It is deliberately simple: it launches the real game,
+does the steps you write, takes the pictures you ask for in order, and collects the logs. It judges nothing (no
+PASS/FAIL); **you read the logs**. Pictures come second.
 
 ```
 powershell -File tools/suite/Play.ps1                     # the user's playground: flat grid, camera on it, they play

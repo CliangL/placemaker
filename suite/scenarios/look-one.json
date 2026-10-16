@@ -1,6 +1,5 @@
 {
   "_about": "One 45-degree picture of one type and preset. Change layer and preset. See README: Default use.",
-  "grow": false,
   "scenarios": [
     {
       "id": "look-one",

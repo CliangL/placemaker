@@ -7,7 +7,6 @@
     { "do": "type", "layer": "parking", "preset": "compact" },
     { "do": "entrance", "side": "south", "t": 0.5 },
     { "do": "preview", "shot": "preview" },
-    { "do": "issues" },
     { "do": "build" },
     { "do": "camera", "target": "build", "view": "top", "shot": "top", "shotMode": "render" },
     { "do": "camera", "target": "point", "at": [0, 0], "view": "low", "shot": "centre-low", "shotMode": "render" },

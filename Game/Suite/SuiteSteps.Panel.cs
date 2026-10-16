@@ -1,4 +1,4 @@
-// In-game test suite: the panel, as a person uses it. Each action clicks the panel's real element (data-testid) when
+// Game runner: the panel, as a person uses it. Each action clicks the panel's real element (data-testid) when
 // it is on the screen, else fires the panel's own trigger through the UI view (engine.trigger: the binding path with
 // its argument conversions, in the UI update), and only as a last resort calls the tool directly — the path taken is
 // recorded per action ("ui": click / trigger / direct). Before an action the panel's state is read the way a person
@@ -337,26 +337,10 @@ namespace Placemaker.Game.Suite
             yield return WaitPlan(st, rec, always: true);
             if (_tool.PreviewModeSelected == PreviewMode.Ghost) yield return WaitGhost(rec);
             else rec["previewMode"] = "sketch";
-            st.Plan = _tool.Plan;
             rec["issues"] = Issues(rec);
             rec["planCost"] = Math.Round(_tool.PlanCost);
             st.Result["planIssues"] = rec["issues"];
             st.Result["planCost"] = rec["planCost"];
-            st.PermanentTerraform = st.Plan != null && st.Plan.Layers.Any(l => l.Terraform.Any(t => t.Permanent));
-            // the ghost a person looks at: what the build is expected to show (census of the temporaries)
-            if (st.Ring != null && _tool.PreviewModeEffective == PreviewMode.Ghost)
-                yield return Framed(st, rec, Do(() =>
-                {
-                    try
-                    {
-                        var (min, max) = Bounds(st.Ring, 12f);
-                        st.Ghost = Timed(() => _probe.GhostByPrefab(min, max, out st.GhostTotal));
-                        st.GhostRevision = _tool.PlanRevision;
-                        rec["ghostObjects"] = st.GhostTotal;
-                        st.Result["ghost"] = new JObject { ["objects"] = st.GhostTotal, ["byPrefab"] = SuiteProbe.TopDict(st.Ghost, 40) };
-                    }
-                    catch (Exception e) { rec["ghostCensusError"] = e.Message; }
-                }));
             // what the panel shows: the bound state and summary parse, and the main button as the person sees it
             var state = Bound(rec, "state");
             if (state != null) rec["panelPrimary"] = state["primary"]?.DeepClone();

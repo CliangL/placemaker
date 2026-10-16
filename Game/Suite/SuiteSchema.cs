@@ -1,4 +1,4 @@
-// In-game test suite: the scenario and step vocabulary (suite/schema.json, the same file Send-Suite and Run-Suite check
+// Game runner: the scenario and step vocabulary (suite/schema.json, the same file Send-Suite and Run-Suite check
 // before anything reaches the game). Unknown keys, steps, targets, views and enum values are errors, never silently
 // defaulted; keys starting with '_' are comments.
 

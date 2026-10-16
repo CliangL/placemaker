@@ -1,12 +1,14 @@
-// In-game test suite: scenarios as step scripts (suite/README.md has the vocabulary with an example per step).
+// Game runner: scenarios as step scripts (suite/README.md has the vocabulary with an example per step).
 // A scenario is a list of steps that drive the real tool the way a person does:
 //   * world clicks: the point is projected to the screen (panned into view like a person would, refused under the
 //     panel), the GAME's raycast at that screen point decides what is hit, the cursor glides there, then clicks;
 //   * panel actions: the panel's real elements are clicked (data-testid) or its triggers fired through the UI view,
 //     in the stage whose panel shows that control (the person's way there is taken and recorded);
 //   * keys go through the tool's own key handling (Enter, Esc, Ctrl+Z/Y).
-// Every action checks its effect (a step that changed nothing fails with the reason). Waits are on readiness and
-// recorded; shots go through the settle gate (SuiteShots). This file: the scenario loop, step dispatch, waits.
+// Every action checks that it happened (a click that changed nothing is logged with the reason and the scenario's
+// remaining steps may stop). Waits are on readiness and logged; shots go through the settle gate (SuiteShots). The
+// runner measures and judges nothing: what Placemaker did is in its own log. This file: the scenario loop, step
+// dispatch, waits.
 
 using System;
 using System.Collections;
@@ -32,8 +34,6 @@ namespace Placemaker.Game.Suite
         {
             public Scenario S;
             public JObject Result = new JObject();
-            public SiteSnapshot Before;
-            public ComposedPlan Plan;
             public int Group;
             public bool Built, Deleted;
             public float2[] Ring;
@@ -43,20 +43,11 @@ namespace Placemaker.Game.Suite
             /// <summary>Entrances as the script placed them (position, kind, step path), in script order.</summary>
             public readonly List<(float3 At, string Kind, string Path)> Markers = new List<(float3, string, string)>();
             public JObject Shots => Result["shots"] as JObject ?? (JObject)(Result["shots"] = new JObject());
-            public JArray Builds => Result["builds"] as JArray ?? (JArray)(Result["builds"] = new JArray());
             /// <summary>Hard failure (no outline, type not selected, build failed): the remaining steps are skipped.</summary>
             public bool Stop;
             public string Pace = "human";
-            public Dictionary<string, int> Ghost;
-            public int GhostTotal;
-            /// <summary>The plan revision the ghost census was taken for, and the one that was built.</summary>
-            public int GhostRevision = -1, BuiltRevision = -2;
-            public bool PermanentTerraform;
             public int BuildCount;
             public int StepIndex;
-            /// <summary>The block's ground was restored (the after-delete restore ran).</summary>
-            public bool Restored;
-            public JObject LastLeftBehind;
         }
 
         private readonly Dictionary<string, ScenarioState> _byId = new Dictionary<string, ScenarioState>(StringComparer.Ordinal);
@@ -185,16 +176,11 @@ namespace Placemaker.Game.Suite
                     if (srec["error"] != null && rec["error"] == null) rec["shotError"] = srec["error"];
                 }
                 rec["frames"] = CloseWindow();
+                Say($"step {i} {what}: {rec["ms"]} ms, worst frame {rec["frames"]?["maxMs"]} ms" + (rec["planComputeMs"] != null ? $", plan {rec["planComputeMs"]} ms" : "")
+                    + (rec["shot"] != null ? $", shot {rec["shot"]}" : rec["shotRecord"]?["shot"] != null ? $", shot {rec["shotRecord"]["shot"]}" : "") + (rec["error"] != null ? " — " + rec["error"] : ""));
                 if (rec["error"] != null && IsHard(what) && !((bool?)rec["suiteError"] ?? false)) st.Stop = true;
             }
             _scenario = s.Id;
-            // the build's ground goes back only now (an after-delete shot shows what the delete left, not the suite's repair)
-            if (st.Deleted && !st.Restored && s.On == null)
-            {
-                var rrec = new JObject { ["i"] = steps.Count, ["do"] = "restore", ["implicit"] = true };
-                outSteps.Add(rrec);
-                yield return Guard(StepRestore(st, rrec), e => rrec["error"] = "suite error: " + e.Message);
-            }
             yield return Frames(30);   // errors of the last step land in this scenario's window
             res["errors"] = ErrorsSince(errMark);
             if ((string)res["status"] == "running") res["status"] = st.Deleted ? "deleted" : st.Built ? "built" : "designed";
@@ -244,7 +230,6 @@ namespace Placemaker.Game.Suite
                 foreach (var key in new[] { "shots", "placed", "sub" }) if (s[key] is JArray a) foreach (var n in a.OfType<JObject>()) Walk(n);
             }
             if (res["steps"] is JArray steps) foreach (var s in steps.OfType<JObject>()) Walk(s);
-            if (res["postShots"] is JArray ps) foreach (var s in ps.OfType<JObject>()) Walk(s);
             res["waitsMs"] = t;
             res["timeouts"] = timeouts;
         }
@@ -264,7 +249,6 @@ namespace Placemaker.Game.Suite
                 case "removeEntrance": yield return StepMoveEntrance(st, step, rec, true); break;
                 case "preview": yield return StepPreview(st, step, rec); break;
                 case "previewMode": yield return StepPreviewMode(st, step, rec); break;
-                case "issues": rec["issues"] = Issues(); break;
                 case "edit": yield return StepEdit(st, step, rec); break;
                 case "build": yield return StepBuild(st, step, rec); break;
                 case "select": yield return StepSelect(st, step, rec); break;
@@ -272,7 +256,6 @@ namespace Placemaker.Game.Suite
                 case "bulldoze": yield return StepBulldoze(st, step, rec); break;
                 case "infoEdit": yield return StepInfo(st, step, rec, edit: true); break;
                 case "infoRemove": yield return StepInfo(st, step, rec, edit: false); break;
-                case "restore": yield return StepRestore(st, rec); break;
                 case "camera": yield return StepCameraAndShot(st, step, rec); break;
                 case "shot": yield return StepShot(st, step, rec, (string)step["name"] ?? (string)step["shot"] ?? "shot" + rec["i"]); break;
                 case "wait":
@@ -286,7 +269,6 @@ namespace Placemaker.Game.Suite
                 case "anarchy": yield return StepAnarchy(st, step, rec); break;
                 case "setting": yield return StepSetting(st, step, rec); break;
                 case "preset": yield return StepPreset(st, step, rec); break;
-                case "compare": StepCompare(st, step, rec); break;
                 default: rec["error"] = "unknown step '" + what + "' (suite/schema.json lists the steps)"; break;
             }
         }

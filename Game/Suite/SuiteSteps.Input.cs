@@ -1,4 +1,4 @@
-// In-game test suite: world input like a person. A press at a world point is first made clickable (on the screen, not
+// Game runner: world input like a person. A press at a world point is first made clickable (on the screen, not
 // under the panel: the camera pans there like a person would, recorded), then the GAME's raycast at that screen point
 // (with the active tool's own masks) decides what is hit, the cursor glides to it over a few frames, and clicks.
 // Area tools (bucket, points, paint, road nodes) and entrance placement all use it.
@@ -157,7 +157,7 @@ namespace Placemaker.Game.Suite
             var h = hit.Value.m_Hit;
             var owner = hit.Value.m_Owner;
             pr["hit"] = new JArray(Math.Round(h.m_HitPosition.x, 1), Math.Round(h.m_HitPosition.z, 1));
-            pr["hitEntity"] = owner == Entity.Null ? "" : _probe.KindOf(owner) + " " + _probe.PrefabName(owner);
+            pr["hitEntity"] = owner == Entity.Null ? "" : _lookup.KindOf(owner) + " " + _lookup.PrefabName(owner);
             pr["hitOffM"] = Math.Round(math.distance(h.m_HitPosition.xz, target.xz), 2);
             // the cursor arrives: from where it rests, or from the panel side when it is over the panel
             var from = PlacemakerToolSystem.SuiteCursor ?? (h.m_HitPosition + new float3(40f, 0f, 0f));
@@ -187,8 +187,6 @@ namespace Placemaker.Game.Suite
                 yield return UiAct(st, rec, "clear area", "clear-area", "clearArea", null, () => !_tool.SuiteHasSelection, () => _tool.ClearArea());
                 yield return Frames(2);
             }
-            var want = new List<float2>();
-            float brush = 0f;
             switch (tool)
             {
                 case "bucket":
@@ -213,7 +211,6 @@ namespace Placemaker.Game.Suite
                         var c = Pt(step["at"], b, abs);
                         pts.Add(c + new float2(-w / 2, -h / 2)); pts.Add(c + new float2(w / 2, -h / 2)); pts.Add(c + new float2(w / 2, h / 2)); pts.Add(c + new float2(-w / 2, h / 2));
                     }
-                    want.AddRange(pts);
                     foreach (var p in pts.Concat(new[] { pts[0] }))   // the first corner again closes the outline
                     {
                         RaycastHit? hit = null;
@@ -229,7 +226,6 @@ namespace Placemaker.Game.Suite
                     yield return UiSetAreaMode(rec, tool == "paint" ? SelectionMode.BlockPaint : SelectionMode.Paint);
                     float size = (float?)step["size"] ?? math.min(b.X1 - b.X0, b.Z1 - b.Z0) * 0.45f;
                     _tool.SetBrush((bool?)step["square"] ?? false, size, (float?)step["angle"] ?? 0f);
-                    brush = size;
                     yield return Frames(2);
                     var path = new List<float3>();
                     if (step["stroke"] is JArray stroke) foreach (var p in stroke) path.Add(P3(Pt(p, b, abs)));
@@ -238,7 +234,6 @@ namespace Placemaker.Game.Suite
                         float hw = (b.X1 - b.X0) * 0.25f, hh = (b.Z1 - b.Z0) * 0.2f;
                         foreach (var d in new[] { new float2(-hw, -hh), new float2(hw, -hh), new float2(hw, hh), new float2(-hw, hh) }) path.Add(P3(b.Center + d));
                     }
-                    foreach (var p in path) want.Add(p.xz);
                     // every point of the stroke must be on the screen, away from the panel
                     yield return ReadPanelRect();
                     foreach (var p in path)
@@ -291,7 +286,6 @@ namespace Placemaker.Game.Suite
                         yield return Press(st, rec, at, false, h => hit = h);
                         if (!hit.HasValue) { st.Result["status"] = "no-outline"; yield break; }
                         nodes.Add(new JArray(Math.Round(at.x), Math.Round(at.z)));
-                        want.Add(at.xz);
                     }
                     RaycastHit? last = null;
                     yield return Press(st, rec, firstAt, false, h => last = h);   // back to the first node: closes the loop
@@ -319,69 +313,7 @@ namespace Placemaker.Game.Suite
             rec["areaM2"] = Math.Round(area);
             rec["corners"] = st.Ring.Length;
             st.Result["areaM2"] = rec["areaM2"];
-            rec["outline"] = OutlineAsIntended(tool, want, brush, st, area);
-            st.Before = _probe.Snapshot(st.Ring, b);
-            st.Result["before"] = new JObject { ["buildings"] = st.Before.Buildings.Count, ["areas"] = st.Before.Areas.Count, ["objects"] = st.Before.Objects.Count, ["edges"] = st.Before.Edges.Count, ["groundSamples"] = st.Before.Samples.Count };
             yield return WaitPlan(st, rec);
-        }
-
-        /// <summary>Did the tool produce the outline the script meant? rect/points: area and overlap; bucket: the block's land; paint: the swept area; nodes: through the clicked junctions.</summary>
-        private JObject OutlineAsIntended(string tool, List<float2> want, float brush, ScenarioState st, float area)
-        {
-            var o = new JObject();
-            var b = st.S.Block;
-            var ring = st.Ring.ToList();
-            switch (tool)
-            {
-                case "points":
-                case "draw":
-                {
-                    float wantArea = SuiteVerdicts.Area(want);
-                    float iou = SuiteVerdicts.IoU(want, ring);
-                    o["wantM2"] = Math.Round(wantArea);
-                    o["iou"] = Math.Round(iou, 3);
-                    o["ok"] = iou >= 0.75f && math.abs(area - wantArea) <= 0.15f * wantArea;   // snapping moves corners a little; a sliver or a different shape fails
-                    o["detail"] = $"outline {Math.Round(area)} m² vs the clicked polygon {Math.Round(wantArea)} m², overlap {iou:P0}";
-                    break;
-                }
-                case "bucket":
-                case "block":
-                {
-                    var land = b.Interior(_fixture.HalfWidth).ToList();
-                    float landArea = SuiteVerdicts.Area(land);
-                    float iou = SuiteVerdicts.IoU(land, ring, 2f);
-                    o["wantM2"] = Math.Round(landArea);
-                    o["iou"] = Math.Round(iou, 3);
-                    // zoned blocks keep their houses out; the bucket may trim corners and kerbs
-                    o["ok"] = b.Kind == SuiteBlockKind.Zoned || b.Kind == SuiteBlockKind.Survive ? iou >= 0.5f : iou >= 0.8f;
-                    o["detail"] = $"outline {Math.Round(area)} m² vs the block's land between the kerbs {Math.Round(landArea)} m², overlap {iou:P0}";
-                    break;
-                }
-                case "paint":
-                case "paintanything":
-                {
-                    var land = b.Interior(_fixture.HalfWidth).ToList();
-                    float swept = SuiteVerdicts.SweptArea(want, brush, land);
-                    o["sweptM2"] = Math.Round(swept);
-                    o["ok"] = area >= 0.7f * swept;
-                    o["detail"] = $"outline {Math.Round(area)} m² vs {Math.Round(swept)} m² the brush swept inside the block ({(swept > 0 ? area / swept : 0):P0})";
-                    break;
-                }
-                case "nodes":
-                case "perimeter":
-                {
-                    // the junctions are road centres: the outline follows the kerbs around the land they enclose
-                    var land = b.Interior(_fixture.HalfWidth).ToList();
-                    float iou = SuiteVerdicts.IoU(land, ring, 2f);
-                    float worst = want.Count == 0 ? 0f : want.Max(p => SuiteVerdicts.DistanceToRing(ring, p));
-                    o["worstNodeOffM"] = Math.Round(worst, 1);
-                    o["iou"] = Math.Round(iou, 3);
-                    o["ok"] = iou >= 0.8f;
-                    o["detail"] = $"outline {Math.Round(area)} m² vs the land the junctions enclose {Math.Round(SuiteVerdicts.Area(land))} m², overlap {iou:P0}; junctions at most {Math.Round(worst, 1)} m from the outline";
-                    break;
-                }
-            }
-            return o;
         }
 
         /// <summary>The road junction nearest a point (Road layer nodes only — what the Road-nodes raycast can hit).</summary>
@@ -396,7 +328,7 @@ namespace Placemaker.Game.Suite
             using (var all = q.ToEntityArray(Allocator.Temp))
                 foreach (var e in all)
                 {
-                    if (!_probe.CityNet(e)) continue;
+                    if (!_lookup.CityNet(e)) continue;
                     var pos = em.GetComponentData<global::Game.Net.Node>(e).m_Position;
                     float d = math.distance(pos.xz, p);
                     if (d < bestD) { bestD = d; best = e; at = pos; }

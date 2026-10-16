@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Sends scenarios to a running suite session (Run-Suite.ps1 -Queue) and waits for the result.
+  Sends scenarios to a running game-runner session (Run-Suite.ps1 -Queue) and waits until they are done.
 
 .EXAMPLE
   powershell -File tools/suite/Send-Suite.ps1 -File suite/scenarios/examples/a4-edit-rebuild.json
@@ -11,9 +11,9 @@
 .DESCRIPTION
   Checks the file against suite/schema.json (unknown keys, steps, targets, views, enum values are errors; keys starting
   with '_' are comments), drops it into <run>/inbox under a time-stamped name, waits for <name>.result.json and prints
-  per scenario its result (PASS / FAIL / UNKNOWN), every check that did not pass with its detail, the PNGs and the
-  result file. While waiting it watches the game: a stale heartbeat or a dead game ends the wait at once.
-  Exit code: 0 all PASS, 1 a check failed, 3 only unknowns, 2 usage/schema error, 4 the game went away.
+  per scenario what happened (status, steps the runner could not do), its pictures and where the logs are. While waiting
+  it watches the game: a stale heartbeat or a dead game ends the wait at once.
+  Exit code: 0 done, 1 the runner reported an error or timed out, 2 usage/schema error, 4 the game went away.
   -RunId defaults to the newest run whose heartbeat says it is in the queue.
 #>
 param(
@@ -112,14 +112,15 @@ Start-Sleep -Milliseconds 200
 $r = Get-Content $result -Raw | ConvertFrom-Json
 $code = 0
 if ($r.error) { Write-Host "ERROR: $($r.error)"; $code = 1 }
-foreach ($s in @($r.scenarios) + @($r.rejudged)) {
+foreach ($s in @($r.scenarios)) {
     if (-not $s) { continue }
-    Write-Host ("{0}: {1} ({2}) on {3} {4} in {5} s" -f $s.id, $s.result, $s.status, $s.block, $s.kind, $s.sec)
-    foreach ($v in @($s.verdicts)) { if ($v) { Write-Host ("  {0} {1}: {2}" -f $v.result.ToUpper(), $v.id, $v.detail) } }
+    $why = if ($s.refused) { ": $($s.refused)" } elseif ($s.failure) { ": $($s.failure)" } else { '' }
+    Write-Host ("{0}: {1}{2} on {3} {4} in {5} s" -f $s.id, $s.status, $why, $s.block, $s.kind, $s.sec)
+    foreach ($e in @($s.stepErrors)) { if ($e) { Write-Host "  runner could not: $e" } }
     if ($s.shots) { foreach ($p in $s.shots.PSObject.Properties) { Write-Host ("  shot {0}: {1}" -f $p.Name, (Join-Path $runDir $p.Value)) } }
-    Write-Host "  result: $($s.resultFile)"
-    if ($s.result -eq 'FAIL') { $code = 1 } elseif ($s.result -ne 'PASS' -and $code -eq 0) { $code = 3 }
+    Write-Host "  steps: $($s.resultFile)"
 }
 if ($r.grow) { Write-Host ("grow: " + ($r.grow | ConvertTo-Json -Compress)) }
-Write-Host "contact sheet: $(Join-Path $runDir 'contact.html')"
+Write-Host "logs (the game writes them as it goes): $(Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\Placemaker.log'), runner: $(Join-Path $runDir 'suite.log')"
+Write-Host "pictures in order: $(Join-Path $runDir 'contact.html')"
 exit $code
