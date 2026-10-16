@@ -276,7 +276,50 @@ namespace Placemaker.Game.Suite
             bool fast = (bool?)step["fast"] ?? true;
             yield return Grow((float?)step["seconds"] ?? 30f, "grow-" + st.S.Id + "-" + st.StepIndex, fast);
             rec["grow"] = _summary["grow-" + st.S.Id + "-" + st.StepIndex];
+            if (st.Built && !st.Deleted && st.Ring != null && st.Ring.Length >= 3)
+            {
+                try { rec["census"] = GrowCensus(st); } catch (Exception e) { rec["censusError"] = e.Message; }
+            }
             Event("grow");
+        }
+
+        /// <summary>
+        /// (shops) Which road every grown building inside the build's outline faces (its Building.m_RoadEdge): one of the
+        /// build's own lanes, or a city street. Logged to Placemaker.log as "grow census" so a run says, without pictures,
+        /// whether the shops face the site's lanes.
+        /// </summary>
+        private JObject GrowCensus(ScenarioState st)
+        {
+            var em = _world.EntityManager;
+            var ring = st.Ring;
+            bool Inside(float2 p)
+            {
+                bool c = false;
+                for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+                    if ((ring[i].y > p.y) != (ring[j].y > p.y) && p.x < (ring[j].x - ring[i].x) * (p.y - ring[i].y) / (ring[j].y - ring[i].y) + ring[i].x) c = !c;
+                return c;
+            }
+            int ours = 0, city = 0, none = 0;
+            var cityRoads = new Dictionary<string, int>(StringComparer.Ordinal);
+            var ourRoads = new Dictionary<string, int>(StringComparer.Ordinal);
+            var cityAt = new List<string>();
+            using (var q = em.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Buildings.Building>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>()))
+            using (var ents = q.ToEntityArray(Allocator.Temp))
+            {
+                foreach (var b in ents)
+                {
+                    var p = em.GetComponentData<global::Game.Objects.Transform>(b).m_Position;
+                    if (!Inside(p.xz)) continue;
+                    var edge = em.GetComponentData<global::Game.Buildings.Building>(b).m_RoadEdge;
+                    if (edge == Entity.Null || !em.Exists(edge)) { none++; continue; }
+                    string name = _lookup.PrefabName(edge);
+                    if (_lookup.GroupOf(edge) == st.Group) { ours++; ourRoads[name] = ourRoads.TryGetValue(name, out var n) ? n + 1 : 1; }
+                    else { city++; cityRoads[name] = cityRoads.TryGetValue(name, out var n) ? n + 1 : 1; if (cityAt.Count < 12) cityAt.Add($"({p.x:F0}, {p.z:F0})"); }
+                }
+            }
+            string Fmt(Dictionary<string, int> d) => string.Join(", ", d.Select(kv => $"{kv.Value} {kv.Key}"));
+            Mod.Log.Info($"Placemaker grow census ({st.S.Id}, group {st.Group}): {ours + city + none} buildings in the outline; {ours} face the build's own lanes ({Fmt(ourRoads)}), {city} face city streets ({Fmt(cityRoads)}){(cityAt.Count > 0 ? " at " + string.Join(" ", cityAt) : "")}{(none > 0 ? $", {none} with no road" : "")}.");
+            return new JObject { ["buildings"] = ours + city + none, ["ourLanes"] = ours, ["cityStreets"] = city, ["noRoad"] = none, ["cityRoads"] = Fmt(cityRoads), ["ourRoads"] = Fmt(ourRoads) };
         }
     }
 }
