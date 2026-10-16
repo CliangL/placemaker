@@ -269,14 +269,13 @@ function D-StartSession($req, $queued) {
     $id = 'queue-' + (Get-Date -Format 'MMdd-HHmmss')
     $grid = D-Grid $req $queued
     $p = D-StartHost $req $id @('-Set', 'queue', '-Queue', '-Grid', $grid, '-ResultsRoot', $script:QMainRuns)
-    $script:launches++
     $script:sess = [ordered]@{
         id = $id; kind = 'queue'; key = $req.key; build = $req.build.hash; label = $req.build.label; bundle = $req.build.bundle; who = $req.who
         dir = (Join-Path $script:QMainRuns $id); hostPid = $p.Id; hostStart = (Q-Ticks $p); startedAt = (Get-Date).ToString('o'); readyAt = ''; quitAt = ''; quitWhy = ''
         served = 0; grid = $grid; capacity = $null; firstRequest = $req.id; requestId = ''
+        launchLine = ('{0:yyyy-MM-dd HH:mm:ss} launch {1} build {2} ({3}) for {4} ({5}), grid {6}' -f (Get-Date), $id, $req.build.hash, $req.build.label, $req.id, $req.who, $grid)
     }
     D-SaveSession
-    Add-Content -LiteralPath $script:Q.Launches -Value ('{0:yyyy-MM-dd HH:mm:ss} launch {1} build {2} ({3}) for {4} ({5}), grid {6}' -f (Get-Date), $id, $req.build.hash, $req.build.label, $req.id, $req.who, $grid)
     D-Log "launching game $id for build $($req.build.hash) ($($req.who)), grid $grid"
     return $true
 }
@@ -288,16 +287,24 @@ function D-StartPlay($req) {
     $a = @('-Playground', '-ResultsRoot', $req.resultsRoot)
     if ($req.session.grid) { $a += @('-Grid', $req.session.grid) }
     $p = D-StartHost $req $req.runId $a
-    $script:launches++
     $script:sess = [ordered]@{
         id = $req.runId; kind = 'play'; key = ''; build = $req.build.hash; label = $req.build.label; bundle = $req.build.bundle; who = $req.who
         dir = $req.resultsDir; hostPid = $p.Id; hostStart = (Q-Ticks $p); startedAt = (Get-Date).ToString('o'); readyAt = ''; quitAt = ''; quitWhy = ''
         served = 0; grid = $req.session.grid; capacity = $null; firstRequest = $req.id; requestId = $req.id
+        launchLine = ('{0:yyyy-MM-dd HH:mm:ss} launch {1} PLAYGROUND build {2} ({3}) for {4} ({5})' -f (Get-Date), $req.runId, $req.build.hash, $req.build.label, $req.id, $req.who)
     }
     D-SaveSession
-    Add-Content -LiteralPath $script:Q.Launches -Value ('{0:yyyy-MM-dd HH:mm:ss} launch {1} PLAYGROUND build {2} ({3}) for {4} ({5})' -f (Get-Date), $req.runId, $req.build.hash, $req.build.label, $req.id, $req.who)
     D-Log "the user's playground $($req.runId) for $($req.who): build $($req.build.hash)"
     return ''
+}
+
+# launches.log and the launch count: only games that were really started (ready, or started but did not boot), not a
+# host that stopped before starting the game (another game was open).
+function D-CountLaunch([string]$how) {
+    if (-not $script:sess -or $script:sess.launchCounted) { return }
+    $script:sess['launchCounted'] = $true; D-SaveSession
+    $script:launches++
+    try { Add-Content -LiteralPath $script:Q.Launches -Value "$($script:sess.launchLine): $how" } catch { }
 }
 
 function D-Beat {
@@ -797,10 +804,12 @@ try {
                 $beat = D-Beat
                 if (-not $script:sess.readyAt -and $beat -and "$($beat.phase)" -eq 'playground') {
                     $script:sess.readyAt = $now.ToString('o'); D-SaveSession
+                    D-CountLaunch ("ready in {0:F0} s" -f ($now - (Q-Date $script:sess.startedAt)).TotalSeconds)
                     D-Log ("the playground {0} is ready ({1:F0} s): the controls are the user's; the queue waits until the game is closed" -f $script:sess.id, ($now - (Q-Date $script:sess.startedAt)).TotalSeconds)
                 }
                 if (-not $hostAlive) {
                     $stop = if (-not $script:sess.readyAt) { D-HostStop $script:sess.id } else { '' }
+                    if (-not $stop) { D-CountLaunch $(if ($script:sess.readyAt) { 'closed' } else { 'closed before it was ready' }) }
                     D-Log "the user's playground $($script:sess.id) closed$(if ($stop) { " before it opened: $stop" })"
                     if ($script:active) { if ($stop) { D-Finish 'failed' 1 "the playground did not open: $stop" $null } else { D-Finish 'served' 0 '' $null } }
                     $script:sess = $null; D-SaveSession
@@ -816,6 +825,7 @@ try {
                     if ($sum -and $sum.capacity) { $script:sess.capacity = $sum.capacity }
                     D-SaveSession
                     D-Log ("game {0} ready in {1:F0} s (grid {2})" -f $script:sess.id, $boot, $script:sess.grid)
+                    D-CountLaunch ("ready in {0:F0} s" -f $boot)
                     $script:idleSince = $now
                     $script:startFailures.Remove($script:sess.key)
                 }
@@ -851,6 +861,7 @@ try {
                         }
                         $script:hostBackoff = $now.AddSeconds(15); $script:backoffNote = 'waiting a moment before starting the game again'
                     } elseif (-not $script:sess.readyAt -and -not $script:sess.quitAt) {
+                        D-CountLaunch "did not boot (status $how)"
                         $k = $script:sess.key
                         $script:bootFailures[$k] = 1 + [int]$script:bootFailures[$k]
                         D-Log "game $($script:sess.id) did not boot (status $how; attempt $($script:bootFailures[$k]))"
