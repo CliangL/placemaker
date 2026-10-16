@@ -58,6 +58,7 @@ namespace Placemaker.Core.Layers.Commercial
             Shared(c.Toggle("plotTrees", plotTrees, ControlTier.More, "extras")).Tip();
             Shared(c.Toggle("wornGround", worn, ControlTier.More, "extras")).Tip();
             Shared(c.Choice("water", water, ControlTier.More, "extras", "none", "pond", "rainGardens", "both")).Tip();
+            Shared(c.Slider("lotMedian", 2.5, 2.5, 6, 0.5, "m", ControlTier.More, "parking")).Tip();
         }
 
         /// <summary>

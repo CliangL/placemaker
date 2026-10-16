@@ -319,7 +319,30 @@ namespace Placemaker.Game.Suite
             }
             string Fmt(Dictionary<string, int> d) => string.Join(", ", d.Select(kv => $"{kv.Value} {kv.Key}"));
             Mod.Log.Info($"Placemaker grow census ({st.S.Id}, group {st.Group}): {ours + city + none} buildings in the outline; {ours} face the build's own lanes ({Fmt(ourRoads)}), {city} face city streets ({Fmt(cityRoads)}){(cityAt.Count > 0 ? " at " + string.Join(" ", cityAt) : "")}{(none > 0 ? $", {none} with no road" : "")}.");
-            return new JObject { ["buildings"] = ours + city + none, ["ourLanes"] = ours, ["cityStreets"] = city, ["noRoad"] = none, ["cityRoads"] = Fmt(cityRoads), ["ourRoads"] = Fmt(ourRoads) };
+            // (rf-shops3) Trees of the build after the growth: the shops types plant trees on their own plots; a building that grows
+            // over them should hide (Overridden) or remove what is in its way. Measurement only.
+            int trees = 0, hidden = 0, underBuildings = 0;
+            var lots = new List<float2>();
+            using (var q = em.CreateEntityQuery(ComponentType.ReadOnly<global::Game.Buildings.Building>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>()))
+            using (var ents = q.ToEntityArray(Allocator.Temp))
+                foreach (var b in ents)
+                {
+                    var p = em.GetComponentData<global::Game.Objects.Transform>(b).m_Position.xz;
+                    if (Inside(p)) lots.Add(p);
+                }
+            using (var q = em.CreateEntityQuery(ComponentType.ReadOnly<PlacemakerMember>(), ComponentType.ReadOnly<global::Game.Objects.Tree>(), ComponentType.ReadOnly<global::Game.Objects.Transform>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>()))
+            using (var ents = q.ToEntityArray(Allocator.Temp))
+                foreach (var t in ents)
+                {
+                    if (em.GetComponentData<PlacemakerMember>(t).GroupId != st.Group) continue;
+                    trees++;
+                    bool hid = em.HasComponent<global::Game.Common.Overridden>(t);
+                    if (hid) hidden++;
+                    var p = em.GetComponentData<global::Game.Objects.Transform>(t).m_Position.xz;
+                    if (!hid) foreach (var c in lots) if (math.distance(c, p) < 7f) { underBuildings++; break; }
+                }
+            Mod.Log.Info($"Placemaker grow census trees ({st.S.Id}, group {st.Group}): {trees} trees of the build after the growth, {hidden} hidden by the game (Overridden: something over them), {underBuildings} still shown within 7 m of a grown building's centre.");
+            return new JObject { ["buildings"] = ours + city + none, ["ourLanes"] = ours, ["cityStreets"] = city, ["noRoad"] = none, ["cityRoads"] = Fmt(cityRoads), ["ourRoads"] = Fmt(ourRoads), ["trees"] = trees, ["treesHidden"] = hidden, ["treesUnderBuildings"] = underBuildings };
         }
     }
 }

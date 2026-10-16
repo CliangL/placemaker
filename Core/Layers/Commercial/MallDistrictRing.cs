@@ -67,13 +67,17 @@ namespace Placemaker.Core.Layers.Commercial
             // Rails: chords of the ring along the frame's In, joined to it at both ends.
             var rails = new List<(Mall.Lane lane, float x)>();
             float tMidAll = 0.5f * (tF + tB);
-            foreach (var x in xs)
+            foreach (var x0r in xs)
             {
-                if (!Mall.Chord(loop.Points, r.At(x, tMidAll), r.In, out var pa, out var pb)) { ctx.Plan.Facts["railNoChord"] = x; continue; }
-                if (math.distance(pa, pb) < 2f * d + 20f) { ctx.Plan.Facts["railShort"] = math.distance(pa, pb); continue; }
-                var rail = mall.Connect(Mall.End.OnLane(loop, pa), null, Mall.End.OnLane(loop, pb), railRole, railAsset, hr);
-                if (rail == null) ctx.Plan.Facts["railConnectFail"] = (ctx.Plan.Facts.TryGetValue("railConnectFail", out var rc) ? rc : 0) + 1;
-                if (rail != null) rails.Add((rail, x));
+                // (a chord meeting the ring right at one of its bends is moved a few metres: the bend's corridor is in the way)
+                foreach (float shift in new[] { 0f, 4f, -4f, 8f, -8f })
+                {
+                    float x = x0r + shift;
+                    if (!Mall.Chord(loop.Points, r.At(x, tMidAll), r.In, out var pa, out var pb)) continue;
+                    if (math.distance(pa, pb) < 2f * d + 20f) continue;
+                    var rail = mall.Connect(Mall.End.OnLane(loop, pa), null, Mall.End.OnLane(loop, pb), railRole, railAsset, hr);
+                    if (rail != null) { rails.Add((rail, x)); break; }
+                }
             }
             // Rungs: at each level, pieces between neighbouring lanes (the ring, the rails, the ring again).
             var rungs = new List<(Mall.Lane lane, float y, int k)>();
@@ -89,7 +93,7 @@ namespace Placemaker.Core.Layers.Commercial
                 stops.Add((pr, loop));
                 for (int k = 0; k + 1 < stops.Count; k++)
                 {
-                    if (math.distance(stops[k].at, stops[k + 1].at) < 2f * d + 16f) continue;
+                    if (math.distance(stops[k].at, stops[k + 1].at) < 2f * Mall.Cell + 2f * hr + 6f) continue;
                     var g = mall.Connect(Mall.End.OnLane(stops[k].on, stops[k].at), null, Mall.End.OnLane(stops[k + 1].on, stops[k + 1].at), rungRole, rungAsset, hp);
                     if (g != null) rungs.Add((g, y, k));
                 }

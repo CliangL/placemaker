@@ -47,7 +47,7 @@ namespace Placemaker.Core.Layers.Commercial
             Preset("district", ("lanes", "mixed"), ("blocks", "medium"));
             Preset("pedestrian", ("lanes", "pedestrian"), ("blocks", "medium"), ("outerDepth", 24.0));
             Preset("mixedUse", ("lanes", "mixed"), ("blocks", "spacious"), ("zoneKind", ZoneKinds.Mixed), ("plotDepth", 24.0));
-            Preset("dense", ("lanes", "alley"), ("blocks", "compact"), ("zoneKind", ZoneKinds.CommercialHigh), ("plotDepth", 24.0), ("outerDepth", 40.0), ("squares", false), ("parkingBlocks", "some"));
+            Preset("dense", ("lanes", "alley"), ("blocks", "compact"), ("zoneKind", ZoneKinds.CommercialHigh), ("plotDepth", 24.0), ("outerDepth", 40.0), ("squares", false), ("parkingBlocks", "many"));
             Preset("village", ("lanes", "pedestrian"), ("blocks", "compact"), ("plotDepth", 16.0), ("outerDepth", 16.0), ("outerZone", ZoneKinds.CommercialLow));
         }
 

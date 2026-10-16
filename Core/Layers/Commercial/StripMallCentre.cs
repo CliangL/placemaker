@@ -130,10 +130,13 @@ namespace Placemaker.Core.Layers.Commercial
                 {
                     foreach (var (y, side) in new[] { (t + h, +1), (t + 3f * h + 2f * d, -1) })
                     {
-                        if (!Mall.Chord(loop.Points, r.At(sMid, y), r.Dir, out var pa, out var pb)) continue;
-                        if (math.distance(pa, pb) < 70f) continue;
-                        var g = mall.Connect(Mall.End.OnLane(loop, pa), null, Mall.End.OnLane(loop, pb), NetRole.Alley, asset, h);
-                        if (g != null) rungs.Add((g, side));
+                        foreach (float shift in new[] { 0f, 3f, -3f, 6f, -6f })
+                        {
+                            if (!Mall.Chord(loop.Points, r.At(sMid, y + shift), r.Dir, out var pa, out var pb)) continue;
+                            if (math.distance(pa, pb) < 70f) continue;
+                            var g = mall.Connect(Mall.End.OnLane(loop, pa), null, Mall.End.OnLane(loop, pb), NetRole.Alley, asset, h);
+                            if (g != null) { rungs.Add((g, side)); break; }
+                        }
                     }
                     t += pair + L;
                 }

@@ -509,6 +509,8 @@ namespace Placemaker.Core.Layers.Commercial
             b.Values["lanterns"] = ctx.B("lamps");
             b.Values["perimeterRoad"] = false;
             b.Values["setback"] = 1.0;
+            // (rf-shops3) Wider planted medians between the rows of bays (real-3: long tree-lined medians), when the type asks.
+            if (ctx.Settings.Values.ContainsKey("lotMedian") && ctx.Raw("lotMedian") > 2.5f) b.Values["medianDepth"] = (double)ctx.Raw("lotMedian");
             return b;
         }
 

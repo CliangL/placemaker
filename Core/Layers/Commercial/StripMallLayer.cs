@@ -52,7 +52,7 @@ namespace Placemaker.Core.Layers.Commercial
             Preset("neighbourhood", ("style", "classic"), ("lotSize", "small"), ("frontage", 90.0), ("plotDepth", 16.0), ("lotGreen", "medians"), ("zoneKind", ZoneKinds.CommercialLow));
             // (shops2) Big box: a few very wide, deep low-rise stores (one-storey boxes) on the biggest lots.
             Preset("bigBox", ("style", "classic"), ("lotSize", "large"), ("frontage", 240.0), ("plotDepth", 48.0), ("zoneKind", ZoneKinds.CommercialLow), ("evShare", 10.0),
-                ("foodTrucks", 3.0), ("bikes", "paths"), ("water", "both"), ("pads", true));
+                ("foodTrucks", 3.0), ("bikes", "paths"), ("water", "both"), ("pads", true), ("lotMedian", 4.5));
         }
 
         /// <summary>(rf-shops3) Planned from the player's entrances (the centre: StripMallCentre.cs); the hidden corner and rear-alley styles too.</summary>

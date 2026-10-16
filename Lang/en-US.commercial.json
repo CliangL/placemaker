@@ -263,5 +263,7 @@
   "Placemaker.MallPark.loopRoad": "Loop road",
   "Placemaker.MallPark.loopRoad.Tooltip": "Parking: a road with parked cars on both sides round the park (a town square). Alley: a quiet lane.",
   "Placemaker.MallPark.loopRoad.alley": "Alley",
-  "Placemaker.MallPark.loopRoad.parking": "Parking both sides"
+  "Placemaker.MallPark.loopRoad.parking": "Parking both sides",
+  "Placemaker.Commercial.lotMedian": "Lot medians",
+  "Placemaker.Commercial.lotMedian.Tooltip": "How wide the planted strips between the rows of parking bays are: wider holds bigger trees."
 }
