@@ -48,7 +48,8 @@ back on both curved blocks.
 | | village | C- | keep | mixed use, dense |
 | | lifestyle | D- | **hide** | four shops for a ring drive, three lots and paseos |
 | shopsPark | all | D | **hide type** | a park with street shops: every shop faces the city street by design; Parks covers it |
-| mallPark | commons, garden, family, promenade | D | keep | shops ring a park — distinct; fixed (below) |
+| mallPark | commons, garden, family | D | keep | shops ring a park — distinct; fixed (below) |
+| | promenade | D | **hide** | its pedestrian loop leaves the corners to odd lots |
 | highStreet | market (default), farmers, cafe, boulevard | C | keep | the best of the category |
 | | shared | D | **hide** | car lanes instead of pedestrian streets, plots on the city street; the weakest variant |
 | retailPark | classic, megastore, outlet | D | keep | big boxes round one lot — distinct; fixed (below) |
@@ -76,14 +77,57 @@ back on both curved blocks.
    along its back run only, as deep as asked (the default city block got a street-row fallback before).
 7. **Mall park**: an access lane only crosses a ring side long enough to keep zonable rows either side of it (58 m);
    on the default block the loop had no shop.
-8. **Mall district and mall park keep their outer rows** ("Shops facing the streets" on by default): the big buildings
-   facing the streets are the design ("big outside, little inside"); every inner plot still faces our lanes. Their kerb
-   strips spare those columns (ZoneGuard.KerbStrips).
+8. **Street rows stay planted for every kept type** ("Shops facing the streets" off by default, as the core set it). Tried
+   and undone: keeping the mall district's and mall park's outer rows (big buildings on the streets) took the cells of the
+   lane rows behind them — the city street's block reaches 48 m, the older block wins (it1: the mall park ring lost 7 of 11
+   plots, the mall district 26 of 110 cells). Instead the mall district and mall park lay their lane grid over the whole
+   site when street shops are off (no outer rows), and the high street keeps its outer rows planted.
+9. **Lane plots keep clear of a city street's first zone row** (`Mall.BacksOntoStreet`, `Mall.KerbMargin`, `GateTrim`): the
+   core's kerb strips sit in that row, and a lane plot reaching into it loses its cells (it1: the retail park's back
+   terrace, 54 cells planned, 14 zoned; it3: every ring row of the mall park and the outer lane rows of the mall district
+   next to the 4-lane Medium Road). Rows stop a cell short of the street (by the street's own width), lanes leaving a
+   street start their rows past it, and the mall district/park fit their grid inside that margin.
+10. **Grey paving** for the outdoor mall's plazas and the high street's café strip (the sandstone palette read as a sand lot).
+11. **Hidden styles** (shelf): mall park promenade (its pedestrian loop leaves the corners to odd lots).
 
 Shared code touched: `Game/Suite/SuiteSteps.Build.cs` and `SuiteLookup.GroupOf` (public): the **grow census** — after a
 grow step, Placemaker.log says how many buildings inside the outline face the build's own lanes and how many face city
 streets. Measurement only.
 
-## AFTER
+## Done
 
-(filled in below after the runs)
+Wrapped up on the user's word (the shared game queue was backed up for hours); no further game runs.
+
+- Changes 1-11 above, all in `Core/Layers/Commercial/`, plus the grow census (measurement only). Test fingerprints
+  regenerated on purpose (360a915, 792bfd1).
+- **Kept**: stripMall (classic, corner, neighbourhood, bigBox), outdoorMall (promenade, grand, loop, village), mallPark
+  (commons, garden, family), highStreet (market, farmers, cafe, boulevard), retailPark (classic, megastore, outlet),
+  mallDistrict (all five).
+- **Hidden** (`Recipes/shelf/shops.json`, code kept): types shoppingPlaza (repeats the outdoor mall loop and the
+  squares' courts) and shopsPark (street shops in a park, Parks' job); styles stripMall rearAlley (builds no shop),
+  outdoorMall lifestyle (four shops), highStreet shared (car lanes, plots on the city street), retailPark trade
+  (industrial zoning), mallPark promenade (corner lots).
+- BEFORE run: `show-46-builds-1016-062815-e662`. Latest AFTER run: `shops-it3-081855` (built from c8130ec-dirty: everything
+  up to the grey paving, not 55f4b8b). In it3 every built scenario zoned all its cutout cells, and outside the mall park
+  every grown building faces our own lanes (strip mall 8/4/9/10, high street 10/9/1/9, retail park 4/3/4/8 on
+  block/small/L/slope).
+- Pictures (under `C:\Users\jack\cs2-area-tool\.forensics\suite\runs\`):
+  before `show-46-builds-1016-062815-e662\shots\02-stripMall-classic.06-45-clean.png`,
+  `show-46-builds-1016-062815-e662\shots\41-mallDistrict-default.06-45-clean.png`;
+  after `shops-it3-081855\shots\01-stripMall-default-block.06-45-clean.png`,
+  `shops-it3-081855\shots\05-mallDistrict-default-block.06-45-clean.png`.
+
+## Not done / known problems
+
+- **55f4b8b is not tested in the game** (rows backing onto a city street keep clear of its first zone row by the
+  street's width; mall park promenade hidden). No run was made after it.
+- Mall park (it3, default block): 0 buildings face our lanes, 4 face the city Small Road, 22 cells zoned. The ring rows
+  are still lost next to the street; 55f4b8b aims at this.
+- Mall district (it3, default block): 20 cells, 6 buildings (14-16 buildings before); its outer lane rows next to the
+  4-lane road were lost. 55f4b8b aims at this too; until a run confirms, the mall district is worse than before.
+- High street on the L plot: 4 cells, 1 building.
+- outdoorMall and mallPark found no small / L / slope plot in it3 (no-block): only the default block was checked.
+  Curved blocks were checked offline only.
+- Non-default styles were not re-run in the game after the changes (it1 and it3 ran defaults only).
+- The offline fallback count (69 in the gallery sweep before) was not re-counted after the last changes.
+- The squares agent also edits `Recipes/shelf/shops.json`: merge both hidden lists by hand.
