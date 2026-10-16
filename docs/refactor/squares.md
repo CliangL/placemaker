@@ -9,7 +9,7 @@ Everything below was judged in the game runner (`tools/suite/Show.ps1`, clean pr
 unless said otherwise). Grades are mine, from the pictures and the logs.
 
 - BEFORE: `show-31-builds-1016-062611-025f` (every type and style: plan, 45-degree, top, terrain).
-- AFTER: AFTER_RUN
+- AFTER: `show-6-builds-1016-084129-9d70` (plaza, at 39605c3), `show-4-builds-1016-084148-080d` (market square, at 39605c3); amphitheatre and fairground last shot at 9430fa2: `show-2-builds-1016-072939-c291`, `show-2-builds-1016-072939-52d4`.
 
 ## What was wrong (BEFORE), common to all four types
 
@@ -126,3 +126,39 @@ the amphitheatre; festival and funfair need assets nobody has; food trucks staye
 6. **Market cross aisles** on the square's own axes (two 4.8 m aisles meeting at the centre) instead of aisles to every
    access point, which cut the stall rows at odd angles.
 7. **Fair: the front-of-house tent is off by default** (a lone dark dome in the crowd field).
+
+## Done
+
+- Street shops off by default on plaza, market square, amphitheatre and fairground (no more grass holes, `MISMATCH`
+  lines or failed tree rings from carved outlines; 0 `MISMATCH` in every AFTER run's Placemaker.log).
+- Planted centre (lawn, specimen oak, shrubs, benches) when no fountain or statue is installed; the user's own
+  centrepieces are still used.
+- Market stalls, fair stalls and amphitheatre rows scale with the site.
+- `LayerRegion.InsetRing`: plaza allée, plaza planters, market tree ring and fair loop survive chamfered block corners.
+- Plaza lawns fill the ground between off-axis walks (`FreeLawns`); market cross aisles on the square's own axes.
+- Fair front-of-house tent off by default.
+- Shelf (`Recipes/shelf/shops.json`) checked against the "What is kept" table: matches.
+  - Kept: plaza civic, fountain, cafe, sunkenCourt, green (+ default); market square weekly, bigMarket, farmers;
+    amphitheatre classic, bandstand (+ default); fairground fairground, christmas.
+  - Hidden: plaza market, amphitheatre, garden, sunken, terraced, splitLevel, cascade, podium, piazza; amphitheatre
+    cinema, meadow, speakers; fairground festival, funfair, foodTrucks (reasons above).
+- Runs: BEFORE `show-31-builds-1016-062611-025f`; AFTER `show-6-builds-1016-084129-9d70`,
+  `show-4-builds-1016-084148-080d`, `show-2-builds-1016-072939-c291`, `show-2-builds-1016-072939-52d4`. Pictures:
+  - `C:/Users/jack/cs2-area-tool/.forensics/suite/runs/show-6-builds-1016-084129-9d70/shots/06-plaza-green.06-top-clean.png` (lawns between eight walks, tree ring, planted centre)
+  - `C:/Users/jack/cs2-area-tool/.forensics/suite/runs/show-4-builds-1016-084148-080d/shots/03-marketSquare-bigMarket.06-top-clean.png` (scaled stalls on a block)
+
+## Not done / known problems
+
+- No AFTER grades written: the AFTER pictures were not re-graded type by type before the wrap-up.
+- Fair tent change (87e3e74) never seen in the game: its run `queue-1016-092650` (full profile) died after the menu.
+  Amphitheatre and fairground were not re-shot after the InsetRing change (39605c3).
+- Market square bigMarket on a block (AFTER picture): no visible tree ring, only the east-west aisle reads, and no
+  centre feature; still a grid of stalls on a bare grey slab. Needs a look at whether the ring and the north-south
+  aisle are built.
+- Not tested in the user's full profile (with fountains and statues) after the changes; only the unit test asserts
+  the centrepiece is kept.
+- Not tried on odd shapes (triangles, L-shapes, slopes); everything was judged on a flat 150 x 140 m block.
+- Street shops, when turned on, still face the city street with their backs to the square (by design for now).
+- Amphitheatre default and classic still a small bowl in a big lawn on large sites (rows capped at 2x).
+- Fairground default/christmas still sparse on a block; foodTrucks hidden rather than fixed.
+- Branch not merged.
