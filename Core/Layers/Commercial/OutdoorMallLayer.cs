@@ -73,6 +73,8 @@ namespace Placemaker.Core.Layers.Commercial
                 : Promenade(ctx, mall, r, c, hs, asset, role, ref cells, out blockL, out blockR, out spine);
             if (!ok)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
+
                 mall.ShopRow(r, from, to, 0f, cells);
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;

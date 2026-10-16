@@ -53,6 +53,7 @@ namespace Placemaker.Core.Layers.Commercial
             if (style != "classic") ctx.Issue(IssueSeverity.Info, FallbackKey);
             if (!Classic(ctx, mall, runs[0]))
             {
+                if (mall.Extra) return;
                 // No room for a lot and a lane: plots straight on the street.
                 var r = runs[0];
                 mall.ShopRow(r, r.From + 2f, r.To - 2f, 0f, Cells(ctx));
@@ -72,6 +73,13 @@ namespace Placemaker.Core.Layers.Commercial
         private static bool Classic(LayerContext ctx, Mall mall, StreetShops.Run r)
         {
             Span(ctx, r, out float s0, out float s1);
+            if (mall.Extra)
+            {
+                // (shops) Another frontage: the stretch with free land behind it for a lot, the lane and two cells of shops.
+                var b = mall.BestSpan(r, 50f, Mall.LotDepth(1) + 2f * Mall.AlleyHalf + 2f * Mall.Cell, s0, s1, true);
+                if (b == null) return false;
+                s0 = b.Value.s0; s1 = b.Value.s1;
+            }
             if (s1 - s0 < 50f) return false;
             int cells = Cells(ctx), aisles = Mall.Aisles(ctx.S("lotSize"));
             // (shops) Free land only: a second strip on another street (ComposeMore) stops at the first one's shops.

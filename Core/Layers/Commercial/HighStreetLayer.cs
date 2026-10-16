@@ -104,6 +104,8 @@ namespace Placemaker.Core.Layers.Commercial
             }
             if (lanes.Count == 0)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
+
                 mall.ShopRow(r, from, to, 0f, cells);
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;

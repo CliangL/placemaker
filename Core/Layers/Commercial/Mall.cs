@@ -79,6 +79,8 @@ namespace Placemaker.Core.Layers.Commercial
         public readonly List<float2[]> Shops = new List<float2[]>();
         public readonly List<Lane> Lanes = new List<Lane>();
         public readonly List<float2[]> Lots = new List<float2[]>();
+        /// <summary>(shops) True while another frontage is composed (CommercialLayer.ComposeMore): a composition that does not fit there leaves nothing behind (no fallback street row).</summary>
+        public bool Extra;
         /// <summary>(shops) Most land (m²) all the lots together may take: leftover lots (CommercialLayer.RestLots) stop here and the rest is planted.</summary>
         public float LotBudget = float.MaxValue;
         /// <summary>(shops) Land the lots take so far (m²).</summary>
@@ -164,13 +166,13 @@ namespace Placemaker.Core.Layers.Commercial
         /// district on a 3 ha half-curved block saw 52 m of 150 and fell back to a street row). The whole run is kept when it
         /// holds at least 85 % of the best. Null when no stretch qualifies.
         /// </summary>
-        public (float s0, float s1, float reach)? BestSpan(StreetShops.Run r, float minLen, float minReach, float from, float to)
+        public (float s0, float s1, float reach)? BestSpan(StreetShops.Run r, float minLen, float minReach, float from, float to, bool free = false)
         {
             float len = to - from;
             if (len < minLen) return null;
             int n = math.max(2, (int)math.ceil(len / 4f));
             var reach = new float[n + 1];
-            for (int i = 0; i <= n; i++) reach[i] = ReachAt(r, math.lerp(from, to, (float)i / n));
+            for (int i = 0; i <= n; i++) reach[i] = free ? FreeReachAt(r, math.lerp(from, to, (float)i / n)) : ReachAt(r, math.lerp(from, to, (float)i / n));
             float whole = float.MaxValue; foreach (var x in reach) whole = math.min(whole, x);
             float bestArea = -1f; int bi = 0, bj = n; float bReach = whole;
             for (int i = 0; i < n; i++)

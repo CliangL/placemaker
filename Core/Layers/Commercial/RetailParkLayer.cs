@@ -77,6 +77,7 @@ namespace Placemaker.Core.Layers.Commercial
             float lt = Mall.LotDepth(aisles);
             if (w < 40f || Verge + lt + h > reach - 1f)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                 mall.Row(r, from, to, 0f, math.min(cells, 4), 1f, null, unit);
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;
@@ -107,6 +108,7 @@ namespace Placemaker.Core.Layers.Commercial
                 road = mall.Connect(Mall.End.Street(r.At(l, 0f), -r.In), new[] { r.At(l, back), r.At(rr, back) }, Mall.End.Street(r.At(rr, 0f), -r.In), NetRole.Alley, asset, h);
                 if (road == null)
                 {
+                    if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                     mall.Row(r, from, to, 0f, math.min(cells, 4), 1f, null, unit);
                     ctx.Issue(IssueSeverity.Info, FallbackKey);
                     return;

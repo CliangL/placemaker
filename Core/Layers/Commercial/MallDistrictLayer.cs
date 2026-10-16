@@ -84,6 +84,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
             if (sr - sl < 2f * d + 2f * hr || tb - tf < d + hp)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                 mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, math.max(1, inner));
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;
@@ -111,6 +112,7 @@ namespace Placemaker.Core.Layers.Commercial
                 u = mall.Connect(Mall.End.Street(r.At(sl, 0f), -r.In), new[] { r.At(sl, tb), r.At(sr, tb) }, Mall.End.Street(r.At(sr, 0f), -r.In), railRole, railAsset, hr);
                 if (u == null)
                 {
+                    if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                     mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, math.max(1, inner));
                     ctx.Issue(IssueSeverity.Info, FallbackKey);
                     return;

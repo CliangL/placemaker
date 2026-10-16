@@ -211,7 +211,9 @@ namespace Placemaker.Core.Layers.Commercial
                 float mk = 0.5f * (rk.From + rk.To);
                 cand.Add((k, mall.FreeReachAt(rk, mk)));
             }
-            cand.Sort((a, b) => b.free.CompareTo(a.free));
+            // The street opposite the main one first (a second strip back to back with the first), then the most free land.
+            float Rank((int k, float free) c) => c.free + (math.dot(runs[c.k].In, runs[0].In) < -0.7f ? 1000f : 0f);
+            cand.Sort((a, b) => Rank(b).CompareTo(Rank(a)));
             foreach (var (k, free) in cand)
             {
                 ctx.Check();
@@ -224,7 +226,9 @@ namespace Placemaker.Core.Layers.Commercial
                 if (!mall.Fits(Mall.Rect(r, m - Mall.Cell, m + Mall.Cell, 0f, Mall.Cell))) continue;
                 var order = new List<StreetShops.Run> { r };
                 for (int i = 0; i < runs.Count; i++) if (i != k) order.Add(runs[i]);
-                Compose(ctx, mall, order);
+                mall.Extra = true;
+                try { Compose(ctx, mall, order); }
+                finally { mall.Extra = false; }
             }
         }
 

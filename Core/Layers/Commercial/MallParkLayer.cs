@@ -82,6 +82,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
             if (parkW < 24f || parkD < 24f)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                 mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, Cells(ctx));
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;
@@ -92,6 +93,7 @@ namespace Placemaker.Core.Layers.Commercial
             var loop = mall.Loop(r.At(cx, fy), new[] { r.At(rx, fy), r.At(rx, by), r.At(lx, by), r.At(lx, fy) }, role, asset, h);
             if (loop == null)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                 mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, Cells(ctx));
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;
