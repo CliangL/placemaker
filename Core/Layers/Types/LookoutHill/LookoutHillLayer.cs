@@ -104,7 +104,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             Preset("viewpointMound", ("subtype", "viewpointMound"), ("height", 8.0), ("shape", "cone"), ("plateau", 5.0), ("pathStyle", "spiral"),
                 ("viewpoint", "plaza"), ("telescopes", 0.0), ("summitBenches", 8.0), ("treeDensity", 40.0), ("treeLine", 30.0), ("roughness", 10.0));
             Preset("terraces", ("subtype", "terraces"), ("height", 16.0), ("shape", "terraced"), ("levels", 4.0), ("plateau", 12.0),
-                ("pathStyle", "switchback"), ("pathWidth", "wide"), ("viewpoint", "plaza"), ("summitBenches", 10.0), ("treeDensity", 50.0), ("lamps", true));
+                ("pathStyle", "switchback"), ("viewpoint", "plaza"), ("summitBenches", 10.0), ("treeDensity", 50.0), ("lamps", true));
             Preset("kiteHill", ("subtype", "kiteHill"), ("height", 12.0), ("shape", "dome"), ("plateau", 14.0), ("pathStyle", "direct"),
                 ("viewpoint", "cairn"), ("treeDensity", 30.0), ("treeLine", 25.0), ("kites", 6.0), ("summitBenches", 4.0), ("roughness", 0.0));
         }
@@ -120,7 +120,11 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
 
             // ── Summit & landform ──
             var summit = Summit(ctx, region, gates, inscribed);
-            float plateau = math.min(ctx.F("plateau"), inscribed * 0.45f);
+            // (rf-nature) The summit plaza holds its centrepiece with room to walk round it and benches on its rim:
+            // the 9 m plateau gave the hilltop gazebo (7.6 x 6.5 m) a plaza barely wider than itself, with the benches
+            // jammed against it. The plateau grows to fit, as far as the area allows.
+            float centreFit = CentreRadius(ctx.S("viewpoint"));
+            float plateau = math.min(math.max(ctx.F("plateau"), centreFit > 0f ? (centreFit + 4.5f) / 0.85f : 0f), inscribed * 0.45f);
             var spec = new HillSpec
             {
                 Height = ctx.F("height"), Shape = HillSpec.Parse(ctx.S("shape")), Summit = summit, Plateau = plateau,
@@ -241,7 +245,13 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                     }
                     if (best >= 0 && bd < 120f)
                     {
-                        LeisureKit.Path(ctx, occ, g.Position, main[best], role, asset);
+                        if (bd >= 1f)
+                        {
+                            var spur = ctx.StraightNet(g.Position, main[best], role, asset);
+                            AttachStart(spur, g);
+                            occ.TakeCorridor(g.Position, main[best], hw, 100);
+                            occ.Paths.Add(g.Position, main[best], hw, 100);
+                        }
                         total += bd;
                         continue;
                     }
@@ -255,18 +265,72 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 var pts = HillPaths.Climb(field, region, occ, g.Position, g.Position + inward * (hw + 2.5f), spec);
                 if (pts.Count < 3) continue;
                 if (!HillPaths.Reached(pts, spec)) ctx.Issue(IssueSeverity.Info, "Placemaker.LookoutHill.Issue.PathShort");
+                Relax(pts, region, hw);
                 var simple = Poly.SimplifyPolyline(pts, 0.6f);
-                for (int i = 0; i + 1 < simple.Length; i++)
+                int n = simple.Length;
+                for (int i = 0; i + 1 < n; i++)
                 {
+                    // (rf-nature) Smooth pieces (Catmull-Rom tangents through the walker's corners) instead of straight
+                    // chords, so the climb reads as one flowing path, not a chain of kinks; straight where a curve
+                    // would leave the outline. The first piece starts on the street (attached), like every park path.
+                    var a = simple[i]; var b = simple[i + 1];
+                    var p0 = i > 0 ? simple[i - 1] : a; var p3 = i + 2 < n ? simple[i + 2] : b;
+                    var cb = a + (b - p0) / 6f; var cc = b - (p3 - a) / 6f;
+                    var net = i > 0 && i + 2 < n && CurveInside(region, a, cb, cc, b, hw)
+                        ? ctx.CurvedNet(a, cb, cc, b, role, asset) : ctx.StraightNet(a, b, role, asset);
+                    if (i == 0) AttachStart(net, g);
                     // Pieces are added to the occupancy one by one; the last piece onto the plaza is fine.
-                    ctx.StraightNet(simple[i], simple[i + 1], role, asset);
-                    occ.TakeCorridor(simple[i], simple[i + 1], hw, 100);
-                    occ.Paths.Add(simple[i], simple[i + 1], hw, 100);
-                    total += math.distance(simple[i], simple[i + 1]);
+                    var prev = a;
+                    for (int k = 1; k <= 6; k++)
+                    {
+                        var q = Composer.Bezier(net.A, net.B, net.C, net.D, k / 6f).xz;
+                        occ.TakeCorridor(prev, q, hw, 100);
+                        occ.Paths.Add(prev, q, hw, 100);
+                        prev = q;
+                    }
+                    total += math.distance(a, b);
                 }
                 if (main.Count == 0) main.AddRange(simple);
             }
             return total;
+        }
+
+        /// <summary>
+        /// (rf-nature) Rounds the walker's corners (it steps 4 m at a time and turns where the hill's contours turn, so a
+        /// hill on a square block gave a square spiral with sharp elbows): a few passes of neighbour averaging over the
+        /// inner points; the street end, its entry point and the last steps onto the plaza stay put, and no point leaves the outline.
+        /// </summary>
+        private static void Relax(List<float2> pts, LayerRegion region, float hw)
+        {
+            if (pts.Count < 5) return;
+            var tmp = new float2[pts.Count];
+            for (int pass = 0; pass < 4; pass++)
+            {
+                for (int i = 0; i < pts.Count; i++) tmp[i] = pts[i];
+                for (int i = 2; i < pts.Count - 3; i++)
+                {
+                    var q = tmp[i] * 0.5f + (tmp[i - 1] + tmp[i + 1]) * 0.25f;
+                    if (region.ContainsDisc(q, hw + 1f)) pts[i] = q;
+                }
+            }
+        }
+
+        private static void AttachStart(PlannedNet net, Gate g)
+        {
+            if (g.AttachId < 0 || math.distancesq(net.A.xz, g.Position) > 1e-4f) return;
+            net.StartAttach = g.AttachId;
+            net.StartAttachT = g.AttachT;
+        }
+
+        private static bool CurveInside(LayerRegion region, float2 a, float2 b, float2 c, float2 d, float hw)
+        {
+            for (int i = 1; i < 8; i++)
+            {
+                float u = i / 8f, v = 1f - u;
+                var p = v * v * v * a + 3f * v * v * u * b + 3f * v * u * u * c + u * u * u * d;
+                if (!region.ContainsDisc(p, hw + 0.5f)) return false;
+            }
+            return true;
         }
 
         private static bool Clear(LayerRegion region, Occupancy occ, float2 a, float2 b, float hw)
@@ -300,9 +364,10 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             if (chain != null)
             {
                 string cat = LeisureKit.Category(ctx, "", chain);
-                if (cat != null && res.Free(summit, math.min(r * 0.45f, 3.5f), 0.5f, 0.2f) && !occ.Paths.Overlaps(summit, math.min(r * 0.45f, 3.5f), 0.2f))
+                float fit = math.min(CentreRadius(ctx.S("viewpoint")), math.max(2f, r - 2.5f));
+                if (cat != null && res.Free(summit, fit, 0.5f, 0.2f) && !occ.Paths.Overlaps(summit, fit, 0.2f))
                 {
-                    centreR = math.min(r * 0.45f, 3.5f);
+                    centreR = fit;
                     var o = ctx.Object(summit, Hashing.Unit(v) * 6.283f, ObjectRole.Furniture, centre, v, -1, cat);
                     if (ctx.S("viewpoint") == "cairn")
                     {
@@ -337,6 +402,18 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                     var p = summit + new float2(math.cos(a), math.sin(a)) * math.max(centreR + 1.2f, r - 0.8f);
                     Spot(ctx, occ, res, p, LeisureKit.Yaw(summit, p), ObjectRole.Furniture, scope, 0.5f, Hashing.Mix(v, 40u + (uint)i), AssetMix.One(""));
                 }
+        }
+
+        /// <summary>Half the footprint of the summit centrepiece (its bounding circle), 0 for none.</summary>
+        private static float CentreRadius(string viewpoint)
+        {
+            switch (viewpoint)
+            {
+                case "tower": return 5f;      // Gazebo03, 7.6 x 6.5 m
+                case "pavilion": return 4.5f; // CampgroundShelter02 / Gazebo01
+                case "cairn": return 2.5f;    // a boulder with stones heaped round its foot
+                default: return 0f;
+            }
         }
 
         /// <summary>Puts an object on the summit plaza (inside the reserved plaza disc, clear of what is already there).</summary>

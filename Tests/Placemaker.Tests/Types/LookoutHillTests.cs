@@ -38,6 +38,8 @@ namespace Placemaker.Tests.Types.T04
             Out.WriteLine($"peak {plan.Facts["peak"]:0.0} m, {plan.Terraform.Count} cells");
             Assert.True(plan.Facts["peak"] >= 18f * 0.8f, "peak " + plan.Facts["peak"]);
             Assert.All(plan.Terraform, t => Assert.Equal(TerraformKind.Raise, t.Kind));
+            // (rf-nature) One continuous slope: sloped patches sharing their corners, never a staircase of levelled cells.
+            Assert.All(plan.Terraform, t => Assert.True(t.Sloped));
             // The summit is the highest planned point and lies well inside.
             var summit = Summit(plan);
             var top = plan.Terraform.OrderByDescending(t => t.TargetHeight - site.HeightAt(Poly.Centroid(Poly.To2D(t.Ring)))).First();
@@ -77,6 +79,67 @@ namespace Placemaker.Tests.Types.T04
                 }
         }
 
+        [Theory]
+        [InlineData("hilltop", false)]
+        [InlineData("sledding", false)]
+        [InlineData("viewpointMound", false)]
+        [InlineData("terraces", false)]
+        [InlineData("kiteHill", false)]
+        [InlineData("hilltop", true)]
+        [InlineData("sledding", true)]
+        [InlineData("terraces", true)]
+        [InlineData("kiteHill", true)]
+        public void PathStartsOnTheStreetAndWalksStraightOntoThePlaza(string preset, bool cityBlock)
+        {
+            // (rf-nature) The user's "weird roads": the climb ended loose short of the pavement, and near the top it
+            // hooked round the reserved plaza (an S-bend or a loop) instead of walking onto it.
+            // The 6 ha L, and a 150 x 140 m city block (the game runner's block, where the hilltop path hooked).
+            var ring = cityBlock ? TestKit.Rect(150, 140) : SixHaL;
+            var road = TestKit.RoadAlongBottom(cityBlock ? 150 : 293);
+            var composed = Compose(TestKit.Entered(WithPreset(preset), ring, road), ring, road);
+            Assert.True(string.IsNullOrEmpty(Errors(composed)), Errors(composed));
+            var plan = Layer(composed);
+            var paths = plan.Nets.Where(n => n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide).ToList();
+            Assert.NotEmpty(paths);
+            Assert.Contains(paths, n => n.StartAttach >= 0);
+            var summit = Summit(plan);
+            // The last 25 m of the climb (walking back from the piece that ends nearest the summit) only ever gets
+            // closer to the summit: it walks onto the plaza instead of hooking round it.
+            int k = 0;
+            for (int i = 1; i < paths.Count; i++)
+                if (math.distance(paths[i].D.xz, summit) < math.distance(paths[k].D.xz, summit)) k = i;
+            float walked = 0f, worst = 0f;
+            float2 prev = paths[k].D.xz;
+            float nearest = math.distance(prev, summit);
+            for (int i = k; i >= 0 && walked < 25f; i--)
+            {
+                if (i < k && math.distance(paths[i].D.xz, paths[i + 1].A.xz) > 0.01f) break;
+                for (int s = 7; s >= 0 && walked < 25f; s--)
+                {
+                    var q = Composer.Bezier(paths[i].A, paths[i].B, paths[i].C, paths[i].D, s / 8f).xz;
+                    walked += math.distance(q, prev);
+                    float d = math.distance(q, summit);
+                    worst = math.max(worst, nearest - d);   // walking back, the path came nearer than a later point
+                    nearest = math.max(nearest, d);
+                    prev = q;
+                }
+            }
+            Out.WriteLine($"{preset}: {paths.Count} pieces, the last {walked:0} m: worst step away from the summit {worst:0.0} m");
+            Assert.True(worst < 2f, $"{preset}: the path hooks round the plaza ({worst:0.0} m away again)");
+            // No sharp corner where two pieces of the climb meet (a turn back on the spot left an acute node the game dug
+            // a 7 m pit beside, on the sledding hill): consecutive pieces turn by less than 100 degrees.
+            float sharpest = 0f;
+            for (int i = 0; i + 1 < paths.Count; i++)
+            {
+                if (math.distance(paths[i].D.xz, paths[i + 1].A.xz) > 0.01f) continue;
+                var din = math.normalizesafe(paths[i].D.xz - paths[i].C.xz, math.normalizesafe(paths[i].D.xz - paths[i].A.xz));
+                var dout = math.normalizesafe(paths[i + 1].B.xz - paths[i + 1].A.xz, math.normalizesafe(paths[i + 1].D.xz - paths[i + 1].A.xz));
+                sharpest = math.max(sharpest, math.degrees(math.acos(math.clamp(math.dot(din, dout), -1f, 1f))));
+            }
+            Out.WriteLine($"{preset}: sharpest turn {sharpest:0} deg");
+            Assert.True(sharpest < 100f, $"{preset}: a {sharpest:0} deg corner in the climb");
+        }
+
         [Fact]
         public void TreesStayBelowTheTreeLineAndTheSummitIsOpen()
         {
@@ -105,7 +168,9 @@ namespace Placemaker.Tests.Types.T04
         {
             var plan = PlanPreset("terraces", SixHaL, new SiteContext());
             Assert.True(plan.Facts["terraceBenches"] >= 3, "terrace benches " + plan.Facts["terraceBenches"]);
-            Assert.Contains(plan.Nets, n => n.Role == NetRole.PathwayWide);
+            // (rf-nature) Narrow paths: the 8 m wide walk cut walls into the steps and read as a road up the hill.
+            Assert.DoesNotContain(plan.Nets, n => n.Role == NetRole.PathwayWide);
+            Assert.Contains(plan.Nets, n => n.Role == NetRole.Pathway);
             Assert.Contains(plan.Objects, o => o.Role == ObjectRole.Lamp);
         }
 

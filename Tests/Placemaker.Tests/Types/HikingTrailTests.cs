@@ -185,7 +185,10 @@ namespace Placemaker.Tests.Types
         public void TrailheadHasParkingMapAndBench()
         {
             var road = B12Kit.Road(250);
-            var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues("forestTrail")), B12Kit.FiveHa, road), B12Kit.FiveHa, road).Layers[0];
+            // (rf-nature) The car park is off by default (no driveway reaches it); asked for, it is still laid out.
+            var plain = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues("forestTrail")), B12Kit.FiveHa, road), B12Kit.FiveHa, road).Layers[0];
+            Assert.False(plain.Facts.ContainsKey("parkingStalls"), "a car park by default");
+            var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, With(PresetValues("forestTrail"), ("parking", 8.0))), B12Kit.FiveHa, road), B12Kit.FiveHa, road).Layers[0];
             Assert.Contains(plan.Objects, o => o.Category == AssetCategories.TrailSign);
             Assert.True(plan.Facts.TryGetValue("parkingStalls", out var stalls) && stalls >= 8, "no trailhead car park");
             Assert.Contains(plan.Surfaces, s => s.Category == AssetCategories.SurfaceNatural);
@@ -214,6 +217,27 @@ namespace Placemaker.Tests.Types
             var meadow = B12Kit.Compose(B12Kit.With(Id, PresetValues("meadowWalk")), B12Kit.FiveHa, B12Kit.Hilly(250)).Layers[0];
             Assert.NotEmpty(meadow.Paint);
             Assert.DoesNotContain(meadow.Nets, n => n.Role == NetRole.PathwayWide);   // trails are narrow (art pass a3)
+        }
+
+        [Theory]
+        [InlineData("ridgeHike")]
+        [InlineData("canyonTrail")]
+        [InlineData("summitClimb")]
+        public void ShapedGroundIsSmoothOnHillsAndTheTrailStandsOnIt(string preset)
+        {
+            // (rf-nature) The game runner's hills (4 m egg-crate bumps, 30 m apart): the old ridge and gorge were flat 12 m
+            // squares each levelled to its own centre (a staircase, with pits up to 80 m deep left beside the trail).
+            var site = TestKit.RoadAlongBottom(250);
+            site.HeightAt = p => 50f + 4f * math.sin(p.x * 0.21f) * math.sin(p.y * 0.21f);
+            var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues(preset)), B12Kit.FiveHa, site), B12Kit.FiveHa, site).Layers[0];
+            Assert.NotEmpty(plan.Terraform);
+            Assert.All(plan.Terraform, t => Assert.True(t.Sloped, "a levelled terraform square"));
+            Assert.True(plan.Terraform.Count <= 2200, $"{plan.Terraform.Count} terraform patches (the build rasters each; too many run out its time)");
+            // The trail (terrain-following pieces) lies on the shaped ground: every end within 1 m of the planned surface.
+            float after(float2 q) { foreach (var t in plan.Terraform) if (Placemaker.Core.Geometry.Poly.Contains(Placemaker.Core.Geometry.Poly.To2D(t.Ring), q)) return TerraformSurface.TargetAt(t, q); return site.HeightAt(q); }
+            foreach (var n in Trail(plan).Where(n => n.FollowTerrain))
+                foreach (var p in new[] { n.A, n.D })
+                    Assert.True(math.abs(p.y - after(p.xz)) < 1f, $"{preset}: trail end {p.y:0.0} m, ground {after(p.xz):0.0} m");
         }
 
         [Fact]

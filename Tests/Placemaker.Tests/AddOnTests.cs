@@ -154,7 +154,10 @@ namespace Placemaker.Tests
             TestKit.AssertObjectsInside(camp, ring);
             TestKit.AssertObjectsClearOfNets(camp);
             TestKit.AssertSurfacesAccepted(camp);
-            Assert.Contains(plan.Layers, l => l.GeneratorId == "picnic" && l.Objects.Count > 0);
+            // (rf-nature) A single type: the shipped recipe has no child steps, so the Make row offers it (picnic is an
+            // optional feature of the campground; pitches have their own tables).
+            Assert.Empty(recipe.Root.Children);
+            Assert.True(Placemaker.Core.Tool.Features.ShowInMakeRow(recipe, false, GeneratorRegistry.Get));
         }
 
         [Fact]

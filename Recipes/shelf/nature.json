@@ -9,5 +9,24 @@
   ],
   "types": [],
   "hiddenTypes": [],
-  "hiddenStyles": {}
+  "hiddenStyles": {
+    "campground": [
+      "meadow",
+      "caravan"
+    ],
+    "natureReserve": [
+      "wildwood"
+    ],
+    "greenwayPark": [
+      "open"
+    ],
+    "lookoutHill": [
+      "viewpointMound"
+    ],
+    "hikingTrail": [
+      "summitClimb",
+      "lakeshoreLoop"
+    ]
+  },
+  "_decisions": "rf-nature (docs/refactor/nature.md): wetland keeps all five; the hidden styles are the mundane or duplicate ones (see the doc for each grade)."
 }
