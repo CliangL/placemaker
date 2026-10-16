@@ -82,7 +82,7 @@ namespace Placemaker.Core.Layers.Commercial
 
         /// <summary>(shops2) The lengths of the mall's lists (a composition that gives up late is taken back with <see cref="Rewind"/>,
         /// together with CommercialLayer.PlanMark for the plan). Only for lists appended to since the mark.</summary>
-        public int[] Mark() => new[] { Taken.Count, Shops.Count, Lanes.Count, Lots.Count, Doors.Count, _lotGround.Count, Walks.Count, Stalls, EvStalls, KeptLand.Count, RowHolds.Count, SpineFronts.Count, Drives.Count };
+        public int[] Mark() => new[] { Taken.Count, Shops.Count, Lanes.Count, Lots.Count, Doors.Count, _lotGround.Count, Walks.Count, Stalls, EvStalls, KeptLand.Count, RowHolds.Count, SpineFronts.Count, Drives.Count, KerbDrives.Count };
 
         public void Rewind(int[] m)
         {
@@ -97,6 +97,7 @@ namespace Placemaker.Core.Layers.Commercial
             Cut(Taken, m[0]); Cut(Shops, m[1]); Cut(Lanes, m[2]); Cut(Lots, m[3]); Cut(Doors, m[4]); Cut(_lotGround, m[5]); Cut(Walks, m[6]);
             Stalls = m[7]; EvStalls = m[8];
             if (m.Length > 12) { Cut(KeptLand, m[9]); Cut(RowHolds, m[10]); Cut(SpineFronts, m[11]); Cut(Drives, m[12]); }
+            if (m.Length > 13) Cut(KerbDrives, m[13]);
         }
         /// <summary>(shops) True while another frontage is composed (CommercialLayer.ComposeMore): a composition that does not fit there leaves nothing behind (no fallback street row).</summary>
         public bool Extra;
@@ -477,8 +478,8 @@ namespace Placemaker.Core.Layers.Commercial
             // split the lane at the stub's end instead.
             foreach (var n in sub.Nets)
             {
-                if (t.Synthetic.TryGetValue(n.StartAttach, out var s0)) { SnapOnto(s0.lane, s0.seg, ref n.A, ref n.B); s0.lane.Joins.Add(n.A.xz); n.StartAttach = -1; }
-                if (t.Synthetic.TryGetValue(n.EndAttach, out var s1)) { SnapOnto(s1.lane, s1.seg, ref n.D, ref n.C); s1.lane.Joins.Add(n.D.xz); n.EndAttach = -1; }
+                if (t.Synthetic.TryGetValue(n.StartAttach, out var s0)) { SnapOnto(s0.lane, s0.seg, ref n.A, ref n.B); OntoNode(s0.lane, ref n.A, ref n.B); AddJoin(s0.lane, n.A.xz); n.StartAttach = -1; }
+                if (t.Synthetic.TryGetValue(n.EndAttach, out var s1)) { SnapOnto(s1.lane, s1.seg, ref n.D, ref n.C); OntoNode(s1.lane, ref n.D, ref n.C); AddJoin(s1.lane, n.D.xz); n.EndAttach = -1; }
             }
             sub.Regions.Clear();
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error || i.Key == "Placemaker.Parking.Issue.NoEntrance");

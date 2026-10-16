@@ -105,6 +105,7 @@ namespace Placemaker.Tests
             if (preset != "") Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint q = 0;
             Editor.AddDefaultFeatures(r, () => ++q);
+            ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
             Assert.False(plan.HasErrors, $"{type}/{preset}");
             var bad = Violations(plan, site);

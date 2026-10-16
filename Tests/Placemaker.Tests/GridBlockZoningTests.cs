@@ -87,7 +87,9 @@ namespace Placemaker.Tests
             if (!string.IsNullOrEmpty(preset)) Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
-            return Composer.Compose(r, new AreaShape { Ring = Ring(block, ring), Source = AreaSource.Drawn }, site, CancellationToken.None);
+            var outline = Ring(block, ring);
+            ShopTestEntrances.Place(r, outline, site, footpath: true);
+            return Composer.Compose(r, new AreaShape { Ring = outline, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 
         /// <summary>
@@ -178,12 +180,21 @@ namespace Placemaker.Tests
             var plots = plan.Layers.SelectMany(l => l.Regions).Where(Cutouts.IsCutout).Select(g => Poly.To2D(g.Ring)).ToList();
             Assert.NotEmpty(plots);
             var zoned = plan.ZoneCells.Where(c => c.State == ZoneCellState.Zoned).Select(c => 0.25f * (c.A + c.B + c.C + c.D)).ToList();
+            var lanes = plan.Layers.SelectMany(l => l.Nets).Where(n => n.Role == NetRole.Alley).Select(n => (n.A.xz, n.D.xz)).ToList();
+            int full = 0;
             foreach (var q in plots)
             {
                 int n = zoned.Count(p => Poly.Contains(q, p));
+                // (rf-shops3) The plot's own depth: a row's end plot by a cut corner of the outline may be planned a cell shallower.
+                // Its front is the side along a lane, its depth the side next to it.
+                int front = Enumerable.Range(0, q.Length).OrderBy(i => lanes.Min(l => math.sqrt(Placemaker.Core.Layers.Common.SegmentIndex.DistSq(0.5f * (q[i] + q[(i + 1) % q.Length]), l.Item1, l.Item2)))).First();
+                int depth = (int)math.round(math.distance(q[(front + 1) % q.Length], q[(front + 2) % q.Length]) / 8f);
+                Assert.InRange(depth, 2, rows);
+                if (depth == rows) full++;
                 // At least two columns, each the plot's full depth.
-                Assert.True(n >= 2 * rows && n % rows == 0, $"{preset}/{ring}: plot at {Poly.Centroid(q)} has {n} zoned cells (whole columns of {rows} rows expected)");
+                Assert.True(n >= 2 * depth && n % depth == 0, $"{preset}/{ring}: plot at {Poly.Centroid(q)} has {n} zoned cells (whole columns of {depth} rows expected)");
             }
+            Assert.True(full * 2 >= plots.Count, $"{preset}/{ring}: only {full} of {plots.Count} plots are {rows} rows deep");
         }
 
         /// <summary>

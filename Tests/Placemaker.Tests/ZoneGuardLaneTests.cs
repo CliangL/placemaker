@@ -388,6 +388,7 @@ namespace Placemaker.Tests
             var r = editor.SingleLayerRecipe(GeneratorRegistry.Get(type), 5);
             if (preset != "") editor.ApplyPreset(r, Placemaker.Core.Tool.RecipePaths.Root, preset);
             uint n = 0; editor.AddDefaultFeatures(r, () => ++n);
+            ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
             var lanes = plan.Layers.SelectMany(l => l.Nets).Where(x => ZoneBlockPredictor.Zones(x.Role)).ToList();
             Assert.NotEmpty(lanes);

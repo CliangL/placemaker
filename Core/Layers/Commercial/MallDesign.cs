@@ -114,7 +114,7 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>(rf-shops3) Forgets the design counters and lists a composition left behind (a variant tried and taken back).</summary>
         public void ResetDesign()
         {
-            KeptLand.Clear(); RowHolds.Clear(); SpineFronts.Clear(); Drives.Clear();
+            KeptLand.Clear(); RowHolds.Clear(); SpineFronts.Clear(); Drives.Clear(); KerbDrives.Clear();
             BikeRackCount = 0; FoodCartCount = 0; _paint = null;
         }
 

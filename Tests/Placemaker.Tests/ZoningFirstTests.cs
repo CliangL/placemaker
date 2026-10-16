@@ -84,10 +84,11 @@ namespace Placemaker.Tests
             foreach (var c in zoned)
                 Assert.True(plots.Any(q => Poly.Contains(q, Centre(c)) || (lanePlotsExempt && FacesLane(q) && Poly.DistanceToBoundary(q, Centre(c)) < 4.5f)),
                     $"{ctx}: zoned cell at {Centre(c)} lies in no plot");
-            // Nothing of the host on a zoned cell (decals may lie anywhere; objects of other layers are cleared too).
+            // Nothing of the host on a zoned cell (decals may lie anywhere; objects of other layers are cleared too) but the plot planting
+            // (rf-shops3: trees and shrubs at the back of a plot, tree.plot / bush.plot; the growing building clears what is in its way).
             foreach (var l in plan.Layers.Where(l => l.GeneratorId != Cutouts.ZoningLayer))
             {
-                foreach (var o in l.Objects.Where(o => o.Role != ObjectRole.Decal))
+                foreach (var o in l.Objects.Where(o => o.Role != ObjectRole.Decal && !Cutouts.KeepsOnPlot(o)))
                     Assert.False(zoned.Any(c => Poly.Contains(Shrink(new[] { c.A, c.B, c.C, c.D }, 0.3f), o.Position.xz)), $"{ctx}: {l.GeneratorId} {o.Role} on a zoned cell at {o.Position.xz}");
                 foreach (var n in l.Nets.Where(n => !ZoneBlockPredictor.Zones(n.Role)))
                     for (int i = 0; i <= 16; i++)
@@ -187,6 +188,7 @@ namespace Placemaker.Tests
             if (preset != "") Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
+            ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
             if (!plan.Layers.SelectMany(l => l.Regions).Any(Cutouts.IsCutout)) return;   // a layout without shops on this site
             AssertPlotsAreCells(plan, type, $"{type}/{preset}", true, ring);

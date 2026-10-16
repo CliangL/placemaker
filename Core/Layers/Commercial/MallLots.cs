@@ -59,6 +59,7 @@ namespace Placemaker.Core.Layers.Commercial
                     if (len >= (kind == 1 ? 12f : 5f))
                     {
                         var m = pts[(first + (k0 + k1) / 2) % count];
+                        if (kind == 2) m = ClearOfNodes(piece, pts, first, count, k0, k1, m);
                         var q1 = pts[(first + k0 + (k1 - k0) / 4) % count];
                         var q2 = pts[(first + k0 + (k1 - k0) * 3 / 4) % count];
                         found.Add((len, m, kind == 1 && len > 90f ? q1 : m, kind == 1 ? "entrance" : "alley"));
@@ -77,6 +78,103 @@ namespace Placemaker.Core.Layers.Commercial
                 if (!near) list.Add((f.at2, f.kind));
             }
             return list;
+        }
+
+        /// <summary>A lot's way onto a lane lands on one of the lane's nodes or at least this far (m) from every one.</summary>
+        private const float NodeClear = 8f;
+
+        /// <summary>
+        /// (rf-shops3) A lot's way onto a lane keeps clear of the lane's nodes (its corners, the joins on it): a stub 4 m from a corner
+        /// of a ring left a lane piece shorter than its two junctions need, which the game rejects (MallNetGeometryTests). Of the run's
+        /// samples, the one nearest its middle that lands <see cref="NodeClear"/> from every node, or on a node where the piece has no
+        /// corner (the lot planner moves a way in off its own corners); else the middle.
+        /// </summary>
+        private float2 ClearOfNodes(float2[] piece, List<float2> pts, int first, int count, int k0, int k1, float2 mid)
+        {
+            bool Good(float2 p)
+            {
+                float gap = NodeGap(p);
+                if (gap >= NodeClear) return true;
+                if (gap > 1f) return false;
+                foreach (var v in piece) if (math.distance(v, p) < 4f) return false;
+                return true;
+            }
+            if (Good(mid)) return mid;
+            int c = (k0 + k1) / 2;
+            for (int off = 1; off <= (k1 - k0) / 2 + 1; off++)
+                foreach (int k in new[] { c - off, c + off })
+                {
+                    if (k < k0 || k > k1) continue;
+                    var p = pts[(first + k) % count];
+                    if (Good(p)) return p;
+                }
+            return mid;
+        }
+
+        /// <summary>
+        /// (rf-shops3) Does a lot's stub land on a lane so close to a node of the lane (a corner, a join) that the lane piece between
+        /// them is shorter than its two junctions need (NetFit's model: the game folds it, InvalidShape)? On a node is fine: within 1 m
+        /// of a corner (Finish moves the corner onto the stub's end) or 1.5 m of a join (CommitLot moves the stub's end onto it).
+        /// </summary>
+        private static bool StubFolds(LotTry t)
+        {
+            foreach (var n in t.Sub.Nets)
+                for (int end = 0; end < 2; end++)
+                {
+                    long id = end == 0 ? n.StartAttach : n.EndAttach;
+                    if (!t.Synthetic.TryGetValue(id, out var s)) continue;
+                    var p = end == 0 ? n.A : n.D; var c = end == 0 ? n.B : n.C;
+                    if (LandingFolds(s.lane, s.seg, p.xz, math.normalizesafe((c - p).xz), NetFit.Half(n))) return true;
+                }
+            return false;
+        }
+
+        private static bool LandingFolds(Lane lane, int seg, float2 p, float2 into, float half)
+        {
+            int n = lane.Points.Count;
+            if (seg < 0 || seg + 1 >= n) return false;
+            foreach (var v in lane.Points) if (math.distance(v, p) <= 1f) return false;
+            foreach (var j in lane.Joins) if (math.distance(j, p) < 1.5f) return false;
+            var a = lane.Points[seg]; var b = lane.Points[seg + 1];
+            float len = math.distance(a, b);
+            if (len < 0.01f) return false;
+            var dir = (b - a) / len;
+            float sp = math.dot(p - a, dir), h = lane.Half;
+            foreach (int side in new[] { -1, 1 })
+            {
+                // The nearest node that way along the segment: a join on it, else the segment's end (a corner or the lane's end).
+                float gap = side > 0 ? len - sp : sp; bool join = false;
+                foreach (var j in lane.Joins)
+                {
+                    float sj = math.dot(j - a, dir);
+                    if (math.distance(a + dir * sj, j) > 0.5f) continue;
+                    float g = (sj - sp) * side;
+                    if (g > 0.01f && g < gap) { gap = g; join = true; }
+                }
+                var dl = dir * side;
+                float need = NetFit.Cutback(dl, h, into, half);
+                int k = side > 0 ? seg + 1 : seg, other = k + side;
+                if (lane.Closed && other < 0) other = n - 2;
+                if (lane.Closed && other >= n) other = 1;
+                // At the node: a corner turns into the next segment; a join or the lane's end is taken as a crossing of the lane's width.
+                need += !join && other >= 0 && other < n ? NetFit.Cutback(-dl, h, math.normalizesafe(lane.Points[other] - lane.Points[k]), h) : h;
+                if (gap < need - 0.05f) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Distance (m) from where <paramref name="p"/> meets the lanes it lies along to the nearest node of those lanes.</summary>
+        private float NodeGap(float2 p)
+        {
+            float best = float.MaxValue;
+            foreach (var l in Lanes)
+            {
+                var q = Project(l, p, out float d);
+                if (d - l.Half > LaneContact + 0.5f) continue;
+                foreach (var v in l.Points) best = math.min(best, math.distance(v, q));
+                foreach (var v in l.Joins) best = math.min(best, math.distance(v, q));
+            }
+            return best;
         }
 
         private int Classify(List<StreetFrontage.RoadLine> roads, float2 p)
@@ -258,6 +356,7 @@ namespace Placemaker.Core.Layers.Commercial
                     }
                     var t = PlanLot(shape, entries, bag, salt + (uint)(si * 3), true);
                     if (t == null || NetFit.Violations(t.Sub.Nets, t.Site).Count > 0) continue;   // a connector the game would fold (InvalidShape)
+                    if (StubFolds(t)) continue;   // (rf-shops3) or a lane piece between its stub and a node of the lane
                     float fill = t.Capacity * 26f / math.max(1f, Poly.Area(t.Ring));
                     float score = t.Capacity * math.min(1f, fill / GoodFill);
                     if (score > bestScore) { bestScore = score; best = t; }
@@ -367,12 +466,17 @@ namespace Placemaker.Core.Layers.Commercial
         public const float PlotClear = 4.2f;
 
         /// <summary>The piece minus everything within <see cref="PlotClear"/> of a shop plot (simple parts, largest first).</summary>
+        /// <remarks>(rf-shops3) And of a row band held for later (<see cref="RowHolds"/>): the entrance compositions plan their lots
+        /// before the rows they hold are placed, and a lot's aisle ending 0.75 m inside a held side row closed a zone column of
+        /// its plot (the strip mall's side rows lost their zoning).</remarks>
         public List<float2[]> KeepOffPlots(float2[] piece, float clear = PlotClear)
         {
             var result = new List<float2[]>();
-            if (Shops.Count == 0) { result.Add(piece); return result; }
+            var plots = new List<float2[]>(Shops);
+            plots.AddRange(RowHolds);
+            if (plots.Count == 0) { result.Add(piece); return result; }
             var grown = new List<IReadOnlyList<float2>>();
-            foreach (var s in Shops)
+            foreach (var s in plots)
             {
                 var c = Poly.Centroid(s);
                 bool near = false;
