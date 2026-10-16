@@ -1,6 +1,7 @@
 {
   "formatVersion": 1,
   "id": "stripMall",
+  "order": 3,
   "nameKey": "Placemaker.Recipe.StripMall",
   "descriptionKey": "Placemaker.Recipe.StripMall.Description",
   "icon": "Media/Game/Icons/ZoneCommercial.svg",

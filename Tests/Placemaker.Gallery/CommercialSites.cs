@@ -18,6 +18,9 @@ namespace Placemaker.Gallery
         public static float3[] Make(string kind, float area, out SiteContext site)
         {
             float3[] ring;
+            // (shops2) The game runner's land made to order (Show.ps1 -Shape/-Size): "land-<shape>-<W>x<D>", e.g. land-l-280x260,
+            // land-rect-300x280, land-circle-260x260: the outline as SuitePlot draws it, a Small Road ring 16 m outside its box.
+            if (kind.StartsWith("land-")) return Land(kind, out site);
             switch (kind)
             {
                 case "curved": ring = Round(out site); break;
@@ -40,6 +43,21 @@ namespace Placemaker.Gallery
                 }
             }
             return ring;
+        }
+
+        private static float3[] Land(string kind, out SiteContext site)
+        {
+            var parts = kind.Split('-');
+            var wd = parts[2].Split('x');
+            // land-<shape>-<W>x<D>[-<gap>][-f]: gap from the outline to the road centre (8: the outline 2 m off the kerb, as the bucket draws it); f: the road follows the outline
+            bool follow = parts.Contains("f");
+            var gapPart = parts.Skip(3).FirstOrDefault(x => x != "f");
+            var plot = new Placemaker.Core.Suite.SuitePlot { RoadsFollow = follow, Gap = gapPart != null ? float.Parse(gapPart, System.Globalization.CultureInfo.InvariantCulture) : 8f, Shape = parts[1], Size = new float2(float.Parse(wd[0], System.Globalization.CultureInfo.InvariantCulture), float.Parse(wd[1], System.Globalization.CultureInfo.InvariantCulture)) };
+            site = new SiteContext();
+            long id = 700;
+            foreach (var seg in plot.RingRoads()) Line(site, ref id, seg.A, seg.B, 12f);
+            foreach (var g in ZoneLots.SiteGrids(site, null)) { var c = g; c.Predicted = false; c.Existing = false; site.ZoneGrids.Add(c); }
+            return plot.Outline().Select(p => new float3(p.x, 0, p.y)).ToArray();
         }
 
         private static NearbyNet Net(long id, float2 a, float2 b, float2 c, float2 d, float w) => new NearbyNet

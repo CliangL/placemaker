@@ -1,0 +1,13 @@
+{
+  "_about": "UI mock test shelf (fixed): the Make-row categories as the UI tests expect them. The mock host and backend read this, never Recipes/shelf, so product shelf decisions (hiding types and styles) do not break the UI tests. Only whole categories are hidden here (industry, transport).",
+  "id": "parking",
+  "name": "Parking",
+  "order": 2,
+  "hidden": false,
+  "groups": [
+    "parking"
+  ],
+  "types": [],
+  "hiddenTypes": [],
+  "hiddenStyles": {}
+}

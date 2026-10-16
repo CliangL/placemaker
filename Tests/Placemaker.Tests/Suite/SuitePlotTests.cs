@@ -9,6 +9,23 @@ namespace Placemaker.Tests.Suite
     public class SuitePlotTests
     {
         [Fact]
+        public void ManyBigPlots_WrapIntoRowsSouth_AllOnTheMap()
+        {
+            var l = new SuiteLayout();
+            var all = new List<SuitePlot>();
+            for (int i = 0; i < 30; i++) all.Add(l.AddPlot(new SuitePlot { Size = new float2(360, 280) }));
+            foreach (var p in all) Assert.True(l.OnMap(p), p.Name);
+            for (int i = 0; i < all.Count; i++)
+                for (int j = i + 1; j < all.Count; j++)
+                {
+                    var a = all[i]; var b = all[j];
+                    bool apart = a.OuterMax.x <= b.OuterMin.x || b.OuterMax.x <= a.OuterMin.x || a.OuterMax.y <= b.OuterMin.y || b.OuterMax.y <= a.OuterMin.y;
+                    Assert.True(apart, a.Name + " overlaps " + b.Name);
+                }
+            Assert.Equal(l.Base, l.Height(all[29].Center.x, all[29].Center.y), 2);   // flat, clear of the grid's slope rows
+        }
+
+        [Fact]
         public void Plots_LieEastOfTheGrid_InARow_WithoutOverlap()
         {
             var l = new SuiteLayout();

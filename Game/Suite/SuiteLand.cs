@@ -66,6 +66,7 @@ namespace Placemaker.Game.Suite
                 if (p.HasWater && p.Water != "north" && p.Water != "south" && p.Water != "east" && p.Water != "west") { error = "land: water side must be north, south, east or west, not " + p.Water; return null; }
                 string roads = ((string)land["roads"] ?? "around").ToLowerInvariant();
                 p.RoadsAround = roads != "none";
+                p.RoadsFollow = roads == "follow";
                 if (land["road"] != null) p.Road = (string)land["road"];
                 if (land["gap"] != null) p.Gap = math.max(4f, (float)land["gap"]);
                 if (p.Size.x < 4f || p.Size.y < 4f || p.Size.x > 4000f || p.Size.y > 4000f) { error = $"land: size {p.Size.x} x {p.Size.y} m is outside 4..4000 m"; return null; }

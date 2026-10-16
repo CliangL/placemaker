@@ -46,6 +46,8 @@ namespace Placemaker.Core.Layers.Leisure
             c.Slider("stalls", 16, 0, 60, 1, "count", ControlTier.Essential, "market").Tip();
             c.Slider("aisle", 4.5, 3, 8, 0.5, "m", ControlTier.Essential, "market").Tip();
             c.Toggle("treeRing", true, ControlTier.Essential, "market").Tip();
+            // (shops2) The user, Big market: "shouldn't it fill the entire area and have more intermingled other things?"
+            c.Toggle("fill", false, ControlTier.Essential, "market").Tip();
             c.Choice("centerKind", "statue", ControlTier.Essential, "market", "none", "any", "fountain", "statue");
             c.Asset("stallAsset", AssetCategories.MarketStall, ControlTier.More, "market");
             c.Slider("treeSpacing", 8, 5, 14, 1, "m", ControlTier.More, "market").Layout(7).When("treeRing=true");
@@ -69,7 +71,7 @@ namespace Placemaker.Core.Layers.Leisure
         protected override void DefinePresets()
         {
             Preset("weekly", ("stalls", 16.0), ("aisle", 4.5), ("treeRing", true), ("centerKind", "statue"));
-            Preset("bigMarket", ("stalls", 44.0), ("aisle", 4.0), ("treeRing", false), ("centerKind", "none"), ("cafe", 0.0));
+            Preset("bigMarket", ("stalls", 44.0), ("aisle", 4.0), ("treeRing", false), ("centerKind", "none"), ("cafe", 0.0), ("fill", true));
             Preset("farmers", ("stalls", 10.0), ("aisle", 5.5), ("treeRing", true), ("cafe", 3.0), ("centerKind", "fountain"), ("pattern", "border"));
         }
 
@@ -83,6 +85,78 @@ namespace Placemaker.Core.Layers.Leisure
         /// </summary>
         public static int ScaledStalls(int stalls, float area) =>
             stalls <= 0 ? 0 : math.min(240, (int)math.round(stalls * math.clamp(area / StallsReferenceArea, 1f, 4f)));
+
+        /// <summary>(shops2) Spacing of the market streets (m) when the market fills the square.</summary>
+        public const float StreetStep = 56f;
+
+        /// <summary>
+        /// (shops2) The filled market's streets: aisles 6 m wide across the square on its axes every <see cref="StreetStep"/> m
+        /// (the middle ones are the main aisles), lined with trees; at every other crossing a food court (cafe seating round
+        /// trees and benches), so the stall blocks are broken up by shade and places to sit, not one sea of stalls.
+        /// </summary>
+        private static void MarketStreets(LayerContext ctx, Occupancy occ, LayerRegion region, float2 c, float2 axis, List<Gate> gates, List<float2> pits)
+        {
+            PlazaDressing.Extents(region, c, axis, out float minA, out float maxA, out float minB, out float maxB);
+            var side = new float2(-axis.y, axis.x);
+            var us = new List<float>(); var vs = new List<float>();
+            for (float u = 0f; u <= maxA - 20f; u += StreetStep) { us.Add(u); if (u > 0f && -u >= minA + 20f) us.Add(-u); }
+            for (float v = 0f; v <= maxB - 20f; v += StreetStep) { vs.Add(v); if (v > 0f && -v >= minB + 20f) vs.Add(-v); }
+            const float half = 3.2f;
+            foreach (var u in us) occ.TakeCorridor(c + axis * u + side * minB, c + axis * u + side * maxB, half, 6);
+            foreach (var v in vs) occ.TakeCorridor(c + side * v + axis * minA, c + side * v + axis * maxA, half, 6);
+            bool trees = AssetAvailability.Require(ctx.Plan, AssetCategories.Tree, new[] { ctx.S("treeAsset") }, Keys.Category(AssetCategories.Tree));
+            var ids = string.IsNullOrEmpty(ctx.S("treeAsset")) ? PlazaArt.ChestnutTrees : new[] { ctx.S("treeAsset") };
+            int t = 0;
+            // Trees along the streets that run along the square's axis (one side each), every 14 m, clear of the crossings.
+            if (trees)
+                foreach (var v in vs)
+                    for (float u = minA + 8f; u <= maxA - 8f; u += 14f)
+                    {
+                        bool nearCross = false; foreach (var uu in us) if (math.abs(u - uu) < 8f) nearCross = true;
+                        if (nearCross) continue;
+                        var p = c + axis * u + side * (v + half + 2.1f);
+                        if (!region.Contains(p) || PlazaDressing.NearGate(p, gates, 6f)) continue;
+                        if (LeisureKit.Put(ctx, occ, p, 0f, ObjectRole.Tree, AssetMix.Pick(ids, (uint)t), null, 1.6f, Hashing.Mix(ctx.Seed, 0x7300u + (uint)t), 0.6f, 0.1f, 3, 3)) { pits.Add(p); t++; }
+                    }
+            // Food courts at every other crossing (not the centre, where the main aisles meet).
+            bool seats = PlazaArt.Available(ctx, "cafeAsset", AssetCategories.CafeSeating, AssetCategories.Picnic);
+            var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0);
+            int courts = 0;
+            for (int i = 0; i < us.Count; i++)
+                for (int j = 0; j < vs.Count; j++)
+                {
+                    float u = us[i], v = vs[j];
+                    if (u == 0f && v == 0f) continue;
+                    int iu = (int)math.round(u / StreetStep), iv = (int)math.round(v / StreetStep);
+                    if (((iu + iv) & 1) != 0) continue;
+                    var q = c + axis * u + side * v;
+                    const float R = 11f;
+                    if (!region.Contains(q) || Placemaker.Core.Geometry.Poly.DistanceToBoundary(region.Ring, q) < R + 4f) continue;
+                    // The court: a tree in each corner, cafe seating between them, benches facing in.
+                    for (int k = 0; k < 4; k++)
+                    {
+                        float a = math.atan2(axis.y, axis.x) + math.PI * 0.25f + k * math.PI * 0.5f;
+                        var dir = new float2(math.cos(a), math.sin(a));
+                        var tp = q + dir * (R - 2f);
+                        if (trees && LeisureKit.Put(ctx, occ, tp, 0f, ObjectRole.Tree, AssetMix.Pick(ids, (uint)t), null, 1.6f, Hashing.Mix(ctx.Seed, 0x7400u + (uint)t), 0.6f, 0.1f, 3, 3)) { pits.Add(tp); t++; }
+                    }
+                    for (int k = 0; k < 4; k++)
+                    {
+                        float a = math.atan2(axis.y, axis.x) + k * math.PI * 0.5f;
+                        var dir = new float2(math.cos(a), math.sin(a));
+                        var sp = q + dir * (R - 4.5f) + new float2(-dir.y, dir.x) * 4.5f;
+                        uint vr = Hashing.Mix(ctx.Seed, 0xC0C0u + (uint)(courts * 8 + k));
+                        if (seats) LeisureKit.Put(ctx, occ, sp, math.atan2(dir.x, dir.y), ObjectRole.Furniture, PlazaArt.Or(ctx, "cafeAsset", PlazaArt.Patios, vr), AssetCategories.CafeSeating, 2.4f, vr, 0.5f, 0.2f, 0);
+                        var bp = q + dir * (R - 1.5f) - new float2(-dir.y, dir.x) * 4f;
+                        LeisureKit.Put(ctx, occ, bp, math.atan2(-dir.x, -dir.y), ObjectRole.Bench, bench, null, 1.1f, Hashing.Mix(vr, 7u), 0.5f, 0.1f);
+                    }
+                    occ.Take(q, R, 0);
+                    courts++;
+                }
+            ctx.Plan.Facts["marketStreets"] = us.Count + vs.Count;
+            ctx.Plan.Facts["foodCourts"] = courts;
+            ctx.Plan.Facts["streetTrees"] = t;
+        }
 
         protected override void PlanCore(LayerContext ctx)
         {
@@ -184,17 +258,23 @@ namespace Placemaker.Core.Layers.Leisure
             }
             ctx.Check();
 
+            // (shops2) A market filling the whole square: tree-lined market streets every ~55 m, food courts at some of their
+            // crossings, and stalls in every block between them.
+            bool fill = ctx.B("fill");
+            if (fill) MarketStreets(ctx, occ, region, centre, axis, gates, pits);
+            ctx.Check();
+
             // The market block: stalls back to back round the centre, facing their aisles, on a lighter floor.
             int stalls = 0;
             int asked = ctx.I("stalls");
-            int wanted = ScaledStalls(asked, region.Area);
+            int wanted = fill ? (int)math.min(2400f, region.Area / 18f) : ScaledStalls(asked, region.Area);
             if (wanted > 0 && PlazaArt.Available(ctx, "stallAsset", AssetCategories.MarketStall, AssetCategories.Kiosk))
             {
                 stalls = PlazaDressing.StallBlock(ctx, occ, region, centre, axis, wanted, ctx.F("aisle"), "stallAsset", 0x5700u, out var block);
                 if (stalls > 0)
                     pave.Add(new OrientedRect { Center = block.Center, Axis = block.Axis, HalfLength = block.HalfLength + 2.5f, HalfWidth = block.HalfWidth + 1.5f }.Ring,
                         SurfaceRole.Plaza, palette.Accent, AssetCategories.SurfacePaving);
-                if (stalls < asked) ctx.Issue(IssueSeverity.Info, "Placemaker.Market.Issue.Fewer", stalls, asked);
+                if (stalls < asked && !fill) ctx.Issue(IssueSeverity.Info, "Placemaker.Market.Issue.Fewer", stalls, asked);
             }
             ctx.Check();
 

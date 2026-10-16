@@ -163,7 +163,7 @@ namespace Placemaker.Core.Layers.Commercial
         private const float MinMainRun = 60f;
 
         /// <summary>(shops) The lengths of a plan's lists (and a copy of its facts), so a composition that fell back can be taken out again.</summary>
-        private sealed class PlanMark
+        protected sealed class PlanMark
         {
             private int _regions, _surfaces, _nets, _objects, _areas, _terraform, _paint, _zoning, _stats, _issues;
             private Dictionary<string, double> _facts;

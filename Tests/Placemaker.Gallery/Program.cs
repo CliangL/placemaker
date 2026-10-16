@@ -502,6 +502,8 @@ namespace Placemaker.Gallery
         public string Summary = "", File = "";
         public double Ms;
         public int Objects, Nets, Surfaces, Errors, Warnings, BenchesOffPath, Overlaps, Outside, Decals, EdgeSpikes;
+        /// <summary>(shops2) The first layer plan's facts (the composition's own numbers).</summary>
+        public Dictionary<string, double> Facts = new Dictionary<string, double>();
         /// <summary>(s30) Glitch metrics of the final ground (curtain, net seats) for terrain renders.</summary>
         public string Glitch;
         public double PathMetres;
@@ -709,6 +711,7 @@ namespace Placemaker.Gallery
                 plan = new ComposedPlan();
             }
             res.Ms = sw.Elapsed.TotalMilliseconds;
+            if (plan.Layers.Count > 0) foreach (var kv in plan.Layers[0].Facts) res.Facts[kv.Key] = kv.Value;
 
             var dir = Path.Combine(outDir, job.Type);
             Directory.CreateDirectory(dir);
@@ -1525,7 +1528,7 @@ namespace Placemaker.Gallery
                     {
                         type = j.Type, variant = j.Variant, file = r.File, ms = Math.Round(r.Ms), failure = r.Failure, objects = r.Objects, nets = r.Nets,
                         pathMetres = Math.Round(r.PathMetres), surfaces = r.Surfaces, errors = r.Errors, warnings = r.Warnings,
-                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, edgeSpikes = r.EdgeSpikes, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(),
+                        benchesOffPath = r.BenchesOffPath, overlaps = r.Overlaps, outside = r.Outside, edgeSpikes = r.EdgeSpikes, decals = r.Decals, byRole = r.ByRole, byCategory = r.ByCategory.OrderByDescending(k => k.Value).ToDictionary(k => k.Key, k => k.Value), issues = r.IssueKeys.Distinct().ToList(), facts = r.Facts,
                         roads = r.RoadLegend.Select(e => new { role = e.Role, asset = e.AssetId, lengthM = e.LengthM, count = e.Count }).ToList(),
                     });
                 }

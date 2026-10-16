@@ -1,6 +1,7 @@
 {
   "formatVersion": 1,
   "id": "mallDistrict",
+  "order": 1,
   "nameKey": "Placemaker.Recipe.MallDistrict",
   "descriptionKey": "Placemaker.Recipe.MallDistrict.Description",
   "icon": "Media/Game/Icons/ZoneCommercial.svg",

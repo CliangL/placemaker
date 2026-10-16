@@ -39,24 +39,27 @@ Pictures in `docs/refactor/shops-ref/`:
 > and I say I want a strip mall, I should get a giant strip mall with multiple rows of buildings and a labyrinth of
 > parking, right?
 
-## Reading, as a checklist
+## Correction (the user, relayed by the lead, same day)
+
+> I didn't say 25% less. I said 25% remaining, 75% less. Perfect the best. Ditch the rest.
+
+So about a **quarter** of the shops and squares types and styles stay; the rest is hidden through the shelf.
+
+## Reading, as a checklist (after the correction)
 
 | Item | Verdict | Do |
 |---|---|---|
-| Mall district | nearly A | **Front and centre**, the first and main shops type. Polish only. |
+| Mall district | nearly A | **Front and centre**: the first shops type. Keep **Shopping district** and **Downtown**; hide car-free quarter (pedestrian), mixed use and shopping village. |
 | Mall district: Downtown | nearly A | Needs more parking mixed in. |
-| Mall park: Family park, Commons, Garden square | liked (cool park and mall integrations) | Keep. Garden square: the garden "stops", so fix it so it always works. More integrations like these are welcome. |
-| Strip mall (all styles) | F | **Rebuild as a REAL strip mall:** mostly parking, buildings in rows along the lot, several rows and a parking "labyrinth" on big areas (`real-2`). Not a park. |
-| Megastores | A- | Becomes the regular strip mall look; rename it (no "Megastores"). |
-| Big box | good idea, wrong result | A real big box: a large store and a big lot, not a park mall. |
-| Retail park, default | okay | Keep and polish. |
-| Outlet village | F, same problem | Rebuild like the strip mall (no giant park areas), or hide. |
-| Outdoor mall | not great, 80% park | Rethink as a mall, or hide. A park next to a mall is the user's job, not the type's. |
-| Shopping village | okay | Hide the pedestrian-only ("civilian") styles. |
-| Market square | all bad except Big market | Big market: fill the whole area, mixed with other things. Hide the rest. |
-| Fairground | doesn't belong | **Hide every fairground style.** |
-| Amphitheatre, Bandstand town | nice, but parks | **Move to Parks** (check whether Parks already has an amphitheatre and merge). |
-| Overall | | **Keep only about 25 %** of shops and squares types and styles, hide about 75 %: "Perfect the best. Ditch the rest." |
+| Mall park: Family park, Commons, Garden square | liked (cool park and mall integrations) | Keep all three. Garden square: the garden "stops", so fix it so it always works. |
+| Strip mall | F | **One real strip mall**, built from the Megastores look (Megastores is renamed away): mostly parking, rows of buildings facing the lot, several rows and a parking "labyrinth" on big areas (`real-2`). Not a park. Corner, neighbourhood and rear alley hidden. |
+| Big box | good idea, wrong result | A real big box (a large store and a big lot), **only if it earns its place**; else hidden. |
+| Retail park, default | okay | Only if among the very best; hidden for now (its Megastores look becomes the strip mall). |
+| Market square: Big market | the only good one | Keep **only if it fills the whole area well**, mixed with other things. Weekly and farmers hidden. |
+| Outlet village, outdoor mall, shopping village, high street, plaza, shopping plaza, shops & park | ditched | Hidden. |
+| Fairground | doesn't belong | **Hidden** (every style). |
+| Amphitheatre, Bandstand lawn | nice, but parks | **Moved to Parks** (Parks has no amphitheatre type of its own). |
+| Overall | | **About 25 % remains**; spend the effort perfecting those. |
 
 **Testing:** big areas (four times the test block), long rectangles, L shapes and circles, beside the small block.
 Every kept type and style must build correctly every time and look like a real place (compare with `real-1..3`).

@@ -142,13 +142,39 @@ namespace Placemaker.Core.Suite
         /// <summary>Adds a plot after the last one (centred on the grid's middle row), named P1, P2...</summary>
         public SuitePlot AddPlot(SuitePlot p)
         {
-            float x = GridMax.x + PlotGap;
-            foreach (var q in Plots) x = math.max(x, q.OuterMax.x + PlotGap);
             p.Name = "P" + (Plots.Count + 1);
-            p.Center = new float2(0f, (LineZ(0) + LineZ(NZ)) * 0.5f);
-            p.Center.x = x - p.OuterMin.x;   // OuterMin.x is relative to the centre while it is 0
+            p.Center = float2.zero;
+            float2 relMin = p.OuterMin, relMax = p.OuterMax;   // relative to the centre while it is 0
+            // (shops2) Rows: when the map's east edge is reached, a new row starts south of everything laid out so far (east of the
+            // grid, where the grid's slope rows do not reach), so a request with many big lands still gets them all.
+            int row = Plots.Count == 0 || !_row.TryGetValue(Plots[Plots.Count - 1], out var lr) ? 0 : lr;
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                float x = GridMax.x + PlotGap;
+                foreach (var q in Plots) if (_row.TryGetValue(q, out var qr) && qr == row) x = math.max(x, q.OuterMax.x + PlotGap);
+                float cz = row == 0 ? (LineZ(0) + LineZ(NZ)) * 0.5f : _rowTop[row] - relMax.y;
+                p.Center = new float2(x - relMin.x, cz);
+                if (attempt == 1 || OnMap(p)) break;
+                float top = GridMin.y;
+                foreach (var q in Plots) top = math.min(top, q.OuterMin.y);
+                row = _rowTop.Count + 1;
+                _rowTop[row] = top - PlotGap;
+                p.Center = float2.zero;
+            }
+            _row[p] = row;
             Plots.Add(p);
             return p;
+        }
+
+        private readonly Dictionary<SuitePlot, int> _row = new Dictionary<SuitePlot, int>();
+        private readonly Dictionary<int, float> _rowTop = new Dictionary<int, float>();
+
+        /// <summary>The plot lies inside the playable map with room for the ease back into the map's terrain.</summary>
+        public bool OnMap(SuitePlot plot)
+        {
+            var lo = MapOffset + Blend;
+            var hi = MapOffset + MapExtent - Blend;
+            return plot.OuterMin.x >= lo.x && plot.OuterMin.y >= lo.y && plot.OuterMax.x <= hi.x && plot.OuterMax.y <= hi.y;
         }
 
         /// <summary>1 over the grid's columns, easing to 0 within 60 m east of its apron (the slope rows stop there).</summary>
