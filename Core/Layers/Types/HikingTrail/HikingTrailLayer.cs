@@ -186,7 +186,7 @@ namespace Placemaker.Core.Layers.Types.Hiking
             Emit(t, gates);
             ctx.Check();
 
-            ShapeTerrain(t, landscape);
+            bool shaped = ShapeTerrain(t, landscape);
             Trailheads(t, gates);
             Viewpoints(t, gates);
             RestSpots(t, gates);
@@ -215,6 +215,8 @@ namespace Placemaker.Core.Layers.Types.Hiking
                     if (i == 0) ctx.AddRegion(LayerRegion.Circle(clearings[i].c, clearings[i].r, 20), "glade:0", RegionTags.Green, RegionTags.Core);
                     else ctx.AddRegion(LayerRegion.Circle(clearings[i].c, clearings[i].r, 20), "glade:" + i, RegionTags.Green);
             else EmitGreenRegions(ctx, occ);
+            // The trail was routed and emitted on the original ground: put it (and everything since) onto the shaped one.
+            if (shaped) Sculpt.Resnap(ctx);
             CommonStats(ctx);
             ctx.Stat(Keys.StatBushes, Count(ctx.Plan, ObjectRole.Bush), Keys.UnitCount);
             ctx.Stat("Placemaker.Stat.Viewpoints", t.Views, Keys.UnitCount);
@@ -469,49 +471,39 @@ namespace Placemaker.Core.Layers.Types.Hiking
 
         // ───────────── terrain ─────────────
 
-        private static void ShapeTerrain(Trail t, string landscape)
+        /// <summary>
+        /// Gorge (canyon) or ridge under the trail. (rf-nature) On a sloped node grid (Common/Sculpt) instead of one
+        /// levelled 12 m square per cell: on any ground that was not flat the old cells became a staircase of flat
+        /// squares (the ridge and summit trails on hills), and the 4-12 m steps between them left the game pits up to
+        /// 80 m deep beside the trail. The change follows the ground's own shape, dies out towards the outline, is never
+        /// steeper than 30 %, and the trail, its furniture and its planting are put back onto the new ground.
+        /// </summary>
+        private static bool ShapeTerrain(Trail t, string landscape)
         {
             var ctx = t.Ctx;
             string mode = ctx.S("shapeTerrain");
             if (mode == "auto") mode = landscape == "canyon" ? "gorge" : landscape == "ridge" ? "ridge" : "none";
-            if (mode != "gorge" && mode != "ridge") return;
+            if (mode != "gorge" && mode != "ridge") return false;
             float sign = mode == "gorge" ? -1f : 1f;
             float depth = ctx.F("terrainDepth");
             var region = t.Region;
-            float cell = math.max(TerrainShaper.DefaultCell, math.sqrt(region.Area / TerrainShaper.MaxCells));
+            float cell = math.max(Sculpt.DefaultCell, math.sqrt(region.Area / 12000f));
             float floor = 6f + t.Hw, wall = 10f + depth * 3f, falloff = 20f, slope = 0.3f;
-            int nx = (int)math.ceil((region.Max.x - region.Min.x) / cell), ny = (int)math.ceil((region.Max.y - region.Min.y) / cell);
-            int cells = 0;
-            for (int iy = 0; iy < ny; iy++)
+            var wet = ctx.Site?.WaterDepthAt;
+            var sc = Sculpt.Over(ctx, region, null, cell, p => wet != null && wet(p) > 0.05f);
+            sc.Shape((p, h0, cur) =>
             {
-                ctx.Check();
-                for (int ix = 0; ix < nx; ix++)
-                {
-                    var c = region.Min + (new float2(ix, iy) + 0.5f) * cell;
-                    if (!region.Contains(c)) continue;
-                    if (ctx.Site.WaterDepthAt(c) > 0.05f) continue;
-                    float edge = region.BoundaryDistance(c, falloff + cell);
-                    // The whole cell must lie inside, and the change is capped by the distance to the outline.
-                    float room = edge - cell * 0.71f;
-                    if (room <= 0f) continue;
-                    float d = t.Occ.Paths.Clearance(c, floor + wall + 1f);
-                    float x = math.saturate((d - floor) / wall);
-                    float profile = 1f - x * x * (3f - 2f * x);
-                    float e = math.saturate(edge / falloff);
-                    float offset = sign * depth * profile * e * e * (3f - 2f * e);
-                    offset = math.clamp(offset, -slope * room, slope * room);
-                    if (math.abs(offset) < 0.2f) continue;
-                    var sq = LayerRegion.Rect(c, new float2(1, 0), cell * 0.5f, cell * 0.5f);
-                    ctx.Plan.Terraform.Add(new PlannedTerraform
-                    {
-                        Ring = Poly.To3D(sq, ctx.H), Kind = offset > 0f ? TerraformKind.Raise : TerraformKind.Lower,
-                        TargetHeight = ctx.H(c) + offset, Permanent = true,
-                    });
-                    cells++;
-                }
-            }
-            if (cells > 0) ctx.Issue(IssueSeverity.Warning, TerrainShaper.PermanentKey);
-            ctx.Plan.Facts["terrainCells"] = cells;
+                float d = t.Occ.Paths.Clearance(p, floor + wall + 1f);
+                float x = math.saturate((d - floor) / wall);
+                float profile = 1f - x * x * (3f - 2f * x);
+                float edge = Sculpt.Smooth01(region.BoundaryDistance(p, falloff + 1f) / falloff);
+                return h0 + sign * depth * profile * edge;
+            });
+            sc.Smooth(2);
+            sc.LimitGrade(slope);
+            sc.CapToBorder(slope);
+            var r = sc.Emit(ctx, new[] { region.Ring });
+            return r != null && r.Cells > 0;
         }
 
         // ───────────── stops ─────────────

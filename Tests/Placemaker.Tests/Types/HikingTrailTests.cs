@@ -219,6 +219,26 @@ namespace Placemaker.Tests.Types
             Assert.DoesNotContain(meadow.Nets, n => n.Role == NetRole.PathwayWide);   // trails are narrow (art pass a3)
         }
 
+        [Theory]
+        [InlineData("ridgeHike")]
+        [InlineData("canyonTrail")]
+        [InlineData("summitClimb")]
+        public void ShapedGroundIsSmoothOnHillsAndTheTrailStandsOnIt(string preset)
+        {
+            // (rf-nature) The game runner's hills (4 m egg-crate bumps, 30 m apart): the old ridge and gorge were flat 12 m
+            // squares each levelled to its own centre (a staircase, with pits up to 80 m deep left beside the trail).
+            var site = TestKit.RoadAlongBottom(250);
+            site.HeightAt = p => 50f + 4f * math.sin(p.x * 0.21f) * math.sin(p.y * 0.21f);
+            var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues(preset)), B12Kit.FiveHa, site), B12Kit.FiveHa, site).Layers[0];
+            Assert.NotEmpty(plan.Terraform);
+            Assert.All(plan.Terraform, t => Assert.True(t.Sloped, "a levelled terraform square"));
+            // The trail (terrain-following pieces) lies on the shaped ground: every end within 1 m of the planned surface.
+            float after(float2 q) { foreach (var t in plan.Terraform) if (Placemaker.Core.Geometry.Poly.Contains(Placemaker.Core.Geometry.Poly.To2D(t.Ring), q)) return TerraformSurface.TargetAt(t, q); return site.HeightAt(q); }
+            foreach (var n in Trail(plan).Where(n => n.FollowTerrain))
+                foreach (var p in new[] { n.A, n.D })
+                    Assert.True(math.abs(p.y - after(p.xz)) < 1f, $"{preset}: trail end {p.y:0.0} m, ground {after(p.xz):0.0} m");
+        }
+
         [Fact]
         public void RouteShapesDiffer()
         {
