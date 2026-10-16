@@ -166,6 +166,21 @@ namespace Placemaker.Core.Layers.Commercial
             return best;
         }
 
+        /// <summary>
+        /// (shops) A leftover lot reads as a car park only when it is roughly a rectangle square to the main street, at least a
+        /// double row of bays (30 m) across: thin strips and odd shapes with turning bulbs looked like stray asphalt.
+        /// </summary>
+        private bool Tidy(float2[] ring)
+        {
+            var d = MainDir ?? new float2(1f, 0f);
+            var n = new float2(-d.y, d.x);
+            float a0 = float.MaxValue, a1 = float.MinValue, b0 = float.MaxValue, b1 = float.MinValue;
+            foreach (var p in ring) { float a = math.dot(p, d), b = math.dot(p, n); a0 = math.min(a0, a); a1 = math.max(a1, a); b0 = math.min(b0, b); b1 = math.max(b1, b); }
+            float w = a1 - a0, h = b1 - b0;
+            if (math.min(w, h) < 30f) return false;
+            return Poly.Area(ring) >= 0.75f * w * h;
+        }
+
         /// <summary>(shops) The main street's direction (the composition's frame): leftover lots lay their rows square to it.</summary>
         public float2? MainDir;
 
@@ -206,7 +221,7 @@ namespace Placemaker.Core.Layers.Commercial
                     if (score > bestScore) { bestScore = score; best = t; }
                 }
                 // (shops) A leftover lot of a handful of stalls reads as a stray patch of asphalt: ten at least, else the piece is planted.
-                if (best != null && best.Capacity >= 10f) return CommitLot(best, true);
+                if (best != null && best.Capacity >= 10f && Tidy(best.Ring)) return CommitLot(best, true);
             }
             return false;
         }

@@ -274,10 +274,37 @@ namespace Placemaker.Core.Layers.Commercial
         {
             for (int d = cells; d >= math.max(1, minCells); d--)
             {
+                // (shops) A lane plot whose back reaches a city street's first zone row is killed by the kerb strip there (the
+                // retail park's back terrace: 54 cells planned, 14 zoned): it stops a cell short of the street.
+                if (t0 != 0f && BacksOntoStreet(r, a, b, t0 + dir * d * Cell)) continue;
                 var rect = Rect(r, a, b, t0, t0 + dir * d * Cell);
                 if (!Shop(rect)) continue;
                 if (!string.IsNullOrEmpty(zone)) ShopZone[rect] = zone;
                 return true;
+            }
+            return false;
+        }
+
+        /// <summary>The band (m) beyond a city street's edge that its first zone row (and a kerb strip in it) takes.</summary>
+        public const float KerbBand = Cell + 1f;
+
+        /// <summary>
+        /// (shops) Does the back edge (t = <paramref name="tBack"/>, s0 … s1) of a lane plot lie within <see cref="KerbBand"/> of a
+        /// city street running along it? ZoneGuard.KerbStrips blocks the street's first row along the build, and a plot reaching
+        /// into it loses its cells (CleanBlockedCells blocks a column in front of a blocked cell).
+        /// </summary>
+        public bool BacksOntoStreet(StreetShops.Run r, float s0, float s1, float tBack)
+        {
+            var roads = _roads ?? (_roads = StreetFrontage.Roads(Ctx.Input));
+            for (int k = 0; k <= 4; k++)
+            {
+                var p = r.At(math.lerp(s0, s1, k / 4f), tBack);
+                foreach (var road in roads)
+                {
+                    var dir = math.normalizesafe(road.B - road.A);
+                    if (math.abs(math.dot(dir, r.Dir)) < 0.8f) continue;   // only a street along the plot's back
+                    if (math.sqrt(SegmentIndex.DistSq(p, road.A, road.B)) < road.HalfWidth + KerbBand) return true;
+                }
             }
             return false;
         }

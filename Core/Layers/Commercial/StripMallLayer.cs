@@ -51,7 +51,7 @@ namespace Placemaker.Core.Layers.Commercial
             if (style == "corner" && Corner(ctx, mall, runs)) return;
             if (style == "rearAlley" && RearAlley(ctx, mall, runs[0])) return;
             if (style != "classic") ctx.Issue(IssueSeverity.Info, FallbackKey);
-            if (!Classic(ctx, mall, runs[0]))
+            if (!Classic(ctx, mall, runs[0], runs))
             {
                 if (mall.Extra) return;
                 // No room for a lot and a lane: plots straight on the street.
@@ -70,7 +70,7 @@ namespace Placemaker.Core.Layers.Commercial
             if (s1 - s0 > max) { float c = 0.5f * (s0 + s1); s0 = c - max * 0.5f; s1 = c + max * 0.5f; }
         }
 
-        private static bool Classic(LayerContext ctx, Mall mall, StreetShops.Run r)
+        private static bool Classic(LayerContext ctx, Mall mall, StreetShops.Run r, List<StreetShops.Run> runs = null)
         {
             Span(ctx, r, out float s0, out float s1);
             if (mall.Extra)
@@ -86,8 +86,15 @@ namespace Placemaker.Core.Layers.Commercial
             float reach = math.min(mall.Reach(r, s0, s1), mall.FreeReach(r, s0, s1));
             // (s26) The shops front this lane (across it from the lot): it must carry zone blocks.
             var (laneAsset, h) = Mall.ShopLane(ctx);
+            // (shops) A block deep enough for two strips, with a street behind: this one takes the front half, so the back
+            // street gets its own strip (ComposeMore) back to back with this one instead of half a block of lot or lawn.
+            float need = Mall.LotDepth(1) + 2f * h + 2f * Mall.Cell + 1f;
+            if (!mall.Extra && runs != null && reach >= 2f * need + 4f)
+                foreach (var o in runs)
+                    if (math.dot(o.In, r.In) < -0.7f && o.Length >= 60f) { reach = math.max(need, reach * 0.5f - 2f); break; }
+            // (shops) The shops keep their depth before the lot does: fewer aisles first, then shallower shops.
             while (aisles > 0 && Mall.LotDepth(aisles) + 2 * h + cells * Mall.Cell > reach - 1f)
-                if (cells > 2) cells--; else aisles--;
+                if (aisles > 1) aisles--; else if (cells > 2) cells--; else aisles--;
             if (aisles == 0) return false;
             float lt = Mall.LotDepth(aisles);
             var lane = mall.AddLane(r.At(s0 + h, 0f), -r.In, new[] { r.At(s0 + h, lt + h), r.At(s1 - h, lt + h) }, r.At(s1 - h, 0f), -r.In, NetRole.Alley, laneAsset, h);

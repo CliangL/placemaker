@@ -73,7 +73,8 @@ namespace Placemaker.Core.Layers.Commercial
             float parkW = 0f, parkD = 0f;
             for (int guard = 0; guard < 12; guard++)
             {
-                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h;
+                // (shops) With no outer row a ring row backs onto the street: it keeps clear of the street's first zone row (Mall.KerbBand).
+                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h + (street[k] && outer == 0 ? Mall.KerbBand : 0f);
                 parkW = (s1 - s0) - inset[1] - inset[3] - 2f * h;
                 parkD = reach - inset[0] - inset[2] - 2f * h;
                 if (parkW >= 36f && parkD >= 30f) break;
