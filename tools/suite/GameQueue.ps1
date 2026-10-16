@@ -527,24 +527,52 @@ function Q-ParseErrors([string]$file) {
     return @($err | Where-Object { $_ } | ForEach-Object { "$(Split-Path $file -Leaf) line $($_.Extent.StartLineNumber): $($_.Message)" })
 }
 
-# @{ dir (the copy's tools\suite, '' when none); hash; errors }
-function Q-DispatcherCopy([string]$scriptDir) {
-    $lines = @()
+# The scripts a dispatcher copy is made from: what the worktree has COMMITTED (git HEAD). Uncommitted edits to these
+# scripts (an agent's experiment in progress) never become the dispatcher, nor the game host it starts for everyone's
+# requests. Not a git worktree: the files as they are. Returns @{ files = @{ name = path }; from; errors; tmp }.
+function Q-DispatcherSources([string]$scriptDir) {
+    $repo = Split-Path (Split-Path $scriptDir)
+    $files = @{}; $dirty = @()
     foreach ($f in $script:QDispFiles) {
         $p = Join-Path $scriptDir $f
-        if (-not (Test-Path -LiteralPath $p)) { return @{ dir = ''; hash = ''; errors = @("$f is missing in $scriptDir") } }
-        $lines += "${f}:" + (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash
+        if (-not (Test-Path -LiteralPath $p)) { return @{ files = @{}; from = $scriptDir; errors = @("$f is missing in $scriptDir"); tmp = '' } }
+        $files[$f] = $p
     }
+    try { $dirty = @(& git -C $repo status --porcelain --untracked-files=no -- @($script:QDispFiles | ForEach-Object { "tools/suite/$_" }) 2>$null | Where-Object { "$_".Trim() }) } catch { $dirty = @() }
+    if ($dirty.Count -eq 0) { return @{ files = $files; from = $scriptDir; errors = @(); tmp = '' } }
+    $tmp = Join-Path $script:Q.Disp ('.src-' + $PID + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    foreach ($f in $script:QDispFiles) {
+        $dst = Join-Path $tmp $f
+        $pr = Start-Process -FilePath 'git' -ArgumentList @('-C', "`"$repo`"", 'show', "HEAD:tools/suite/$f") -RedirectStandardOutput $dst -RedirectStandardError "$dst.err" -NoNewWindow -Wait -PassThru
+        if ($pr.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $dst) -or (Get-Item -LiteralPath $dst).Length -eq 0) { return @{ files = @{}; from = $scriptDir; errors = @("$f is not committed in $repo (the dispatcher runs committed scripts only)"); tmp = $tmp } }
+        $files[$f] = $dst
+    }
+    $names = @($dirty | ForEach-Object { ("$_".Substring(3)).Trim() }) -join ', '
+    Q-Say "your uncommitted edits to $names are not used by the dispatcher or its game host: they run what that worktree has committed (HEAD)"
+    return @{ files = $files; from = "$scriptDir (committed: HEAD; uncommitted edits to $names not used)"; errors = @(); tmp = $tmp }
+}
+
+# @{ dir (the copy's tools\suite, '' when none); hash; errors }
+function Q-DispatcherCopy([string]$scriptDir) {
+    $s = Q-DispatcherSources $scriptDir
+    try {
+        if ($s.errors.Count -gt 0) { return @{ dir = ''; hash = ''; errors = $s.errors } }
+        $lines = @(); foreach ($f in $script:QDispFiles) { $lines += "${f}:" + (Get-FileHash -LiteralPath $s.files[$f] -Algorithm SHA256).Hash }
+        return (Q-DispatcherCopyFrom $s $lines)
+    } finally { if ($s.tmp -and (Test-Path -LiteralPath $s.tmp)) { Remove-Item -LiteralPath $s.tmp -Recurse -Force -ErrorAction SilentlyContinue } }
+}
+function Q-DispatcherCopyFrom($s, $lines) {
     $hash = (Q-HashText ($lines -join "`n")).Substring(0, 12)
     $root = Join-Path $script:Q.Disp $hash
     $dir = Join-Path $root 'tools\suite'
     if (-not (Test-Path -LiteralPath (Join-Path $dir 'copied.txt'))) {
-        $errs = @(); foreach ($f in $script:QDispFiles) { $errs += @(Q-ParseErrors (Join-Path $scriptDir $f)) }
+        $errs = @(); foreach ($f in $script:QDispFiles) { $errs += @(Q-ParseErrors $s.files[$f] | ForEach-Object { $_ -replace '^\S+ line', "$f line" }) }
         if ($errs.Count -gt 0) { return @{ dir = ''; hash = $hash; errors = $errs } }
         $tmp = Join-Path $script:Q.Disp ('.tmp-' + $PID + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
         New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'tools\suite') | Out-Null
-        foreach ($f in $script:QDispFiles) { Copy-Item -LiteralPath (Join-Path $scriptDir $f) -Destination (Join-Path $tmp "tools\suite\$f") -Force }
-        Set-Content -LiteralPath (Join-Path $tmp 'tools\suite\copied.txt') -Value "from $scriptDir at $((Get-Date).ToString('o'))" -Encoding UTF8
+        foreach ($f in $script:QDispFiles) { Copy-Item -LiteralPath $s.files[$f] -Destination (Join-Path $tmp "tools\suite\$f") -Force }
+        Set-Content -LiteralPath (Join-Path $tmp 'tools\suite\copied.txt') -Value "from $($s.from) at $((Get-Date).ToString('o'))" -Encoding UTF8
         # an incomplete one (looked at again now: another client may have just finished the same copy, and may be starting
         # a dispatcher from it)
         if ((Test-Path -LiteralPath $root) -and -not (Test-Path -LiteralPath (Join-Path $dir 'copied.txt'))) { $gone = Join-Path $script:Q.Disp ('.gone-' + [guid]::NewGuid().ToString('N').Substring(0, 6)); try { [IO.Directory]::Move($root, $gone); Remove-Item -LiteralPath $gone -Recurse -Force -ErrorAction SilentlyContinue } catch { } }

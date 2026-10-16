@@ -74,7 +74,8 @@ session) and wait their turn. Ten agents share one game, launched once per build
   line for 10 minutes (the game quits first) and the user's build is back. It runs from a copy of its scripts in the
   queue folder (`dispatcher\<hash>\`), not from the worktree that started it, so a worktree removed or edited later
   cannot break it; a copy that does not parse is never started, and `dispatcher\good.json` names the last copy that ran
-  well (a client falls back to it).
+  well (a client falls back to it). The copy is what that worktree has committed: uncommitted edits to the queue's
+  scripts (`Game-Dispatcher`, `GameQueue`, `ModsInstall`, `Run-Suite`, `Contact-Suite`) are never run for everyone.
 * Results go to `-ResultsRoot`, by default `C:\Users\jack\cs2-area-tool\.forensics\suite\runs\<runId>\` whatever
   worktree asks (the commands print full paths). Each request's folder is its own: its builds numbered from 01 with
   the ids it asked for, its pictures, and its own part of `logs/Placemaker.log` and `logs/Player.log` (from where the
