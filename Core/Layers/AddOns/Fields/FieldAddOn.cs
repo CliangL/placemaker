@@ -110,6 +110,18 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         /// </summary>
         public const string HostSizedTag = "hostSized";
 
+        /// <summary>(rf-sports) Region tag prefix a host adds to choose the court surface ("courtSurface:clay"); the field's own choice otherwise.</summary>
+        public const string SurfaceTagPrefix = "courtSurface:";
+
+        /// <summary>(rf-sports) The surface a host's place asks for, else <paramref name="own"/>.</summary>
+        public static string HostSurface(AreaInput input, string own)
+        {
+            if (input?.RegionTags != null)
+                foreach (var t in input.RegionTags)
+                    if (t != null && t.StartsWith(SurfaceTagPrefix, StringComparison.Ordinal)) return t.Substring(SurfaceTagPrefix.Length);
+            return own;
+        }
+
         /// <summary>The formats of this field (biggest first).</summary>
         protected abstract FieldFormat[] Formats(LayerContext ctx);
 

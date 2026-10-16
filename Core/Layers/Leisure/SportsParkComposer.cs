@@ -1160,7 +1160,9 @@ namespace Placemaker.Core.Layers.Leisure
                             if (u > -1.5f) u += 3f;   // keep the middle (the walk) clear
                             if (u > r.HalfLength - 1.5f) break;
                             var p = r.Local(u, -r.HalfWidth + 1.4f);
-                            if (LeisureKit.Put(ctx, _occ, p, r.Yaw + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One(""), cat, 0.5f, Hashing.Mix(seed, 0xB1Cu), 0.1f, 0.1f)) placed++;
+                            // (rf-sports) Single racks 1.4 m apart: the automatic bike pool starts with the big bicycle shelter,
+                            // and six shelters overlapped each other (every build kept them only by anarchy).
+                            if (LeisureKit.Put(ctx, _occ, p, r.Yaw + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One("", "BikeRack01", "BikeRack02", "CommercialBikeRack01"), cat, 0.5f, Hashing.Mix(seed, 0xB1Cu), 0.1f, 0.1f)) placed++;
                         }
                         ctx.Plan.Facts["bikeRacks"] = placed;
                     }
@@ -1388,7 +1390,13 @@ namespace Placemaker.Core.Layers.Leisure
             {
                 if (!it.Place) continue;
                 string place = Amenities.Place(it.Layer);
-                ctx.AddRegion(it.Rect.Ring, place + ":" + k++, place, SportsParkLayer.SizedTag);
+            {
+                // (rf-sports) The park's court surface (a tennis club plays on clay) rides on the place as a tag.
+                string court = ctx.S("tennisSurface");
+                if (it.Layer == "tennisCourts" && !string.IsNullOrEmpty(court) && court != "hard")
+                    ctx.AddRegion(it.Rect.Ring, place + ":" + k++, place, SportsParkLayer.SizedTag, FieldAddOn.SurfaceTagPrefix + court);
+                else ctx.AddRegion(it.Rect.Ring, place + ":" + k++, place, SportsParkLayer.SizedTag);
+            }
             }
             if (_kids != null) ctx.AddRegion(_kids.Rect.Ring, "core:clubyard", RegionTags.Core, RegionTags.Green);
             var pieces = FreeSpace.Pieces(_region, p => _occ.Corridors.Overlaps(p, 0.75f) || _occ.HitsPolygon(p, 0.5f) || InItem(p, 0.5f), 3f, 150f, ctx.Cancel);

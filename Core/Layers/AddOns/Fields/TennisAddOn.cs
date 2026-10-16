@@ -76,7 +76,8 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             float hw = math.min(blockW * 0.5f, (blockL >= blockW ? place.HalfWidth : place.HalfLength) - 0.4f);
             var block = f.Rect(0f, 0f, hl, hw);
 
-            FieldKit.Surface(ctx, block.Ring, ctx.S("surface") == "grass" ? SurfaceRole.Grass : SurfaceRole.Asphalt, ctx.S("surfaceAsset"), Chain(ctx.S("surface")));
+            string surface = HostSurface(ctx.Input, ctx.S("surface"));
+            FieldKit.Surface(ctx, block.Ring, surface == "grass" ? SurfaceRole.Grass : SurfaceRole.Asphalt, ctx.S("surfaceAsset"), Chain(surface));
 
             string netCat = FieldKit.Cat(ctx, ctx.S("netAsset"), AssetCategories.SportsTennis);
             var l = j.Lines;

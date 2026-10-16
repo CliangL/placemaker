@@ -62,7 +62,8 @@ namespace Placemaker.Core.Layers.AddOns.Fields
 
             // A full court gets the game's own court decal (28 × 15 m) when installed: one clean stamp
             // instead of hundreds of line pieces. Compact courts (26 × 14) keep painted lines.
-            bool stamp = !compact && ctx.B("lines") && AssetAvailability.Has(AssetCategories.DecalCourtBasketball);
+            // (rf-sports) The court decals are the game's own (named explicitly): the marking decals being usable is enough.
+            bool stamp = !compact && ctx.B("lines") && (AssetAvailability.Has(AssetCategories.DecalCourtBasketball) || AssetAvailability.Has(AssetCategories.DecalMarkings));
             if (stamp)
             {
                 // The decal's long side is its local X: turn it a quarter so it runs along the court. (rf-sports) Named

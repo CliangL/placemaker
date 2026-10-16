@@ -376,7 +376,9 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 {
                     var pad = pads[pi];
                     float share = pad.HalfLength * pad.HalfWidth / math.max(1f, padArea);
-                    int items = rampCat == null ? 0 : (int)math.ceil(ctx.I("skateItems") * share);
+                    // (rf-sports) A pad is filled to its size (about one obstacle per 100 m2 of pad): a 120 m pad with twelve
+                    // obstacles read as an empty concrete slab.
+                    int items = rampCat == null ? 0 : math.max((int)math.ceil(ctx.I("skateItems") * share), ctx.I("skateItems") > 0 ? (int)(pad.HalfLength * pad.HalfWidth * 4f / 100f) : 0);
                     int ledgeWanted = (int)math.ceil(ctx.I("ledges") * share);
                     skate += SkateLines(ctx, occ, pad, items, ctx.L("rampAssets"), rampCat, Hashing.Mix(ctx.Seed, 0x5CA0u + (uint)pi));
                     if (ledgeWanted > 0)
@@ -400,7 +402,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 {
                     float spacing = ctx.F("jumpSpacing");
                     int maxJumps = math.clamp((int)((major * 0.55f - 17f) / spacing), 2, 6);
-                    jumps = DirtJumps.PlaceLines(ctx, region, occ, all, far, axis, ctx.I("jumpLines"), maxJumps, ctx.F("jumpHeight"), spacing, true, true, 1, Hashing.Mix(ctx.Seed, 0xB3Au));
+                    jumps = DirtJumps.PlaceLines(ctx, region, occ, all, far, axis, ctx.I("jumpLines"), maxJumps, ctx.F("jumpHeight"), spacing, true, true, 3, Hashing.Mix(ctx.Seed, 0xB3Au));   // (rf-sports) 3 = dirt (1 was dry grass: the track was invisible)
                     if (jumps == 0) ctx.Issue(IssueSeverity.Info, "Placemaker.Ruins.Issue.Fewer", 0, ctx.I("jumpLines"));
                 }
                 else if (m == "blocks" && ctx.I("blocks") > 0)
@@ -430,6 +432,29 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                         occ.Take(p, 1.8f, 2);
                         fallenSlabs++;
                     }
+                // (rf-sports) The carriageway's own furniture, so the fallen deck reads as a highway: broken runs of jersey
+                // barriers along both edges and an abandoned vehicle or two left where the road gave way.
+                for (int e = -1; e <= 1; e += 2)
+                    for (float u = -s.R.HalfLength + 1.5f; u < s.R.HalfLength - 1f; u += 3.2f)
+                    {
+                        uint bv = Hashing.Mix(v, 0xBA00u + (uint)((u + 100f) * 10f) + (uint)(e + 1) * 7919u);
+                        if (Hashing.Unit(bv) < 0.25f + 0.45f * decay) continue;
+                        var p = s.R.Local(u, e * (s.R.HalfWidth - 0.9f));
+                        if (!region.ContainsDisc(p, 1f) || !occ.Free(p, 1f, 0.6f, 0.1f)) continue;
+                        float tilt = (Hashing.Unit(Hashing.Mix(bv, 1u)) - 0.5f) * 0.5f * decay;
+                        ctx.Object(p, s.R.Yaw + math.PI * 0.5f + tilt, ObjectRole.Furniture, AssetMix.One("", "ConcreteBarrier01", "ConcreteBarrier02"), bv, -1, AssetCategories.ScrapBarrier);
+                        occ.Take(p, 1f, 2);
+                    }
+                for (int k = 0; k < 2; k++)
+                {
+                    uint wv = Hashing.Mix(v, 0xCA50u + (uint)k);
+                    if (Hashing.Unit(wv) > 0.35f + 0.4f * decay) continue;
+                    var p = s.R.Local((Hashing.Unit(Hashing.Mix(wv, 1u)) - 0.5f) * s.R.HalfLength * 1.2f, (k == 0 ? -1f : 1f) * s.R.HalfWidth * 0.45f);
+                    if (!occ.Free(p, 2.6f, 1f, 0.2f)) continue;
+                    ctx.Object(p, s.R.Yaw + (k == 0 ? 0f : math.PI) + (Hashing.Unit(Hashing.Mix(wv, 2u)) - 0.5f) * 0.7f, ObjectRole.Furniture,
+                        AssetMix.One("", Wrecks[(int)(wv % (uint)Wrecks.Length)]), wv, -1, AssetCategories.ScrapWreck);
+                    occ.Take(p, 2.6f, 2);
+                }
                 if (rubbleCat != null)
                 {
                     var res = DecayKit.RubbleField(ctx, occ, guard, region, s.R.Center, math.max(s.R.HalfLength, s.R.HalfWidth) * 1.3f, math.min(1f, decay * 1.1f),
@@ -542,10 +567,18 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         }
 
         /// <summary>Skate lines along the pad: ramps at both ends facing in, rails/boxes between. Returns the count.</summary>
+        private static readonly string[] Wrecks = { "Prop_CarTrailer01", "Prop_ParkMaintenanceVehicle01", "Prop_CamperTrailer01" };
+        private static readonly string[] SkateEnds = { "SkateParkRamp01", "SkateParkRamp02", "SkateParkHalfPipe01", "SkateParkRamp03", "SkateParkRamp04", "SkateParkHalfPipe02" };
+        private static readonly string[] SkateMiddles = { "SkateParkBox01", "SkateParkRail01", "SkateParkBox02", "SkateParkRail02" };
+
         private static int SkateLines(LayerContext ctx, Occupancy occ, OrientedRect pad, int items, string[] ids, string cat, uint seed)
         {
             if (cat == null || items <= 0) return 0;
-            var lines = pad.HalfWidth >= 5f ? new[] { -pad.HalfWidth * 0.45f, pad.HalfWidth * 0.45f } : new[] { 0f };
+            // (rf-sports) One skate line per ~11 m of pad width (up to four), evenly across it.
+            int nl = pad.HalfWidth >= 5f ? math.clamp((int)math.round(pad.HalfWidth * 2f / 11f), 2, 4) : 1;
+            var lines = new float[nl];
+            for (int i = 0; i < nl; i++) lines[i] = nl == 1 ? 0f : -pad.HalfWidth * 0.8f + pad.HalfWidth * 1.6f * i / (nl - 1);
+            bool auto = ids == null || ids.Length == 0 || System.Array.TrueForAll(ids, string.IsNullOrEmpty);
             int perLine = (int)math.ceil(items / (float)lines.Length);
             int n = 0;
             for (int li = 0; li < lines.Length; li++)
@@ -560,8 +593,12 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                     float yaw = pad.Yaw + (k < slots / 2 ? 0f : math.PI);
                     if (!end) yaw = pad.Yaw + ((k + li) % 2 == 0 ? 0f : math.PI * 0.5f) * 0.25f;
                     uint v = Hashing.Mix(seed, (uint)(li * 64 + k));
+                    // (rf-sports) Automatic skate props are one uniform prop per build (every obstacle the same box): a line
+                    // gets ramps or a half-pipe at its ends and boxes and rails between, from the game's own skate set.
+                    var asset = auto ? AssetMix.One("", end ? SkateEnds[(int)(v % (uint)SkateEnds.Length)] : SkateMiddles[(int)(v % (uint)SkateMiddles.Length)])
+                        : AssetMix.Pick(ids, v);
                     foreach (var du in new[] { 0f, 1.5f, -1.5f })
-                        if (LeisureKit.Put(ctx, occ, pad.Local(u + du, w), yaw, ObjectRole.Furniture, AssetMix.Pick(ids, v), cat, 1.8f, v, 0.4f, 0.4f, 2))
+                        if (LeisureKit.Put(ctx, occ, pad.Local(u + du, w), yaw, ObjectRole.Furniture, asset, cat, 1.8f, v, 0.4f, 0.4f, 2))
                         { n++; break; }
                 }
             }
