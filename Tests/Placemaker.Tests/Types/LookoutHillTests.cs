@@ -126,6 +126,18 @@ namespace Placemaker.Tests.Types.T04
             }
             Out.WriteLine($"{preset}: {paths.Count} pieces, the last {walked:0} m: worst step away from the summit {worst:0.0} m");
             Assert.True(worst < 2f, $"{preset}: the path hooks round the plaza ({worst:0.0} m away again)");
+            // No sharp corner where two pieces of the climb meet (a turn back on the spot left an acute node the game dug
+            // a 7 m pit beside, on the sledding hill): consecutive pieces turn by less than 100 degrees.
+            float sharpest = 0f;
+            for (int i = 0; i + 1 < paths.Count; i++)
+            {
+                if (math.distance(paths[i].D.xz, paths[i + 1].A.xz) > 0.01f) continue;
+                var din = math.normalizesafe(paths[i].D.xz - paths[i].C.xz, math.normalizesafe(paths[i].D.xz - paths[i].A.xz));
+                var dout = math.normalizesafe(paths[i + 1].B.xz - paths[i + 1].A.xz, math.normalizesafe(paths[i + 1].D.xz - paths[i + 1].A.xz));
+                sharpest = math.max(sharpest, math.degrees(math.acos(math.clamp(math.dot(din, dout), -1f, 1f))));
+            }
+            Out.WriteLine($"{preset}: sharpest turn {sharpest:0} deg");
+            Assert.True(sharpest < 100f, $"{preset}: a {sharpest:0} deg corner in the climb");
         }
 
         [Fact]

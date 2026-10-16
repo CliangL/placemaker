@@ -62,6 +62,16 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                     // Try: on grade, on grade the other way (switchback turn), steeper, then straight up.
                     for (int attempt = 0; attempt < 5 && !moved; attempt++)
                     {
+                        // (rf-nature) Before turning back on the spot (a V: the new leg leaves at a hair's breadth from
+                        // the old one, an acute node the game dug a pit beside), try a round hairpin.
+                        if (attempt == 1 && UTurn(region, occ, pts, ref p, up, new float2(-up.y, up.x) * side, margin, spec))
+                        {
+                            side = -side;
+                            leg = 0f;
+                            q = p;
+                            moved = true;
+                            break;
+                        }
                         float grade = spec.Grade * (attempt >= 2 ? 1.8f : 1f);
                         if (attempt == 1 || attempt == 3) side = -side;
                         float sin = math.saturate(grade / math.max(1e-4f, gl));
@@ -80,15 +90,18 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                     moved = Ok(region, occ, q, margin, spec) && FarFromEarlier(pts, q, spec.Spacing);
                 }
                 if (!moved) break;
-                p = q;
-                pts.Add(p);
+                if (math.distancesq(p, q) > 1e-6f) { p = q; pts.Add(p); }
                 leg += Step;
                 if (spec.Style == "switchback" && leg >= spec.LegLength && gl > spec.Grade * 1.05f)
                 {
-                    // Hairpin: a short steeper rise, then back the other way.
+                    // Hairpin: a round U-turn up the slope (rf-nature: was one straight 7.5 m step straight uphill, a
+                    // 30 % piece between two sharp corners), then back the other way.
                     var up = g / math.max(1e-4f, gl);
-                    var hp = p + up * (spec.Spacing + 1.5f);
-                    if (Ok(region, occ, hp, margin, spec) && FarFromEarlier(pts, hp, spec.Spacing)) { p = hp; pts.Add(p); }
+                    if (!UTurn(region, occ, pts, ref p, up, new float2(-up.y, up.x) * side, margin, spec))
+                    {
+                        var hp = p + up * (spec.Spacing + 1.5f);
+                        if (Ok(region, occ, hp, margin, spec) && FarFromEarlier(pts, hp, spec.Spacing)) { p = hp; pts.Add(p); }
+                    }
                     side = -side;
                     leg = 0f;
                 }
@@ -104,6 +117,28 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
 
         public static bool Reached(List<float2> pts, ClimbSpec spec) =>
             pts.Count > 1 && math.distance(pts[pts.Count - 1], spec.Summit) <= spec.SummitRadius + Step;
+
+        /// <summary>
+        /// A half circle from <paramref name="p"/> that leaves along <paramref name="dir"/>, swings up the slope and comes
+        /// back the other way one leg spacing higher. Adds its points and moves p to its end; false (nothing added) when
+        /// any point is blocked.
+        /// </summary>
+        private static bool UTurn(LayerRegion region, Occupancy occ, List<float2> pts, ref float2 p, float2 up, float2 dir, float margin, ClimbSpec spec)
+        {
+            float r = (spec.Spacing + 1.5f) * 0.5f;
+            var c = p + up * r;
+            var arc = new float2[4];
+            for (int k = 1; k <= 4; k++)
+            {
+                float a = k * math.PI / 4f;
+                arc[k - 1] = c + (-up * math.cos(a) + dir * math.sin(a)) * r;
+                if (!Ok(region, occ, arc[k - 1], margin, spec)) return false;
+            }
+            if (!FarFromEarlier(pts, arc[3], spec.Spacing)) return false;
+            foreach (var q in arc) pts.Add(q);
+            p = arc[3];
+            return true;
+        }
 
         /// <summary>Distance from the summit at which the path turns straight onto the plaza.</summary>
         private static float Arrive(ClimbSpec spec) => spec.SummitRadius + spec.HalfWidth + 3f;
