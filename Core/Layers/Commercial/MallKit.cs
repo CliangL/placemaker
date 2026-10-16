@@ -310,6 +310,26 @@ namespace Placemaker.Core.Layers.Commercial
         }
 
         /// <summary>
+        /// (shops) How far in from outline point <paramref name="p"/> a lane plot's back must stay so it is clear of the first zone row
+        /// of a city street running along <paramref name="along"/> beside it (see <see cref="BacksOntoStreet"/>); 0 with no such street.
+        /// Wide streets (a 4-lane Medium Road) need more than narrow ones.
+        /// </summary>
+        public float KerbMargin(float2 p, float2 along)
+        {
+            var roads = _roads ?? (_roads = StreetFrontage.Roads(Ctx.Input));
+            float m = 0f;
+            foreach (var road in roads)
+            {
+                var dir = math.normalizesafe(road.B - road.A);
+                if (math.abs(math.dot(dir, math.normalizesafe(along))) < 0.8f) continue;
+                float d = math.sqrt(SegmentIndex.DistSq(p, road.A, road.B));
+                if (d > 40f) continue;
+                m = math.max(m, road.HalfWidth + KerbBand + 0.5f - d);
+            }
+            return m;
+        }
+
+        /// <summary>
         /// Rows on both sides (or one: side = ±1, 0 = both) of every segment of a lane, from its edge, <paramref name="trimStart"/>
         /// / <paramref name="trimEnd"/> metres kept clear at the lane's ends (a street mouth's gateway, a plaza).
         /// </summary>

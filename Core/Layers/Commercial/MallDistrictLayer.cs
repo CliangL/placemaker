@@ -69,18 +69,20 @@ namespace Placemaker.Core.Layers.Commercial
             bool back = mall.StreetAlong(r.At(s1, reach) + r.In * 0.5f, r.At(s0, reach) + r.In * 0.5f);
             bool left = (atStart && r.StartCorner) || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
 
+            // (shops) No outer row: rows backing onto a street keep clear of its first zone row (the kerb strip there), by the
+            // street's own width (Mall.KerbMargin).
+            float kbL = mall.KerbMargin(r.At(s0, reach * 0.5f), r.In), kbR = mall.KerbMargin(r.At(s1, reach * 0.5f), r.In);
+            float kbF = mall.KerbMargin(r.At(0.5f * (s0 + s1), 0f), r.Dir), kbB = mall.KerbMargin(r.At(0.5f * (s0 + s1), reach), r.Dir);
             // Fit: rails need a row on each side; shrink the rows until at least two rails and one block fit.
             float d = inner * Mall.Cell, o = outer * Mall.Cell;
             float sl = 0f, sr = 0f, tf = 0f, tb = 0f;
             for (int guard = 0; guard < 12; guard++)
             {
                 d = inner * Mall.Cell; o = outer * Mall.Cell;
-                // (shops) No outer row: rows backing onto a street keep out of its first zone row (Mall.KerbBand, from the kerb ~2 m off).
-                float kb = outer == 0 ? Mall.KerbBand - 2f : 0f;
-                sl = s0 + (left ? o + kb : 0f) + d + hr;
-                sr = s1 - (right ? o + kb : 0f) - d - hr;
-                tf = o + kb + d + hp;
-                tb = reach - (back ? o + kb : 0f) - d - hr;
+                sl = s0 + (left ? (outer == 0 ? kbL : o) : 0f) + d + hr;
+                sr = s1 - (right ? (outer == 0 ? kbR : o) : 0f) - d - hr;
+                tf = (outer == 0 ? kbF : o) + d + hp;
+                tb = reach - (back ? (outer == 0 ? kbB : o) : 0f) - d - hr;
                 if (sr - sl >= 2f * d + 2f * hr && tb - tf >= 2f * d + 2f * hp) break;
                 // Rows back to back stay two cells deep (a one-cell row would hand the row behind it its second zone row).
                 if (outer > 2) outer--; else if (inner > 2) inner--; else if (outer > 0) outer = 0; else break;
@@ -106,7 +108,7 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 for (int k = 0; k < xs.Count; k++)
                     rails[k] = mall.Connect(Mall.End.Street(r.At(xs[k], 0f), -r.In), null, Mall.End.Street(r.At(xs[k], mall.ReachAt(r, xs[k])), r.In), railRole, railAsset, hr);
-                tb = reach - o - (outer == 0 ? Mall.KerbBand - 2f : 0f) - d - hp;
+                tb = reach - (outer == 0 ? kbB : o) - d - hp;
             }
             else
             {

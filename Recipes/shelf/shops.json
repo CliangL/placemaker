@@ -27,6 +27,9 @@
     ],
     "retailPark": [
       "trade"
+    ],
+    "mallPark": [
+      "promenade"
     ]
   }
 }

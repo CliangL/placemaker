@@ -70,12 +70,15 @@ namespace Placemaker.Core.Layers.Commercial
             street[3] = (atStart && r.StartCorner) || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
 
             // Insets of the loop's centre line from each side; shrink rows until the park keeps at least 36 × 30 m.
+            // (shops) Per side, how far a ring row backing onto that street keeps in (its first zone row: Mall.KerbMargin).
+            float cm = 0.5f * (s0 + s1);
+            var kerb = new[] { mall.KerbMargin(r.At(cm, 0f), r.Dir), mall.KerbMargin(r.At(s1, reach * 0.5f), r.In), mall.KerbMargin(r.At(cm, reach), r.Dir), mall.KerbMargin(r.At(s0, reach * 0.5f), r.In) };
             float[] inset = new float[4];
             float parkW = 0f, parkD = 0f;
             for (int guard = 0; guard < 12; guard++)
             {
                 // (shops) With no outer row a ring row backs onto the street: it keeps clear of the street's first zone row (Mall.KerbBand).
-                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h + (street[k] && outer == 0 ? Mall.KerbBand - 2f : 0f);
+                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h + (street[k] && outer == 0 ? kerb[k] : 0f);
                 parkW = (s1 - s0) - inset[1] - inset[3] - 2f * h;
                 parkD = reach - inset[0] - inset[2] - 2f * h;
                 if (parkW >= 36f && parkD >= 30f) break;
