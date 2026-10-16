@@ -23,7 +23,7 @@ Run `show-19-builds-1016-062555-f02b` (all 3 types x every style, flat 150 x 140
 | farmstead | dairy | B- | keep, fixed | Barns, paddocks, hay meadows: reads as a farm. |
 | farmstead | arable | B- | keep, fixed | Big straw fields on a track grid. |
 | farmstead | mixed (= default) | B- | keep, fixed | The all-round farm. |
-| farmstead | hobby | D | see AFTER | Small plots were carpeted with grey raised-bed pieces. |
+| farmstead | hobby | D | **hide** | Small plots were carpeted with grey raised-bed pieces; once fixed it is just a small copy of mixed. |
 | farmstead | ranch | C | keep, fixed | Read as one empty lawn with three fenced squares. |
 
 ## Shared defects found (and fixed in the farm code)
@@ -55,6 +55,33 @@ being *automatic field crops* (`farm.crop`); they stay planters and garden crops
 The ponds (farmstead, animal park) are dug and get a water source after the build, but the runner's pictures without
 `-Grow` show the bare sand bed: water only flows while the simulation runs (the same holds for the wetland). See AFTER.
 
-## AFTER
+## Done
 
-(filled in below)
+Wrapped up on request (the shared game queue was backed up); no further game runs.
+
+- **Kept:** animalPark (pettingFarm, paddocks, horsePaddock, deerPark); farmstead (mixed/default, dairy, arable, ranch).
+- **Hidden** (shelf `Recipes/shelf/farms.json`, code kept, still builds by id): type `urbanFarm` (all 7 styles:
+  repetitive path grid, grey bed pieces, many objects for little effect); style `animalPark.aviaryGarden` (gazebos as
+  aviaries, no real aviary prop); style `farmstead.hobby` (a small copy of mixed).
+- **Changed:** the seven shared defects above (no grey bed crops, trailers in the yard and irrigation rigs in the arable
+  fields, wooden field shelters not gazebos, water-tank feed bins, unbroken tracks, petting pens one pen deep around a
+  meadow and duck pond, fenced ranch pastures with gates). Last commit (639d084): hedgerows are continuous hedge nets
+  that never cross a track; the animal park places no gazebo aviaries unless the aviary style asks for them.
+- **Runs:** BEFORE `show-19-builds-1016-062555-f02b`. AFTER (build c802cda-dirty, i.e. before 639d084):
+  `show-4-builds-1016-074917-09e2` (farmstead, flat block), `show-4-builds-1016-074920-6f38` (animal park, flat block),
+  `show-4-builds-1016-074923-4c99` / `-074926-0cc6` (plots).
+  Pictures (under `.forensics/suite/runs/`): `show-4-builds-1016-074917-09e2/shots/03-farmstead-mixed.06-45-clean.png`,
+  `show-4-builds-1016-074920-6f38/shots/01-animalPark-pettingFarm.06-45-clean.png`; before:
+  `show-19-builds-1016-062555-f02b/shots/01-urbanFarm-default.05-45-clean.png`.
+
+## Not done / known problems
+
+- Commit 639d084 (hedge nets, no gazebo aviaries) compiles but was **never seen in game**; the latest AFTER pictures
+  predate it (the petting farm there still shows two gazebos at the east edge).
+- No after-grade pass written per style; grades in the table are the BEFORE grades.
+- No animals anywhere (vanilla has no farm animal props usable here); paddocks and pens read as empty fenced grass.
+- Ponds show as bare sand beds in runner pictures without `-Grow` (water flows only while the sim runs); not checked with `-Grow`.
+- Without crop plants, fields are crop surface plus ruts only; water-tank feed bins are a stand-in for silos.
+- Ranch/dairy on small plots and slopes only checked on flat plots; no sloped-terrain run.
+- Animal park tests touched; farmstead has no new unit tests.
+- Branch not merged to master.
