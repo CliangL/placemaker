@@ -1156,7 +1156,7 @@ namespace Placemaker.Core.Layers.Leisure
                         int placed = 0;
                         for (int i = 0; i < racks; i++)
                         {
-                            float u = -r.HalfLength + 2f + i * 1.4f;
+                            float u = -r.HalfLength + 2f + i * 1.9f;   // (rf-sports) 1.9 m: the game's rack is 1.5 m long
                             if (u > -1.5f) u += 3f;   // keep the middle (the walk) clear
                             if (u > r.HalfLength - 1.5f) break;
                             var p = r.Local(u, -r.HalfWidth + 1.4f);

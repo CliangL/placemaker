@@ -104,7 +104,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 ("skateItems", 4.0), ("ledges", 2.0), ("embankment", 3.0), ("walls", 0.0), ("graffiti", 40.0), ("decay", 90.0), ("overgrowth", 70.0), ("benches", 2.0));
             Preset("graffitiPark", ("subtype", "graffitiPark"), ("deck", true), ("deckSide", "side"), ("collapse", 0.0), ("padShare", 60.0), ("skateItems", 6.0),
                 ("ledges", 4.0), ("walls", 10.0), ("graffiti", 100.0), ("decay", 25.0), ("overgrowth", 20.0), ("benches", 10.0));
-            Preset("parkour", ("subtype", "parkour"), ("deck", false), ("padShare", 35.0), ("skateItems", 2.0), ("ledges", 0.0), ("blocks", 30.0),
+            Preset("parkour", ("subtype", "parkour"), ("deck", false), ("padShare", 20.0), ("skateItems", 2.0), ("ledges", 0.0), ("blocks", 30.0),
                 ("blockSpacing", 4.5), ("walls", 6.0), ("graffiti", 45.0), ("decay", 40.0), ("overgrowth", 25.0));
             Preset("dirtJumps", ("subtype", "dirtJumps"), ("deck", true), ("deckSide", "side"), ("deckWidth", 12.0), ("collapse", 80.0), ("padShare", 0.0),
                 ("skateItems", 0.0), ("ledges", 0.0), ("jumpLines", 3.0), ("jumpHeight", 1.75), ("walls", 0.0), ("graffiti", 30.0), ("decay", 60.0), ("overgrowth", 55.0));
@@ -378,7 +378,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                     float share = pad.HalfLength * pad.HalfWidth / math.max(1f, padArea);
                     // (rf-sports) A pad is filled to its size (about one obstacle per 100 m2 of pad): a 120 m pad with twelve
                     // obstacles read as an empty concrete slab.
-                    int items = rampCat == null ? 0 : math.max((int)math.ceil(ctx.I("skateItems") * share), ctx.I("skateItems") > 0 ? (int)(pad.HalfLength * pad.HalfWidth * 4f / 100f) : 0);
+                    int items = rampCat == null ? 0 : math.max((int)math.ceil(ctx.I("skateItems") * share), ctx.I("skateItems") > 0 && sub != "parkour" ? (int)(pad.HalfLength * pad.HalfWidth * 4f / 100f) : 0);
                     int ledgeWanted = (int)math.ceil(ctx.I("ledges") * share);
                     skate += SkateLines(ctx, occ, pad, items, ctx.L("rampAssets"), rampCat, Hashing.Mix(ctx.Seed, 0x5CA0u + (uint)pi));
                     if (ledgeWanted > 0)
@@ -433,7 +433,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                         fallenSlabs++;
                     }
                 // (rf-sports) The carriageway's own furniture, so the fallen deck reads as a highway: broken runs of jersey
-                // barriers along both edges and an abandoned vehicle or two left where the road gave way.
+                // barriers along both edges. (No abandoned vehicles: the game has no vehicle props to stand in.)
                 for (int e = -1; e <= 1; e += 2)
                     for (float u = -s.R.HalfLength + 1.5f; u < s.R.HalfLength - 1f; u += 3.2f)
                     {
@@ -445,16 +445,6 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                         ctx.Object(p, s.R.Yaw + math.PI * 0.5f + tilt, ObjectRole.Furniture, AssetMix.One("", "ConcreteBarrier01", "ConcreteBarrier02"), bv, -1, AssetCategories.ScrapBarrier);
                         occ.Take(p, 1f, 2);
                     }
-                for (int k = 0; k < 2; k++)
-                {
-                    uint wv = Hashing.Mix(v, 0xCA50u + (uint)k);
-                    if (Hashing.Unit(wv) > 0.35f + 0.4f * decay) continue;
-                    var p = s.R.Local((Hashing.Unit(Hashing.Mix(wv, 1u)) - 0.5f) * s.R.HalfLength * 1.2f, (k == 0 ? -1f : 1f) * s.R.HalfWidth * 0.45f);
-                    if (!occ.Free(p, 2.6f, 1f, 0.2f)) continue;
-                    ctx.Object(p, s.R.Yaw + (k == 0 ? 0f : math.PI) + (Hashing.Unit(Hashing.Mix(wv, 2u)) - 0.5f) * 0.7f, ObjectRole.Furniture,
-                        AssetMix.One("", Wrecks[(int)(wv % (uint)Wrecks.Length)]), wv, -1, AssetCategories.ScrapWreck);
-                    occ.Take(p, 2.6f, 2);
-                }
                 if (rubbleCat != null)
                 {
                     var res = DecayKit.RubbleField(ctx, occ, guard, region, s.R.Center, math.max(s.R.HalfLength, s.R.HalfWidth) * 1.3f, math.min(1f, decay * 1.1f),
@@ -567,8 +557,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         }
 
         /// <summary>Skate lines along the pad: ramps at both ends facing in, rails/boxes between. Returns the count.</summary>
-        private static readonly string[] Wrecks = { "Prop_CarTrailer01", "Prop_ParkMaintenanceVehicle01", "Prop_CamperTrailer01" };
-        private static readonly string[] SkateEnds = { "SkateParkRamp01", "SkateParkRamp02", "SkateParkHalfPipe01", "SkateParkRamp03", "SkateParkRamp04", "SkateParkHalfPipe02" };
+        private static readonly string[] SkateEnds = { "SkateParkRamp01", "SkateParkRamp02", "SkateParkRamp03", "SkateParkRamp04" };
         private static readonly string[] SkateMiddles = { "SkateParkBox01", "SkateParkRail01", "SkateParkBox02", "SkateParkRail02" };
 
         private static int SkateLines(LayerContext ctx, Occupancy occ, OrientedRect pad, int items, string[] ids, string cat, uint seed)
@@ -579,8 +568,12 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
             var lines = new float[nl];
             for (int i = 0; i < nl; i++) lines[i] = nl == 1 ? 0f : -pad.HalfWidth * 0.8f + pad.HalfWidth * 1.6f * i / (nl - 1);
             bool auto = ids == null || ids.Length == 0 || System.Array.TrueForAll(ids, string.IsNullOrEmpty);
-            int perLine = (int)math.ceil(items / (float)lines.Length);
             int n = 0;
+            // (rf-sports) A big pad gets the game's half-pipe (14 x 5 m) as its centrepiece; the lines run round it.
+            if (auto && pad.HalfLength >= 12f && pad.HalfWidth >= 7f
+                && LeisureKit.Put(ctx, occ, pad.Center, pad.Yaw + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One("", "SkateParkHalfPipe01", "SkateParkHalfPipe02"), cat, 7.2f,
+                    Hashing.Mix(seed, 0x4A1Fu), 0.4f, 0.4f, 2)) n++;
+            int perLine = (int)math.ceil(items / (float)lines.Length);
             for (int li = 0; li < lines.Length; li++)
             {
                 float w = lines[li];
@@ -598,7 +591,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                     var asset = auto ? AssetMix.One("", end ? SkateEnds[(int)(v % (uint)SkateEnds.Length)] : SkateMiddles[(int)(v % (uint)SkateMiddles.Length)])
                         : AssetMix.Pick(ids, v);
                     foreach (var du in new[] { 0f, 1.5f, -1.5f })
-                        if (LeisureKit.Put(ctx, occ, pad.Local(u + du, w), yaw, ObjectRole.Furniture, asset, cat, 1.8f, v, 0.4f, 0.4f, 2))
+                        if (LeisureKit.Put(ctx, occ, pad.Local(u + du, w), yaw, ObjectRole.Furniture, asset, cat, end && auto ? 2.9f : 1.8f, v, 0.4f, 0.4f, 2))
                         { n++; break; }
                 }
             }

@@ -99,6 +99,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         public static void Dish(LayerContext ctx, float2 c, float radius, float depth)
         {
             float baseH = ctx.H(c);
+            ctx.Plan.Facts["intentionalPit"] = 1;   // (rf-sports) a skate bowl is dug on purpose: the pit guard filled it back in
             for (int i = 0; i < 2; i++)
             {
                 float f = i == 0 ? 1f : 0.6f;

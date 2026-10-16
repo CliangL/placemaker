@@ -78,6 +78,7 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                 foreach (var p in rim) j.Occ.Take(f.P(p), 1.2f, 2);
                 j.Occ.Take(f.P(centre), radius, 2);
                 ctx.Plan.Facts["bowlDepth"] = depth;
+                ctx.Plan.Facts["intentionalPit"] = 1;   // (rf-sports) dug on purpose: the pit guard raised the bowl back to flat ground
                 ctx.Plan.Facts["bowlRadius"] = radius;
             }
 
@@ -117,7 +118,9 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                     if (placed >= wanted) break;
                     uint v = j.V(0x5CA7u + (uint)placed * 31u);
                     var wp = f.P(p);
-                    if (LeisureKit.Put(ctx, j.Occ, wp, LeisureKit.Yaw(wp, f.P(face)), ObjectRole.Furniture, AssetMix.Pick(ids, v), AssetCategories.SportsSkate, 1.8f, v, 0.3f, 0.4f))
+                    // (rf-sports) Automatic skate props are one uniform prop per build (a deck of identical boxes): mix the game's set.
+                    var asset = ids == null || ids.Length == 0 ? AssetMix.One("", MixedSet[(int)(v % (uint)MixedSet.Length)]) : AssetMix.Pick(ids, v);
+                    if (LeisureKit.Put(ctx, j.Occ, wp, LeisureKit.Yaw(wp, f.P(face)), ObjectRole.Furniture, asset, AssetCategories.SportsSkate, 1.8f, v, 0.3f, 0.4f))
                     { placed++; j.Equipment++; }
                 }
             }
@@ -134,6 +137,8 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                     j.Toward, 2.5f, AssetMix.One(ctx.S("fenceAsset")));
             ctx.Stat("Placemaker.Stat.SkateFeatures", placed + (rim != null ? 1 : 0), Keys.UnitCount);
         }
+
+        private static readonly string[] MixedSet = { "SkateParkRamp01", "SkateParkBox01", "SkateParkRail01", "SkateParkRamp02", "SkateParkBox02", "SkateParkRail02", "SkateParkRamp03" };
 
         private static float2[] World(Frame f, List<float2> l)
         {
