@@ -127,6 +127,11 @@ With any of them it gets its own land, made to order at launch (east of the grid
   metres (`[[m, m, ...], ...]`, rows north to south, stretched over the land) or `-Heightmap` a greyscale PNG (`-Range`
   metres for white).
 * `-Roads`: `around` (default: a ring road, so entrances have a street) or `none` (open land, e.g. to test roads).
+* **The land touches its street (rf-shops3).** Show.ps1 gives made-to-order land `gap` 10 (the outline about 2 m off
+  the kerb of the 16 m ring road, as a user draws up to a street) and, for `l`, `circle`, `pinch` and `points`, a ring road
+  that follows the shape (`roads` `follow`). The old default (16 m) left the outline 8 m off the kerb, out of every type's
+  frontage reach: shops found no street and fell back to a park. Pass `gap` (or `roads` `around` round a circle) on purpose
+  for a site that does not touch its street. Scenario files (Send-Suite, Run-Suite -Set) keep the game's own default (16).
 * `-Land`: the same as JSON (a file, or the text; keys in `suite/schema.json` "land"), merged over the options, e.g.
   `{"points": [[0,0],[90,0],[90,40],[30,70],[0,60]], "ground": "bumpy"}`.
 

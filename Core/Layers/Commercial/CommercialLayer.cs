@@ -22,6 +22,8 @@ namespace Placemaker.Core.Layers.Commercial
         public const string FallbackKey = K + "Issue.Fallback";
         public const string PadKey = K + "Issue.Pad";
         public const string RestKey = K + "Issue.Rest";
+        /// <summary>(rf-shops3) A shops type planned from entrances whose layout does not fit the area, with no street along it.</summary>
+        public const string NoLayoutKey = K + "Issue.NoLayout";
 
         protected override bool TypedEntrances => false;
         protected override bool HostsStreetShops => false;
@@ -139,7 +141,13 @@ namespace Placemaker.Core.Layers.Commercial
                     CommonStats(ctx);
                     return;
                 }
-                // The site could not hold it: the type's older layout (its lanes join the streets themselves).
+                // The site could not hold it: the type's older layout (its lanes join the streets themselves) when a street runs
+                // along it; a shops type never quietly becomes a park (the lead: a user drawing 8 m off a road got one).
+                if (runs.Count == 0)
+                {
+                    ctx.Issue(IssueSeverity.Warning, NoLayoutKey);
+                    return;
+                }
                 mall = NewMall(ctx);
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
             }
@@ -328,6 +336,8 @@ namespace Placemaker.Core.Layers.Commercial
         /// </summary>
         protected virtual void LotFirst(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
         {
+            // (rf-shops3) Planned from entrances: no access alley or street row joins a street by itself (FillRest plans the lots).
+            if (mall.EntranceMode) return;
             int cells = Cells(ctx);
             var alleys = AccessAlleys(ctx, mall, runs, cells);
             ctx.Check();
@@ -441,6 +451,15 @@ namespace Placemaker.Core.Layers.Commercial
                     // Shut in by plots: give back the smallest plot that touches it and a street.
                     if (openAccess && Poly.Area(piece) >= 1200f) { var parts = Mall.Smooth(piece); var basis = parts.Count > 0 ? parts[0] : piece; if (Poly.Area(basis) >= 1200f && mall.Entries(basis).Count == 0 && mall.OpenAccess(basis)) { any = true; break; } }
                     if (mall.PolyLot(piece, Mall.Parking(ctx), salt + (uint)pass * 0x10u + (uint)i)) { any = true; break; }
+                    // (rf-shops3) An L or a T of land (the inside of a ring round an L) holds no tidy lot: cut it at its inner corner, square
+                    // to the main street, and try the parts (the rest is a new piece on the next pass).
+                    if (Poly.Area(piece) >= 1500f)
+                    {
+                        bool split = false;
+                        foreach (var part in mall.SplitAtReflex(piece))
+                            if (mall.PolyLot(part, Mall.Parking(ctx), salt + 0x7u + (uint)pass * 0x10u + (uint)i)) { split = true; break; }
+                        if (split) { any = true; break; }
+                    }
                     failed.Add(key);
                 }
                 if (!any) break;

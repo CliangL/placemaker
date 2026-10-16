@@ -67,6 +67,8 @@ namespace Placemaker.Core.Layers.Commercial
             float d = cells * Mall.Cell;
             bool bigBox = ctx.Raw("plotDepth") >= 44f;
             int maxPiece = bigBox ? 6 : 3;
+            // Anchors at the ends of every row (a grocer, a pharmacy), inline shops between; big boxes are all big.
+            mall.AnchorWeight = bigBox ? 1.25f : 1.8f;
             var ring = mall.Region.Ring;
             float sMin = float.MaxValue, sMax = float.MinValue, tMin = float.MaxValue, tMax = float.MinValue;
             foreach (var p in ring)
@@ -91,7 +93,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
             var line = mall.RingLineVar(InsetFor, 10f, 26f);
             if (line == null) return Fail(2);
-            var loop = mall.RingLoop(line, NetRole.Alley, asset, h);
+            var loop = mall.RingLoop(line, NetRole.Alley, asset, h, r.At(0.5f * (sMin + sMax), tMax));
             if (loop == null) return Fail(3);
             float2 OutN(int i) { var dd = math.normalizesafe(loop.Points[i + 1] - loop.Points[i]); return new float2(dd.y, -dd.x); }
             bool Front(int i) => math.dot(OutN(i), -r.In) > 0.55f;
@@ -112,6 +114,7 @@ namespace Placemaker.Core.Layers.Commercial
                 tF = math.min(tF, t); tB = math.max(tB, t); lsMin = math.min(lsMin, s); lsMax = math.max(lsMax, s);
             }
             float sMid = 0.5f * (lsMin + lsMax);
+            ctx.Plan.Facts["ringDepth"] = tB - tF;
 
             // ── rungs across the ring on deep sites: rows of shops back to back, lots between ──
             float D = tB - tF - 2f * h;
@@ -156,17 +159,21 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 // The frontage: the land between the main street and the ring's front drive, over the drive's front stretch.
                 float fa = float.MaxValue, fb = float.MinValue;
+                // (only the straight front: the corridors of the rounded corners reach past their ends)
                 for (int i = 0; i + 1 < loop.Points.Count; i++)
-                    if (Front(i))
+                    if (math.dot(OutN(i), -r.In) > 0.92f)
                         foreach (var p in new[] { loop.Points[i], loop.Points[i + 1] }) { float s = math.dot(p - r.A, r.Dir); fa = math.min(fa, s); fb = math.max(fb, s); }
+                fa += h + 1f; fb -= h + 1f;
                 if (fb - fa >= 20f && tFront - tMin >= 4f)
                 {
                     var rect = Mall.Rect(r, fa, fb, tMin - 2f, tFront);
                     float2[] piece = null;
                     try { piece = Mall.Largest(Poly.Intersection(mall.Region.Ring, rect), 60f); } catch (System.Exception) { piece = null; }
+                    ctx.Plan.Facts["frontageTry"] = piece == null ? -1 : Poly.IsConvex(piece) ? 1 : 0;
                     if (piece != null && Poly.IsConvex(piece))
                     {
                         var k = mall.Keep(piece, Mall.KeepKind.Frontage, salt++);
+                        ctx.Plan.Facts["frontageKept"] = k != null ? 1 : mall.Free(piece) ? 2 : 3;
                         if (k != null) { k.Frame = r; k.S0 = fa; k.S1 = fb; k.T0 = math.max(tMin, 0f); k.T1 = tFront; }
                     }
                 }
@@ -191,12 +198,20 @@ namespace Placemaker.Core.Layers.Commercial
                     if (dq < 0.5f && math.dot(q - r.A, r.In) < math.dot(end - r.A, r.In)) { target = lane; end = q; }
                 }
                 float t0 = math.dot(pF - r.A, r.In) + h + 0.3f, t1 = math.dot(end - r.A, r.In) - target.Half - 0.3f;
+                ctx.Plan.Facts["spineLen"] = t1 - t0;
                 if (t1 - t0 >= 22f)
                 {
                     float plazaD = x.Plaza ? 11f : 0f;
                     Mall.Kept spine = null, plaza = null;
-                    if (x.Plaza) plaza = mall.KeepRect(r, sSpine - 10f, sSpine + 10f, t1 - plazaD, t1, Mall.KeepKind.Plaza, salt++);
-                    if (x.Walkways) spine = mall.KeepRect(r, sSpine - 4f, sSpine + 4f, t0, t1 - (plaza != null ? plazaD : 0f), Mall.KeepKind.Spine, salt++);
+                    // (each end pulled back until it is clear of the ring's corridors: a crossing near a bend of the ring)
+                    for (float pull = 0f; pull <= 6f && plaza == null && x.Plaza; pull += 1f) plaza = mall.KeepRect(r, sSpine - 10f, sSpine + 10f, t1 - plazaD - pull, t1 - pull, Mall.KeepKind.Plaza, salt);
+                    salt++;
+                    float tTop = plaza != null ? math.dot(Mall.Rect(r, 0f, 1f, 0f, 0f)[0] - r.A, r.In) : 0f;
+                    float spineEnd = t1 - (plaza != null ? plazaD : 0f);
+                    if (plaza != null) spineEnd = plaza.T0;
+                    for (float pull = 0f; pull <= 6f && spine == null && x.Walkways; pull += 1f) spine = mall.KeepRect(r, sSpine - 4f, sSpine + 4f, t0 + pull, spineEnd, Mall.KeepKind.Spine, salt);
+                    salt++;
+                    ctx.Plan.Facts["spineKept"] = (spine != null ? 1 : 0) + (plaza != null ? 2 : 0);
                     if (spine != null || plaza != null)
                     {
                         var walk = mall.PathChain(new List<float2> { pF, end }, null, target, false, loop);
@@ -224,27 +239,40 @@ namespace Placemaker.Core.Layers.Commercial
                     // Corner A (start of the front drive): pad; corner B: pond on a big box, else a second pad on a long front.
                     if (x.Pads && flen >= 70f)
                     {
-                        var rect = Mall.Rect(f, h + 2f, h + 2f + pw, f.In.x * 0f + h, h + pd);
+                        var rect = Mall.Rect(f, h + 8f, h + 8f + pw, h + 0.5f, h + 0.5f + pd);
                         var held = mall.HoldRow(rect);
+                        ctx.Plan.Facts["padHold"] = (ctx.Plan.Facts.TryGetValue("padHold", out var ph) ? ph : 0) + (held != null ? 1 : 100);
                         if (held != null) pads.Add((held, f));
                     }
-                    if (pond && flen >= 90f)
+                    if (pond && flen >= 90f && tB - tF > 0f)
                     {
-                        float R = math.clamp(0.33f * (tB - tF - 2f * h), 10f, 20f);
-                        var c = f.At(f.To - h - 4f - R, h + 4f + R);
-                        var blob = LeisureKit.Blob(c, R, Hashing.Mix(ctx.Seed, 0xB0Bu), 14, 0.22f);
-                        var hull = LayerRegion.Circle(c, R * 1.32f + 3f, 10);
-                        var k = mall.Keep(hull, Mall.KeepKind.Pond, salt++);
-                        if (k != null) { k.Inner = blob; ctx.Plan.Facts["ponds"] = 1; }
+                        // As big as the front lot allows (between the front drive and the first rung, a third of the front at most).
+                        float frontLot = tB - tF;
+                        foreach (var (lane, side) in rungs) frontLot = math.min(frontLot, math.dot(lane.Points[0] - r.A, r.In) - tF);
+                        float hullR = math.min(0.5f * (frontLot - 2f * h - 3f), 0.17f * flen);
+                        float R = math.min(20f, (hullR - 3f) / 1.32f);
+                        hullR = R * 1.32f + 3f;
+                        if (R >= 8f)
+                        {
+                            var c = f.At(f.To - h - 6f - hullR, h + 1.5f + hullR);
+                            var blob = LeisureKit.Blob(c, R, Hashing.Mix(ctx.Seed, 0xB0Bu), 14, 0.22f);
+                            var hull = LayerRegion.Circle(c, hullR, 10);
+                            var k = mall.Keep(hull, Mall.KeepKind.Pond, salt++);
+                            if (k != null) { k.Inner = blob; ctx.Plan.Facts["ponds"] = 1; } else ctx.Plan.Facts["pondFail"] = StreetShops.Fits(mall.Region, hull) ? 2 : 1;
+                        }
                     }
                     else if (x.Pads && flen >= 120f)
                     {
-                        var rect = Mall.Rect(f, f.To - h - 2f - pw, f.To - h - 2f, h, h + pd);
+                        var rect = Mall.Rect(f, f.To - h - 8f - pw, f.To - h - 8f, h + 0.5f, h + 0.5f + pd);
                         var held = mall.HoldRow(rect);
+                        ctx.Plan.Facts["padHold"] = (ctx.Plan.Facts.TryGetValue("padHold", out var ph) ? ph : 0) + (held != null ? 1 : 100);
                         if (held != null) pads.Add((held, f));
                     }
                 }
             }
+
+            // Planted islands from the ring's inner corners (an L): the lot inside splits into tidy rectangles, a tree row between.
+            Islands(mall, line, r, h, salt + 0x40u);
 
             // ── the player's entrances: drives, alleys and walks into this network ──
             mall.RouteGates();
@@ -272,6 +300,38 @@ namespace Placemaker.Core.Layers.Commercial
             ctx.Plan.Facts["pads"] = padsMade;
             ctx.Plan.Facts["sideRows"] = sideRows ? 1 : 0;
             return true;
+        }
+
+        /// <summary>
+        /// At every inner (reflex) corner of the ring, a 6 m planted island across the inside to the opposite side of the ring
+        /// (the shorter way, square to the frame), so the lot inside is two tidy rectangles instead of one L that no lot fits.
+        /// </summary>
+        internal static int Islands(Mall mall, float2[] line, StreetShops.Run r, float h, uint salt)
+        {
+            int made = 0, n = line.Length;
+            for (int i = 0; i < n; i++)
+            {
+                var p = line[(i + n - 1) % n]; var v = line[i]; var q = line[(i + 1) % n];
+                if (Poly.Cross(v - p, q - v) >= -1e-3f) continue;   // convex (CCW)
+                float best = float.MaxValue; float2 bu = default, be = default;
+                foreach (var u in new[] { r.Dir, -r.Dir, r.In, -r.In })
+                {
+                    var start = v + u * (h + 0.6f);
+                    if (!Poly.Contains(line, start)) continue;
+                    var far = start + u * 600f;
+                    float tmin = float.MaxValue; float2 hitP = start;
+                    for (int k = 0; k < n; k++)
+                        if (Poly.SegmentIntersection(start, far, line[k], line[(k + 1) % n], out var hp, out float tt, out _) && tt * 600f > 0.5f && tt * 600f < tmin) { tmin = tt * 600f; hitP = hp; }
+                    if (tmin < 12f || tmin > 400f) continue;
+                    if (tmin < best) { best = tmin; bu = u; be = hitP; }
+                }
+                if (best == float.MaxValue) continue;
+                var a = v + bu * (h + 0.3f); var b = be - bu * (h + 0.3f);
+                var nrm = new float2(-bu.y, bu.x);
+                var rect = Poly.EnsureCcw(new[] { a - nrm * 3f, b - nrm * 3f, b + nrm * 3f, a + nrm * 3f });
+                if (mall.Keep(rect, Mall.KeepKind.Island, salt + (uint)made) != null) made++;
+            }
+            return made;
         }
 
         private static float Min(float2[] rect, StreetShops.Run f) { float m = float.MaxValue; foreach (var v in rect) m = math.min(m, math.dot(v - f.A, f.Dir)); return m; }

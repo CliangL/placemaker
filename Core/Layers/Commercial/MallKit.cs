@@ -25,6 +25,9 @@ namespace Placemaker.Core.Layers.Commercial
         public const float Gap = 8f;
         /// <summary>(s39) Shortest free stretch of frontage that gets plots: two cells and a metre (two whole columns whatever the grid).</summary>
         public const float MinStretch = 2 * Cell + 1f;
+        /// <summary>(rf-shops3) Rows of the designed compositions: 0 = the old even split; above 0 pieces are rounded to the
+        /// row's piece size and the end pieces of a row of three or more are this many times wider (anchors).</summary>
+        public float AnchorWeight;
         /// <summary>Width of a paseo (a walk through a row of plots, m).</summary>
         /// <remarks>(s39) Wide enough that no zone column whose centre lies on a plot touches the walk (a walk closes the column it
         /// crosses; a 3 m walk ± 4 m of cell): the plots either side keep whole columns (game depth rule, s36).</remarks>
@@ -250,9 +253,26 @@ namespace Placemaker.Core.Layers.Commercial
             // Pieces at least maxPiece cells long: every 8 m of frontage holds one cell centre of the road's block whatever its
             // alignment, so a piece shorter than a cell could hold none (ZoneGuard would drop it).
             int n = math.max(1, (int)math.floor(len / (maxPiece * Cell) + 0.01f));
+            // (rf-shops3) A designed row: pieces about maxPiece cells (rounded, not floored: a 45 m stretch is two shops, not one
+            // 45 m box), never under two cells, and an anchor at each end of a longer row (AnchorWeight wider than the rest).
+            var cut = new float[n + 1];
+            if (AnchorWeight > 0f)
+            {
+                n = math.max(1, math.min((int)math.floor(len / (2f * Cell) + 0.01f), (int)math.round(len / (maxPiece * Cell))));
+                cut = new float[n + 1];
+                float total = 0f;
+                for (int k = 0; k < n; k++) total += n >= 3 && (k == 0 || k == n - 1) ? AnchorWeight : 1f;
+                float acc = 0f;
+                for (int k = 0; k <= n; k++)
+                {
+                    cut[k] = s0 + len * acc / total;
+                    if (k < n) acc += n >= 3 && (k == 0 || k == n - 1) ? AnchorWeight : 1f;
+                }
+            }
+            else for (int k = 0; k <= n; k++) cut[k] = math.lerp(s0, s1, (float)k / n);
             for (int k = 0; k < n; k++)
             {
-                float a = math.lerp(s0, s1, (float)k / n), b = math.lerp(s0, s1, (float)(k + 1) / n);
+                float a = cut[k], b = cut[k + 1];
                 if (Piece(r, a, b, t0, cells, dir, zone, minCells)) { made++; continue; }
                 int m = (int)math.floor((b - a) / Cell + 0.01f);
                 if (m >= 2)

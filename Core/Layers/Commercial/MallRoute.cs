@@ -56,11 +56,13 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var g in Gates)
             {
                 Ctx.Check();
+                g.Landed = "none";
                 if (!g.Cars && g.Kind != ShopEntrances.Footpath) continue;
                 // The street it joins: within the usual reach, else up to 30 m further out (a site drawn short of the kerb).
                 var (street, hasStreet) = StreetFor(g);
                 if (!hasStreet)
                 {
+                    Ctx.Plan.Facts["gateFail" + g.Index] = 1;
                     Ctx.Plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = NoStreetKey, Args = new object[] { g.Index + 1 }, At = Ctx.P3(g.At) });
                     continue;
                 }
@@ -78,6 +80,7 @@ namespace Placemaker.Core.Layers.Commercial
                 }
                 if (target == null && !FirstLane(g.At, g.In, 260f, out target, out hit))
                 {
+                    Ctx.Plan.Facts["gateFail" + g.Index] = 2;
                     Ctx.Plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = NoLaneKey, Args = new object[] { g.Index + 1 }, At = Ctx.P3(g.At) });
                     continue;
                 }
@@ -85,12 +88,13 @@ namespace Placemaker.Core.Layers.Commercial
                 // The gap: through held rows a paseo wide enough to keep whole zone columns either side; else the drive's width.
                 float half = walk ? 2f : 4.5f;
                 float rowHalf = walk ? PaseoWidth * 0.5f : 5f;
-                var corridor = Strip(g.At - g.In * 1f, hit, half, target.Half);
-                var rowCorridor = Strip(g.At - g.In * 1f, hit, rowHalf, target.Half);
+                var corridor = Strip(g.At - g.In * 1f, hit, half, target.Half + 1.2f);
+                var rowCorridor = Strip(g.At - g.In * 1f, hit, rowHalf, target.Half + 1.2f);
                 if (corridor == null) continue;
                 CutHolds(rowCorridor, corridor);
-                if (!Free(corridor))
+                if (!FreeExcept(corridor, target))
                 {
+                    Ctx.Plan.Facts["gateFail" + g.Index] = 3;
                     Ctx.Plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = NoLaneKey, Args = new object[] { g.Index + 1 }, At = Ctx.P3(g.At) });
                     continue;
                 }
@@ -155,16 +159,34 @@ namespace Placemaker.Core.Layers.Commercial
         private ((float2 from, float2 kerb, long id, float t), bool) StreetFor(ShopEntrances.Gate g)
         {
             var roads = _roads ?? (_roads = StreetFrontage.Roads(Ctx.Input));
+            var along = new float2(g.In.y, -g.In.x);
+            foreach (float side in new[] { 0f, 3f, -3f, 6f, -6f, 9f, -9f })
             for (float out_ = 0f; out_ <= 30f; out_ += 3f)
             {
-                var p = g.At - g.In * out_;
+                var p = g.At - g.In * out_ + along * side;
+                if (side != 0f && !Region.Contains(g.At + along * side + g.In * 0.5f)) continue;
                 if (!StreetShops.StreetEnd(Ctx.Input, p, -g.In, out var hit, out long id, out float t)) continue;
                 float hw = 6f;
                 foreach (var r in roads) if (math.sqrt(SegmentIndex.DistSq(hit, r.A, r.B)) < 0.6f) { hw = r.HalfWidth; break; }
+                if (side != 0f) g.At += along * side;   // a road node right at the gate: the drive moves beside it
                 var kerb = hit + math.normalizesafe(g.At - hit) * hw;
                 return ((p, kerb, id, t), true);
             }
             return ((g.At, g.At, -1, 0f), false);
+        }
+
+        /// <summary>Free of everything taken but the lanes' own corridors at a junction end (a drive meets its lane at an angle).</summary>
+        private bool FreeExcept(float2[] poly, Lane lane)
+        {
+            foreach (var t in Taken)
+            {
+                if (lane?.Land != null && lane.Land.Contains(t)) continue;
+                bool laneLand = false;
+                foreach (var l in Lanes) if (l.Land != null && l.Land.Contains(t)) { laneLand = true; break; }
+                if (laneLand && StreetShops.ConvexOverlap(t, Shrink(poly, 2.5f), 0.05f) == false) continue;
+                if (StreetShops.ConvexOverlap(t, poly, 0.05f)) return false;
+            }
+            return true;
         }
 
         /// <summary>The first lane of this mall the ray from <paramref name="a"/> along <paramref name="dir"/> meets (its centre line point).</summary>

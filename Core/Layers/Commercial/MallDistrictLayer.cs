@@ -14,7 +14,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Commercial
 {
     [AreaGenerator(23, Group = Group)]
-    public sealed class MallDistrictLayer : CommercialLayer
+    public sealed partial class MallDistrictLayer : CommercialLayer
     {
         protected override string Area => "MallDistrict";
         public override string Id => "mallDistrict";
@@ -36,6 +36,8 @@ namespace Placemaker.Core.Layers.Commercial
             OuterRowControls(c, ZoneKinds.CommercialHigh);
             Shared(c.Slider("outerDepth", 32, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
             CommonControls(c, ZoneKinds.CommercialLow, 16, null, true);
+            // (rf-shops3) The architect's extras.
+            ExtrasControls(c, pads: false, trucks: 2);
             c.Fixed("lanes");
             c.Fixed("blocks");
         }

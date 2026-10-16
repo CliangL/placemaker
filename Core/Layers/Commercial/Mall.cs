@@ -342,6 +342,19 @@ namespace Placemaker.Core.Layers.Commercial
             Lanes.Add(lane);
         }
 
+        /// <summary>How far from its end on <paramref name="host"/> a lane leaving it along <paramref name="dir"/> keeps its corridor (m).</summary>
+        private static float Clearance(Lane host, float2 at, float2 dir, float half)
+        {
+            float best = float.MaxValue; float2 e = dir;
+            for (int k = 0; k + 1 < host.Points.Count; k++)
+            {
+                float dd = SegmentIndex.DistSq(at, host.Points[k], host.Points[k + 1]);
+                if (dd < best) { best = dd; e = math.normalizesafe(host.Points[k + 1] - host.Points[k]); }
+            }
+            float sin = math.max(0.25f, math.abs(dir.x * e.y - dir.y * e.x)), cos = math.abs(math.dot(dir, e));
+            return host.Half / sin + half * cos / sin + 0.1f;
+        }
+
         /// <summary>Lane footprint pieces (the road width; plots may start right at its edge, where its zone blocks begin).</summary>
         private List<float2[]> Corridors(Lane lane)
         {
@@ -354,8 +367,9 @@ namespace Placemaker.Core.Layers.Commercial
                 // Square ends overlap at bends so the union is closed; at an attached end only the part inside the area matters.
                 float ea = i == 0 ? 0f : h, eb = i + 2 == lane.Points.Count ? (lane.EndAttach >= 0 ? 0f : 0.5f) : h;
                 // (s32) An end on another lane stops at that lane's edge (its corridor is already taken).
-                if (i == 0 && lane.StartOn != null) ea = -(lane.StartOn.Half + 0.1f);
-                if (i + 2 == lane.Points.Count && lane.EndOn != null) eb = -(lane.EndOn.Half + 0.1f);
+                // (rf-shops3) Met at an angle (a chord of a round ring) the end stops further back: the host's band is wider along the lane, and the lane's own corners reach out sideways.
+                if (i == 0 && lane.StartOn != null) ea = -Clearance(lane.StartOn, a, d, h);
+                if (i + 2 == lane.Points.Count && lane.EndOn != null) eb = -Clearance(lane.EndOn, b, -d, h);
                 list.Add(Poly.EnsureCcw(new[] { a - d * ea - n * h, b + d * eb - n * h, b + d * eb + n * h, a - d * ea + n * h }));
             }
             return list;

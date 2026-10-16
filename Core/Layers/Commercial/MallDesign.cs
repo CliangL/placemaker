@@ -88,7 +88,7 @@ namespace Placemaker.Core.Layers.Commercial
 
         // ───────────── kept land ─────────────
 
-        public enum KeepKind { Frontage, Spine, Plaza, Pond }
+        public enum KeepKind { Frontage, Spine, Plaza, Pond, Island }
 
         /// <summary>Land the design keeps out of the lots until it is dressed (<see cref="DressKept"/>).</summary>
         public sealed class Kept
@@ -110,6 +110,13 @@ namespace Placemaker.Core.Layers.Commercial
         }
 
         public readonly List<Kept> KeptLand = new List<Kept>();
+
+        /// <summary>(rf-shops3) Forgets the design counters and lists a composition left behind (a variant tried and taken back).</summary>
+        public void ResetDesign()
+        {
+            KeptLand.Clear(); RowHolds.Clear(); SpineFronts.Clear(); Drives.Clear();
+            BikeRackCount = 0; FoodCartCount = 0; _paint = null;
+        }
 
         /// <summary>Holds a convex piece of land for the design; null when it is not free.</summary>
         public Kept Keep(float2[] ring, KeepKind kind, uint salt)
@@ -153,6 +160,7 @@ namespace Placemaker.Core.Layers.Commercial
                     case KeepKind.Pond: DressPond(k); break;
                     case KeepKind.Plaza: DressPlaza(k); break;
                     case KeepKind.Spine: DressSpine(k); break;
+                    case KeepKind.Island: Landscape(k.Ring, k.Salt); break;
                     default: DressFrontage(k); break;
                 }
             }
@@ -255,6 +263,10 @@ namespace Placemaker.Core.Layers.Commercial
                 float amp = math.clamp(0.5f * (k.T1 - k.T0) - 2.6f, 0f, 3.2f);
                 var a = k.Frame.At(k.S0 + 2.5f, mid); var b = k.Frame.At(k.S1 - 2.5f, mid);
                 var line = Meander(a, b, amp, 44f, k.Anchors, Hashing.Mix(Ctx.Seed, k.Salt));
+                // A curved frontage (a round site): the walk keeps to the piece, its ends where the piece narrows.
+                while (line.Count > 2 && (!region.Contains(line[0]) || region.BoundaryDistance(line[0], 4f) < 2.2f)) line.RemoveAt(0);
+                while (line.Count > 2 && (!region.Contains(line[line.Count - 1]) || region.BoundaryDistance(line[line.Count - 1], 4f) < 2.2f)) line.RemoveAt(line.Count - 1);
+                if (line.Count >= 2) { a = line[0]; b = line[line.Count - 1]; }
                 // Split at the anchors: each piece ends on a spine's node (a T junction of walks).
                 var pieceLine = new List<float2>();
                 walk = new List<float2>();
@@ -282,6 +294,8 @@ namespace Placemaker.Core.Layers.Commercial
                     }
                 }
             }
+            Ctx.Plan.Facts["frontageDressed"] = (Ctx.Plan.Facts.TryGetValue("frontageDressed", out var fd) ? fd : 0) + 1;
+            if (walk != null) Ctx.Plan.Facts["promenade"] = (Ctx.Plan.Facts.TryGetValue("promenade", out var pm) ? pm : 0) + walk.Count;
             Landscape(piece, k.Salt, walk, k.Frame, k.T1);
         }
 
@@ -362,6 +376,18 @@ namespace Placemaker.Core.Layers.Commercial
                     Ctx.Object(q, ang + math.PI, ObjectRole.Bench, AssetMix.Pick(PlazaArt.Benches, (uint)i), Hashing.Mix(Ctx.Seed, salt + 1u + (uint)i));
                 }
             }
+            // Food carts first (they need the room): along the lot side, either side of where the spine comes in.
+            if (X.Trucks > 0)
+            {
+                int carts = 0;
+                foreach (float u in new[] { 0.2f, 0.8f, 0.5f })
+                {
+                    if (carts >= X.Trucks) break;
+                    if (u == 0.5f && w < 26f) continue;
+                    carts += FoodCarts(f.At(math.lerp(k.S0, k.S1, u), k.T0 + 2.4f), f.Dir, 1, 4f, f.In, salt + 0x60u + (uint)carts);
+                }
+                reserved = Reserved();
+            }
             // Café tables in the two corners by the shops (under parasols), planters along the lot edge.
             int cafes = 0;
             if (AssetAvailability.Has(AssetCategories.CafeSeating))
@@ -384,7 +410,6 @@ namespace Placemaker.Core.Layers.Commercial
                 Ctx.Object(f.At(math.lerp(k.S0 + 1f, k.S1 - 1f, u), k.T0 + 1f), 0f, ObjectRole.Lamp, new AssetRef(""), Hashing.Mix(Ctx.Seed, salt + 0x30u + (uint)(u * 5f)));
             // Bike racks along one side, food carts along the other.
             if (X.Racks) BikeRacks(f.At(k.S0 + 1.3f, k.T0 + d * 0.55f), f.In, math.min(5, (int)(d / 1.8f)), salt + 0x50u);
-            if (X.Trucks > 0) FoodCarts(f.At(k.S1 - 2.2f, k.T0 + d * 0.5f), f.In, X.Trucks, math.max(4f, d - 3f), -f.Dir, salt + 0x60u);
             Taken.Add(Poly.EnsureCcw(ring));
         }
 

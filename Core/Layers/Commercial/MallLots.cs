@@ -183,6 +183,44 @@ namespace Placemaker.Core.Layers.Commercial
             return Poly.Area(ring) >= 0.75f * w * h;
         }
 
+        /// <summary>
+        /// (rf-shops3) An L-, T- or U-shaped piece cut in two at an inner corner, along or across the main street (the cut whose parts
+        /// are tidiest), largest part first. Empty when the piece has no inner corner or no cut helps.
+        /// </summary>
+        public List<float2[]> SplitAtReflex(float2[] piece)
+        {
+            var res = new List<float2[]>();
+            var ring = Poly.EnsureCcw(Poly.Simplify(piece, 1.0f));
+            int n = ring.Length;
+            if (n < 5) return res;
+            var d = MainDir ?? new float2(1f, 0f);
+            var nn = new float2(-d.y, d.x);
+            float bestScore = 0f;
+            List<float2[]> best = null;
+            for (int i = 0; i < n; i++)
+            {
+                var p = ring[(i + n - 1) % n]; var v = ring[i]; var q = ring[(i + 1) % n];
+                if (Poly.Cross(v - p, q - v) >= -1e-3f) continue;
+                foreach (var u in new[] { d, nn })
+                {
+                    var w = new float2(-u.y, u.x);
+                    var parts = new List<float2[]>();
+                    foreach (float side in new[] { 1f, -1f })
+                    {
+                        var half = Poly.EnsureCcw(new[] { v - u * 2000f, v + u * 2000f, v + u * 2000f + w * side * 2000f, v - u * 2000f + w * side * 2000f });
+                        try { foreach (var r in Poly.Intersection(ring, half)) if (r?.Outer != null && r.Outer.Length >= 3 && Poly.Area(r.Outer) >= 300f) parts.Add(Poly.EnsureCcw(Poly.Clean(r.Outer, 0.05f))); }
+                        catch (Exception) { }
+                    }
+                    if (parts.Count < 2) continue;
+                    float score = 0f;
+                    foreach (var part in parts) score += Tidy(part) ? Poly.Area(part) : 0f;
+                    if (score > bestScore) { bestScore = score; best = parts; }
+                }
+            }
+            if (best != null) { best.Sort((a, b) => Poly.Area(b).CompareTo(Poly.Area(a))); res.AddRange(best); }
+            return res;
+        }
+
         /// <summary>(shops) The main street's direction (the composition's frame): leftover lots lay their rows square to it.</summary>
         public float2? MainDir;
 

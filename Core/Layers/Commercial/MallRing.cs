@@ -171,11 +171,23 @@ namespace Placemaker.Core.Layers.Commercial
         /// A closed loop lane along <paramref name="ring"/> (CCW), starting in the middle of its longest edge. Null when its
         /// corridors are not free or a corner leaves the site.
         /// </summary>
-        public Lane RingLoop(float2[] ring, NetRole role, AssetRef asset, float h)
+        public Lane RingLoop(float2[] ring, NetRole role, AssetRef asset, float h, float2? startNear = null)
         {
             if (ring == null || ring.Length < 3) return null;
             int n = ring.Length, best = 0; float len = 0f;
             for (int i = 0; i < n; i++) { float l = math.distance(ring[i], ring[(i + 1) % n]); if (l > len) { len = l; best = i; } }
+            // (rf-shops3) Or the edge nearest a given point (the back of a strip mall: its front drive stays one straight piece).
+            if (startNear.HasValue)
+            {
+                float bd = float.MaxValue;
+                for (int i = 0; i < n; i++)
+                {
+                    var a = ring[i]; var b = ring[(i + 1) % n];
+                    if (math.distance(a, b) < 20f) continue;
+                    float dd = math.distance(math.lerp(a, b, 0.5f), startNear.Value);
+                    if (dd < bd) { bd = dd; best = i; }
+                }
+            }
             var start = math.lerp(ring[best], ring[(best + 1) % n], 0.5f);
             var corners = new List<float2>();
             for (int k = 1; k <= n; k++) corners.Add(ring[(best + k) % n]);
