@@ -43,7 +43,7 @@ namespace Placemaker.Game.Tool
                 if (_mode != SelectionMode.Draw && _mode != SelectionMode.Block && _mode != SelectionMode.Perimeter) return s;
                 var rules = BrushRules;
                 Func<BrushObstacleKind, bool> only = rules.DrawClip
-                    ? (Func<BrushObstacleKind, bool>)(k => k != BrushObstacleKind.Road)
+                    ? (Func<BrushObstacleKind, bool>)(k => k != BrushObstacleKind.Road && k != BrushObstacleKind.EmptyZoneCell)   // "Avoid zoning": every road has empty zone cells along it; only zoned cells, buildings, lots and builds count
                     : k => k == BrushObstacleKind.PlacemakerBuild;
                 // s42: "Paint over anything" is the Paint area tool's Smart edges switch (off); the outline tools keep
                 // their own Keep off chips whatever the brush does.

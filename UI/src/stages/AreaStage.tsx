@@ -235,9 +235,9 @@ const KeepOff = ({ rules, bucket }: { rules: BrushRules; bucket?: boolean }) => 
                     />
                     <ToggleChip
                         icon="area"
-                        label={t("Placemaker.UI.Rules.FreeLand", "Clip to free land")}
+                        label={t("Placemaker.UI.Rules.FreeLand", "Avoid zoning")}
                         on={clip}
-                        tip={t("Placemaker.UI.Rules.FreeLandTip", "Also cut it back from buildings, lots, zoning and water.")}
+                        tip={t("Placemaker.UI.Rules.FreeLandTip", "Shrinks the outline to keep off zoned land, buildings and lots. Empty zone cells along streets do not count. Off by default.")}
                         onClick={() => act.setBrushRules({ drawClip: !clip })}
                         testId="keep-off-free-land"
                     />
