@@ -274,7 +274,8 @@ function Q-Snapshot([string]$repo, [switch]$NoBuild) {
         foreach ($f in Get-ChildItem $bin -Recurse -File) { $files['mod\' + $f.FullName.Substring($bin.Length + 1)] = $f.FullName }
         if (Test-Path $ui) { foreach ($f in Get-ChildItem $ui -Recurse -File) { $files['mod\' + $f.FullName.Substring($ui.Length + 1)] = $f.FullName } }
         foreach ($f in Get-ChildItem (Join-Path $repo 'tools\suite') -File -Filter '*.ps1') { $files['host\tools\suite\' + $f.Name] = $f.FullName }
-        foreach ($rel in 'suite\schema.json', 'suite\scenarios\smoke.json', 'suite\catalog.json') { $p = Join-Path $repo $rel; if (Test-Path $p) { $files['host\' + $rel] = $p } }
+        # not suite\catalog.json: every run rewrites it (it names the assembly), which would make every request a new build
+        foreach ($rel in 'suite\schema.json', 'suite\scenarios\smoke.json') { $p = Join-Path $repo $rel; if (Test-Path $p) { $files['host\' + $rel] = $p } }
         $lines = foreach ($k in ($files.Keys | Sort-Object)) { $k.ToLowerInvariant() + ':' + (Get-FileHash -LiteralPath $files[$k] -Algorithm SHA256).Hash }
         $hash = (Q-HashText ($lines -join "`n")).Substring(0, 12)
         $dllHash = (Get-FileHash (Join-Path $bin 'Placemaker.dll') -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
