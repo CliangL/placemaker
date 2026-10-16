@@ -11,23 +11,33 @@
     it as a second mod) and then two renames, under <queue>\install.lock. A change cut off half way is finished by the
     next reconcile from what install.json says.
   * <queue>\user-build\ (mod\ + manifest.json) is the copy of the user's build; it is only ever replaced by a newer,
-    verified copy, never deleted.
+    verified copy, and the one it replaces is kept as <queue>\user-build.prev\.
   * A build someone installed on purpose while the queue was not using the folder (dotnet build -c Release, a -Direct
-    run, the user's playground) becomes the user's build: it is what gets put back from then on.
+    run, the user's playground) becomes the user's build: it is what gets put back from then on. Only a folder nobody
+    has written for 10 s is taken (a deploy from a checkout without Deploy-Mod.ps1 copies file by file).
+  * The csproj's Deploy (dotnet build -c Release) goes through MI-DeployOnPurpose (Deploy-Mod.ps1): under install.lock,
+    refused while a game runs or while a queue game owns the folder, staged and swapped in like the queue's own installs.
 #>
 
 $script:MIRoot = if ($env:PLACEMAKER_GAME_QUEUE) { $env:PLACEMAKER_GAME_QUEUE } else { Join-Path $env:USERPROFILE '.placemaker\game-queue' }
 # tests: a stand-in Mods\Placemaker (only with a stand-in queue root, so a test can never touch the real folder)
 $script:MITest = [bool]($env:PLACEMAKER_GAME_QUEUE -and $env:PLACEMAKER_GAME_QUEUE_MODS)
+# a stand-in queue root without a stand-in Mods folder would keep a second install.json over the real Mods\Placemaker
+$script:MIRefuse = if ($env:PLACEMAKER_GAME_QUEUE -and -not $env:PLACEMAKER_GAME_QUEUE_MODS) { 'PLACEMAKER_GAME_QUEUE is set without PLACEMAKER_GAME_QUEUE_MODS: a stand-in queue never touches the real Mods\Placemaker' } else { '' }
+$script:MIRuns = if ($env:PLACEMAKER_GAME_QUEUE_RUNS) { $env:PLACEMAKER_GAME_QUEUE_RUNS } else { 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs' }
 $script:MI = @{
     Root = $script:MIRoot
     Mods = $(if ($script:MITest) { $env:PLACEMAKER_GAME_QUEUE_MODS } else { Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\Placemaker' })
     User = Join-Path $script:MIRoot 'user-build'
+    Prev = Join-Path $script:MIRoot 'user-build.prev'
     State = Join-Path $script:MIRoot 'install.json'
     Lock = Join-Path $script:MIRoot 'install.lock'
     Stage = Join-Path $script:MIRoot 'staging'
     Log = Join-Path $script:MIRoot 'dispatcher.log'
+    SuiteLock = Join-Path (Split-Path $script:MIRuns) 'lock'   # Run-Suite's lock (one for every worktree)
 }
+# Seconds a folder must have gone unwritten before a build found there is taken as installed on purpose.
+$script:MIQuietSec = 10
 
 function MI-Log([string]$m) {
     $line = '{0:yyyy-MM-dd HH:mm:ss} [{1}] install: {2}' -f (Get-Date), $PID, $m
@@ -40,6 +50,12 @@ function MI-Games {
         return @(foreach ($f in 'fake-user-game', 'fake-game-running') { if (Test-Path -LiteralPath (Join-Path $script:MI.Root $f)) { 0 } })
     }
     return @(Get-Process -Name 'Cities2' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+}
+# The Paradox launcher (Launcher\dowser.exe): the user is starting the game. The queue installs nothing meanwhile (a
+# restore of the user's build still goes ahead: it is what their game should load).
+function MI-Launchers {
+    if ($script:MITest) { return @(if (Test-Path -LiteralPath (Join-Path $script:MI.Root 'fake-launcher')) { 0 }) }
+    return @(Get-Process -Name 'dowser', 'Paradox Launcher' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
 
 function MI-Hash([string]$s) {
@@ -86,10 +102,40 @@ function MI-DllHash([string]$dir) {
     try { return (MI-FileSha $sha $p).Substring(0, 8).ToLowerInvariant() } finally { $sha.Dispose() }
 }
 
+# Read with every share mode, so a writer can swap the file in (File.Replace) while it is being read.
 function MI-ReadJson([string]$p) {
     if (-not (Test-Path -LiteralPath $p)) { return $null }
-    for ($i = 0; $i -lt 3; $i++) { try { return ([IO.File]::ReadAllText($p) | ConvertFrom-Json) } catch { Start-Sleep -Milliseconds 50 } }
+    for ($i = 0; $i -lt 3; $i++) {
+        try {
+            $fs = [IO.File]::Open($p, 'Open', 'Read', 'ReadWrite, Delete')
+            try { $text = (New-Object IO.StreamReader($fs, [Text.Encoding]::UTF8)).ReadToEnd() } finally { $fs.Dispose() }
+            return ($text | ConvertFrom-Json)
+        } catch { Start-Sleep -Milliseconds 50 }
+    }
     return $null
+}
+
+# Seconds since anything in $dir was created or written (files and folders); a large number when it does not exist.
+function MI-QuietFor([string]$dir) {
+    if (-not (Test-Path -LiteralPath $dir)) { return 1e9 }
+    $d = Get-Item -LiteralPath $dir -Force
+    $latest = if ($d.LastWriteTimeUtc -gt $d.CreationTimeUtc) { $d.LastWriteTimeUtc } else { $d.CreationTimeUtc }
+    foreach ($f in Get-ChildItem -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue) {
+        if ($f.LastWriteTimeUtc -gt $latest) { $latest = $f.LastWriteTimeUtc }
+        if ($f.CreationTimeUtc -gt $latest) { $latest = $f.CreationTimeUtc }
+    }
+    return [math]::Max(0, ([datetime]::UtcNow - $latest).TotalSeconds)
+}
+
+# The Run-Suite holding the suite lock, when that process is alive (PID and start time); $null otherwise.
+function MI-SuiteLockHolder {
+    if ($script:MITest) { $f = Join-Path $script:MI.Root 'fake-suite-lock'; if (Test-Path -LiteralPath $f) { return [pscustomobject]@{ pid = 0; runId = 'fake' } }; return $null }
+    $l = MI-ReadJson $script:MI.SuiteLock
+    if (-not $l -or -not $l.pid) { return $null }
+    $p = Get-Process -Id ([int]$l.pid) -ErrorAction SilentlyContinue
+    if (-not $p) { return $null }
+    if ($l.procStart) { try { if ([math]::Abs($p.StartTime.ToUniversalTime().Ticks - [int64]$l.procStart) -gt 20000000) { return $null } } catch { } }
+    return $l
 }
 function MI-WriteJson([string]$p, $o) {
     $tmp = "$p.$PID.tmp"
@@ -113,6 +159,7 @@ function MI-SetState([string]$state, [hashtable]$extra = @{}) {
 
 # One holder at a time (the dispatcher and a host may both want the folder); a holder that dies releases it.
 function MI-WithLock([scriptblock]$block) {
+    if ($script:MIRefuse) { throw $script:MIRefuse }
     New-Item -ItemType Directory -Force -Path $script:MI.Root | Out-Null
     $fs = $null
     for ($i = 0; $i -lt 600 -and -not $fs; $i++) {
@@ -179,7 +226,11 @@ function MI-SetUser($info, [string]$mod, [string]$why) {
     $old = $null
     if (Test-Path -LiteralPath $script:MI.User) { $old = Join-Path $script:MI.Stage ('user-old-' + [guid]::NewGuid().ToString('N').Substring(0, 12)); MI-Move $script:MI.User $old }
     MI-Move $new $script:MI.User
-    if ($old) { MI-Remove $old | Out-Null }
+    if ($old) {
+        # the one it replaces is kept (user-build.prev): a wrong adoption never loses the user's build for good
+        if (Test-Path -LiteralPath $script:MI.Prev) { $gone = Join-Path $script:MI.Stage ('prev-gone-' + [guid]::NewGuid().ToString('N').Substring(0, 12)); MI-Move $script:MI.Prev $gone; MI-Remove $gone | Out-Null }
+        MI-Move $old $script:MI.Prev
+    }
 }
 
 # Copies what Mods\Placemaker holds now into user-build (verified against $cur, taken again if the folder changes meanwhile).
@@ -249,7 +300,10 @@ function MI-ReconcileLocked([string]$why) {
     $keepReady = if ($ub) { Split-Path (MI-ReadyDir $ub) -Leaf } else { '' }
     foreach ($d in Get-ChildItem -LiteralPath $script:MI.Stage -Directory -ErrorAction SilentlyContinue | Where-Object { ($ub -or $_.Name -notlike 'user-old-*') -and $_.Name -ne $keepReady -and $_.LastWriteTime -lt (Get-Date).AddMinutes(-10) }) { MI-Remove $d.FullName | Out-Null; Remove-Item -LiteralPath "$($d.FullName).ok" -Force -ErrorAction SilentlyContinue }
     $cur = MI-FolderInfo $script:MI.Mods
+    # a build being copied in right now (a deploy that copies file by file) is never taken half way: wait until it is quiet
+    $busy = @{ ok = $false; pending = $true; busy = $true; message = "Mods\Placemaker is being written right now (a build installed outside the queue): waiting until nothing has been written for $($script:MIQuietSec) s" }
     if (-not $ub) {
+        if ($cur.exists -and (MI-QuietFor $script:MI.Mods) -lt $script:MIQuietSec) { return $busy }
         if ($st.state -ne 'user') { MI-Log "no copy of the user's build to put back ($why): keeping what Mods\Placemaker holds ($(MI-Describe $cur)) as the user's" }
         MI-Snapshot $cur "first use ($why)"
         MI-SetState 'user'
@@ -258,12 +312,15 @@ function MI-ReconcileLocked([string]$why) {
     }
     if ($st.state -eq 'user') {
         if ($cur.hash -eq $ub.hash) { return @{ ok = $true; pending = $false; message = ''; changed = $false } }
+        if ((MI-QuietFor $script:MI.Mods) -lt $script:MIQuietSec) { return $busy }
         MI-Snapshot $cur "installed on purpose ($why)"
         $m = "a build was installed outside the queue ($(MI-Describe $cur)): it is the user's build from now on (was $(MI-Describe $ub))"; MI-Log $m
         return @{ ok = $true; pending = $false; message = $m; changed = $false }
     }
     # deploying | queue | restoring: the queue had (or was putting) a build of its own there
     if ($cur.hash -eq $ub.hash) { MI-SetState 'user'; return @{ ok = $true; pending = $false; message = ''; changed = $false } }
+    # the queue's build was there and someone else is writing over it right now: let them finish first
+    if ($st.state -eq 'queue' -and (MI-QuietFor $script:MI.Mods) -lt $script:MIQuietSec) { return $busy }
     if (-not $cur.exists -or -not $cur.dll -or $cur.dll -eq $st.queueDll -or $cur.dll -eq $ub.dll -or $st.state -ne 'queue') {
         MI-SetState 'restoring' @{ queueHash = "$($st.queueHash)"; queueDll = "$($st.queueDll)"; label = "$($st.label)" }
         MI-PutBackUser $ub
@@ -272,6 +329,7 @@ function MI-ReconcileLocked([string]$why) {
         return @{ ok = $true; pending = $false; message = $m; changed = $true }
     }
     # another Placemaker.dll than the queue's: installed on purpose after the queue's game had closed
+    if ((MI-QuietFor $script:MI.Mods) -lt $script:MIQuietSec) { return $busy }
     MI-Snapshot $cur "installed on purpose over the queue's build ($why)"
     MI-SetState 'user'
     $m = "a build was installed outside the queue over the queue's ($(MI-Describe $cur)): it is the user's build from now on"; MI-Log $m
@@ -292,8 +350,14 @@ function MI-Install([string]$src, [string]$label, [string]$by) {
     if (-not (Test-Path -LiteralPath (Join-Path $src 'Placemaker.dll'))) { return @{ ok = $false; message = "the frozen build $src has no Placemaker.dll" } }
     try {
         $srcInfo = MI-FolderInfo $src
+        # a frozen build is installed only as it was frozen (bundle.json next to mod\ records its folder hash)
+        $bj = MI-ReadJson (Join-Path (Split-Path $src) 'bundle.json')
+        if ($bj -and $bj.modHash -and $bj.modHash -ne $srcInfo.hash) { return @{ ok = $false; message = "the frozen build $src is damaged (its files hash to $($srcInfo.hash), it was frozen as $($bj.modHash)); run the command again" } }
+        $l = @(MI-Launchers)
+        if ($l.Count -gt 0) { return @{ ok = $false; message = "the Paradox launcher is open (PID $($l -join ', ')): the user is starting the game; nothing was installed" } }
         return (MI-WithLock {
             $r = MI-ReconcileLocked "before installing $label"
+            for ($i = 0; $i -lt 30 -and $r.busy; $i++) { Start-Sleep -Seconds 2; $r = MI-ReconcileLocked "before installing $label" }
             if (-not $r.ok) { return @{ ok = $false; message = $r.message } }
             $ub = MI-ReadUser
             $stage = MI-Stage $src $srcInfo.hash
@@ -324,6 +388,47 @@ function MI-AdoptInstalled([string]$why) {
             return @{ ok = $true; message = $m }
         })
     } catch { $m = "could not keep the playground's build as the user's: $($_.Exception.Message)"; MI-Log $m; return @{ ok = $false; message = $m } }
+}
+
+# The csproj's Deploy (dotnet build -c Release; tools\suite\Deploy-Mod.ps1): installs bin\Release + UI\build into
+# Mods\Placemaker on purpose, as the user's build. Refused while any game runs, and while a queue game owns the folder
+# (a game host holds the suite lock with the queue's build installed); a restore the queue still owes is done first.
+# $allowPid: the Run-Suite -Direct whose own build this is (it holds the suite lock itself).
+function MI-DeployOnPurpose([string[]]$sources, [int]$allowPid = 0) {
+    $script:miSwapped = $false
+    try {
+        return (MI-WithLock {
+            $g = @(MI-Games)
+            if ($g.Count -gt 0) { return @{ ok = $false; message = "a game is running (Cities2.exe PID $($g -join ', ')): close it first. Nothing was installed (the build is in bin\Release; the game queue takes it from there: build with -p:Deploy=false)" } }
+            $st = MI-State
+            if ($st.state -ne 'user') {
+                $h = MI-SuiteLockHolder
+                if ($h -and (-not $allowPid -or [int]$h.pid -ne $allowPid)) { return @{ ok = $false; message = "the game queue's game host (run $($h.runId), PID $($h.pid)) has its build $($st.label) in Mods\Placemaker for its game: install when that game has closed (tools\suite\Queue.ps1 shows the line). Nothing was installed" } }
+                $r = MI-ReconcileLocked 'before a deploy'
+                if (-not $r.ok) { return @{ ok = $false; message = "$($r.message). Nothing was installed" } }
+            }
+            New-Item -ItemType Directory -Force -Path $script:MI.Stage | Out-Null
+            $stage = Join-Path $script:MI.Stage ('deploy-' + [guid]::NewGuid().ToString('N').Substring(0, 12))
+            New-Item -ItemType Directory -Force -Path $stage | Out-Null
+            try {
+                foreach ($s in $sources) { if ($s -and (Test-Path -LiteralPath $s)) { foreach ($c in Get-ChildItem -LiteralPath $s -Force) { Copy-Item -LiteralPath $c.FullName -Destination $stage -Recurse -Force -ErrorAction Stop } } }
+                if (-not (Test-Path -LiteralPath (Join-Path $stage 'Placemaker.dll'))) { throw "no Placemaker.dll in $($sources -join ' + ')" }
+                $info = MI-FolderInfo $stage
+                $out = MI-SwapIn $stage
+                $script:miSwapped = $true
+            } catch { MI-Remove $stage | Out-Null; throw }
+            if ($out) { MI-Remove $out | Out-Null }
+            # the user's build from now on: a verified copy of what is installed now
+            $copy = MI-Stage $script:MI.Mods $info.hash
+            MI-SetUser $info $copy 'installed with dotnet build (Deploy)'
+            MI-SetState 'user'
+            $m = "installed $(MI-Describe $info) into Mods\Placemaker; it is the user's build from now on"; MI-Log $m
+            return @{ ok = $true; message = $m; installed = $info }
+        })
+    } catch {
+        if ($script:miSwapped) { $m = "installed, but its copy as the user's build failed ($($_.Exception.Message)); the game queue takes it as the user's build at its next look"; MI-Log $m; return @{ ok = $true; message = $m } }
+        return @{ ok = $false; message = "$($_.Exception.Message). Nothing was installed" }
+    }
 }
 
 # One line for people: what Mods\Placemaker holds and what is put back.

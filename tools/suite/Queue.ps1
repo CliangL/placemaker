@@ -34,6 +34,7 @@ do {
         foreach ($q in $queued) { Write-Host "  $($q.id) $($q.who) $($q.kind) $($q.scenarios) build(s)" }
     }
     Write-Host (MI-StatusLine)
+    $pv = MI-ReadJson (Join-Path $script:MI.Prev 'manifest.json'); if ($pv) { Write-Host "the user's build before that, kept in $($script:MI.Prev): $(MI-Describe $pv)" }
     if ($Log -gt 0 -and (Test-Path $script:Q.Log)) { Write-Host '--- dispatcher.log'; Get-Content $script:Q.Log -Tail $Log | ForEach-Object { Write-Host $_ } }
     if ($Watch) { Start-Sleep -Seconds 5; Write-Host '' }
 } while ($Watch)

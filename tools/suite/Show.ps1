@@ -259,10 +259,15 @@ foreach ($sc in $rows) {
         $tm = if ($scFile) { @((Get-Content $scFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).steps) | Where-Object { $_.do -eq 'terrain' -and $_.terrain } | Select-Object -First 1 } else { $null }
         if ($tm) { Write-Host ("  {0,-14} ground {1} m to +{2} m around its typical level; colours +/-{3} m; contours every {4} m" -f 'heights', $tm.terrain.minM, $tm.terrain.maxM, $tm.terrain.rangeM, $tm.terrain.contourM) }
     }
-    Write-Host ("  {0,-14} {1}{2}" -f 'log', $log, $(if ($from -and $to) { ", lines $from-$to" } else { '' }))
+    # a build the game was in the middle of when it went away has no end line: its lines run to the end of the log
+    Write-Host ("  {0,-14} {1}{2}" -f 'log', $log, $(if ($from -and $to) { ", lines $from-$to" } elseif ($from) { ", lines $from-$($lines.Count) (the end of the log: the game stopped during this build)" } else { '' }))
 }
+$never = @($builds | Select-Object -Skip $rows.Count | ForEach-Object { $_.Id })
+if ($never.Count -gt 0) { Write-Host ''; Write-Host ("Never ran ({0} of {1}): {2}" -f $never.Count, $builds.Count, ($never -join ', ')) }
 Write-Host ''
 Write-Host "Game errors:    $(Join-Path $runDir 'logs\Player.log')"
 Write-Host "Runner steps:   $(Join-Path $runDir 'suite.log')"
 Write-Host "All pictures:   $(Join-Path $runDir 'contact.html')"
+# a run that did not finish (the game crashed or was stopped) fails, even with some pictures
+if ($runCode -ne 0) { Write-Host "The run did not finish (exit $runCode): read the lines above and logs\Player.log."; exit 1 }
 if ($pictures -gt 0) { exit 0 } else { exit 1 }

@@ -16,7 +16,9 @@
 #>
 
 # The queue's protocol version: a client with a newer one asks an older dispatcher to hand over when the game is free.
-$script:QVersion = 2
+# 3: the dispatcher runs from a copy in the queue folder, waits 2 min after the user's game (or a stop from outside)
+#    closes, quits its game when the user starts theirs, per-type ETA.
+$script:QVersion = 3
 $script:QRoot = if ($env:PLACEMAKER_GAME_QUEUE) { $env:PLACEMAKER_GAME_QUEUE } else { Join-Path $env:USERPROFILE '.placemaker\game-queue' }
 # tests only: a fake game host script instead of Run-Suite, and only with a stand-in queue root (never on the real line)
 $script:QFake = if ($env:PLACEMAKER_GAME_QUEUE) { $env:PLACEMAKER_GAME_QUEUE_FAKE } else { '' }
@@ -35,6 +37,7 @@ $script:Q = @{
     Session = Join-Path $script:QRoot 'session.json'
     Log = Join-Path $script:QRoot 'dispatcher.log'
     Launches = Join-Path $script:QRoot 'launches.log'
+    Disp = Join-Path $script:QRoot 'dispatcher'   # copies of the dispatcher's scripts it runs from (dispatcher\<hash>\, good.json)
 }
 $script:QUserData = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
 $script:QMainRuns = if ($env:PLACEMAKER_GAME_QUEUE_RUNS) { $env:PLACEMAKER_GAME_QUEUE_RUNS } else { 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs' }   # Run-Suite's default ResultsRoot (one suite lock for every worktree)
@@ -48,7 +51,7 @@ function Q-Init { foreach ($k in 'Root', 'Requests', 'Active', 'Done', 'Bundles'
 
 function Q-WriteText([string]$path, [string]$text) {
     $tmp = "$path.$PID.tmp"
-    [IO.File]::WriteAllText($tmp, $text, (New-Object Text.UTF8Encoding $false))
+    try { [IO.File]::WriteAllText($tmp, $text, (New-Object Text.UTF8Encoding $false)) } catch { return $false }
     for ($i = 0; $i -lt 20; $i++) {
         try {
             if (Test-Path -LiteralPath $path) { [IO.File]::Replace($tmp, $path, [NullString]::Value) } else { [IO.File]::Move($tmp, $path) }
@@ -59,6 +62,16 @@ function Q-WriteText([string]$path, [string]$text) {
     return $false
 }
 function Q-WriteJson([string]$path, $obj) { Q-WriteText $path ($obj | ConvertTo-Json -Depth 12) | Out-Null }
+# A file a client waits for (done\<id>\result.json): written until it is there, $false when it could not be.
+function Q-WriteJsonSure([string]$path, $obj) {
+    $text = $obj | ConvertTo-Json -Depth 12
+    for ($i = 0; $i -lt 10; $i++) {
+        try { New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null } catch { }
+        if (Q-WriteText $path $text) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
 # Readers share delete access, so a writer can swap the file in while it is being read.
 function Q-ReadText([string]$path) {
     $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite, Delete')
@@ -76,6 +89,8 @@ function Q-Date($v) {
     if ($v -is [datetime]) { return $v.ToLocalTime() }
     return [datetime]::Parse("$v", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToLocalTime()
 }
+# A path as an absolute one, against PowerShell's current location (a relative -ResultsRoot means the asker's folder).
+function Q-FullPath([string]$p) { if (-not $p) { return $p }; return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p) }
 # A file another process is writing (the game's logs): read with every share mode, from byte $offset on.
 function Q-CopyShared([string]$src, [string]$dst, [int64]$offset = 0) {
     if (-not (Test-Path -LiteralPath $src)) { return $false }
@@ -147,12 +162,18 @@ function Q-RowRecord($row, [bool]$land) {
     if ($n -gt 0) { $o.p = [math]::Round([math]::Max(0.2, $shotSec / $n), 2) }
     return $o
 }
-function Q-HistoryAddRows($rows, $landFlags) {
+function Q-HistoryAddRows($rows, $landFlags, $types = @()) {
     $h = Q-History
     $k = 0
-    foreach ($r in @($rows)) { $rec = Q-RowRecord $r ([bool](@($landFlags)[$k])); if ($rec) { $h.rows = @(@($h.rows) + [pscustomobject]$rec) }; $k++ }
+    foreach ($r in @($rows)) {
+        $rec = Q-RowRecord $r ([bool](@($landFlags)[$k]))
+        if ($rec) { $t = "$(@($types)[$k])"; if ($t) { $rec['t'] = $t }; $h.rows = @(@($h.rows) + [pscustomobject]$rec) }
+        $k++
+    }
     Q-SaveHistory $h
 }
+# The medians: a build's time without pictures and per picture, overall and per type (a type with 3 or more measured
+# builds: parks settle their pictures slower than plazas).
 function Q-Rates {
     $h = Q-History
     $rows = @($h.rows | Where-Object { $_ })
@@ -161,9 +182,14 @@ function Q-Rates {
     $land = $script:QDefaults.land
     $lr = @($rows | Where-Object { $_.l }); $fr = @($rows | Where-Object { -not $_.l })
     if ($lr.Count -ge 3 -and $fr.Count -ge 3) { $land = [math]::Min(120, [math]::Max(0, (Q-Median ($lr | ForEach-Object { $_.b }) 0) - (Q-Median ($fr | ForEach-Object { $_.b }) 0))) }
+    $byType = @{}
+    foreach ($g in @($rows | Where-Object { $_.t -and -not $_.l } | Group-Object { "$($_.t)" })) {
+        if ($g.Count -lt 3) { continue }
+        $byType[$g.Name] = @{ base = (Q-Median ($g.Group | ForEach-Object { $_.b }) $base); pic = (Q-Median ($g.Group | Where-Object { $_.n -gt 0 -and $_.p } | ForEach-Object { $_.p }) $pic) }
+    }
     return @{
         boot = Q-Median $h.boot $script:QDefaults.boot; quit = Q-Median $h.quit $script:QDefaults.quit
-        base = $base; pic = $pic; land = $land; overhead = Q-Median $h.overhead $script:QDefaults.overhead
+        base = $base; pic = $pic; land = $land; overhead = Q-Median $h.overhead $script:QDefaults.overhead; byType = $byType
     }
 }
 # First use (or a history from before the per-picture model): measured builds from the runs already on disk.
@@ -193,13 +219,17 @@ function Q-ScenarioPics($sc) {
     foreach ($st in $steps) { $d = "$($st.do)"; if ($d -eq 'shot' -or $d -eq 'terrain' -or "$($st.shot)") { $n++ } }
     return $n
 }
-function Q-RowSec([int]$pics, [bool]$land, $rates) { return $rates.base + $pics * $rates.pic + $(if ($land) { $rates.land } else { 0 }) }
+function Q-RowSec([int]$pics, [bool]$land, $rates, [string]$type = '') {
+    $base = $rates.base; $pic = $rates.pic
+    if ($type -and $rates.byType -and $rates.byType.ContainsKey($type)) { $base = $rates.byType[$type].base; $pic = $rates.byType[$type].pic }
+    return $base + $pics * $pic + $(if ($land) { $rates.land } else { 0 })
+}
 # The work of a request (s): its builds, each with its pictures, plus the per-request overhead.
 function Q-WorkSec($r, $rates) {
     $rp = @($r.rowPics)
     if ($rp.Count -gt 0) {
-        $rl = @($r.rowLand); $t = 0.0
-        for ($k = 0; $k -lt $rp.Count; $k++) { $t += Q-RowSec ([int]$rp[$k]) ([bool]$rl[$k]) $rates }
+        $rl = @($r.rowLand); $rt = @($r.rowType); $t = 0.0
+        for ($k = 0; $k -lt $rp.Count; $k++) { $t += Q-RowSec ([int]$rp[$k]) ([bool]$rl[$k]) $rates "$($rt[$k])" }
         return $t + $rates.overhead
     }
     return [double]$r.scenarios * (Q-RowSec 3 $false $rates) + [double]$r.land * $rates.land + $rates.overhead
@@ -214,7 +244,8 @@ function Q-RunningLeft($r, [int]$rowsDone, [double]$sinceRowSec, [double]$runSec
         if ($left -lt 0.1 * $est) { if ($left -lt 0) { $over = -$left }; $left = [math]::Max(3, 0.1 * $est) }
         return @{ left = $left; over = $over; done = $rowsDone; total = [int]$r.scenarios }
     }
-    $est = @(for ($k = 0; $k -lt $rp.Count; $k++) { Q-RowSec ([int]$rp[$k]) ([bool]$rl[$k]) $rates })
+    $rt = @($r.rowType)
+    $est = @(for ($k = 0; $k -lt $rp.Count; $k++) { Q-RowSec ([int]$rp[$k]) ([bool]$rl[$k]) $rates "$($rt[$k])" })
     $k0 = [math]::Min($rowsDone, $est.Count)
     $doneEst = 0.0; for ($k = 0; $k -lt $k0; $k++) { $doneEst += $est[$k] }
     $speed = 1.0
@@ -242,25 +273,33 @@ function Q-Queued {
     return @($r | Sort-Object { [int64]$_.seq })
 }
 
+# Heads of the line that no request may jump any more (decided once: the place in line printed to a client does not flip
+# back and forth as the estimates move near the limit).
+$script:QProtected = @{}
+
 # The policy: the user's playground first; else, while a game is open with build K, the oldest request with build K
 # (that still fits that game's test grid), as long as the head of the line still starts within StarveSec of asking when
-# that request is done; else the head. $atSec: how far in the future the choice is made (for the plan).
+# that request is done (and the game has been relaunched for the head's build, when it needs that); else the head.
+# $atSec: how far in the future the choice is made (for the plan).
 function Q-SelectNext($queued, [string]$sessKey, [int]$served, [scriptblock]$fits, [double]$atSec = 0, [double]$starveSec = 600, $rates = $null) {
     $queued = @($queued | Where-Object { $_ })
     if ($queued.Count -eq 0) { return $null }
     $play = $queued | Where-Object { $_.kind -eq 'play' } | Select-Object -First 1
     if ($play) { return $play }
     $head = $queued[0]
-    if ($sessKey) {
+    if ($sessKey -and -not $script:QProtected.ContainsKey("$($head.id)")) {
         $waited = ((Get-Date).AddSeconds($atSec) - (Q-Date $head.created)).TotalSeconds
-        if ($waited -lt $starveSec) {
-            foreach ($r in $queued) {
-                if ($r.key -ne $sessKey) { continue }
-                if ($r.fresh -and $served -gt 0) { continue }
-                if ($fits -and -not (& $fits $r)) { continue }
-                if ($r.id -ne $head.id -and $rates -and ($waited + (Q-WorkSec $r $rates)) -gt $starveSec) { continue }   # would make the head wait too long
-                return $r
+        $headLaunch = if ($rates -and ($head.key -ne $sessKey -or ($head.fresh -and $served -gt 0))) { $rates.quit + $rates.boot } else { 0 }
+        if ($waited -ge $starveSec) { $script:QProtected["$($head.id)"] = $true; return $head }
+        foreach ($r in $queued) {
+            if ($r.key -ne $sessKey) { continue }
+            if ($r.fresh -and $served -gt 0) { continue }
+            if ($fits -and -not (& $fits $r)) { continue }
+            if ($r.id -ne $head.id -and $rates -and ($waited + (Q-WorkSec $r $rates) + $headLaunch) -gt $starveSec) {
+                $script:QProtected["$($head.id)"] = $true   # would make the head wait too long: from now on it goes first
+                return $head
             }
+            return $r
         }
     }
     return $head
@@ -270,6 +309,8 @@ function Q-SelectNext($queued, [string]$sessKey, [int]$served, [scriptblock]$fit
 # $sess: @{ key; served; remainSec } for the open game (key $null when none, or when it is closing).
 function Q-Plan($queued, $sess, $rates, [double]$starveSec = 600) {
     $pending = @($queued | Where-Object { $_ })
+    $ids = @{}; foreach ($p in $pending) { $ids["$($p.id)"] = $true }
+    foreach ($k in @($script:QProtected.Keys)) { if (-not $ids.ContainsKey($k)) { $script:QProtected.Remove($k) } }   # gone from the line
     $t = 0.0; $key = $null; $served = 0; $unknown = $false; $launchFor = ''
     if ($sess) { $t = [double]$sess.remainSec; $key = $sess.key; $served = [int]$sess.served; if ($sess.unknown) { $unknown = $true } }
     $out = @()
@@ -303,7 +344,7 @@ function Q-Who([string]$repo) {
 # Scenarios, test blocks by kind, land plots and the pictures of each build a set needs (expansions counted from the
 # requester's catalog).
 function Q-Needs($doc, [string]$repo) {
-    $r = [ordered]@{ scenarios = 0; land = 0; blocks = [ordered]@{ Flat = 0; Zoned = 0; Slope = 0; Rough = 0; Survive = 0 }; rowPics = @(); rowLand = @() }
+    $r = [ordered]@{ scenarios = 0; land = 0; blocks = [ordered]@{ Flat = 0; Zoned = 0; Slope = 0; Rough = 0; Survive = 0 }; rowPics = @(); rowLand = @(); rowType = @() }
     if (-not $doc -or $doc.command) { return $r }
     $list = @(if ($doc.scenarios) { $doc.scenarios } else { $doc })
     $types = @()
@@ -323,7 +364,18 @@ function Q-Needs($doc, [string]$repo) {
         }
         $r.scenarios += $n
         $pics = Q-ScenarioPics $sc
-        for ($k = 0; $k -lt $n; $k++) { $r.rowPics += $pics; $r.rowLand += $(if ($sc.land -and -not $sc.on) { 1 } else { 0 }) }
+        # the type of each build (for its measured time): the scenario's layer, its 'type' step's, or each expanded type's
+        $typeStep = @($sc.steps | Where-Object { $_ -and "$($_.do)" -eq 'type' -and $_.layer } | Select-Object -First 1)
+        $one = if ($sc.layer) { "$($sc.layer)" } elseif ($typeStep.Count) { "$($typeStep[0].layer)" } else { '' }
+        $rowTypes = @(for ($k = 0; $k -lt $n; $k++) { $one })
+        if (($exp -eq 'presets' -or $exp -eq 'types') -and $ts.Count -gt 0) {
+            $rowTypes = @(foreach ($t in $ts) {
+                    $c = if ($exp -eq 'presets') { @($t.presets | Where-Object { -not $sc.skip -or -not (@($sc.skip) -contains $_) }).Count } else { 1 }
+                    if ($exp -eq 'presets' -and $sc.limit -gt 0) { $c = [math]::Min($c, [int]$sc.limit) }
+                    for ($k = 0; $k -lt $c; $k++) { "$($t.layer)" }
+                })
+        }
+        for ($k = 0; $k -lt $n; $k++) { $r.rowPics += $pics; $r.rowLand += $(if ($sc.land -and -not $sc.on) { 1 } else { 0 }); $r.rowType += "$(@($rowTypes)[$k])" }
         if ($sc.on) { continue }
         if ($sc.land) { $r.land += $n; continue }
         $kind = switch ("$($sc.site)".ToLowerInvariant()) { 'zoned' { 'Zoned' } 'slope' { 'Slope' } 'rough' { 'Rough' } 'survive' { 'Survive' } default { 'Flat' } }
@@ -398,12 +450,23 @@ function Q-Snapshot([string]$repo, [switch]$NoBuild) {
             } catch { }
             if (-not $git) { $git = 'nogit' }
             $dir = Join-Path $script:Q.Bundles $hash
-            if (Q-BundleOk $dir) {
-                Q-WriteJson (Join-Path $tmp 'bundle.json') ([ordered]@{ hash = $hash; git = $git; dllHash = $dllHash; label = "$git+$dllHash"; repo = $repo; created = (Get-Date).ToString('o'); files = $keys.Count; bytes = $bytes })
-                if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }   # an incomplete one
+            # the folder hash of mod\ as frozen: a reused bundle and every install are checked against it
+            $modHash = (MI-FolderInfo (Join-Path $tmp 'mod')).hash
+            $have = Q-BundleOk $dir
+            if (-not $have) { $bj = Q-ReadJson (Join-Path $dir 'bundle.json'); if (-not $bj -or $bj.modHash -ne $modHash -or (MI-FolderInfo (Join-Path $dir 'mod')).hash -ne $modHash) { $have = 'damaged' } }
+            if ($have) {
+                Q-WriteJson (Join-Path $tmp 'bundle.json') ([ordered]@{ hash = $hash; git = $git; dllHash = $dllHash; label = "$git+$dllHash"; repo = $repo; created = (Get-Date).ToString('o'); files = $keys.Count; bytes = $bytes; modHash = $modHash })
+                $again = Q-ReadJson (Join-Path $dir 'bundle.json')
+                if ((Test-Path -LiteralPath $dir) -and -not ($have -ne 'damaged' -and $again -and $again.modHash -eq $modHash -and -not (Q-BundleOk $dir))) {
+                    # an incomplete or damaged one (a clean-up cut off half way): renamed away in one step, then deleted
+                    # (not one another client has just frozen)
+                    $gone = Join-Path $script:Q.Bundles ('.gone-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+                    try { [IO.Directory]::Move($dir, $gone); Remove-Item -LiteralPath $gone -Recurse -Force -ErrorAction SilentlyContinue } catch { }
+                }
                 try { [IO.Directory]::Move($tmp, $dir) } catch { }   # another client may have frozen the same build first
             }
             $bad = Q-BundleOk $dir
+            if (-not $bad) { $bj = Q-ReadJson (Join-Path $dir 'bundle.json'); if ($bj.modHash -ne $modHash) { $bad = "its frozen copy in $dir is not the build it should be" } }
             if ($bad) { return [pscustomobject]@{ code = 3; message = "could not freeze the build into $dir ($bad)"; tail = @() } }
             Q-Touch $dir   # in use: the clean-up goes by last use
             $b = Q-ReadJson (Join-Path $dir 'bundle.json')
@@ -420,20 +483,77 @@ function Q-DispatcherInfo {
     return $null
 }
 
+# The dispatcher runs from a copy of its scripts in the queue folder (dispatcher\<hash>\tools\suite\), not from the
+# worktree that started it: a worktree removed or edited later cannot break it (Run-Suite -RestoreOnly included), and a
+# copy that does not parse is never started. dispatcher\good.json names the last copy that ran well (a fallback).
+$script:QDispFiles = @('Game-Dispatcher.ps1', 'GameQueue.ps1', 'ModsInstall.ps1', 'Run-Suite.ps1')
+
+function Q-ParseErrors([string]$file) {
+    $tok = $null; $err = $null
+    [void][Management.Automation.Language.Parser]::ParseFile($file, [ref]$tok, [ref]$err)
+    return @($err | Where-Object { $_ } | ForEach-Object { "$(Split-Path $file -Leaf) line $($_.Extent.StartLineNumber): $($_.Message)" })
+}
+
+# @{ dir (the copy's tools\suite, '' when none); hash; errors }
+function Q-DispatcherCopy([string]$scriptDir) {
+    $lines = @()
+    foreach ($f in $script:QDispFiles) {
+        $p = Join-Path $scriptDir $f
+        if (-not (Test-Path -LiteralPath $p)) { return @{ dir = ''; hash = ''; errors = @("$f is missing in $scriptDir") } }
+        $lines += "${f}:" + (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash
+    }
+    $hash = (Q-HashText ($lines -join "`n")).Substring(0, 12)
+    $root = Join-Path $script:Q.Disp $hash
+    $dir = Join-Path $root 'tools\suite'
+    if (-not (Test-Path -LiteralPath (Join-Path $dir 'copied.txt'))) {
+        $errs = @(); foreach ($f in $script:QDispFiles) { $errs += @(Q-ParseErrors (Join-Path $scriptDir $f)) }
+        if ($errs.Count -gt 0) { return @{ dir = ''; hash = $hash; errors = $errs } }
+        $tmp = Join-Path $script:Q.Disp ('.tmp-' + $PID + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+        New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'tools\suite') | Out-Null
+        foreach ($f in $script:QDispFiles) { Copy-Item -LiteralPath (Join-Path $scriptDir $f) -Destination (Join-Path $tmp "tools\suite\$f") -Force }
+        Set-Content -LiteralPath (Join-Path $tmp 'tools\suite\copied.txt') -Value "from $scriptDir at $((Get-Date).ToString('o'))" -Encoding UTF8
+        if (Test-Path -LiteralPath $root) { $gone = Join-Path $script:Q.Disp ('.gone-' + [guid]::NewGuid().ToString('N').Substring(0, 6)); try { [IO.Directory]::Move($root, $gone); Remove-Item -LiteralPath $gone -Recurse -Force -ErrorAction SilentlyContinue } catch { } }   # an incomplete one
+        try { [IO.Directory]::Move($tmp, $root) } catch { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }   # another client copied it first
+        if (-not (Test-Path -LiteralPath (Join-Path $dir 'copied.txt'))) { return @{ dir = ''; hash = $hash; errors = @("could not copy the dispatcher's scripts into $root") } }
+    }
+    return @{ dir = $dir; hash = $hash; errors = @() }
+}
+function Q-GoodCopy {
+    $g = Q-ReadJson (Join-Path $script:Q.Disp 'good.json')
+    if ($g -and $g.hash) {
+        $dir = Join-Path $script:Q.Disp "$($g.hash)\tools\suite"
+        if (Test-Path -LiteralPath (Join-Path $dir 'Game-Dispatcher.ps1')) { return @{ dir = $dir; hash = "$($g.hash)"; errors = @() } }
+    }
+    return @{ dir = ''; hash = ''; errors = @('no copy of the dispatcher has run well before') }
+}
+
 # Starts the dispatcher detached: Game-Dispatcher.ps1 -Detach starts the real one and exits at once, so the dispatcher
 # is nobody's child and outlives the command that started it (an agent's background command is stopped with its tree).
-function Q-StartDispatcher([string]$scriptDir) {
-    $script = Join-Path $scriptDir 'Game-Dispatcher.ps1'
+# Returns @{ pid (0: none came up); why; copy }.
+function Q-StartDispatcher([string]$scriptDir, [switch]$UseGood) {
+    Q-Init
+    $c = if ($UseGood) { Q-GoodCopy } else { Q-DispatcherCopy $scriptDir }
+    if (-not $c.dir) { return @{ pid = 0; why = ($c.errors -join '; '); copy = $c.hash } }
+    $script = Join-Path $c.dir 'Game-Dispatcher.ps1'
+    $logFrom = Q-FileLength $script:Q.Log
     $p = Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$script`" -Detach" -WindowStyle Hidden -WorkingDirectory $env:USERPROFILE -PassThru
     $p.WaitForExit(15000) | Out-Null
-    for ($i = 0; $i -lt 20; $i++) { $d = Q-DispatcherInfo; if ($d) { return [int]$d.pid }; Start-Sleep -Milliseconds 250 }
-    return 0
+    for ($i = 0; $i -lt 24; $i++) { $d = Q-DispatcherInfo; if ($d) { return @{ pid = [int]$d.pid; why = ''; copy = $c.hash } }; Start-Sleep -Milliseconds 250 }
+    # it did not come up: what it logged
+    $new = ''
+    try { $fs = [IO.File]::Open($script:Q.Log, 'Open', 'Read', 'ReadWrite, Delete'); try { if ($logFrom -le $fs.Length) { [void]$fs.Seek($logFrom, 'Begin') }; $new = (New-Object IO.StreamReader($fs, [Text.Encoding]::UTF8)).ReadToEnd() } finally { $fs.Dispose() } } catch { }
+    $tail = @($new -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 2) -join ' / '
+    return @{ pid = 0; why = $(if ($tail) { $tail } else { "it exited at once without a word ($script)" }); copy = $c.hash }
+}
+
+function Q-LogTail([int]$n = 3) {
+    try { return (@(Get-Content -LiteralPath $script:Q.Log -Tail $n -Encoding UTF8 -ErrorAction Stop) -join ' / ') } catch { return '' }
 }
 
 # ───────────── the client: ask, wait, print ─────────────
 
 function Q-NewId([string]$who) {
-    $safe = ($who -replace '[^A-Za-z0-9._-]', '-')
+    $safe = ($who -replace '[^A-Za-z0-9_-]', '-')   # no '.': an id ending in '.result' would name a file the game never reads
     if ($safe.Length -gt 40) { $safe = $safe.Substring(0, 40) }
     return ('{0}-{1}-{2}' -f (Get-Date -Format 'yyyyMMdd-HHmmss-fff'), $safe, ([guid]::NewGuid().ToString('N').Substring(0, 4)))
 }
@@ -497,7 +617,7 @@ function Q-Progress($st, [string]$id) {
         if ($cur.kind -eq 'play') { $parts += "now: the user's playground ($($cur.who))" }
         else { $parts += "now: $($cur.who) $(if ($cur.total) { "$($cur.done) of $($cur.total) build(s) done" } else { "$($cur.scenarios) build(s)" }), $(Q-Duration $cur.runningSec) in$(if ([double]$cur.overSec -gt 0) { ", $(Q-Duration $cur.overSec) over its estimate" })" }
     }
-    if ($st.game -and $st.game.build) { $parts += "game open with build $($st.game.build)$(if ($st.game.state -ne 'ready') { " ($($st.game.state))" })" }
+    if ($st.game -and $st.game.build) { $parts += "game open with build $($st.game.build)$(if ($st.game.state -ne 'ready') { " ($($st.game.state)$(if ([double]$st.game.bootOverSec -gt 0) { ", $(Q-Duration $st.game.bootOverSec) over its usual $(Q-Duration $st.rates.bootSec) boot" }))" })" }
     if ($st.note) { $parts += $st.note }
     if ($me) {
         if ($me.unknown -or $st.paused) { $parts += 'ETA unknown until the user''s game or playground ahead is closed' }
@@ -527,7 +647,17 @@ function Q-SubmitAndWait([hashtable]$req, [string]$payloadText, [string]$scriptD
     try { $parent = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId } catch { }
     $parentStart = if ($parent) { Q-ProcStart $parent } else { 0 }
     $lastPrint = [datetime]::MinValue; $lastLine = ''; $lastKey = ''; $lastStart = [datetime]::MinValue
-    $orphanSince = $null; $retired = $false
+    $orphanSince = $null; $retired = $false; $finishingSince = $null
+    # the client never waits for ever: it gives up (STUCK, exit 1) when no live dispatcher has written a fresh status.json
+    # for 3 min, or when a dispatcher could not be started 4 times in a row
+    $healthyAt = Get-Date; $startFails = 0; $startedOwn = $false; $useGood = $false
+    $lastSt = $null; $lastStAt = [datetime]::MinValue
+    $stuck = {
+        param([string]$why)
+        Q-Cancel $id 'the queue is stuck' | Out-Null
+        Q-Say "STUCK: $why; giving up. The dispatcher's last lines: $(Q-LogTail 3) (all in $($script:Q.Log))"
+        return [pscustomobject]@{ code = 1; status = 'stuck'; message = "the game queue is stuck: $why" }
+    }
     $finished = $false
     try {
         while ($true) {
@@ -539,37 +669,56 @@ function Q-SubmitAndWait([hashtable]$req, [string]$payloadText, [string]$scriptD
                 if ($s.state -eq 'done') { $finished = $true; return $s.result }
                 if ($s.state -eq 'gone') { $finished = $true; Q-Say 'your request was taken out of the line (its folder was deleted)'; return [pscustomobject]@{ code = 2; status = 'cancelled'; message = 'removed from the line' } }
             }
+            if ($s.state -eq 'finishing') {
+                if (-not $finishingSince) { $finishingSince = Get-Date }
+                elseif (((Get-Date) - $finishingSince).TotalSeconds -gt 90) { $finished = $true; return (& $stuck "your request is in $($script:Q.Done)\$id but its result.json was never written") }
+            } else { $finishingSince = $null }
             if ($parent -and $parentStart -and -not (Q-Alive $parent $parentStart)) { Q-Cancel $id 'the command that asked is gone' | Out-Null; $finished = $true; return [pscustomobject]@{ code = 2; status = 'cancelled'; message = 'the asking command is gone' } }
             $disp = Q-DispatcherInfo
             if (-not $disp -and ((Get-Date) - $lastStart).TotalSeconds -gt 20) {
                 Start-Sleep -Milliseconds (Get-Random -Minimum 0 -Maximum 800)   # several clients: the dispatcher's own lock keeps one
                 if (-not (Q-DispatcherInfo)) {
-                    $dp = Q-StartDispatcher $scriptDir
-                    Q-Say "no dispatcher was running: started one (PID $dp)"
+                    # our own copy first; when it did not come up (or came up and never answered), the last copy that ran well
+                    $r = Q-StartDispatcher $scriptDir -UseGood:$useGood
+                    if ($r.pid) {
+                        Q-Say "no dispatcher was running: started one (PID $($r.pid)$(if ($useGood) { ", the last copy that ran well ($($r.copy))" }))"
+                        if (-not $useGood) { $startedOwn = $true }
+                    } else {
+                        $startFails++
+                        Q-Say "could not start the dispatcher (attempt $startFails of 4$(if ($useGood) { ', the last copy that ran well' })): $($r.why)"
+                        if (-not $useGood -and (Q-GoodCopy).dir) { $useGood = $true }
+                        if ($startFails -ge 4) { $finished = $true; return (& $stuck "the dispatcher could not be started ($startFails attempts): $($r.why)") }
+                    }
                 }
                 $lastStart = Get-Date
             }
-            if ($disp -and -not $retired -and [int]$disp.v -lt $script:QVersion) {
-                Q-WriteJson $script:Q.Retire ([ordered]@{ v = $script:QVersion; by = $req.who; pid = $PID; at = (Get-Date).ToString('o') })
+            # a newer client asks an older dispatcher to hand over (only while this request is in line; the file names us,
+            # so a dispatcher ignores it once we are gone)
+            if ($disp -and -not $retired -and -not $useGood -and [int]$disp.v -lt $script:QVersion) {
+                Q-WriteJson $script:Q.Retire ([ordered]@{ v = $script:QVersion; by = $req.who; pid = $PID; start = (Q-ProcStart $PID); request = $id; at = (Get-Date).ToString('o') })
                 Q-Say "the dispatcher running (PID $($disp.pid)) is an older version ($([int]$disp.v)); asked it to hand over when the game is free"
                 $retired = $true
             }
+            # status.json is replaced while it is read: a failed read keeps the last one for a moment
             $st = Q-ReadJson $script:Q.Status
+            if ($st) { $lastSt = $st; $lastStAt = Get-Date } elseif ($lastSt -and ((Get-Date) - $lastStAt).TotalSeconds -lt 10) { $st = $lastSt }
             if ($st -and $disp -and $st.dispatcherPid -ne $disp.pid) { $st = $null }
-            # stuck? (the dispatcher is alive but has stopped writing status.json, or our request sits in active\ unrun)
+            $age = if ($st) { ((Get-Date) - (Q-Date $st.updated)).TotalSeconds } else { 1e9 }
+            if ($st -and $disp -and $age -lt 60) { $healthyAt = Get-Date; $startFails = 0 }
+            $unhealthy = ((Get-Date) - $healthyAt).TotalSeconds
+            if ($startedOwn -and -not $useGood -and $unhealthy -gt 60 -and (Q-GoodCopy).dir) { $useGood = $true }   # ours came up but never answered
+            if ($unhealthy -gt 180) {
+                $finished = $true
+                $why = if ($disp -and $st) { "the dispatcher (PID $($disp.pid)) has not updated status.json for $(Q-Duration $age)" } elseif ($disp) { "the dispatcher (PID $($disp.pid)) has written no status for 3 min" } else { 'no dispatcher has been running for 3 min' }
+                return (& $stuck $why)
+            }
+            # stuck? (our request sits in active\ unrun)
             if ($st -and $disp) {
-                $age = ((Get-Date) - (Q-Date $st.updated)).TotalSeconds
-                if ($age -gt 180) {
-                    $finished = $true
-                    Q-Say "STUCK: the dispatcher (PID $($disp.pid)) has not updated status.json for $(Q-Duration $age); giving up (see $($script:Q.Log))"
-                    return [pscustomobject]@{ code = 1; status = 'stuck'; message = "the game queue's dispatcher stopped answering ($(Q-Duration $age))" }
-                }
                 if ($s.state -eq 'active' -and $age -lt 15 -and -not ($st.current -and $st.current.id -eq $id)) {
                     if (-not $orphanSince) { $orphanSince = Get-Date }
                     elseif (((Get-Date) - $orphanSince).TotalSeconds -gt 60) {
                         $finished = $true
-                        Q-Say "STUCK: your request has been in $($script:Q.Active) for over a minute but the dispatcher is not running it; giving up (see $($script:Q.Log))"
-                        return [pscustomobject]@{ code = 1; status = 'stuck'; message = 'the request was taken from the line but never run' }
+                        return (& $stuck "your request has been in $($script:Q.Active) for over a minute but the dispatcher is not running it")
                     }
                 } else { $orphanSince = $null }
             }
@@ -583,6 +732,7 @@ function Q-SubmitAndWait([hashtable]$req, [string]$payloadText, [string]$scriptD
         }
     } finally {
         if (-not $finished) { Q-Cancel $id 'stopped (Ctrl+C)' | Out-Null }
+        if ($retired) { $rt = Q-ReadJson $script:Q.Retire; if ($rt -and [int]$rt.pid -eq $PID) { Remove-Item -LiteralPath $script:Q.Retire -Force -ErrorAction SilentlyContinue } }   # our hand-over request goes with us
     }
 }
 
@@ -595,6 +745,7 @@ function Q-UniqueRunId([string]$runId, [string]$resultsRoot) {
 
 # Run-Suite.ps1 through the queue (Show.ps1 and Play.ps1 call Run-Suite). Returns the exit code Run-Suite would have.
 function Invoke-QueuedRun([string]$repo, [hashtable]$o) {
+    $o.ResultsRoot = Q-FullPath $o.ResultsRoot   # the dispatcher works in another folder
     $playground = [bool]$o.Playground
     $set = $o.Set
     $payload = '{}'
@@ -628,7 +779,7 @@ function Invoke-QueuedRun([string]$repo, [hashtable]$o) {
         clientPid = $PID; clientStart = (Q-ProcStart $PID)
         build = [ordered]@{ hash = $snap.hash; label = $snap.label; git = $snap.git; dllHash = $snap.dllHash; bundle = $snap.bundle }
         session = $session; key = "$($snap.hash)|$(Q-HashText $sig)".Substring(0, 30)
-        scenarios = [int]$needs.scenarios; land = [int]$needs.land; blocks = $needs.blocks; rowPics = @($needs.rowPics); rowLand = @($needs.rowLand)
+        scenarios = [int]$needs.scenarios; land = [int]$needs.land; blocks = $needs.blocks; rowPics = @($needs.rowPics); rowLand = @($needs.rowLand); rowType = @($needs.rowType)
         runId = $runId; resultsRoot = $o.ResultsRoot; resultsDir = (Join-Path $o.ResultsRoot $runId)
         timeoutMin = [int]$o.TimeoutMin; fresh = $false
     }
@@ -641,6 +792,7 @@ function Invoke-QueuedRun([string]$repo, [hashtable]$o) {
 # Send-Suite.ps1 through the queue: the file runs in the queue's game with the requester's current build (Run-Suite's
 # default session options, so it shares the game a Show.ps1 of the same build opened). Returns @{ code; resultsDir; result }.
 function Invoke-QueuedSend([string]$repo, [string]$text, [string]$base, [hashtable]$o) {
+    $o.ResultsRoot = Q-FullPath $o.ResultsRoot
     $doc = $text | ConvertFrom-Json
     $who = if ($o.Who) { $o.Who } else { Q-Who $repo }
     $noBuild = -not $o.Build -and (Test-Path -LiteralPath (Join-Path $repo 'bin\Release\Placemaker.dll'))
@@ -658,7 +810,7 @@ function Invoke-QueuedSend([string]$repo, [string]$text, [string]$base, [hashtab
         kind = 'send'; repo = $repo; set = $base; clientPid = $PID; clientStart = (Q-ProcStart $PID)
         build = [ordered]@{ hash = $snap.hash; label = $snap.label; git = $snap.git; dllHash = $snap.dllHash; bundle = $snap.bundle }
         session = $session; key = "$($snap.hash)|$(Q-HashText $sig)".Substring(0, 30)
-        scenarios = [int]$needs.scenarios; land = [int]$needs.land; blocks = $needs.blocks; rowPics = @($needs.rowPics); rowLand = @($needs.rowLand)
+        scenarios = [int]$needs.scenarios; land = [int]$needs.land; blocks = $needs.blocks; rowPics = @($needs.rowPics); rowLand = @($needs.rowLand); rowType = @($needs.rowType)
         runId = $runId; resultsRoot = $o.ResultsRoot; resultsDir = (Join-Path $o.ResultsRoot $runId)
         timeoutMin = $(if ($o.TimeoutSec -gt 0) { [int][math]::Ceiling($o.TimeoutSec / 60) } else { 0 }); fresh = $false
     }

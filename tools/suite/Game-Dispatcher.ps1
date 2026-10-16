@@ -24,18 +24,26 @@
   * Results: each request's own folder (summary.json, scenarios, shots, its own part of the logs, contact.html) in the
     requester's ResultsRoot.
   * After -IdleMinutes with an empty line the game quits; once the user's build is back the lock is released and it exits.
+  * The user first: when a game it did not start closes (the user's, a playground), or its own game is stopped from
+    outside (Steam's Stop, Task Manager, the window closed), it waits -UserGraceSec before launching a game, so the user
+    can start theirs; when the user starts a game (or the Paradox launcher) while its game is open, the request in the
+    game finishes and its game quits.
+  * It runs from a copy of its scripts in the queue folder (GameQueue.ps1, Q-StartDispatcher); dispatcher\good.json
+    names the last copy that ran well.
 #>
 param(
     [double]$IdleMinutes = 10,
     [double]$StarveMinutes = 10,
     [int]$ExitGraceSec = 20,
+    [int]$UserGraceSec = 120,
     # started by a client: start the real dispatcher (hidden) and exit, so it is nobody's child
     [switch]$Detach
 )
 $ErrorActionPreference = 'Stop'
 if ($Detach) {
-    $pass = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-IdleMinutes', $IdleMinutes, '-StarveMinutes', $StarveMinutes, '-ExitGraceSec', $ExitGraceSec)
+    $pass = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-IdleMinutes', $IdleMinutes, '-StarveMinutes', $StarveMinutes, '-ExitGraceSec', $ExitGraceSec, '-UserGraceSec', $UserGraceSec)
     if ($env:PLACEMAKER_GAME_QUEUE -and $env:PLACEMAKER_GAME_QUEUE_IDLE) { $pass[6] = $env:PLACEMAKER_GAME_QUEUE_IDLE }   # tests
+    if ($env:PLACEMAKER_GAME_QUEUE -and $env:PLACEMAKER_GAME_QUEUE_GRACE) { $pass[12] = $env:PLACEMAKER_GAME_QUEUE_GRACE }   # tests
     Start-Process -FilePath 'powershell.exe' -ArgumentList ($pass -join ' ') -WindowStyle Hidden -WorkingDirectory $env:USERPROFILE | Out-Null
     exit 0
 }
@@ -69,9 +77,28 @@ if ($old -and $old.pid -and $old.pid -ne $PID) { D-Log "took over the lock of di
 $lockBytes = [Text.Encoding]::UTF8.GetBytes((([ordered]@{ pid = $PID; start = (Q-ProcStart $PID); at = (Get-Date).ToString('o'); v = $script:QVersion; script = $PSCommandPath }) | ConvertTo-Json -Compress))
 $script:lockStream.SetLength(0); $script:lockStream.Write($lockBytes, 0, $lockBytes.Length); $script:lockStream.Flush()
 D-Log "dispatcher up (PID $PID, v$($script:QVersion), $PSCommandPath)$(if ($script:QFake) { ", FAKE host $script:QFake" })"
-$rt = Q-ReadJson $script:Q.Retire
-if ($rt -and [int]$rt.v -le $script:QVersion) { Remove-Item -LiteralPath $script:Q.Retire -Force -ErrorAction SilentlyContinue }
-Q-SeedHistory
+# a stand-in queue folder (tests) never runs real game hosts, and never with a second install state over the real Mods
+if ($env:PLACEMAKER_GAME_QUEUE -and -not ($script:QFake -and $env:PLACEMAKER_GAME_QUEUE_MODS)) {
+    D-Log "PLACEMAKER_GAME_QUEUE is set without both PLACEMAKER_GAME_QUEUE_FAKE and PLACEMAKER_GAME_QUEUE_MODS: a stand-in queue never runs the real game or touches the real Mods\Placemaker; not starting"
+    try { $script:lockStream.Dispose() } catch { }
+    exit 1
+}
+
+# A newer client's request to hand over (retire.json): only while that client lives and a request of the newer protocol
+# is in line; a request whose writer is gone, or that is not newer, is removed (it could otherwise stop every older
+# dispatcher for ever).
+function D-RetireWanted($queued) {
+    $rt = Q-ReadJson $script:Q.Retire
+    if (-not $rt) { return $null }
+    $drop = ''
+    if ([int]$rt.v -le $script:QVersion) { $drop = "not newer (v$($rt.v))" }
+    elseif (-not (Q-Alive $rt.pid $rt.start)) { $drop = "its client (PID $($rt.pid)) is gone" }
+    if ($drop) { Remove-Item -LiteralPath $script:Q.Retire -Force -ErrorAction SilentlyContinue; D-Log "ignored a request to hand over from $($rt.by): $drop"; return $null }
+    if (-not @($queued | Where-Object { [int]$_.v -gt $script:QVersion }).Count) { return $null }
+    return $rt
+}
+try { D-RetireWanted @(Q-Queued) | Out-Null } catch { D-Log "reading retire.json: $($_.Exception.Message)" }
+try { Q-SeedHistory } catch { D-Log "seeding the ETA history failed: $($_.Exception.Message)" }
 
 $script:sess = $null          # the game this dispatcher runs (persisted in session.json)
 $script:active = $null        # @{ req; dir; feed; takenAt } the request in the game now
@@ -82,7 +109,16 @@ $script:paused = $false
 $script:bootFailures = @{}
 $script:startFailures = @{}
 $script:feedFailures = @{}
-$script:orphanQuit = @{}
+$script:stoppedBoots = @{}      # boots stopped from outside, per build key (3: its requests fail)
+$script:orphanQuit = @{}        # runId -> @{ at; sent }
+$script:userGame = ''           # the note while a game the user started (or the Paradox launcher) is open
+$script:userSeen = $null        # @{ at; kind } while such a game is open (its closing starts the grace below)
+$script:userGraceUntil = [datetime]::MinValue
+$script:userGraceNote = ''
+# the grace outlives a dispatcher that stops meanwhile (the next one waits it out too)
+function D-SaveGrace { Q-WriteJson (Join-Path $script:Q.Root 'grace.json') ([ordered]@{ until = $script:userGraceUntil.ToString('o'); note = $script:userGraceNote }) }
+try { $g = Q-ReadJson (Join-Path $script:Q.Root 'grace.json'); if ($g -and $g.until -and (Q-Date $g.until) -gt (Get-Date)) { $script:userGraceUntil = Q-Date $g.until; $script:userGraceNote = "$($g.note)" } } catch { }
+$script:goodWritten = $false
 $script:lastGc = [datetime]::MinValue
 $script:hostBackoff = [datetime]::MinValue
 $script:backoffNote = ''
@@ -116,12 +152,14 @@ function D-CmdLine($p) {
     return $cmd
 }
 
-# Cities2.exe processes this dispatcher did not start, classified. Never touched (an earlier dispatcher's game excepted).
+# Cities2.exe processes this dispatcher did not start, classified, and the Paradox launcher (the user starting the game).
+# Never touched (an earlier dispatcher's game excepted).
 function D-Foreign {
     if ($script:QFake) {
-        $f = Join-Path $script:Q.Root 'fake-user-game'
-        if (Test-Path -LiteralPath $f) { return @([pscustomobject]@{ pid = 0; kind = 'user'; runId = '' }) }
-        return @()
+        $r = @()
+        if (Test-Path -LiteralPath (Join-Path $script:Q.Root 'fake-user-game')) { $r += [pscustomobject]@{ pid = 0; kind = 'user'; runId = '' } }
+        if (Test-Path -LiteralPath (Join-Path $script:Q.Root 'fake-launcher')) { $r += [pscustomobject]@{ pid = 0; kind = 'launcher'; runId = '' } }
+        return $r
     }
     $r = @()
     foreach ($p in @(Get-Process -Name 'Cities2' -ErrorAction SilentlyContinue)) {
@@ -131,6 +169,7 @@ function D-Foreign {
         $kind = if (-not $tok) { 'user' } elseif ($tok -like 'queue-*') { 'orphan' } elseif ($tok -like 'play-*') { 'playground' } else { 'runner' }
         $r += [pscustomobject]@{ pid = $p.Id; kind = $kind; runId = $tok }
     }
+    foreach ($id in @(MI-Launchers)) { $r += [pscustomobject]@{ pid = $id; kind = 'launcher'; runId = '' } }
     return $r
 }
 
@@ -158,6 +197,7 @@ function D-WaitNote($foreign, $holder) {
     if ($f) {
         switch ($f.kind) {
             'user' { return "waiting: the user's own game is open (Cities2.exe PID $($f.pid)); the queue goes on when it closes" }
+            'launcher' { return "waiting: the user is starting the game (the Paradox launcher is open, PID $($f.pid)); the queue goes on when it closes" }
             'playground' { return "waiting: the user's playground is open (run $($f.runId)); the queue goes on when they close the game" }
             'orphan' { return "waiting: an earlier queue game (run $($f.runId)) is closing" }
             default { return "waiting: a game runner started outside the queue has the game (run $($f.runId), PID $($f.pid))" }
@@ -167,18 +207,24 @@ function D-WaitNote($foreign, $holder) {
     return ''
 }
 
-# A game an earlier (dead) dispatcher left: ask it to quit through its inbox, kill it only if it will not.
+# A game an earlier (dead) dispatcher left: ask it to quit through its inbox (again once its inbox appears: a game still
+# booting has none yet), kill it only if it will not.
 function D-HandleOrphans($foreign) {
     foreach ($f in @($foreign | Where-Object { $_.kind -eq 'orphan' })) {
+        $inbox = Join-Path (Join-Path $script:QMainRuns $f.runId) 'inbox'
         if (-not $script:orphanQuit.ContainsKey($f.runId)) {
-            $inbox = Join-Path (Join-Path $script:QMainRuns $f.runId) 'inbox'
-            if (Test-Path -LiteralPath $inbox) { Q-WriteText (Join-Path $inbox ((Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-quit.json')) '{"command":"quit"}' | Out-Null }
-            $script:orphanQuit[$f.runId] = Get-Date
-            D-Log "an earlier queue game is still open (run $($f.runId), PID $($f.pid)): asked it to quit"
-        } elseif (((Get-Date) - $script:orphanQuit[$f.runId]).TotalSeconds -gt 240) {
+            $script:orphanQuit[$f.runId] = @{ at = (Get-Date); sent = $false }
+            D-Log "an earlier queue game is still open (run $($f.runId), PID $($f.pid)): asking it to quit"
+        }
+        $o = $script:orphanQuit[$f.runId]
+        if (-not $o.sent -and (Test-Path -LiteralPath $inbox)) {
+            $o.sent = [bool](Q-WriteText (Join-Path $inbox ((Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-quit.json')) '{"command":"quit"}')
+            if ($o.sent) { $o.at = Get-Date; D-Log "asked the earlier queue game $($f.runId) to quit through its inbox" }
+        }
+        if (((Get-Date) - $o.at).TotalSeconds -gt 240) {
             D-Log "the earlier queue game (run $($f.runId), PID $($f.pid)) did not quit in 240 s: stopping it (a queue game, not the user's)"
             Stop-Process -Id $f.pid -Force -ErrorAction SilentlyContinue
-            $script:orphanQuit[$f.runId] = Get-Date
+            $o.at = Get-Date
         }
     }
 }
@@ -304,7 +350,7 @@ function D-CountLaunch([string]$how) {
     if (-not $script:sess -or $script:sess.launchCounted) { return }
     $script:sess['launchCounted'] = $true; D-SaveSession
     $script:launches++
-    try { Add-Content -LiteralPath $script:Q.Launches -Value "$($script:sess.launchLine): $how" } catch { }
+    try { [IO.File]::AppendAllText($script:Q.Launches, "$($script:sess.launchLine): $how`r`n", (New-Object Text.UTF8Encoding $false)) } catch { }
 }
 
 function D-Beat {
@@ -312,6 +358,15 @@ function D-Beat {
     $b = Q-ReadJson (Join-Path $script:sess.dir 'heartbeat.json')
     if ($b -and $b.runId -ne $script:sess.id) { return $null }
     return $b
+}
+
+# Stops the queue's own game the sure way: its PID when it is verified as ours; and always through its host, which knows
+# the PID it started (stop-game.txt in the run folder: the host kills that PID and ends as 'killed').
+function D-StopGame([string]$why) {
+    $gp = D-GamePid -Loose
+    if ($gp) { D-Log "${why}: stopping game $($script:sess.id) (PID $gp, started by the queue)"; Stop-Process -Id $gp -Force -ErrorAction SilentlyContinue }
+    else { D-Log "${why}: asking the host of game $($script:sess.id) to stop the game it started" }
+    Q-WriteText (Join-Path $script:sess.dir 'stop-game.txt') "$why ($((Get-Date).ToString('o')))" | Out-Null
 }
 
 function D-QuitSession([string]$why) {
@@ -325,16 +380,19 @@ function D-QuitSession([string]$why) {
 }
 
 # The queue game's Cities2.exe PID (from its heartbeat), only when that process really is our game: Cities2.exe with this
-# session's -placemakerSuite token (a PID Windows has reused is never killed).
-function D-GamePid {
+# session's -placemakerSuite token (a PID Windows has reused is never killed). -Loose (when the command line cannot be
+# read): Cities2.exe started after this session's host started it.
+function D-GamePid([switch]$Loose) {
     $b = D-Beat
     if (-not $b -or -not $b.pid) { return 0 }
     $gp = [int]$b.pid
     if ($script:QFake) { return $gp }
     $p = Get-Process -Id $gp -ErrorAction SilentlyContinue
     if (-not $p -or $p.ProcessName -ne 'Cities2') { return 0 }
-    if ((D-CmdLine $p) -notmatch ('-placemakerSuite="?' + [regex]::Escape($script:sess.id) + '("|\s|$)')) { return 0 }
-    return $gp
+    $cmd = D-CmdLine $p
+    if ($cmd -match ('-placemakerSuite="?' + [regex]::Escape($script:sess.id) + '("|\s|$)')) { return $gp }
+    if ($Loose -and -not $cmd) { try { if ($p.StartTime -ge (Q-Date $script:sess.startedAt).AddSeconds(-5)) { return $gp } } catch { } }
+    return 0
 }
 
 # The STOP line of a host that stopped before launching the game.
@@ -349,7 +407,14 @@ function D-Take($req) {
     $to = Join-Path $script:Q.Active $req.id
     if (-not (D-MoveDir $from $to)) { return $null }   # gone (cancelled) or held
     $r = Q-ReadJson (Join-Path $to 'request.json')
-    if (-not $r) { D-Log "$($req.id): taken from the line without its request.json: dropped"; Remove-Item -LiteralPath $to -Recurse -Force -ErrorAction SilentlyContinue; return $null }
+    if (-not $r) {
+        # the client is told why (not "its folder was deleted")
+        D-Log "$($req.id): its request.json could not be read once taken from the line: failed"
+        $doneDir = Join-Path $script:Q.Done $req.id
+        if (-not (D-MoveDir $to $doneDir)) { Remove-Item -LiteralPath $to -Recurse -Force -ErrorAction SilentlyContinue }
+        Q-WriteJsonSure (Join-Path $doneDir 'result.json') ([ordered]@{ id = $req.id; who = $req.who; kind = $req.kind; status = 'failed'; code = 1; message = 'the queue could not read its request.json once it was its turn (run the command again)'; finishedAt = (Get-Date).ToString('o') }) | Out-Null
+        return $null
+    }
     return @{ req = $r; dir = $to; feed = $null; takenAt = (Get-Date) }
 }
 
@@ -379,7 +444,7 @@ function D-Feed {
     $payload = [IO.File]::ReadAllText($payloadFile)
     $inbox = Join-Path $script:sess.dir 'inbox'
     New-Item -ItemType Directory -Force -Path $inbox | Out-Null
-    $name = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + ($req.who -replace '[^A-Za-z0-9._-]', '-')
+    $name = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + ($req.who -replace '[^A-Za-z0-9_-]', '-')   # no '.': a name ending in '.result' is never read
     $rowsBefore = @(D-SummaryRows $script:sess.dir).Count
     $now = Get-Date
     # where this request's part of the game's logs starts
@@ -398,8 +463,16 @@ function D-SafeId([string]$id) { foreach ($c in [IO.Path]::GetInvalidFileNameCha
 # The request's own results folder, in the requester's ResultsRoot: what a direct run would have left there. Builds,
 # scenario files and pictures are numbered from 01 and keep the ids the request asked for (the shared game makes ids
 # unique across requests: 'park-default+' is the second park-default of that game); its own part of the logs.
+# Pictures: a hard link to the game's own file (same volume: no second copy on disk), else a copy.
+function D-LinkOrCopy([string]$src, [string]$dst) {
+    if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force -ErrorAction SilentlyContinue }
+    if ("$src$dst" -notmatch '[\[\]*?]') { try { New-Item -ItemType HardLink -Path $dst -Value $src -ErrorAction Stop | Out-Null; return } catch { } }
+    Copy-Item -LiteralPath $src -Destination $dst -Force
+}
+
 function D-Publish($a, $result, [string]$status, [string]$message) {
     $req = $a.req; $feed = $a.feed
+    $note = ''
     $dir = $req.resultsDir
     if (Test-Path -LiteralPath $dir) { $old = "$dir.old-$(Get-Date -Format 'yyyyMMdd-HHmmss')"; try { Move-Item -LiteralPath $dir -Destination $old -ErrorAction Stop } catch { } }
     foreach ($sub in '', 'shots', 'scenarios', 'logs') { New-Item -ItemType Directory -Force -Path (Join-Path $dir $sub) | Out-Null }
@@ -432,11 +505,17 @@ function D-Publish($a, $result, [string]$status, [string]$message) {
                 $src = Join-Path $sd $rel
                 $dst = Join-Path $dir $newRel
                 New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-                if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $dst -Force }
+                if (Test-Path -LiteralPath $src) { D-LinkOrCopy $src $dst }
                 $p.Value = $newRel
             }
         }
         if ($want -ne $sid) { $row.id = $want; $row | Add-Member -NotePropertyName sessionId -NotePropertyValue $sid -Force }
+        if ($status -ne 'served' -and "$($row.status)" -eq 'running') {
+            # the build the game was doing when it went away
+            $row.status = 'interrupted'
+            $row | Add-Member -NotePropertyName failure -NotePropertyValue "the game went away during this build ($message)" -Force
+            $note = "build $($k + 1) of $([int]$req.scenarios) ($want) was running when the game went away"
+        }
         $idMap["$k"] = @{ id = $want; sid = $sid; shots = $row.shots }
         $rows += $row
     }
@@ -472,6 +551,21 @@ function D-Publish($a, $result, [string]$status, [string]$message) {
     $now = Get-Date
     $waited = ($fedAt - (Q-Date $req.created)).TotalSeconds
     $ran = ($now - $fedAt).TotalSeconds
+    if ($status -ne 'served') {
+        # what the requester needs after a crash: the build that was running, and how many never ran (a crash writes no
+        # row for the build it was in: its id comes from the request's own scenarios, when they are not expanded)
+        $missing = [math]::Max(0, [int]$req.scenarios - $rows.Count)
+        if (-not $note -and $missing -gt 0) {
+            $pl = Q-ReadJson (Join-Path $a.dir 'payload.json')
+            $scs = @(if ($pl -and $pl.scenarios) { $pl.scenarios } elseif ($pl -and -not $pl.command) { $pl })
+            $nextId = if (@($scs | Where-Object { $_.expand }).Count -eq 0 -and $rows.Count -lt $scs.Count) { "$($scs[$rows.Count].id)" } else { '' }
+            $note = "build $($rows.Count + 1) of $([int]$req.scenarios)$(if ($nextId) { " ($nextId)" }) was running when the game went away"
+            $missing--
+        }
+        $parts = @(); if ($note) { $parts += $note }; if ($missing -gt 0) { $parts += "$missing of $([int]$req.scenarios) build(s) never ran" }
+        $note = $parts -join '; '
+        if ($note) { $message = "$message; $note" }
+    }
     $byStatus = ($rows | Group-Object { "$($_.status)" } | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', '
     $shotCount = 0; foreach ($r in $rows) { if ($r.shots) { $shotCount += @($r.shots.PSObject.Properties).Count } }
     $headline = "$(if ($status -eq 'served') { 'finished' } else { "$($status.ToUpperInvariant()): $message" }). $($rows.Count) scenarios ($byStatus). Shots: $shotCount. Run in the queue's game $($feed.session)."
@@ -521,7 +615,7 @@ function D-Publish($a, $result, [string]$status, [string]$message) {
         Q-WriteJson (Join-Path $dir 'result.json') $r2
     }
     Q-WriteJson (Join-Path $dir 'host.json') ([ordered]@{ runId = $req.runId; set = $req.set; git = $req.build.git; dllHash = $req.build.dllHash; label = $req.build.label; status = $status; queue = $queueInfo })
-    return @{ waited = $waited; ran = $ran; rows = $rows }
+    return @{ waited = $waited; ran = $ran; rows = $rows; message = $message }
 }
 
 function D-InstalledLine {
@@ -533,8 +627,9 @@ function D-InstalledLine {
 function D-Finish([string]$status, [int]$code, [string]$message, $result) {
     $a = $script:active
     $req = $a.req
-    $pub = @{ waited = 0; ran = 0; rows = @() }
+    $pub = @{ waited = 0; ran = 0; rows = @(); message = $message }
     if ($a.feed -and $req.kind -ne 'play' -and $script:sess) { try { $pub = D-Publish $a $result $status $message } catch { D-Log "publishing $($req.id) failed: $($_.Exception.Message) at $($_.InvocationInfo.ScriptLineNumber)" } }
+    if ($pub.message) { $message = $pub.message }
     if ($req.kind -eq 'play' -and $script:sess -and $script:sess.startedAt) { $pub.waited = ((Q-Date $script:sess.startedAt) - (Q-Date $req.created)).TotalSeconds; $pub.ran = ((Get-Date) - (Q-Date $script:sess.startedAt)).TotalSeconds }
     $res = [ordered]@{
         id = $req.id; who = $req.who; kind = $req.kind; status = $status; code = $code; message = $message
@@ -544,13 +639,13 @@ function D-Finish([string]$status, [int]$code, [string]$message, $result) {
     }
     $doneDir = Join-Path $script:Q.Done $req.id
     if (-not (D-MoveDir $a.dir $doneDir)) { New-Item -ItemType Directory -Force -Path $doneDir | Out-Null }
-    Q-WriteJson (Join-Path $doneDir 'result.json') $res
+    if (-not (Q-WriteJsonSure (Join-Path $doneDir 'result.json') $res)) { D-Log "could not write $(Join-Path $doneDir 'result.json'): its client will say STUCK" }
     if (Test-Path -LiteralPath $a.dir) { Remove-Item -LiteralPath $a.dir -Recurse -Force -ErrorAction SilentlyContinue }   # the move failed: the result is in done\ all the same
     D-Log "finished $($req.id) ($($req.who)): $status$(if ($message) { " - $message" }) (waited $(Q-Duration $pub.waited), ran $(Q-Duration $pub.ran))"
     # history for the ETA
     if ($status -eq 'served' -and $pub.rows -and @($pub.rows).Count -gt 0) {
         $sum = 0.0; foreach ($r in $pub.rows) { if ($r.sec) { $sum += [double]$r.sec } }
-        Q-HistoryAddRows $pub.rows @($req.rowLand)
+        Q-HistoryAddRows $pub.rows @($req.rowLand) @($req.rowType)
         Q-HistoryAdd 'overhead' ([math]::Max(0.5, $pub.ran - $sum))
     }
     $script:active = $null
@@ -652,19 +747,30 @@ function D-Status([string]$state, $queued) {
     }
     $planSess = $null
     $gameState = ''
+    $bootOver = 0
     if ($script:sess) {
         if ($script:sess.kind -eq 'play') { $planSess = @{ key = $null; served = 0; remainSec = 0; unknown = $true }; $gameState = 'playground' }
         elseif ($script:sess.quitAt) { $gameState = 'closing'; $planSess = @{ key = $null; served = 0; remainSec = [math]::Max(3, $rates.quit - ($now - (Q-Date $script:sess.quitAt)).TotalSeconds) } }
-        elseif (-not $script:sess.readyAt) { $gameState = 'starting'; $planSess = @{ key = $script:sess.key; served = $script:sess.served; remainSec = [math]::Max(5, $rates.boot - ($now - (Q-Date $script:sess.startedAt)).TotalSeconds) + $remain } }
+        elseif (-not $script:sess.readyAt) {
+            # a boot slower than usual: the ETA keeps a floor that grows with the overrun (not stuck at a few seconds), and
+            # the clients say how far over its usual boot it is
+            $gameState = 'starting'
+            $bootLeft = $rates.boot - ($now - (Q-Date $script:sess.startedAt)).TotalSeconds
+            if ($bootLeft -lt 10) { $bootOver = [math]::Max(0, -$bootLeft); $bootLeft = 10 + 0.25 * $bootOver }
+            $planSess = @{ key = $script:sess.key; served = $script:sess.served; remainSec = $bootLeft + $remain }
+        }
         else { $gameState = 'ready'; $planSess = @{ key = $script:sess.key; served = $script:sess.served; remainSec = $remain } }
     }
     if ($script:paused) { if ($planSess) { $planSess.unknown = $true } else { $planSess = @{ key = $null; served = 0; remainSec = 0; unknown = $true } } }
-    elseif (-not $script:sess -and $script:hostBackoff -gt $now) { $planSess = @{ key = $null; served = 0; remainSec = ($script:hostBackoff - $now).TotalSeconds } }
+    elseif (-not $script:sess) {
+        $until = $script:hostBackoff; if ($script:userGraceUntil -gt $until) { $until = $script:userGraceUntil }
+        if ($until -gt $now) { $planSess = @{ key = $null; served = 0; remainSec = ($until - $now).TotalSeconds } }
+    }
     $plan = @(Q-Plan $queued $planSess $rates ($StarveMinutes * 60))
     $st = [ordered]@{
         updated = $now.ToString('o'); dispatcherPid = $PID; v = $script:QVersion; state = $state; note = $script:note; paused = $script:paused
-        game = $(if ($script:sess) { [ordered]@{ id = $script:sess.id; kind = $script:sess.kind; build = $script:sess.build; label = $script:sess.label; who = $script:sess.who; state = $gameState; served = $script:sess.served; startedAt = $script:sess.startedAt; readyAt = $script:sess.readyAt; grid = $script:sess.grid } } else { $null })
-        current = $cur; queued = @($queued).Count; plan = $plan; launches = $script:launches; installed = (MI-StatusLine)
+        game = $(if ($script:sess) { [ordered]@{ id = $script:sess.id; kind = $script:sess.kind; build = $script:sess.build; label = $script:sess.label; who = $script:sess.who; state = $gameState; served = $script:sess.served; startedAt = $script:sess.startedAt; readyAt = $script:sess.readyAt; grid = $script:sess.grid; bootOverSec = [math]::Round($bootOver) } } else { $null })
+        current = $cur; queued = @($queued | Where-Object { $_ }).Count; plan = $plan; launches = $script:launches; installed = (MI-StatusLine)
         rates = [ordered]@{ bootSec = [math]::Round($rates.boot); quitSec = [math]::Round($rates.quit); perBuildSec = [math]::Round($rates.base, 1); perPictureSec = [math]::Round($rates.pic, 1); landSec = [math]::Round($rates.land, 1); overheadSec = [math]::Round($rates.overhead, 1) }
     }
     Q-WriteJson $script:Q.Status $st
@@ -682,6 +788,24 @@ function D-TrimLog([string]$p, [int64]$max = 4MB, [int64]$keep = 1MB) {
     } catch { }
 }
 
+# The copy of the scripts this dispatcher runs from (dispatcher\<hash>\tools\suite: the hash), '' when it runs elsewhere.
+function D-MyCopy {
+    $root = Split-Path (Split-Path $PSScriptRoot)
+    if ((Split-Path $root) -eq $script:Q.Disp) { return (Split-Path $root -Leaf) }
+    return ''
+}
+# Once a round has gone well: this copy is the fallback for a client whose own copy does not start.
+function D-MarkGood {
+    if ($script:goodWritten) { return }
+    $script:goodWritten = $true
+    $h = D-MyCopy
+    if (-not $h) { return }
+    $g = Q-ReadJson (Join-Path $script:Q.Disp 'good.json')
+    if ($g -and $g.hash -eq $h) { return }
+    if ($g -and [int]$g.v -gt $script:QVersion) { return }   # a newer one ran well already
+    Q-WriteJson (Join-Path $script:Q.Disp 'good.json') ([ordered]@{ hash = $h; v = $script:QVersion; at = (Get-Date).ToString('o'); pid = $PID })
+}
+
 function D-Gc([switch]$Now) {
     if (-not $Now -and ((Get-Date) - $script:lastGc).TotalMinutes -lt 10) { return }
     $script:lastGc = Get-Date
@@ -695,16 +819,39 @@ function D-Gc([switch]$Now) {
     }
     if ($script:sess) { $keep[$script:sess.build] = $true }
     foreach ($b in Get-ChildItem -LiteralPath $script:Q.Bundles -Directory -Force -ErrorAction SilentlyContinue) {
+        if ($b.Name.StartsWith('.')) {
+            # a freeze, a replacement or a clean-up that was cut off
+            if ($b.LastWriteTime -lt (Get-Date).AddHours(-1)) { Remove-Item -LiteralPath $b.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+            continue
+        }
         if ($keep.ContainsKey($b.Name)) { continue }
-        if ($b.LastWriteTime -lt (Get-Date).AddHours(-6)) { Remove-Item -LiteralPath $b.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+        if ($b.LastWriteTime -lt (Get-Date).AddHours(-6)) {
+            # renamed away first, so a half-deleted build never sits under its name (a client would reuse it)
+            $gone = Join-Path $script:Q.Bundles ('.gc-' + $b.Name)
+            if (D-MoveDir $b.FullName $gone) { Remove-Item -LiteralPath $gone -Recurse -Force -ErrorAction SilentlyContinue }
+        }
     }
     foreach ($f in Get-ChildItem -LiteralPath $script:Q.Logs -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) }) { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
-    # the queue's own game folders (every request has its own copy of its results): 3 days
+    # copies of the dispatcher's scripts: the running one and the last one that ran well stay, others go after a week
+    if (Test-Path -LiteralPath $script:Q.Disp) {
+        $good = Q-ReadJson (Join-Path $script:Q.Disp 'good.json')
+        $mine = D-MyCopy
+        foreach ($d in Get-ChildItem -LiteralPath $script:Q.Disp -Directory -Force -ErrorAction SilentlyContinue) {
+            if ($d.Name -eq $mine -or ($good -and $d.Name -eq $good.hash)) { continue }
+            $age = if ($d.Name.StartsWith('.')) { (Get-Date).AddHours(-1) } else { (Get-Date).AddDays(-7) }
+            if ($d.LastWriteTime -lt $age) { Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+    }
     if (-not $script:QFake -and (Test-Path -LiteralPath $script:QMainRuns)) {
-        foreach ($d in Get-ChildItem -LiteralPath $script:QMainRuns -Directory -Filter 'queue-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) }) {
+        # the queue's own game folders (every request has its own copy of its results): 3 days; so do results that a
+        # request with the same run id moved aside (<run>.old-<time>)
+        foreach ($d in Get-ChildItem -LiteralPath $script:QMainRuns -Directory -ErrorAction SilentlyContinue | Where-Object { ($_.Name -like 'queue-*' -or $_.Name -like '*.old-*') -and $_.LastWriteTime -lt (Get-Date).AddDays(-3) }) {
             if ($script:sess -and $d.Name -eq $script:sess.id) { continue }
             Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue
         }
+        # Show.ps1's set files (a command killed while waiting leaves its own behind)
+        $show = Join-Path $script:forensics 'show'
+        foreach ($f in Get-ChildItem -LiteralPath $show -File -Filter '*.json' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) }) { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
     }
     D-TrimLog $script:Q.Log
     D-TrimLog $script:Q.Launches
@@ -718,7 +865,7 @@ function D-DropDead($queued) {
             $d = Join-Path $script:Q.Requests $r.id
             $doneDir = Join-Path $script:Q.Done $r.id
             if (D-MoveDir $d $doneDir) {
-                Q-WriteJson (Join-Path $doneDir 'result.json') ([ordered]@{ id = $r.id; who = $r.who; status = 'dropped'; code = 2; message = 'the command that asked is gone (Ctrl+C or killed): taken out of the line' })
+                Q-WriteJsonSure (Join-Path $doneDir 'result.json') ([ordered]@{ id = $r.id; who = $r.who; status = 'dropped'; code = 2; message = 'the command that asked is gone (Ctrl+C or killed): taken out of the line' }) | Out-Null
                 D-Log "dropped $($r.id) ($($r.who)): its client PID $($r.clientPid) is gone"
             }
             continue
@@ -730,21 +877,29 @@ function D-DropDead($queued) {
 
 # ───────────── adopt what a dead dispatcher left ─────────────
 
-$prev = Q-ReadJson $script:Q.Session
-if ($prev) {
-    if (Q-Alive $prev.hostPid $prev.hostStart) {
-        $script:sess = [ordered]@{}
-        foreach ($p in $prev.PSObject.Properties) { $script:sess[$p.Name] = $p.Value }
-        D-Log "adopted game $($prev.id) ($($prev.kind), build $($prev.build)) from a dispatcher that is gone"
-    } else {
-        D-Log "the game $($prev.id) of a gone dispatcher has ended"
-        Remove-Item -LiteralPath $script:Q.Session -Force
+# Every step here is guarded on its own: a failure is logged and the dispatcher still reaches its loop (a dispatcher that
+# died here would leave every client waiting).
+function D-Startup([string]$what, [scriptblock]$block) {
+    try { . $block } catch { D-Log "start-up: $what failed: $($_.Exception.Message) at $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())" }
+}
+D-Startup 'adopting the game of a gone dispatcher' {
+    $prev = Q-ReadJson $script:Q.Session
+    if ($prev) {
+        if (Q-Alive $prev.hostPid $prev.hostStart) {
+            $script:sess = [ordered]@{}
+            foreach ($p in $prev.PSObject.Properties) { $script:sess[$p.Name] = $p.Value }
+            D-Log "adopted game $($prev.id) ($($prev.kind), build $($prev.build)) from a dispatcher that is gone"
+        } else {
+            D-Log "the game $($prev.id) of a gone dispatcher has ended"
+            Remove-Item -LiteralPath $script:Q.Session -Force
+        }
     }
 }
-foreach ($d in Get-ChildItem -LiteralPath $script:Q.Active -Directory -ErrorAction SilentlyContinue) {
+foreach ($d in @(Get-ChildItem -LiteralPath $script:Q.Active -Directory -ErrorAction SilentlyContinue)) {
+  D-Startup "adopting $($d.Name)" {
     $req = Q-ReadJson (Join-Path $d.FullName 'request.json')
-    if (-not $req) { Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue; continue }
-    if ($script:active) { continue }   # one request is in the game at a time; D-ReconcileActive puts any other back in line
+    if (-not $req) { Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue; return }
+    if ($script:active) { return }   # one request is in the game at a time; D-ReconcileActive puts any other back in line
     $feed = Q-ReadJson (Join-Path $d.FullName 'feed.json')
     $a = @{ req = $req; dir = $d.FullName; feed = $null; takenAt = (Get-Date) }
     if ($feed) { $a.feed = [ordered]@{}; foreach ($p in $feed.PSObject.Properties) { $a.feed[$p.Name] = $p.Value } }
@@ -752,7 +907,7 @@ foreach ($d in Get-ChildItem -LiteralPath $script:Q.Active -Directory -ErrorActi
     if ($req.kind -eq 'play') {
         if ($script:sess -and $script:sess.kind -eq 'play' -and $script:sess.requestId -eq $req.id) { D-Log "adopted the user's playground request $($req.id)" }
         else { D-Finish 'served' 0 'the playground was closed while no dispatcher was watching' $null }   # never reopened
-        continue
+        return
     }
     if ($script:sess -and $feed -and $feed.session -eq $script:sess.id) {
         D-Log "adopted the request in the game: $($req.id) ($($req.who))"
@@ -764,7 +919,7 @@ foreach ($d in Get-ChildItem -LiteralPath $script:Q.Active -Directory -ErrorActi
             if (Test-Path -LiteralPath $pf) { Q-WriteText $fedFile ([IO.File]::ReadAllText($pf)) | Out-Null; $a.feed.fedAt = (Get-Date).ToString('o'); Q-WriteJson (Join-Path $d.FullName 'feed.json') $a.feed; D-Log "$($req.id) had not reached the game's inbox: fed it again" }
             else { D-Requeue 'its payload is missing' }
         }
-        continue
+        return
     }
     $inboxResult = if ($feed) { Join-Path $feed.sessionDir "inbox\$($feed.inbox).result.json" } else { '' }
     if ($inboxResult -and (Test-Path -LiteralPath $inboxResult)) {
@@ -773,11 +928,12 @@ foreach ($d in Get-ChildItem -LiteralPath $script:Q.Active -Directory -ErrorActi
         D-Finish 'served' 0 '' (Q-ReadJson $inboxResult)
         $script:sess = $tmpSess
     } else { D-Requeue 'its game ended with the dispatcher that ran it' }
+  }
 }
 
-D-Gc -Now
-D-RestoreUserBuild 'a dispatcher started' -Now | Out-Null
-D-RestoreSettings 'a dispatcher started'
+D-Startup 'the clean-up' { D-Gc -Now }
+D-Startup "putting the user's build back" { D-RestoreUserBuild 'a dispatcher started' -Now | Out-Null }
+D-Startup "putting the user's settings back" { D-RestoreSettings 'a dispatcher started' }
 
 # ───────────── the loop ─────────────
 
@@ -794,6 +950,18 @@ try {
         $script:note = ''
         $script:paused = $false
         D-ReconcileActive
+        # a game the queue did not start (the user's, a playground, a runner outside the queue) or the Paradox launcher
+        $users = @($foreign | Where-Object { $_.kind -ne 'orphan' })
+        $script:userGame = D-WaitNote $users $null
+        if ($users.Count -gt 0) { $script:userSeen = @{ at = $now; kind = "$($users[0].kind)" } }
+        elseif ($script:userSeen) {
+            # it has just closed: the user may start the game again (or their own after a playground): wait before launching
+            $script:userGraceUntil = $now.AddSeconds($UserGraceSec)
+            $script:userGraceNote = "$(if ($script:userSeen.kind -in 'user', 'launcher', 'playground') { "the user's game closed" } else { 'a game the queue did not start closed' }) at $($now.ToString('HH:mm:ss')): the queue waits $(Q-Duration $UserGraceSec) before launching its own (time for the user to start theirs again)"
+            D-SaveGrace
+            D-Log $script:userGraceNote
+            $script:userSeen = $null
+        }
 
         if ($script:sess) {
             $hostAlive = Q-Alive $script:sess.hostPid $script:sess.hostStart
@@ -812,6 +980,11 @@ try {
                     if (-not $stop) { D-CountLaunch $(if ($script:sess.readyAt) { 'closed' } else { 'closed before it was ready' }) }
                     D-Log "the user's playground $($script:sess.id) closed$(if ($stop) { " before it opened: $stop" })"
                     if ($script:active) { if ($stop) { D-Finish 'failed' 1 "the playground did not open: $stop" $null } else { D-Finish 'served' 0 '' $null } }
+                    if (-not $stop) {
+                        $script:userGraceUntil = $now.AddSeconds($UserGraceSec)
+                        $script:userGraceNote = "the user closed the playground at $($now.ToString('HH:mm:ss')): the queue waits $(Q-Duration $UserGraceSec) before launching its own game (time for the user to start theirs)"
+                        D-SaveGrace
+                    }
                     $script:sess = $null; D-SaveSession
                     $script:idleSince = Get-Date
                 }
@@ -834,22 +1007,26 @@ try {
                     # put the user's build back; D-RestoreUserBuild finishes that if it could not)
                     $hj = Q-ReadJson (Join-Path $script:sess.dir 'host.json')
                     $how = if ($hj) { "$($hj.status)" } else { 'unknown' }
-                    $byHand = ($how -eq 'closed-externally' -and -not $script:sess.quitAt)
+                    # stopped from outside: not asked by the queue, not a crash, not the host's own watchdog. The user's way to
+                    # free the game: Steam's Stop, Task Manager, the window's close button
+                    $asked = [bool]$script:sess.quitAt -or [bool]($script:active -and $script:active.feed -and $script:active.feed.killed)
+                    $fromOutside = (-not $asked) -and ($how -in @('closed-externally', 'unknown-exit', 'unknown', 'gone'))
                     if ($script:sess.quitAt) { Q-HistoryAdd 'quit' ($now - (Q-Date $script:sess.quitAt)).TotalSeconds }
-                    D-Log "game $($script:sess.id) ended: $how$(if ($script:sess.quitWhy) { " (closed: $($script:sess.quitWhy))" })"
+                    D-Log "game $($script:sess.id) ended: $how$(if ($script:sess.quitWhy) { " (closed: $($script:sess.quitWhy))" })$(if ($fromOutside) { ' - stopped from outside the queue' })"
                     if ($script:active) {
                         $f = $script:active.feed
                         $resFile = if ($f) { Join-Path $script:sess.dir "inbox\$($f.inbox).result.json" } else { '' }
                         if ($resFile -and (Test-Path -LiteralPath $resFile)) { D-Finish 'served' 0 '' (Q-ReadJson $resFile) }
                         elseif ($f -and $f.killed) { D-Finish 'timeout' 1 "no result after $($f.timeoutSec) s: the game was stopped (status $how); the logs are in the results folder" $null }
-                        elseif ($f -and $byHand -and -not $script:active.req.retried) { D-Requeue "the game window was closed by hand while it ran (it goes again once)" -Retried }
-                        elseif ($f) { D-Finish 'failed' $(if ($script:active.req.kind -eq 'send') { 4 } else { 1 }) "the game went away while running it (status $how); the logs are in the results folder" $null }
+                        elseif ($f -and $fromOutside -and -not $script:active.req.retried) { D-Requeue "the queue's game was stopped from outside while it ran (status $how; it goes again once)" -Retried }
+                        elseif ($f) { D-Finish 'failed' $(if ($script:active.req.kind -eq 'send') { 4 } else { 1 }) "the game went away while running it (status $how$(if ($how -eq 'crashed') { ': a crash, see logs/Player.log' })); the logs are in the results folder" $null }
                         else { D-Requeue "the game ended before it was fed (status $how)" }
                     } elseif (-not $script:sess.readyAt -and -not $script:sess.quitAt -and -not (Test-Path -LiteralPath (Join-Path $script:sess.dir 'host.json'))) {
                         # the host stopped before it launched the game: another game or runner (waited for), or the build
                         # could not be installed (a request that fails 3 times leaves the line)
                         $why = D-HostStop $script:sess.id
-                        if ($why -match 'Cities2.exe is running|holds the suite lock|did not quit') { D-Log "the game host for $($script:sess.id) stopped before launching the game: $why - waiting" }
+                        $fromOutside = $false
+                        if ($why -match 'Cities2\.exe|a game is running|launcher is open|holds the suite lock|did not quit') { D-Log "the game host for $($script:sess.id) stopped before launching the game: $why - waiting" }
                         else {
                             $k = $script:sess.key
                             $script:startFailures[$k] = 1 + [int]$script:startFailures[$k]
@@ -863,14 +1040,25 @@ try {
                     } elseif (-not $script:sess.readyAt -and -not $script:sess.quitAt) {
                         D-CountLaunch "did not boot (status $how)"
                         $k = $script:sess.key
-                        $script:bootFailures[$k] = 1 + [int]$script:bootFailures[$k]
-                        D-Log "game $($script:sess.id) did not boot (status $how; attempt $($script:bootFailures[$k]))"
-                        if ($script:bootFailures[$k] -ge 2) {
-                            D-FailBuild $queued $k '' "the game did not boot twice for this build (status $how): see $($script:sess.dir)\host.log"
-                            $script:bootFailures.Remove($k)
+                        if ($fromOutside) {
+                            # stopped while it booted: not this build's fault, but not for ever either
+                            $script:stoppedBoots[$k] = 1 + [int]$script:stoppedBoots[$k]
+                            D-Log "game $($script:sess.id) was stopped from outside while it booted (status $how; $($script:stoppedBoots[$k]) of 3)"
+                            if ($script:stoppedBoots[$k] -ge 3) { D-FailBuild $queued $k '' "the queue's game for this build was stopped 3 times while it booted (status $how): see $($script:sess.dir)\host.log"; $script:stoppedBoots.Remove($k) }
+                        } else {
+                            $script:bootFailures[$k] = 1 + [int]$script:bootFailures[$k]
+                            D-Log "game $($script:sess.id) did not boot (status $how; attempt $($script:bootFailures[$k]))"
+                            if ($script:bootFailures[$k] -ge 2) {
+                                D-FailBuild $queued $k '' "the game did not boot twice for this build (status $how): see $($script:sess.dir)\host.log"
+                                $script:bootFailures.Remove($k)
+                            }
                         }
                     }
-                    if ($byHand) { $script:hostBackoff = $now.AddSeconds(120); $script:backoffNote = "the queue's game window was closed by hand: waiting 2 min before launching again (time for the user to start their own game)" }
+                    if ($fromOutside) {
+                        $script:userGraceUntil = $now.AddSeconds($UserGraceSec)
+                        $script:userGraceNote = "the queue's game was stopped from outside at $($now.ToString('HH:mm:ss')) (status $how): the queue waits $(Q-Duration $UserGraceSec) before launching again (time for the user to start their own game)"
+                        D-SaveGrace
+                    }
                     $script:sess = $null; D-SaveSession
                     $script:idleSince = Get-Date
                     $state = 'idle'
@@ -896,17 +1084,31 @@ try {
                         $f.killed = $now.ToString('o')
                         Q-WriteJson (Join-Path $script:active.dir 'feed.json') $f
                         if ($gp) { D-Log "$($script:active.req.id): no result after $($f.timeoutSec) s: stopping game $($script:sess.id) (PID $gp, started by the queue)"; Stop-Process -Id $gp -Force -ErrorAction SilentlyContinue }
-                        else { D-Log "$($script:active.req.id): no result after $($f.timeoutSec) s, and the game's PID is not the queue's game any more: closing it through its inbox"; D-QuitSession 'timeout' }
+                        else { D-Log "$($script:active.req.id): no result after $($f.timeoutSec) s, and the game's PID cannot be checked: closing it through its inbox"; D-QuitSession 'timeout' }
+                    } elseif ($f.killed -and ($now - (Q-Date $f.killed)).TotalSeconds -gt 60) {
+                        # it is still there a minute later (the kill did not take, or the quit sits behind the hung file)
+                        D-StopGame "$($script:active.req.id) got no result and the game did not stop"
+                        $f.killed = $now.ToString('o'); Q-WriteJson (Join-Path $script:active.dir 'feed.json') $f
+                    } elseif ($script:userGame) {
+                        $script:note = "$($script:userGame) - the request in the queue's game finishes, then the queue's game quits"; $script:paused = $true
                     }
                 }
                 elseif ($script:sess.quitAt) {
                     $state = 'closing'
                     if (($now - (Q-Date $script:sess.quitAt)).TotalSeconds -gt 240) {
-                        $gp = D-GamePid
-                        if ($gp) { D-Log "game $($script:sess.id) did not close in 240 s: stopping it (PID $gp, started by the queue)"; Stop-Process -Id $gp -Force -ErrorAction SilentlyContinue }
-                        else { D-Log "game $($script:sess.id) has not closed in 240 s; its PID is not a queue game (any more): waiting for its host" }
+                        D-StopGame "game $($script:sess.id) did not close in 240 s"
                         $script:sess.quitAt = $now.ToString('o'); D-SaveSession
                     }
+                    if ($script:userGame) { $script:note = "$($script:userGame) - the queue's game is closing"; $script:paused = $true }
+                }
+                elseif ($script:userGame) {
+                    # the user started a game (or the launcher) while the queue's game is open: it gets out of the way (the
+                    # request in it has finished): a ready game quits cleanly, a game still booting is stopped (nothing in
+                    # it yet), so the user's build is back before the user's game loads it
+                    $state = 'closing'; $script:note = "$($script:userGame) - the queue's game is closing"; $script:paused = $true
+                    if ($script:active) { D-Requeue 'the user started their own game before it was fed' }
+                    D-QuitSession 'the user started their own game'
+                    if (-not $script:sess.readyAt) { D-StopGame 'the user started their own game while the queue''s game was booting' }
                 }
                 elseif (-not $script:sess.readyAt) { $state = 'starting' }
                 elseif ($script:active) {
@@ -949,15 +1151,18 @@ try {
             D-RestoreSettings 'no game is open'
             $next = Q-SelectNext $queued $null 0 $null 0 ($StarveMinutes * 60)
             $wait = D-WaitNote $foreign $holder
-            $retire = Q-ReadJson $script:Q.Retire
-            if ($retire -and [int]$retire.v -gt $script:QVersion -and -not $script:active -and $restored) {
-                D-Log "a client with a newer queue (v$($retire.v), $($retire.by)) asked for the line: handing over"
+            $retire = D-RetireWanted $queued
+            if ($retire -and -not $script:active -and $restored) {
+                D-Log "a client with a newer queue (v$($retire.v), $($retire.by)) is in line: handing over to it"
                 break
             }
             if ($next -and $wait) {
                 $state = 'waiting'; $script:note = $wait; $script:paused = $true
             } elseif ($next -and $script:hostBackoff -gt $now) {
                 $state = 'waiting'; $script:note = $script:backoffNote
+            } elseif ($next -and $next.kind -ne 'play' -and $script:userGraceUntil -gt $now) {
+                # the user's own Play.ps1 does not wait for this: it is the user asking
+                $state = 'waiting'; $script:note = $script:userGraceNote
             } elseif ($next -and $script:active) {
                 $state = 'waiting'   # D-ReconcileActive deals with it next round
             } elseif ($next -and $next.kind -eq 'play') {
@@ -983,6 +1188,7 @@ try {
         }
         D-Status $state $queued
         D-Gc
+        D-MarkGood
         Start-Sleep -Milliseconds 1500
         $errors = 0
       } catch {

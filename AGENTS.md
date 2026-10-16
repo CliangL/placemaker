@@ -56,16 +56,20 @@ There is one game for every agent. Each of these commands waits its turn in one 
 of your build; requests with the same build share one open game, and the game is relaunched only to switch builds.
 
 - **Run the command as a background command.** It exits when your results are back (same output and exit code as
-  before), which wakes you up. Do the next thing meanwhile; don't poll, retry or start a second copy.
+  before), which wakes you up. Do the next thing meanwhile; don't poll, retry or start a second copy. Start it from
+  your own shell and keep that shell: a command whose parent process is gone leaves the line (exit 2).
+- **Name yourself with `-Who <name>`** (your task, e.g. `-Who fix-parking-fence`). Without it you show up as your
+  branch, and every agent in the same worktree looks the same in the line.
 - Read its progress lines: `queue: #2 in line | ahead: lead (3 build(s), 9 pictures, relaunch) | now: ... | ETA about
-  2 min 10 s`. `#N` is your place, `ahead` who goes first, the ETA is measured per build and per picture (ask for
-  fewer pictures and you are done sooner). `waiting: the user's ... game is open`: the line waits for the user; that
-  can take long, and that is fine. `STUCK` (exit 1): the queue itself is broken; report it, don't retry in a loop.
+  2 min 10 s`. `#N` is your place, `ahead` who goes first, the ETA is measured per build and per picture, per type
+  (ask for fewer pictures and you are done sooner). `waiting: the user's ... game is open`, `the user is starting the
+  game`, or `the queue waits 2 min before launching`: the user comes first; that can take long, and that is fine.
+  `STUCK` (exit 1): the queue itself is broken (no dispatcher could run for 3 min); report it with the lines it
+  printed, don't retry in a loop.
 - Ctrl+C leaves the line. `-Direct` bypasses the queue: for debugging the runner only. `tools/suite/Queue.ps1` shows
   the line and what `Mods\Placemaker` holds.
 - The queue does not install your build for the user's own game: `Mods\Placemaker` gets the user's build back the
-  moment the queue's game exits. Say so when you report a fix; install it with `dotnet build -c Release` only when
-  the user asks and no game is open (it then stays the user's build).
+  moment the queue's game exits. Say so when you report a fix (below, "Build and test").
 - Details: `suite/README.md`, "The game queue".
 
 - Results go to `C:\Users\jack\cs2-area-tool\.forensics\suite\runs\<id>\` (the main checkout's, also from a worktree;
@@ -80,9 +84,14 @@ of your build; requests with the same build share one open game, and the game is
 
 ## Build and test
 
-- `dotnet build Placemaker.csproj -c Release`: builds the UI and installs into
-  `%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\Placemaker`. The game must be closed.
+- `dotnet build Placemaker.csproj -c Release -p:Deploy=false`: **the build** (UI included). It installs nothing; the
+  game runner takes your build from `bin\Release` (the queue's commands build it for you anyway).
 - `-p:Deploy=false -p:SkipUI=true`: a compile check only.
+- Installing into the user's game (`dotnet build Placemaker.csproj -c Release`, without `-p:Deploy=false`, which
+  installs into `%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\Placemaker` and makes it the
+  user's build) is the lead's job, from master, when the user asks or has closed the game. It fails, and touches
+  nothing, while any game is open or while the game queue's game owns the folder (`tools/suite/Deploy-Mod.ps1`). The
+  user's previous build is kept in `%USERPROFILE%\.placemaker\game-queue\user-build.prev`.
 - `dotnet test Tests/Placemaker.Tests --filter ...`: the full run takes 20+ minutes, so run what you touch.
 - When the user plays, the logs are in `...\Cities Skylines II\Logs\Placemaker.log` and the build audits in
   `...\ModsData\Placemaker\audit\`.
@@ -99,12 +108,17 @@ of your build; requests with the same build share one open game, and the game is
   (teardown report 08).
 - Build freezes of 1.4–2.7 s. Switching freezes come from decal copies forcing asset catalog rescans (report 09).
 - The roads presets strict-grid and superblocks build nothing.
+- The game crashes (native, `TerrainSystem.CullForCascades`) on the 4th build of `Show.ps1 -Category parks -Type park
+  -Style all -Views 45,top -Modes clean,zoning,terrain` (park-garden, right after its terraform and terrain paint);
+  park-garden alone builds fine (runs `queue-1016-003552`, `queue-1016-004950`).
 
 ## How the user works
 
 - They are not a programmer. Use plain language and short answers.
-- Never say something is fixed unless you saw it work in the game (`Show.ps1`) **and** it is installed. Compare the
-  time on `Mods\Placemaker\Placemaker.dll` with your commit (the game queue does not leave your build installed).
+- Never tell the user something is fixed in their game unless you saw it work in the game (`Show.ps1`) **and** it is
+  installed. You don't install (the lead does, above), so say it plainly: "fixed on branch X and seen in the game
+  runner; not in your game yet". Compare the time on `Mods\Placemaker\Placemaker.dll` with the commit (the game queue
+  does not leave your build installed).
 - Fix things everywhere they occur: every type and code path that shares the mechanism, not just the one in the
   screenshot.
 - Helper agents use the strongest model. Commit when a piece of work is done; the user tests in game.

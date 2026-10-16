@@ -89,7 +89,17 @@ $script:hostLog = $null
 function Say([string]$m) {
     $line = '{0:HH:mm:ss} {1}' -f (Get-Date), $m
     Write-Host $line
-    if ($script:hostLog) { Add-Content -Path $script:hostLog -Value $line }
+    if ($script:hostLog) { try { [IO.File]::AppendAllText($script:hostLog, "$line`r`n", (New-Object Text.UTF8Encoding $false)) } catch { } }
+}
+
+# Games that are not this run's: every Cities2.exe but ours, and the Paradox launcher (Launcher\dowser.exe: the user is
+# starting the game). Checked again right before the settings are switched and right before the game is started.
+$script:ourPid = 0
+function Get-OtherGames {
+    $r = @()
+    foreach ($p in @(Get-Process -Name 'Cities2' -ErrorAction SilentlyContinue)) { if ($p.Id -ne $script:ourPid) { $r += "Cities2.exe PID $($p.Id)" } }
+    foreach ($p in @(Get-Process -Name 'dowser', 'Paradox Launcher' -ErrorAction SilentlyContinue)) { $r += "the Paradox launcher PID $($p.Id)" }
+    return $r
 }
 
 # The user's settings and Placemaker data: saved before the run, put back after it (or at the start of the next run).
@@ -101,10 +111,28 @@ function Get-SettingsFiles {
     return $r
 }
 
+# Not while a game that is not ours runs (the user's): it would be writing under it, and a game the user just started may
+# already have read the suite profile (it saves it back on exit). The restore then stays pending (pending.txt), and the
+# game queue's dispatcher does it once no game runs; files the user's game made meanwhile are kept (foreign.txt).
+# The run's own one-launch arming (runOnce.txt: the next game launch merges its tokens into its command line, and
+# run.json) goes at once, whatever runs: a game the user starts must never pick it up.
+function Disarm {
+    $ro = Join-Path $ud 'runOnce.txt'; if (Test-Path -LiteralPath $ro) { Remove-Item -LiteralPath $ro -Force -ErrorAction SilentlyContinue }
+    foreach ($f in @('run.json', 'run.active.json')) { $p = Join-Path $suiteData $f; if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue } }
+}
 function Restore-Settings([string]$why) {
     $pending = Join-Path $saved 'pending.txt'
-    if (-not (Test-Path $pending)) { return }
-    $list = @(Get-Content (Join-Path $saved 'files.txt'))
+    if (-not (Test-Path -LiteralPath $pending)) { return }
+    Disarm
+    $other = @(Get-OtherGames | Where-Object { $_ -like 'Cities2.exe*' })
+    $foreignMark = Join-Path $saved 'foreign.txt'
+    if ($other.Count -gt 0) {
+        Set-Content -LiteralPath $foreignMark -Value "$($other -join ', ') ran while the restore was due ($why)" -Encoding UTF8
+        Say "not putting the user's settings back now: a game that is not this run's is running ($($other -join ', ')); the game queue puts them back once it has closed (or run Run-Suite.ps1 -RestoreOnly then)"
+        return
+    }
+    $keepNew = Test-Path -LiteralPath $foreignMark
+    $list = @(Get-Content -LiteralPath (Join-Path $saved 'files.txt'))
     $n = 0
     foreach ($rel in $list) {
         $src = Join-Path $saved "files\$rel"
@@ -117,15 +145,17 @@ function Restore-Settings([string]$why) {
     $known = @{}; foreach ($rel in $list) { $known[$rel.ToLowerInvariant()] = $true }
     foreach ($f in Get-SettingsFiles) {
         $rel = $f.FullName.Substring($ud.Length + 1)
-        if (-not $known.ContainsKey($rel.ToLowerInvariant())) { Remove-Item -LiteralPath $f.FullName -Force; Say "removed new settings file $rel" }
+        if ($known.ContainsKey($rel.ToLowerInvariant())) { continue }
+        if ($keepNew) { Say "kept new settings file $rel (the user's game ran meanwhile)"; continue }
+        Remove-Item -LiteralPath $f.FullName -Force; Say "removed new settings file $rel"
     }
-    $ro = Join-Path $ud 'runOnce.txt'; if (Test-Path $ro) { Remove-Item $ro -Force }
-    foreach ($f in @('run.json', 'run.active.json')) { $p = Join-Path $suiteData $f; if (Test-Path $p) { Remove-Item $p -Force } }
-    Remove-Item $pending -Force
+    Remove-Item -LiteralPath $pending -Force
+    if ($keepNew) { Remove-Item -LiteralPath $foreignMark -Force -ErrorAction SilentlyContinue }
     Say "user settings and Placemaker data put back ($n files, $why)"
 }
 
-function Release-Lock { if (Test-Path $lockFile) { try { $l = Get-Content $lockFile -Raw | ConvertFrom-Json; if ($l.pid -eq $PID) { Remove-Item $lockFile -Force } } catch { } } }
+$script:lockStream = $null
+function Release-Lock { if ($script:lockStream) { try { $script:lockStream.Dispose() } catch { }; $script:lockStream = $null } }   # the file stays: a lock nobody holds open is free
 # The lock's holder is alive: its PID runs and is the same process (Windows reuses PIDs; a lock without procStart is from
 # an older Run-Suite: then the process must have started before the lock was written).
 function Test-LockHolder($l) {
@@ -136,10 +166,12 @@ function Test-LockHolder($l) {
     if ($l.procStart) { return [math]::Abs($st.ToUniversalTime().Ticks - [int64]$l.procStart) -lt 20000000 }
     try { return $st -le ([datetime]$l.start).AddSeconds(5) } catch { return $true }
 }
-# The queue's host: the user's build back in Mods\Placemaker once our game is gone (ModsInstall.ps1).
+# The queue's host: the user's build back in Mods\Placemaker once our game is gone (ModsInstall.ps1). A playground's
+# build stays once the playground has opened (MI-AdoptInstalled then: the user played it); one that never opened goes.
 $script:queueInstall = $false
+$script:playAdopted = $false
 function Restore-UserBuild([string]$why) {
-    if (-not $script:queueInstall -or $Playground) { return }
+    if (-not $script:queueInstall -or $script:playAdopted) { return }
     $r = MI-Reconcile $why
     if ($r.ok) { $script:queueInstall = $false; Say "the user's build is back in Mods\Placemaker$(if ($r.message) { ": $($r.message)" })" }
     else { Say "the user's build is not back yet: $($r.message) (the game queue's dispatcher puts it back once no game runs)" }
@@ -149,23 +181,29 @@ if ($RestoreOnly) { Restore-Settings 'restore only'; exit 0 }
 if ($Playground) { $UserModSettings = $true }   # the user plays with their own Placemaker options
 
 # ───────────── 1. lock and preflight ─────────────
-if (Test-Path $lockFile) {
-    $l = $null; try { $l = Get-Content $lockFile -Raw | ConvertFrom-Json } catch { }
-    if (Test-LockHolder $l) { Write-Host "STOP: another Run-Suite (PID $($l.pid), run $($l.runId)) holds the suite lock"; exit 2 }
-    Remove-Item $lockFile -Force
+# The suite lock is held open for the whole run: nobody else can open it for writing while this process lives, and the
+# handle goes when it dies (killed or not). Taking it is one step, so two runners can never both hold it; the JSON inside
+# says who holds it. It is never deleted.
+New-Item -ItemType Directory -Force -Path (Split-Path $lockFile) | Out-Null
+try { $script:lockStream = [System.IO.File]::Open($lockFile, 'OpenOrCreate', 'ReadWrite', 'Read') }
+catch {
+    $l = $null; try { $l = Get-Content -LiteralPath $lockFile -Raw | ConvertFrom-Json } catch { }
+    Write-Host "STOP: another Run-Suite (PID $($l.pid), run $($l.runId)) holds the suite lock"; exit 2
 }
+# a Run-Suite of an older checkout writes the lock and closes it: then its JSON is what says it is alive
+$l = $null; try { $buf = New-Object byte[] ([int]$script:lockStream.Length); [void]$script:lockStream.Read($buf, 0, $buf.Length); $l = [Text.Encoding]::UTF8.GetString($buf) | ConvertFrom-Json } catch { }
+if ($l -and $l.pid -and [int]$l.pid -ne $PID -and (Test-LockHolder $l)) { Release-Lock; Write-Host "STOP: another Run-Suite (PID $($l.pid), run $($l.runId)) holds the suite lock"; exit 2 }
 try {
-    $fs = [System.IO.File]::Open($lockFile, 'CreateNew', 'Write')
     $bytes = [System.Text.Encoding]::UTF8.GetBytes((@{ pid = $PID; procStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks; runId = $RunId; start = (Get-Date).ToString('o') } | ConvertTo-Json -Compress))
-    $fs.Write($bytes, 0, $bytes.Length); $fs.Close()
-} catch { Write-Host "STOP: could not take the suite lock: $($_.Exception.Message)"; exit 2 }
+    $script:lockStream.SetLength(0); $script:lockStream.Write($bytes, 0, $bytes.Length); $script:lockStream.Flush()
+} catch { Release-Lock; Write-Host "STOP: could not take the suite lock: $($_.Exception.Message)"; exit 2 }
 
 try {
 if (-not $RunId) { $RunId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + ([IO.Path]::GetFileNameWithoutExtension($Set)) }
 $runDir = Join-Path $ResultsRoot $RunId
-if (Test-Path $runDir) {
+if (Test-Path -LiteralPath $runDir) {
     $old = "$runDir.old-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-    Move-Item $runDir $old
+    Move-Item -LiteralPath $runDir -Destination $old
     Write-Host "run folder $RunId existed: moved to $old"
 }
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
@@ -204,6 +242,7 @@ try {
     }
     if (-not $NoBuild) {
         Say "building and deploying $git ..."
+        $env:PLACEMAKER_SUITE_LOCK_PID = "$PID"   # Deploy-Mod.ps1: this run holds the suite lock itself
         $out = & dotnet build Placemaker.csproj -c Release 2>&1
         if ($LASTEXITCODE -ne 0) { $out | Select-Object -Last 30 | ForEach-Object { Say $_ }; Say 'STOP: build failed'; exit 3 }
         Say 'build + deploy ok'
@@ -215,8 +254,7 @@ if ($DeployFrom) {
     $ir = MI-Install $DeployFrom $Label "run $RunId"
     if (-not $ir.ok) { Say "STOP: could not install the build: $($ir.message)"; exit 5 }
     $script:queueInstall = $true
-    Say "installed the queue's build $Label into Mods\Placemaker$(if (-not $Playground) { ' (the user''s build goes back when the game has exited)' })"
-    if ($Playground) { $ar = MI-AdoptInstalled "the user's playground $RunId"; Say $ar.message }
+    Say "installed the queue's build $Label into Mods\Placemaker$(if (-not $Playground) { ' (the user''s build goes back when the game has exited)' } else { ' (it stays installed once the playground is open: the user plays it)' })"
 }
 $dll = Join-Path $ud 'Mods\Placemaker\Placemaker.dll'
 $dllInfo = Get-Item $dll
@@ -225,6 +263,9 @@ $label = "$git+$dllHash"
 Say ("installed Placemaker.dll {0} bytes, {1:yyyy-MM-dd HH:mm:ss}, sha256 {2}" -f $dllInfo.Length, $dllInfo.LastWriteTime, $dllHash)
 
 # ───────────── 3. save the user's settings, suite profile ─────────────
+# again now (the build install took a moment): the user may have started their game meanwhile
+$other = @(Get-OtherGames)
+if ($other.Count -gt 0) { Say ("STOP: Cities2.exe is running or starting ({0}) and it is not this run's; the suite never touches the user's session." -f ($other -join ', ')); exit 2 }
 if (Test-Path (Join-Path $saved 'files')) { Remove-Item (Join-Path $saved 'files') -Recurse -Force }
 New-Item -ItemType Directory -Force -Path (Join-Path $saved 'files') | Out-Null
 $rels = @()
@@ -276,8 +317,8 @@ if (-not $KeepGraphics) {
 # ───────────── arm ─────────────
 New-Item -ItemType Directory -Force -Path $suiteData | Out-Null
 $setName = if ($Set -in @('bootstrap', 'queue')) { 'smoke' } else { $Set }
-$scenarioFile = if ($setName -match "[\/.]" -and (Test-Path $setName -PathType Leaf)) { (Resolve-Path $setName).Path } else { Join-Path $repo "suite\scenarios\$setName.json" }
-if (-not (Test-Path $scenarioFile)) { Say "STOP: no scenario set $scenarioFile"; Restore-Settings 'stopped'; exit 2 }
+$scenarioFile = if ($setName -match "[\/.]" -and (Test-Path -LiteralPath $setName -PathType Leaf)) { (Resolve-Path -LiteralPath $setName).Path } else { Join-Path $repo "suite\scenarios\$setName.json" }
+if (-not (Test-Path -LiteralPath $scenarioFile)) { Say "STOP: no scenario set $scenarioFile"; Restore-Settings 'stopped'; exit 2 }
 $schemaFile = Join-Path $repo 'suite\schema.json'
 $cfg = [ordered]@{
     runId = $RunId; set = $Set; outDir = $runDir; scenarioFile = $scenarioFile; schemaFile = $schemaFile; git = $git; dllHash = $dllHash
@@ -311,8 +352,13 @@ try {
     $psi.UseShellExecute = $false
     $psi.EnvironmentVariables['SteamAppId'] = '949230'
     $psi.EnvironmentVariables['SteamGameId'] = '949230'
+    # the last look before the start: a game the user started since the checks above wins (the settings stay pending
+    # while it runs, the user's build goes back once no game runs)
+    $other = @(Get-OtherGames)
+    if ($other.Count -gt 0) { $status = 'not started'; Disarm; Say ("STOP: Cities2.exe is running or starting ({0}) and it is not this run's; the game was not started." -f ($other -join ', ')); exit 2 }   # the finally puts back what it may
     $proc = [System.Diagnostics.Process]::Start($psi)
     $ourPid = $proc.Id
+    $script:ourPid = $ourPid
     Write-NoBom $activeFile (@{ pid = $ourPid; runId = $RunId; start = $launchedAt.ToString('o'); runDir = $runDir } | ConvertTo-Json -Compress)
     Say "started Cities2.exe PID $ourPid $gameArgs"
     if ($script:queueInstall -and -not $Playground) { MI-PrepareRestore }   # while it boots: the user's build ready to swap back in at once
@@ -339,8 +385,15 @@ try {
                 $lastPhase = $beat.phase
                 $phaseTimes[$beat.phase] = [math]::Round(($now - $launchedAt).TotalSeconds, 1)
                 Say ("phase {0} at {1:F0} s (game says {2} s since process start)" -f $beat.phase, ($now - $launchedAt).TotalSeconds, $beat.sinceStart)
+                if ($Playground -and $script:queueInstall -and $beat.phase -eq 'playground' -and -not $script:playAdopted) {
+                    # the user has the controls now: the build they play stays installed afterwards
+                    $ar = MI-AdoptInstalled "the user's playground $RunId"; Say $ar.message
+                    $script:playAdopted = [bool]$ar.ok
+                }
             }
         }
+        # the game queue's dispatcher asks this host to stop the game it started (no result in time, the user's game)
+        if (Test-Path -LiteralPath (Join-Path $runDir 'stop-game.txt')) { $status = 'killed'; Say "the game queue asked to stop the game: $(Get-Content -LiteralPath (Join-Path $runDir 'stop-game.txt') -Raw)"; break }
         if (-not $alive) {
             if ($lastPhase -eq 'quit') { $status = 'quit'; Say 'game exited after the clean quit' }
             else { $status = 'gone'; Say "game process gone in phase '$lastPhase' without the suite's quit" }
@@ -368,7 +421,9 @@ try {
 }
 finally {
     # ───────────── collect logs, classify, put the settings back ─────────────
-    Restore-UserBuild "game $RunId exited"   # first: the moment the game is gone, before the user can start theirs
+    # first, the moment the game is gone, before the user can start theirs: the user's build and settings
+    Restore-UserBuild "game $RunId exited"
+    Restore-Settings "after run $RunId"
     $logs = Join-Path $runDir 'logs'
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
     foreach ($f in @('Player.log')) { $p = Join-Path $ud $f; if (Test-Path $p) { Copy-Item $p $logs -Force } }
@@ -383,12 +438,12 @@ finally {
         $crashDir = Join-Path $env:TEMP 'Colossal Order\Cities Skylines II\Crashes'
         $newCrash = (Test-Path $crashDir) -and @(Get-ChildItem $crashDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $launchedAt }).Count -gt 0
         $text = if (Test-Path $player) { Get-Content $player -Raw } else { '' }
-        if ($newCrash -or $text -match 'Crash!!!') { $status = 'crashed' }
+        # Unity's crash marker, and Mono's native crash report (a crash in the game's own native code)
+        if ($newCrash -or $text -match 'Crash!!!|Native Crash Reporting|Got a SIG[A-Z]+ while executing native code') { $status = 'crashed' }
         elseif ($text -match 'Game terminated successfully') { $status = 'closed-externally' }
         else { $status = 'unknown-exit' }
         Say "classified the exit: $status"
     }
-    Restore-Settings "after run $RunId"
     if (Test-Path $activeFile) { Remove-Item $activeFile -Force }
 }
 

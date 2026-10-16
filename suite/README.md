@@ -9,6 +9,11 @@ session) and wait their turn. Ten agents share one game, launched once per build
 
 * **Run the command in the background.** It blocks until its results are back, then prints what it always printed
   (the builds, the pictures, the log lines) and exits with the same exit code, so you are woken up when it exits.
+  It never waits for ever: when no dispatcher has answered for 3 minutes (or none could be started 4 times) it prints
+  `STUCK` with the dispatcher's last log lines, leaves the line and exits 1. Keep the shell that started it: a command
+  whose parent process is gone leaves the line (exit 2), so don't `Start-Process` it from a shell that then exits.
+* **`-Who <name>`** names you in the line (`ahead:` and `now:` lines, `Queue.ps1`). The default is your git branch,
+  the same for every agent in one worktree: pass your task's name.
 * While it waits it prints a line every ~15 s, and at once when its place, who is ahead or what runs changes:
 
   ```
@@ -20,9 +25,11 @@ session) and wait their turn. Ten agents share one game, launched once per build
   the game restarted); `now` is what the game does, with how many of its builds are done. Your build `is the open
   game's`, `shares the launch for <who>` (the game opened for someone ahead with the same build) or `needs a launch`.
   The ETA is measured (`history.json`): boot and quit times, and per build its time without pictures plus a time per
-  picture (taken from the game's own timings), so 22 builds with 14 pictures each are estimated as such; the request
-  in the game is followed build by build (`over its estimate` when one takes longer). `waiting: the user's own game is
-  open` or `the user's playground is open`: the line waits until the user closes the game, and the ETA is unknown.
+  picture (taken from the game's own timings; per type once a type has 3 measured builds: parks settle their pictures
+  slower than plazas), so 22 builds with 14 pictures each are estimated as such; the request in the game is followed
+  build by build (`over its estimate` when one takes longer; `over its usual boot` for a slow start). `waiting: the
+  user's own game is open`, `the user is starting the game` (the Paradox launcher) or `the user's playground is open`:
+  the line waits until the user closes the game, and the ETA is unknown.
 * **Your build is frozen when you ask.** The command builds your worktree without installing it (unless `-NoBuild`)
   and copies what Deploy would install (`bin\Release`, `UI\build`) plus the runner scripts into the queue. The hash of
   the frozen mod and of the scripts the game run uses (Run-Suite, ModsInstall, Contact-Suite, schema) is the build's
@@ -30,28 +37,42 @@ session) and wait their turn. Ten agents share one game, launched once per build
 * **Batching.** The game stays open with a build. Requests with that build run back to back in it without a relaunch
   (land made to order is laid out in the open game when its request comes). Another build waits for the request in
   the game, then the game quits cleanly and relaunches with it (about 60 s). The oldest request with the open game's
-  build goes first, but only while the head of the line would still start within 10 minutes of asking. A request that
-  does not fit the open game's test grid gets a fresh launch.
+  build goes first, but only while the head of the line would still start within 10 minutes of asking (its relaunch
+  counted); once a head has been kept first it stays first, so places in line do not flip. A request that does not
+  fit the open game's test grid gets a fresh launch.
 * **The user comes first.** `Play.ps1` goes next after the request in the game; the line then waits until the user
-  closes the playground. A game the user started themselves is never touched: the line waits for it.
+  closes the playground. A game the user started themselves (or the Paradox launcher) is never touched: the line waits
+  for it. If the user starts one while the queue's game is open, the request in it finishes and the queue's game quits
+  (one still booting is stopped). After a game the queue did not start closes (the user's, a playground), and after the
+  queue's own game is stopped from outside (Steam's Stop, Task Manager, its window closed), the queue waits 2 minutes
+  before it launches a game, so the user can start theirs (a request in the game when it was stopped goes again once).
+  A crash is not a stop: that request fails, naming the build that was running and how many never ran.
 * **`Mods\Placemaker` is the user's** whenever no queue game runs (`ModsInstall.ps1`). The queue's game host swaps a
   request's frozen build in right before it launches the game (after it holds the suite lock and has checked that no
   other game runs) and swaps the user's build back the moment that game has exited. Nothing is written while any
   Cities2.exe runs: if the user starts a game in that moment, the user's build goes back once it is closed (the
-  dispatcher stays up until then). A build installed on purpose (`dotnet build -c Release`, a `-Direct` run) becomes
-  the user's build; so does the build the user played in `Play.ps1` (it stays installed, as it always did).
-  **The queue does not install your build for the user's own game**: do that with `dotnet build -c Release` when no
-  game is open.
+  dispatcher stays up until then); the user's game settings likewise. A build installed on purpose (`dotnet build -c
+  Release`, a `-Direct` run) becomes the user's build, once nothing has been written into the folder for 10 s; so does
+  the build the user played in `Play.ps1`, once the playground has opened (it stays installed, as it always did). The
+  user's build before that is kept in `user-build.prev`.
+  **The queue does not install your build for the user's own game.** `dotnet build -c Release` (without
+  `-p:Deploy=false`) installs one through `tools/suite/Deploy-Mod.ps1`: under the queue's install lock, as a staged
+  copy and two renames, and refused (the build fails, nothing is touched) while any game runs or a queue game owns the
+  folder. Installing for the user is the lead's job.
 * **Leaving the line:** Ctrl+C (or killing the command), or deleting its folder in `requests\`. A command whose queue
-  is stuck (the dispatcher stopped updating `status.json` for 3 min, or the request sits in `active\` unrun) prints
-  `STUCK` and exits 1.
+  is stuck (no live dispatcher has updated `status.json` for 3 min, none could be started, or the request sits in
+  `active\` unrun) prints `STUCK` and exits 1.
 * The dispatcher (`Game-Dispatcher.ps1`) starts by itself with the first request, and stops when nothing has been in
-  line for 10 minutes (the game quits first) and the user's build is back.
+  line for 10 minutes (the game quits first) and the user's build is back. It runs from a copy of its scripts in the
+  queue folder (`dispatcher\<hash>\`), not from the worktree that started it, so a worktree removed or edited later
+  cannot break it; a copy that does not parse is never started, and `dispatcher\good.json` names the last copy that ran
+  well (a client falls back to it).
 * Results go to `-ResultsRoot`, by default `C:\Users\jack\cs2-area-tool\.forensics\suite\runs\<runId>\` whatever
   worktree asks (the commands print full paths). Each request's folder is its own: its builds numbered from 01 with
   the ids it asked for, its pictures, and its own part of `logs/Placemaker.log` and `logs/Player.log` (from where the
-  logs stood when it was fed); `suite.log` is the whole game's. The game's own run folder is `runs/queue-<time>/`
-  (removed after 3 days).
+  logs stood when it was fed); `suite.log` is the whole game's. The pictures are hard links to the game's own files
+  (no second copy on disk). The game's own run folder is `runs/queue-<time>/` (removed after 3 days, as are
+  `runs/*.old-*` and Show.ps1's set files in `show/`).
 * `powershell -File tools/suite/Queue.ps1` shows the line (`-Watch`, `-Log 40`, `-Cancel <id>`) and what
   `Mods\Placemaker` holds. Use it rather than reading `status.json` yourself (it is replaced while you read). In the
   queue folder: `requests\`, `active\`, `done\<id>\result.json`, `dispatcher.log`, `launches.log` (one line per game
