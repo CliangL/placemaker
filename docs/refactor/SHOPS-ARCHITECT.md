@@ -178,3 +178,16 @@ S, driveway E, footpaths W and N), grow 20-30 s, plan / 45 / zoning / close pict
   the circle inside a block builds a centre. Seen: the circle's east half was planted (a lot shape test too strict
   inside a ring: relaxed); the block's back row was two wide plots (the loop started mid-edge: now on a corner; rows
   are rounded to the piece size with anchors at the ends).
+- **it2** `shops3-it2` (rings for the mall park and the district, gates routed from the entrances, plot trees): 49 builds,
+  every one built, all 245 entrance steps placed, zoning 98-100 % in every build, every grown shop faces the build's own
+  lanes but 3 (the strip mall's L: the street at the L's inner corner zoned three plots of the ring's row there).
+  **Plot trees, verified in the game:** in every build the growing shops hid the trees in their way (the game's
+  Overridden flag: strip mall big 117 of 787, district big 124 of 390) and none stood within 7 m of a grown building, so
+  trees and the dirt / lawn paint stay on the plots. Seen: strip mall big, district L / circle / big and mall park garden
+  big read as designed places; the normal block was the weak case: the district's ring was skewed (the bucket draws the
+  block with its kerb returns cut, eight corners; dropping one end of each cut slanted a whole side, so its rows backed
+  onto the street margin and became car parks), its corners and the mall park's were lawn, the big box had two boxes and
+  lawn. Fixed for it3: cut corners restored before the ring is laid; rows and holds start at the drive's zone offset; a
+  gate whose way straight in is blocked bends to the free lane point cutting the fewest rows (the big box's way out on
+  the east failed); rings too small for deep rows retry with two-cell rows; corner courts (a small car park turned to
+  each soft corner, entered from the chamfer); the big box pond from an 80 m front.
