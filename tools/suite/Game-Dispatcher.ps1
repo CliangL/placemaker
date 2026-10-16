@@ -328,7 +328,7 @@ function D-Publish($a, $result, [string]$status, [string]$message) {
         $row = $all[$i]
         $rows += $row
         $f = Get-ChildItem (Join-Path $sd 'scenarios') -Filter ('{0:D2}-*.json' -f ($i + 1)) -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($f) { Copy-Item $f.FullName (Join-Path $dir "scenarios\$($f.Name)") -Force; $scFiles[$row.id] = Join-Path $dir "scenarios\$($f.Name)" }
+        if ($f) { Copy-Item $f.FullName (Join-Path $dir "scenarios\$($f.Name)") -Force; $scFiles["$($row.id)"] = Join-Path $dir "scenarios\$($f.Name)" }
         if ($row.shots) {
             foreach ($p in $row.shots.PSObject.Properties) {
                 $rel = "$($p.Value)"
@@ -386,7 +386,7 @@ function D-Publish($a, $result, [string]$status, [string]$message) {
         $n++
         $md += "| $n | $($r.id) | $($r.block) $($r.kind) | $($r.status)$(if ($r.failure) { ': ' + $r.failure }) | $($r.sec) | $(if ($r.shots) { @($r.shots.PSObject.Properties).Count } else { 0 }) |"
         [void]$html.Append('<h2>' + $n + '. ' + (D-H $r.id) + '</h2><div class="cap">' + (D-H "$($r.block) $($r.kind), status $($r.status), $($r.sec) s") + '</div>')
-        $sf = $scFiles[$r.id]
+        $sf = $scFiles["$($r.id)"]
         if ($sf) {
             $sc = Q-ReadJson $sf
             foreach ($x in @($sc.steps | Where-Object { $_ -and $_.error })) { [void]$html.Append('<div class="bad">step ' + $x.i + ' ' + (D-H $x.do) + ': ' + (D-H "$($x.error)") + '</div>') }
@@ -400,7 +400,7 @@ function D-Publish($a, $result, [string]$status, [string]$message) {
     [IO.File]::WriteAllText((Join-Path $dir 'contact.html'), $html.ToString(), (New-Object Text.UTF8Encoding $false))
     if ($result) {
         $r2 = $result | ConvertTo-Json -Depth 12 | ConvertFrom-Json
-        foreach ($s in @($r2.scenarios | Where-Object { $_ })) { if ($scFiles[$s.id]) { $s.resultFile = $scFiles[$s.id] } }
+        foreach ($s in @($r2.scenarios | Where-Object { $_ })) { if ($scFiles["$($s.id)"]) { $s.resultFile = $scFiles["$($s.id)"] } }
         if ($r2.PSObject.Properties['contact']) { $r2.contact = Join-Path $dir 'contact.html' }
         Q-WriteJson (Join-Path $dir 'result.json') $r2
     }
