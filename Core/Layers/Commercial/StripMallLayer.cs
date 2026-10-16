@@ -38,11 +38,14 @@ namespace Placemaker.Core.Layers.Commercial
 
         protected override void DefinePresets()
         {
-            Preset("classic", ("style", "classic"));
+            // (shops2) The Megastores look of the retail park (the user: A-, "should just be what the regular strip mall is"): big
+            // stores, deep plots, high-density commercial, a big lot; on a big site several rows round a grid of lots.
+            Preset("classic", ("style", "classic"), ("lotSize", "large"), ("plotDepth", 40.0), ("zoneKind", ZoneKinds.CommercialHigh), ("evShare", 10.0), ("frontage", 240.0));
             Preset("corner", ("style", "corner"), ("lotSize", "medium"));
             Preset("rearAlley", ("style", "rearAlley"), ("lotSize", "medium"), ("plotDepth", 16.0));
             Preset("neighbourhood", ("style", "classic"), ("lotSize", "small"), ("frontage", 90.0), ("plotDepth", 16.0), ("lotGreen", "medians"));
-            Preset("bigBox", ("style", "classic"), ("lotSize", "large"), ("frontage", 220.0), ("plotDepth", 40.0), ("zoneKind", ZoneKinds.CommercialHigh), ("evShare", 10.0));
+            // (shops2) Big box: a few very wide, deep low-rise stores (one-storey boxes) on the biggest lots.
+            Preset("bigBox", ("style", "classic"), ("lotSize", "large"), ("frontage", 240.0), ("plotDepth", 48.0), ("zoneKind", ZoneKinds.CommercialLow), ("evShare", 10.0));
         }
 
         protected override void Compose(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)

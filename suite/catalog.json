@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+2a041e4",
+  "assembly": "0.1.0+f3666d8",
   "categories": [
     {
       "id": "roads",
@@ -25,6 +25,9 @@
       "groups": [
         "parks",
         "gardens"
+      ],
+      "types": [
+        "amphitheatre"
       ]
     },
     {
@@ -406,6 +409,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "green"
       ]
     },
     {
@@ -599,6 +605,11 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "corner",
+        "rearAlley",
+        "neighbourhood"
       ]
     },
     {
@@ -808,7 +819,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "outdoorMall",
@@ -1044,6 +1056,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelved": true,
+      "shelvedStyles": [
+        "lifestyle"
       ]
     },
     {
@@ -1255,7 +1271,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "mallPark",
@@ -1363,6 +1380,9 @@
           "kind": "Toggle",
           "default": false
         }
+      ],
+      "shelvedStyles": [
+        "promenade"
       ]
     },
     {
@@ -2088,6 +2108,18 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelved": true,
+      "shelvedStyles": [
+        "market",
+        "garden",
+        "sunken",
+        "amphitheatre",
+        "terraced",
+        "splitLevel",
+        "cascade",
+        "podium",
+        "piazza"
       ]
     },
     {
@@ -2260,6 +2292,10 @@
           "kind": "Toggle",
           "default": false
         }
+      ],
+      "shelved": true,
+      "shelvedStyles": [
+        "shared"
       ]
     },
     {
@@ -2336,7 +2372,7 @@
         {
           "id": "streetShops",
           "kind": "Toggle",
-          "default": true
+          "default": false
         },
         {
           "id": "lotSize",
@@ -2387,6 +2423,10 @@
           "kind": "Toggle",
           "default": false
         }
+      ],
+      "shelved": true,
+      "shelvedStyles": [
+        "trade"
       ]
     },
     {
@@ -2495,6 +2535,11 @@
           "kind": "Toggle",
           "default": false
         }
+      ],
+      "shelvedStyles": [
+        "pedestrian",
+        "mixedUse",
+        "village"
       ]
     },
     {
@@ -3620,6 +3665,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "meadow",
+        "caravan"
       ]
     },
     {
@@ -4041,6 +4090,16 @@
           "default": "two"
         },
         {
+          "id": "tennisSurface",
+          "kind": "Choice",
+          "options": [
+            "hard",
+            "clay",
+            "grass"
+          ],
+          "default": "hard"
+        },
+        {
           "id": "basketballCourtCount",
           "kind": "Slider",
           "min": 1.0,
@@ -4337,6 +4396,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "campus"
       ]
     },
     {
@@ -5004,6 +5066,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "wildwood"
       ]
     },
     {
@@ -5646,7 +5711,7 @@
             "some",
             "lots"
           ],
-          "default": "lots"
+          "default": "some"
         },
         {
           "id": "shopLayout",
@@ -5745,6 +5810,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "weekly",
+        "farmers"
       ]
     },
     {
@@ -6120,6 +6189,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "open"
       ]
     },
     {
@@ -6503,7 +6575,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "beach",
@@ -6883,6 +6956,29 @@
           "default": 20.0
         },
         {
+          "id": "jetties",
+          "kind": "Slider",
+          "min": 0.0,
+          "max": 3.0,
+          "step": 1.0,
+          "unit": "count",
+          "default": 0.0
+        },
+        {
+          "id": "jettyLength",
+          "kind": "Slider",
+          "min": 8.0,
+          "max": 80.0,
+          "step": 2.0,
+          "unit": "m",
+          "default": 26.0
+        },
+        {
+          "id": "jettyHead",
+          "kind": "Toggle",
+          "default": true
+        },
+        {
           "id": "dressAmount",
           "kind": "Slider",
           "min": 0.0,
@@ -6979,6 +7075,11 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "rocky",
+        "river",
+        "volleyball"
       ]
     },
     {
@@ -7055,7 +7156,7 @@
           "max": 12.0,
           "step": 1.0,
           "unit": "count",
-          "default": 2.0
+          "default": 0.0
         },
         {
           "id": "animals",
@@ -7369,6 +7470,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "aviaryGarden"
       ]
     },
     {
@@ -7809,6 +7913,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "riverSteps",
+        "fishing"
       ]
     },
     {
@@ -8596,7 +8704,7 @@
         {
           "id": "foh",
           "kind": "Toggle",
-          "default": true
+          "default": false
         },
         {
           "id": "stageAsset",
@@ -8904,12 +9012,18 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelved": true,
+      "shelvedStyles": [
+        "festival",
+        "funfair",
+        "foodTrucks"
       ]
     },
     {
       "layer": "amphitheatre",
       "group": "events",
-      "category": "shops",
+      "category": "parks",
       "presets": [
         "classic",
         "cinema",
@@ -9321,6 +9435,11 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "cinema",
+        "meadow",
+        "speakers"
       ]
     },
     {
@@ -10435,6 +10554,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "hobby"
       ]
     },
     {
@@ -11474,6 +11596,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "viewpointMound"
       ]
     },
     {
@@ -12690,7 +12815,7 @@
           "max": 30.0,
           "step": 1.0,
           "unit": "count",
-          "default": 8.0
+          "default": 0.0
         },
         {
           "id": "mapBoard",
@@ -12913,6 +13038,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "summitClimb",
+        "lakeshoreLoop"
       ]
     },
     {
@@ -13968,6 +14097,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "graffitiPark"
       ]
     },
     {
