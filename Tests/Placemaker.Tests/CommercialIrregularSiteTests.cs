@@ -206,7 +206,8 @@ namespace Placemaker.Tests
         public static float Target(string type, string preset, float step = 4f) => type == "shopsPark" ? 0.06f : 0.12f;   // shops & park (hidden) is a park with shops
 
         /// <summary>(shops) Most of the block all lots together may cover: the budget (40 %, retail park 60 %) plus the composition's own lots.</summary>
-        public static float LotCap(string type) => type == "retailPark" ? 0.85f : 0.6f;
+        /// (shops2) The strip mall is mostly parking (the user: "basically all parking"): rows of big stores round lots.
+        public static float LotCap(string type) => type == "retailPark" || type == "stripMall" ? 0.85f : 0.6f;
 
         [Theory]
         [MemberData(nameof(Cases))]
@@ -219,7 +220,8 @@ namespace Placemaker.Tests
             Assert.False(plan.HasErrors);
             Assert.DoesNotContain(plan.AllIssues(), i => i.Key == CommercialLayer.NoStreetKey);
             // (shops) A strip mall needs a straight street of 50 m; the fully curved block has none, so only its fallback row is planned.
-            Assert.True(m.NPlots >= (type == "stripMall" && step == 0f ? 2 : 3), type + "/" + preset + ": " + m.NPlots + " plots");
+            // (shops2) The strip mall's stores are big plots (four cells wide, five deep): two on a small block.
+            Assert.True(m.NPlots >= (type == "stripMall" ? 2 : 3), type + "/" + preset + ": " + m.NPlots + " plots");
             Assert.True(m.Lots <= LotCap(type) * area, $"{type}/{preset} @ {SiteName(step)}: lots cover {m.Lots / area:P0} of the block (cap {LotCap(type):P0})");
             Assert.True(m.Commercial >= Target(type, preset, step), $"{type}/{preset} @ {SiteName(step)}: only {m.Commercial:P0} commercial (need {Target(type, preset, step):P0})");
         }

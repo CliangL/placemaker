@@ -79,6 +79,24 @@ namespace Placemaker.Core.Layers.Commercial
         public readonly List<float2[]> Shops = new List<float2[]>();
         public readonly List<Lane> Lanes = new List<Lane>();
         public readonly List<float2[]> Lots = new List<float2[]>();
+
+        /// <summary>(shops2) The lengths of the mall's lists (a composition that gives up late is taken back with <see cref="Rewind"/>,
+        /// together with CommercialLayer.PlanMark for the plan). Only for lists appended to since the mark.</summary>
+        public int[] Mark() => new[] { Taken.Count, Shops.Count, Lanes.Count, Lots.Count, Doors.Count, _lotGround.Count, Walks.Count, Stalls, EvStalls };
+
+        public void Rewind(int[] m)
+        {
+            void Cut<T>(List<T> l, int n) { if (l.Count > n) l.RemoveRange(n, l.Count - n); }
+            for (int i = m[2]; i < Lanes.Count; i++)
+            {
+                var lane = Lanes[i];
+                if (lane.StartOn != null) lane.StartOn.Joins.Remove(lane.Points[0]);
+                if (lane.EndOn != null) lane.EndOn.Joins.Remove(lane.Points[lane.Points.Count - 1]);
+            }
+            for (int i = m[1]; i < Shops.Count; i++) { ShopZone.Remove(Shops[i]); CellPlots.Remove(Shops[i]); }
+            Cut(Taken, m[0]); Cut(Shops, m[1]); Cut(Lanes, m[2]); Cut(Lots, m[3]); Cut(Doors, m[4]); Cut(_lotGround, m[5]); Cut(Walks, m[6]);
+            Stalls = m[7]; EvStalls = m[8];
+        }
         /// <summary>(shops) True while another frontage is composed (CommercialLayer.ComposeMore): a composition that does not fit there leaves nothing behind (no fallback street row).</summary>
         public bool Extra;
         /// <summary>(shops) Most land (m²) all the lots together may take: leftover lots (CommercialLayer.RestLots) stop here and the rest is planted.</summary>

@@ -25,8 +25,6 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>(shops) A second strip on the back street when the first leaves half the block (a lot, a lane and two cells of shops: ~45 m).</summary>
         protected override float ComposeMoreBelow => 0.6f;
         protected override float MoreReach => 44f;
-        /// <summary>(shops2) A strip mall is mostly parking: the lots take what the rows of stores leave (the user: "basically all parking").</summary>
-        protected override float LotShare => 0.95f;
         /// <summary>(shops2) Plan fact set when the whole site was laid out as rows of stores round lots (<see cref="Rows"/>): the number of store rows.</summary>
         public const string RowsFact = "stripRows";
 
@@ -46,9 +44,9 @@ namespace Placemaker.Core.Layers.Commercial
             // (shops2) The Megastores look of the retail park (the user: A-, "should just be what the regular strip mall is"): big
             // stores, deep plots, high-density commercial, a big lot; on a big site several rows round a grid of lots.
             Preset("classic", ("style", "classic"), ("lotSize", "large"), ("plotDepth", 40.0), ("zoneKind", ZoneKinds.CommercialHigh), ("evShare", 10.0), ("frontage", 240.0));
-            Preset("corner", ("style", "corner"), ("lotSize", "medium"));
-            Preset("rearAlley", ("style", "rearAlley"), ("lotSize", "medium"), ("plotDepth", 16.0));
-            Preset("neighbourhood", ("style", "classic"), ("lotSize", "small"), ("frontage", 90.0), ("plotDepth", 16.0), ("lotGreen", "medians"));
+            Preset("corner", ("style", "corner"), ("lotSize", "medium"), ("plotDepth", 24.0), ("zoneKind", ZoneKinds.CommercialLow));
+            Preset("rearAlley", ("style", "rearAlley"), ("lotSize", "medium"), ("plotDepth", 16.0), ("zoneKind", ZoneKinds.CommercialLow));
+            Preset("neighbourhood", ("style", "classic"), ("lotSize", "small"), ("frontage", 90.0), ("plotDepth", 16.0), ("lotGreen", "medians"), ("zoneKind", ZoneKinds.CommercialLow));
             // (shops2) Big box: a few very wide, deep low-rise stores (one-storey boxes) on the biggest lots.
             Preset("bigBox", ("style", "classic"), ("lotSize", "large"), ("frontage", 240.0), ("plotDepth", 48.0), ("zoneKind", ZoneKinds.CommercialLow), ("evShare", 10.0));
         }
@@ -96,7 +94,8 @@ namespace Placemaker.Core.Layers.Commercial
         private static bool Rows(LayerContext ctx, Mall mall, StreetShops.Run r)
         {
             // Why the rows did not fit (plan fact stripRowsFail: the step that gave up), for the gallery and the logs.
-            bool Fail(int step) { ctx.Plan.Facts["stripRowsFail"] = step; return false; }
+            var planMark = PlanMark.Of(ctx.Plan); var mallMark = mall.Mark();
+            bool Fail(int step) { planMark.Restore(ctx.Plan); mall.Rewind(mallMark); ctx.Plan.Facts["stripRowsFail"] = step; return false; }
             var ring = mall.Region.Ring;
             float sMin = float.MaxValue, sMax = float.MinValue, tMax = float.MinValue;
             foreach (var p in ring)
@@ -173,6 +172,8 @@ namespace Placemaker.Core.Layers.Commercial
                 if (!StreetShops.StreetEnd(ctx.Input, r.At(xs[k], spans[k].a), -r.In, out _, out _, out _)) return Fail(4);
                 if (k == 0 || k == xs.Count - 1) { t0 = math.max(t0, spans[k].a); t1 = math.min(t1, spans[k].b); }
             }
+            // The common stretch holds between the outer rails too (a concave back street bows in between them).
+            for (float x = xs[0] + 4f; x < xs[xs.Count - 1] - 4f; x += 4f) { var sp = Span(x); if (!float.IsNaN(sp.a)) { t0 = math.max(t0, sp.a); t1 = math.min(t1, sp.b); } }
             float D = t1 - t0;
             if (D < 60f) return Fail(5);
 
@@ -255,6 +256,39 @@ namespace Placemaker.Core.Layers.Commercial
                     if (g != null) rungs.Add((g, side));
                 }
             }
+
+            // The lots go in before the rows: their stubs join the rungs and rails where the parking planner puts them, and the
+            // rows across those lanes are then split at the real joins (in the game a row planned first lost its cells where a
+            // later stub split the lane under it: "10 -> 0" plots). The rows' land is held meanwhile.
+            var holds = new List<float2[]>();
+            void HoldRow(Mall.Lane lane, int side, int seg0, int seg1)
+            {
+                if (lane == null) return;
+                for (int i = seg0; i <= seg1 && i + 1 < lane.Points.Count; i++)
+                {
+                    var f = Mall.Frame(lane.Points[i], lane.Points[i + 1]);
+                    float a = side > 0 ? h : -(h + dd + 1f), b = side > 0 ? h + dd + 1f : -h;
+                    // Clear of the crossing lanes at its ends (further in where a rail runs askew).
+                    for (float trim = h + 0.5f; trim <= h + 16f; trim += 2f)
+                    {
+                        if (f.To - 2f * trim < 8f) break;
+                        var rect = Mall.Rect(f, trim, f.To - trim, a, b);
+                        if (mall.Free(rect)) { holds.Add(mall.Hold(rect)); break; }
+                    }
+                }
+            }
+            foreach (var (lane, side) in rungs) HoldRow(lane, side, 0, 0);
+            if (u != null) HoldRow(u, +1, 0, u.Points.Count - 2);
+            else
+            {
+                if (sideRowsL) HoldRow(rails[0], +1, 0, rails[0].Points.Count - 2);
+                var lastRail = rails[xs.Count - 1];
+                if (sideRowsR && lastRail != null) HoldRow(lastRail, -1, 0, lastRail.Points.Count - 2);
+            }
+            mall.MainDir = r.Dir;
+            mall.LotBudget = float.MaxValue;
+            RestLots(ctx, mall, 0xA80u, 400f, false, true);
+            foreach (var hd in holds) mall.Release(hd);
 
             // Store rows: along the rungs (facing the lot across them), then the U's back run, then outside the outer rails.
             int rows = 0;

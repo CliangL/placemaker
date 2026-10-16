@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+f3666d8",
+  "assembly": "0.1.0+ec8919a",
   "categories": [
     {
       "id": "roads",
@@ -443,7 +443,7 @@
           "max": 240.0,
           "step": 10.0,
           "unit": "m",
-          "default": 140.0
+          "default": 240.0
         },
         {
           "id": "zoneKind",
@@ -461,16 +461,16 @@
             "officeHigh",
             "industrial"
           ],
-          "default": "commercialLow"
+          "default": "commercialHigh"
         },
         {
           "id": "plotDepth",
           "kind": "Slider",
           "min": 8.0,
-          "max": 40.0,
+          "max": 48.0,
           "step": 8.0,
           "unit": "m",
-          "default": 24.0
+          "default": 40.0
         },
         {
           "id": "streetShops",
@@ -485,7 +485,7 @@
             "medium",
             "large"
           ],
-          "default": "medium"
+          "default": "large"
         },
         {
           "id": "stallAngle",
