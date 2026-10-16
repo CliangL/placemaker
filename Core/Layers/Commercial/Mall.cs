@@ -704,6 +704,55 @@ namespace Placemaker.Core.Layers.Commercial
         /// <summary>(s40) Shop plots that are exactly cells (zoned as they are).</summary>
         public readonly HashSet<float2[]> CellPlots = new HashSet<float2[]>();
 
+        /// <summary>
+        /// (core) Plots that face no lane of this mall (rows along the city streets: StreetRows, the shop rows at t = 0 of a run, the
+        /// retail park's pads) are not zoned unless <paramref name="streetShops"/>: the user's playtest, "the shops got put on the wrong
+        /// side ... they should have been put on the alleyway". The lanes and lane rows stay where the composition put them; the
+        /// street plots' land goes back to the rest of the site (lots, planting), and the city street's zoning along the build is
+        /// blocked (kerb strips, LaneSides), so every shop that grows faces the build's own lanes. Returns how many were given back.
+        /// </summary>
+        public int PlantStreetPlots(bool streetShops)
+        {
+            if (streetShops) return 0;
+            var street = new List<float2[]>();
+            foreach (var s in Shops) if (!RunsAlongLane(s)) street.Add(s);
+            // A composition with no lane plot at all (a style that only fronts the streets) keeps its street plots: a shopping
+            // site with no shop is not the answer. Its kerb strips spare those columns (ZoneGuard.KerbStrips).
+            if (street.Count == 0 || street.Count == Shops.Count) return 0;
+            int n = 0;
+            foreach (var s in street)
+            {
+                // The land goes back to the site: the rest of the composition (FillRest) makes it a lot entered from the street (a
+                // strip centre's lot lies between the street and the shops) or planting; the city's cells along it are blocked.
+                Shops.Remove(s);
+                ShopZone.Remove(s);
+                Taken.Remove(s);
+                n++;
+            }
+            Ctx.Plan.Facts["streetPlotsPlanted"] = n;
+            return n;
+        }
+
+
+
+        /// <summary>(core) True when one side of the plot runs along a lane of this mall (Faces, lanes only).</summary>
+        public bool RunsAlongLane(float2[] rect)
+        {
+            bool Near(float2 p)
+            {
+                foreach (var l in Lanes)
+                    for (int i = 0; i + 1 < l.Points.Count; i++)
+                        if (math.sqrt(SegmentIndex.DistSq(p, l.Points[i], l.Points[i + 1])) <= l.Half + StreetFrontage.Tolerance) return true;
+                return false;
+            }
+            for (int i = 0; i < rect.Length; i++)
+            {
+                float2 a = rect[i], b = rect[(i + 1) % rect.Length];
+                if (Near(math.lerp(a, b, 0.5f)) && Near(math.lerp(a, b, 0.2f)) && Near(math.lerp(a, b, 0.8f))) return true;
+            }
+            return false;
+        }
+
         public void SnapStreetPlotsToCells()
         {
             if (Shops.Count == 0 || !Build.ZoneGuard.Enabled) return;

@@ -33,8 +33,8 @@ namespace Placemaker.Core.Layers.Commercial
             c.Choice("style", "horseshoe", ControlTier.Essential, "layout", Styles).Tip();
             c.Choice("unit", "large", ControlTier.Essential, "shops", Units).Tip();
             c.Choice("road", "street", ControlTier.More, "layout", "street", "lane").Tip();
-            c.Toggle("pads", false, ControlTier.More, "shops").Tip();   // (core) pad sites face the city street: only on request
-            CommonControls(c, ZoneKinds.CommercialHigh, 40, "large", maxDepth: 48);
+            c.Toggle("pads", true, ControlTier.More, "shops").Tip();
+            CommonControls(c, ZoneKinds.CommercialHigh, 40, "large", maxDepth: 48, streetShops: true);
             c.Fixed("style");
         }
 
@@ -156,7 +156,10 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 Pads(mall, r, from, l - zo - side - Mall.Gap, unit);
                 Pads(mall, r, rr + zo + side + Mall.Gap, to, unit);
-                // (core) The other streets get no shop rows facing them any more (shops face the lot, not the city street).
+                // The other streets: small units back to back with the boxes (a whole cell off the road).
+                var others = new List<StreetShops.Run>();
+                for (int i = 1; i < runs.Count; i++) others.Add(runs[i]);
+                mall.StreetRows(others, 3, ZoneKinds.CommercialLow, 2, 2);
             }
         }
 

@@ -133,7 +133,14 @@ With any of them it gets its own land, made to order at launch (east of the grid
 The area is drawn in the land's shape with the Points tool. Land is laid out at launch, or, in a game that is already
 open (the queue's), when its request arrives.
 
+* `-Category`: a category of the Make row, as the central shelf defines it (`Recipes/shelf/<category>.json`: roads,
+  parking, parks, beach, shops, nature, farms, sports; industry and transport are hidden). `Show.ps1` with no arguments
+  lists them with their types and styles; hidden types and styles are marked.
 * `-Type`, `-Style`: one or more (`a,b`), or `all` (with `-Category` for types). Every type x every style is built.
+  `all` leaves out what the shelf hides; a hidden type or style named by id is still built (picked by id: the panel
+  shows no chip for it), and the run says so.
+* `-Grow <seconds>`: grow the city after the build, before the pictures (shops on the zoned plots; with `-Modes
+  zoning` you see which road each grown shop faces).
 * `-Views`: `45` (default), `top`, `low`, `close`. Framed on the build (`close` looks at its middle).
 * `-Modes`: `clean` (default, no overlays), `zoning` (the game's zone grid: zoned cells in their zone colour, the way
   the road and zoning tools show it), `overlay` (Placemaker's and the game's overlays), `ui` (the real screen),

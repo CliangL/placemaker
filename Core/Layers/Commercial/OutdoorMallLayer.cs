@@ -44,10 +44,10 @@ namespace Placemaker.Core.Layers.Commercial
         protected override void DefinePresets()
         {
             Preset("promenade", ("style", "promenade"));
-            Preset("grand", ("style", "grand"), ("lotSize", "large"), ("plotDepth", 24.0), ("plazaSize", 48.0), ("zoneKind", ZoneKinds.CommercialHigh), ("outerZone", ZoneKinds.CommercialHigh));
+            Preset("grand", ("style", "grand"), ("lotSize", "large"), ("plotDepth", 24.0), ("plazaSize", 48.0), ("zoneKind", ZoneKinds.CommercialHigh), ("outerRow", true), ("outerZone", ZoneKinds.CommercialHigh));
             Preset("loop", ("style", "loop"), ("plazaSize", 40.0), ("plotDepth", 16.0));
             Preset("village", ("style", "promenade"), ("plotDepth", 16.0), ("lotSize", "small"), ("plazaSize", 28.0), ("zoneKind", ZoneKinds.Mixed), ("outerZone", ZoneKinds.Mixed));
-            Preset("lifestyle", ("style", "lifestyle"), ("plotDepth", 24.0), ("plazaSize", 40.0), ("spineLength", 100.0), ("lotSize", "medium"), ("outerZone", ZoneKinds.CommercialHigh));
+            Preset("lifestyle", ("style", "lifestyle"), ("plotDepth", 24.0), ("plazaSize", 40.0), ("spineLength", 100.0), ("lotSize", "medium"), ("outerRow", true), ("outerZone", ZoneKinds.CommercialHigh));
         }
 
         protected override void Compose(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)

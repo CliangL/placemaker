@@ -13,9 +13,14 @@ previews it and builds it: roads, parking lots, parks, shops. It merges ParkingL
 ## Direction: tall and perfect, not wide
 
 The focus, in order, is **Roads, Parking, Parks, Shops & squares**. Make those excellent before anything else.
-Industry and Transport are hidden from the picker, and Gardens/Water fold into Parks while Squares/Events fold into
-Shops. The code stays (`MERGED_GROUPS` / `SHELVED_GROUPS` in `UI/src/stages/PresetBrowser.tsx`). Hide things; don't
-delete code.
+
+**The shelf** (`Recipes/shelf/<category>.json`, read by `Core/Tool/Shelf.cs`) decides the Make row: one file per
+category (Roads, Parking, Parks, Beach, Shops & squares, Nature, Farms, Sports; Industry and Transport hidden), its order,
+the type groups it shows (Gardens fold into Parks, the old Water group is Beach, Squares and Events fold into Shops), types
+moved in from another group (`types`), and what it hides: `hiddenTypes` and `hiddenStyles` per type. To cut a type or
+a style, list it there: never delete code. The panel, its search, the game runner's catalog and `Show.ps1` all read it;
+hidden things are flagged and can still be built by id (`Show.ps1 -Type quarry`). A category agent edits only its own
+file.
 
 ## Read first
 
