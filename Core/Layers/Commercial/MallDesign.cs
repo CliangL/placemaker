@@ -427,6 +427,8 @@ namespace Placemaker.Core.Layers.Commercial
                     Ctx.Object(q, ang + math.PI, ObjectRole.Bench, AssetMix.Pick(PlazaArt.Benches, (uint)i), Hashing.Mix(Ctx.Seed, salt + 1u + (uint)i));
                 }
             }
+            Decal(c + f.In * 1.5f, AssetCategories.DecalLeaves, salt + 0x90u);
+            Decal(f.At(sm, k.T0 + 1.2f), "decal.wear", salt + 0x91u, 0.8f);
             // Food carts first (they need the room): along the lot side, either side of where the spine comes in.
             if (X.Trucks > 0)
             {
@@ -687,6 +689,7 @@ namespace Placemaker.Core.Layers.Commercial
                     var rack = g.At + g.In * 4f - side * 3.2f;
                     if (Open(rack, 0.6f) && Open(rack + g.In * 4.8f, 0.6f)) BikeRacks(rack, g.In, 4, 0x6C0u + k++);
                 }
+                Decal(g.At + g.In * 2.5f, "decal.wear", 0x6E0u + k);
                 var bin = g.At + g.In * 6.5f + side * 2.4f;
                 if (Open(bin, 0.4f)) Ctx.Object(bin, 0f, ObjectRole.Bin, new AssetRef(""), Hashing.Mix(Ctx.Seed, 0x6D0u + k++));
             }
@@ -806,6 +809,7 @@ namespace Placemaker.Core.Layers.Commercial
                 if (!ok) continue;
                 Ctx.Object(p, math.atan2(f.Dir.x, f.Dir.y), ObjectRole.Furniture, new AssetRef("", "TrashContainerEmpty01", "TrashContainerEmpty02", "TrashContainerEmpty03"), Hashing.Mix(Ctx.Seed, 0x5E0u + (uint)n), -1, "industrial.skip");
                 reserved.AddDisc(p, 1.6f);
+                Decal(p + f.Dir * 2.2f, AssetCategories.DecalDirt, 0x5F0u + (uint)n, 0.8f);
                 n++;
             }
             if (n > 0) Ctx.Plan.Facts["serviceYards"] = n;
@@ -878,6 +882,14 @@ namespace Placemaker.Core.Layers.Commercial
             width = frame.To;
             depth = math.abs(math.dot(ring[(best + 2) % 4] - ring[best], frame.In));
             return width > 1f && depth > 1f;
+        }
+
+        /// <summary>(rf-shops3) A subtle ground decal (worn patch, leaves, a stain): only with the Worn ground extra and where the catalog has one (asset packs).</summary>
+        private void Decal(float2 p, string category, uint salt, float scale = 1f)
+        {
+            if (!X.Worn || !AssetAvailability.Has(category) || AssetAvailability.CountOf(category) == 0) return;
+            var o = Ctx.Object(p, Hashing.Unit(salt) * 6.283f, ObjectRole.Decal, new AssetRef(""), Hashing.Mix(Ctx.Seed, salt), -1, category);
+            o.Scale = scale;
         }
 
         // ───────────── helpers ─────────────
