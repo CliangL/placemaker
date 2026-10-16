@@ -340,7 +340,7 @@ namespace Placemaker.Game.Suite
                     float iou = SuiteVerdicts.IoU(want, ring);
                     o["wantM2"] = Math.Round(wantArea);
                     o["iou"] = Math.Round(iou, 3);
-                    o["ok"] = iou >= 0.9f;
+                    o["ok"] = iou >= 0.75f && math.abs(area - wantArea) <= 0.15f * wantArea;   // snapping moves corners a little; a sliver or a different shape fails
                     o["detail"] = $"outline {Math.Round(area)} m² vs the clicked polygon {Math.Round(wantArea)} m², overlap {iou:P0}";
                     break;
                 }

@@ -218,6 +218,7 @@ if (-not $KeepGraphics) {
         $t = $t -replace '"distanceCloudsEnabled":\s*true', '"distanceCloudsEnabled": false'
         $t = $t -replace '"distanceCloudsShadows":\s*true', '"distanceCloudsShadows": false'
         $t = $t -replace '"lodCrossFade":\s*true', '"lodCrossFade": false'
+        $t = $t -replace '"edgeScrolling":\s*true', '"edgeScrolling": false'
         $t = $t -replace '"levelOfDetail":\s*[0-9.]+', '"levelOfDetail": 1'
         $t = $t -replace '"resolution":\s*\{[^}]*\}', ('"resolution": {"width": ' + $w + ', "height": ' + $h + '}')
         $t = $t -replace '("enabled":\s*)true(,\s*"isAdaptive")', '${1}false$2'

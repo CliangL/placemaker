@@ -83,8 +83,21 @@ namespace Placemaker.Game.Suite
 
         // ───────────── sun, climate, icons, labels, LOD ─────────────
 
+        /// <summary>The real mouse must not move the camera (edge scrolling while the cursor rests on a window edge).</summary>
+        public void CameraInputOff()
+        {
+            try
+            {
+                var c = _world.GetExistingSystemManaged<CameraUpdateSystem>()?.gamePlayController;
+                if (c != null && c.edgeScrolling) c.edgeScrolling = false;
+                Record["edgeScrolling"] = false;
+            }
+            catch (Exception e) { Record["edgeScrollingError"] = e.Message; }
+        }
+
         public void Apply(Action<string> say)
         {
+            CameraInputOff();
             if (!Enabled) { Record["mode"] = "game"; return; }
             Record["mode"] = "suite";
             try { Sun(); } catch (Exception e) { Record["sunError"] = e.Message; say("sun: " + e.Message); }
@@ -106,6 +119,7 @@ namespace Placemaker.Game.Suite
         /// <summary>Per scenario: LOD and icons can be re-applied by the game's own settings and infoviews.</summary>
         public void Reassert()
         {
+            CameraInputOff();
             if (!Enabled) return;
             Detail();
             try { HideIcons(); } catch (Exception) { }

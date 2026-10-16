@@ -611,6 +611,7 @@ namespace Placemaker.Game.Suite
             var rec = new JObject();
             yield return CameraTo(FocusOf(flat), 25f, 60f, 320f, rec, null);
             yield return Seconds(1f);
+            if (rec["timeouts"] != null) { _look.Record["calibrationCameraTimeout"] = rec["timeouts"]; Say("look calibration: the camera did not arrive; exposure and noise floor may be off"); }
             if (_look.Enabled && _look.HasExposure) yield return _look.CalibrateExposure(Say);
             _look.RecordSun();
             yield return CalibrateNoise(FocusOf(zoned));
