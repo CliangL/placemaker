@@ -354,7 +354,7 @@ $md = Join-Path $runDir 'summary.md'
 $top = @("> **Host: $status** (label $label, profile $($cfg.profile), total $([math]::Round($total)) s; phases s after launch: $(($phaseTimes.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '))")
 if ($status -ne 'quit') { $top += "> **The run did not end with the suite's own quit: results after phase '$lastPhase' are missing.**" }
 $top += ''
-$body = if (Test-Path $md) { Get-Content $md -Raw } else { "# Game run $RunId`r`n(no summary written by the game)`r`n" }
+$body = if (Test-Path $md) { Get-Content $md -Raw -Encoding UTF8 } else { "# Game run $RunId`r`n(no summary written by the game)`r`n" }
 Write-NoBom $md (($top -join "`r`n") + "`r`n" + $body)
 Say "done: $status in $([math]::Round($total)) s -> $runDir"
 Say "installed now: Mods/Placemaker/Placemaker.dll $label ($([math]::Round($dllInfo.Length / 1KB)) KB) - the user's normal game loads this build"
