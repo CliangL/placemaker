@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+a71a842-dirty",
+  "assembly": "0.1.0+0ac810a-dirty",
   "categories": [
     {
       "id": "roads",
@@ -2533,7 +2533,8 @@
             "wildflower",
             "urban",
             "riverside",
-            "picnic"
+            "picnic",
+            "garden"
           ],
           "default": "natural"
         },
@@ -15710,6 +15711,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "moss",
+        "bamboo"
       ]
     }
   ]

@@ -76,6 +76,7 @@ namespace Placemaker.Tests.Types
             var preset = TestKit.Gen(Id).Presets.Single(p => p.Id == "karesansui");
             var values = preset.Values.Clone();
             values.Values["gravelSurface"] = false;
+            values.Values["fieldShape"] = "rect";
             var plan = TestKit.Gen(Id).Plan(TestKit.Input(FiveHa, values, 7, null, TestKit.RoadAlongBottom(250)), System.Threading.CancellationToken.None);
             Assert.Equal(5, (int)plan.Facts["fieldGroups"]);
             Assert.True(plan.Facts["gravelArea"] > 2000);
@@ -164,7 +165,10 @@ namespace Placemaker.Tests.Types
                 var plan = PlanPreset(Id, "tea", FiveHa, TestKit.RoadAlongBottom(250));
                 Assert.False(plan.HasErrors, Errors(plan.Issues));
                 Assert.Contains(plan.Issues, i => i.Key == Keys.NoAssetsIssue && i.Severity == IssueSeverity.Info);
-                Assert.DoesNotContain(plan.Objects, o => none.ContainsKey(o.Category ?? "") || o.Role == ObjectRole.Lamp || o.Role == ObjectRole.Bush);
+                // rf-parks: the rock groups use named vanilla boulders while the rock control is automatic (resolved by name, like the
+                // memorial's curated pieces), so only rocks other than those may not appear.
+                Assert.DoesNotContain(plan.Objects, o => (none.ContainsKey(o.Category ?? "") && !(o.Category == AssetCategories.Rock && (o.Asset.Id ?? "").StartsWith("Boulder")))
+                    || o.Role == ObjectRole.Lamp || o.Role == ObjectRole.Bush);
                 Assert.NotEmpty(plan.Nets);
             }
         }

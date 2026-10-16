@@ -588,6 +588,21 @@ namespace Placemaker.Core.Layers.Types.Wetland
                     var lr = LayerRegion.From(clean);
                     var anchor = lr != null ? lr.DeepestPoint(out _, null, 12) : Poly.Centroid(clean);
                     bool shelf = shelfWidth > 0.2f && depth > shelfDepth + 0.1f;
+                    // rf-parks: with a shelf the water source must stand in the deep part. The deepest point of a piece cut round the
+                    // islands can lie on the shelf, where the build measured only the shelf depth (0.3 m < 0.5 m) and added no water
+                    // ("lake basin not deep enough"; zen stroll garden, wetland bird reserve, 2026-10-16).
+                    if (shelf)
+                    {
+                        float bestIns = -1f;
+                        foreach (var deep in Poly.Offset(clean, shelfWidth))
+                        {
+                            if (deep == null || deep.Length < 3 || Poly.Area(deep) < 8f) continue;
+                            var dr = LayerRegion.From(deep);
+                            if (dr == null) continue;
+                            var p = dr.DeepestPoint(out float ins, null, 12);
+                            if (ins > bestIns) { bestIns = ins; anchor = p; }
+                        }
+                    }
                     ctx.Plan.Terraform.Add(new PlannedTerraform
                     {
                         Ring = Poly.To3D(clean, ctx.H), Kind = TerraformKind.Lower,
