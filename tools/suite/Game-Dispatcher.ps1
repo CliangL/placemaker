@@ -320,7 +320,7 @@ function D-Publish($a, $result, [string]$status, [string]$message) {
     foreach ($sub in '', 'shots', 'scenarios', 'logs') { New-Item -ItemType Directory -Force -Path (Join-Path $dir $sub) | Out-Null }
     $sd = $feed.sessionDir
     $sum = Q-ReadJson (Join-Path $sd 'summary.json')
-    $all = if ($sum) { @($sum.scenarios | Where-Object { $_ }) } else { @() }
+    $all = @(if ($sum) { $sum.scenarios | Where-Object { $_ } })   # @() around the if: one row must stay an array (Windows PowerShell has no .Count on a lone object)
     $count = if ($result -and $result.scenarios) { @($result.scenarios).Count } else { [math]::Max(0, $all.Count - [int]$feed.rowsBefore) }
     $rows = @()
     $scFiles = @{}

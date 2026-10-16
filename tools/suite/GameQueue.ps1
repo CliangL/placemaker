@@ -213,7 +213,7 @@ function Q-Who([string]$repo) {
 function Q-Needs($doc, [string]$repo) {
     $r = [ordered]@{ scenarios = 0; land = 0; blocks = [ordered]@{ Flat = 0; Zoned = 0; Slope = 0; Rough = 0; Survive = 0 } }
     if (-not $doc -or $doc.command) { return $r }
-    $list = if ($doc.scenarios) { @($doc.scenarios) } else { @($doc) }
+    $list = @(if ($doc.scenarios) { $doc.scenarios } else { $doc })
     $types = @()
     $cat = Join-Path $repo 'suite\catalog.json'
     if (Test-Path $cat) { try { $types = @((Get-Content $cat -Raw | ConvertFrom-Json).types) } catch { } }
