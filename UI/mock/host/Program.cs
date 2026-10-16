@@ -107,8 +107,22 @@ namespace Placemaker.MockHost
     {
         // ───────────── catalog ─────────────
 
+        /// <summary>(core) The central shelf (Recipes/shelf/*.json), read as the game reads it (Core/Tool/Shelf.cs).</summary>
+        private static Placemaker.Core.Tool.Shelf Shelf(string repo)
+        {
+            var files = new List<KeyValuePair<string, string>>();
+            var dir = Path.Combine(repo ?? ".", "Recipes", Placemaker.Core.Tool.Shelf.FolderName);
+            if (Directory.Exists(dir))
+                foreach (var f in Directory.GetFiles(dir, "*.json").OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                    files.Add(new KeyValuePair<string, string>(Path.GetFileName(f), File.ReadAllText(f)));
+            var shelf = Placemaker.Core.Tool.Shelf.Parse(files);
+            Placemaker.Core.Tool.Shelf.Current = shelf;
+            return shelf;
+        }
+
         public static JsonNode Catalog(string repo)
         {
+            var shelf = Shelf(repo);
             var layers = new JsonArray();
             var recipes = Recipes(repo);
             var shippedRoots = new HashSet<string>(recipes.Select(r => (string)r["root"]?["layer"] ?? ""));
@@ -138,9 +152,23 @@ namespace Placemaker.MockHost
                 // Make-row category (contract RecipeInfo.group), as Core UiModels.Catalog sends it.
                 var grp = GeneratorGroups.Of(GeneratorRegistry.Get((string)r["root"]?["layer"] ?? (string)r["id"] ?? ""));
                 if (!string.IsNullOrEmpty(grp)) copy["group"] = grp;
+                // (core) The shelf's category and hidden flag, as Core UiModels.Catalog sends them.
+                if (!string.IsNullOrEmpty(grp) && (bool?)r["custom"] != true)
+                {
+                    var id = (string)r["id"] ?? "";
+                    copy["category"] = shelf.CategoryOf(id, grp);
+                    if (shelf.IsTypeShelved(id, grp)) copy["shelved"] = true;
+                }
                 all.Add(copy);
             }
-            return new JsonObject { ["layers"] = layers, ["recipes"] = all };
+            var cats = new JsonArray();
+            foreach (var c in shelf.Categories)
+            {
+                var co = new JsonObject { ["id"] = c.Id, ["name"] = c.Key, ["en"] = c.Name, ["order"] = c.Order };
+                if (c.Hidden) co["hidden"] = true;
+                cats.Add(co);
+            }
+            return new JsonObject { ["layers"] = layers, ["recipes"] = all, ["categories"] = cats };
         }
 
         /// <summary>Shipped recipes (Recipes/*.json, docs/proposals/recipe-json.md), as mock templates.</summary>
@@ -246,7 +274,11 @@ namespace Placemaker.MockHost
             }
             var presets = new JsonArray();
             foreach (var p in g.Presets ?? Array.Empty<PresetInfo>())
-                presets.Add(new JsonObject { ["id"] = p.Id, ["name"] = p.LabelKey, ["icon"] = p.Icon ?? "", ["values"] = Bag(p.Values) });
+            {
+                var po = new JsonObject { ["id"] = p.Id, ["name"] = p.LabelKey, ["icon"] = p.Icon ?? "", ["values"] = Bag(p.Values) };
+                if (Placemaker.Core.Tool.Shelf.Current.IsStyleShelved(g.Id, GeneratorGroups.Of(g), p.Id)) po["shelved"] = true;
+                presets.Add(po);
+            }
             // Built-in features (Core.IHasFeatures) and Make-row visibility (AreaGenerator Hidden).
             var features = new JsonArray();
             if (g is IHasFeatures hf)

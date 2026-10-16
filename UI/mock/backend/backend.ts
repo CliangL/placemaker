@@ -5,7 +5,7 @@
 // It publishes exactly the six values of contract.ts and handles exactly its triggers.
 import { defaultVisible, fakeLegend } from "./legend";
 import {
-    ActivePreset, AreaMode, BrushShape, Catalog, DesignState, FeatureFit, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, PROTOCOL, RecipeInfo, SettingValue, Stage, StepView,
+    ActivePreset, AreaMode, BrushShape, Catalog, CategoryInfo, DesignState, FeatureFit, GROUP, Hint, LocText, ManagedGroup, PresetView, PrimaryAction, PROTOCOL, RecipeInfo, SettingValue, Stage, StepView,
     Issue, Summary, ToolState,
 } from "../../src/contract";
 import { publish, setTriggerHandler } from "../cs2/api";
@@ -19,6 +19,7 @@ import { composeFake, FAKE_LAYER_IDS } from "./fakePlanner";
 import { defaultSurface, surfaceColor } from "./fakeAssets";
 import { area, closestOnRing, dist, perimeter, selfIntersects, simplify, V2 } from "./geometry";
 import { ComposeResult, StepModel } from "./types";
+import { SHELF_CATEGORIES, shelve, styleShelved } from "./shelf";
 
 /** s33: like Core UiModels.NeedsAck — ground paint alone needs no tick. */
 function needsAck(permanent: { key: string }[]): boolean {
@@ -210,9 +211,10 @@ export class MockBackend {
                 this.layers = this.layers.filter((x) => x.id.toLowerCase() !== l.id.toLowerCase());
             }
             this.layers = [...real, ...this.layers];
+            if (Array.isArray(cat?.categories)) this.categories = cat.categories;
             // Shipped recipes first; keep fake recipes only where no real layer covers their root.
             const shipped: MockRecipe[] = (cat?.recipes ?? []).map((r: any) => ({
-                info: { id: r.id, name: r.name, icon: r.icon, custom: false, description: r.description, group: r.group },
+                info: { id: r.id, name: r.name, icon: r.icon, custom: false, description: r.description, group: r.group, category: r.category, shelved: r.shelved },
                 root: r.root ?? { layer: r.id },
             }));
             if (shipped.length) {
@@ -384,7 +386,10 @@ export class MockBackend {
     }
 
     presetViews(l: MockLayer): PresetView[] {
-        const built: PresetView[] = l.presets.map((p) => ({ id: p.id, name: p.name, icon: p.icon, overridden: this.presetOverrides[l.id + "|" + p.id] ? true : undefined }));
+        const built: PresetView[] = l.presets.map((p) => ({
+            id: p.id, name: p.name, icon: p.icon, overridden: this.presetOverrides[l.id + "|" + p.id] ? true : undefined,
+            shelved: (p as PresetView).shelved || styleShelved(l.id, (l as { group?: string }).group, p.id) || undefined,
+        }));
         const own: PresetView[] = (this.customPresets[l.id] ?? []).map((p) => ({ id: p.id, name: p.name, custom: true, basedOn: p.basedOn }));
         return [...built, ...own];
     }
@@ -1518,9 +1523,13 @@ export class MockBackend {
     catalog(): Catalog {
         return {
             layers: this.layers.map(({ minArea, markerKinds, markersRequired, real, features, ...l }) => ({ ...l, presets: this.presetViews(l as MockLayer) })) as any,
-            recipes: this.recipes.map((r) => r.info),
+            recipes: this.recipes.map((r) => shelve(r.info)),
+            categories: this.categories,
         };
     }
+
+    /** (core) The central shelf's categories (the host's when it is up, else Recipes/shelf/*.json bundled). */
+    categories: CategoryInfo[] = SHELF_CATEGORIES;
 
     /** Tests: force a feature's fit status by feature layer id (null = computed). */
     fitOverride: Record<string, FeatureFit | null> = {};

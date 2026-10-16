@@ -34,9 +34,9 @@ test("picker: 1 Category · 2 Type · 3 Style rows of chips, compact", async ({ 
     await toDesign(page, "park");
     expect(await width(page)).toBe(560); // 1920 px wide screen → the wide default
 
-    // categories in a fixed order (roads, parking, parks, shops & squares, nature); squares fold into shops
+    // categories in a fixed order (the shelf: roads, parking, parks, shops & squares, nature); squares fold into shops
     const chips = await page.locator('[data-testid="make-groups"] [data-testid^="make-group-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    expect(chips).toEqual(["make-group-roads", "make-group-parking", "make-group-parks", "make-group-commercial", "make-group-nature"]);
+    expect(chips).toEqual(["make-group-roads", "make-group-parking", "make-group-parks", "make-group-shops", "make-group-nature"]);
     await expect(page.getByTestId("make-group-parks")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("recipe-park")).toHaveAttribute("aria-pressed", "true");
 
@@ -57,11 +57,11 @@ test("picker: 1 Category · 2 Type · 3 Style rows of chips, compact", async ({ 
     await panelShot(page, "grid-browser-wide");
 
     // a category lists its types; switching category picks its first type, so the styles follow
-    await page.getByTestId("make-group-commercial").click();
-    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("make-group-shops").click();
+    await expect(page.getByTestId("make-group-shops")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("recipe-plaza")).toBeVisible();
     await expect(page.getByTestId("recipe-park")).toHaveCount(0);
-    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("data-has-selected", "true");
+    await expect(page.getByTestId("make-group-shops")).toHaveAttribute("data-has-selected", "true");
     await pickType(page, "plaza");
     await expect(page.getByTestId("presets-plaza").getByTestId("preset-civic")).toBeVisible();
     await page.getByTestId("make-group-parks").click();

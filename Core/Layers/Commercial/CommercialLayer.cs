@@ -42,11 +42,15 @@ namespace Placemaker.Core.Layers.Commercial
         protected override string[] DefaultFeatures => Array.Empty<string>();
 
         /// <summary>Zone type, plot depth and the parking options shared by every commercial type.</summary>
-        protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "", double maxDepth = 40, bool green = true)
+        /// <param name="streetShops">(core) Default of "Shops facing the streets": off for the types built round their own lanes (their
+        /// street rows are planted), on for the types whose shops stand on the streets by design (shops park, retail park).</param>
+        protected void CommonControls(ControlSet c, string zone = ZoneKinds.CommercialLow, double depth = 24, string lotSize = "medium", bool lot = true, string lotWhen = "", double maxDepth = 40, bool green = true, bool streetShops = false)
         {
             var z = EdgeZoningAddOn.ZoneKindControl("zoneKind", "shops", zone);
             c.List.Add(z);
             Shared(c.Slider("plotDepth", depth, 8, maxDepth, 8, "m", ControlTier.Essential, "shops")).Tip();
+            // (core) Off: plots along the city streets are planted and every shop faces the site's own lanes and lot.
+            Shared(c.Toggle("streetShops", streetShops, ControlTier.More, "shops")).Tip();
             if (lot)
             {
                 if (lotSize != null) Shared(c.Choice("lotSize", lotSize, ControlTier.Essential, "parking", "small", "medium", "large")).Tip();
@@ -101,6 +105,8 @@ namespace Placemaker.Core.Layers.Commercial
             // (s50) Lot first: the shop rows, access alleys and lots the composition did not reach.
             LotFirst(ctx, mall, runs);
             ctx.Check();
+            // (core) Shops face the build's lanes: plots facing only a city street are planted unless the player asks for street shops.
+            mall.PlantStreetPlots(ctx.B("streetShops"));
             // (s40) Zoning first: street plots become their real cells before the rest is planned around them.
             mall.SnapStreetPlotsToCells();
             FillRest(ctx, mall);

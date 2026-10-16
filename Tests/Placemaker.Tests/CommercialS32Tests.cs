@@ -69,7 +69,7 @@ namespace Placemaker.Tests
                             yield return new object[] { t, p, s };
         }
 
-        internal static ComposedPlan Compose(string type, string preset, string siteName, out SiteContext site, uint seed = 5)
+        internal static ComposedPlan Compose(string type, string preset, string siteName, out SiteContext site, uint seed = 5, System.Action<Recipe> tweak = null)
         {
             var ring = Site(siteName);
             site = ZoningCutoutTests.Streets(ring);
@@ -79,6 +79,7 @@ namespace Placemaker.Tests
             if (!string.IsNullOrEmpty(preset)) Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
+            tweak?.Invoke(r);
             return Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 
@@ -151,7 +152,8 @@ namespace Placemaker.Tests
         [InlineData("highStreet", "boulevard")]
         public void BigBuildingsOnTheStreetsLittleOnesOnTheLanes(string type, string preset)
         {
-            var plan = Compose(type, preset, "sq25", out _);
+            // (core) Street rows are zoned only with "Shops facing the streets" on (off by default for these lane types).
+            var plan = Compose(type, preset, "sq25", out _, 5, r => r.Root.Settings.Values["streetShops"] = true);
             var host = plan.Layers.First(l => l.GeneratorId == type);
             var gen = (LayerBase)GeneratorRegistry.Get(type);
             var settings = gen.Defaults();

@@ -200,14 +200,17 @@ namespace Placemaker.Core.Tool
         // ───────────── catalog ─────────────
 
         /// <param name="presets">Preset list per type (PresetStore.ViewsFor: built-ins, overrides, customs); null = built-ins only.</param>
+        /// <param name="shelf">(core) The central shelf (Recipes/shelf/*.json): each type's category and shelved flag, each style's
+        /// shelved flag, and the categories in order; null = <see cref="Shelf.Current"/>.</param>
         public static JsonValue Catalog(IEnumerable<IAreaGenerator> generators, IEnumerable<RecipeListEntry> recipes,
-            Func<IAreaGenerator, IReadOnlyList<PresetView>> presets = null)
+            Func<IAreaGenerator, IReadOnlyList<PresetView>> presets = null, Shelf shelf = null)
         {
+            shelf = shelf ?? Shelf.Current ?? new Shelf();
             var layers = JsonValue.Arr();
             foreach (var g in generators)
             {
                 if (g == null) continue;
-                try { layers.Add(Layer(g, presets)); }
+                try { layers.Add(Layer(g, presets, shelf)); }
                 catch (Exception) { /* a broken generator must not hide the others */ }
             }
             var list = JsonValue.Arr();
@@ -217,12 +220,17 @@ namespace Placemaker.Core.Tool
                 if (!string.IsNullOrEmpty(r.DescriptionKey)) ro.Set("description", r.DescriptionKey);
                 var grp = GeneratorGroups.Of(GeneratorRegistry.Get(r.Id));
                 if (!string.IsNullOrEmpty(grp)) ro.Set("group", grp);
+                if (!r.Custom && !string.IsNullOrEmpty(grp))
+                {
+                    ro.Set("category", shelf.CategoryOf(r.Id, grp));
+                    if (shelf.IsTypeShelved(r.Id, grp)) ro.Set("shelved", true);
+                }
                 list.Add(ro);
             }
-            return JsonValue.Obj().Set("layers", layers).Set("recipes", list);
+            return JsonValue.Obj().Set("layers", layers).Set("recipes", list).Set("categories", shelf.CategoriesJson());
         }
 
-        public static JsonValue Layer(IAreaGenerator g, Func<IAreaGenerator, IReadOnlyList<PresetView>> presetViews = null)
+        public static JsonValue Layer(IAreaGenerator g, Func<IAreaGenerator, IReadOnlyList<PresetView>> presetViews = null, Shelf shelf = null)
         {
             var o = JsonValue.Obj()
                 .Set("id", g.Id ?? "")
@@ -243,15 +251,21 @@ namespace Placemaker.Core.Tool
             {
                 try { views = presetViews(g); } catch (Exception) { views = null; }
             }
+            JsonValue Shelved(PresetView v, JsonValue po)
+            {
+                if (shelf != null && !v.Custom && shelf.IsStyleShelved(g.Id, group, v.Id)) po.Set("shelved", true);
+                return po;
+            }
             if (views != null)
             {
-                foreach (var v in views) if (v != null) presets.Add(Preset(v));
+                foreach (var v in views) if (v != null) presets.Add(Shelved(v, Preset(v)));
             }
             else if (g.Presets != null)
                 foreach (var p in g.Presets)
                 {
                     if (p == null) continue;
-                    presets.Add(Preset(new PresetView { Id = p.Id ?? "", Name = p.LabelKey ?? "", Icon = p.Icon ?? "" }));
+                    var v = new PresetView { Id = p.Id ?? "", Name = p.LabelKey ?? "", Icon = p.Icon ?? "" };
+                    presets.Add(Shelved(v, Preset(v)));
                 }
             o.Set("presets", presets);
             return o;

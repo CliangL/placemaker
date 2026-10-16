@@ -182,6 +182,9 @@ namespace Placemaker.Core.Build
             return !IsFunctional(objects[w.Index].Role);
         }
 
+        /// <summary>(core) No asset chosen (automatic and nothing resolved): an empty id with no fallback.</summary>
+        public static bool IsUnchosen(AssetRef a) => string.IsNullOrEmpty(a.Id) && (a.Fallbacks == null || a.Fallbacks.Length == 0);
+
         /// <summary>(s25) Planned stall markings (ParkingBay objects with an asset) — the build logs how many it built.</summary>
         public static int StallMarkings(ComposedPlan plan)
         {
@@ -239,6 +242,9 @@ namespace Placemaker.Core.Build
                 {
                     var a = l.Areas[i];
                     if (a?.Ring == null || a.Ring.Length < 3) continue;
+                    // (core) A lot area without an explicit asset only reserves land in the plan (other layers keep off it);
+                    // it is never built: the automatic lot pool holds only vanilla industry lots (AutoAssets).
+                    if (a.Role == AreaRole.Lot && IsUnchosen(a.Asset)) continue;
                     Add(w.Areas, excluded, new WorkItem
                     {
                         Kind = WorkKind.Area, Layer = li, Index = i, Category = RoleCategories.ForArea(a.Role), Asset = a.Asset,

@@ -5,8 +5,9 @@
 //     "+ New" (save the current settings as a new style). The search icon in the header filters all three rows.
 //   Editing bar: "EDITING · ● unsaved changes", the breadcrumb [Category] › [Type] › [Style] and an icon toolbar:
 //     undo changes (back to the style) · shuffle · save as new · save (overwrite) · more (rename, delete, reset, export).
-// Styles are the engine's presets (selectPreset / savePreset / savePresetAs …); categories come from the type's
-// GeneratorRegistry group (RecipeInfo.group), guessed from the id only for types that declare none.
+// Styles are the engine's presets (selectPreset / savePreset / savePresetAs …); categories come from the central shelf
+// (Recipes/shelf/<category>.json, Core/Tool/Shelf.cs): the game sends each type's category (RecipeInfo.category), what the
+// shelf hides (RecipeInfo.shelved, PresetView.shelved) and the categories in order (Catalog.categories).
 import React, { KeyboardEvent, useEffect, useRef, useState } from "react";
 import classNames from "classnames";
 import { ActivePreset, Catalog, DesignState, LayerType, PresetView, RecipeInfo, StepView } from "../contract";
@@ -43,34 +44,31 @@ export function makeRecipes(catalog: Catalog): RecipeInfo[] {
     const fills = new Set(catalog.layers.filter((l) => l.kind === "fill" && !l.hidden).map((l) => l.id.toLowerCase()));
     const singles = catalog.recipes.filter((r) => !r.custom && fills.has(r.id.toLowerCase()));
     const types = singles.length ? singles : catalog.recipes.filter((r) => !isMix(catalog, r));
-    return types.filter((r) => !SHELVED_GROUPS.has(recipeGroup(r)));
+    // (core) The central shelf hides whole categories (industry, transport) and single types (RecipeInfo.shelved).
+    return types.filter((r) => !r.shelved);
 }
 
+export type MakeGroup = { id: string; key: string; en: string };
+const OTHER_GROUP: MakeGroup = { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" };
+
 /**
- * The shelf (user 2026-10-15: "go tall and perfect rather than wide"). Categories folded into another one, and
- * categories hidden from the picker and its search. The types and all their code stay; to bring one back, remove it
- * from these two lists.
+ * The categories of the Make row, in the shelf's order (Recipes/shelf/<category>.json: "fewer, better", user 2026-10-15),
+ * hidden ones left out, "Other" last. Without shelf data every type group is its own category, in first-seen order.
  */
-export const MERGED_GROUPS: Record<string, string> = { gardens: "parks", water: "parks", squares: "commercial", events: "commercial" };
-export const SHELVED_GROUPS = new Set(["industrial", "transport"]);
+export function makeGroups(catalog: Catalog): MakeGroup[] {
+    const shelf = (catalog.categories ?? []).filter((c) => !c.hidden).slice().sort((a, b) => a.order - b.order);
+    if (shelf.length) return [...shelf.map((c) => ({ id: c.id, key: c.name, en: c.en })), OTHER_GROUP];
+    const seen: string[] = [];
+    for (const r of catalog.recipes) {
+        const g = recipeGroup(r);
+        if (g !== "other" && !seen.includes(g)) seen.push(g);
+    }
+    return [...seen.map((g) => ({ id: g, key: "Placemaker.UI.MakeGroup." + g.charAt(0).toUpperCase() + g.slice(1), en: humanize(g) })), OTHER_GROUP];
+}
 
-/** The categories of the Make row, in this fixed order. */
-export const MAKE_GROUPS: { id: string; key: string; en: string }[] = [
-    { id: "roads", key: "Placemaker.UI.MakeGroup.Roads", en: "Roads" },
-    { id: "parking", key: "Placemaker.UI.MakeGroup.Parking", en: "Parking" },
-    { id: "parks", key: "Placemaker.UI.MakeGroup.Parks", en: "Parks" },
-    { id: "commercial", key: "Placemaker.UI.MakeGroup.Commercial", en: "Shops & squares" },
-    { id: "nature", key: "Placemaker.UI.MakeGroup.Nature", en: "Nature" },
-    { id: "sports", key: "Placemaker.UI.MakeGroup.Sports", en: "Sports" },
-    { id: "farms", key: "Placemaker.UI.MakeGroup.Farms", en: "Farms" },
-    { id: "other", key: "Placemaker.UI.MakeGroup.Other", en: "Other" },
-];
-
-/** Group of a recipe: the group its type declares (else guessed from the id), folded by the shelf. */
+/** Category of a recipe: the shelf's (RecipeInfo.category), else the group its type declares, else guessed from the id. */
 export function recipeGroup(r: RecipeInfo): string {
-    const raw = r.group || makeGroupOf(r.id);
-    const g = MERGED_GROUPS[raw] ?? raw;
-    return SHELVED_GROUPS.has(g) || MAKE_GROUPS.some((x) => x.id === g) ? g : "other";
+    return r.category || r.group || makeGroupOf(r.id);
 }
 
 /** Fallback group of a type id that declares none ("parking" before "park", "market square" before parks). */
@@ -91,8 +89,10 @@ function typeLayer(catalog: Catalog, r: RecipeInfo): LayerType | undefined {
 
 export const presetName = (t: TFunc, p: PresetView) => (p.custom ? p.name : t(p.name, humanize(p.name || p.id)));
 const recipeName = (t: TFunc, r: RecipeInfo) => (r.custom ? r.name : t(r.name, humanize(r.name || r.id)));
-const groupName = (t: TFunc, id: string) => {
-    const g = MAKE_GROUPS.find((x) => x.id === id) ?? MAKE_GROUPS[MAKE_GROUPS.length - 1];
+const groupName = (t: TFunc, catalog: Catalog, id: string) => {
+    const shelf = (catalog.categories ?? []).find((c) => c.id === id);
+    if (shelf) return t(shelf.name, shelf.en);
+    const g = makeGroups(catalog).find((x) => x.id === id) ?? OTHER_GROUP;
     return t(g.key, g.en);
 };
 const DEFAULT_ID = "";
@@ -209,15 +209,16 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
     const [searching, setSearching] = useState(false);
     const [moreCats, setMoreCats] = useOpen("design:moreCategories", false);
     const list = makeRecipes(catalog);
-    const selectedRecipe = list.find((r) => r.id === design.recipeId);
+    // A shelved type picked on purpose (the game runner by id, editing an old build) still shows its styles while it is current.
+    const selectedRecipe = list.find((r) => r.id === design.recipeId) ?? catalog.recipes.find((r) => r.id === design.recipeId && !r.custom && !!r.shelved);
     const selectedGroup = selectedRecipe ? recipeGroup(selectedRecipe) : "";
     const [chosen, setChosen] = useState<string | null>(() => load<string | null>(CATEGORY_KEY, null));
     const root = useRef<HTMLDivElement>(null);
     const q = query.trim().toLowerCase();
     const has = (text: string) => text.toLowerCase().includes(q);
 
-    const cats = MAKE_GROUPS.map((g, order) => ({ id: g.id, title: t(g.key, g.en), order, types: list.filter((r) => recipeGroup(r) === g.id) }))
-        .filter((c) => c.types.length);   // fixed order: roads, parking, parks, shops, then the rest
+    const cats = makeGroups(catalog).map((g, order) => ({ id: g.id, title: t(g.key, g.en), order, types: list.filter((r) => recipeGroup(r) === g.id) }))
+        .filter((c) => c.types.length);   // the shelf's order (Recipes/shelf/*.json), "Other" last
     const exists = (id: string | null) => !!id && cats.some((c) => c.id === id);
     const category = exists(chosen) ? chosen! : exists(selectedGroup) ? selectedGroup : cats[0]?.id ?? "";
     const setCategory = (c: string) => {
@@ -232,13 +233,8 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
         if (selectedGroup && selectedGroup !== chosen) setCategory(selectedGroup);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [design.recipeId]);
-    // The current type is shelved (the last one used before the shelf, e.g. Quarry): switch to the first type shown.
-    const current = catalog.recipes.find((r) => r.id === design.recipeId);
-    const shelved = !!current && !current.custom && SHELVED_GROUPS.has(recipeGroup(current));
-    const fallback = cats[0]?.types[0]?.id;
-    useEffect(() => {
-        if (shelved && fallback) act.selectRecipe(fallback);
-    }, [shelved, fallback]);
+    // A shelved last pick (e.g. Quarry, used before industry was hidden) is switched to the first type shown by the game when
+    // it restores the last type (PlacemakerToolSystem.EnsureInitialized), so a hidden type picked on purpose stays.
 
     // search hits
     type Hit = { r: RecipeInfo; layer: LayerType; p: PresetView };
@@ -250,7 +246,7 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
             const catHit = has(c.title);
             for (const r of c.types) {
                 const layer = typeLayer(catalog, r);
-                const ps = layer ? layer.presets.filter((p) => has(presetName(t, p))) : [];
+                const ps = layer ? layer.presets.filter((p) => !p.shelved && has(presetName(t, p))) : [];
                 if (layer) for (const p of ps) styleHits.push({ r, layer, p });
                 if (catHit || has(recipeName(t, r)) || ps.length) {
                     typeHits.push(r);
@@ -509,7 +505,7 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
                                 ) : selectedRecipe && selLayer ? (
                                     <div className={s.chips} data-testid={`presets-${selectedRecipe.id}`}>
                                         {styleChip(selectedRecipe, selLayer, null, false)}
-                                        {selLayer.presets.filter((p) => !p.custom).map((p) => styleChip(selectedRecipe, selLayer, p, false))}
+                                        {selLayer.presets.filter((p) => !p.custom && (!p.shelved || p.id === activeId)).map((p) => styleChip(selectedRecipe, selLayer, p, false))}
                                         {selLayer.presets.filter((p) => p.custom).map((p) => styleChip(selectedRecipe, selLayer, p, false))}
                                         <Chip
                                             testId="preset-new"
@@ -687,7 +683,7 @@ export const PresetBar = ({
             ) : (
                 <div className={s.barRow}>
                     <div className={s.crumbs}>
-                        <Crumb icon={categoryIcon(group)} color={categoryColor(group)} name={groupName(t, group)} />
+                        <Crumb icon={categoryIcon(group)} color={categoryColor(group)} name={groupName(t, catalog, group)} />
                         <Icon name="chevronRight" size={10} tint="dim" className={s.sep} />
                         <Crumb icon={tIcon} color={categoryColor(group)} name={recipe ? recipeName(t, recipe) : humanize(layer.id)} />
                         <Icon name="chevronRight" size={10} tint="dim" className={s.sep} />

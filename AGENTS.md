@@ -13,9 +13,14 @@ previews it and builds it: roads, parking lots, parks, shops. It merges ParkingL
 ## Direction: tall and perfect, not wide
 
 The focus, in order, is **Roads, Parking, Parks, Shops & squares**. Make those excellent before anything else.
-Industry and Transport are hidden from the picker, and Gardens/Water fold into Parks while Squares/Events fold into
-Shops. The code stays (`MERGED_GROUPS` / `SHELVED_GROUPS` in `UI/src/stages/PresetBrowser.tsx`). Hide things; don't
-delete code.
+
+**The shelf** (`Recipes/shelf/<category>.json`, read by `Core/Tool/Shelf.cs`) decides the Make row: one file per
+category (Roads, Parking, Parks, Beach, Shops & squares, Nature, Farms, Sports; Industry and Transport hidden), its order,
+the type groups it shows (Gardens fold into Parks, the old Water group is Beach, Squares and Events fold into Shops), types
+moved in from another group (`types`), and what it hides: `hiddenTypes` and `hiddenStyles` per type. To cut a type or
+a style, list it there: never delete code. The panel, its search, the game runner's catalog and `Show.ps1` all read it;
+hidden things are flagged and can still be built by id (`Show.ps1 -Type quarry`). A category agent edits only its own
+file.
 
 ## Read first
 
@@ -109,14 +114,31 @@ ode_modules`.
   installed to regenerate it from `Cities2_Data\Managed\Game.dll`.
 - There is no `python` on this machine; use node for scripting.
 
+## Fixed in the core refactor (rf-core; seen in the game runner, see its merge commit)
+
+- Trees, bushes and lamps not drawn: the parking planner's lot area became a vanilla "Agriculture Lot - Field"
+  (CanOverrideObjects hid everything inside it). `area.lot` is never automatic, an unchosen lot area is never built,
+  and no vanilla extractor/storage lot is built outside farm and industry types. The un-hide of our own overlapping
+  pieces also restores their render search-tree mask.
+- Farm fields and their fences across entrances: same cause, gone.
+- The dip at lot entrances (4–7 m, strip mall, mall district): the game re-fits marker nets (invisible paths) to the
+  ground and the lane junction clips the ground to them. Our marker edges and nodes get `Game.Net.Elevation` 0 on the
+  Apply frame (`BuildService.Pits.cs`). Every build logs a live pit check over its whole outline ("pit check").
+- Shops facing the city street: our zoning roads switch zoning off on sides no plot faces (`Core/Build/LaneSides.cs`,
+  vanilla `ZonesDisabled`), kerb strips block the city streets' first zone row along the build before the zoning
+  refresh (`ZoneGuard.KerbStrips`), the refresh never moves a lane plot onto a city street, and street-facing plots are
+  given back to the site unless "Shops facing the streets" is on (on by default only for shops park and retail park).
+  Plazas and market squares have no lanes: their shops still face the streets by design.
+- Catalog rescans from our own prefabs (switching freezes): `AssetCatalogSystem.AddOwnPrefab` counts them; they never
+  trigger a rescan and are not catalogue items.
+
 ## Known mod bugs (found by the game runner, not fixed yet)
 
-- After a build, trees, bushes and lamps exist but are never drawn (about 300 of 650 pieces in a parking lot).
-- Vanilla "Agriculture Lot" fields get placed inside parking and shop builds, and their fences block entrances.
-- Strip-mall stalls can't be reached from the city. Pits 6–9 m deep in strip malls.
-- Grown shops face the city street instead of our lane. The fix is the game's per-side "no zoning" road flag
-  (teardown report 08).
-- Build freezes of 1.4–2.7 s. Switching freezes come from decal copies forcing asset catalog rescans (report 09).
+- Build freezes of 1.4–2.7 s (the build itself; report 09's other items: ghost re-emission, plan landing work).
+- The decal-copy rescan fix is proven with park companions in the clean profile (no rescan after them); decal copies
+  themselves only appear with the user's asset packs (`-AllMods`), not run.
+- Plazas and market squares: their shops face the city streets (these types have no lanes); for the Shops & squares
+  agent to decide.
 - The roads presets strict-grid and superblocks build nothing.
 - The game crashes (native, `TerrainSystem.CullForCascades`) on the 4th build of `Show.ps1 -Category parks -Type park
   -Style all -Views 45,top -Modes clean,zoning,terrain` (park-garden, right after its terraform and terrain paint);

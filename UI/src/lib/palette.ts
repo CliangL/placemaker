@@ -19,6 +19,10 @@ export const CATEGORY_COLOR: Record<string, string> = {
     transport: "#8a9dff",
     parking: "#5f9dff",
     commercial: "#ff7c9c",
+    // (core) shelf category ids (Recipes/shelf/<id>.json) that are not a type group
+    shops: "#ff7c9c",
+    beach: "#4fb8e8",
+    industry: "#a9b4bd",
     other: "#c9d3da",
 };
 
@@ -37,6 +41,9 @@ export const CATEGORY_ICON: Record<string, string> = {
     transport: "bus",
     parking: "parking",
     commercial: "shop",
+    shops: "shop",
+    beach: "waves",
+    industry: "factory",
     other: "layers",
 };
 

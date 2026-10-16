@@ -43,7 +43,7 @@ namespace Placemaker.Core.Layers.Commercial
             c.Choice("parkStyle", "urban", ControlTier.More, "layout", "urban", "pocket", "natural", "formal", "modern").Tip();
             Shared(c.Choice("lot", "small", ControlTier.Essential, "parking", "none", "small")).Tip();
             // The car park is always one aisle deep (no lot size); its options only matter while there is one.
-            CommonControls(c, ZoneKinds.CommercialLow, 16, null, true, "lot=small", green: false);
+            CommonControls(c, ZoneKinds.CommercialLow, 16, null, true, "lot=small", green: false, streetShops: true);
             c.Fixed("layout");
         }
 

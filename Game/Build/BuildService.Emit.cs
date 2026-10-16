@@ -105,6 +105,16 @@ namespace Placemaker.Game.Build
             return math.isfinite(h) ? h : 0f;
         }
 
+        private int _sagNotes;
+
+        /// <summary>The curve parameter of a planned net nearest a point (16 samples).</summary>
+        private static float ClosestT(PlannedNet n, float2 p)
+        {
+            float best = float.MaxValue, bt = 0.5f;
+            for (int k = 0; k <= 16; k++) { float t = k / 16f; float d = math.distancesq(Composer.Bezier(n.A, n.B, n.C, n.D, t).xz, p); if (d < best) { best = d; bt = t; } }
+            return bt;
+        }
+
         private Entity NewDefinition()
         {
             var e = EntityManager.CreateEntity();
@@ -117,6 +127,8 @@ namespace Placemaker.Game.Build
         private void EmitNets()
         {
             _heightsValid = false;
+            _sagNotes = 0;
+            if (!_gEmission) ScanLivePits("before the nets");
             _netIndex = new PlanIndex();
             _objectIndex = _objectIndex ?? new PlanIndex();
             var random = new Unity.Mathematics.Random(Seeds.Mix(0x5EEDu, (uint)_groupId));
@@ -146,6 +158,18 @@ namespace Placemaker.Game.Build
                 {
                     var c = pieces[p];
                     if (c.Length() < CourseFitting.MinCourseLength) continue;
+                    // (core) Pit diagnosis: a course that sags or humps more than 1 m away from the plan at its middle.
+                    if (!elevated && _sagNotes < 12)
+                    {
+                        var mid = c.Position(0.5f);
+                        float planned = Composer.Bezier(net.A, net.B, net.C, net.D, ClosestT(net, mid.xz)).y;
+                        if (math.abs(mid.y - planned) > 1f)
+                        {
+                            _sagNotes++;
+                            Mod.Log.Warn($"Placemaker net course off its plan: {net.Role} piece {p + 1}/{pieces.Count} at ({mid.x:F0}, {mid.z:F0}) y {c.A.y:F1}/{c.B.y:F1}/{c.C.y:F1}/{c.D.y:F1} (middle {mid.y:F1}), planned {planned:F1}; "
+                                + $"ground {GroundHeight(c.Position(1f / 3f).xz):F1}/{GroundHeight(c.Position(2f / 3f).xz):F1} at 1/3, 2/3 (live {Height(c.Position(1f / 3f).xz):F1}/{Height(c.Position(2f / 3f).xz):F1}), length {c.Length():F1} m, {(_gEmission ? "ghost" : "build")}.");
+                        }
+                    }
                     var start = MakeCoursePos(c.A, c.Tangent(0), 0f, CoursePosFlags.IsFirst, p == 0 ? net.StartAttach : -1, prefab);
                     var end = MakeCoursePos(c.D, -c.Tangent(1), 1f, CoursePosFlags.IsLast, p == pieces.Count - 1 ? net.EndAttach : -1, prefab);
                     if (elevated) Elevate(ref start, ref end, c, p > 0, p < pieces.Count - 1);
@@ -410,9 +434,27 @@ namespace Placemaker.Game.Build
         {
             var prefab = PrefabOf(w);
             if (prefab == Entity.Null) return;
+            if (VanillaIndustryLotRefused(prefab, w)) return;
             var a = _request.Plan.Layers[w.Layer].Areas[w.Index];
             EmitPreparedRings(prefab, a.Ring, w, false);
         }
+
+        /// <summary>
+        /// (core) No vanilla extractor or storage lot ("Agriculture Lot - Field", "Extractor Lot", warehouse yards) in a build that is not a
+        /// farm or industry type: they carry their own economy, a crop surface, a border fence across entrances, and CanOverrideObjects,
+        /// which hides every tree, bush and lamp inside them (Game.Prefabs.AreaInitializeSystem, Game.Objects.OverrideSystem.AreaIterator).
+        /// </summary>
+        private bool VanillaIndustryLotRefused(Entity prefab, WorkItem w)
+        {
+            if (!EntityManager.HasComponent<ExtractorAreaData>(prefab) && !EntityManager.HasComponent<StorageAreaData>(prefab)) return false;
+            var group = GeneratorGroups.Of(GeneratorRegistry.Get(w.GeneratorId ?? ""));
+            if (group == "farms" || group == "industrial") return false;
+            if (_refusedLots++ == 0)
+                Mod.Log.Warn($"Placemaker: left out the vanilla industry lot '{_prefabs.GetPrefabName(prefab)}' planned by '{w.GeneratorId}' (no farm or extractor lot outside farm and industry builds).");
+            return true;
+        }
+
+        private int _refusedLots;
 
         /// <summary>
         /// US8 root-cause fix for ErrorType.InvalidShape: every ring is checked against the game's own

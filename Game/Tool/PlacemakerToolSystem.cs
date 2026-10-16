@@ -137,6 +137,17 @@ namespace Placemaker.Game.Tool
             var last = _settings?.LastRecipe;
             var pick = !string.IsNullOrEmpty(last) && _recipes.Find(last) != null ? last
                      : _recipes.Entries.Count > 0 ? _recipes.Entries[0].Recipe.Id : null;
+            // (core) The last type used is shelved now (e.g. Quarry before industry was hidden): start on the first type shown.
+            // Only at this restore: a hidden type picked on purpose (the game runner by id, editing an old build) stays.
+            if (pick != null && _recipes.IsShelved(pick))
+            {
+                var shown = _recipes.FirstShown();
+                if (shown != null)
+                {
+                    Mod.Log.Info($"Placemaker: the last type used, '{pick}', is shelved; starting on '{shown}'.");
+                    pick = shown;
+                }
+            }
             if (pick != null)
             {
                 _recipe = _recipes.Instantiate(pick, NewSeed());

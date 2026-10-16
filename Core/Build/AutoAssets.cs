@@ -159,8 +159,11 @@ namespace Placemaker.Core.Build
                     }
                 foreach (var s in l.Surfaces)
                     if (s != null && Needs(s.Asset, exists)) resolved += Set(ref s.Asset, Pick(step, RoleCategories.ForSurface(s), 0), exists);
+                // (core) A lot area is never automatic: every area.lot in the game is a vanilla industry lot ("Agriculture Lot",
+                // "Extractor Lot", ...) with its own economy, a farm-field surface, a border fence and CanOverrideObjects (it hid every
+                // tree, bush and lamp inside parking lots). An empty lot asset stays empty and is not built (PlanWork.Flatten).
                 foreach (var a in l.Areas)
-                    if (a != null && Needs(a.Asset, exists)) resolved += Set(ref a.Asset, Pick(step, RoleCategories.ForArea(a.Role), 0), exists);
+                    if (a != null && a.Role != AreaRole.Lot && Needs(a.Asset, exists)) resolved += Set(ref a.Asset, Pick(step, RoleCategories.ForArea(a.Role), 0), exists);
                 foreach (var o in l.Objects)
                 {
                     if (o == null || !Needs(o.Asset, exists)) continue;

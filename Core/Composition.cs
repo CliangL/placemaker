@@ -108,6 +108,12 @@ namespace Placemaker.Core
         public List<float2[]> Footprints = new List<float2[]>();
         /// <summary>(s19) Rings of the zone-blocking lots (physical lot areas, see Build/ZoneGuard). Set by Compose.</summary>
         public List<float2[]> ZoneBlockers = new List<float2[]>();
+        /// <summary>
+        /// (core) Kerb strips: thin zone-blocking lots inside the first row of the CITY streets' zone blocks along the build, built
+        /// right after Apply and before the zoning refresh, so the city's older blocks lose every column that reaches into the build
+        /// and the build's own lanes zone its shop plots (docs/teardown/08 §4.3). Set by ZoneGuard.Apply.
+        /// </summary>
+        public List<float2[]> KerbBlockers = new List<float2[]>();
         /// <summary>(s19) Zone cells of existing roads the build zones or blocks (preview). Set by Compose.</summary>
         public List<Build.ZoneCellMark> ZoneCells = new List<Build.ZoneCellMark>();
         /// <summary>(s26) The cutout quads before snapping (ZoneGuard.Refresh re-snaps them to the live blocks after Apply).</summary>
@@ -186,6 +192,8 @@ namespace Placemaker.Core
             Build.SiteHarmony.Apply(result, area, site, cancel);
             // (s15) Never build on existing buildings: drop / cut whatever would touch a building lot.
             Build.SiteSafety.Apply(result, area, site);
+            // (core) Our roads zone only on the sides that hold the build's shops: the vanilla per-side "no zoning" flag elsewhere.
+            try { Build.LaneSides.Apply(result, site); } catch (Exception) { /* never fail a plan over it */ }
             // (s19) Road zone cells under the build are blocked outside the zoning; the zoning snaps to the cells.
             Build.ZoneGuard.Apply(result, site);
             // (s22) Terraform preview: a heat map of the height change instead of dashed boxes.

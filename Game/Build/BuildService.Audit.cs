@@ -128,7 +128,7 @@ namespace Placemaker.Game.Build
                 var q = GetEntityQuery(ComponentType.ReadOnly<PlacemakerMember>(), ComponentType.ReadOnly<global::Game.Common.Overridden>(),
                     ComponentType.ReadOnly<global::Game.Objects.Transform>(), ComponentType.ReadOnly<PrefabRef>(),
                     ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
-                int hiddenNow = 0, restored = 0;
+                int hiddenNow = 0, restored = 0, unmasked = 0;
                 var byPrefab = new Dictionary<string, int>(StringComparer.Ordinal);
                 if (!q.IsEmptyIgnoreFilter)
                 {
@@ -158,8 +158,12 @@ namespace Placemaker.Game.Build
                         if (own)
                         {
                             // Only our own pieces are in the way: show it again (no Updated: that would re-run the override check).
+                            // (core) OverrideSystem also zeroed the object's mask in the static search tree (UpdateObjectOverrideJob:
+                            // m_Mask = 0), and the renderer culls through that tree: removing Overridden alone left about 300 of 650
+                            // parking pieces "shown again" but never drawn. The mask goes back exactly as OverrideSystem restores it.
                             EntityManager.RemoveComponent<global::Game.Common.Overridden>(e);
                             EntityManager.AddComponent<global::Game.Common.BatchesUpdated>(e);
+                            if (RestoreSearchMask(e, prefab)) unmasked++;
                             restored++;
                         }
                         else Audit.Add("object", name, pos, AuditReason.Hidden);
@@ -171,11 +175,38 @@ namespace Placemaker.Game.Build
                     top.Sort((a, b) => b.Value.CompareTo(a.Value));
                     var parts = new List<string>();
                     for (int i = 0; i < top.Count && i < 6; i++) parts.Add(top[i].Key + " x" + top[i].Value);
-                    Mod.Log.Warn($"Placemaker survivors: {hiddenNow} object(s) of group {_groupId} were hidden by the game (Overridden): {restored} shown again (anarchy: planned pieces stay visible), {hiddenNow - restored} stay hidden [{string.Join("; ", parts)}].");
+                    Mod.Log.Warn($"Placemaker survivors: {hiddenNow} object(s) of group {_groupId} were hidden by the game (Overridden): {restored} shown again (anarchy: planned pieces stay visible; {unmasked} back in the render search tree), {hiddenNow - restored} stay hidden [{string.Join("; ", parts)}].");
                 }
                 else Mod.Log.Info($"Placemaker survivors: no object of group {_groupId} is hidden by the game (Overridden); {_carrierOwned} share the carrier owner.");
             }
             catch (Exception e) { Mod.Log.Warn("Placemaker: survivor check failed: " + e.Message); }
+        }
+
+        /// <summary>
+        /// (core) Puts an un-hidden object back into the static object search tree with the mask OverrideSystem gives a visible one
+        /// (Game.Objects.OverrideSystem.GetBoundsMask: NotOverridden | the prefab's mesh layers). Without it the object stays culled.
+        /// </summary>
+        private bool RestoreSearchMask(Entity e, Entity prefab)
+        {
+            try
+            {
+                if (!EntityManager.HasComponent<ObjectGeometryData>(prefab)) return false;
+                var layers = EntityManager.GetComponentData<ObjectGeometryData>(prefab).m_Layers;
+                var search = World.GetOrCreateSystemManaged<global::Game.Objects.SearchSystem>();
+                var tree = search.GetStaticSearchTree(false, out var deps);
+                deps.Complete();
+                bool ok = false;
+                if (tree.TryGet(e, out var bounds))
+                {
+                    var mask = global::Game.Common.BoundsMask.NotOverridden | global::Game.Common.CommonUtils.GetBoundsMask(layers);
+                    bounds.m_Mask = (bounds.m_Mask & ~(global::Game.Common.BoundsMask.AllLayers | global::Game.Common.BoundsMask.NotOverridden)) | mask;
+                    tree.Update(e, bounds);
+                    ok = true;
+                }
+                search.AddStaticSearchTreeWriter(default);
+                return ok;
+            }
+            catch (Exception ex) { Mod.Log.Warn("Placemaker: search tree restore failed: " + ex.Message); return false; }
         }
 
         private static void Tally(Dictionary<string, int> d, string key) => d[key] = (d.TryGetValue(key, out int n) ? n : 0) + 1;

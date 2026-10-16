@@ -1,10 +1,98 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+0885f1f-dirty",
+  "assembly": "0.1.0+151536e-dirty",
+  "categories": [
+    {
+      "id": "roads",
+      "name": "Roads",
+      "order": 1,
+      "groups": [
+        "roads"
+      ]
+    },
+    {
+      "id": "parking",
+      "name": "Parking",
+      "order": 2,
+      "groups": [
+        "parking"
+      ]
+    },
+    {
+      "id": "parks",
+      "name": "Parks",
+      "order": 3,
+      "groups": [
+        "parks",
+        "gardens"
+      ]
+    },
+    {
+      "id": "beach",
+      "name": "Beach",
+      "order": 4,
+      "groups": [
+        "water"
+      ]
+    },
+    {
+      "id": "shops",
+      "name": "Shops & squares",
+      "order": 5,
+      "groups": [
+        "commercial",
+        "squares",
+        "events"
+      ]
+    },
+    {
+      "id": "nature",
+      "name": "Nature",
+      "order": 6,
+      "groups": [
+        "nature"
+      ]
+    },
+    {
+      "id": "farms",
+      "name": "Farms",
+      "order": 7,
+      "groups": [
+        "farms"
+      ]
+    },
+    {
+      "id": "sports",
+      "name": "Sports",
+      "order": 8,
+      "groups": [
+        "sports"
+      ]
+    },
+    {
+      "id": "industry",
+      "name": "Industry",
+      "order": 90,
+      "groups": [
+        "industrial"
+      ],
+      "hidden": true
+    },
+    {
+      "id": "transport",
+      "name": "Transport",
+      "order": 91,
+      "groups": [
+        "transport"
+      ],
+      "hidden": true
+    }
+  ],
   "types": [
     {
       "layer": "parking",
       "group": "parking",
+      "category": "parking",
       "presets": [
         "standard",
         "compact",
@@ -323,6 +411,7 @@
     {
       "layer": "stripMall",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "classic",
         "corner",
@@ -376,6 +465,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 24.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "lotSize",
@@ -510,6 +604,7 @@
     {
       "layer": "shoppingPlaza",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "plaza",
         "market",
@@ -579,6 +674,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 24.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "lotSize",
@@ -713,6 +813,7 @@
     {
       "layer": "outdoorMall",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "promenade",
         "grand",
@@ -809,6 +910,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 24.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "lotSize",
@@ -943,6 +1049,7 @@
     {
       "layer": "shopsPark",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "clusters",
         "facingIn",
@@ -1020,6 +1127,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 16.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": true
         },
         {
           "id": "stallAngle",
@@ -1148,6 +1260,7 @@
     {
       "layer": "mallPark",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "commons",
         "garden",
@@ -1244,12 +1357,18 @@
           "step": 8.0,
           "unit": "m",
           "default": 16.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         }
       ]
     },
     {
       "layer": "plaza",
       "group": "squares",
+      "category": "shops",
       "presets": [
         "civic",
         "fountain",
@@ -1974,6 +2093,7 @@
     {
       "layer": "highStreet",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "market",
         "farmers",
@@ -2087,6 +2207,11 @@
           "default": 16.0
         },
         {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
+        },
+        {
           "id": "lotSize",
           "kind": "Choice",
           "options": [
@@ -2140,6 +2265,7 @@
     {
       "layer": "retailPark",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "classic",
         "megastore",
@@ -2208,6 +2334,11 @@
           "default": 40.0
         },
         {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": true
+        },
+        {
           "id": "lotSize",
           "kind": "Choice",
           "options": [
@@ -2261,6 +2392,7 @@
     {
       "layer": "mallDistrict",
       "group": "commercial",
+      "category": "shops",
       "presets": [
         "district",
         "pedestrian",
@@ -2354,6 +2486,11 @@
           "default": 16.0
         },
         {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
+        },
+        {
           "id": "extraGreen",
           "kind": "Toggle",
           "default": false
@@ -2363,6 +2500,7 @@
     {
       "layer": "park",
       "group": "parks",
+      "category": "parks",
       "presets": [
         "natural",
         "formal",
@@ -3223,6 +3361,7 @@
     {
       "layer": "campground",
       "group": "nature",
+      "category": "nature",
       "presets": [
         "forest",
         "meadow",
@@ -3462,6 +3601,7 @@
     {
       "layer": "botanicalGarden",
       "group": "gardens",
+      "category": "parks",
       "presets": [
         "mixed",
         "flowerShow",
@@ -3713,6 +3853,7 @@
     {
       "layer": "sportsPark",
       "group": "sports",
+      "category": "sports",
       "presets": [
         "community",
         "stadium",
@@ -4155,6 +4296,7 @@
     {
       "layer": "dogPark",
       "group": "parks",
+      "category": "parks",
       "presets": [
         "neighbourhood",
         "split",
@@ -4378,6 +4520,7 @@
     {
       "layer": "picnicGrounds",
       "group": "parks",
+      "category": "parks",
       "presets": [
         "family",
         "bbq",
@@ -4609,6 +4752,7 @@
     {
       "layer": "natureReserve",
       "group": "nature",
+      "category": "nature",
       "presets": [
         "forest",
         "heath",
@@ -4817,6 +4961,7 @@
     {
       "layer": "formalGarden",
       "group": "gardens",
+      "category": "parks",
       "presets": [
         "french",
         "italian",
@@ -5056,6 +5201,7 @@
     {
       "layer": "communityGarden",
       "group": "gardens",
+      "category": "parks",
       "presets": [
         "allotments",
         "community",
@@ -5271,6 +5417,7 @@
     {
       "layer": "marketSquare",
       "group": "squares",
+      "category": "shops",
       "presets": [
         "weekly",
         "bigMarket",
@@ -5553,6 +5700,7 @@
     {
       "layer": "cemeteryGrounds",
       "group": "parks",
+      "category": "parks",
       "presets": [
         "churchyard",
         "lawn"
@@ -5733,6 +5881,7 @@
     {
       "layer": "greenwayPark",
       "group": "nature",
+      "category": "nature",
       "presets": [
         "leafy",
         "open"
@@ -5925,6 +6074,7 @@
     {
       "layer": "urbanFarm",
       "group": "farms",
+      "category": "farms",
       "presets": [
         "marketGarden",
         "vineyard",
@@ -6307,6 +6457,7 @@
     {
       "layer": "beach",
       "group": "water",
+      "category": "beach",
       "presets": [
         "sandy",
         "resort",
@@ -6782,6 +6933,7 @@
     {
       "layer": "animalPark",
       "group": "farms",
+      "category": "farms",
       "presets": [
         "pettingFarm",
         "paddocks",
@@ -7171,6 +7323,7 @@
     {
       "layer": "waterfront",
       "group": "water",
+      "category": "beach",
       "presets": [
         "promenade",
         "pier",
@@ -7610,6 +7763,7 @@
     {
       "layer": "constructionSite",
       "group": "industrial",
+      "category": "industry",
       "presets": [
         "foundation",
         "roadworks",
@@ -7903,11 +8057,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "quarry",
       "group": "industrial",
+      "category": "industry",
       "presets": [
         "openPit",
         "gravelPit",
@@ -8220,11 +8376,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "fairground",
       "group": "events",
+      "category": "shops",
       "presets": [
         "fairground",
         "festival",
@@ -8700,6 +8858,7 @@
     {
       "layer": "amphitheatre",
       "group": "events",
+      "category": "shops",
       "presets": [
         "classic",
         "cinema",
@@ -9116,6 +9275,7 @@
     {
       "layer": "restArea",
       "group": "transport",
+      "category": "transport",
       "presets": [
         "highway",
         "picnic",
@@ -9463,11 +9623,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "transitPlaza",
       "group": "transport",
+      "category": "transport",
       "presets": [
         "parkRide",
         "busPlaza",
@@ -9826,11 +9988,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "farmstead",
       "group": "farms",
+      "category": "farms",
       "presets": [
         "dairy",
         "arable",
@@ -10225,6 +10389,7 @@
     {
       "layer": "orchardPark",
       "group": "parks",
+      "category": "parks",
       "presets": [
         "apple",
         "cherryBlossom",
@@ -10545,6 +10710,7 @@
     {
       "layer": "golf",
       "group": "sports",
+      "category": "sports",
       "presets": [
         "parkland",
         "links",
@@ -10913,6 +11079,7 @@
     {
       "layer": "lookoutHill",
       "group": "nature",
+      "category": "nature",
       "presets": [
         "hilltop",
         "sledding",
@@ -11260,6 +11427,7 @@
     {
       "layer": "adventurePlayground",
       "group": "parks",
+      "category": "parks",
       "presets": [
         "adventure",
         "toddler",
@@ -11628,6 +11796,7 @@
     {
       "layer": "memorialPark",
       "group": "parks",
+      "category": "parks",
       "presets": [
         "garden",
         "square",
@@ -12014,6 +12183,7 @@
     {
       "layer": "logisticsYard",
       "group": "industrial",
+      "category": "industry",
       "presets": [
         "containerStacks",
         "palletYard",
@@ -12324,11 +12494,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "hikingTrail",
       "group": "nature",
+      "category": "nature",
       "presets": [
         "forestTrail",
         "meadowWalk",
@@ -12669,6 +12841,7 @@
     {
       "layer": "scrapyard",
       "group": "industrial",
+      "category": "industry",
       "presets": [
         "scrapyard",
         "salvage",
@@ -12983,11 +13156,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "abandonedLot",
       "group": "industrial",
+      "category": "industry",
       "presets": [
         "overgrown",
         "rubbleField",
@@ -13318,11 +13493,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "urbanRuins",
       "group": "sports",
+      "category": "sports",
       "presets": [
         "diySpot",
         "highwayRuins",
@@ -13719,6 +13896,7 @@
     {
       "layer": "landfill",
       "group": "industrial",
+      "category": "industry",
       "presets": [
         "active",
         "capped",
@@ -14050,11 +14228,13 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "roads",
       "group": "roads",
+      "category": "roads",
       "presets": [
         "downtown",
         "suburb",
@@ -14797,6 +14977,7 @@
     {
       "layer": "wetland",
       "group": "nature",
+      "category": "nature",
       "presets": [
         "wetlandPark",
         "waterGarden",
@@ -15107,6 +15288,7 @@
     {
       "layer": "zenGarden",
       "group": "gardens",
+      "category": "parks",
       "presets": [
         "karesansui",
         "stroll",

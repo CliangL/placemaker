@@ -263,7 +263,7 @@ test("Make: many types — the browser opens on the selected type's category; ch
     await expect(page.getByTestId("make-group-gardens")).toHaveCount(0);
     await expect(recipes.getByTestId("recipe-marketSquare")).toHaveCount(0);
     // industry and transport are shelved: no chip, no type, no search hit
-    for (const g of ["industrial", "transport", "squares", "events", "water"]) await expect(page.getByTestId(`make-group-${g}`)).toHaveCount(0);
+    for (const g of ["industry", "transport", "industrial", "squares", "events", "water", "gardens"]) await expect(page.getByTestId(`make-group-${g}`)).toHaveCount(0);
     await page.getByTestId("browser-search-toggle").click();
     await page.getByTestId("browser-search").fill("quarry");
     await expect(page.getByTestId("browser-empty")).toBeVisible();
@@ -274,33 +274,38 @@ test("Make: many types — the browser opens on the selected type's category; ch
     const ys = await recipes.locator('[data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
     expect(new Set(ys).size).toBeLessThan(ys.length);
     // squares fold into shops
-    await page.getByTestId("make-group-commercial").click();
+    await page.getByTestId("make-group-shops").click();
     await expect(recipes.getByTestId("recipe-marketSquare")).toBeVisible();
     await expect(recipes.getByTestId("recipe-plaza")).toBeVisible();
     await expect(recipes.getByTestId("recipe-park")).toHaveCount(0);
     // switching category picks its first type, so the styles follow
-    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("data-has-selected", "true");
+    await expect(page.getByTestId("make-group-shops")).toHaveAttribute("data-has-selected", "true");
     await expect(page.getByTestId("make-group-parks")).toHaveAttribute("data-has-selected", "false");
     await page.getByTestId("make-group-parking").click();
     await expect(recipes.getByTestId("recipe-parkingGarage")).toBeVisible();
     await noTextOverflow(page, "grouped make row");
     await panelShot(page, "r4-make-grouped");
-    await page.getByTestId("make-group-commercial").click();
+    await page.getByTestId("make-group-shops").click();
     await page.reload();
     await expect(page.getByTestId("placemaker-panel")).toBeVisible();
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
     await page.evaluate(() => (window as any).pm.backend.addMoreTypes());
-    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("make-group-shops")).toHaveAttribute("aria-pressed", "true");
 });
 
-test("Make: a shelved type in use (last used before the shelf) switches to the first type shown", async ({ page }) => {
+// (core) The game switches a shelved LAST pick to the first type shown when it restores it (PlacemakerToolSystem.EnsureInitialized,
+// checked in the game runner). A shelved type picked on purpose (the game runner by id, editing an old build) stays: the panel
+// shows no chip for it but still shows its styles.
+test("Make: a shelved type picked by id stays, with no tile, and its styles still show", async ({ page }) => {
     await open(page);
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
     await page.evaluate(() => (window as any).pm.backend.addMoreTypes());
     await page.evaluate(() => (window as any).pm.backend.onTrigger("selectRecipe", ["quarry"]));
-    await expect.poll(() => page.evaluate(() => (window as any).pm.backend.recipeId)).toBe("roads");
-    await expect(page.getByTestId("recipe-roads")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("make-group-roads")).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).pm.backend.recipeId)).toBe("quarry");
+    await expect(page.getByTestId("recipe-quarry")).toHaveCount(0);
+    await expect(page.getByTestId("make-group-industry")).toHaveCount(0);
+    await expect(page.getByTestId("presets-quarry")).toBeVisible();
 });

@@ -53,6 +53,8 @@ param(
     [string[]]$Views = @('45'),
     [string[]]$Modes = @('clean', 'terrain'),
     [switch]$NoPlan,
+    # grow the city this many seconds after the build, before the pictures (shops on zoned plots; 0 = no grow)
+    [int]$Grow = 0,
     # a grid block: flat | slope | rough | zoned (housing grown next to it) | survive (two plopped parks on the block)
     [ValidateSet('flat', 'slope', 'rough', 'zoned', 'survive')][string]$Site = 'flat',
     # land made to order (see the description)
@@ -80,17 +82,19 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 function Split-List([string[]]$a) { @($a | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
 $Type = Split-List $Type; $Style = Split-List $Style; $Views = Split-List $Views; $Modes = Split-List $Modes
 
-# The Make row's categories and the type groups they show (UI/src/stages/PresetBrowser.tsx MAKE_GROUPS / MERGED_GROUPS).
-$categories = [ordered]@{
-    roads   = @('roads')
-    parking = @('parking')
-    parks   = @('parks', 'gardens', 'water')
-    shops   = @('commercial', 'squares', 'events')
-    nature  = @('nature')
-    sports  = @('sports')
-    farms   = @('farms')
-}
-$aliases = @{ 'shops & squares' = 'shops'; 'shops&squares' = 'shops'; 'commercial' = 'shops'; 'park' = 'parks'; 'road' = 'roads' }
+# The Make row's categories: the central shelf (Recipes/shelf/<category>.json, Core/Tool/Shelf.cs), one file per category, in
+# their order; each names the type groups it shows, types moved in from another group, and the types and styles it hides.
+# Hidden types and styles are marked in the lists, left out of -Type all and -Style all, and can still be built by id.
+$shelfDir = Join-Path $repo 'Recipes\shelf'
+$shelf = @(Get-ChildItem -LiteralPath $shelfDir -Filter '*.json' -ErrorAction SilentlyContinue | ForEach-Object {
+        $o = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $o.id) { $o | Add-Member -NotePropertyName id -NotePropertyValue $_.BaseName -Force }
+        if ($null -eq $o.order) { $o | Add-Member -NotePropertyName order -NotePropertyValue 1000 -Force }
+        $o
+    } | Sort-Object { [int]$_.order }, id)
+$categories = [ordered]@{}
+foreach ($c in $shelf) { if (-not $categories.Contains($c.id)) { $categories[$c.id] = @($c.groups) } }
+$aliases = @{ 'shops & squares' = 'shops'; 'shops&squares' = 'shops'; 'commercial' = 'shops'; 'squares' = 'shops'; 'park' = 'parks'; 'gardens' = 'parks'; 'road' = 'roads'; 'water' = 'beach'; 'industrial' = 'industry' }
 $viewSteps = @{
     '45'  = [ordered]@{ view = 'oblique'; pitch = 45 }
     'top' = [ordered]@{ view = 'top' }
@@ -99,10 +103,23 @@ $viewSteps = @{
 }
 $modeSteps = @{ clean = @('render', $false); zoning = @('render', $true); overlay = @('overlay', $false); ui = @('ui', $false); terrain = $null }
 $catalog = (Get-Content (Join-Path $repo 'suite\catalog.json') -Raw | ConvertFrom-Json).types
-function CategoryOf($t) { foreach ($k in $categories.Keys) { if ($categories[$k] -contains $t.group) { return $k } }; return $null }
+function ShelfOf([string]$id) { $shelf | Where-Object { $_.id -eq $id } | Select-Object -First 1 }
+function CategoryOf($t) {
+    foreach ($c in $shelf) { if (@($c.types) -contains $t.layer) { return $c.id } }
+    foreach ($c in $shelf) { if (@($c.groups) -contains $t.group) { return $c.id } }
+    return $null
+}
+function TypeHidden($t) { $c = ShelfOf (CategoryOf $t); return [bool]($c -and ($c.hidden -or (@($c.hiddenTypes) -contains $t.layer))) }
+function HiddenStyles($t) { $c = ShelfOf (CategoryOf $t); if ($c -and $c.hiddenStyles -and $c.hiddenStyles.PSObject.Properties[$t.layer]) { return @($c.hiddenStyles.($t.layer)) }; return @() }
+function TypesOf([string]$k) { @($catalog | Where-Object { (CategoryOf $_) -eq $k }) }
 function ListCategory($k) {
-    Write-Host "${k}:"
-    foreach ($t in $catalog | Where-Object { $categories[$k] -contains $_.group }) { Write-Host ("  {0,-20} styles: {1}" -f $t.layer, (@($t.presets) -join ', ')) }
+    $c = ShelfOf $k
+    Write-Host ("{0}:{1}" -f $k, $(if ($c -and $c.hidden) { ' (hidden from the Make row; types can still be built by id)' } else { '' }))
+    foreach ($t in TypesOf $k) {
+        $hs = HiddenStyles $t
+        $shown = @($t.presets | Where-Object { $hs -notcontains $_ })
+        Write-Host ("  {0,-20}{1} styles: {2}{3}" -f $t.layer, $(if (TypeHidden $t) { ' (hidden)' } else { '' }), ($shown -join ', '), $(if ($hs.Count) { "; hidden: $($hs -join ', ')" } else { '' }))
+    }
 }
 function Stop-With([string]$why) { Write-Host $why; exit 2 }
 
@@ -154,23 +171,26 @@ if ($Shape -or $Size -or $Ground -or $Grade -or $Toward -or $Amplitude -or $Wave
 $types = @()
 if ($Type.Count -eq 1 -and $Type[0] -ieq 'all') {
     if (-not $cat) { Stop-With '-Type all needs a -Category.' }
-    $types = @($catalog | Where-Object { $categories[$cat] -contains $_.group })
+    $types = @(TypesOf $cat | Where-Object { -not (TypeHidden $_) })   # the shelf's hidden types only by name
 } else {
     foreach ($name in $Type) {
         $t = $catalog | Where-Object { $_.layer -ieq $name } | Select-Object -First 1
         if (-not $t) { Write-Host "No type '$name'."; if ($cat) { ListCategory $cat } else { Write-Host 'Run Show.ps1 with no arguments for the list.' }; exit 2 }
         $tcat = CategoryOf $t
-        if (-not $tcat) { Stop-With "'$($t.layer)' is hidden from the Make row (group $($t.group)); it cannot be built from the panel." }
+        if (-not $tcat) { Stop-With "'$($t.layer)' is in no category of Recipes/shelf (group $($t.group))." }
+        if (TypeHidden $t) { Write-Host "Note: '$($t.layer)' is hidden from the Make row by Recipes/shelf/$tcat.json; building it by id." }
         if ($cat -and $tcat -ne $cat) { Write-Host "'$($t.layer)' is in $tcat, not $cat."; ListCategory $tcat; exit 2 }
         $types += $t
     }
 }
 $builds = @()
 foreach ($t in $types) {
-    $styles = if ($Style.Count -eq 0) { @('') } elseif ($Style.Count -eq 1 -and $Style[0] -ieq 'all') { @('') + @($t.presets) } else { $Style }
+    $hiddenStyles = HiddenStyles $t
+    $styles = if ($Style.Count -eq 0) { @('') } elseif ($Style.Count -eq 1 -and $Style[0] -ieq 'all') { @('') + @($t.presets | Where-Object { $hiddenStyles -notcontains $_ }) } else { $Style }
     foreach ($s in $styles) {
         $preset = if ($s -and $s -ine 'default') { @($t.presets) | Where-Object { $_ -ieq $s } | Select-Object -First 1 } else { '' }
         if ($s -and $s -ine 'default' -and -not $preset) { Stop-With "'$($t.layer)' has no style '$s'. Styles: default, $(@($t.presets) -join ', ')" }
+        if ($preset -and $hiddenStyles -contains $preset -and -not ($Style.Count -eq 1 -and $Style[0] -ieq 'all')) { Write-Host "Note: style '$preset' of '$($t.layer)' is hidden by Recipes/shelf/$(CategoryOf $t).json; building it by id." }
         $builds += [pscustomobject]@{ Layer = $t.layer; Category = (CategoryOf $t); Preset = $preset; Id = $t.layer + '-' + $(if ($preset) { $preset } else { 'default' }) }
     }
 }
@@ -186,6 +206,7 @@ $scenarios = foreach ($b in $builds) {
     if ($NoPlan) { $steps += [ordered]@{ do = 'preview' } }
     else { $steps += [ordered]@{ do = 'preview'; shot = 'plan'; shotMode = 'overlay'; camera = $planCam } }
     $steps += [ordered]@{ do = 'build' }
+    if ($Grow -gt 0) { $steps += [ordered]@{ do = 'grow'; seconds = $Grow } }
     foreach ($v in $Views) {
         foreach ($m in $viewModes) {
             $st = [ordered]@{ do = 'camera'; target = 'build' }

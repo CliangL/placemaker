@@ -32,10 +32,10 @@ test("s42 design: picker rows, editing bar, two-column Shape and Extras for real
 
     for (const [group, recipe] of [
         ["parks", "park"],
-        ["parks", "waterfront"],
+        ["beach", "waterfront"],
         ["roads", "roads"],
-        ["commercial", "stripMall"],
-        ["commercial", "plaza"],
+        ["shops", "stripMall"],
+        ["shops", "plaza"],
     ]) {
         await pick(page, group, recipe);
         await expect(page.getByTestId(`recipe-${recipe}`)).toHaveAttribute("aria-pressed", "true");
@@ -110,9 +110,9 @@ test("s42 review: money card with one cost bar, stat chips, alert chips, park st
     test.skip(!(await page.evaluate(() => (window as any).pm.backend.hostLayers.has("waterfront"))), "no real Core layers");
     for (const [group, recipe] of [
         ["parks", "park"],
-        ["parks", "waterfront"],
-        ["commercial", "stripMall"],
-        ["commercial", "outdoorMall"],
+        ["beach", "waterfront"],
+        ["shops", "stripMall"],
+        ["shops", "outdoorMall"],
     ]) {
         await toReviewReal(page, group, recipe);
         await expect(page.getByTestId("review-cost")).toContainText("¢");

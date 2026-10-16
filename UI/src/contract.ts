@@ -245,12 +245,30 @@ export interface RecipeInfo {
   description?: string;
   /** Make-row group declared by the type ("parks", "gardens", "squares", "sports", "water", "nature", "farms", "events", "industrial", "transport", "parking", "commercial", "roads"). */
   group?: string;
+  /** (core) The Make-row category the central shelf puts it in (Recipes/shelf/<category>.json: "parks", "beach", "shops", …). */
+  category?: string;
+  /** (core) Hidden by the shelf (its category is hidden or the category hides it): not in the picker or its search. */
+  shelved?: boolean;
+}
+
+/** (core) A Make-row category of the central shelf, in Make-row order. */
+export interface CategoryInfo {
+  id: string;
+  /** Localisation key ("Placemaker.UI.MakeGroup.Parks"). */
+  name: string;
+  /** English label (used when the key has no translation). */
+  en: string;
+  order: number;
+  /** The whole category is hidden (industry, transport). */
+  hidden?: boolean;
 }
 
 /** catalog — changes rarely (load, mods/assets change). */
 export interface Catalog {
   layers: LayerType[];
   recipes: RecipeInfo[];    // built-in "types" (park, plaza, parking, roads, roads+parks…) + player recipes
+  /** (core) The central shelf's categories in Make-row order (absent: every type group is its own category). */
+  categories?: CategoryInfo[];
 }
 
 export type SettingValue = number | boolean | string | string[];
@@ -333,6 +351,8 @@ export interface PresetView {
   overridden?: boolean;
   /** For custom presets: the built-in it was derived from (display only). */
   basedOn?: string;
+  /** (core) Hidden by the central shelf: not in the picker or its search (shown only while it is the active style). */
+  shelved?: boolean;
 }
 
 /** The preset currently applied to the focused fill step. */
