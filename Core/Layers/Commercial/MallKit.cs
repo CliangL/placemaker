@@ -232,7 +232,7 @@ namespace Placemaker.Core.Layers.Commercial
         /// (<see cref="KerbMargin"/>, a metre to spare: <see cref="BacksOntoStreet"/> tests the plot's corners).
         /// </summary>
         public float RowInset(float2 p, float2 nOut, float half, float depth) =>
-            ZoneOffset(half) + depth + math.max(1.5f, KerbMargin(p, new float2(-nOut.y, nOut.x)) + 1f);
+            ZoneOffset(half) + depth + math.max(1.5f, KerbMargin(p, new float2(-nOut.y, nOut.x)) + 0.5f);
 
         /// <summary>A frame along a segment: s along a → b, t to its left (CCW inward for an outline edge).</summary>
         public static StreetShops.Run Frame(float2 a, float2 b)
