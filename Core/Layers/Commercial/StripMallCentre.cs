@@ -264,7 +264,7 @@ namespace Placemaker.Core.Layers.Commercial
                             if (k != null) { k.Inner = blob; ctx.Plan.Facts["ponds"] = 1; } else ctx.Plan.Facts["pondFail"] = StreetShops.Fits(mall.Region, hull) ? 2 : 1;
                         }
                     }
-                    else if (x.Pads && flen >= 120f)
+                    else if (x.Pads && flen >= 90f)
                     {
                         var rect = Mall.Rect(f, f.To - h - 8f - pw, f.To - h - 8f, h + 0.5f, h + 0.5f + pd);
                         var held = mall.HoldRow(rect);
