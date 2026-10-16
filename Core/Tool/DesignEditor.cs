@@ -152,19 +152,55 @@ namespace Placemaker.Core.Tool
             return true;
         }
 
-        public RecipeStep FeatureStep(FeatureInfo f, uint seed)
+        public RecipeStep FeatureStep(FeatureInfo f, uint seed, SettingsBag presetValues = null)
         {
             var s = NewStep(f.Layer, f.Target ?? "", seed);
             var gen = Generator(f.Layer);
-            if (f.Preset != null)
-                foreach (var kv in f.Preset.Values)
-                {
-                    var schema = FindControl(gen, kv.Key);
-                    if (gen != null && schema == null) continue;
-                    var v = schema != null ? Coerce(schema, kv.Value) : kv.Value;
-                    if (v != null) s.Settings.Values[kv.Key] = v is string[] a ? (string[])a.Clone() : v;
-                }
+            foreach (var bag in new[] { f.Preset, presetValues })
+                if (bag != null)
+                    foreach (var kv in bag.Values)
+                    {
+                        var schema = FindControl(gen, kv.Key);
+                        if (gen != null && schema == null) continue;
+                        var v = schema != null ? Coerce(schema, kv.Value) : kv.Value;
+                        if (v != null) s.Settings.Values[kv.Key] = v is string[] a ? (string[])a.Clone() : v;
+                    }
             return s;
+        }
+
+        /// <summary>The feature values preset <paramref name="p"/> gives feature layer <paramref name="layer"/> (null when none).</summary>
+        public static SettingsBag PresetFeatureValues(PresetInfo p, string layer) =>
+            p?.FeatureValues != null && layer != null && p.FeatureValues.TryGetValue(layer, out var bag) ? bag : null;
+
+        /// <summary>
+        /// (rf-parks) A built-in preset's feature values (PresetInfo.FeatureValues) on the feature children that are on: every key any
+        /// preset of the type sets for that feature gets this preset's value, or the feature's own default when this preset sets none,
+        /// so switching from the picnic park to another style puts the picnic groups back.
+        /// </summary>
+        private bool ApplyFeatureValues(RecipeStep step, IAreaGenerator gen, PresetInfo preset)
+        {
+            bool changed = false;
+            IReadOnlyList<PresetInfo> all;
+            try { all = gen.Presets; } catch (Exception) { return false; }
+            foreach (var f in Features.Of(gen))
+            {
+                if (f == null) continue;
+                int idx = Features.ChildIndex(step, f);
+                if (idx < 0 || !step.Children[idx].Enabled) continue;
+                var keys = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var p in all) { var b = PresetFeatureValues(p, f.Layer); if (b != null) foreach (var k in b.Values.Keys) keys.Add(k); }
+                if (keys.Count == 0) continue;
+                var expected = FeatureStep(f, 0u, PresetFeatureValues(preset, f.Layer));
+                var child = step.Children[idx];
+                foreach (var k in keys)
+                {
+                    if (!expected.Settings.Values.TryGetValue(k, out var v)) continue;
+                    if (child.Settings.Values.TryGetValue(k, out var old) && ValueEquals(old, v)) continue;
+                    child.Settings.Values[k] = v is string[] a ? (string[])a.Clone() : v;
+                    changed = true;
+                }
+            }
+            return changed;
         }
 
         /// <summary>
@@ -310,6 +346,7 @@ namespace Placemaker.Core.Tool
                 bool on = f[0] != '-';
                 changed |= SetFeature(recipe, path, on ? f : f.Substring(1), on, Placemaker.Core.Layers.Common.Hashing.Mix(fs, Seeds.Hash(f)));
             }
+            changed |= ApplyFeatureValues(step, gen, preset);
             return changed;
         }
 

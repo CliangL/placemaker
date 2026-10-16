@@ -440,6 +440,11 @@ namespace Placemaker.Core
         /// DefaultOn feature off (playtest 4b: presets should look complete).
         /// </summary>
         public string[] Features = Array.Empty<string>();
+        /// <summary>
+        /// (rf-parks) Settings this preset gives its feature children, per feature layer, over the feature's own preset
+        /// (FeatureInfo.Preset): a picnic park has eight picnic groups where another park style has two.
+        /// </summary>
+        public Dictionary<string, SettingsBag> FeatureValues = new Dictionary<string, SettingsBag>(StringComparer.Ordinal);
 
         /// <summary>Whether the preset has feature <paramref name="f"/> on.</summary>
         public bool FeatureOn(FeatureInfo f)

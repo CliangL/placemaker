@@ -49,7 +49,7 @@ namespace Placemaker.Core.Layers.Leisure
             { "golf", new[] { "restrooms", "decals" } },
             { "hikingTrail", new[] { "decals" } },
             { "lookoutHill", new[] { "decals" } },
-            { "memorialPark", new[] { "bigtrees", "flowerbeds", "decals" } },
+            { "memorialPark", new[] { "decals" } },   // rf-parks: big trees and loose flowerbeds hid the axis (the memorial plants its own)
             { "orchardPark", new[] { "decals" } },
             { "urbanFarm", new[] { "decals" } },
             { "urbanRuins", new[] { "bigtrees", "decals" } },

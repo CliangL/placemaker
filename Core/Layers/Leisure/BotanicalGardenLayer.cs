@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Park;
+using Placemaker.Core.Layers.Types.AdventurePlayground;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Leisure
@@ -30,7 +31,11 @@ namespace Placemaker.Core.Layers.Leisure
 
         protected override void DefineControls(ControlSet c)
         {
-            c.Choice("theme", "mixed", ControlTier.Essential, "collections", "mixed", "flowers", "trees", "shrubs").Tip();
+            c.Choice("theme", "flowers", ControlTier.Essential, "collections", "mixed", "flowers", "trees", "shrubs").Tip();
+            // rf-parks: carpet beds — geometric beds of massed flowerbed tiles, edged with low shrubs, beside the walks.
+            c.Slider("showBeds", 0, 0, 12, 1, "count", ControlTier.More, "collections").Tip();
+            // rf-parks: shrub borders — the share of shrubs massed along the walks instead of scattered over the lawn.
+            c.Slider("pathBorders", 0, 0, 90, 10, "%", ControlTier.More, "collections").Tip();
             c.Slider("bedDensity", 90, 20, 250, 5, "perHa", ControlTier.Essential, "collections").Tip();
             c.Toggle("glasshouse", true, ControlTier.Essential, "collections").Tip();
             c.Slider("benches", 3, 0, 12, 0.5, "per100m", ControlTier.Essential, "furniture");
@@ -49,15 +54,17 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("fenceAsset", AssetCategories.Fence, ControlTier.More, "boundary").When("fence=true");
             DefineStreetShopControls(c);
             c.RandomRange("bedDensity", 50, 150);
+            c.Fixed("showBeds");
+            c.Fixed("pathBorders");
             c.Fixed("glasshouse");
         }
 
         protected override void DefinePresets()
         {
             Preset("mixed", ("theme", "mixed"), ("bedDensity", 90.0));
-            Preset("flowerShow", ("theme", "flowers"), ("bedDensity", 160.0), ("benches", 4.0));
+            Preset("flowerShow", ("theme", "flowers"), ("bedDensity", 70.0), ("benches", 4.0), ("showBeds", 6.0));
             Preset("arboretum", ("theme", "trees"), ("bedDensity", 90.0), ("glasshouse", false), ("benches", 2.5));
-            Preset("shrubbery", ("theme", "shrubs"), ("bedDensity", 140.0));
+            Preset("shrubbery", ("theme", "shrubs"), ("bedDensity", 140.0), ("pathBorders", 60.0));
         }
 
         // ───────────── art direction (art pass a3) ─────────────
@@ -82,6 +89,75 @@ namespace Placemaker.Core.Layers.Leisure
 
         private static string[] Or(string[] picked, string[] curated) => picked != null && picked.Length > 0 ? picked : curated;
         private static AssetRef OneOr(string picked, string[] curated) => string.IsNullOrEmpty(picked) ? AssetMix.Pick(curated, 0u) : AssetMix.One(picked);
+
+        /// <summary>
+        /// (rf-parks) A flower show's carpet beds: round or long beds of massed flowerbed tiles on a 2.5 m grid (one kind per bed),
+        /// edged with low flowering shrubs, set in the open lawn near the walks. Scattered single tiles read as confetti; massed
+        /// beds read as a garden from any distance.
+        /// </summary>
+        private static void CarpetBeds(LayerContext ctx, Occupancy occ, int wanted)
+        {
+            if (wanted <= 0) return;
+            var region = ctx.LayerRegion;
+            var flowers = ctx.L("flowerAssets");
+            if (flowers.Length == 0) flowers = FlowerBeds;
+            string cat = CategoryChains.Quiet(AssetCategories.Flowerbed) ?? AssetCategories.Flowerbed;
+            wanted = math.min(wanted, math.max(1, (int)(region.Area / 900f)));
+            var placed = new List<float2>();
+            int beds = 0, tiles = 0;
+            for (int k = 0; k < wanted * 2 && beds < wanted; k++)
+            {
+                uint v = Hashing.Mix(ctx.Seed, 0xCA40u + (uint)k);
+                bool round = (v & 1u) == 0u;
+                float r = round ? 4.2f + 1.4f * Hashing.Unit(Hashing.Mix(v, 2u)) : 4.5f;
+                float reach = (round ? r : r * 1.9f) + 1.4f;
+                if (!Spots.Find(occ, reach, Spots.Preference.NearPaths, v, out var c, placed, r * 2f + 10f, 2f, budget: 1500)) break;
+                // Long beds lie along the nearest walk; round beds face it.
+                var axis = new float2(1, 0);
+                if (occ.Paths.Count > 0 && occ.Paths.Nearest(c, 60f, out var q) >= 0) { var to = math.normalizesafe(q - c, axis); axis = new float2(-to.y, to.x); }
+                var nrm = new float2(-axis.y, axis.x);
+                float hl = round ? r : r * 1.9f, hw = round ? r : r * 0.62f;
+                var bedAsset = AssetMix.One(flowers[beds % flowers.Length]);
+                float yaw = math.atan2(axis.x, axis.y);
+                const float cell = 2.4f;
+                for (float u = -hl + cell * 0.5f; u <= hl - cell * 0.5f + 0.01f; u += cell)
+                    for (float w = -hw + cell * 0.5f; w <= hw - cell * 0.5f + 0.01f; w += cell)
+                    {
+                        if (round && u * u + w * w > (r - cell * 0.45f) * (r - cell * 0.45f)) continue;
+                        var p = c + axis * u + nrm * w;
+                        ctx.Object(p, yaw, ObjectRole.Planter, bedAsset, Hashing.Mix(v, (uint)tiles), -1, cat);
+                        tiles++;
+                    }
+                // A low edging of flowering shrubs round the bed.
+                string bush = CategoryChains.Quiet(AssetCategories.Bush) ?? AssetCategories.Bush;
+                float er = round ? r + 0.9f : 0f;
+                int edge = 0;
+                if (round)
+                {
+                    int ne = math.clamp((int)(2f * math.PI * er / 1.5f), 8, 60);
+                    for (int i = 0; i < ne; i++)
+                    {
+                        float a = i * 2f * math.PI / ne;
+                        ctx.Object(c + new float2(math.cos(a), math.sin(a)) * er, a, ObjectRole.Bush, AssetMix.Pick(FlowerShrubs, Hashing.Mix(v, 0x100u)), Hashing.Mix(v, 0x200u + (uint)i), -1, bush);
+                        edge++;
+                    }
+                }
+                else
+                {
+                    foreach (float sw in new[] { -1f, 1f })
+                        for (float u = -hl; u <= hl + 0.01f; u += 1.5f)
+                        {
+                            ctx.Object(c + axis * u + nrm * sw * (hw + 0.8f), yaw, ObjectRole.Bush, AssetMix.Pick(FlowerShrubs, Hashing.Mix(v, 0x100u)), Hashing.Mix(v, 0x300u + (uint)edge), -1, bush);
+                            edge++;
+                        }
+                }
+                occ.Take(c, math.max(hl, hw) + 1.6f, 2);
+                placed.Add(c);
+                beds++;
+            }
+            ctx.Plan.Facts["carpetBeds"] = beds;
+            ctx.Plan.Facts["carpetTiles"] = tiles;
+        }
 
         protected override void PlanCore(LayerContext ctx)
         {
@@ -125,6 +201,9 @@ namespace Placemaker.Core.Layers.Leisure
             if (ctx.B("lamps")) PathLamps(ctx, occ, 22f, OneOr(ctx.S("lampAsset"), GardenLamps), 0x1A70u);
             ctx.Check();
 
+            CarpetBeds(ctx, occ, ctx.I("showBeds"));
+            ctx.Check();
+
             // Collections: one theme per lawn.
             var lawns = FreeSpace.Pieces(region, p => occ.Corridors.Overlaps(p, 0.75f), 2f, 80f, ctx.Cancel);
             string theme = ctx.S("theme");
@@ -154,7 +233,14 @@ namespace Placemaker.Core.Layers.Leisure
                             p => lawn.BoundaryDistance(p, 4f) > 3f);
                         break;
                     case "shrubs":
-                        n = LeisureKit.Plant(ctx, occ, lawn, (int)(ha * density * 2f), ObjectRole.Bush, Bushes(Shrubbery), 1f, 8f, 0.35f, salt);
+                    {
+                        // rf-parks: a share of the shrubs massed along the walks (borders), the rest in loose clumps on the lawn.
+                        int all = (int)(ha * density * 2f);
+                        int border = (int)(all * math.clamp(ctx.F("pathBorders") / 100f, 0f, 0.95f));
+                        n = border > 0 ? LeisureKit.Plant(ctx, occ, lawn, border, ObjectRole.Bush, Bushes(Shrubbery), 1f, 5f, 0.6f, salt + 7u,
+                            p => occ.Paths.Count == 0 || occ.Paths.Nearest(p, 6.5f, out _) < 0) : 0;
+                        n += LeisureKit.Plant(ctx, occ, lawn, all - border, ObjectRole.Bush, Bushes(Shrubbery), 1f, 8f, 0.35f, salt);
+                    }
                         LeisureKit.Plant(ctx, occ, lawn, (int)(ha * 8f), ObjectRole.Tree, Trees(AccentTrees), 2.5f, 20f, 0.6f, salt + 1u);
                         break;
                     case "trees":

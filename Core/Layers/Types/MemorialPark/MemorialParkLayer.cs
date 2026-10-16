@@ -70,12 +70,14 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.Slider("flags", 0, 0, 12, 1, "count", ControlTier.More, "monument");
             c.Slider("sculptures", 0, 0, 30, 1, "count", ControlTier.More, "monument").Tip();
             c.Asset("monumentAsset", AssetCategories.MemorialMonument, ControlTier.More, "monument");
+            c.Slider("monumentScale", 220, 100, 400, 10, "%", ControlTier.More, "monument").Tip();
             c.AssetMulti("sculptureAssets", AssetCategories.MemorialSculpture, ControlTier.More, "monument");
             // Water.
             c.Toggle("pool", true, ControlTier.Essential, "water").Tip();
             c.Slider("poolLength", 50, 20, 80, 5, "%", ControlTier.More, "water").When("pool=true").Tip();
             c.Slider("poolWidth", 5, 2, 12, 0.5, "m", ControlTier.More, "water").When("pool=true");
             c.Toggle("realWater", false, ControlTier.More, "water").When("pool=true").Tip();
+            c.Toggle("poolFountains", true, ControlTier.More, "water").When("pool=true").Tip();
             c.Asset("poolAsset", AssetCategories.SurfaceWater, ControlTier.More, "water").When("pool=true");
             // Hedged rooms.
             c.Toggle("rooms", true, ControlTier.Essential, "rooms").Tip();
@@ -87,6 +89,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.Slider("treeSpacing", 9, 6, 16, 1, "m", ControlTier.More, "planting").Layout(6).When("allees=true");
             c.Slider("lawnTrees", 20, 0, 80, 5, "perHa", ControlTier.More, "planting").Tip();
             c.Toggle("flowerRing", true, ControlTier.More, "planting").Tip();
+            c.Toggle("borders", false, ControlTier.More, "planting").Tip();
             c.AssetMulti("treeSpecies", AssetCategories.Tree, ControlTier.More, "planting");
             // Lighting.
             c.Choice("lighting", "bollards", ControlTier.Essential, "lighting", "bollards", "lanterns", "uplights", "none").Tip();
@@ -101,20 +104,24 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             c.RandomRange("forecourt", 7, 14);
             c.RandomRange("lawnTrees", 5, 40);
             c.Fixed("realWater");
+            c.Fixed("monumentScale");
         }
 
         protected override void DefinePresets()
         {
+            // rf-parks: every axial style keeps its lawn open (few lawn trees, so the axis, the rooms and the monument read) and has a
+            // scaled focal monument; each gets its own signature: flower borders, poppies and flags, a fountain rill, a sculpture trail.
             Preset("garden", ("style", "garden"), ("focal", "end"), ("pool", false), ("rooms", true), ("roomContent", "flowers"), ("lighting", "bollards"),
-                ("flowerRing", true), ("plaques", 4.0), ("lawnTrees", 30.0));
+                ("flowerRing", true), ("borders", true), ("plaques", 4.0), ("lawnTrees", 10.0), ("monumentScale", 200.0), ("crossAxis", true));
             Preset("square", ("style", "square"), ("focal", "centre"), ("crossAxis", true), ("paving", true), ("forecourt", 16.0), ("pool", false), ("rooms", false),
                 ("lighting", "lanterns"), ("enclosure", "none"), ("processionWidth", 10.0), ("lawnTrees", 0.0), ("flowerRing", false));
-            Preset("war", ("style", "war"), ("focal", "end"), ("raised", true), ("raiseHeight", 2.0), ("plaques", 10.0), ("flags", 8.0), ("pool", true),
-                ("poolLength", 45.0), ("rooms", true), ("roomContent", "benches"), ("lighting", "uplights"), ("flowerRing", true), ("enclosure", "hedge"));
+            Preset("war", ("style", "war"), ("focal", "end"), ("raised", true), ("raiseHeight", 2.0), ("plaques", 12.0), ("flags", 10.0), ("pool", true),
+                ("poolLength", 45.0), ("rooms", true), ("roomContent", "benches"), ("lighting", "uplights"), ("flowerRing", true), ("borders", true), ("enclosure", "hedge"),
+                ("lawnTrees", 6.0), ("monumentScale", 300.0));
             Preset("reflection", ("style", "reflection"), ("focal", "end"), ("pool", true), ("poolLength", 70.0), ("poolWidth", 7.0), ("rooms", true),
-                ("roomContent", "tree"), ("lighting", "bollards"), ("plaques", 0.0), ("allees", true), ("treeSpacing", 8.0));
+                ("roomContent", "tree"), ("lighting", "bollards"), ("plaques", 0.0), ("allees", true), ("treeSpacing", 8.0), ("lawnTrees", 8.0), ("monumentScale", 240.0));
             Preset("sculpture", ("style", "sculpture"), ("sculptures", 14.0), ("pool", true), ("poolLength", 30.0), ("rooms", true), ("roomContent", "sculpture"),
-                ("allees", false), ("lighting", "uplights"), ("lawnTrees", 35.0), ("plaques", 0.0), ("enclosure", "fence"));
+                ("allees", false), ("lighting", "uplights"), ("lawnTrees", 25.0), ("plaques", 0.0), ("enclosure", "fence"), ("monumentScale", 220.0));
         }
 
         // ───────────── planning ─────────────
@@ -222,6 +229,13 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
 
         /// <summary>The player's choice, or the art-pass default when the control is on automatic.</summary>
         private static string[] Or(string[] chosen, string[] defaults) => chosen != null && chosen.Length > 0 ? chosen : defaults;
+
+        /// <summary>
+        /// (rf-parks) The category for a piece with curated vanilla defaults: the first category with items, else the chain's head.
+        /// The curated pieces are named explicitly and the game resolves them by name whatever the category holds, so an empty
+        /// category (a clean game has no memorial monument, sculpture or fountain items) no longer drops the focal piece.
+        /// </summary>
+        private static string CatOr(State st, bool chosen, params string[] chain) => chosen ? chain[0] : CategoryChains.Quiet(chain) ?? chain[0];
 
         private static float2 LongestEdge(LayerRegion region)
         {
@@ -432,6 +446,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             float roomsFrom = (ctx.B("allees") ? alleeOff + 3.6f : inner + 3f);
             if (ctx.B("rooms")) RoomRows(st, spans, roomsFrom);
             if (ctx.B("allees")) Allees(st, spans, alleeOff);
+            if (ctx.B("borders")) Borders(st, spans, inner + 1.5f);
             vistaA = start; vistaB = centreFocus ? far : mon; vista = alleeOff + 2f;
             ctx.Plan.Facts["axisLength"] = math.distance(start, mon);
             return true;
@@ -466,6 +481,21 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 if (cat != null) ctx.Surface(water.Ring, SurfaceRole.Water, AssetMix.One(ctx.S("poolAsset")), cat);
             }
             ctx.Plan.Facts["poolArea"] = water.HalfLength * water.HalfWidth * 4f;
+            // rf-parks: a rill of small fountains down the pool's middle. A clean game has no water-look surface, so the pool alone
+            // was a grey slab; with the fountains it reads as water in any game.
+            if (ctx.B("poolFountains") && water.HalfWidth >= 1.2f)
+            {
+                string fc = CatOr(st, false, AssetCategories.CenterpieceFountain, AssetCategories.Centerpiece);
+                float step = math.max(6f, water.HalfWidth * 2f + 3f);
+                int nf = 0;
+                foreach (var p in LeisureKit.Along(water.Local(-water.HalfLength + step * 0.5f, 0f), water.Local(water.HalfLength - step * 0.5f, 0f), step))
+                {
+                    var fo = ctx.Object(p, math.atan2(water.Axis.x, water.Axis.y), ObjectRole.Furniture, AssetMix.Pick(MemorialAssets.PoolFountains, (uint)nf), Hashing.Mix(ctx.Seed, 0xF0F0u + (uint)nf), -1, fc);
+                    fo.Scale = math.clamp(water.HalfWidth * 2f / 4f, 0.6f, 1.2f);
+                    nf++;
+                }
+                ctx.Plan.Facts["poolFountains"] = nf;
+            }
             // Low lights on the coping, both long sides.
             if (ctx.S("lighting") != "none")
             {
@@ -488,13 +518,16 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             var mon = st.Monument; float fr = st.Forecourt;
             string style = ctx.S("style");
             float faceStart = LeisureKit.Yaw(mon, mon - dir);
+            // rf-parks: the focal piece is always there (curated vanilla pieces resolve by name when the category is empty, as in a
+            // clean game: the memorial had no monument at all) and it is scaled up to read as a monument, not a garden ornament.
             string cat = style == "sculpture"
-                ? st.Chains.Get(ctx.L("sculptureAssets").Length > 0, AssetCategories.MemorialSculpture, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece)
-                : st.Chains.Get(ctx.S("monumentAsset").Length > 0, AssetCategories.MemorialMonument, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
-            if (cat != null)
+                ? CatOr(st, ctx.L("sculptureAssets").Length > 0, AssetCategories.MemorialSculpture, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece)
+                : CatOr(st, ctx.S("monumentAsset").Length > 0, AssetCategories.MemorialMonument, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
             {
                 var asset = style == "sculpture" ? AssetMix.Pick(Or(ctx.L("sculptureAssets"), MemorialAssets.Sculptures), ctx.Seed) : AssetMix.One(ctx.S("monumentAsset"), MemorialAssets.Monuments);
-                ctx.Object(mon, faceStart, ObjectRole.Centerpiece, asset, Hashing.Mix(ctx.Seed, 0x303u), -1, cat);
+                var ob = ctx.Object(mon, faceStart, ObjectRole.Centerpiece, asset, Hashing.Mix(ctx.Seed, 0x303u), -1, cat);
+                ob.Scale = math.clamp(ctx.F("monumentScale") / 100f, 0.5f, 5f);
+                ctx.Plan.Facts["monumentScale"] = ob.Scale;
             }
             float baseA = math.atan2(dir.y, dir.x);   // pointing away from the procession (behind the monument)
             float inner = fr - 1.2f;
@@ -628,6 +661,41 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                 }
             }
             ctx.Plan.Facts["alleeTrees"] = i;
+        }
+
+        /// <summary>
+        /// (rf-parks) Flower borders either side of the procession, between the walk and the allée: a ribbon of flowerbeds (a
+        /// memorial garden) or of poppies (a war memorial), in symmetric pairs, so the axis reads from far away.
+        /// </summary>
+        private static void Borders(State st, List<(float2 a, float2 b)> spans, float offset)
+        {
+            var ctx = st.Ctx;
+            bool war = ctx.S("style") == "war";
+            string cat = war ? CatOr(st, false, AssetCategories.Bush, AssetCategories.Flowerbed) : CatOr(st, false, AssetCategories.Flowerbed, AssetCategories.Bush);
+            // Checked at a shrub's full footprint (1.1 m) against paths and reserved space; poppies then hold only their core,
+            // so the next one 1.7 m along still fits.
+            float step = war ? 1.7f : 2.4f, rad = 1.1f, hold = war ? 0.5f : 1.1f;
+            int n = 0;
+            foreach (var (a, b) in spans)
+            {
+                var d = math.normalizesafe(b - a); var nrm = new float2(-d.y, d.x);
+                float len = math.distance(a, b);
+                for (float u = 3f; u < len - 2f; u += step)
+                {
+                    var p = a + d * u;
+                    var l = p + nrm * offset; var r = p - nrm * offset;
+                    if (!st.Occ.Free(l, rad, 0.2f, 0.05f) || !st.Occ.Free(r, rad, 0.2f, 0.05f)) continue;
+                    uint v = Hashing.Mix(ctx.Seed, 0xB0D0u + (uint)n);
+                    var asset = war ? AssetMix.Pick(MemorialAssets.Poppies, v) : AssetMix.Pick(ParkArt.Flowerbeds, v);
+                    foreach (var q in new[] { l, r })
+                    {
+                        ctx.Object(q, math.atan2(d.x, d.y), war ? ObjectRole.Bush : ObjectRole.Planter, asset, v, -1, cat);
+                        st.Occ.Take(q, hold, 4);
+                        n++;
+                    }
+                }
+            }
+            ctx.Plan.Facts["borderPlants"] = n;
         }
 
         /// <summary>Hedged rooms in a row on both sides of each axis span, opening towards the axis.</summary>
@@ -834,7 +902,7 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
             if (want > 0)
             {
                 var ids = ctx.L("sculptureAssets");
-                string sc = st.Chains.Get(ids.Length > 0, AssetCategories.MemorialSculpture, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
+                string sc = CatOr(st, ids.Length > 0, AssetCategories.MemorialSculpture, AssetCategories.CenterpieceStatue, AssetCategories.Centerpiece);
                 string hedgeCat = ctx.B("rooms") ? st.Chains.Get(ctx.S("hedgeAsset").Length > 0, AssetCategories.Hedge, AssetCategories.Bush) : null;
                 if (sc != null)
                 {
@@ -845,7 +913,8 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
                         if (!occ.Free(an.Position, 3.6f, 4.2f, 0.3f)) continue;
                         uint v = Hashing.Mix(ctx.Seed, 0x5C00u + (uint)i++);
                         if (ctx.B("paving")) ctx.Surface(LayerRegion.Circle(an.Position, 2.2f, 14), SurfaceRole.Plaza, AssetMix.One("", ParkArt.Pavement), AssetCategories.SurfacePaving);
-                        ctx.Object(an.Position, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Centerpiece, AssetMix.Pick(Or(ids, MemorialAssets.Sculptures), v), v, -1, sc);
+                        var sob = ctx.Object(an.Position, LeisureKit.Yaw(an.Position, an.Toward), ObjectRole.Centerpiece, AssetMix.Pick(Or(ids, MemorialAssets.Sculptures), v), v, -1, sc);
+                        sob.Scale = math.clamp(ctx.F("monumentScale") / 100f * 0.6f, 0.8f, 2.5f);
                         st.Sculptures++;
                         if (hedgeCat != null)
                         {

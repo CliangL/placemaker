@@ -18,6 +18,8 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         public static readonly string[] Poppies = { "VFP PoppyBushWild", "FlowerBushWild01", "FlowerBushWild02" };
         public static readonly string[] Avenue = ParkArt.AvenueTrees;
         public static readonly string[] LawnTrees = { "NA_LindenTree01", "OakTree01", "EU_ChestnutTree01" };
+        /// <summary>(rf-parks) The rill of fountains down a reflecting pool (vanilla, ~3.5 m across).</summary>
+        public static readonly string[] PoolFountains = { "SmallFountain03", "SmallFountain02", "SmallFountain01" };
         public static readonly string[] SpecimenTrees = { "OakTree01", "EU_ChestnutTree01", "NA_LondonPlaneTree01" };
     }
 }

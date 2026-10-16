@@ -219,6 +219,11 @@ namespace Placemaker.Core.Layers.Park
             Preset("greenway", ("style", "natural"), ("pathStyle", "curvy"), ("pathWidth", "narrow"), ("treeDensity", 28.0), ("bushDensity", 60.0),
                 ("furniture", 3.5), ("bikePath", true), ("smallPaths", 2.0), ("trails", 1.0), ("desireLines", "worn"), ("curvedPaths", true));
 
+            // rf-parks: picnic grounds fold into the park as a style: a gentle circuit round a big open lawn, picnic groups with
+            // shelters and grills spread over the grass, shade-tree clumps round the edge, a playground and restrooms.
+            Preset("picnic", ("style", "picnic"), ("pathStyle", "circuit"), ("pathWidth", "narrow"), ("treeDensity", 30.0), ("bushDensity", 30.0),
+                ("furniture", 3.0), ("lamps", true), ("bins", true), ("belt", true), ("curvedPaths", true));
+
             // Playtest 4b: presets look complete. On top of the DefaultOn features (playground, picnic,
             // restrooms, big trees, flowerbeds, decals, shore) each idiom turns on what belongs to it.
             PresetFeatures("formal", "plaza");   // the park plaza has a fountain centre
@@ -230,7 +235,11 @@ namespace Placemaker.Core.Layers.Park
             PresetFeatures("landscape", "-flowerbeds", "pond");   // a landscape park is a lawn falling to a lake with a temple island
             PresetFeatures("modern", "plaza");
             PresetFeatures("wildflower", "-flowerbeds", "-playground");
-            PresetFeatures("urban", "plaza", "shops");
+            // rf-parks: the urban pocket is the city's park: plaza, kiosk and shops on its street edge; no picnic or loose flowerbeds
+            // (they found no room and said so on every build).
+            PresetFeatures("urban", "plaza", "shops", StreetShopsLayer, "-picnic", "-flowerbeds");
+            PresetFeatures("picnic", "-flowerbeds");
+            PresetFeatureValues("picnic", "picnic", ("groups", 8.0), ("tables", 3.0), ("shelter", true), ("shadeTrees", true));
         }
 
         public override List<EdgeMarker> SuggestMarkers(AreaInput input)
@@ -857,6 +866,7 @@ namespace Placemaker.Core.Layers.Park
                 case "meadow": case "wildflower": return new[] { "OakTree01", "BirchTree01", "NA_HickoryTree01" };
                 case "riverside": return new[] { "EU_AlderTree01", "EU_PoplarTree01", "BirchTree01", "OakTree01" };
                 case "pocket": return new[] { "NA_LindenTree01", "NA_LondonPlaneTree01", "BirchTree01" };
+                case "picnic": return new[] { "OakTree01", "EU_ChestnutTree01", "NA_LondonPlaneTree01", "NA_LindenTree01" };
                 default: return ParkArt.ParkTrees;
             }
         }

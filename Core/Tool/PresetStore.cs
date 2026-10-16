@@ -195,7 +195,7 @@ namespace Placemaker.Core.Tool
             foreach (var f in Features.Of(gen))
             {
                 if (f == null || !builtIn.FeatureOn(f) || Features.ChildIndex(step, f) >= 0) continue;
-                var fs = _editor.FeatureStep(f, 0);
+                var fs = _editor.FeatureStep(f, 0, DesignEditor.PresetFeatureValues(builtIn, f.Layer));
                 fs.Markers.Clear();
                 step.Children.Add(fs);
             }
