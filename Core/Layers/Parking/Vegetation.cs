@@ -4,6 +4,12 @@
 //
 // Plants fill the green rings on a jittered grid; trees keep away from the strip edge more than
 // bushes, clumping follows a smooth value noise, and spacing is enforced through a 16 m bucket grid.
+//
+// rf-parking (2026-10-16): the green strips behind stall rows (medians, the edge strip behind a perimeter row) are
+// planted first, in rows (PlanRows): trees evenly spaced on the strip's centre line at their crown size, shrubs
+// between them. The jittered fill then only adds to what is left (row ends, corners, wide islands), and trees there
+// need room for a trunk well inside the green. In the game the old fill put a 10 m crown every 4 m anywhere in a
+// 2.5 m median (the catalog's plant bounds are the collision core, not the crown): clumps over the aisles.
 
 using System;
 using System.Collections.Generic;
@@ -18,17 +24,42 @@ namespace Placemaker.Core.Layers.Parking
         public double Height;
     }
 
+    /// <summary>One stall's back edge, seen from the stall: a back corner, the row direction and which way is back.</summary>
+    internal struct RowEdge
+    {
+        public double2 Corner;     // a back corner of a stall (local frame)
+        public double2 RowDir;     // along the row
+        public double2 Back;       // unit, perpendicular to the row, toward the strip behind the stall
+        /// <summary>A row-end cap (the strip beside the last stall of a row): shrubs only, no trees.</summary>
+        public bool Cap;
+    }
+
     internal static class Vegetation
     {
         /// <summary>Hard cap on candidate positions (PLT Kandidatengrenze).</summary>
         private const int CandidateLimit = 400000;
 
+        /// <summary>Trees in the jittered fill keep their trunk this far inside the green (a 2.5 m median has no such spot).</summary>
+        public const double TreeEdge = 1.4;
+        /// <summary>A planting line needs a strip this wide for trees, and this wide for shrubs.</summary>
+        public const double MinTreeStrip = 0.7, MinShrubStrip = 0.5;
+        /// <summary>The jittered fill keeps this far from any plant of a planting line.</summary>
+        public const double RowClear = 4.0;
+
         public static List<Plant> Plan(List<List<double2>> rings, IReadOnlyList<Species> species, int density, uint seed,
-            IReadOnlyList<Lantern> lanterns, Func<double2, bool> blocked)
+            IReadOnlyList<Lantern> lanterns, Func<double2, bool> blocked, List<Plant> seeded = null)
         {
             var plants = new List<Plant>();
             if (density <= 0 || species.Count == 0 || rings == null) return plants;
             var occupied = new Dictionary<long, List<int>>();
+            if (seeded != null)
+                foreach (var sp in seeded)
+                {
+                    long sk = Key((int)Math.Floor(sp.Position.x / 16), (int)Math.Floor(sp.Position.y / 16));
+                    if (!occupied.TryGetValue(sk, out var sl)) occupied[sk] = sl = new List<int>();
+                    sl.Add(plants.Count);
+                    plants.Add(sp);
+                }
             var anchor = new double2(double.MaxValue, double.MaxValue);
             foreach (var r in rings) foreach (var p in r) anchor = math.min(anchor, p);
             int candidates = 0;
@@ -84,7 +115,7 @@ namespace Placemaker.Core.Layers.Parking
                         p += new double2(Unit(Hash(s + 7)) - .5, Unit(Hash(s + 11)) - .5) * (hi - lo) / new double2(nx, ny);
                         if (!PGeo.Contains(local, p)) continue;
                         double edge = PGeo.DistToBoundary(local, p);
-                        if (edge < (kind.Tree ? .15 : .10)) continue;
+                        if (edge < (kind.Tree ? TreeEdge : .10)) continue;
                         double chance = kind.Tree ? Lerp(.3, 1, Sat(edge / 4)) : Lerp(1, .7, Sat(edge / 4));
                         var world = origin + axis * p.x + across * p.y;
                         double group = GroupDensity((world - anchor) / (kind.Tree ? 18.0 : 7.0), seed + (uint)pass * 313u);
@@ -111,6 +142,7 @@ namespace Placemaker.Core.Layers.Parking
                                     {
                                         var other = plants[n];
                                         double dist = (Spacing(kind) + Spacing(species[other.Species])) * .5;
+                                        if (other.Row) dist = Math.Max(dist, RowClear);   // the lines stay lines: no stray fill beside them
                                         if (math.distancesq(world, other.Position) < dist * dist - .001) { clear = false; break; }
                                     }
                         if (!clear) continue;
@@ -127,8 +159,204 @@ namespace Placemaker.Core.Layers.Parking
         private static List<Plant> Thin(List<Plant> plants, int density)
         {
             double keep = Math.Max(0, Math.Min(100, density)) / 100.0;
-            plants.RemoveAll(p => Unit(Hash(p.Seed + 97)) >= keep);
+            plants.RemoveAll(p => !p.Row && Unit(Hash(p.Seed + 97)) >= keep);
             return plants;
+        }
+
+        /// <summary>
+        /// Spacing factor of the planting lines for the density setting: 50 % (the default) leaves a fifth of a crown
+        /// between trees, 80 % lets the crowns just meet, 100 % closes the canopy, 20 % leaves wide gaps.
+        /// </summary>
+        public static double RowSpacingFactor(int density) => 0.6 + 30.0 / Math.Max(5, Math.Min(100, density));
+
+        /// <summary>
+        /// Trees and shrubs in rows on the centre line of the green strip behind every stall row. The strip is found by
+        /// probing from each stall's back corners straight back (perpendicular to the row) while the ground is green;
+        /// its middle is the planting point. Points on one line are grouped (same direction and offset), split where
+        /// the line breaks (cross lanes, row ends), and planted symmetrically: a tree every k-th point (k from the
+        /// crown size and the density), shrubs between the trees. One tree species per line.
+        /// </summary>
+        public static List<Plant> PlanRows(IReadOnlyList<RowEdge> edges, IReadOnlyList<Species> species, int density, uint seed,
+            IReadOnlyList<Lantern> lanterns, Func<double2, bool> isGreen, Func<double2, bool> blocked)
+        {
+            var plants = new List<Plant>();
+            if (density <= 0 || species.Count == 0 || edges == null || edges.Count == 0) return plants;
+            var treeKinds = new List<int>(); var shrubKinds = new List<int>();
+            for (int i = 0; i < species.Count; i++) (species[i].Tree ? treeKinds : shrubKinds).Add(i);
+            double factor = RowSpacingFactor(density);
+
+            // 1. the middle of the strip behind each back corner
+            var pts = new List<(double2 P, double2 Dir, double Width, bool Cap)>();
+            var seen = new Dictionary<long, List<int>>();
+            const double Step = 0.3, MaxProbe = 12;
+            foreach (var e in edges)
+            {
+                var start = e.Corner + e.Back * 0.05;
+                if (!isGreen(start + e.Back * 0.1)) continue;
+                double d = 0.1;
+                while (d < MaxProbe && isGreen(start + e.Back * (d + Step))) d += Step;
+                // the far edge to a few centimetres: halve the last step
+                for (double h = Step * 0.5; h > 0.02; h *= 0.5) if (d + h < MaxProbe && isGreen(start + e.Back * (d + h))) d += h;
+                if (d < MinShrubStrip) continue;
+                var c = start + e.Back * (d * 0.5);
+                // the strip must run along the row here (not a row-end cap seen from its last stall)
+                if (!isGreen(c + e.RowDir * 0.6) || !isGreen(c - e.RowDir * 0.6)) continue;
+                int gx = (int)Math.Floor(c.x / 4), gy = (int)Math.Floor(c.y / 4);
+                bool dup = false;
+                for (int dy = -1; dy <= 1 && !dup; dy++)
+                    for (int dx = -1; dx <= 1 && !dup; dx++)
+                        if (seen.TryGetValue(Key(gx + dx, gy + dy), out var near))
+                            foreach (int n in near) if (math.distancesq(pts[n].P, c) < 0.6 * 0.6) { dup = true; break; }
+                if (dup) continue;
+                if (!seen.TryGetValue(Key(gx, gy), out var cell)) seen[Key(gx, gy)] = cell = new List<int>();
+                cell.Add(pts.Count);
+                pts.Add((c, e.RowDir, d, e.Cap));
+            }
+            if (pts.Count == 0) return plants;
+
+            // 2. lines: the same direction (either sign) and the same offset across it
+            var lines = new List<List<(double2 P, double Width)>>();
+            var lineKey = new List<(double2 Dir, double Off, bool Cap)>();
+            foreach (var q in pts)
+            {
+                var dir = q.Dir.x < -1e-6 || (Math.Abs(q.Dir.x) <= 1e-6 && q.Dir.y < 0) ? -q.Dir : q.Dir;
+                double off = PGeo.Dot(q.P, PGeo.Perp(dir));
+                int found = -1;
+                for (int i = 0; i < lines.Count; i++)
+                    if (lineKey[i].Cap == q.Cap && PGeo.Dot(lineKey[i].Dir, dir) > 0.999 && Math.Abs(lineKey[i].Off - off) < 2.0) { found = i; break; }
+                if (found < 0) { lines.Add(new List<(double2, double)>()); lineKey.Add((dir, off, q.Cap)); found = lines.Count - 1; }
+                lines[found].Add((q.P, q.Width));
+            }
+
+            var trees = new PointGrid();
+            var shrubs = new PointGrid();
+            var runs = new List<(List<(double2 P, double Width)> Run, double2 Dir, double Pitch, int Index, bool Cap)>();
+            for (int li = 0; li < lines.Count; li++)
+            {
+                var dir = lineKey[li].Dir;
+                var across = PGeo.Perp(dir);
+                var raw = lines[li];
+                // one straight line: every point onto the line's middle offset (the two rows of a median can see its
+                // middle a little apart where one row ends earlier), where that is still green; then no two points closer than 1 m
+                var offs = new List<double>();
+                foreach (var q in raw) offs.Add(PGeo.Dot(q.P, across));
+                offs.Sort();
+                double mid = offs[offs.Count / 2];
+                var line = new List<(double2 P, double Width)>(raw.Count);
+                foreach (var q in raw)
+                {
+                    var moved = q.P + across * (mid - PGeo.Dot(q.P, across));
+                    line.Add((isGreen(moved) ? moved : q.P, q.Width));
+                }
+                line.Sort((a, b) => PGeo.Dot(a.P, dir).CompareTo(PGeo.Dot(b.P, dir)));
+                for (int i = line.Count - 1; i > 0; i--)
+                    if (PGeo.Dot(line[i].P - line[i - 1].P, dir) < 1.0) line.RemoveAt(i);
+                // the usual gap between neighbours on this line (the stall pitch)
+                var gaps = new List<double>();
+                for (int i = 1; i < line.Count; i++) gaps.Add(PGeo.Dot(line[i].P - line[i - 1].P, dir));
+                gaps.Sort();
+                double pitch = gaps.Count > 0 ? Math.Max(1.0, gaps[gaps.Count / 2]) : 3.0;
+                // 3. runs: the line breaks where a gap is much wider than the pitch or the strip is cut (a cross lane)
+                int from = 0;
+                for (int i = 1; i <= line.Count; i++)
+                {
+                    if (i < line.Count && PGeo.Dot(line[i].P - line[i - 1].P, dir) < pitch * 1.6 && Unbroken(line[i - 1].P, line[i].P)) continue;
+                    runs.Add((line.GetRange(from, i - from), dir, pitch, runs.Count, lineKey[li].Cap));
+                    from = i;
+                }
+            }
+            // the long lines first, so a stray stall (a special bay across a row end) never takes a tree from a median
+            runs.Sort((a, b) => a.Run.Count != b.Run.Count ? b.Run.Count.CompareTo(a.Run.Count) : a.Index.CompareTo(b.Index));
+            foreach (var r in runs) PlantRun(r.Run, r.Dir, r.Pitch, r.Index, r.Cap);
+            return plants;
+
+            bool Unbroken(double2 a, double2 b)
+            {
+                int n = Math.Max(1, (int)Math.Ceiling(math.distance(a, b) / 0.4));
+                for (int j = 1; j < n; j++) if (!isGreen(math.lerp(a, b, (double)j / n))) return false;
+                return true;
+            }
+
+            void PlantRun(List<(double2 P, double Width)> run, double2 dir, double pitch, int index, bool cap)
+            {
+                uint rs = Hash(seed ^ Hash((uint)index * 2654435761u + 17u));
+                double runLen = PGeo.Dot(run[run.Count - 1].P - run[0].P, dir);
+                if (treeKinds.Count > 0 && run.Count >= 3 && !cap)
+                {
+                    int kindT = treeKinds[(int)(rs % (uint)treeKinds.Count)];
+                    double spacing = Spacing(species[kindT]) * factor;
+                    int k = Math.Max(1, (int)Math.Round(spacing / pitch));
+                    int count = run.Count;
+                    int first = ((count - 1) % k) / 2;
+                    if (count <= k && runLen + pitch < spacing * 0.6) first = count;   // too short for a crown
+                    for (int i = first; i < count; i += k)
+                    {
+                        var q = run[i];
+                        if (q.Width < MinTreeStrip || Near(q.P, true)) continue;
+                        if (trees.AnyWithin(q.P, spacing * 0.85)) continue;
+                        trees.Add(q.P);
+                        plants.Add(new Plant { Position = q.P, Tree = true, Species = kindT, Seed = Hash(rs + (uint)i * 31u), Row = true });
+                    }
+                }
+                if (shrubKinds.Count == 0) return;
+                // shrubs between the trees: on the points and halfway between them, off the trunks
+                double shrubStep = 0;
+                foreach (int b in shrubKinds) shrubStep = Math.Max(shrubStep, Spacing(species[b]));
+                shrubStep *= factor;
+                const double TreeClear = 1.8;
+                var last = new double2(double.NaN, double.NaN);
+                int n = 0;
+                for (int i = 0; i < run.Count; i++)
+                    for (int h = 0; h < 2; h++)
+                    {
+                        if (h == 1 && i == run.Count - 1) break;
+                        var p = h == 0 ? run[i].P : (run[i].P + run[i + 1].P) * 0.5;
+                        double w = h == 0 ? run[i].Width : Math.Min(run[i].Width, run[i + 1].Width);
+                        if (w < MinShrubStrip) continue;
+                        if (!double.IsNaN(last.x) && math.distance(last, p) < shrubStep - 1e-6) continue;
+                        if (trees.AnyWithin(p, TreeClear) || Near(p, false)) continue;
+                        // lines that meet (cap ends, the wedges of angled rows) do not double up
+                        if (shrubs.AnyWithin(p, shrubStep * 0.7)) continue;
+                        shrubs.Add(p);
+                        last = p;
+                        int kindS = shrubKinds[(int)((rs / 7 + (uint)n) % (uint)shrubKinds.Count)];
+                        n++;
+                        plants.Add(new Plant { Position = p, Tree = false, Species = kindS, Seed = Hash(rs + 977u + (uint)(i * 2 + h)), Row = true });
+                    }
+            }
+
+            bool Near(double2 p, bool tree)
+            {
+                if (lanterns != null)
+                {
+                    double free = tree ? 3.0 : 0.8;
+                    foreach (var l in lanterns) if (math.distancesq(p, l.Position) < free * free) return true;
+                }
+                return blocked != null && blocked(p);
+            }
+        }
+
+        /// <summary>Points by 16 m cell, for "anything closer than r".</summary>
+        private sealed class PointGrid
+        {
+            private readonly Dictionary<long, List<double2>> _cells = new Dictionary<long, List<double2>>();
+            public void Add(double2 p)
+            {
+                long k = Key((int)Math.Floor(p.x / 16), (int)Math.Floor(p.y / 16));
+                if (!_cells.TryGetValue(k, out var l)) _cells[k] = l = new List<double2>();
+                l.Add(p);
+            }
+            public bool AnyWithin(double2 p, double r)
+            {
+                int gx = (int)Math.Floor(p.x / 16), gy = (int)Math.Floor(p.y / 16);
+                double r2 = r * r;
+                int reach = Math.Max(1, (int)Math.Ceiling(r / 16));
+                for (int dy = -reach; dy <= reach; dy++)
+                    for (int dx = -reach; dx <= reach; dx++)
+                        if (_cells.TryGetValue(Key(gx + dx, gy + dy), out var l))
+                            foreach (var q in l) if (math.distancesq(q, p) < r2) return true;
+                return false;
+            }
         }
 
         private static List<int2> GridCells(List<double2> ring, double2 lo, double2 hi, int nx, int ny)

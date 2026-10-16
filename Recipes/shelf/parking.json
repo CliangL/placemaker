@@ -9,5 +9,10 @@
   ],
   "types": [],
   "hiddenTypes": [],
-  "hiddenStyles": {}
+  "hiddenStyles": {
+    "parking": [
+      "green"
+    ]
+  },
+  "_why": "rf-parking (docs/refactor/parking.md): green is standard with wider medians and denser planting, a near-duplicate now that every style plants its medians in tidy lines; the planting density slider gives the same look."
 }
