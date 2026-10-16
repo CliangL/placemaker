@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+151536e-dirty",
+  "assembly": "0.1.0+975778e-dirty",
   "categories": [
     {
       "id": "roads",
@@ -3596,6 +3596,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "meadow",
+        "caravan"
       ]
     },
     {
@@ -4956,6 +4960,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "wildwood"
       ]
     },
     {
@@ -6069,6 +6076,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "open"
       ]
     },
     {
@@ -11422,6 +11432,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "viewpointMound"
       ]
     },
     {
@@ -12613,7 +12626,7 @@
           "max": 30.0,
           "step": 1.0,
           "unit": "count",
-          "default": 8.0
+          "default": 0.0
         },
         {
           "id": "mapBoard",
@@ -12836,6 +12849,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "summitClimb",
+        "lakeshoreLoop"
       ]
     },
     {

@@ -232,6 +232,7 @@ namespace Placemaker.Tests.Types
             var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues(preset)), B12Kit.FiveHa, site), B12Kit.FiveHa, site).Layers[0];
             Assert.NotEmpty(plan.Terraform);
             Assert.All(plan.Terraform, t => Assert.True(t.Sloped, "a levelled terraform square"));
+            Assert.True(plan.Terraform.Count <= 2200, $"{plan.Terraform.Count} terraform patches (the build rasters each; too many run out its time)");
             // The trail (terrain-following pieces) lies on the shaped ground: every end within 1 m of the planned surface.
             float after(float2 q) { foreach (var t in plan.Terraform) if (Placemaker.Core.Geometry.Poly.Contains(Placemaker.Core.Geometry.Poly.To2D(t.Ring), q)) return TerraformSurface.TargetAt(t, q); return site.HeightAt(q); }
             foreach (var n in Trail(plan).Where(n => n.FollowTerrain))

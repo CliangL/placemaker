@@ -487,7 +487,9 @@ namespace Placemaker.Core.Layers.Types.Hiking
             float sign = mode == "gorge" ? -1f : 1f;
             float depth = ctx.F("terrainDepth");
             var region = t.Region;
-            float cell = math.max(Sculpt.DefaultCell, math.sqrt(region.Area / 12000f));
+            // About 2000 cells at most: the build rasters every patch, and ~4800 on a 10 ha trail took the whole 6 s
+            // terraform budget before a texel moved ("terraform incomplete (time limit)", nothing shaped).
+            float cell = math.max(Sculpt.DefaultCell, math.sqrt(region.Area / 2000f));
             float floor = 6f + t.Hw, wall = 10f + depth * 3f, falloff = 20f, slope = 0.3f;
             var wet = ctx.Site?.WaterDepthAt;
             var sc = Sculpt.Over(ctx, region, null, cell, p => wet != null && wet(p) > 0.05f);
