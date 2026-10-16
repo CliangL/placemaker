@@ -26,12 +26,18 @@ delete code.
   (street zoning), `09` (switching freezes).
 - `.forensics/suite/scrutiny/STATUS.md` (git-ignored, local): the state of the game runner and its known gaps.
 
-## The game runner: close the loop yourself
+## The game runner: required for every change
 
-Use it on every change before telling the user anything works. It is deliberately simple: it launches the real game,
-does the steps you write, takes the pictures you ask for in order, and collects the logs. It judges nothing (no
-PASS/FAIL); **you read the logs**. Pictures come second: start with `Show.ps1`'s three (the plan, the built result, the terrain map) and
-ask for more views or modes only when those did not show what you needed.
+Nothing is done until you have seen it in the game. After any change that affects what gets built (the planner, the
+build pipeline, a type, a style, the panel), run `tools/suite/Show.ps1` on the types it touches, and on the other
+types that share the same mechanism. Read that build's lines in `Placemaker.log` (Show prints them) and look at its
+three pictures: the plan, the built result and the terrain map. Only then tell the user anything. For a bug, run it
+before the fix too, so you can compare.
+
+Use the land options to reproduce the case: any shape and size, a slope, hills or mountains, your own heights, open
+land for roads (`suite/README.md`, "Land"). The runner is deliberately simple: it launches the real game, does the
+steps, takes the pictures in order and collects the logs. It judges nothing (no PASS/FAIL); **you read the logs**.
+Ask for more views or modes only when the three pictures did not show what you needed.
 
 ```
 powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal   # 3 pictures (plan, built, terrain) + log lines
@@ -75,8 +81,8 @@ powershell -File tools/suite/Send-Suite.ps1 -File x.json        # feed it builds
 ## How the user works
 
 - They are not a programmer. Use plain language and short answers.
-- Never say something is fixed unless you saw it work in the game **and** it is installed. Compare the time on
-  `Mods\Placemaker\Placemaker.dll` with your commit.
+- Never say something is fixed unless you saw it work in the game (`Show.ps1`) **and** it is installed. Compare the
+  time on `Mods\Placemaker\Placemaker.dll` with your commit.
 - Fix things everywhere they occur: every type and code path that shares the mechanism, not just the one in the
   screenshot.
 - Helper agents use the strongest model. Commit when a piece of work is done; the user tests in game.
