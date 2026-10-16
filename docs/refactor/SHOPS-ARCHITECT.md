@@ -158,6 +158,8 @@ chargers).
 circle, an L round an L), small shops outside it facing the park, the park inside; entrances become access lanes
 (cars) or walks that cross the loop into the park. Commons: an urban park with a fountain plaza and food trucks on the
 loop. Garden square: the Garden walk park with a lily pond. Family park: the natural park with a playground and a pond.
+Car entrances on an alley loop open onto gate courts (a car park off the loop on the park side), the corners outside
+the loop are corner courts: a round mall park is shops round a park with parking at its gates, not a park alone.
 
 **Market square, Big market: "the market quarter".** A market filling the whole site whatever its shape: tree-lined
 market streets planned between the gates, food courts at the crossings, planting islands breaking up the paving, food
