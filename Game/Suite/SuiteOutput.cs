@@ -47,9 +47,18 @@ namespace Placemaker.Game.Suite
             else
             {
                 st = new ScenarioState { S = s };
-                if (string.Equals(s.Site, "zoned", StringComparison.OrdinalIgnoreCase) && !_pregrown) yield return Pregrow();
-                s.Block = _fixture.Take(s.Site, s.BlockId, s.Streets, s.SiteFallback, s.Id, out var note);
-                s.SiteNote = note;
+                if (s.Plot != null || s.LandError != null)
+                {
+                    // its own land, laid out at launch
+                    s.Block = s.Plot != null ? _fixture.PlotBlock(s.Plot) : null;
+                    s.SiteNote = s.LandError ?? (s.Block == null ? "land is laid out at launch: start it with Run-Suite -Set or Show.ps1, not sent to a running session" : "plot " + s.Block.Id);
+                }
+                else
+                {
+                    if (string.Equals(s.Site, "zoned", StringComparison.OrdinalIgnoreCase) && !_pregrown) yield return Pregrow();
+                    s.Block = _fixture.Take(s.Site, s.BlockId, s.Streets, s.SiteFallback, s.Id, out var note);
+                    s.SiteNote = note;
+                }
             }
             st.FileIndex = _states.Count;
             _states.Add(st);

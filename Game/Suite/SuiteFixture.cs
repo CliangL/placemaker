@@ -53,6 +53,19 @@ namespace Placemaker.Game.Suite
 
         public float HalfWidth(string road) => HalfWidths.TryGetValue(road ?? "", out var w) ? w : 8f;
 
+        /// <summary>Test land made to order for one scenario: laid out east of the grid, its block handed to that scenario only.</summary>
+        public SuiteBlock AddPlot(SuitePlot plot)
+        {
+            Layout.AddPlot(plot);
+            var b = plot.Block();
+            Blocks.Add(b);
+            _used.Add(b.Id);   // never handed out by Take()
+            Note($"plot {plot.Name}: {plot.Shape} {plot.Size.x:F0} x {plot.Size.y:F0} m, ground {plot.Ground}, roads {(plot.RoadsAround ? plot.Road + " around" : "none")}, centre ({plot.Center.x:F0}, {plot.Center.y:F0})");
+            return b;
+        }
+
+        public SuiteBlock PlotBlock(SuitePlot plot) => Blocks.FirstOrDefault(b => b.Kind == SuiteBlockKind.Plot && b.Name == plot.Name && Layout.Plots.Contains(plot));
+
         // ───────────── prefabs ─────────────
 
         public void IndexPrefabs()

@@ -70,7 +70,7 @@ namespace Placemaker.Game.Suite
             var steps = new List<JObject>();
             if (s.Draw != null && s.Draw.Length >= 2)
                 steps.Add(new JObject { ["do"] = "area", ["tool"] = "points", ["rect"] = new JArray(s.Draw[0], s.Draw[1]) });
-            else steps.Add(new JObject { ["do"] = "area", ["tool"] = "bucket" });
+            else steps.Add(new JObject { ["do"] = "area", ["tool"] = s.Plot != null ? "land" : "bucket" });
             steps.Add(new JObject { ["do"] = "type", ["layer"] = s.Layer, ["preset"] = s.Preset ?? "" });
             foreach (var v in s.Values) steps.Add(new JObject { ["do"] = "value", ["path"] = v.path ?? "0", ["id"] = v.id, ["json"] = v.json });
             steps.Add(new JObject { ["do"] = "entrances" });

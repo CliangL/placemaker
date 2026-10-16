@@ -1,6 +1,6 @@
 // Game runner: a terrain map picture (the "terrain" step). The ground's height, read from the game's own height data,
 // over the build's outline and a margin around it, seen from straight above (north up): colour by height around the
-// outline's typical ground (blue below, red above), shaded by the slope, contour lines every 0.5 m (darker every 2 m),
+// outline's typical ground (blue below, red above), shaded by the slope, contour lines every 0.5 m (wider on hills: 1, 2, 5 or 10 m; darker every 4th),
 // the outline in white. Only the ground: no buildings, trees or roads. It measures nothing else and judges nothing.
 
 using System;
@@ -18,7 +18,7 @@ namespace Placemaker.Game.Suite
 {
     public sealed partial class SuiteRunner
     {
-        private const float ContourM = 0.5f, MajorContourM = 2f;
+
 
         private IEnumerator StepTerrainMap(ScenarioState st, JObject step, JObject rec)
         {
@@ -41,7 +41,7 @@ namespace Placemaker.Game.Suite
             rec["shotName"] = name;
             if (info != null) rec["terrain"] = info;
             if (err != null) rec["error"] = "terrain map: " + err;
-            else Say($"terrain map {name}: ground {info["minM"]} to +{info["maxM"]} m around {info["groundM"]} m (colour range ±{info["rangeM"]} m, contours every {ContourM} m)");
+            else Say($"terrain map {name}: ground {info["minM"]} to +{info["maxM"]} m around {info["groundM"]} m (colour range ±{info["rangeM"]} m, contours every {info["contourM"]} m)");
             st.Shots[name] = rel;
             _contact.Add(new ShotRow
             {
@@ -74,6 +74,10 @@ namespace Placemaker.Game.Suite
             float ground = inside[inside.Count / 2];
             var dev = z.Select(v => math.abs(v - ground)).OrderBy(v => v).ToList();
             float range = math.max(1f, dev[(int)(dev.Count * 0.99f)]);
+            // contour spacing: 0.5 m on gentle ground, wider on hills and mountains (about 30 lines over the range at most)
+            float ContourM = 0.5f;
+            foreach (var s in new[] { 0.5f, 1f, 2f, 5f, 10f }) { ContourM = s; if (2f * range / s <= 30f) break; }
+            float MajorContourM = ContourM * 4f;
 
             var px = new Color32[w * h];
             var light = math.normalize(new float3(-1f, 1.4f, 1f));   // from the north-west, as maps are lit

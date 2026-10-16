@@ -114,6 +114,8 @@ namespace Placemaker.Game.Suite
         public string buildWhen;
         /// <summary>One-line scenarios: the preview mode set in Review before building (sketch | ghost).</summary>
         public string previewMode;
+        /// <summary>Test land made to order for this scenario (shape, size, ground, roads; suite/schema.json "land"), instead of a grid block.</summary>
+        public Newtonsoft.Json.Linq.JObject land;
     }
 
     public sealed class ScenarioSet
@@ -146,6 +148,9 @@ namespace Placemaker.Game.Suite
         public string BuildWhen;
         public string PreviewMode;
         public Placemaker.Core.Suite.SuiteBlock Block;
+        /// <summary>Its own test land (from "land"), laid out at launch; null = a grid block.</summary>
+        public Placemaker.Core.Suite.SuitePlot Plot;
+        public string LandError;
         /// <summary>What the block assignment did: requested kind, the kind it got, and why.</summary>
         public string SiteNote;
     }

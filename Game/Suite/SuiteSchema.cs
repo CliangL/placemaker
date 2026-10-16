@@ -82,13 +82,21 @@ namespace Placemaker.Game.Suite
             return null;
         }
 
-        /// <summary>Unknown scenario keys (not steps), null when valid.</summary>
+        /// <summary>Unknown scenario keys (not steps), and the "land" keys and values; null when valid.</summary>
         public string CheckScenario(JObject sc)
         {
             if (_doc == null) return null;
             var allowed = new HashSet<string>(Strings(_doc["scenarioKeys"]), StringComparer.Ordinal);
             foreach (var p in sc.Properties())
                 if (!p.Name.StartsWith("_") && !allowed.Contains(p.Name)) return $"scenario: unknown key '{p.Name}' (keys: {string.Join(", ", allowed.OrderBy(x => x))})";
+            if (sc["land"] is JObject land && _doc["land"] is JObject spec)
+            {
+                var keys = new HashSet<string>(Strings(spec["keys"]), StringComparer.Ordinal);
+                foreach (var p in land.Properties())
+                    if (!p.Name.StartsWith("_") && !keys.Contains(p.Name)) return $"land: unknown key '{p.Name}' (keys: {string.Join(", ", keys.OrderBy(x => x))})";
+                var bad = Enums(spec["enums"] as JObject, land, "land");
+                if (bad != null) return bad;
+            }
             return Enums(_doc["scenarioEnums"] as JObject, sc, "scenario");
         }
     }

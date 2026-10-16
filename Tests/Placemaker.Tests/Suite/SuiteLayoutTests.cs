@@ -27,7 +27,8 @@ namespace Placemaker.Tests.Suite
             var l = new SuiteLayout();
             var blocks = l.Blocks();
             Assert.Equal(l.NX * l.NZ, blocks.Count);
-            foreach (SuiteBlockKind k in System.Enum.GetValues(typeof(SuiteBlockKind))) Assert.Contains(blocks, b => b.Kind == k);
+            foreach (SuiteBlockKind k in System.Enum.GetValues(typeof(SuiteBlockKind)))
+                if (k != SuiteBlockKind.Plot) Assert.Contains(blocks, b => b.Kind == k);   // plots are not grid blocks
             Assert.Contains(blocks, b => b.West == SuiteLayout.PedestrianStreet || b.East == SuiteLayout.PedestrianStreet);
             Assert.Contains(blocks, b => b.South == SuiteLayout.MediumRoad || b.West == SuiteLayout.MediumRoad);
         }

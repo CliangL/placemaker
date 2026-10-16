@@ -30,11 +30,12 @@ delete code.
 
 Use it on every change before telling the user anything works. It is deliberately simple: it launches the real game,
 does the steps you write, takes the pictures you ask for in order, and collects the logs. It judges nothing (no
-PASS/FAIL); **you read the logs**. Pictures come second: start with `Show.ps1`'s two (the plan and the built result) and
+PASS/FAIL); **you read the logs**. Pictures come second: start with `Show.ps1`'s three (the plan, the built result, the terrain map) and
 ask for more views or modes only when those did not show what you needed.
 
 ```
-powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal   # 2 pictures (plan, built) + log lines
+powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal   # 3 pictures (plan, built, terrain) + log lines
+powershell -File tools/suite/Show.ps1 -Type roads -Size 900x700 -Ground mountains -Roads none   # land made to order
 powershell -File tools/suite/Show.ps1 -Category parking -Type parking -Style all -Views top -Modes clean,zoning
 powershell -File tools/suite/Play.ps1                     # the user's playground: flat grid, camera on it, they play
 powershell -File tools/suite/Run-Suite.ps1 -Set look-one  # one type and preset, one 45° picture, quit

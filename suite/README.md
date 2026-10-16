@@ -4,26 +4,48 @@
 
 ```
 powershell -File tools/suite/Show.ps1                                          # the categories, types and styles
-powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal # the usual: 2 pictures
+powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal # the usual: 3 pictures
 powershell -File tools/suite/Show.ps1 -Category parking -Type parking -Style all -Views top -Modes clean,zoning
 powershell -File tools/suite/Show.ps1 -Category shops -Type all -NoPlan
+powershell -File tools/suite/Show.ps1 -Type park -Shape circle -Size 140 -Ground hills
+powershell -File tools/suite/Show.ps1 -Type parking -Shape pinch -Size 180x110 -Ground slope -Grade 8 -Toward east
+powershell -File tools/suite/Show.ps1 -Type roads -Size 900x700 -Ground mountains -Roads none -Views top
+powershell -File tools/suite/Show.ps1 -Type plaza -Land my-land.json     # any outline, any heights
 ```
 
 One launch for everything asked (about 70 s, then about 10 s per build; the game must be closed). Each build gets its
-own flat test block and is built the way a person does (bucket the block, pick type and style, entrances, Review,
-Build). It prints, per build, its pictures and its lines in `Placemaker.log`; `Player.log` has the game's own errors.
+own test land and is built the way a person does (select the area, pick type and style, entrances, Review, Build). It
+prints, per build, its pictures and its lines in `Placemaker.log`; `Player.log` has the game's own errors.
 
-**Start with the default two pictures**: `plan` (Review before building: the outline and the ghost) and `45-clean`
-(the finished build at 45°). Ask for more only when those did not show what you needed; don't dump pictures.
+**Start with the default three pictures**: `plan` (Review before building: the outline and the ghost), `45-clean`
+(the finished build at 45°) and `terrain` (the ground's height map). Ask for more only when those did not show what
+you needed; don't dump pictures.
+
+**Land.** Without land options a build gets a flat 150 x 140 m city block of the test grid (`-Site` for another kind).
+With any of them it gets its own land, made to order at launch (east of the grid) before the roads go in:
+
+* `-Shape`: `rect` (default), `circle`, `pinch` (a waist in the middle, `neck` 0.3 of the depth), `l`, or `points`
+  (any outline, in `-Land`).
+* `-Size`: `W x D` metres (`180x110`), or one number for both; 4 to 4000 m.
+* `-Ground`: `flat` (default: perfectly flat), `slope` (`-Grade` in % or as 0.06, `-Toward north|south|east|west`),
+  `hills`, `bumpy`, `mountains` (`-Amplitude` m, `-Wavelength` m), or your own heights: `-Heights` a JSON file of
+  metres (`[[m, m, ...], ...]`, rows north to south, stretched over the land) or `-Heightmap` a greyscale PNG (`-Range`
+  metres for white).
+* `-Roads`: `around` (default: a ring road, so entrances have a street) or `none` (open land, e.g. to test roads).
+* `-Land`: the same as JSON (a file, or the text; keys in `suite/schema.json` "land"), merged over the options, e.g.
+  `{"points": [[0,0],[90,0],[90,40],[30,70],[0,60]], "ground": "bumpy"}`.
+
+The area is drawn in the land's shape with the Points tool. Land is laid out at launch, so it cannot be sent to a
+running queue session.
 
 * `-Type`, `-Style`: one or more (`a,b`), or `all` (with `-Category` for types). Every type x every style is built.
 * `-Views`: `45` (default), `top`, `low`, `close`. Framed on the build (`close` looks at its middle).
 * `-Modes`: `clean` (default, no overlays), `zoning` (the game's zone grid: zoned cells in their zone colour, the way
   the road and zoning tools show it), `overlay` (Placemaker's and the game's overlays), `ui` (the real screen),
   `terrain` (a map of the ground's height from above, once per build: blue below the outline's typical ground, red
-  above, shaded by slope, contour lines every 0.5 m and darker every 2 m, the outline in white; only the ground, no
-  buildings, trees or roads. Flat ground is a pale area without lines; pits and mounds are rings. Show.ps1 prints
-  the lowest and highest ground in metres).
+  above, shaded by slope, contour lines every 0.5 m on gentle ground (1, 2, 5 or 10 m on hills), every 4th darker,
+  the outline in white; only the ground, no buildings, trees or roads. Flat ground is a pale area without lines; pits
+  and mounds are rings. Show.ps1 prints the lowest and highest ground in metres). Default: `clean,terrain`.
 * Every view x every mode is taken after the build (`<view>-<mode>.png`); `-NoPlan` skips the plan picture.
 * `-Site slope|rough|zoned|survive` for a block other than flat.
 
@@ -138,6 +160,7 @@ A set (`suite/scenarios/<name>.json`, or any file with `-Set path\to\set.json`) 
 | `expand` | `"presets"` (each style of `layer` or `group`; `limit` = the first N styles of each type, `skip` = style ids) or `"types"` (every type in the Make row); with `steps` the steps are a template (`type` without `layer` takes the expanded type and style). Ids become `<layer>-<preset>` (`-small` with `draw`), a duplicate gets `+` |
 | `site` | `flat`, `zoned` (row 1: low-rise housing on its south street, grown before the first zoned scenario), `slope`, `rough`, `survive` (two plopped parks), `any`. **Never replaced by another kind**: when none is left the scenario is not run (`no-block`) unless `siteFallback: true` |
 | `block`, `streets` | a given block (`"B3-0"`), or a street signature (`{"south":"Medium Road","north":"Small Road"}`) |
+| `land` | its own land instead of a grid block (see Land above: `shape`, `size`, `points`, `neck`, `ground`, `grade`, `toward`, `amplitude`, `wavelength`, `heights`, `heightmap`, `range`, `roads`, `road`, `gap`); the one-line steps then draw it with the area tool `land` |
 | `on` | runs on an earlier scenario's standing build: camera, shot, select, delete, bulldoze, infoEdit, infoRemove, wait, grow; any design step needs `{"do":"edit","build":true}` first. Refused when that build was deleted or never built — so put it before the delete |
 | `seed` | design seed (default 1). A type pick starts a fresh design with this seed (as after opening the game) unless the step says `"fresh": false` (the UI's next build of the same type keeps the design) |
 | `pace` | `human` (default: the cursor glides to every click, clicks at least 0.4 s apart, sliders dragged, brush strokes at 30 m/s as at 60 Hz), `settled` (no glide, fast strokes), `user` (no waiting for "Planning…": presses on) |
@@ -162,7 +185,7 @@ after a failed `area`, `type`, `preview` or `build` the scenario's remaining ste
 
 | step | keys (defaults) | what a person does |
 |---|---|---|
-| `area` | `tool`: `bucket` (default), `points`/`draw`, `paint` (smart edges), `paintAnything`, `nodes`; `at` `[dx,dz]`; `points` `[[dx,dz],…]` or `rect` `[w,h]`; `stroke` `[[dx,dz],…]` with `size` (m, default 45 % of the block), `square`, `angle`; `nodes` `[[dx,dz],…]` (default the four junctions); `abs`; `cameraDistance` (320) | looks at the block from 320 m, picks the area mode, then: one click (bucket); a click per corner and the first again (points); a brush drag (paint); a click per junction and the first again (nodes). Paint ends with Next |
+| `area` | `tool`: `bucket` (default), `points`/`draw`, `land` (the scenario's land, in its shape), `paint` (smart edges), `paintAnything`, `nodes`; `at` `[dx,dz]`; `points` `[[dx,dz],…]` or `rect` `[w,h]`; `stroke` `[[dx,dz],…]` with `size` (m, default 45 % of the block), `square`, `angle`; `nodes` `[[dx,dz],…]` (default the four junctions); `abs`; `cameraDistance` (320) | looks at the block from 320 m, picks the area mode, then: one click (bucket); a click per corner and the first again (points); a brush drag (paint); a click per junction and the first again (nodes). Paint ends with Next |
 | `clear` | – | Clear (in Area) |
 | `type` | `layer`, `preset` (style), `fresh` (true) | the type tile of the Make row, then the style chip; refuses a type the Make row does not offer; lists the valid ids on a typo |
 | `preset` | `layer` (the current type), `preset` | the style chip (Design) |

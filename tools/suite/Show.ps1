@@ -6,17 +6,33 @@
 .EXAMPLE
   powershell -File tools/suite/Show.ps1                                          # list categories, types, styles
   powershell -File tools/suite/Show.ps1 -Category parks                          # the types and styles of a category
-  powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal # the usual: 2 pictures
+  powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal # the usual: 3 pictures
   powershell -File tools/suite/Show.ps1 -Category parking -Type parking -Style all -Views top -Modes clean,zoning
   powershell -File tools/suite/Show.ps1 -Category shops -Type all -Views 45,top -NoPlan
+  powershell -File tools/suite/Show.ps1 -Type park -Shape circle -Size 140 -Ground hills
+  powershell -File tools/suite/Show.ps1 -Type parking -Shape pinch -Size 180x110 -Ground slope -Grade 8 -Toward east
+  powershell -File tools/suite/Show.ps1 -Type roads -Size 900x700 -Ground mountains -Roads none -Views top
+  powershell -File tools/suite/Show.ps1 -Type plaza -Land '{"points":[[0,0],[90,0],[90,40],[30,70],[0,60]],"ground":"bumpy"}'
 
 .DESCRIPTION
-  Launches the game (about 70 s, then about 10 s per build; the game must be closed), builds each one on its own flat
-  test block the way a person does (bucket the block, pick the type and style, entrances, Review, Build) and quits.
+  Launches the game (about 70 s, then about 10 s per build; the game must be closed), builds each one on its own test
+  land the way a person does (select the area, pick the type and style, entrances, Review, Build) and quits.
 
-  Pictures. Start with the default two; ask for more only when they did not show what you needed:
+  Land. Without land options each build gets a flat 150 x 140 m city block of the test grid (-Site for another kind).
+  With any of them each build gets its own land, made to order before the roads go in:
+    -Shape      rect (default), circle, pinch (a waist in the middle; -Land neck), l, or -Land points (any outline)
+    -Size       W x D metres ("180x110"), or one number for both; 4 to 4000 m
+    -Ground     flat (default: perfectly flat), slope (-Grade % or 0.06, -Toward north|south|east|west),
+                hills, bumpy, mountains (-Amplitude m, -Wavelength m), or your own heights: -Heights a JSON file
+                ([[m, m, ...], ...] rows north to south) or -Heightmap a greyscale PNG (-Range m for white)
+    -Roads      around (default: a ring road, so entrances have a street) or none (open land, e.g. to test roads)
+    -Land       the same as JSON, merged over the options (keys: suite/schema.json "land")
+  The area is drawn with the Points tool in the land's shape.
+
+  Pictures. Start with the default three; ask for more only when they did not show what you needed:
     plan              the build's plan in Review before building (first view, overlay: the outline and the ghost)
-    <view>-<mode>     the finished build, for every view x every mode asked
+    <view>-<mode>     the finished build, for every view x every mode asked (default 45-clean)
+    terrain           the ground's height map (default)
   Views: 45 (default; 45 degrees from the south), top (straight down), low (20 degrees), close (a close look at the
   middle). Every view but close is framed on the build.
   Modes: clean (default; no overlays), zoning (the game's zone grid: zoned cells in their zone colour), overlay
@@ -32,10 +48,23 @@ param(
     [string[]]$Type = @(),
     [string[]]$Style = @(),
     [string[]]$Views = @('45'),
-    [string[]]$Modes = @('clean'),
+    [string[]]$Modes = @('clean', 'terrain'),
     [switch]$NoPlan,
-    # flat | slope | rough | zoned (housing grown next to it) | survive (two plopped parks on the block)
+    # a grid block: flat | slope | rough | zoned (housing grown next to it) | survive (two plopped parks on the block)
     [ValidateSet('flat', 'slope', 'rough', 'zoned', 'survive')][string]$Site = 'flat',
+    # land made to order (see the description)
+    [string]$Shape = '',
+    [string]$Size = '',
+    [string]$Ground = '',
+    [double]$Grade = 0,
+    [string]$Toward = '',
+    [double]$Amplitude = 0,
+    [double]$Wavelength = 0,
+    [string]$Roads = '',
+    [string]$Heights = '',
+    [string]$Heightmap = '',
+    [double]$Range = 0,
+    [string]$Land = '',
     [switch]$AllMods,
     [switch]$NoBuild,
     [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
@@ -84,7 +113,38 @@ foreach ($m in $Modes) { if (-not $modeSteps.ContainsKey($m)) { Stop-With "No mo
 $viewModes = @($Modes | Where-Object { $_ -ne 'terrain' })
 $terrainMap = $Modes -contains 'terrain'
 
-# ───────────── the builds: every type x every style ─────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ land made to order â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+$landSpec = $null
+if ($Shape -or $Size -or $Ground -or $Grade -or $Toward -or $Amplitude -or $Wavelength -or $Roads -or $Heights -or $Heightmap -or $Land) {
+    $landSpec = [ordered]@{}
+    if ($Shape) { $landSpec['shape'] = $Shape.ToLowerInvariant() }
+    if ($Size) {
+        if ($Size -match '^\s*([0-9.]+)\s*[xX*]\s*([0-9.]+)\s*$') { $landSpec['size'] = @([double]$Matches[1], [double]$Matches[2]) }
+        elseif ($Size -match '^\s*[0-9.]+\s*$') { $landSpec['size'] = [double]$Size }
+        else { Stop-With "-Size is 'W x D' metres or one number, not '$Size'" }
+    }
+    if ($Ground) { $landSpec['ground'] = $Ground.ToLowerInvariant() }
+    if ($Grade) { $landSpec['grade'] = $Grade }
+    if ($Toward) { $landSpec['toward'] = $Toward.ToLowerInvariant() }
+    if ($Amplitude) { $landSpec['amplitude'] = $Amplitude }
+    if ($Wavelength) { $landSpec['wavelength'] = $Wavelength }
+    if ($Roads) { $landSpec['roads'] = $Roads.ToLowerInvariant() }
+    if ($Heights) { if (-not (Test-Path $Heights)) { Stop-With "No heights file $Heights" }; $landSpec['heights'] = (Get-Content $Heights -Raw | ConvertFrom-Json) }
+    if ($Heightmap) { if (-not (Test-Path $Heightmap)) { Stop-With "No heightmap $Heightmap" }; $landSpec['heightmap'] = (Resolve-Path $Heightmap).Path; if ($Range) { $landSpec['range'] = $Range } }
+    if ($Land) {
+        $text = if (Test-Path -LiteralPath $Land -PathType Leaf) { Get-Content -LiteralPath $Land -Raw } else { $Land }
+        try { $extra = $text | ConvertFrom-Json } catch { Stop-With "-Land is not JSON: $text (give a .json file; Windows PowerShell drops the quotes inside -Land '{...}')" }
+        foreach ($p in $extra.PSObject.Properties) { $landSpec[$p.Name] = $p.Value }
+    }
+    $schema = Get-Content (Join-Path $repo 'suite\schema.json') -Raw | ConvertFrom-Json
+    foreach ($k in @($landSpec.Keys)) { if (-not (@($schema.land.keys) -contains $k)) { Stop-With "land: unknown key '$k' (keys: $(@($schema.land.keys) -join ', '))" } }
+    foreach ($e in $schema.land.enums.PSObject.Properties) {
+        $v = $landSpec[$e.Name]
+        if ($v -is [string] -and -not (@($e.Value) | Where-Object { $_ -ieq $v })) { Stop-With "land: '$($e.Name)' must be one of $(@($e.Value) -join ', '), not '$v'" }
+    }
+}
+
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ the builds: every type x every style â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $types = @()
 if ($Type.Count -eq 1 -and $Type[0] -ieq 'all') {
     if (-not $cat) { Stop-With '-Type all needs a -Category.' }
@@ -112,7 +172,7 @@ foreach ($t in $types) {
 $first = $viewSteps[$Views[0]]
 $scenarios = foreach ($b in $builds) {
     $steps = @(
-        [ordered]@{ do = 'area'; tool = 'bucket' }
+        [ordered]@{ do = 'area'; tool = $(if ($landSpec) { 'land' } else { 'bucket' }) }
         [ordered]@{ do = 'type'; layer = $b.Layer; preset = $b.Preset }
         [ordered]@{ do = 'entrances' }
     )
@@ -131,7 +191,9 @@ $scenarios = foreach ($b in $builds) {
         }
     }
     if ($terrainMap) { $steps += [ordered]@{ do = 'terrain'; name = 'terrain' } }
-    [ordered]@{ id = $b.Id; site = $Site; pace = 'settled'; steps = $steps }
+    $sc = [ordered]@{ id = $b.Id; site = $Site; pace = 'settled'; steps = $steps }
+    if ($landSpec) { $sc['land'] = $landSpec }
+    $sc
 }
 
 $label = if ($builds.Count -eq 1) { $builds[0].Id } else { "$($builds.Count)-builds" }
@@ -142,7 +204,8 @@ $setFile = Join-Path $setDir "$runId.json"
 [IO.File]::WriteAllText($setFile, ([ordered]@{ scenarios = @($scenarios) } | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding $false))
 
 $perBuild = (@($Views).Count * $viewModes.Count) + $(if ($terrainMap) { 1 } else { 0 }) + $(if ($NoPlan) { 0 } else { 1 })
-Write-Host ("Building {0} in the game: {1}; {2} picture(s) each (about {3} s)..." -f $builds.Count, (($builds | ForEach-Object { $_.Id }) -join ', '), $perBuild, (70 + 12 * $builds.Count))
+$where = if ($landSpec) { "on land " + ($landSpec | ConvertTo-Json -Compress -Depth 3) } else { "on a $Site grid block" }
+Write-Host ("Building {0} in the game {1}: {2}; {3} picture(s) each (about {4} s)..." -f $builds.Count, $where, (($builds | ForEach-Object { $_.Id }) -join ', '), $perBuild, (70 + 12 * $builds.Count))
 $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Run-Suite.ps1'), '-Set', $setFile, '-RunId', $runId)
 if ($AllMods) { $runArgs += '-AllMods' }
 if ($NoBuild) { $runArgs += '-NoBuild' }
@@ -151,7 +214,7 @@ $hostOut = & powershell @runArgs 2>&1 | ForEach-Object { "$_" }
 $ErrorActionPreference = 'Stop'
 $runDir = Join-Path $ResultsRoot $runId
 
-# ───────────── what to look at ─────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ what to look at â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $summaryFile = Join-Path $runDir 'summary.json'
 if (-not (Test-Path $summaryFile)) {
     Write-Host 'The run did not get as far as the game. Last lines:'

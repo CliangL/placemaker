@@ -179,7 +179,8 @@ namespace Placemaker.Game.Suite
             string tool = ((string)step["tool"] ?? "bucket").ToLowerInvariant();
             // a person looks at what they select (and the tool's grab radius follows the camera distance)
             var crec = new JObject();
-            yield return CameraTo(FocusOf(b), 25f, 55f, (float?)step["cameraDistance"] ?? 320f, crec, null);
+            float lookFrom = b.Kind == SuiteBlockKind.Plot ? math.max(320f, 1.3f * math.max(b.X1 - b.X0, b.Z1 - b.Z0)) : 320f;
+            yield return CameraTo(FocusOf(b), 25f, 55f, (float?)step["cameraDistance"] ?? lookFrom, crec, null);
             rec["areaCamera"] = crec["camera"];
             if (_tool.Stage == ToolStage.Manage) yield return UiGoToStage(rec, ToolStage.Area);
             if (_tool.SuiteHasSelection)
@@ -218,6 +219,23 @@ namespace Placemaker.Game.Suite
                         if (!hit.HasValue) { st.Result["status"] = "no-outline"; yield break; }
                     }
                     rec["clicks"] = pts.Count + 1;
+                    break;
+                }
+                case "land":
+                {
+                    // the scenario's own land: its shape (rectangle, circle, pinch, L, points) clicked with the Points tool
+                    var plot = st.S.Plot;
+                    if (plot == null) { rec["error"] = "area tool 'land' needs a scenario with \"land\""; st.Result["status"] = "no-outline"; yield break; }
+                    yield return UiSetAreaMode(rec, SelectionMode.Draw);
+                    var pts = plot.Outline();
+                    foreach (var p in pts.Concat(new[] { pts[0] }))   // the first corner again closes the outline
+                    {
+                        RaycastHit? hit = null;
+                        yield return Press(st, rec, P3(p), false, h => hit = h);
+                        if (!hit.HasValue) { st.Result["status"] = "no-outline"; yield break; }
+                    }
+                    rec["clicks"] = pts.Length + 1;
+                    rec["shape"] = $"{plot.Shape} {plot.Size.x:F0} x {plot.Size.y:F0} m on plot {plot.Name}";
                     break;
                 }
                 case "paint":
@@ -293,7 +311,7 @@ namespace Placemaker.Game.Suite
                     break;
                 }
                 default:
-                    rec["error"] = "unknown area tool '" + tool + "' (bucket, points, paint, paintAnything, nodes)";
+                    rec["error"] = "unknown area tool '" + tool + "' (bucket, points, land, paint, paintAnything, nodes)";
                     st.Result["status"] = "no-outline";
                     yield break;
             }

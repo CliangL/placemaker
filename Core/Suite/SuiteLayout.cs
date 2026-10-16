@@ -1,4 +1,4 @@
-// In-game test suite (docs/teardown/10-ingame-suite.md): the fixture's geometry, pure so it is unit-tested offline.
+// Game runner (docs/teardown/10-ingame-suite.md): the fixture's geometry, pure so it is unit-tested offline.
 //
 // The suite starts a new game on a vanilla map (the map-less "default world" is incomplete and crashes natively as
 // soon as roads appear: runs boot2-5, e1, e3), reshapes the fixture area in place through one heightmap replacement
@@ -9,6 +9,7 @@
 //   Rough   row NZ-3 (4 in the default 9 x 7 grid), columns 0-2: ±4 m hills inside the block (the roads stay level)
 //   Slope   the last two rows: the ground climbs 6 % to the north (z), roads included
 //   Flat    everything else
+// Plots (SuitePlot) are test land made to order for one build each, in a row east of the grid.
 // Street types vary per grid line (4-lane avenue, 2-lane street, pedestrian street) so blocks face mixed roads.
 
 using System;
@@ -17,7 +18,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Suite
 {
-    public enum SuiteBlockKind { Flat = 0, Zoned = 1, Slope = 2, Rough = 3, Survive = 4 }
+    public enum SuiteBlockKind { Flat = 0, Zoned = 1, Slope = 2, Rough = 3, Survive = 4, Plot = 5 }
 
     public sealed class SuiteRoadSegment
     {
@@ -35,7 +36,9 @@ namespace Placemaker.Core.Suite
         /// <summary>Road centre lines around the block (west, east, south, north).</summary>
         public float X0, X1, Z0, Z1;
         public string West = "", East = "", South = "", North = "";
-        public string Id => "B" + I + "-" + J;
+        /// <summary>A plot's name (P1, P2...); grid blocks are named by their position.</summary>
+        public string Name;
+        public string Id => Name ?? ("B" + I + "-" + J);
         public float2 Center => new float2((X0 + X1) * 0.5f, (Z0 + Z1) * 0.5f);
 
         /// <summary>The land inside the kerbs, given the half widths of the four roads (+ a margin).</summary>
@@ -106,6 +109,7 @@ namespace Placemaker.Core.Suite
             for (int j = 0; j <= NZ; j++)
                 for (int i = 0; i < NX; i++)
                     r.Add(new SuiteRoadSegment { Prefab = HorizontalRoad(j), Vertical = false, Line = j, A = new float2(LineX(i), LineZ(j)), B = new float2(LineX(i + 1), LineZ(j)) });
+            foreach (var p in Plots) r.AddRange(p.RingRoads());
             return r;
         }
 
@@ -122,8 +126,33 @@ namespace Placemaker.Core.Suite
         /// <summary>Flat apron around the outer roads, and the width of the ease back into the map's terrain.</summary>
         public float Apron = 40f, Blend = 200f;
 
-        public float2 FixtureMin => new float2(LineX(0) - Apron, LineZ(0) - Apron);
-        public float2 FixtureMax => new float2(LineX(NX) + Apron, SlopeEnd + Apron);
+        public float2 GridMin => new float2(LineX(0) - Apron, LineZ(0) - Apron);
+        public float2 GridMax => new float2(LineX(NX) + Apron, SlopeEnd + Apron);
+
+        /// <summary>Everything the fixture reshapes: the grid and every plot.</summary>
+        public float2 FixtureMin { get { var m = GridMin; foreach (var p in Plots) m = math.min(m, p.OuterMin); return m; } }
+        public float2 FixtureMax { get { var m = GridMax; foreach (var p in Plots) m = math.max(m, p.OuterMax); return m; } }
+
+        // ───────────── plots ─────────────
+
+        /// <summary>Test land made to order (SuitePlot), in a row east of the grid.</summary>
+        public readonly List<SuitePlot> Plots = new List<SuitePlot>();
+        public const float PlotGap = 120f;
+
+        /// <summary>Adds a plot after the last one (centred on the grid's middle row), named P1, P2...</summary>
+        public SuitePlot AddPlot(SuitePlot p)
+        {
+            float x = GridMax.x + PlotGap;
+            foreach (var q in Plots) x = math.max(x, q.OuterMax.x + PlotGap);
+            p.Name = "P" + (Plots.Count + 1);
+            p.Center = new float2(0f, (LineZ(0) + LineZ(NZ)) * 0.5f);
+            p.Center.x = x - p.OuterMin.x;   // OuterMin.x is relative to the centre while it is 0
+            Plots.Add(p);
+            return p;
+        }
+
+        /// <summary>1 over the grid's columns, easing to 0 within 60 m east of its apron (the slope rows stop there).</summary>
+        private float GridWeight(float x) => 1f - math.smoothstep(GridMax.x, GridMax.x + 60f, x);
 
         /// <summary>The rough blocks' row (the one below the two slope rows).</summary>
         public int RoughRow => NZ - 3;
@@ -150,7 +179,16 @@ namespace Placemaker.Core.Suite
             return 0f;
         }
 
-        public float Height(float x, float z) => Base + SlopeRise(z) + RoughBump(x, z);
+        public float Height(float x, float z)
+        {
+            float h = Base + GridWeight(x) * SlopeRise(z) + RoughBump(x, z);
+            foreach (var p in Plots)
+            {
+                float w = p.Weight(x, z);
+                if (w > 0f) h += w * p.Rise(x, z);
+            }
+            return h;
+        }
 
         /// <summary>World position (x, z) of heightmap texel (px, py) (row = z, column = x).</summary>
         public float2 TexelWorld(int px, int py) => MapOffset + (new float2(px, py) + 0.5f) * (MapExtent / HeightmapSize);
@@ -188,13 +226,11 @@ namespace Placemaker.Core.Suite
                 int o = py * n;
                 bool rowNear = z >= lo.y && z <= hi.y;
                 if (existing != null && !rowNear) { Array.Copy(existing, o, data, o, n); continue; }
-                float rise = SlopeRise(z);
-                bool roughRow = z > LineZ(RoughRow) - 1f && z < LineZ(RoughRow + 1) + 1f;
                 for (int px = 0; px < n; px++)
                 {
                     float x = MapOffset.x + (px + 0.5f) * cell.x;
                     if (existing != null && (x < lo.x || x > hi.x)) { data[o + px] = existing[o + px]; continue; }
-                    float target = Base + rise + (roughRow ? RoughBump(x, z) : 0f);
+                    float target = Height(x, z);
                     if (existing == null) { data[o + px] = Encode(target); continue; }
                     float d = OutsideFixture(x, z);
                     if (d >= Blend) { data[o + px] = existing[o + px]; continue; }

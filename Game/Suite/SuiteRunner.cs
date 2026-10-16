@@ -412,6 +412,10 @@ namespace Placemaker.Game.Suite
             if (scenarios != null && nx == 0) nx = GridFor(scenarios, set, nz);
             _fixture = new SuiteFixture(_world, nx, nz) { Spacing = _cfg.spacing ?? "checker" };
             _lookup = new SuiteLookup(_world);
+            if (scenarios != null)
+                foreach (var s in scenarios.Where(x => x.Plot != null)) _fixture.AddPlot(s.Plot);
+            if (_fixture.Layout.Plots.Count > 0)
+                _summary["plots"] = new JArray(_fixture.Layout.Plots.Select(p => $"{p.Name}: {p.Shape} {p.Size.x:F0} x {p.Size.y:F0} m, ground {p.Ground}, roads {(p.RoadsAround ? "around" : "none")}"));
             _summary["grid"] = $"{_fixture.Layout.NX} x {_fixture.Layout.NZ} blocks, spacing {_fixture.Spacing}";
             _summary["capacity"] = new JObject { ["flat"] = _fixture.Capacity(SuiteBlockKind.Flat), ["zoned"] = _fixture.Capacity(SuiteBlockKind.Zoned), ["slope"] = _fixture.Capacity(SuiteBlockKind.Slope), ["rough"] = _fixture.Capacity(SuiteBlockKind.Rough), ["survive"] = _fixture.Capacity(SuiteBlockKind.Survive) };
             bool wantsZoned = scenarios == null || scenarios.Any(s => string.Equals(s.Site, "zoned", StringComparison.OrdinalIgnoreCase));
@@ -508,7 +512,7 @@ namespace Placemaker.Game.Suite
         private int GridFor(List<Scenario> scenarios, ScenarioSet set, int nz)
         {
             var need = new Dictionary<SuiteBlockKind, int>();
-            foreach (var s in scenarios.Where(x => x.On == null))
+            foreach (var s in scenarios.Where(x => x.On == null && x.Plot == null && x.LandError == null))
             {
                 var k = SuiteFixture.KindOf(s.Site) ?? SuiteBlockKind.Flat;
                 need[k] = (need.TryGetValue(k, out int n) ? n : 0) + 1;
@@ -870,11 +874,14 @@ namespace Placemaker.Game.Suite
             try { File.WriteAllText(Path.Combine(_out, "catalog.json"), new JObject { ["generatedBy"] = "the in-game suite from GeneratorRegistry", ["assembly"] = AssemblyVersion(), ["types"] = catalog }.ToString(Formatting.Indented)); } catch (Exception) { }
             foreach (var spec in set.scenarios)
             {
+                string landError = null;
                 Scenario Make(string id, string layer, string preset) => new Scenario
                 {
                     Id = id, Layer = layer ?? "", Preset = preset ?? "", Site = spec.site ?? "any", BlockId = spec.block, Streets = spec.streets, SiteFallback = spec.siteFallback,
                     Draw = spec.draw, Values = spec.values ?? new List<ValueOverride>(), Seed = spec.seed, Note = spec.note ?? "", Steps = spec.steps, On = spec.on,
                     Pace = spec.pace, BuildWhen = spec.buildWhen, PreviewMode = spec.previewMode,
+                    // every scenario with land gets its own plot
+                    Plot = spec.land != null ? SuiteLand.Parse(spec.land, out landError) : null, LandError = landError,
                 };
                 if (spec.steps != null && string.IsNullOrEmpty(spec.expand))
                 {

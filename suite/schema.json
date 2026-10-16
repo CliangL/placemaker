@@ -1,6 +1,6 @@
 {
   "_about": "The game runner's scenario and step vocabulary. Checked by Send-Suite.ps1 before sending, and by the game (SuiteSchema) for every set and step. Unknown keys, steps and enum values are errors; keys starting with '_' are comments. suite/README.md explains each key.",
-  "scenarioKeys": ["id", "layer", "preset", "expand", "group", "site", "block", "streets", "siteFallback", "draw", "values", "seed", "note", "skip", "limit", "steps", "on", "pace", "buildWhen", "previewMode"],
+  "scenarioKeys": ["id", "layer", "preset", "expand", "group", "site", "block", "streets", "siteFallback", "draw", "values", "seed", "note", "skip", "limit", "steps", "on", "pace", "buildWhen", "previewMode", "land"],
   "scenarioEnums": {
     "site": ["flat", "zoned", "slope", "rough", "survive", "any"],
     "expand": ["presets", "types"],
@@ -8,10 +8,14 @@
     "buildWhen": ["settled", "planReady", "ghostPending"],
     "previewMode": ["sketch", "ghost"]
   },
+  "land": {
+    "keys": ["shape", "size", "points", "neck", "ground", "grade", "toward", "amplitude", "wavelength", "heights", "heightmap", "range", "roads", "road", "gap"],
+    "enums": { "shape": ["rect", "square", "rectangle", "circle", "pinch", "l", "points"], "ground": ["flat", "slope", "hills", "bumpy", "mountains", "heights"], "toward": ["north", "south", "east", "west"], "roads": ["around", "none"] }
+  },
   "commonStepKeys": ["do", "shot", "camera", "shotMode", "labels", "zones", "note"],
   "commonEnums": { "shotMode": ["render", "overlay", "ui", "grab"] },
   "steps": {
-    "area": { "keys": ["tool", "at", "points", "rect", "stroke", "size", "square", "angle", "nodes", "abs", "cameraDistance"], "enums": { "tool": ["bucket", "block", "points", "draw", "paint", "paintAnything", "nodes", "perimeter"] } },
+    "area": { "keys": ["tool", "at", "points", "rect", "stroke", "size", "square", "angle", "nodes", "abs", "cameraDistance"], "enums": { "tool": ["bucket", "block", "points", "draw", "land", "paint", "paintAnything", "nodes", "perimeter"] } },
     "clear": { "keys": [] },
     "type": { "keys": ["layer", "preset", "fresh"] },
     "preset": { "keys": ["layer", "preset"] },

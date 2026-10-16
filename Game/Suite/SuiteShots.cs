@@ -104,6 +104,7 @@ namespace Placemaker.Game.Suite
             switch (target)
             {
                 case "block":
+                    if (b.Kind == SuiteBlockKind.Plot) radius = math.max(radius, 0.5f * math.max(b.X1 - b.X0, b.Z1 - b.Z0));
                     break;
                 case "area":
                 case "build":
