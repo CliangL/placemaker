@@ -217,7 +217,9 @@ namespace Placemaker.Tests
         public void UrbanPlacesStartWithShopsNatureAndMemorialPlacesDoNot()
         {
             bool On(string id) => Features.Of(GeneratorRegistry.Get(id)).Any(f => f.Layer == LayerBase.StreetShopsLayer && f.Target == StreetFrontage.ShopsTag && f.DefaultOn);
-            foreach (var id in new[] { "plaza", "marketSquare", "park", "waterfront", "fairground" }) Assert.True(On(id), id);
+            foreach (var id in new[] { "park", "waterfront" }) Assert.True(On(id), id);
+            // rf-squares: squares and venues start without street shops (docs/refactor/squares.md).
+            foreach (var id in new[] { "plaza", "marketSquare", "amphitheatre", "fairground" }) Assert.False(On(id), id);
             foreach (var id in new[] { "natureReserve", "hikingTrail", "quarry", "landfill", "farmstead", "golf", "cemeteryGrounds", "memorialPark", "beach", "wetland", "zenGarden" })
                 Assert.False(On(id), id);
             // Every listed default names a type that really hosts the feature.

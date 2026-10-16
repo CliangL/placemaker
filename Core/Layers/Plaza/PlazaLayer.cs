@@ -352,7 +352,9 @@ namespace Placemaker.Core.Layers.Plaza
             var centerAsset = PlazaDressing.CenterAsset(ctx, centerKind);
             bool centerAvailable = mode == CenterMode.None || AssetAvailability.Require(ctx.Plan, AssetCategories.Centerpiece,
                 new[] { ctx.S("centerpiece") }, Keys.Category(AssetCategories.Centerpiece));
-            if (!centerAvailable) mode = CenterMode.None;
+            // rf-squares: no centrepiece installed (the clean game): keep the centre and plant it (PlazaDressing.SpecimenCentre).
+            bool specimen = PlazaDressing.CentreAssetsMissing(ctx);
+            if (!centerAvailable && !specimen) mode = CenterMode.None;
             float centerRadius = math.max(ctx.F("centerSize"), AssetMix.FootprintRadius(ctx.Site, centerAsset, 0f));
             // A fountain feature takes the centre: keep it clear (the add-on places the fountain itself).
             bool fountainFeature = ctx.Input.HasChild("fountain");
@@ -384,6 +386,7 @@ namespace Placemaker.Core.Layers.Plaza
             if (!fountainFeature)
                 foreach (var c in layout.Centerpieces)
                 {
+                    if (specimen) { rondel = math.max(rondel, PlazaDressing.SpecimenCentre(ctx, occ, c.Position, c.Radius + 2.5f, pave, 0x5BE0u + (uint)(rondel * 10f))); continue; }
                     ctx.Object(c.Position, math.atan2(axis.x, axis.y), ObjectRole.Centerpiece, centerAsset, variant, -1, centerCat);   // one design for all: a mirrored pair matches
                     occ.Take(c.Position, c.Radius, 0);
                     rondel = math.max(rondel, c.Radius + 2.5f);
@@ -393,9 +396,11 @@ namespace Placemaker.Core.Layers.Plaza
                 // The fountain's seating ring and the reserved discs of everything placed here stay clear of each other.
                 occ.Take(layout.Center, fountainApron > 0f ? fountainApron + 0.9f : centerRadius, 0);
                 rondel = fountainApron > 0f ? fountainPad : centerRadius - 1f;
+                // rf-squares: the fountain add-on has nothing to build without installed fountains: plant the rondel.
+                if (specimen && rondel > 2f) PlazaDressing.SpecimenCentre(ctx, occ, layout.Center, rondel, pave, 0x5BE0u);
             }
             // A civic centre is framed by flags on the rondel's diagonals.
-            if (centerKind == "statue" && layout.Centerpieces.Count == 1 && !fountainFeature)
+            if (centerKind == "statue" && layout.Centerpieces.Count == 1 && !fountainFeature && !specimen)
                 for (int k = 0; k < 4; k++)
                 {
                     float a = math.atan2(axis.y, axis.x) + math.PI * 0.25f + k * math.PI * 0.5f;

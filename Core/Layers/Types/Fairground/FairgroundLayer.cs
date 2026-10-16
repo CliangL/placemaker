@@ -58,7 +58,7 @@ namespace Placemaker.Core.Layers.Types.Events
         {
             c.Choice("style", "fairground", ControlTier.Essential, "fairLayout", "fairground", "festival", "funfair", "christmas", "foodTrucks").Tip();
             c.Choice("layout", "avenue", ControlTier.Essential, "fairLayout", "avenue", "loop", "grid", "court").Tip();
-            c.Slider("stalls", 24, 0, 160, 1, "count", ControlTier.Essential, "fairLayout");
+            c.Slider("stalls", 24, 0, 160, 1, "count", ControlTier.Essential, "fairLayout").Tip();
             c.Toggle("stage", true, ControlTier.Essential, "fairLayout").Tip();
             c.Slider("field", 25, 5, 60, 5, "%", ControlTier.Essential, "fairLayout").When("stage=true").Tip();
 
@@ -740,10 +740,21 @@ namespace Placemaker.Core.Layers.Types.Events
             }
         }
 
+        /// <summary>Site the "stalls" count is for (m²); a bigger site gets proportionally more, up to three times as many.</summary>
+        public const float StallsReferenceArea = 6000f;
+
+        /// <summary>
+        /// (rf-squares) The stalls a site of <paramref name="area"/> m² gets for the "stalls" setting (the setting is the
+        /// fair of a 0.6 ha site): a city block gets about two and a half times as many, so the streets are lined
+        /// instead of a few stalls in a corner of an empty field.
+        /// </summary>
+        public static int ScaledStalls(int stalls, float area) =>
+            stalls <= 0 ? 0 : math.min(240, (int)math.round(stalls * math.clamp(area / StallsReferenceArea, 1f, 3f)));
+
         private static int Stalls(LayerContext ctx, LayerRegion region, Occupancy occ, List<Street> streets, OrientedRect court, bool truckRing,
             float2 centre, float2 axis, bool grid, string style)
         {
-            int wanted = ctx.I("stalls");
+            int wanted = ScaledStalls(ctx.I("stalls"), region.Area);
             if (wanted <= 0) return 0;
             string cat = StallCategory(ctx, style);
             if (cat == null) return 0;

@@ -12,5 +12,25 @@
   ],
   "types": [],
   "hiddenTypes": [],
-  "hiddenStyles": {}
+  "hiddenStyles": {
+    "plaza": [
+      "market",
+      "amphitheatre",
+      "garden",
+      "sunken",
+      "terraced",
+      "splitLevel",
+      "cascade",
+      "podium"
+    ],
+    "amphitheatre": [
+      "cinema",
+      "meadow",
+      "speakers"
+    ],
+    "fairground": [
+      "festival",
+      "funfair"
+    ]
+  }
 }

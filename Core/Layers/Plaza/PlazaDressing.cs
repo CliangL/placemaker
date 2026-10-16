@@ -859,6 +859,59 @@ namespace Placemaker.Core.Layers.Plaza
 
         // ───────────── identity ─────────────
 
+        /// <summary>
+        /// (rf-squares) No centrepiece can be built: the player chose none and no fountain or statue is installed (the
+        /// clean game has none; they come with asset packs). The square then plants its centre instead of leaving an
+        /// empty paved disc.
+        /// </summary>
+        public static bool CentreAssetsMissing(LayerContext ctx) =>
+            string.IsNullOrEmpty(ctx.S("centerpiece")) && !AssetAvailability.Has(AssetCategories.Centerpiece);
+
+        private static readonly AssetRef SpecimenTree = new AssetRef("OakTree01", "EU_ChestnutTree01", "NA_LindenTree01");
+
+        /// <summary>
+        /// (rf-squares) The planted centre used when no centrepiece is installed: a round lawn inside the rondel with a
+        /// specimen tree in the middle (three on a big rondel), a ring of flowering shrubs and benches round the lawn
+        /// looking out over the square. Returns the radius it took.
+        /// </summary>
+        public static float SpecimenCentre(LayerContext ctx, Occupancy occ, float2 c, float radius, PavingPlan pave, uint salt)
+        {
+            radius = math.max(radius, 3.5f);
+            float lawn = radius - 1.1f;
+            if (pave != null) pave.Add(LayerRegion.Circle(c, lawn, 32), SurfaceRole.Grass, new AssetRef("", PavingPalettes.VGrass), AssetCategories.SurfaceGrass);
+            uint v = Hashing.Mix(ctx.Seed, salt);
+            if (lawn >= 7.5f)
+                for (int k = 0; k < 3; k++)
+                {
+                    float a = k * 2.0944f + 0.5f;
+                    ctx.Object(c + new float2(math.cos(a), math.sin(a)) * (lawn * 0.42f), Hashing.Unit(v + (uint)k) * 6.28f, ObjectRole.Tree, SpecimenTree, Hashing.Mix(v, (uint)k), 3);
+                }
+            else ctx.Object(c, Hashing.Unit(v) * 6.28f, ObjectRole.Tree, SpecimenTree, v, 3);
+            // Shrubs on the lawn's rim.
+            if (lawn >= 3f)
+            {
+                int shrubs = math.clamp((int)(2f * math.PI * (lawn - 0.9f) / 2.6f), 6, 28);
+                for (int k = 0; k < shrubs; k++)
+                {
+                    float a = k * 2f * math.PI / shrubs;
+                    var p = c + new float2(math.cos(a), math.sin(a)) * (lawn - 0.9f);
+                    ctx.Object(p, a, ObjectRole.Bush, PlazaArt.Or(ctx, "bushAsset", PlazaArt.CityBushes, (uint)k), Hashing.Mix(v, 0x40u + (uint)k), -1, AssetCategories.Bush);
+                }
+            }
+            occ.Take(c, radius, 0);
+            // Benches just outside the lawn, backs to it.
+            int benches = math.clamp((int)(2f * math.PI * (radius + 0.8f) / 9f), 4, 8);
+            var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0);
+            for (int k = 0; k < benches; k++)
+            {
+                float a = (k + 0.5f) * 2f * math.PI / benches;
+                var dir = new float2(math.cos(a), math.sin(a));
+                LeisureKit.Put(ctx, occ, c + dir * (radius + 0.8f), math.atan2(dir.x, dir.y), ObjectRole.Bench, bench, null, 1.0f, Hashing.Mix(v, 0x80u + (uint)k), 0.2f, 0.1f);
+            }
+            ctx.Plan.Facts["specimenCentre"] = 1;
+            return radius;
+        }
+
         public static string CenterCategory(string kind) =>
             kind == "fountain" ? AssetCategories.CenterpieceFountain : kind == "statue" ? AssetCategories.CenterpieceStatue : null;
 
