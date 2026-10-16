@@ -166,6 +166,8 @@ function D-Foreign {
         $cmd = D-CmdLine $p
         $tok = if ($cmd -match '-placemakerSuite=(\S+)') { $Matches[1].Trim('"') } else { '' }
         if ($script:sess -and $tok -eq $script:sess.id) { continue }
+        # a command line that cannot be read (a process exiting): our own game when it is the PID in our heartbeat
+        if (-not $cmd -and $script:sess) { $b = D-Beat; if ($b -and [int]$b.pid -eq $p.Id) { continue } }
         $kind = if (-not $tok) { 'user' } elseif ($tok -like 'queue-*') { 'orphan' } elseif ($tok -like 'play-*') { 'playground' } else { 'runner' }
         $r += [pscustomobject]@{ pid = $p.Id; kind = $kind; runId = $tok }
     }
@@ -258,7 +260,7 @@ function D-RestoreSettings([string]$why, [switch]$Now) {
     if (@(MI-Games).Count -gt 0 -or (D-SuiteLockHolder -IncludeOurs)) { return }
     if ($script:sess -and (Q-Alive $script:sess.hostPid $script:sess.hostStart)) { return }
     $out = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Run-Suite.ps1') -RestoreOnly -ResultsRoot $script:QMainRuns 2>&1 | ForEach-Object { "$_" }
-    D-Log "the user's game settings were still switched (a game host was cut off): Run-Suite -RestoreOnly ($why): $(@($out) -join ' / ')"
+    D-Log "the user's game settings were still the suite's (a game host left them pending, or was cut off): Run-Suite -RestoreOnly ($why): $(@($out) -join ' / ')"
 }
 
 # ───────────── games: launch, watch, quit ─────────────
