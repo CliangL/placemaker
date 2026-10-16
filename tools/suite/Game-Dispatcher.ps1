@@ -751,10 +751,15 @@ function D-Fits($r) {
 # The test blocks of each kind the open game's grid still has once the request in it is done ($null: not known yet), for
 # the plan (Q-Plan applies the open game's grid the way the real choice does).
 function D-FreeAfter {
-    if (-not $script:sess -or $script:sess.kind -ne 'queue' -or -not $script:sess.capacity) { return $null }
+    if (-not $script:sess -or $script:sess.kind -ne 'queue') { return $null }
+    $cap = $script:sess.capacity
+    # still booting: the blocks of the grid it was launched with (an estimate for the plan only, as the game lays a N x 7
+    # grid out: 16 x 7 has 29 flat, 16 zoned, 32 slope, 3 rough, 1 survive); the real choice waits for the game's own count
+    if (-not $cap -and "$($script:sess.grid)" -match '^(\d+)x7$') { $n = [int]$Matches[1]; $cap = [pscustomobject]@{ flat = 2 * $n - 3; zoned = $n; slope = 2 * $n; rough = 3; survive = 1 } }
+    if (-not $cap) { return $null }
     $u = D-Used
     $free = @{}
-    foreach ($k in 'Flat', 'Zoned', 'Slope', 'Rough', 'Survive') { $free[$k] = [int]$script:sess.capacity.($k.ToLowerInvariant()) - $u[$k].Count }
+    foreach ($k in 'Flat', 'Zoned', 'Slope', 'Rough', 'Survive') { $free[$k] = [int]$cap.($k.ToLowerInvariant()) - $u[$k].Count }
     if ($script:active -and $script:active.feed) {
         # the request in the game still takes the rest of its blocks
         $rows = @(D-SummaryRows $script:sess.dir | Select-Object -Skip ([int]$script:active.feed.rowsBefore))
@@ -802,7 +807,7 @@ function D-Status([string]$state, $queued) {
             $gameState = 'starting'
             $bootLeft = $rates.boot - ($now - (Q-Date $script:sess.startedAt)).TotalSeconds
             if ($bootLeft -lt 10) { $bootOver = [math]::Max(0, -$bootLeft); $bootLeft = 10 + 0.25 * $bootOver }
-            $planSess = @{ key = $script:sess.key; served = $servedAfter; remainSec = $bootLeft + $remain }
+            $planSess = @{ key = $script:sess.key; served = $servedAfter; remainSec = $bootLeft + $remain; free = (D-FreeAfter) }
         }
         else { $gameState = 'ready'; $planSess = @{ key = $script:sess.key; served = $servedAfter; remainSec = $remain; free = (D-FreeAfter) } }
     }
