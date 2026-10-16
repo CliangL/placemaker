@@ -62,7 +62,7 @@ namespace Placemaker.Core.Layers.Leisure
         protected override void DefinePresets()
         {
             Preset("mixed", ("theme", "mixed"), ("bedDensity", 90.0));
-            Preset("flowerShow", ("theme", "flowers"), ("bedDensity", 35.0), ("benches", 4.0), ("showBeds", 8.0));
+            Preset("flowerShow", ("theme", "flowers"), ("bedDensity", 35.0), ("benches", 4.0), ("showBeds", 10.0));
             Preset("arboretum", ("theme", "trees"), ("bedDensity", 90.0), ("glasshouse", false), ("benches", 2.5));
             Preset("shrubbery", ("theme", "shrubs"), ("bedDensity", 140.0), ("pathBorders", 60.0));
         }
@@ -109,9 +109,9 @@ namespace Placemaker.Core.Layers.Leisure
             {
                 uint v = Hashing.Mix(ctx.Seed, 0xCA40u + (uint)k);
                 bool round = (v & 1u) == 0u;
-                float r = round ? 4.2f + 1.4f * Hashing.Unit(Hashing.Mix(v, 2u)) : 4.5f;
+                float r = round ? 3.6f + 1.6f * Hashing.Unit(Hashing.Mix(v, 2u)) : 4.2f;
                 float reach = (round ? r : r * 1.9f) + 1.4f;
-                if (!Spots.Find(occ, reach, Spots.Preference.NearPaths, v, out var c, placed, r * 2f + 10f, 2f, budget: 1500)) break;
+                if (!Spots.Find(occ, reach, Spots.Preference.NearPaths, v, out var c, placed, r * 2f + 4f, 2f, budget: 1500)) continue;
                 // Long beds lie along the nearest walk; round beds face it.
                 var axis = new float2(1, 0);
                 if (occ.Paths.Count > 0 && occ.Paths.Nearest(c, 60f, out var q) >= 0) { var to = math.normalizesafe(q - c, axis); axis = new float2(-to.y, to.x); }

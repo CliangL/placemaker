@@ -623,7 +623,7 @@ namespace Placemaker.Core.Layers.Park
             int spots = 0;
             for (int k = 0; k < extra * 3 && spots < extra; k++)
             {
-                float r = ctx.M(10f, 6f);
+                float r = ctx.M(13f, 8f);   // a picnic group with its shelter, grill and shade trees needs about 12 m
                 bool placed = false;
                 for (int ri = 0; ri < search.Count && !placed; ri++)
                 {

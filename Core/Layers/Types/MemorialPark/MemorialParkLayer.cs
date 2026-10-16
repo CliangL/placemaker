@@ -712,14 +712,21 @@ namespace Placemaker.Core.Layers.Types.MemorialPark
         {
             var ctx = st.Ctx; var region = st.Region;
             var nrm = new float2(-dir.y, dir.x);
-            float sp = math.max(7f, ctx.F("treeSpacing") * 1.15f);
+            // Per style (first game run: one dense grid read as a forest block, and the same on every style): the war memorial a
+            // solemn double row, the reflection garden a grove of remembrance in quincunx, the memorial garden sparse specimen trees.
+            string style = ctx.S("style");
+            float k = style == "garden" ? 2.1f : style == "war" ? 1.3f : 1.6f;
+            int maxRows = style == "war" ? 2 : 99;
+            bool quincunx = style != "war";
+            float sp = math.max(8f, ctx.F("treeSpacing") * k);
             var treeIds = Or(ctx.L("treeSpecies"), MemorialAssets.Avenue);
             float edge = ctx.M(5f, 3f);
-            int n = 0, rows = 0;
-            for (float v = from + sp * 0.5f; v < 400f; v += sp)
+            int n = 0, rows = 0, step = 0;
+            for (float v = from + sp * 0.5f; v < 400f && rows < maxRows; v += sp, step++)
             {
                 bool any = false, inside = false;
-                for (float u = sp * 0.75f; u < length - sp * 0.25f; u += sp)
+                float off = quincunx && (step & 1) == 1 ? sp * 0.5f : 0f;
+                for (float u = sp * 0.75f + off; u < length - sp * 0.25f; u += sp)
                 {
                     var p = start + dir * u;
                     var l = p + nrm * v; var r = p - nrm * v;
