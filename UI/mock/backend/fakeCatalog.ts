@@ -346,4 +346,6 @@ export const MORE_TYPES: [string, string, string, string][] = [
     ["communityGarden", "Community garden", "leaf", "gardens"],
     ["marketSquare", "Market square", "plaza", "squares"],
     ["parkingGarage", "Parking garage", "parking", "parking"],
+    ["quarry", "Quarry", "area", "industrial"],
+    ["restArea", "Rest area", "parking", "transport"],
 ];

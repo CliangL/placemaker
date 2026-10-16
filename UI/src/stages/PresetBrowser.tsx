@@ -232,6 +232,13 @@ export const TypeBrowser = ({ catalog, design, onNew }: { catalog: Catalog; desi
         if (selectedGroup && selectedGroup !== chosen) setCategory(selectedGroup);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [design.recipeId]);
+    // The current type is shelved (the last one used before the shelf, e.g. Quarry): switch to the first type shown.
+    const current = catalog.recipes.find((r) => r.id === design.recipeId);
+    const shelved = !!current && !current.custom && SHELVED_GROUPS.has(recipeGroup(current));
+    const fallback = cats[0]?.types[0]?.id;
+    useEffect(() => {
+        if (shelved && fallback) act.selectRecipe(fallback);
+    }, [shelved, fallback]);
 
     // search hits
     type Hit = { r: RecipeInfo; layer: LayerType; p: PresetView };

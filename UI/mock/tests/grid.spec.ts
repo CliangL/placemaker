@@ -34,9 +34,9 @@ test("picker: 1 Category · 2 Type · 3 Style rows of chips, compact", async ({ 
     await toDesign(page, "park");
     expect(await width(page)).toBe(560); // 1920 px wide screen → the wide default
 
-    // categories from the backend groups, most used first (defaults: parks, squares, roads, parking, nature)
+    // categories in a fixed order (roads, parking, parks, shops & squares, nature); squares fold into shops
     const chips = await page.locator('[data-testid="make-groups"] [data-testid^="make-group-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    expect(chips).toEqual(["make-group-parks", "make-group-squares", "make-group-roads", "make-group-parking", "make-group-nature"]);
+    expect(chips).toEqual(["make-group-roads", "make-group-parking", "make-group-parks", "make-group-commercial", "make-group-nature"]);
     await expect(page.getByTestId("make-group-parks")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("recipe-park")).toHaveAttribute("aria-pressed", "true");
 
@@ -56,13 +56,12 @@ test("picker: 1 Category · 2 Type · 3 Style rows of chips, compact", async ({ 
     await noTextOverflow(page, "picker wide");
     await panelShot(page, "grid-browser-wide");
 
-    // a category lists its types; the selected type stays selected and its styles stay listed
-    await page.getByTestId("make-group-squares").click();
-    await expect(page.getByTestId("make-group-squares")).toHaveAttribute("aria-pressed", "true");
+    // a category lists its types; switching category picks its first type, so the styles follow
+    await page.getByTestId("make-group-commercial").click();
+    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("recipe-plaza")).toBeVisible();
     await expect(page.getByTestId("recipe-park")).toHaveCount(0);
-    await expect(page.getByTestId("make-group-parks")).toHaveAttribute("data-has-selected", "true");
-    await expect(presets.getByTestId("preset-formal")).toBeVisible();
+    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("data-has-selected", "true");
     await pickType(page, "plaza");
     await expect(page.getByTestId("presets-plaza").getByTestId("preset-civic")).toBeVisible();
     await page.getByTestId("make-group-parks").click();

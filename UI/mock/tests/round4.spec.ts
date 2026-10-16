@@ -258,30 +258,49 @@ test("Make: many types — the browser opens on the selected type's category; ch
     const recipes = page.getByTestId("recipes");
     await expect(recipes).toHaveAttribute("data-grouped", "true");
     await expect(page.getByTestId("make-group-parks")).toHaveAttribute("aria-pressed", "true");
-    for (const id of ["dogPark", "park"]) await expect(recipes.getByTestId(`recipe-${id}`)).toBeVisible();
-    await expect(recipes.getByTestId("recipe-botanicalGarden")).toHaveCount(0);
-    await page.getByTestId("make-group-gardens").click();
-    await expect(recipes.getByTestId("recipe-botanicalGarden")).toBeVisible();
-    await page.getByTestId("make-group-parks").click();
+    // gardens fold into parks
+    for (const id of ["dogPark", "park", "botanicalGarden", "formalGarden"]) await expect(recipes.getByTestId(`recipe-${id}`)).toBeVisible();
+    await expect(page.getByTestId("make-group-gardens")).toHaveCount(0);
     await expect(recipes.getByTestId("recipe-marketSquare")).toHaveCount(0);
+    // industry and transport are shelved: no chip, no type, no search hit
+    for (const g of ["industrial", "transport", "squares", "events", "water"]) await expect(page.getByTestId(`make-group-${g}`)).toHaveCount(0);
+    await page.getByTestId("browser-search-toggle").click();
+    await page.getByTestId("browser-search").fill("quarry");
+    await expect(page.getByTestId("browser-empty")).toBeVisible();
+    await page.getByTestId("browser-search").fill("rest area");
+    await expect(page.getByTestId("browser-empty")).toBeVisible();
+    await page.getByTestId("browser-clear").click();
     // tiles share rows
     const ys = await recipes.locator('[data-testid^="recipe-"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
     expect(new Set(ys).size).toBeLessThan(ys.length);
-    await page.getByTestId("make-group-squares").click();
+    // squares fold into shops
+    await page.getByTestId("make-group-commercial").click();
     await expect(recipes.getByTestId("recipe-marketSquare")).toBeVisible();
+    await expect(recipes.getByTestId("recipe-plaza")).toBeVisible();
     await expect(recipes.getByTestId("recipe-park")).toHaveCount(0);
     // switching category picks its first type, so the styles follow
-    await expect(page.getByTestId("make-group-squares")).toHaveAttribute("data-has-selected", "true");
+    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("data-has-selected", "true");
     await expect(page.getByTestId("make-group-parks")).toHaveAttribute("data-has-selected", "false");
     await page.getByTestId("make-group-parking").click();
     await expect(recipes.getByTestId("recipe-parkingGarage")).toBeVisible();
     await noTextOverflow(page, "grouped make row");
     await panelShot(page, "r4-make-grouped");
-    await page.getByTestId("make-group-squares").click();
+    await page.getByTestId("make-group-commercial").click();
     await page.reload();
     await expect(page.getByTestId("placemaker-panel")).toBeVisible();
     await drawPolygon(page, FIELD);
     await page.getByTestId("primary").click();
     await page.evaluate(() => (window as any).pm.backend.addMoreTypes());
-    await expect(page.getByTestId("make-group-squares")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("make-group-commercial")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Make: a shelved type in use (last used before the shelf) switches to the first type shown", async ({ page }) => {
+    await open(page);
+    await drawPolygon(page, FIELD);
+    await page.getByTestId("primary").click();
+    await page.evaluate(() => (window as any).pm.backend.addMoreTypes());
+    await page.evaluate(() => (window as any).pm.backend.onTrigger("selectRecipe", ["quarry"]));
+    await expect.poll(() => page.evaluate(() => (window as any).pm.backend.recipeId)).toBe("roads");
+    await expect(page.getByTestId("recipe-roads")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("make-group-roads")).toHaveAttribute("aria-pressed", "true");
 });

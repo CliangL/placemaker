@@ -47,7 +47,7 @@ test("browser: categories ▸ types ▸ presets; clicking a preset applies it; t
     await expect(page.getByTestId("presets-plaza").getByTestId("preset-default")).toHaveAttribute("aria-pressed", "true");
 
     // a category chip lists its own types
-    await page.getByTestId("make-group-squares").click();
+    await page.getByTestId("make-group-commercial").click();
     await expect(page.getByTestId("recipe-park")).toHaveCount(0);
     await page.getByTestId("make-group-parks").click();
     await expect(page.getByTestId("recipe-park")).toBeVisible();
@@ -62,7 +62,7 @@ test("browser: search filters categories, types and presets; keyboard moves betw
     const search = page.getByTestId("browser-search");
     await page.getByTestId("browser-search-toggle").click();
     await search.fill("civ");
-    await expect(page.getByTestId("make-group-squares")).toBeVisible();
+    await expect(page.getByTestId("make-group-commercial")).toBeVisible();
     await expect(page.getByTestId("make-group-parks")).toHaveCount(0);
     await expect(page.getByTestId("preset-civic")).toBeVisible();
     await expect(page.getByTestId("preset-market")).toHaveCount(0);
@@ -92,12 +92,13 @@ test("browser: search filters categories, types and presets; keyboard moves betw
     // tool's primary action
     await search.focus();
     await search.press("ArrowDown"); // first category chip
-    await expect(page.getByTestId("make-group-parks")).toBeFocused();
+    await expect(page.getByTestId("make-group-roads")).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByTestId("make-group-squares")).toBeFocused();
+    await expect(page.getByTestId("make-group-parking")).toBeFocused();
     await page.keyboard.press("ArrowLeft");
-    await expect(page.getByTestId("make-group-parks")).toBeFocused();
-    await page.keyboard.press("ArrowDown"); // the tile row below
+    await expect(page.getByTestId("make-group-roads")).toBeFocused();
+    await page.keyboard.press("ArrowDown"); // the row below: wrapped categories in a narrow panel, else the types
+    if (await page.locator('[data-nav="cat"]:focus').count()) await page.keyboard.press("ArrowDown");
     await expect(page.locator('[data-testid="recipes"] [data-nav="type"]:focus')).toHaveCount(1);
     await page.getByTestId("preset-default").focus();
     await page.keyboard.press("ArrowRight"); // Formal garden
@@ -219,7 +220,7 @@ test("long own preset names and many types never overflow", async ({ page }) => 
     await page.getByTestId("preset-name-input").fill("A really very long preset name for the big park");
     await page.getByTestId("preset-name-save").click();
     await expect(page.getByTestId("presets-park").locator('[data-testid^="preset-custom-"]')).toHaveCount(1);
-    for (const g of ["squares", "parking", "roads", "nature", "gardens"]) {
+    for (const g of ["commercial", "parking", "roads", "nature", "parks"]) {
         if (!(await page.getByTestId(`make-group-${g}`).count())) await page.getByTestId("make-groups-more").click();
         await page.getByTestId(`make-group-${g}`).click();
         await noTextOverflow(page, "long names " + g);
