@@ -21,6 +21,7 @@ delete code.
 
 - `docs/ARCHITECTURE.md`, `docs/DESIGN.md`: how it is built and how it should feel.
 - `docs/RESEARCH-NOTES.md`, `docs/RESEARCH-NOTES-ADDENDUM.md`: game engine rules (decompiled). A mandatory checklist.
+- `docs/refactor/GRADES.md`: the user's grades per category and the current refactor brief.
 - `suite/README.md`: the game runner (below).
 - `docs/teardown/`: what went wrong and why. Start with `00-user-feedback-1215.md`, then `07` (shop defects), `08`
   (street zoning), `09` (switching freezes).
@@ -66,6 +67,10 @@ of your build; requests with the same build share one open game, and the game is
   game`, or `the queue waits 2 min before launching`: the user comes first; that can take long, and that is fine.
   `STUCK` (exit 1): the queue itself is broken (no dispatcher could run for 3 min); report it with the lines it
   printed, don't retry in a loop.
+- **Your branch must contain the queue** (master from `932753b` on). A branch made before it has the old commands,
+  which launch the game themselves past the line: merge master first. The queue also runs only what your worktree has
+  **committed** of its own scripts (`Game-Dispatcher`, `GameQueue`, `ModsInstall`, `Run-Suite`, `Contact-Suite`);
+  your build (`binRelease`, `UIuild`) is taken as it is, committed or not.
 - Ctrl+C leaves the line. `-Direct` bypasses the queue: for debugging the runner only. `tools/suite/Queue.ps1` shows
   the line and what `Mods\Placemaker` holds.
 - The queue does not install your build for the user's own game: `Mods\Placemaker` gets the user's build back the
@@ -78,6 +83,11 @@ of your build; requests with the same build share one open game, and the game is
 - One game at a time. Never close a game the user started.
 - A code change needs a rebuild and a relaunch (about 60 s to a ready test world).
 - After a cut-off run, `Run-Suite.ps1 -RestoreOnly` puts the user's game settings back (the queue does it by itself).
+- A new worktree: `git -C C:Usersjackcs2-area-tool worktree add C:Usersjackpm-wt<name> -b <name> master`,
+  then link the shared UI deps: `cmd /c mklink /J C:Usersjackpm-wt<name>UI
+ode_modules
+  C:Usersjackcs2-area-toolUI
+ode_modules`.
 - Removing a worktree: its `UI\node_modules` is a link to the shared folder. Delete the link first
   (`cmd /c rmdir <worktree>\UI\node_modules`), then `git worktree remove`; a recursive delete empties the shared
   folder and breaks every worktree's UI build.
