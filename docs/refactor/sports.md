@@ -113,7 +113,30 @@ it2 `show-17-builds-1016-070443-c8ac`, then the AFTER run and the land variants 
 In the AFTER run every build is built (17 of 17, 0 step errors, no exceptions in Player.log). The six bicycle shelters kept
 by anarchy on every sports park are gone; the pit guard no longer fills in skate bowls.
 
-## Not done / still weak (honest list)
+## Done
+
+- **Kept (14 styles):** Sports park community, stadium, tennisClub, neighbourhood; Golf parkland, links, pitchPutt,
+  miniGolf, drivingRange, discGolf; Urban ruins diySpot, highwayRuins, parkour, dirtJumps. All three types stay.
+- **Hidden (2 styles, code kept):** `sportsPark/campus` (not unique, five facilities never fit a city block) and
+  `urbanRuins/graffitiPark` (not unique, its graffiti needs decal packs; a bare white slab without them).
+  `Recipes/shelf/sports.json` hides exactly these two and no types.
+- **Changed:** tennis nets/chairs/cage and the game's court decals; basketball and pitch decals; stadium track fits a
+  block; tennis club on clay (new `tennisSurface` option); single bike racks; skate and DIY bowls dug on purpose;
+  skate pads filled with mixed ramps/boxes/rails and a half-pipe; ruins on dark pavement with jersey barriers and road
+  arrows; dirt-jump lines painted dirt; mini golf kerb strips on bare ground; driving range targets in sand collars.
+  Commits `93f1ca9`, `00d963a`, `56f797a`, `3163571`, `ec9a342` (details above).
+- **Runs:** BEFORE `show-19-builds-1016-062550-d800`, AFTER `show-17-builds-1016-081020-8a4f` (17 of 17 built, 0 step
+  errors). Pictures, e.g.:
+  - `.forensics/suite/runs/show-17-builds-1016-081020-8a4f/shots/03-sportsPark-stadium.05-45-clean.png`
+  - `.forensics/suite/runs/show-17-builds-1016-081020-8a4f/shots/10-golf-miniGolf.05-45-clean.png`
+  - `.forensics/suite/runs/show-17-builds-1016-081020-8a4f/shots/15-urbanRuins-highwayRuins.05-45-clean.png`
+  - the matching shots under `show-19-builds-1016-062550-d800/shots/` for the before.
+
+## Not done / known problems
+
+- **Last commit not run on its own:** every AFTER and land-variant run is labelled `3163571-dirty`; `ec9a342` (mini golf
+  on bare ground, compact basketball decal) was committed after them and has had no run at its own commit.
+- Stopped early for the wrap-up (the shared game queue made each request wait about 45 minutes); no further iterations.
 
 - **Highway ruins still has no deck in the air.** The highway is told by pillars, a fallen carriageway with jersey
   barriers and road arrows, and skate pads where the deck would stand. A real elevated deck would need an elevated net
