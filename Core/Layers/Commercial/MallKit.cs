@@ -199,7 +199,19 @@ namespace Placemaker.Core.Layers.Commercial
         // ───────────── frames and rows ─────────────
 
         /// <summary>Where a lane's zone cells begin (ZoneUtils.GetCellWidth · 4 from its centre line; = the edge of 8/16 m lanes).</summary>
-        public static float ZoneOffset(Lane lane) => math.max(lane.Half, Build.ZoneBlockPredictor.CellWidth(2f * lane.Half) * 4f);
+        public static float ZoneOffset(Lane lane) => ZoneOffset(lane.Half);
+
+        /// <summary>Where a lane of half width <paramref name="half"/> zones from (its zone blocks start on the cell grid of its width).</summary>
+        public static float ZoneOffset(float half) => math.max(half, Build.ZoneBlockPredictor.CellWidth(2f * half) * 4f);
+
+        /// <summary>
+        /// (rf-shops3) How far in from the outline (at <paramref name="p"/>, outward normal <paramref name="nOut"/>) a ring drive of half
+        /// width <paramref name="half"/> runs so a row <paramref name="depth"/> m deep fits between it and the street: the row starts
+        /// at the drive's zone offset (a 12 m drive zones from 8 m, not 6), and its back stays clear of the street's first zone row
+        /// (<see cref="KerbMargin"/>, a metre to spare: <see cref="BacksOntoStreet"/> tests the plot's corners).
+        /// </summary>
+        public float RowInset(float2 p, float2 nOut, float half, float depth) =>
+            ZoneOffset(half) + depth + math.max(1.5f, KerbMargin(p, new float2(-nOut.y, nOut.x)) + 1f);
 
         /// <summary>A frame along a segment: s along a → b, t to its left (CCW inward for an outline edge).</summary>
         public static StreetShops.Run Frame(float2 a, float2 b)

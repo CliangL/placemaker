@@ -306,7 +306,7 @@ namespace Placemaker.Core.Layers.Commercial
                 for (int i = seg0; i <= seg1 && i + 1 < lane.Points.Count; i++)
                 {
                     var f = Mall.Frame(lane.Points[i], lane.Points[i + 1]);
-                    float a = side > 0 ? h : -(h + dd + 1f), b = side > 0 ? h + dd + 1f : -h;
+                    float a = side > 0 ? h : -(Mall.ZoneOffset(h) + dd + 1f), b = side > 0 ? Mall.ZoneOffset(h) + dd + 1f : -h;
                     // Clear of the crossing lanes at its ends (further in where a rail runs askew).
                     for (float trim = h + 0.5f; trim <= h + 16f; trim += 2f)
                     {

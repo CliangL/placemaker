@@ -83,7 +83,7 @@ namespace Placemaker.Core.Layers.Commercial
             bool sideRows = width - 2f * rowNeed >= 64f;
             float frontInset = h + band;
             if (depth - rowNeed - frontInset < Mall.LotDepth(1) + 4f) return Fail(1);
-            float RowsInset(float2 p, float2 nOut) => h + d + math.max(1.5f, mall.KerbMargin(p, new float2(-nOut.y, nOut.x)) + 0.5f);
+            float RowsInset(float2 p, float2 nOut) => mall.RowInset(p, nOut, h, d);
             float InsetFor(float2 p, float2 nOut)
             {
                 float f = math.dot(nOut, -r.In), b = math.dot(nOut, r.In);
@@ -146,7 +146,7 @@ namespace Placemaker.Core.Layers.Commercial
             void HoldBand(Mall.Lane lane, int seg, int side)
             {
                 var f = Mall.Frame(lane.Points[seg], lane.Points[seg + 1]);
-                float a = side > 0 ? h : -(h + d + 1f), b = side > 0 ? h + d + 1f : -h;
+                float a = side > 0 ? h : -(Mall.ZoneOffset(h) + d + 1f), b = side > 0 ? Mall.ZoneOffset(h) + d + 1f : -h;
                 for (float trim = h + 0.5f; trim <= h + 16f; trim += 2f)
                 {
                     if (f.To - 2f * trim < 8f) break;

@@ -21,6 +21,7 @@ namespace Placemaker.Gallery
             // (shops2) The game runner's land made to order (Show.ps1 -Shape/-Size): "land-<shape>-<W>x<D>", e.g. land-l-280x260,
             // land-rect-300x280, land-circle-260x260: the outline as SuitePlot draws it, a Small Road ring 16 m outside its box.
             if (kind.StartsWith("land-")) return Land(kind, out site);
+            if (kind.StartsWith("gblock-")) return GameBlock(kind, out site);
             switch (kind)
             {
                 case "curved": ring = Round(out site); break;
@@ -60,7 +61,35 @@ namespace Placemaker.Gallery
             return plot.Outline().Select(p => new float3(p.x, 0, p.y)).ToArray();
         }
 
-        private static NearbyNet Net(long id, float2 a, float2 b, float2 c, float2 d, float w) => new NearbyNet
+        /// <summary>
+        /// (rf-shops3) A runner's grid block as the bucket fills it: "gblock-<W>x<D>-<wW>_<wS>_<wE>_<wN>" (road centre lines W x D apart,
+        /// each street's width; e.g. gblock-150x140-20_20_12_12 is the suite's B4-0, Medium Roads west and south), the outline
+        /// 2 m off every kerb with its corners cut 5 m (eight corners, as the bucket draws round the kerb returns).
+        /// </summary>
+        private static float3[] GameBlock(string kind, out SiteContext site)
+        {
+            var parts = kind.Split('-');
+            var wd = parts[1].Split('x');
+            var ws = parts[2].Split('_').Select(x => float.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            float W = float.Parse(wd[0], System.Globalization.CultureInfo.InvariantCulture), D = float.Parse(wd[1], System.Globalization.CultureInfo.InvariantCulture);
+            site = new SiteContext();
+            long id = 800;
+            // centre lines: west x=0, south y=0, east x=W, north y=D (each running 40 m past the block)
+            Line(site, ref id, new float2(0, -40), new float2(0, D + 40), ws[0]);
+            Line(site, ref id, new float2(-40, 0), new float2(W + 40, 0), ws[1]);
+            Line(site, ref id, new float2(W, -40), new float2(W, D + 40), ws[2]);
+            Line(site, ref id, new float2(-40, D), new float2(W + 40, D), ws[3]);
+            float x0 = ws[0] * 0.5f + 2f, y0 = ws[1] * 0.5f + 2f, x1 = W - ws[2] * 0.5f - 2f, y1 = D - ws[3] * 0.5f - 2f, c = 5f;
+            var ring = new[]
+            {
+                new float2(x0 + c, y0), new float2(x1 - c, y0), new float2(x1, y0 + c), new float2(x1, y1 - c),
+                new float2(x1 - c, y1), new float2(x0 + c, y1), new float2(x0, y1 - c), new float2(x0, y0 + c),
+            };
+            foreach (var g in ZoneLots.SiteGrids(site, null)) { var gc = g; gc.Predicted = false; gc.Existing = false; site.ZoneGrids.Add(gc); }
+            return ring.Select(p => new float3(p.x, 0, p.y)).ToArray();
+        }
+
+        private static NearbyNet Net(long id,float2 a, float2 b, float2 c, float2 d, float w) => new NearbyNet
         {
             ExternalId = id, A = new float3(a.x, 0, a.y), B = new float3(b.x, 0, b.y), C = new float3(c.x, 0, c.y), D = new float3(d.x, 0, d.y),
             Width = w, Category = NetCategory.Road, HasSidewalk = true,

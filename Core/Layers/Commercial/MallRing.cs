@@ -25,21 +25,7 @@ namespace Placemaker.Core.Layers.Commercial
             var inner = Region.InsetRing(inset);
             if (inner == null || inner.Length < 3 || Poly.Area(inner) < 900f) return null;
             var simp = new List<float2>(Poly.EnsureCcw(Poly.Simplify(inner, 2.5f)));
-            // Merge short edges: drop the vertex whose removal loses the least area while any edge is shorter than minEdge.
-            for (int guard = 0; guard < 64 && simp.Count > 4; guard++)
-            {
-                int n = simp.Count, worst = -1; float shortest = float.MaxValue;
-                for (int i = 0; i < n; i++)
-                {
-                    float l = math.distance(simp[i], simp[(i + 1) % n]);
-                    if (l < shortest) { shortest = l; worst = i; }
-                }
-                if (shortest >= minEdge) break;
-                // Of the edge's two ends, remove the one whose triangle (with its neighbours) is smaller.
-                int a = worst, b = (worst + 1) % n;
-                float TriArea(int k) { var p = simp[(k + n - 1) % n]; var q = simp[k]; var r = simp[(k + 1) % n]; return math.abs(Poly.Cross(q - p, r - p)) * 0.5f; }
-                simp.RemoveAt(TriArea(a) <= TriArea(b) ? a : b);
-            }
+            MergeShort(simp, minEdge, 4);
             if (simp.Count < 3) return null;
             // Soften the corners: every turn sharper than 40° becomes a chamfer (two points `round` m back along both edges).
             var res = new List<float2>();
@@ -66,13 +52,7 @@ namespace Placemaker.Core.Layers.Commercial
         public float2[] RingLineVar(Func<float2, float2, float> insetFor, float round, float minEdge)
         {
             var simp = new List<float2>(Poly.EnsureCcw(Poly.Simplify(Region.Ring, 2.5f)));
-            for (int guard = 0; guard < 64 && simp.Count > 3; guard++)
-            {
-                int n0 = simp.Count, worst = -1; float shortest = float.MaxValue;
-                for (int i = 0; i < n0; i++) { float l = math.distance(simp[i], simp[(i + 1) % n0]); if (l < shortest) { shortest = l; worst = i; } }
-                if (shortest >= 10f) break;
-                simp.RemoveAt((worst + 1) % n0);
-            }
+            MergeShort(simp, 10f, 3);
             int n = simp.Count;
             if (n < 3) return null;
             var off = new float[n];
@@ -108,11 +88,16 @@ namespace Placemaker.Core.Layers.Commercial
             return Soften(ring, round, minEdge);
         }
 
-        /// <summary>Short edges merged (each at least <paramref name="minEdge"/>), corners sharper than 40° chamfered by <paramref name="round"/> m.</summary>
-        private static float2[] Soften(float2[] ring, float round, float minEdge)
+        /// <summary>
+        /// Merges edges shorter than <paramref name="minEdge"/> (while more than <paramref name="minCount"/> points are left). A short
+        /// edge between two long ones that turn (a kerb return the bucket cut across a block's corner) gives way to the corner
+        /// itself, where the long edges' lines meet: dropping one of its ends instead skews a whole side of the block by the
+        /// cut (a 5 m return slants a 120 m side by 5 m, and every row along it backs onto the street at one end). Otherwise
+        /// the end whose triangle with its neighbours is smaller goes.
+        /// </summary>
+        private static void MergeShort(List<float2> simp, float minEdge, int minCount)
         {
-            var simp = new List<float2>(Poly.EnsureCcw(ring));
-            for (int guard = 0; guard < 64 && simp.Count > 4; guard++)
+            for (int guard = 0; guard < 96 && simp.Count > minCount; guard++)
             {
                 int n = simp.Count, worst = -1; float shortest = float.MaxValue;
                 for (int i = 0; i < n; i++)
@@ -121,10 +106,31 @@ namespace Placemaker.Core.Layers.Commercial
                     if (l < shortest) { shortest = l; worst = i; }
                 }
                 if (shortest >= minEdge) break;
-                int a = worst, b = (worst + 1) % n;
+                int a = worst, b = (worst + 1) % n, pi = (a + n - 1) % n, qi = (b + 1) % n;
+                float2 pa = simp[pi], va = simp[a], vb = simp[b], qb = simp[qi];
+                var d1 = math.normalizesafe(va - pa); var d2 = math.normalizesafe(qb - vb);
+                float cr = Poly.Cross(d1, d2);
+                if (math.abs(cr) > 0.25f && math.distance(pa, va) > shortest && math.distance(vb, qb) > shortest)
+                {
+                    float t = Poly.Cross(vb - va, d2) / cr;
+                    var x = va + d1 * t;
+                    if (t > -0.5f * shortest && t < 2.5f * shortest && math.distance(x, vb) < 2.5f * shortest)
+                    {
+                        simp[a] = x;
+                        simp.RemoveAt(b);
+                        continue;
+                    }
+                }
                 float TriArea(int k) { var p = simp[(k + n - 1) % n]; var q = simp[k]; var r = simp[(k + 1) % n]; return math.abs(Poly.Cross(q - p, r - p)) * 0.5f; }
                 simp.RemoveAt(TriArea(a) <= TriArea(b) ? a : b);
             }
+        }
+
+        /// <summary>Short edges merged (each at least <paramref name="minEdge"/>), corners sharper than 40° chamfered by <paramref name="round"/> m.</summary>
+        private static float2[] Soften(float2[] ring, float round, float minEdge)
+        {
+            var simp = new List<float2>(Poly.EnsureCcw(ring));
+            MergeShort(simp, minEdge, 4);
             if (simp.Count < 3) return null;
             var res = new List<float2>();
             int m = simp.Count;

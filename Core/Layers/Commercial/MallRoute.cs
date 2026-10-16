@@ -79,20 +79,60 @@ namespace Placemaker.Core.Layers.Commercial
                         if (d < best && math.dot(at - g.At, g.In) > 2f) { best = d; target = lane; hit = at; }
                     }
                 }
-                if (target == null && !FirstLane(g.At, g.In, 260f, out target, out hit))
+                // The candidates: the spine front (a walk), the first lane straight ahead, then the nearest points of every lane
+                // (a way in that meets a held corner, a pad or a pond straight ahead bends to the closest lane it can reach).
+                var cands = new List<(Lane lane, float2 at)>();
+                if (target != null) cands.Add((target, hit));
+                if (FirstLane(g.At, g.In, 260f, out var ahead, out var aheadAt)) cands.Add((ahead, aheadAt));
+                var near = new List<(Lane lane, float2 at, float d)>();
+                foreach (var l in Lanes)
+                {
+                    if (l.Role == NetRole.DriveConnector) continue;
+                    var q = Project(l, g.At, out float dq);
+                    if (dq < 90f && math.dot(q - g.At, g.In) > 0.3f * dq) near.Add((l, q, dq));
+                }
+                near.Sort((x, y) => x.d.CompareTo(y.d));
+                for (int k = 0; k < near.Count && k < 4; k++) cands.Add((near[k].lane, near[k].at));
+                // the bends of the lanes near it too (a ring's corner: no shops there to cut through)
+                foreach (var l in Lanes)
+                    for (int k = 1; k + 1 < l.Points.Count; k++)
+                    {
+                        float dq = math.distance(l.Points[k], g.At);
+                        if (dq < 70f && math.dot(l.Points[k] - g.At, g.In) > 0.5f * dq) cands.Add((l, l.Points[k]));
+                    }
+                if (cands.Count == 0)
                 {
                     Ctx.Plan.Facts["gateFail" + g.Index] = 2;
                     Ctx.Plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = NoLaneKey, Args = new object[] { g.Index + 1 }, At = Ctx.P3(g.At) });
                     continue;
                 }
-                hit = OnNode(target, Project(target, hit, out _));
                 // The gap: through held rows a paseo wide enough to keep whole zone columns either side; else the drive's width.
                 float half = walk ? 2f : 4.5f;
                 float rowHalf = walk ? PaseoWidth * 0.5f : 5f;
-                var corridor = Strip(g.At - g.In * 1f, hit, half, target.Half + 1.2f);
-                var rowCorridor = Strip(g.At - g.In * 1f, hit, rowHalf, target.Half + 1.2f);
-                if (corridor == null) continue;
-                CutHolds(rowCorridor, corridor);
+                // Of the ways that are free, the one cutting the fewest held rows of shops (each costs 30 m of way), then the shortest;
+                // the first candidate (the spine front for a walk, else straight ahead) wins ties.
+                float2[] corridor = null, rowCorridor = null;
+                float bestCost = float.MaxValue;
+                for (int ci = 0; ci < cands.Count; ci++)
+                {
+                    var (cl, cat) = cands[ci];
+                    var h0 = OnNode(cl, Project(cl, cat, out _));
+                    var c0 = Strip(g.At - g.In * 1f, h0, half, cl.Half + 1.2f);
+                    if (c0 == null || !Passable(c0, cl)) continue;
+                    var r0 = Strip(g.At - g.In * 1f, h0, rowHalf, cl.Half + 1.2f) ?? c0;
+                    int cuts = 0;
+                    foreach (var rh in RowHolds) if (StreetShops.ConvexOverlap(rh, r0, 0.05f)) cuts++;
+                    float cost = math.distance(g.At, h0) + 30f * cuts + (ci == 0 ? -0.5f : 0f);
+                    if (cost >= bestCost) continue;
+                    bestCost = cost; target = cl; hit = h0; corridor = c0; rowCorridor = r0;
+                }
+                if (corridor == null)
+                {
+                    Ctx.Plan.Facts["gateFail" + g.Index] = 3;
+                    Ctx.Plan.Issues.Add(new PlanIssue { Severity = IssueSeverity.Warning, Key = NoLaneKey, Args = new object[] { g.Index + 1 }, At = Ctx.P3(g.At) });
+                    continue;
+                }
+                CutHolds(rowCorridor ?? corridor, corridor);
                 if (!FreeExcept(corridor, target))
                 {
                     Ctx.Plan.Facts["gateFail" + g.Index] = 3;
@@ -199,6 +239,26 @@ namespace Placemaker.Core.Layers.Commercial
                 return ((p, kerb, id, t), true);
             }
             return ((g.At, g.At, -1, 0f), false);
+        }
+
+        /// <summary>
+        /// Could a gate's way run here once the held rows and the planted frontage give way to it (<see cref="CutHolds"/>)? Free of
+        /// everything else taken but the lane's own corridors.
+        /// </summary>
+        private bool Passable(float2[] poly, Lane lane)
+        {
+            var soft = new HashSet<float2[]>(RowHolds);
+            foreach (var k in KeptLand) if (k.Kind == KeepKind.Frontage && math.lengthsq(k.Frame.Dir) > 0.5f) soft.Add(k.Ring);
+            foreach (var t in Taken)
+            {
+                if (soft.Contains(t)) continue;
+                if (lane?.Land != null && lane.Land.Contains(t)) continue;
+                bool laneLand = false;
+                foreach (var l in Lanes) if (l.Land != null && l.Land.Contains(t)) { laneLand = true; break; }
+                if (laneLand && StreetShops.ConvexOverlap(t, Shrink(poly, 2.5f), 0.05f) == false) continue;
+                if (StreetShops.ConvexOverlap(t, poly, 0.05f)) return false;
+            }
+            return true;
         }
 
         /// <summary>Free of everything taken but the lanes' own corridors at a junction end (a drive meets its lane at an angle).</summary>

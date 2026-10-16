@@ -25,15 +25,23 @@ namespace Placemaker.Core.Layers.Commercial
             if (ctx.S("loop") == "pedestrian") return false;   // the hidden car-free ring keeps its own layout
             // A road with parking both sides needs room (24 m wide): on a small or thin site the loop is the alley.
             // It is kept when it holds at least 70 % of the shops the alley ring would (a circle's short sides hold none round a wide road).
-            if (ctx.S("loopRoad") != "parking") return RingPark(ctx, mall, runs, false);
+            // (A ring too small for rows of the asked depth all round tries two-cell rows: the loop moves out 8 m on every side.)
+            bool Ring(bool parking)
+            {
+                if (RingPark(ctx, mall, runs, parking, 99)) return true;
+                if (Cells(ctx) <= 2) return false;
+                mall.ResetDesign();
+                return RingPark(ctx, mall, runs, parking, 2);
+            }
+            if (ctx.S("loopRoad") != "parking") return Ring(false);
             var planMark = PlanMark.Of(ctx.Plan); var mallMark = mall.Mark();
-            int alleyShops = RingPark(ctx, mall, runs, false) ? mall.Shops.Count : 0;
+            int alleyShops = Ring(false) ? mall.Shops.Count : 0;
             planMark.Restore(ctx.Plan); mall.Rewind(mallMark);
             mall.ResetDesign();
-            if (RingPark(ctx, mall, runs, true) && mall.Shops.Count >= 0.7f * alleyShops) return true;
+            if (Ring(true) && mall.Shops.Count >= 0.7f * alleyShops) return true;
             planMark.Restore(ctx.Plan); mall.Rewind(mallMark);
             mall.ResetDesign();
-            return RingPark(ctx, mall, runs, false);
+            return Ring(false);
         }
 
         private static (AssetRef asset, float half, NetRole role) LoopRoad(LayerContext ctx, bool parking)
@@ -53,17 +61,17 @@ namespace Placemaker.Core.Layers.Commercial
             return (a, h, NetRole.Alley);
         }
 
-        private static bool RingPark(LayerContext ctx, Mall mall, List<StreetShops.Run> runs, bool parkingRoad)
+        private static bool RingPark(LayerContext ctx, Mall mall, List<StreetShops.Run> runs, bool parkingRoad, int cellsCap)
         {
             var planMark = PlanMark.Of(ctx.Plan); var mallMark = mall.Mark();
             bool Fail(int step) { planMark.Restore(ctx.Plan); mall.Rewind(mallMark); ctx.Plan.Facts["parkRingFail"] = step; return false; }
             var r = StripMallLayer.MainFrame(ctx, mall, runs);
             mall.MainDir = r.Dir;
             var (asset, h, role) = LoopRoad(ctx, parkingRoad);
-            int inner = Cells(ctx);
+            int inner = math.min(Cells(ctx), cellsCap);
             float d = inner * Mall.Cell;
             mall.AnchorWeight = 1.3f;
-            float InsetFor(float2 p, float2 nOut) => h + d + math.max(1.5f, mall.KerbMargin(p, new float2(-nOut.y, nOut.x)) + 0.5f);
+            float InsetFor(float2 p, float2 nOut) => mall.RowInset(p, nOut, h, d);
             var line = mall.RingLineVar(InsetFor, 14f, 30f);
             if (line == null) return Fail(1);
             // The park needs room: at least 30 m across inside the loop.
@@ -83,7 +91,7 @@ namespace Placemaker.Core.Layers.Commercial
                 for (float trim = h + 0.5f; trim <= h + 16f; trim += 2f)
                 {
                     if (f.To - 2f * trim < 8f) break;
-                    if (mall.HoldRow(Mall.Rect(f, trim, f.To - trim, -h, -(h + d + 1f))) != null) break;
+                    if (mall.HoldRow(Mall.Rect(f, trim, f.To - trim, -h, -(Mall.ZoneOffset(h) + d + 1f))) != null) break;
                 }
             }
             // The park: everything inside the loop, kept until the lots are planned.

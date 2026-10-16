@@ -17,9 +17,16 @@ namespace Placemaker.Core.Layers.Commercial
 
         protected override bool UsesEntrances => true;
 
-        protected override bool ComposeFromEntrances(LayerContext ctx, Mall mall, List<StreetShops.Run> runs) => RingDistrict(ctx, mall, runs);
+        // (A ring too small for rows of the asked depth on both sides tries two-cell rows: the loop moves out and grows.)
+        protected override bool ComposeFromEntrances(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
+        {
+            if (RingDistrict(ctx, mall, runs, 99)) return true;
+            if (Cells(ctx) <= 2) return false;
+            mall.ResetDesign();
+            return RingDistrict(ctx, mall, runs, 2);
+        }
 
-        private static bool RingDistrict(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
+        private static bool RingDistrict(LayerContext ctx, Mall mall, List<StreetShops.Run> runs, int cellsCap)
         {
             var planMark = PlanMark.Of(ctx.Plan); var mallMark = mall.Mark();
             bool Fail(int step) { planMark.Restore(ctx.Plan); mall.Rewind(mallMark); ctx.Plan.Facts["districtRingFail"] = step; return false; }
@@ -29,13 +36,13 @@ namespace Placemaker.Core.Layers.Commercial
             var (railAsset, hr) = kinds == "pedestrian" ? Ped(ctx, out var railRole) : Lane(ctx, out railRole);
             var (rungAsset, hp) = kinds == "alley" ? Lane(ctx, out var rungRole) : Ped(ctx, out rungRole);
             var (loopAsset, hl) = Mall.ShopLane(ctx);
-            int inner = math.max(2, Cells(ctx));
+            int inner = math.max(2, math.min(Cells(ctx), cellsCap));
             float d = inner * Mall.Cell;
             float court = ctx.S("blocks") == "compact" ? 0f : ctx.S("blocks") == "spacious" ? 32f : 16f;
             court = math.max(court, mall.SlopeGap());
             mall.AnchorWeight = 1.4f;
 
-            float InsetFor(float2 p, float2 nOut) => hl + d + math.max(1.5f, mall.KerbMargin(p, new float2(-nOut.y, nOut.x)) + 0.5f);
+            float InsetFor(float2 p, float2 nOut) => mall.RowInset(p, nOut, hl, d);
             var line = mall.RingLineVar(InsetFor, 10f, 26f);
             if (line == null) return Fail(1);
             var loop = mall.RingLoop(line, NetRole.Alley, loopAsset, hl, r.At(0f, 0f) + r.In * 1e5f);
@@ -166,7 +173,7 @@ namespace Placemaker.Core.Layers.Commercial
                 for (float trim = hl + 0.5f; trim <= hl + 16f; trim += 2f)
                 {
                     if (f.To - 2f * trim < 8f) break;
-                    if (mall.HoldRow(Mall.Rect(f, trim, f.To - trim, -hl, -(hl + d + 1f))) != null) break;
+                    if (mall.HoldRow(Mall.Rect(f, trim, f.To - trim, -hl, -(Mall.ZoneOffset(hl) + d + 1f))) != null) break;
                 }
             }
             mall.RouteGates();
