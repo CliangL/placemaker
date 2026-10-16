@@ -360,8 +360,19 @@ namespace Placemaker.Core.Layers.Commercial
                     var c = Poly.Centroid(piece);
                     long key = ((long)(Poly.Area(piece) * 10f) * 73856093L) ^ ((long)(c.x * 100f) * 19349663L) ^ ((long)(c.y * 100f) * 83492791L);
                     if (failed.Contains(key)) continue;
-                    // (shops) The parking budget: a leftover that would take the lots past it stays planted.
-                    if (mall.LotArea() + 0.7f * Poly.Area(piece) > mall.LotBudget) { failed.Add(key); continue; }
+                    // (shops) The parking budget, shared evenly by the big leftovers: a piece bigger than its share keeps a lot of
+                    // that size by its way in (the street or lane it is entered from) and the rest is planted, so two sides of a
+                    // composition get the same lot instead of one side all asphalt and the other all lawn.
+                    float left = mall.LotBudget - mall.LotArea();
+                    if (left < 600f) { failed.Add(key); continue; }
+                    int big = 0; foreach (var q in pieces) if (Poly.Area(q) >= 1200f) big++;
+                    float share = left / math.max(1, big);
+                    if (0.7f * Poly.Area(piece) > share)
+                    {
+                        var near = mall.NearEntrance(piece, share / 0.7f);
+                        if (near == null) { failed.Add(key); continue; }
+                        piece = near;
+                    }
                     // Shut in by plots: give back the smallest plot that touches it and a street.
                     if (openAccess && Poly.Area(piece) >= 1200f) { var parts = Mall.Smooth(piece); var basis = parts.Count > 0 ? parts[0] : piece; if (Poly.Area(basis) >= 1200f && mall.Entries(basis).Count == 0 && mall.OpenAccess(basis)) { any = true; break; } }
                     if (mall.PolyLot(piece, Mall.Parking(ctx), salt + (uint)pass * 0x10u + (uint)i)) { any = true; break; }

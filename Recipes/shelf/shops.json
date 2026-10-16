@@ -11,6 +11,22 @@
     "events"
   ],
   "types": [],
-  "hiddenTypes": [],
-  "hiddenStyles": {}
+  "hiddenTypes": [
+    "shoppingPlaza",
+    "shopsPark"
+  ],
+  "hiddenStyles": {
+    "stripMall": [
+      "rearAlley"
+    ],
+    "outdoorMall": [
+      "lifestyle"
+    ],
+    "highStreet": [
+      "shared"
+    ],
+    "retailPark": [
+      "trade"
+    ]
+  }
 }

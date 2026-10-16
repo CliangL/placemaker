@@ -141,6 +141,31 @@ namespace Placemaker.Core.Layers.Commercial
         /// may be nowhere near the entrance); the variant with the most stalls is kept. False when nothing it touches can
         /// enter it or no variant holds a useful number of stalls.
         /// </summary>
+        /// <summary>
+        /// (shops) The part of a leftover piece of about <paramref name="area"/> m² nearest its way in: the piece cut by a square round
+        /// its first entrance (square to the main street), grown until it holds that much. Null when the piece has no way in.
+        /// </summary>
+        public float2[] NearEntrance(float2[] piece, float area)
+        {
+            var entries = Entries(piece);
+            if (entries.Count == 0) return null;
+            var e = entries[0].at;
+            var d = MainDir ?? new float2(1f, 0f);
+            var n = new float2(-d.y, d.x);
+            float2[] best = null;
+            for (float h = 12f; h <= 300f; h += 4f)
+            {
+                var sq = Poly.EnsureCcw(new[] { e - d * h - n * h, e + d * h - n * h, e + d * h + n * h, e - d * h + n * h });
+                float2[] cut;
+                try { cut = Largest(Poly.Intersection(piece, sq), 300f); }
+                catch (Exception) { cut = null; }
+                if (cut == null) continue;
+                best = cut;
+                if (Poly.Area(cut) >= area) break;
+            }
+            return best;
+        }
+
         /// <summary>(shops) The main street's direction (the composition's frame): leftover lots lay their rows square to it.</summary>
         public float2? MainDir;
 
