@@ -21,7 +21,7 @@ namespace Placemaker.Core.Layers.Commercial
         public override float MinArea => 6000f;
         protected override float GradeTolerance => 0.04f;
 
-        public static readonly string[] ParkStyles = { "urban", "formal", "natural", "modern", "pocket" };
+        public static readonly string[] ParkStyles = { "urban", "formal", "natural", "modern", "pocket", "garden" };
 
         protected override void DefineControls(ControlSet c)
         {
@@ -39,7 +39,9 @@ namespace Placemaker.Core.Layers.Commercial
         protected override void DefinePresets()
         {
             Preset("commons", ("parkStyle", "urban"), ("loop", "lane"));
-            Preset("garden", ("parkStyle", "formal"), ("loop", "lane"), ("zoneKind", ZoneKinds.Mixed), ("playground", false));
+            // (shops2) Garden square: the Parks category's Garden walk (the user's favourite park); the formal park planted only half
+            // the square ("the garden kind of stops").
+            Preset("garden", ("parkStyle", "garden"), ("loop", "lane"), ("zoneKind", ZoneKinds.Mixed), ("playground", false));
             Preset("family", ("parkStyle", "natural"), ("loop", "lane"), ("playground", true), ("fountain", false), ("outerZone", ZoneKinds.CommercialLow), ("outerDepth", 16.0));
             Preset("promenade", ("parkStyle", "modern"), ("loop", "pedestrian"), ("plotDepth", 24.0), ("outerDepth", 32.0));
         }

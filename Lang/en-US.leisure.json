@@ -513,6 +513,8 @@
   "Placemaker.Market.aisle.Tooltip": "Width of the aisles between the stall rows.",
   "Placemaker.Market.treeRing": "Tree ring",
   "Placemaker.Market.treeRing.Tooltip": "Trees just inside the edge with benches between them.",
+  "Placemaker.Market.fill": "Fill the square",
+  "Placemaker.Market.fill.Tooltip": "The market fills the whole square: tree-lined market streets every 56 m, food courts at some of their crossings and stalls in every block between them.",
   "Placemaker.Market.treeSpacing": "Tree spacing",
   "Placemaker.Market.centerKind": "Centrepiece",
   "Placemaker.Market.centerKind.none": "None",

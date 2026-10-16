@@ -7,6 +7,7 @@
 // Presets: district · pedestrian · mixedUse · dense · village.
 
 using System.Collections.Generic;
+using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Unity.Mathematics;
 
@@ -23,15 +24,18 @@ namespace Placemaker.Core.Layers.Commercial
 
         public static readonly string[] LaneKinds = { "mixed", "alley", "pedestrian" };
         public static readonly string[] Blocks = { "compact", "medium", "spacious" };
+        public static readonly string[] ParkingBlocks = { "none", "some", "many" };
 
         protected override void DefineControls(ControlSet c)
         {
             c.Choice("lanes", "mixed", ControlTier.Essential, "layout", LaneKinds).Tip();
             c.Choice("blocks", "medium", ControlTier.Essential, "layout", Blocks).Tip();
             c.Toggle("squares", true, ControlTier.More, "layout").Tip();
+            // (shops2) Parking lots mixed in among the blocks (the user, Downtown: "it needs more parking, intermingled").
+            c.Choice("parkingBlocks", "none", ControlTier.Essential, "parking", ParkingBlocks).Tip();
             OuterRowControls(c, ZoneKinds.CommercialHigh);
             Shared(c.Slider("outerDepth", 32, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
-            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false);
+            CommonControls(c, ZoneKinds.CommercialLow, 16, null, true);
             c.Fixed("lanes");
             c.Fixed("blocks");
         }
@@ -41,7 +45,7 @@ namespace Placemaker.Core.Layers.Commercial
             Preset("district", ("lanes", "mixed"), ("blocks", "medium"));
             Preset("pedestrian", ("lanes", "pedestrian"), ("blocks", "medium"), ("outerDepth", 24.0));
             Preset("mixedUse", ("lanes", "mixed"), ("blocks", "spacious"), ("zoneKind", ZoneKinds.Mixed), ("plotDepth", 24.0));
-            Preset("dense", ("lanes", "alley"), ("blocks", "compact"), ("zoneKind", ZoneKinds.CommercialHigh), ("plotDepth", 24.0), ("outerDepth", 40.0), ("squares", false));
+            Preset("dense", ("lanes", "alley"), ("blocks", "compact"), ("zoneKind", ZoneKinds.CommercialHigh), ("plotDepth", 24.0), ("outerDepth", 40.0), ("squares", false), ("parkingBlocks", "some"));
             Preset("village", ("lanes", "pedestrian"), ("blocks", "compact"), ("plotDepth", 16.0), ("outerDepth", 16.0), ("outerZone", ZoneKinds.CommercialLow));
         }
 
@@ -207,6 +211,72 @@ namespace Placemaker.Core.Layers.Commercial
                 }
             }
 
+            // (shops2) Parking blocks: some of the blocks between two rails and two rungs are surface lots instead of rows (held now,
+            // planned after the rows), staggered so every lane passes a lot now and then.
+            var lotBlocks = new List<(float2[] rect, int k, int j)>();
+            var lotDoors = new List<(float2[] rect, List<(float2 at, Mall.Lane lane)> doors)>();
+            int lotsMade = 0;
+            if (ctx.S("parkingBlocks") != "none" && kinds != "pedestrian" && ys.Count >= 1)
+            {
+                var cells = new List<(int k, int j, float y0, float y1, float dist)>();
+                // The bands between rungs; with a single rung, the band between it and the U's back lane.
+                var bands = new List<(float y0, float y1)>();
+                for (int j = 0; j + 1 < ys.Count; j++) bands.Add((ys[j] + hp, ys[j + 1] - hp));
+                if (!back && ys.Count >= 1) bands.Add((ys[ys.Count - 1] + hp, tb - hr));
+                for (int j = 0; j < bands.Count; j++)
+                    for (int k = 0; k + 1 < xs.Count; k++)
+                    {
+                        if (rails[k] == null || rails[k + 1] == null) continue;
+                        float cx = 0.5f * (xs[k] + xs[k + 1]), cy = 0.5f * (bands[j].y0 + bands[j].y1);
+                        cells.Add((k, j, bands[j].y0, bands[j].y1, math.abs(cx - cxm) + math.abs(cy - cym)));
+                    }
+                bool many = ctx.S("parkingBlocks") == "many";
+                var pick = new List<(int k, int j, float y0, float y1, float dist)>();
+                if (cells.Count <= 3)
+                {
+                    cells.Sort((p, q) => p.dist.CompareTo(q.dist));
+                    if (cells.Count > 0) pick.Add(cells[0]);
+                }
+                else foreach (var c in cells) if ((c.k + 2 * c.j) % (many ? 2 : 3) == 1) pick.Add(c);
+                foreach (var c in pick)
+                {
+                    float a0 = xs[c.k] + hr, a1 = xs[c.k + 1] - hr;
+                    if (c.y1 - c.y0 < Mall.LotDepth(1) + 2f || a1 - a0 < 30f) continue;
+                    var rect = Mall.Rect(r, a0, a1, c.y0, c.y1);
+                    if (!mall.Fits(rect)) continue;
+                    var held = mall.Hold(rect);
+                    lotBlocks.Add((held, c.k, c.j));
+                    // Its ways in: the middle of each rail side, and of the rungs before and behind it when they carry cars. The lot's
+                    // stubs join the lanes there, so the rows across those lanes are split at the same points now (a plot straddling a
+                    // join is never zoned), and the lot is entered exactly there.
+                    float midT = 0.5f * (c.y0 + c.y1), midS = 0.5f * (a0 + a1);
+                    // In from the rungs (the middle of a long run); from the rails only when the rungs are footways: a stub near a
+                    // rail's junction would leave a stretch of rail too short for a zone block.
+                    var doors = new List<(float2, Mall.Lane)>();
+                    if (kinds == "alley")
+                        foreach (var g in rungs)
+                            if (g.k == c.k && (math.abs(g.y + hp - c.y0) < 0.5f || math.abs(g.y - hp - c.y1) < 0.5f))
+                                doors.Add((Mall.Project(g.lane, r.At(midS, g.y), out _), g.lane));
+                    if (doors.Count == 0)
+                    {
+                        doors.Add((Mall.Project(rails[c.k], r.At(xs[c.k], midT), out _), rails[c.k]));
+                        doors.Add((Mall.Project(rails[c.k + 1], r.At(xs[c.k + 1], midT), out _), rails[c.k + 1]));
+                    }
+                    lotDoors.Add((held, doors));
+                }
+            }
+            // The lots go in before the rows: their stubs join the lanes where the parking planner puts them, and the rows across
+            // those lanes are then split at the real joins (a plot straddling a join is never zoned).
+            uint lotSalt = 0xD90u;
+            foreach (var (rect, doors) in lotDoors)
+            {
+                mall.Release(rect);
+                var e = new List<(float2, string)>();
+                foreach (var (at, lane) in doors) { Poly.ClosestPointOnBoundary(rect, at, out int seg, out float tt); e.Add((math.lerp(rect[seg], rect[(seg + 1) % rect.Length], tt), "alley")); }
+                if (!mall.Lot(rect, e, Mall.Parking(ctx), lotSalt++)) mall.Hold(rect);   // planted after the rows (below)
+                else lotsMade++;
+            }
+
             // Plots: rails first (long, continuous), then the rungs; the streets last, a whole cell off every lane.
             // Street mouths keep a gateway the depth of the street's own plots (planted, a cell wide beside the lane).
             foreach (var lane in mall.Lanes.ToArray())
@@ -218,6 +288,7 @@ namespace Placemaker.Core.Layers.Commercial
             if (outer > 0) mall.StreetRows(runs, outer, ctx.S("outerZone"), 3, 2);
 
             uint salt = 0xD10u;
+            ctx.Plan.Facts["parkingBlocks"] = lotsMade;
             // The four corners of a crossing: a diagonal pair of café squares (fountain, seating), the other pair garden squares.
             for (int i = 0; i < squares.Count; i++)
             {
