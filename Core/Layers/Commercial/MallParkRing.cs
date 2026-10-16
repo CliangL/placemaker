@@ -103,6 +103,35 @@ namespace Placemaker.Core.Layers.Commercial
             }
             catch (System.Exception) { park = null; }
             if (park == null) return Fail(5);
+            // (rf-shops3) Gate courts: where a car entrance meets an alley loop, a small car park opens off the loop on the park side,
+            // straight on from the drive (people park, then walk into the park or round to the shops); the park keeps the rest.
+            // A parking loop has its own bays; a park under 4000 m2 keeps all its ground.
+            var gateCourts = new List<(float2[] lot, float2 at)>();
+            if (!parkingRoad && Poly.Area(park) > 4000f && mall.Gates != null)
+                foreach (var g in mall.Gates)
+                {
+                    if (!g.Cars || gateCourts.Count >= 2) continue;
+                    if (!mall.FirstLane(g.At, g.In, 260f, out var ln, out var at) || ln != loop) continue;
+                    int seg = 0; float bd = float.MaxValue;
+                    for (int k = 0; k + 1 < loop.Points.Count; k++)
+                    {
+                        float dd = SegmentIndex.DistSq(at, loop.Points[k], loop.Points[k + 1]);
+                        if (dd < bd) { bd = dd; seg = k; }
+                    }
+                    var f = Mall.Frame(loop.Points[seg], loop.Points[seg + 1]);
+                    float s0 = math.dot(at - f.A, f.Dir), z = h + 1.5f;
+                    var rect = Mall.Rect(f, s0 - 21f, s0 + 21f, z, z + 30f);
+                    float2[] lot = null;
+                    try { lot = Mall.Largest(Poly.Boolean(new[] { (IReadOnlyList<float2>)park }, new[] { (IReadOnlyList<float2>)Poly.EnsureCcw(rect) }, BoolOp.Intersection), 380f); }
+                    catch (System.Exception) { lot = null; }
+                    if (lot == null) continue;
+                    float2[] rest = null;
+                    try { rest = Mall.Largest(Poly.Boolean(new[] { (IReadOnlyList<float2>)park }, new[] { (IReadOnlyList<float2>)Poly.EnsureCcw(rect) }, BoolOp.Difference), 2000f); }
+                    catch (System.Exception) { rest = null; }
+                    if (rest == null) continue;
+                    park = Poly.EnsureCcw(rest);
+                    gateCourts.Add((lot, f.At(s0, z)));
+                }
             int before = mall.Taken.Count;
             mall.Take(park);
             var parkParts = mall.Taken.GetRange(before, mall.Taken.Count - before);
@@ -112,6 +141,10 @@ namespace Placemaker.Core.Layers.Commercial
             ctx.Check();
             // Lots on what is left round the ring (the corners), entered from the loop.
             mall.LotBudget = float.MaxValue;
+            int courts = 0;
+            foreach (var (lot, at) in gateCourts)
+                if (mall.Lot(lot, new List<(float2, string)> { (at, "alley") }, Mall.Parking(ctx), 0x7E0u + (uint)courts)) courts++;
+            ctx.Plan.Facts["gateCourts"] = courts;
             RestLots(ctx, mall, 0x7B0u, 400f, false, false);
             mall.ReleaseRows();
             int rows = mall.LaneRows(loop, inner, null, -1, 0f, 0f, 3, 2, RowSeg);
