@@ -25,6 +25,7 @@ using Placemaker.Core.Geometry;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Leisure;
 using Placemaker.Core.Layers.Park;
+using Placemaker.Core.Layers.Types.UrbanFarm;
 using Unity.Mathematics;
 
 namespace Placemaker.Core.Layers.Types.Farmstead
@@ -345,6 +346,27 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 }
             }
 
+            // 2b. The track lines are claimed before the pond and the paddocks, so the spine (and the grid) run unbroken
+            // from the yard to the outline: placed afterwards they were cut into stubs that ended in the grass (rf-farms).
+            string trackMode = ctx.S("tracks");
+            float fieldArea = ctx.F("fieldSize") * 10000f;
+            // Small farms still get a few fields; huge ones never exceed the field budget.
+            fieldArea = math.clamp(fieldArea, region.Area / MaxFields, math.max(1500f, region.Area / 4f));
+            float Lf = math.sqrt(fieldArea * 1.6f), Wf = Lf / 1.6f;
+            if (trackMode != "none")
+            {
+                foreach (var (a, b) in Line(region, origin, axis))
+                    drive.Add(LayerRegion.Rect((a + b) * 0.5f, axis, math.distance(a, b) * 0.5f, 3.5f));
+                if (trackMode == "grid")
+                {
+                    Lattice(region, origin, axis, side, Lf, Wf, out int ja0, out int ja1, out _, out _);
+                    for (int ia = ja0 + 1; ia <= ja1; ia++)
+                        if (ia % 2 == 0)
+                            foreach (var (a, b) in Line(region, origin + axis * (ia * Lf), side))
+                                drive.Add(LayerRegion.Rect((a + b) * 0.5f, side, math.distance(a, b) * 0.5f, 3.5f));
+                }
+            }
+
             // 3. Pond.
             float2 pondC = default; float pondR = 0f;
             if (ctx.B("pond") && FindPond(ctx, region, occ, hard, drive, hasYard ? yard.Center : centre, out pondC, out pondR))
@@ -361,11 +383,6 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             ctx.Check();
 
             // 5. Tracks: spine along the farm's axis through the yard, cross tracks every second field.
-            string trackMode = ctx.S("tracks");
-            float fieldArea = ctx.F("fieldSize") * 10000f;
-            // Small farms still get a few fields; huge ones never exceed the field budget.
-            fieldArea = math.clamp(fieldArea, region.Area / MaxFields, math.max(1500f, region.Area / 4f));
-            float Lf = math.sqrt(fieldArea * 1.6f), Wf = Lf / 1.6f;
             Func<float2, bool> trackBlocked = p => hard.Hits(p, 1.5f) || !region.ContainsDisc(p, 3f);
             var trackLinesB = new HashSet<int>();   // lattice lines along the axis carrying a track
             var trackLinesA = new HashSet<int>();   // lattice lines across the axis carrying a track
@@ -399,7 +416,9 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             var cropIds = ctx.L("cropAssets");
             string cropMode = ctx.S("cropProps");
             bool needCrops = cropMode != "none" || fields.Exists(f => f.Kind == FieldKind.Veg);
-            string cropCat = needCrops ? LeisureKit.Category(ctx, cropIds.Length > 0 ? "x" : "", AssetCategories.FieldCrop, AssetCategories.GardenCrop) : null;
+            // Real field crops only (installed or picked): no garden-crop fallback, which in vanilla is raised-bed corner
+            // pieces (rows of grey boxes). Without crop plants a field is its crop surface and wheel ruts — no note.
+            string cropCat = needCrops && (cropIds.Length > 0 || AssetAvailability.Has(AssetCategories.FieldCrop)) ? AssetCategories.FieldCrop : null;
             bool hasHay = fields.Exists(f => f.Kind == FieldKind.Hay) || ctx.B("hayStacks");
             string hayCat = hasHay ? LeisureKit.Category(ctx, "", AssetCategories.FarmHay) : null;
             float rs = ctx.F("rowSpacing");
@@ -411,7 +430,7 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             int arableFields = 0;
             foreach (var f in fields) if (f.Kind == FieldKind.Grain || f.Kind == FieldKind.Veg) arableFields++;
             int perField = math.max(8, cropBudget / math.max(1, arableFields));
-            int fieldSurfaces = 0;
+            int fieldSurfaces = 0, irrigation = 0;
             for (int i = 0; i < fields.Count; i++)
             {
                 var f = fields[i];
@@ -420,6 +439,13 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 {
                     case FieldKind.Grain:
                         if (GroundCover.Field(ctx, f.Ring, GroundCover.Straw)) fieldSurfaces++;
+                        // Arable farms water their big fields: an irrigation rig standing across the rows.
+                        if (sub == "arable" && irrigation < 3 && f.Region.Area > 6000f)
+                        {
+                            var at = f.Region.DeepestPoint(out float clear, null, 10);
+                            if (clear > 10f && LeisureKit.Put(ctx, occ, at, FarmKit.Yaw(f.RowDir), ObjectRole.Furniture, AssetMix.One(FarmArt.Irrigation),
+                                AssetCategories.FarmMachinery, 8.6f, Hashing.Mix(v, 0x1A6u), 0.5f, 0.3f)) irrigation++;
+                        }
                         else if (paint)
                         {
                             TerrainPaint.Patch(ctx, f.Ring, dirtLayer, 0.85f, 3f);
@@ -803,8 +829,13 @@ namespace Placemaker.Core.Layers.Types.Farmstead
 
             // Silo battery at the +u end (claims its strip first so the barns stop short of it).
             int wantSilos = ctx.I("silos");
-            string siloCat = wantSilos > 0 ? LeisureKit.Category(ctx, ctx.S("siloAsset"), AssetCategories.FarmSilo) : null;
-            var siloAsset = AssetMix.One(ctx.S("siloAsset"));
+            // Vanilla has no silo prop: a battery of tall water tanks (feed bins) stands in, without a "missing" note.
+            string siloCat = null; var siloAsset = AssetMix.One(ctx.S("siloAsset"));
+            if (wantSilos > 0)
+            {
+                if (!string.IsNullOrEmpty(ctx.S("siloAsset")) || AssetAvailability.Has(AssetCategories.FarmSilo)) siloCat = AssetCategories.FarmSilo;
+                else if (AssetAvailability.Has(AssetCategories.GardenShed)) { siloCat = AssetCategories.GardenShed; siloAsset = FarmArt.SiloStandIn; }
+            }
             float siloR = AssetMix.FootprintRadius(ctx.Site, siloAsset, 2.6f);
             float siloStrip = 0f;
             if (siloCat != null)
@@ -850,7 +881,10 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                     for (int k = 0, n = 0; k < 8 && n < want; k++)
                     {
                         var p = yard.Local(-yard.HalfLength + 4f + k * 6.5f, frontSign * (yard.HalfWidth - 3.2f));
-                        if (LeisureKit.Put(ctx, yo, p, yawBack, ObjectRole.Furniture, AssetMix.One(""), cat, 2.5f, Hashing.Mix(ctx.Seed, 0x7EC0u + (uint)k), 0.3f, 0.3f))
+                        uint mv = Hashing.Mix(ctx.Seed, 0x7EC0u + (uint)k);
+                        // Tractor trailers with their loads, never the 16 m irrigation rig (that one stands in the fields).
+                        var machine = AssetMix.Pick(FarmArt.Trailers, mv);
+                        if (LeisureKit.Put(ctx, yo, p, yawBack, ObjectRole.Furniture, machine, cat, 2.5f, mv, 0.3f, 0.3f))
                             n++;
                     }
             }
@@ -924,12 +958,10 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 LeisureKit.Put(ctx, occ, r.Center, r.Yaw, ObjectRole.Furniture, AssetMix.One(""), hayCat, 1.2f, Hashing.Mix(v, 2u), 0.5f, 0.2f);
             if (ctx.B("shelters"))
             {
-                string cat = LeisureKit.Category(ctx, "", AssetCategories.Shelter, AssetCategories.FarmBarn, AssetCategories.GardenShed);
-                if (cat != null)
-                {
-                    var far = r.Center + inward * (math.min(r.HalfLength, r.HalfWidth) - 4f) + along * (math.max(r.HalfLength, r.HalfWidth) * 0.5f);
-                    LeisureKit.Put(ctx, occ, far, math.atan2(-inward.x, -inward.y), ObjectRole.Furniture, AssetMix.One(""), cat, 3f, Hashing.Mix(v, 3u), 0.5f, 0.3f);
-                }
+                // A field shelter (installed animal shelter, else the wooden campground shelter): never a gazebo.
+                var (shelter, cat) = AnimalPark.AnimalParkArt.Prop("", AssetCategories.AnimalParkShelter, AnimalPark.AnimalParkArt.ShelterStandIn("paddocks"), AssetCategories.Shelter);
+                var far = r.Center + inward * (math.min(r.HalfLength, r.HalfWidth) - 4f) + along * (math.max(r.HalfLength, r.HalfWidth) * 0.5f);
+                LeisureKit.Put(ctx, occ, far, math.atan2(-inward.x, -inward.y), ObjectRole.Furniture, shelter, cat, 3f, Hashing.Mix(v, 3u), 0.5f, 0.3f);
             }
             int spawners = 0;
             if (ctx.B("animals"))

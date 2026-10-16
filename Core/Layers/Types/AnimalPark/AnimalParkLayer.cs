@@ -438,7 +438,6 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             string troughCat = ctx.B("troughs") && (!string.IsNullOrEmpty(ctx.S("troughAsset")) || AssetAvailability.Has(AssetCategories.AnimalParkTrough)) ? AssetCategories.AnimalParkTrough : null;
             var (hayAsset, hayCat) = AnimalParkArt.Prop(ctx.S("hayAsset"), AssetCategories.AnimalParkHay, AnimalParkArt.Hay, AssetCategories.FarmHay);
             if (!ctx.B("hay")) hayCat = null;
-            string dirt = AssetAvailability.Has(AssetCategories.SurfaceDirt) ? AssetCategories.SurfaceDirt : AssetCategories.SurfaceNatural;
             bool worn = ctx.B("wornGround");
             int layer = math.clamp(ctx.I("groundLayer"), 1, 4);
             var spawnerAsset = new AssetRef(ctx.S("spawnerAsset"), SpawnerFallbacks(kind));
@@ -481,7 +480,14 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
 
                 // Ground: worked earth in small pens, worn patches by the gate in paddocks.
                 // Straw-bedded petting pens (mud, then sand without the farming pack).
-                if (kind == "petting") ctx.Surface(pen.Ring, SurfaceRole.Decorative, AssetMix.One(AnimalParkArt.Straw, "EAI - Surface Pack Ground Mud Surface", "Sand Surface 02"), dirt);
+                // Without a straw / mud surface pack the vanilla fallback was grey "Sand Surface 02" slabs (rf-farms): then
+                // the pen is grass worn to earth by terrain paint instead.
+                if (kind == "petting")
+                {
+                    if (AssetAvailability.Has(AssetCategories.SurfaceDirt))
+                        ctx.Surface(pen.Ring, SurfaceRole.Decorative, AssetMix.One(AnimalParkArt.Straw, "EAI - Surface Pack Ground Mud Surface"), AssetCategories.SurfaceDirt);
+                    else if (worn && patches < 40) { TerrainPaint.Patch(ctx, pen.Ring, layer, 0.55f, 1.5f); patches++; }
+                }
                 if (worn && patches < 40)
                 {
                     var patch = LeisureKit.Blob(gate + inward * 4f, math.min(5f, math.sqrt(pr.Area) * 0.25f), Hashing.Mix(v, 5u), 12, 0.25f);
