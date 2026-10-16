@@ -110,6 +110,25 @@ trucks, pad sites, landscape (groves with shrubs and mulch, flowerbeds at the dr
 front of the lots, building sites (dirt on unbuilt plots), plot trees, worn ground (desire paths, worn walk ends),
 water (a retention pond, rain gardens with lush ground and wet trees).
 
+What is built (control ids `Placemaker.Commercial.<id>`, group "Extras" unless said):
+
+| Extra (id) | Builds | On by default |
+|---|---|---|
+| Entrances (`entrances`, group Entrances) | two-way, way in, way out (invisible drives from the kerb, arrows), driveway / in / out (real junctions, also through a row of shops: a service alley), footpath (a walk from the sidewalk, joining the spine when one is near), bus stop (on the street in front) | the player places them; Build waits |
+| Walkways (`walkways`) | the spine: a tree-lined walk from the ring's front drive through the lot to the first row of shops (lamps, a bench pair, desire lines across its planted strips, worn ground at its street end); the frontage promenade, meandering through the anchors, benches and low lights along it; desire lines from its dead ends to the street | all |
+| Pocket plaza (`pocketPlaza`) | paving, a fountain on big plazas (else a tree in a ring of benches), café patios, planters, lamps, a vending machine | strip mall |
+| Bikes (`bikes`: none / racks / paths) | racks at the plaza and at footpath entrances; paths: the promenade as a bike path | racks; big box paths |
+| Food trucks (`foodTrucks`) | carts at the plaza, the park gates, the district's café squares | 1-3 |
+| Pad sites (`pads`) | 3 x 3-cell plots inside the ring's front corners (a restaurant, a bank by the road) | strip mall |
+| Planting (`landscape`: plain / designed) | every leftover as groves with shrubs, mulch, flowerbeds at drives and lane mouths; boulevard trees along the front drive; a pergola on long frontages; islands from a ring's inner corners | designed |
+| Hedges (`hedges`) | a low hedge between the frontage and the lot | all |
+| Building sites (`buildingSites`) | dirt painted on the front of every plot | all |
+| Trees on plots (`plotTrees`) | trees and shrubs at the back of every plot, on painted lawn; a growing building hides what is in its way | all |
+| Worn ground (`wornGround`) | desire lines, mulch under groves, worn patches; subtle ground decals (worn patches, leaves, stains) where the catalog has them | all |
+| Water (`water`: none / pond / rainGardens / both) | a retention pond in a front corner of the big box (rain-garden margin, lush ground); the mall park's pond (Garden square, Family park); rain gardens: wet trees and lush ground on strips along the lots | strip mall rain gardens; big box both; garden and family pond |
+| Lot medians (`lotMedian`, group Parking) | wider planted strips between the bays | big box 3.5 m |
+| Service yards (with designed planting) | a dumpster behind every other deep shop | with designed planting |
+
 ## The styles
 
 **Strip mall, Classic: "the neighbourhood centre" (real-2).** A ring drive follows the site: close to the main street

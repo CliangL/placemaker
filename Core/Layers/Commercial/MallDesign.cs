@@ -780,7 +780,7 @@ namespace Placemaker.Core.Layers.Commercial
                 if (X.Sites)
                 {
                     var r = Rect(f, 0.9f, w - 0.9f, 0.6f, siteDepth - 0.6f);
-                    if (Poly.Area(r) >= 30f && kit.Fill(r, TerrainMaterials.Dirt, 0.62f, 1.6f, 0.7f, 5f) != null) n++;
+                    if (Poly.Area(r) >= 30f && kit.Fill(r, TerrainMaterials.Dirt, 0.8f, 1.6f, 0.7f, 5f) != null) n++;
                 }
                 if (X.PlotTrees && siteDepth < dep - 1f)
                     kit.Fill(Rect(f, 0.6f, w - 0.6f, siteDepth - 1f, dep - 0.5f), TerrainMaterials.Lush, 0.55f, 2f, 0.8f, 6f);
