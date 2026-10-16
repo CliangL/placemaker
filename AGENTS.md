@@ -57,19 +57,26 @@ of your build; requests with the same build share one open game, and the game is
 
 - **Run the command as a background command.** It exits when your results are back (same output and exit code as
   before), which wakes you up. Do the next thing meanwhile; don't poll, retry or start a second copy.
-- Read its progress lines: `queue: #2 in line | ahead: lead (3 build(s), relaunch) | now: ... | ETA about 2 min 10 s`.
-  `#N` is your place, `ahead` who goes first, the ETA is measured. `waiting: the user's ... game is open`: the line
-  waits for the user; that can take long, and that is fine.
-- Ctrl+C leaves the line. `-Direct` bypasses the queue: for debugging the runner only.
-- The queue does not install your build for the user's own game (it puts back what was installed before). Say so when
-  you report a fix; install it with `dotnet build -c Release` only when the user asks and no game is open.
+- Read its progress lines: `queue: #2 in line | ahead: lead (3 build(s), 9 pictures, relaunch) | now: ... | ETA about
+  2 min 10 s`. `#N` is your place, `ahead` who goes first, the ETA is measured per build and per picture (ask for
+  fewer pictures and you are done sooner). `waiting: the user's ... game is open`: the line waits for the user; that
+  can take long, and that is fine. `STUCK` (exit 1): the queue itself is broken; report it, don't retry in a loop.
+- Ctrl+C leaves the line. `-Direct` bypasses the queue: for debugging the runner only. `tools/suite/Queue.ps1` shows
+  the line and what `Mods\Placemaker` holds.
+- The queue does not install your build for the user's own game: `Mods\Placemaker` gets the user's build back the
+  moment the queue's game exits. Say so when you report a fix; install it with `dotnet build -c Release` only when
+  the user asks and no game is open (it then stays the user's build).
 - Details: `suite/README.md`, "The game queue".
 
-- Results go to `.forensics/suite/runs/<id>/`: `logs/Placemaker.log`, `logs/Player.log`, `suite.log`,
+- Results go to `C:\Users\jack\cs2-area-tool\.forensics\suite\runs\<id>\` (the main checkout's, also from a worktree;
+  the commands print full paths): `logs/Placemaker.log` and `logs/Player.log` (your request's part), `suite.log`,
   `summary.md`, `contact.html` and `shots/`.
 - One game at a time. Never close a game the user started.
 - A code change needs a rebuild and a relaunch (about 60 s to a ready test world).
-- After a cut-off run, `Run-Suite.ps1 -RestoreOnly` puts the user's game settings back.
+- After a cut-off run, `Run-Suite.ps1 -RestoreOnly` puts the user's game settings back (the queue does it by itself).
+- Removing a worktree: its `UI\node_modules` is a link to the shared folder. Delete the link first
+  (`cmd /c rmdir <worktree>\UI\node_modules`), then `git worktree remove`; a recursive delete empties the shared
+  folder and breaks every worktree's UI build.
 
 ## Build and test
 

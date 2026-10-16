@@ -184,6 +184,7 @@ namespace Placemaker.Game.Suite
                             {
                                 yield return RunOne(s);
                                 rows.Add(Row(_lastRun));
+                                WriteSummary();   // after every build: the game queue follows a file's progress (its ETA)
                             }
                             _phase = "queue";
                         }

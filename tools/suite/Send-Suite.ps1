@@ -53,7 +53,7 @@ if (-not $queued) {
     if (-not (Test-Path $inbox)) { Write-Host "run $RunId has no inbox"; exit 2 }
 }
 if ($Quit) { $text = '{"command":"quit"}'; $base = 'quit' }
-elseif ($File) { $text = Get-Content $File -Raw; $base = [IO.Path]::GetFileNameWithoutExtension($File) }
+elseif ($File) { $text = Get-Content -LiteralPath $File -Raw -Encoding UTF8; $base = [IO.Path]::GetFileNameWithoutExtension($File) }
 elseif ($Json) { $text = $Json; $base = 'inline' }
 else { Write-Host 'give -File, -Json or -Quit'; exit 2 }
 $doc = $text | ConvertFrom-Json   # fail here on bad JSON, not in the game

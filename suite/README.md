@@ -9,38 +9,56 @@ session) and wait their turn. Ten agents share one game, launched once per build
 
 * **Run the command in the background.** It blocks until its results are back, then prints what it always printed
   (the builds, the pictures, the log lines) and exits with the same exit code, so you are woken up when it exits.
-* While it waits it prints a line every ~15 s and on every change:
+* While it waits it prints a line every ~15 s, and at once when its place, who is ahead or what runs changes:
 
   ```
-  queue: #2 in line | ahead: lead (3 build(s), relaunch) | now: fix-roads 2 build(s), 40 s in | game open with build 3f2a1c9e7b10 | your build needs a launch | ETA about 2 min 10 s (around 21:14)
+  queue: #2 in line | ahead: lead (3 build(s), 9 pictures, relaunch) | now: fix-roads 1 of 2 build(s) done, 40 s in | game open with build 3f2a1c9e7b10 | your build needs a launch | ETA about 2 min 10 s (around 21:14)
+  queue: running yours in the game: 5 of 22 build(s) done, 4 min 2 s in (build 3f2a1c9e7b10); ETA about 13 min
   ```
 
-  `#N in line` is your place; `ahead` is who goes first (`relaunch`: their build needs the game restarted); `now` is
-  what the game does; the ETA comes from measured boot, per-build and quit times (`history.json`). `waiting: the
-  user's own game is open` or `the user's playground is open`: the line waits until the user closes the game, and the
-  ETA is unknown meanwhile.
+  `#N in line` is your place; `ahead` is who goes first, with their builds and pictures (`relaunch`: their build needs
+  the game restarted); `now` is what the game does, with how many of its builds are done. Your build `is the open
+  game's`, `shares the launch for <who>` (the game opened for someone ahead with the same build) or `needs a launch`.
+  The ETA is measured (`history.json`): boot and quit times, and per build its time without pictures plus a time per
+  picture (taken from the game's own timings), so 22 builds with 14 pictures each are estimated as such; the request
+  in the game is followed build by build (`over its estimate` when one takes longer). `waiting: the user's own game is
+  open` or `the user's playground is open`: the line waits until the user closes the game, and the ETA is unknown.
 * **Your build is frozen when you ask.** The command builds your worktree without installing it (unless `-NoBuild`)
-  and copies what Deploy would install (`bin\Release`, `UI\build`) plus the runner scripts into the queue. Their hash
-  is the build's identity. Keep working while you wait: later edits do not change your request.
+  and copies what Deploy would install (`bin\Release`, `UI\build`) plus the runner scripts into the queue. The hash of
+  the frozen mod and of the scripts the game run uses (Run-Suite, ModsInstall, Contact-Suite, schema) is the build's
+  identity. Keep working while you wait: later edits do not change your request.
 * **Batching.** The game stays open with a build. Requests with that build run back to back in it without a relaunch
   (land made to order is laid out in the open game when its request comes). Another build waits for the request in
   the game, then the game quits cleanly and relaunches with it (about 60 s). The oldest request with the open game's
-  build goes first, unless the head of the line has waited more than 10 minutes. A request that does not fit the open
-  game's test grid gets a fresh launch.
+  build goes first, but only while the head of the line would still start within 10 minutes of asking. A request that
+  does not fit the open game's test grid gets a fresh launch.
 * **The user comes first.** `Play.ps1` goes next after the request in the game; the line then waits until the user
   closes the playground. A game the user started themselves is never touched: the line waits for it.
-* **Leaving the line:** Ctrl+C (or killing the command), or deleting its folder in `requests\`.
+* **`Mods\Placemaker` is the user's** whenever no queue game runs (`ModsInstall.ps1`). The queue's game host swaps a
+  request's frozen build in right before it launches the game (after it holds the suite lock and has checked that no
+  other game runs) and swaps the user's build back the moment that game has exited. Nothing is written while any
+  Cities2.exe runs: if the user starts a game in that moment, the user's build goes back once it is closed (the
+  dispatcher stays up until then). A build installed on purpose (`dotnet build -c Release`, a `-Direct` run) becomes
+  the user's build; so does the build the user played in `Play.ps1` (it stays installed, as it always did).
+  **The queue does not install your build for the user's own game**: do that with `dotnet build -c Release` when no
+  game is open.
+* **Leaving the line:** Ctrl+C (or killing the command), or deleting its folder in `requests\`. A command whose queue
+  is stuck (the dispatcher stopped updating `status.json` for 3 min, or the request sits in `active\` unrun) prints
+  `STUCK` and exits 1.
 * The dispatcher (`Game-Dispatcher.ps1`) starts by itself with the first request, and stops when nothing has been in
-  line for 10 minutes (the game quits first). Then `Mods\Placemaker` gets back the build that was installed before the
-  queue started (unless someone installed another one meanwhile). **The queue does not install your build for the
-  user's own game**: do that with `dotnet build -c Release` when no game is open.
-* Results land where they always did (`.forensics/suite/runs/<runId>/`). `logs/Placemaker.log` is the queue game's log
-  so far (Show prints your lines in it); the game's own run folder is `runs/queue-<time>/`.
-* `powershell -File tools/suite/Queue.ps1` shows the line (`-Watch`, `-Log 40`, `-Cancel <id>`). In the queue folder:
-  `requests\`, `active\`, `done\<id>\result.json`, `dispatcher.log`, `launches.log` (one line per game launch),
-  `status.json`.
+  line for 10 minutes (the game quits first) and the user's build is back.
+* Results go to `-ResultsRoot`, by default `C:\Users\jack\cs2-area-tool\.forensics\suite\runs\<runId>\` whatever
+  worktree asks (the commands print full paths). Each request's folder is its own: its builds numbered from 01 with
+  the ids it asked for, its pictures, and its own part of `logs/Placemaker.log` and `logs/Player.log` (from where the
+  logs stood when it was fed); `suite.log` is the whole game's. The game's own run folder is `runs/queue-<time>/`
+  (removed after 3 days).
+* `powershell -File tools/suite/Queue.ps1` shows the line (`-Watch`, `-Log 40`, `-Cancel <id>`) and what
+  `Mods\Placemaker` holds. Use it rather than reading `status.json` yourself (it is replaced while you read). In the
+  queue folder: `requests\`, `active\`, `done\<id>\result.json`, `dispatcher.log`, `launches.log` (one line per game
+  launch), `install.json` and `user-build\` (the user's build), `bundles\` (frozen builds, 6 h after last use).
 * `-Direct` on any of the commands launches the game here and now, outside the line: for debugging the runner only.
-  It is refused while any game is open.
+  It is refused while any game is open. `Run-Suite -Queue`, `-Set queue` and `-Set bootstrap` (a game of your own
+  kept open) need `-Direct`.
 * Through the queue, `Send-Suite.ps1` runs your file in the queue's game with your current build (`bin\Release` as it
   is; `-Build` rebuilds first). `on` works only within one file: the next file may land in another game.
 
@@ -332,7 +350,7 @@ If the game is closed early the quit hook writes what is known, marked incomplet
 
 ## Live queue
 
-`Run-Suite -Queue` keeps the game open (after the set, or right after the fixture with `-Set queue`); the game queue's
+`Run-Suite -Direct -Queue` keeps the game open (after the set, or right after the fixture with `-Set queue`); the game queue's
 dispatcher runs its games this way. Send-Suite (or the dispatcher) drops a file into `<run>/inbox`; the result comes
 back as `<file>.result.json`. `{"command":"grow","seconds":40}` grows the whole city. A file's own `settings` hold for
 that file only. A scenario with `land` gets its land laid out when it arrives (east of the last plot; the ground is

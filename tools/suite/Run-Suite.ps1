@@ -54,12 +54,19 @@ param(
     [switch]$Direct,
     [string]$Who = '',
     # The run's label instead of this checkout's git hash (the queue runs a frozen copy of the requester's build).
-    [string]$Label = ''
+    [string]$Label = '',
+    # The queue's game host: install this frozen build (a bundle's mod\) once the suite lock is held and no other game
+    # runs, and put the user's build back the moment the game has exited (ModsInstall.ps1). A playground's build stays.
+    [string]$DeployFrom = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-if (-not $Direct -and -not $RestoreOnly -and -not $Queue -and $Set -notin @('bootstrap', 'queue')) {
+if (-not $Direct -and -not $RestoreOnly -and ($Queue -or $Set -in @('bootstrap', 'queue'))) {
+    Write-Host "STOP: -Queue, -Set queue and -Set bootstrap keep a game of your own open outside the game queue: add -Direct (debugging the runner only). To run scenarios in the queue's game use Send-Suite.ps1 -File."
+    exit 2
+}
+if (-not $Direct -and -not $RestoreOnly) {
     . (Join-Path $PSScriptRoot 'GameQueue.ps1')
     exit (Invoke-QueuedRun $repo @{ Set = $Set; RunId = $RunId; NoBuild = $NoBuild; TimeoutMin = $TimeoutMin; MaxScenarios = $MaxScenarios; AllMods = $AllMods; KeepGraphics = $KeepGraphics
             NoTerrain = $NoTerrain; Window = $Window; PregrowSeconds = $PregrowSeconds; Opt = $Opt; Grid = $Grid; UserModSettings = $UserModSettings; Look = $Look; Pace = $Pace
@@ -119,6 +126,24 @@ function Restore-Settings([string]$why) {
 }
 
 function Release-Lock { if (Test-Path $lockFile) { try { $l = Get-Content $lockFile -Raw | ConvertFrom-Json; if ($l.pid -eq $PID) { Remove-Item $lockFile -Force } } catch { } } }
+# The lock's holder is alive: its PID runs and is the same process (Windows reuses PIDs; a lock without procStart is from
+# an older Run-Suite: then the process must have started before the lock was written).
+function Test-LockHolder($l) {
+    if (-not $l -or -not $l.pid) { return $false }
+    $p = Get-Process -Id ([int]$l.pid) -ErrorAction SilentlyContinue
+    if (-not $p) { return $false }
+    try { $st = $p.StartTime } catch { return $true }   # cannot tell (an elevated process): alive
+    if ($l.procStart) { return [math]::Abs($st.ToUniversalTime().Ticks - [int64]$l.procStart) -lt 20000000 }
+    try { return $st -le ([datetime]$l.start).AddSeconds(5) } catch { return $true }
+}
+# The queue's host: the user's build back in Mods\Placemaker once our game is gone (ModsInstall.ps1).
+$script:queueInstall = $false
+function Restore-UserBuild([string]$why) {
+    if (-not $script:queueInstall -or $Playground) { return }
+    $r = MI-Reconcile $why
+    if ($r.ok) { $script:queueInstall = $false; Say "the user's build is back in Mods\Placemaker$(if ($r.message) { ": $($r.message)" })" }
+    else { Say "the user's build is not back yet: $($r.message) (the game queue's dispatcher puts it back once no game runs)" }
+}
 
 if ($RestoreOnly) { Restore-Settings 'restore only'; exit 0 }
 if ($Playground) { $UserModSettings = $true }   # the user plays with their own Placemaker options
@@ -126,12 +151,12 @@ if ($Playground) { $UserModSettings = $true }   # the user plays with their own 
 # ───────────── 1. lock and preflight ─────────────
 if (Test-Path $lockFile) {
     $l = $null; try { $l = Get-Content $lockFile -Raw | ConvertFrom-Json } catch { }
-    if ($l -and (Get-Process -Id $l.pid -ErrorAction SilentlyContinue)) { Write-Host "STOP: another Run-Suite (PID $($l.pid), run $($l.runId)) holds the suite lock"; exit 2 }
+    if (Test-LockHolder $l) { Write-Host "STOP: another Run-Suite (PID $($l.pid), run $($l.runId)) holds the suite lock"; exit 2 }
     Remove-Item $lockFile -Force
 }
 try {
     $fs = [System.IO.File]::Open($lockFile, 'CreateNew', 'Write')
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes((@{ pid = $PID; runId = $RunId; start = (Get-Date).ToString('o') } | ConvertTo-Json -Compress))
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes((@{ pid = $PID; procStart = (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks; runId = $RunId; start = (Get-Date).ToString('o') } | ConvertTo-Json -Compress))
     $fs.Write($bytes, 0, $bytes.Length); $fs.Close()
 } catch { Write-Host "STOP: could not take the suite lock: $($_.Exception.Message)"; exit 2 }
 
@@ -184,6 +209,15 @@ try {
         Say 'build + deploy ok'
     }
 } finally { Pop-Location }
+if ($DeployFrom) {
+    # the queue's frozen build, swapped in only now: the suite lock is ours and no other game runs (checked above)
+    . (Join-Path $PSScriptRoot 'ModsInstall.ps1')
+    $ir = MI-Install $DeployFrom $Label "run $RunId"
+    if (-not $ir.ok) { Say "STOP: could not install the build: $($ir.message)"; exit 5 }
+    $script:queueInstall = $true
+    Say "installed the queue's build $Label into Mods\Placemaker$(if (-not $Playground) { ' (the user''s build goes back when the game has exited)' })"
+    if ($Playground) { $ar = MI-AdoptInstalled "the user's playground $RunId"; Say $ar.message }
+}
 $dll = Join-Path $ud 'Mods\Placemaker\Placemaker.dll'
 $dllInfo = Get-Item $dll
 $dllHash = (Get-FileHash $dll -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
@@ -333,6 +367,7 @@ try {
 }
 finally {
     # ───────────── collect logs, classify, put the settings back ─────────────
+    Restore-UserBuild "game $RunId exited"   # first: the moment the game is gone, before the user can start theirs
     $logs = Join-Path $runDir 'logs'
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
     foreach ($f in @('Player.log')) { $p = Join-Path $ud $f; if (Test-Path $p) { Copy-Item $p $logs -Force } }
@@ -369,9 +404,11 @@ $top += ''
 $body = if (Test-Path $md) { Get-Content $md -Raw -Encoding UTF8 } else { "# Game run $RunId`r`n(no summary written by the game)`r`n" }
 Write-NoBom $md (($top -join "`r`n") + "`r`n" + $body)
 Say "done: $status in $([math]::Round($total)) s -> $runDir"
-Say "installed now: Mods/Placemaker/Placemaker.dll $label ($([math]::Round($dllInfo.Length / 1KB)) KB) - the user's normal game loads this build"
-try { & (Join-Path $PSScriptRoot 'Contact-Suite.ps1') -RunId $RunId -ResultsRoot $ResultsRoot } catch { Say "contact sheet image failed: $($_.Exception.Message)" }
+if ($DeployFrom) { Say "installed now: $(MI-StatusLine)" }
+else { Say "installed now: Mods/Placemaker/Placemaker.dll $label ($([math]::Round($dllInfo.Length / 1KB)) KB) - the user's normal game loads this build" }
+# a queue session's pictures are published per request (each has its own contact sheet): no session-wide image
+if (-not $Queue) { try { & (Join-Path $PSScriptRoot 'Contact-Suite.ps1') -RunId $RunId -ResultsRoot $ResultsRoot } catch { Say "contact sheet image failed: $($_.Exception.Message)" } }
 if ($status -ne 'quit') { exit 1 }
 exit 0
 }
-finally { Release-Lock }
+finally { Restore-UserBuild "host $RunId ended"; Release-Lock }

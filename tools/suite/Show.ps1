@@ -203,7 +203,7 @@ $scenarios = foreach ($b in $builds) {
 }
 
 $label = if ($builds.Count -eq 1) { $builds[0].Id } else { "$($builds.Count)-builds" }
-$runId = 'show-' + $label + '-' + (Get-Date -Format 'MMdd-HHmmss')
+$runId = 'show-' + $label + '-' + (Get-Date -Format 'MMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 4)   # two agents asking the same in the same second get two folders
 $setDir = Join-Path (Split-Path $ResultsRoot) 'show'
 New-Item -ItemType Directory -Force -Path $setDir | Out-Null
 $setFile = Join-Path $setDir "$runId.json"
@@ -211,7 +211,8 @@ $setFile = Join-Path $setDir "$runId.json"
 
 $perBuild = (@($Views).Count * $viewModes.Count) + $(if ($terrainMap) { 1 } else { 0 }) + $(if ($NoPlan) { 0 } else { 1 })
 $where = if ($landSpec) { "on land " + ($landSpec | ConvertTo-Json -Compress -Depth 3) } else { "on a $Site grid block" }
-Write-Host ("Building {0} in the game {1}: {2}; {3} picture(s) each (about {4} s)..." -f $builds.Count, $where, (($builds | ForEach-Object { $_.Id }) -join ', '), $perBuild, (70 + 12 * $builds.Count))
+$about = if ($Direct) { "about $([math]::Round(60 + $builds.Count * (8 + 4.5 * $perBuild))) s" } else { 'the queue prints its ETA' }
+Write-Host ("Building {0} in the game {1}: {2}; {3} picture(s) each ({4})..." -f $builds.Count, $where, (($builds | ForEach-Object { $_.Id }) -join ', '), $perBuild, $about)
 $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Run-Suite.ps1'), '-Set', $setFile, '-RunId', $runId)
 if ($AllMods) { $runArgs += '-AllMods' }
 if ($NoBuild) { $runArgs += '-NoBuild' }
@@ -219,6 +220,7 @@ if ($Direct) { $runArgs += '-Direct' }
 if ($Who) { $runArgs += @('-Who', $Who) }
 $ErrorActionPreference = 'Continue'   # the game writes to stderr; that is not a failure
 $hostOut = & powershell @runArgs 2>&1 | ForEach-Object { $l = "$_"; if ($l -like 'queue: *' -or $l -like 'STOP*') { Write-Host $l }; $l }   # the queue's place-in-line and ETA lines as they come
+$runCode = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 $runDir = Join-Path $ResultsRoot $runId
 
@@ -227,6 +229,7 @@ $summaryFile = Join-Path $runDir 'summary.json'
 if (-not (Test-Path $summaryFile)) {
     Write-Host 'The run did not get as far as the game. Last lines:'
     $hostOut | Select-Object -Last 15 | ForEach-Object { Write-Host "  $_" }
+    if ($runCode -eq 2) { Remove-Item -LiteralPath $setFile -Force -ErrorAction SilentlyContinue; exit 2 }   # left the line (or a usage error)
     exit 1
 }
 $rows = @((Get-Content $summaryFile -Raw -Encoding UTF8 | ConvertFrom-Json).scenarios)
@@ -234,11 +237,14 @@ $log = Join-Path $runDir 'logs\Placemaker.log'
 $lines = if (Test-Path $log) { @(Get-Content $log -Encoding UTF8) } else { @() }
 $pictures = 0
 Write-Host ''
+$k = 0
 foreach ($sc in $rows) {
+    $k++
     $from = $null; $to = $null
+    $logId = if ($sc.sessionId) { $sc.sessionId } else { $sc.id }   # the queue's game names a repeated id 'id+' in its log
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if (-not $from -and $lines[$i] -like "*Placemaker suite: scenario $($sc.id) on *") { $from = $i + 1 }
-        if ($lines[$i] -like "*Placemaker suite: scenario $($sc.id): *") { $to = $i + 1 }
+        if (-not $from -and $lines[$i] -like "*Placemaker suite: scenario $logId on *") { $from = $i + 1 }
+        if ($lines[$i] -like "*Placemaker suite: scenario ${logId}: *") { $to = $i + 1 }
     }
     $why = if ($sc.status -eq 'built') { '' } elseif ($sc.failure) { ": $($sc.failure)" } elseif ($sc.unready) { ": $($sc.unready)" } elseif ($sc.refused) { ": $($sc.refused)" } else { '' }
     Write-Host ("{0}: {1}{2} ({3})" -f $sc.id, $sc.status, $why, $sc.block)
@@ -249,7 +255,7 @@ foreach ($sc in $rows) {
         }
     }
     if ($terrainMap) {
-        $scFile = Get-ChildItem (Join-Path $runDir 'scenarios') -Filter "*-$($sc.id).json" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $scFile = Get-ChildItem -LiteralPath (Join-Path $runDir 'scenarios') -Filter ('{0:D2}-*.json' -f $k) -ErrorAction SilentlyContinue | Select-Object -First 1
         $tm = if ($scFile) { @((Get-Content $scFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).steps) | Where-Object { $_.do -eq 'terrain' -and $_.terrain } | Select-Object -First 1 } else { $null }
         if ($tm) { Write-Host ("  {0,-14} ground {1} m to +{2} m around its typical level; colours +/-{3} m; contours every {4} m" -f 'heights', $tm.terrain.minM, $tm.terrain.maxM, $tm.terrain.rangeM, $tm.terrain.contourM) }
     }
