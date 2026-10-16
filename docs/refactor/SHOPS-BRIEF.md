@@ -56,7 +56,7 @@ Pictures in `docs/refactor/shops-ref/`:
 | Market square | all bad except Big market | Big market: fill the whole area, mixed with other things. Hide the rest. |
 | Fairground | doesn't belong | **Hide every fairground style.** |
 | Amphitheatre, Bandstand town | nice, but parks | **Move to Parks** (check whether Parks already has an amphitheatre and merge). |
-| Overall | | **Cut about 25–33 %** of shops and squares types and styles; keep the best. |
+| Overall | | **Keep only about 25 %** of shops and squares types and styles, hide about 75 %: "Perfect the best. Ditch the rest." |
 
 **Testing:** big areas (four times the test block), long rectangles, L shapes and circles, beside the small block.
 Every kept type and style must build correctly every time and look like a real place (compare with `real-1..3`).
