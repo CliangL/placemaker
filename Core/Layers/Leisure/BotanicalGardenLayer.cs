@@ -62,7 +62,7 @@ namespace Placemaker.Core.Layers.Leisure
         protected override void DefinePresets()
         {
             Preset("mixed", ("theme", "mixed"), ("bedDensity", 90.0));
-            Preset("flowerShow", ("theme", "flowers"), ("bedDensity", 70.0), ("benches", 4.0), ("showBeds", 6.0));
+            Preset("flowerShow", ("theme", "flowers"), ("bedDensity", 35.0), ("benches", 4.0), ("showBeds", 8.0));
             Preset("arboretum", ("theme", "trees"), ("bedDensity", 90.0), ("glasshouse", false), ("benches", 2.5));
             Preset("shrubbery", ("theme", "shrubs"), ("bedDensity", 140.0), ("pathBorders", 60.0));
         }

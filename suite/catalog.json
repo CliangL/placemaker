@@ -3358,6 +3358,18 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "formal",
+        "woodland",
+        "meadow",
+        "pocket",
+        "victorian",
+        "landscape",
+        "modern",
+        "wildflower",
+        "riverside",
+        "greenway"
       ]
     },
     {
@@ -3620,7 +3632,25 @@
             "trees",
             "shrubs"
           ],
-          "default": "mixed"
+          "default": "flowers"
+        },
+        {
+          "id": "showBeds",
+          "kind": "Slider",
+          "min": 0.0,
+          "max": 12.0,
+          "step": 1.0,
+          "unit": "count",
+          "default": 0.0
+        },
+        {
+          "id": "pathBorders",
+          "kind": "Slider",
+          "min": 0.0,
+          "max": 90.0,
+          "step": 10.0,
+          "unit": "%",
+          "default": 0.0
         },
         {
           "id": "bedDensity",
@@ -3850,6 +3880,10 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "mixed",
+        "arboretum"
       ]
     },
     {
@@ -4517,7 +4551,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "picnicGrounds",
@@ -4749,7 +4784,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "natureReserve",
@@ -5198,7 +5234,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "communityGarden",
@@ -5414,7 +5451,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "marketSquare",
@@ -5878,7 +5916,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "greenwayPark",
@@ -10707,7 +10746,8 @@
           "unit": "%",
           "default": 100.0
         }
-      ]
+      ],
+      "shelved": true
     },
     {
       "layer": "golf",
@@ -11793,6 +11833,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "water"
       ]
     },
     {
@@ -11903,6 +11946,15 @@
           "default": ""
         },
         {
+          "id": "monumentScale",
+          "kind": "Slider",
+          "min": 100.0,
+          "max": 400.0,
+          "step": 10.0,
+          "unit": "%",
+          "default": 220.0
+        },
+        {
           "id": "sculptureAssets",
           "kind": "AssetMulti",
           "default": []
@@ -11934,6 +11986,11 @@
           "id": "realWater",
           "kind": "Toggle",
           "default": false
+        },
+        {
+          "id": "poolFountains",
+          "kind": "Toggle",
+          "default": true
         },
         {
           "id": "poolAsset",
@@ -11998,6 +12055,11 @@
           "id": "flowerRing",
           "kind": "Toggle",
           "default": true
+        },
+        {
+          "id": "borders",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "treeSpecies",
@@ -12180,6 +12242,9 @@
           "unit": "%",
           "default": 100.0
         }
+      ],
+      "shelvedStyles": [
+        "square"
       ]
     },
     {
