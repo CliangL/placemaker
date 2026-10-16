@@ -49,9 +49,10 @@ namespace Placemaker.Game.Suite
                 st = new ScenarioState { S = s };
                 if (s.Plot != null || s.LandError != null)
                 {
-                    // its own land, laid out at launch
+                    // its own land, laid out at launch, or now when it came to a running session (SuiteRunner.Land.cs)
                     s.Block = s.Plot != null ? _fixture.PlotBlock(s.Plot) : null;
-                    s.SiteNote = s.LandError ?? (s.Block == null ? "land is laid out at launch: start it with Run-Suite -Set or Show.ps1, not sent to a running session" : "plot " + s.Block.Id);
+                    if (s.Plot != null && s.Block == null) yield return LayOutPlotNow(s);
+                    s.SiteNote = s.LandError ?? (s.Block == null ? (s.SiteNote ?? "the land could not be laid out") : "plot " + s.Block.Id);
                 }
                 else
                 {
@@ -108,6 +109,7 @@ namespace Placemaker.Game.Suite
         }
 
         private ScenarioState _lastRun;
+        private bool _queuePinned;
 
         // ───────────── live queue ─────────────
 
@@ -175,10 +177,14 @@ namespace Placemaker.Game.Suite
                         if (set != null)
                         {
                             _phase = "queue-run";
+                            // a file's own "settings" hold for that file only (as at a launch); the next file starts from the defaults again
+                            bool pins = set.settings != null && set.settings.Count > 0;
+                            if (pins || _queuePinned) { PinSettings(set); _queuePinned = pins; }
                             foreach (var s in Expand(set))
                             {
                                 yield return RunOne(s);
                                 rows.Add(Row(_lastRun));
+                                WriteSummary();   // after every build: the game queue follows a file's progress (its ETA)
                             }
                             _phase = "queue";
                         }

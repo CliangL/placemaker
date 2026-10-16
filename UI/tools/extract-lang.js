@@ -59,12 +59,15 @@ function extract() {
 }
 
 const next = extract();
+const cur = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf8").replace(/\r\n/g, "\n") : "";
 if (process.argv.includes("--check")) {
-    const cur = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf8").replace(/\r\n/g, "\n") : "";
     if (cur !== next) {
         console.error("Lang/en-US.ui.json is out of date: run `npm run lang`.");
         process.exit(1);
     }
+    console.log("Lang/en-US.ui.json is up to date (" + Object.keys(JSON.parse(next)).length + " keys).");
+} else if (cur === next) {
+    // unchanged: not rewritten (a rewrite turns the checkout's CRLF into LF and leaves the tree "modified" after every build)
     console.log("Lang/en-US.ui.json is up to date (" + Object.keys(JSON.parse(next)).length + " keys).");
 } else {
     fs.writeFileSync(OUT, next);

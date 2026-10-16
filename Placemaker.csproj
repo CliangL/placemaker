@@ -88,15 +88,15 @@
     <Exec WorkingDirectory="$(MSBuildProjectDirectory)\UI" Command="npm run build" EnvironmentVariables="PLACEMAKER_UI_OUT=$(MSBuildProjectDirectory)\UI\build" />
   </Target>
 
+  <!-- Mods\Placemaker is shared with the game queue: tools\suite\Deploy-Mod.ps1 installs under the queue's install lock,
+       refuses while a game runs or a queue game owns the folder, and swaps a staged copy in (never a half-written folder).
+       -p:Deploy=false builds without installing. -->
   <Target Name="DeployStandalone" AfterTargets="Build" Condition="'$(UseToolchain)' != 'true' AND '$(Deploy)' != 'false'">
-    <ItemGroup>
-      <PlacemakerOut Include="$(OutDir)**\*.*" />
-      <PlacemakerUi Include="$(MSBuildProjectDirectory)\UI\build\**\*.*" />
-    </ItemGroup>
-    <RemoveDir Directories="$(DeployDir)" />
-    <Copy SourceFiles="@(PlacemakerOut)" DestinationFiles="@(PlacemakerOut->'$(DeployDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
-    <Copy SourceFiles="@(PlacemakerUi)" DestinationFiles="@(PlacemakerUi->'$(DeployDir)\%(RecursiveDir)%(Filename)%(Extension)')" />
-    <Message Importance="high" Text="Placemaker deployed (standalone, no Burst) to $(DeployDir)" />
+    <PropertyGroup>
+      <PlacemakerOutFull>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutDir)'))).TrimEnd('\'))</PlacemakerOutFull>
+      <PlacemakerDeployTo>$(DeployDir.TrimEnd('\'))</PlacemakerDeployTo>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\tools\suite\Deploy-Mod.ps1&quot; -From &quot;$(PlacemakerOutFull)&quot; -Ui &quot;$(MSBuildProjectDirectory)\UI\build&quot; -To &quot;$(PlacemakerDeployTo)&quot;" CustomErrorRegularExpression="Placemaker was NOT installed" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="high" />
   </Target>
 
   <Target Name="DeployUserInterface" AfterTargets="DeployWIP" Condition="'$(UseToolchain)' == 'true'">

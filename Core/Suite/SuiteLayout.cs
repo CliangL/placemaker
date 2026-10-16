@@ -49,7 +49,7 @@ namespace Placemaker.Core.Suite
         }
     }
 
-    public sealed class SuiteLayout
+    public sealed partial class SuiteLayout
     {
         public const string SmallRoad = "Small Road";
         public const string MediumRoad = "Medium Road";

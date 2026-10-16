@@ -1,6 +1,8 @@
 <#
 .SYNOPSIS
-  Sends scenarios to a running game-runner session (Run-Suite.ps1 -Queue) and waits until they are done.
+  Sends scenarios (or a grow command) to the game and waits until they are done: through the machine-wide game queue
+  by default (it runs in the queue's game with your current build, after the requests ahead of it), or with -Direct /
+  -RunId to a session you started yourself (Run-Suite.ps1 -Direct -Queue).
 
 .EXAMPLE
   powershell -File tools/suite/Send-Suite.ps1 -File suite/scenarios/examples/a4-edit-rebuild.json
@@ -23,25 +25,35 @@ param(
     [string]$RunId = '',
     [int]$TimeoutSec = 480,
     [switch]$NoWait,
-    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
+    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs',
+    # The game queue (default without -RunId): the file waits its turn in the machine-wide line and runs in the queue's
+    # game with your current build (bin\Release as it is; -Build rebuilds it first). -Direct (or -RunId) feeds a session
+    # you started yourself with Run-Suite -Direct -Queue.
+    [switch]$Direct,
+    [switch]$Build,
+    [string]$Who = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$queued = -not $Direct -and -not $RunId
 function Beat($dir) { $hb = Join-Path $dir 'heartbeat.json'; if (-not (Test-Path $hb)) { return $null }; try { return Get-Content $hb -Raw | ConvertFrom-Json } catch { return $null } }
-if (-not $RunId) {
+if ($queued -and ($Quit -or ($Json -match '"command"\s*:\s*"quit"'))) { Write-Host 'the game queue opens and closes its game itself: nothing to quit (Send-Suite -Direct -Quit closes a session you started yourself)'; exit 0 }
+if (-not $queued -and -not $RunId) {
     $live = Get-ChildItem $ResultsRoot -Directory | Sort-Object LastWriteTime -Descending | Where-Object {
         $b = Beat $_.FullName
         if (-not $b) { return $false }
         return ($b.phase -like 'queue*' -or $b.phase -eq 'grow') -and (((Get-Date).ToUniversalTime() - [datetime]::Parse($b.utc).ToUniversalTime()).TotalSeconds -lt 30)
     } | Select-Object -First 1
-    if (-not $live) { Write-Host 'no suite session is waiting in the queue (start one with Run-Suite.ps1 -Queue)'; exit 2 }
+    if (-not $live) { Write-Host 'no suite session is waiting in the queue (start one with Run-Suite.ps1 -Direct -Queue)'; exit 2 }
     $RunId = $live.Name
 }
-$runDir = Join-Path $ResultsRoot $RunId
-$inbox = Join-Path $runDir 'inbox'
-if (-not (Test-Path $inbox)) { Write-Host "run $RunId has no inbox"; exit 2 }
+if (-not $queued) {
+    $runDir = Join-Path $ResultsRoot $RunId
+    $inbox = Join-Path $runDir 'inbox'
+    if (-not (Test-Path $inbox)) { Write-Host "run $RunId has no inbox"; exit 2 }
+}
 if ($Quit) { $text = '{"command":"quit"}'; $base = 'quit' }
-elseif ($File) { $text = Get-Content $File -Raw; $base = [IO.Path]::GetFileNameWithoutExtension($File) }
+elseif ($File) { $text = Get-Content -LiteralPath $File -Raw -Encoding UTF8; $base = [IO.Path]::GetFileNameWithoutExtension($File) }
 elseif ($Json) { $text = $Json; $base = 'inline' }
 else { Write-Host 'give -File, -Json or -Quit'; exit 2 }
 $doc = $text | ConvertFrom-Json   # fail here on bad JSON, not in the game
@@ -86,6 +98,14 @@ if (-not $doc.command) {
     if ($errors.Count -gt 0) { Write-Host 'SCHEMA ERRORS (nothing sent):'; $errors | ForEach-Object { Write-Host "  $_" }; exit 2 }
 }
 
+if ($queued) {
+    # the machine-wide game queue: waits its turn, prints its place and an ETA, then the same lines as below
+    . (Join-Path $PSScriptRoot 'GameQueue.ps1')
+    $q = Invoke-QueuedSend $repo $text $base @{ Build = [bool]$Build; Who = $Who; ResultsRoot = $ResultsRoot; TimeoutSec = $(if ($PSBoundParameters.ContainsKey('TimeoutSec')) { $TimeoutSec } else { 0 }) }
+    if (-not $q.result) { exit $q.code }
+    $runDir = $q.resultsDir
+    $result = $q.result
+} else {
 $name = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $base
 $tmp = Join-Path $inbox "$name.tmp"
 [IO.File]::WriteAllText($tmp, $text, (New-Object Text.UTF8Encoding $false))
@@ -108,6 +128,7 @@ while (-not (Test-Path $result)) {
     }
     if ($gamePid -and -not (Get-Process -Id $gamePid -ErrorAction SilentlyContinue)) { Write-Host "the game (PID $gamePid) is gone (last phase $($b.phase), scenario $($b.scenario))"; exit 4 }
 }
+}
 Start-Sleep -Milliseconds 200
 $r = Get-Content $result -Raw | ConvertFrom-Json
 $code = 0
@@ -121,6 +142,7 @@ foreach ($s in @($r.scenarios)) {
     Write-Host "  steps: $($s.resultFile)"
 }
 if ($r.grow) { Write-Host ("grow: " + ($r.grow | ConvertTo-Json -Compress)) }
-Write-Host "logs (the game writes them as it goes): $(Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\Placemaker.log'), runner: $(Join-Path $runDir 'suite.log')"
+if ($queued) { Write-Host "logs: $(Join-Path $runDir 'logs\Placemaker.log') and $(Join-Path $runDir 'logs\Player.log') (your request's part of the queue game's logs), runner: $(Join-Path $runDir 'suite.log')" }
+else { Write-Host "logs (the game writes them as it goes): $(Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\Placemaker.log'), runner: $(Join-Path $runDir 'suite.log')" }
 Write-Host "pictures in order: $(Join-Path $runDir 'contact.html')"
 exit $code

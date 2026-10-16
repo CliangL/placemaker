@@ -15,8 +15,11 @@
   powershell -File tools/suite/Show.ps1 -Type plaza -Land '{"points":[[0,0],[90,0],[90,40],[30,70],[0,60]],"ground":"bumpy"}'
 
 .DESCRIPTION
-  Launches the game (about 70 s, then about 10 s per build; the game must be closed), builds each one on its own test
-  land the way a person does (select the area, pick the type and style, entrances, Review, Build) and quits.
+  Goes through the machine-wide game queue (suite/README.md, "The game queue"): it waits its turn, printing its place in
+  line, who is ahead and an ETA; the queue's game builds each one on its own test land the way a person does (select
+  the area, pick the type and style, entrances, Review, Build). Run it as a background command: it exits when the
+  results are back. A new game takes about 60 s to start, then about 10-15 s per build; a game already open with the
+  same build is reused. -Direct launches the game here and now instead (debugging; the game must be closed).
 
   Land. Without land options each build gets a flat 150 x 140 m city block of the test grid (-Site for another kind).
   With any of them each build gets its own land, made to order before the roads go in:
@@ -67,7 +70,10 @@ param(
     [string]$Land = '',
     [switch]$AllMods,
     [switch]$NoBuild,
-    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs'
+    [string]$ResultsRoot = 'C:\Users\jack\cs2-area-tool\.forensics\suite\runs',
+    # the game queue (default): waits its turn in the machine-wide line, printing its place and an ETA; -Direct launches now
+    [switch]$Direct,
+    [string]$Who = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -197,7 +203,7 @@ $scenarios = foreach ($b in $builds) {
 }
 
 $label = if ($builds.Count -eq 1) { $builds[0].Id } else { "$($builds.Count)-builds" }
-$runId = 'show-' + $label + '-' + (Get-Date -Format 'MMdd-HHmmss')
+$runId = 'show-' + $label + '-' + (Get-Date -Format 'MMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 4)   # two agents asking the same in the same second get two folders
 $setDir = Join-Path (Split-Path $ResultsRoot) 'show'
 New-Item -ItemType Directory -Force -Path $setDir | Out-Null
 $setFile = Join-Path $setDir "$runId.json"
@@ -205,32 +211,40 @@ $setFile = Join-Path $setDir "$runId.json"
 
 $perBuild = (@($Views).Count * $viewModes.Count) + $(if ($terrainMap) { 1 } else { 0 }) + $(if ($NoPlan) { 0 } else { 1 })
 $where = if ($landSpec) { "on land " + ($landSpec | ConvertTo-Json -Compress -Depth 3) } else { "on a $Site grid block" }
-Write-Host ("Building {0} in the game {1}: {2}; {3} picture(s) each (about {4} s)..." -f $builds.Count, $where, (($builds | ForEach-Object { $_.Id }) -join ', '), $perBuild, (70 + 12 * $builds.Count))
+$about = if ($Direct) { "about $([math]::Round(60 + $builds.Count * (8 + 4.5 * $perBuild))) s" } else { 'the queue prints its ETA' }
+Write-Host ("Building {0} in the game {1}: {2}; {3} picture(s) each ({4})..." -f $builds.Count, $where, (($builds | ForEach-Object { $_.Id }) -join ', '), $perBuild, $about)
 $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Run-Suite.ps1'), '-Set', $setFile, '-RunId', $runId)
 if ($AllMods) { $runArgs += '-AllMods' }
 if ($NoBuild) { $runArgs += '-NoBuild' }
+if ($Direct) { $runArgs += '-Direct' }
+if ($Who) { $runArgs += @('-Who', $Who) }
 $ErrorActionPreference = 'Continue'   # the game writes to stderr; that is not a failure
-$hostOut = & powershell @runArgs 2>&1 | ForEach-Object { "$_" }
+$hostOut = & powershell @runArgs 2>&1 | ForEach-Object { $l = "$_"; if ($l -like 'queue: *' -or $l -like 'STOP*') { Write-Host $l }; $l }   # the queue's place-in-line and ETA lines as they come
+$runCode = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 $runDir = Join-Path $ResultsRoot $runId
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ what to look at â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $summaryFile = Join-Path $runDir 'summary.json'
-if (-not (Test-Path $summaryFile)) {
+if (-not (Test-Path -LiteralPath $summaryFile)) {
     Write-Host 'The run did not get as far as the game. Last lines:'
     $hostOut | Select-Object -Last 15 | ForEach-Object { Write-Host "  $_" }
+    if ($runCode -eq 2) { Remove-Item -LiteralPath $setFile -Force -ErrorAction SilentlyContinue; exit 2 }   # left the line (or a usage error)
     exit 1
 }
-$rows = @((Get-Content $summaryFile -Raw -Encoding UTF8 | ConvertFrom-Json).scenarios)
+$rows = @((Get-Content -LiteralPath $summaryFile -Raw -Encoding UTF8 | ConvertFrom-Json).scenarios)
 $log = Join-Path $runDir 'logs\Placemaker.log'
-$lines = if (Test-Path $log) { @(Get-Content $log -Encoding UTF8) } else { @() }
+$lines = if (Test-Path -LiteralPath $log) { @(Get-Content -LiteralPath $log -Encoding UTF8) } else { @() }
 $pictures = 0
 Write-Host ''
+$k = 0
 foreach ($sc in $rows) {
+    $k++
     $from = $null; $to = $null
+    $logId = if ($sc.sessionId) { $sc.sessionId } else { $sc.id }   # the queue's game names a repeated id 'id+' in its log
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if (-not $from -and $lines[$i] -like "*Placemaker suite: scenario $($sc.id) on *") { $from = $i + 1 }
-        if ($lines[$i] -like "*Placemaker suite: scenario $($sc.id): *") { $to = $i + 1 }
+        if (-not $from -and $lines[$i] -like "*Placemaker suite: scenario $logId on *") { $from = $i + 1 }
+        if ($lines[$i] -like "*Placemaker suite: scenario ${logId}: *") { $to = $i + 1 }
     }
     $why = if ($sc.status -eq 'built') { '' } elseif ($sc.failure) { ": $($sc.failure)" } elseif ($sc.unready) { ": $($sc.unready)" } elseif ($sc.refused) { ": $($sc.refused)" } else { '' }
     Write-Host ("{0}: {1}{2} ({3})" -f $sc.id, $sc.status, $why, $sc.block)
@@ -241,14 +255,19 @@ foreach ($sc in $rows) {
         }
     }
     if ($terrainMap) {
-        $scFile = Get-ChildItem (Join-Path $runDir 'scenarios') -Filter "*-$($sc.id).json" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $scFile = Get-ChildItem -LiteralPath (Join-Path $runDir 'scenarios') -Filter ('{0:D2}-*.json' -f $k) -ErrorAction SilentlyContinue | Select-Object -First 1
         $tm = if ($scFile) { @((Get-Content $scFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).steps) | Where-Object { $_.do -eq 'terrain' -and $_.terrain } | Select-Object -First 1 } else { $null }
         if ($tm) { Write-Host ("  {0,-14} ground {1} m to +{2} m around its typical level; colours +/-{3} m; contours every {4} m" -f 'heights', $tm.terrain.minM, $tm.terrain.maxM, $tm.terrain.rangeM, $tm.terrain.contourM) }
     }
-    Write-Host ("  {0,-14} {1}{2}" -f 'log', $log, $(if ($from -and $to) { ", lines $from-$to" } else { '' }))
+    # a build the game was in the middle of when it went away has no end line: its lines run to the end of the log
+    Write-Host ("  {0,-14} {1}{2}" -f 'log', $log, $(if ($from -and $to) { ", lines $from-$to" } elseif ($from) { ", lines $from-$($lines.Count) (the end of the log: the game stopped during this build)" } else { '' }))
 }
+$never = @($builds | Select-Object -Skip $rows.Count | ForEach-Object { $_.Id })
+if ($never.Count -gt 0) { Write-Host ''; Write-Host ("Never ran ({0} of {1}): {2}" -f $never.Count, $builds.Count, ($never -join ', ')) }
 Write-Host ''
 Write-Host "Game errors:    $(Join-Path $runDir 'logs\Player.log')"
 Write-Host "Runner steps:   $(Join-Path $runDir 'suite.log')"
 Write-Host "All pictures:   $(Join-Path $runDir 'contact.html')"
+# a run that did not finish (the game crashed or was stopped) fails, even with some pictures
+if ($runCode -ne 0) { Write-Host "The run did not finish (exit $runCode): read the lines above and logs\Player.log."; exit 1 }
 if ($pictures -gt 0) { exit 0 } else { exit 1 }
