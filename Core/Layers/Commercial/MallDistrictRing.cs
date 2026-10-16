@@ -17,13 +17,18 @@ namespace Placemaker.Core.Layers.Commercial
 
         protected override bool UsesEntrances => true;
 
-        // (A ring too small for rows of the asked depth on both sides tries two-cell rows: the loop moves out and grows.)
+        // (Rows of the asked depth, and two-cell rows: the loop moves out and grows. On a small block the deep rows leave a ring
+        // too short for rows either side of the entrances' ways; the plan with more shop ground wins, the asked depth on a tie.)
         protected override bool ComposeFromEntrances(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
         {
-            if (RingDistrict(ctx, mall, runs, 99)) return true;
-            if (Cells(ctx) <= 2) return false;
-            mall.ResetDesign();
-            return RingDistrict(ctx, mall, runs, 2);
+            if (Cells(ctx) <= 2) return RingDistrict(ctx, mall, runs, 99);
+            var planMark = PlanMark.Of(ctx.Plan); var mallMark = mall.Mark();
+            float deep = RingDistrict(ctx, mall, runs, 99) ? mall.ShopArea() : 0f;
+            planMark.Restore(ctx.Plan); mall.Rewind(mallMark); mall.ResetDesign();
+            float shallow = RingDistrict(ctx, mall, runs, 2) ? mall.ShopArea() : 0f;
+            if (shallow > 0f && shallow >= 1.1f * deep) return true;
+            planMark.Restore(ctx.Plan); mall.Rewind(mallMark); mall.ResetDesign();
+            return deep > 0f && RingDistrict(ctx, mall, runs, 99);
         }
 
         private static bool RingDistrict(LayerContext ctx, Mall mall, List<StreetShops.Run> runs, int cellsCap)
@@ -200,13 +205,21 @@ namespace Placemaker.Core.Layers.Commercial
             foreach (var p in paseos) { mall.Release(p.rect); mall.DressPaseo(p.rect, p.a, p.b, salt += 4); mall.Taken.Add(p.rect); }
             // A ring too small for lanes inside (a normal block): the middle, inside the inner rows, is the quarter's square (café
             // tables, a fountain or a tree ring, food trucks), not a lawn; walks come in between the rows from the ring.
-            if (rails.Count == 0 && rungs.Count == 0 && ctx.B("squares"))
+            // Downtown ("more parking, intermingled") makes it a parking court entered from the ring between the rows.
+            if (rails.Count == 0 && rungs.Count == 0 && (ctx.B("squares") || ctx.S("parkingBlocks") != "none"))
             {
                 var mid = Poly.Centroid(loop.Points.ToArray());
                 foreach (var piece in mall.RestPieces(250f))
                 {
                     if (!Poly.Contains(piece, mid)) continue;
                     var doors = mall.LaneDoors(piece, 4f);
+                    if (ctx.S("parkingBlocks") != "none" && kinds != "pedestrian" && doors.Count > 0)
+                    {
+                        var e = new List<(float2, string)>();
+                        foreach (var (_, at) in doors) { e.Add((at, "alley")); if (e.Count >= 2) break; }
+                        if (mall.CleanLot(piece, e, Mall.Parking(ctx), salt++)) { ctx.Plan.Facts["districtCourt"] = 1; break; }
+                    }
+                    if (!ctx.B("squares")) break;
                     if (mall.FillOpen(piece, "plaza", "cafe", doors, null, salt++, null, false))
                     {
                         ctx.Plan.Facts["districtSquare"] = 1;

@@ -28,10 +28,14 @@ namespace Placemaker.Core.Layers.Commercial
             // (A ring too small for rows of the asked depth all round tries two-cell rows: the loop moves out 8 m on every side.)
             bool Ring(bool parking)
             {
-                if (RingPark(ctx, mall, runs, parking, 99)) return true;
-                if (Cells(ctx) <= 2) return false;
-                mall.ResetDesign();
-                return RingPark(ctx, mall, runs, parking, 2);
+                if (Cells(ctx) <= 2) return RingPark(ctx, mall, runs, parking, 99);
+                var pm = PlanMark.Of(ctx.Plan); var mm = mall.Mark();
+                float deep = RingPark(ctx, mall, runs, parking, 99) ? mall.ShopArea() : 0f;
+                pm.Restore(ctx.Plan); mall.Rewind(mm); mall.ResetDesign();
+                float shallow = RingPark(ctx, mall, runs, parking, 2) ? mall.ShopArea() : 0f;
+                if (shallow > 0f && shallow >= 1.1f * deep) return true;
+                pm.Restore(ctx.Plan); mall.Rewind(mm); mall.ResetDesign();
+                return deep > 0f && RingPark(ctx, mall, runs, parking, 99);
             }
             if (ctx.S("loopRoad") != "parking") return Ring(false);
             var planMark = PlanMark.Of(ctx.Plan); var mallMark = mall.Mark();

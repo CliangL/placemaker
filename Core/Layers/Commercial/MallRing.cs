@@ -108,6 +108,14 @@ namespace Placemaker.Core.Layers.Commercial
             return best;
         }
 
+        /// <summary>(rf-shops3) The ground of all the shop plots planned (m²), to compare two layouts of one site.</summary>
+        public float ShopArea()
+        {
+            float a = 0f;
+            foreach (var s in Shops) a += Poly.Area(s);
+            return a;
+        }
+
         /// <summary>(rf-shops3) A lot whose way in reaches its aisles (a court that would warn "this entrance has no path" is not built).</summary>
         public bool CleanLot(float2[] ring, List<(float2 at, string kind)> entrances, SettingsBag parking, uint salt)
         {
