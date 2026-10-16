@@ -528,6 +528,23 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                 hedgeItems += FieldHedges(ctx, region, occ, hard, origin, axis, side, Lf, Wf, trackLinesA, trackLinesB, hedgeCat, hedgeIds, treeIds,
                     treeEvery, MaxHedgeItems - hedgeItems, ref hedgeLen);
             ctx.Check();
+            // Ranch: the pastures are fenced range, a gate toward the yard (the grass alone read as one empty lawn, rf-farms).
+            if (sub == "ranch")
+            {
+                int fenced = 0;
+                foreach (var f in fields)
+                {
+                    if ((f.Kind != FieldKind.Pasture && f.Kind != FieldKind.Hay) || fenced >= 24) continue;
+                    var gp = f.Region.ClosestOnBoundary(origin, out int gs, out float gt);
+                    foreach (var run in Fences.Runs(f.Region, new List<Gate> { new Gate { Position = gp, Segment = gs, T = gt } }, 2f))
+                    {
+                        ctx.StraightNet(run.c0, run.c1, NetRole.Fence, fenceAsset);
+                        occ.TakeCorridor(run.c0, run.c1, 0.45f, 5);
+                    }
+                    fenced++;
+                }
+                ctx.Plan.Facts["fencedPastures"] = fenced;
+            }
 
             // 11. Regions for features: yard, fields and paddocks (places), free grass as green/core.
             if (hasYard) ctx.AddRegion(yard.Ring, YardTag, YardTag);
