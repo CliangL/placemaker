@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+5cdc013-dirty",
+  "assembly": "0.1.0+151536e-dirty",
   "categories": [
     {
       "id": "roads",
@@ -467,6 +467,11 @@
           "default": 24.0
         },
         {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
+        },
+        {
           "id": "lotSize",
           "kind": "Choice",
           "options": [
@@ -669,6 +674,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 24.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "lotSize",
@@ -902,6 +912,11 @@
           "default": 24.0
         },
         {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
+        },
+        {
           "id": "lotSize",
           "kind": "Choice",
           "options": [
@@ -1114,6 +1129,11 @@
           "default": 16.0
         },
         {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": true
+        },
+        {
           "id": "stallAngle",
           "kind": "Choice",
           "options": [
@@ -1282,7 +1302,7 @@
         {
           "id": "outerRow",
           "kind": "Toggle",
-          "default": false
+          "default": true
         },
         {
           "id": "outerZone",
@@ -1337,6 +1357,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 16.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         }
       ]
     },
@@ -2134,7 +2159,7 @@
         {
           "id": "outerRow",
           "kind": "Toggle",
-          "default": false
+          "default": true
         },
         {
           "id": "outerZone",
@@ -2180,6 +2205,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 16.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "lotSize",
@@ -2274,7 +2304,7 @@
         {
           "id": "pads",
           "kind": "Toggle",
-          "default": false
+          "default": true
         },
         {
           "id": "zoneKind",
@@ -2302,6 +2332,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 40.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": true
         },
         {
           "id": "lotSize",
@@ -2394,7 +2429,7 @@
         {
           "id": "outerRow",
           "kind": "Toggle",
-          "default": false
+          "default": true
         },
         {
           "id": "outerZone",
@@ -2449,6 +2484,11 @@
           "step": 8.0,
           "unit": "m",
           "default": 16.0
+        },
+        {
+          "id": "streetShops",
+          "kind": "Toggle",
+          "default": false
         },
         {
           "id": "extraGreen",
