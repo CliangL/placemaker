@@ -136,6 +136,11 @@ namespace Placemaker.Core.Layers.Parking
         public bool Tree;
         public int Species;
         public uint Seed;
+        /// <summary>
+        /// Planted on the centre line of the green strip behind a stall row (Vegetation.PlanRows): evenly spaced,
+        /// one growth stage, never thinned at random (density sets the spacing instead).
+        /// </summary>
+        public bool Row;
     }
 
     internal sealed class SurfacePoly

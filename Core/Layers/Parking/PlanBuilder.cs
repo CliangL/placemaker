@@ -149,24 +149,62 @@ namespace Placemaker.Core.Layers.Parking
             {
                 void Add(string id, bool tree)
                 {
-                    double spacing = tree ? 7 : 2.5, height = tree ? 10 : 1;
+                    // rf-parking: spacing is the crown (trees) or the shrub's own size: plant bounds are the game's shrunk
+                    // collision core, which put a 10 m crown every 4 m (same crown estimate as DressingWorld.CrownOf).
+                    double spacing = tree ? 9 : 2.5, height = tree ? 10 : 1;
                     if (!string.IsNullOrEmpty(id) && site.Assets != null && site.Assets.TryGetValue(id, out var info))
                     {
                         var ext = info.BoundsMax - info.BoundsMin;
                         double sz = Math.Max(ext.x, ext.z);
-                        if (sz > 0.1) spacing = Math.Max(tree ? 4 : 1, Math.Min(tree ? 14 : 5, sz * (tree ? 0.8 : 1.0)));
                         if (ext.y > 0.1) height = ext.y;
+                        if (tree) spacing = 2 * Math.Max(3.5, Math.Min(7, Math.Max(sz * 0.5, height * 0.28)));
+                        else if (sz > 0.1) spacing = Math.Max(2, Math.Min(4, Math.Max(sz, height)));
                     }
                     species.Add(new Species { Tree = tree, Spacing = spacing, Height = height });
                 }
                 if (s.Trees.Length == 0) Add(ParkingAssets.DefaultTree, true); else foreach (var t in s.Trees) Add(t, true);
                 if (s.Bushes.Length == 0) foreach (var b in ParkingAssets.DefaultBushes) Add(b, false); else foreach (var b in s.Bushes) Add(b, false);
-                layout.Plants = Vegetation.Plan(greens, species, (int)Math.Round(s.PlantingDensity), input.Seed, layout.Lanterns,
-                    p =>
+                int density = (int)Math.Round(s.PlantingDensity);
+                // stalls by 8 m cell (a stall is at most ~7 m across, so its own cell and the neighbours hold every hit)
+                var bayGrid = new Dictionary<long, List<Bay>>();
+                long Cell(double x, double y) => ((long)Math.Floor(x / 8) << 32) ^ (uint)(int)Math.Floor(y / 8);
+                foreach (var b in layout.LiveBays)
+                {
+                    long k = Cell(b.Center.x, b.Center.y);
+                    if (!bayGrid.TryGetValue(k, out var l)) bayGrid[k] = l = new List<Bay>();
+                    l.Add(b);
+                }
+                bool PlantBlocked(double2 p)
+                {
+                    foreach (var c in layout.Chargers) if (math.distance(c.Position, p) < 1.5) return true;
+                    // never in a stall, even where a stall's corner reaches into the planting (cut corners of odd outlines)
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                            if (bayGrid.TryGetValue(Cell(p.x + dx * 8, p.y + dy * 8), out var near))
+                                foreach (var b in near) if (PGeo.Contains(b.Quad, p)) return true;
+                    return Reserved(p, 1.0);
+                }
+                // rows first: the strips behind the stalls get evenly spaced trees and shrubs on their centre line
+                var edges = new List<RowEdge>();
+                foreach (var b in layout.LiveBays)
+                {
+                    if (b.Quad == null || b.Quad.Length < 4) continue;
+                    var back = PGeo.Perp(b.RowDir);
+                    if (PGeo.Dot(back, b.Axis) < 0) back = -back;
+                    edges.Add(new RowEdge { Corner = b.Quad[2], RowDir = b.RowDir, Back = back });
+                    edges.Add(new RowEdge { Corner = b.Quad[3], RowDir = b.RowDir, Back = back });
+                    // the row-end caps beside a stall's open side: a line of shrubs down the cap (the probe from a side
+                    // with a neighbouring stall hits its asphalt and is dropped)
+                    foreach (var (s0, s1) in new[] { (b.Quad[0], b.Quad[3]), (b.Quad[1], b.Quad[2]) })
                     {
-                        foreach (var c in layout.Chargers) if (math.distance(c.Position, p) < 1.5) return true;
-                        return Reserved(p, 1.0);
-                    });
+                        var mid = (s0 + s1) * 0.5;
+                        var outward = PGeo.Norm(mid - b.Center);
+                        var strip = PGeo.Perp(outward);
+                        edges.Add(new RowEdge { Corner = mid, RowDir = strip, Back = outward, Cap = true });
+                    }
+                }
+                var rows = Vegetation.PlanRows(edges, species, density, input.Seed, layout.Lanterns, IsGreen, PlantBlocked);
+                layout.Plants = Vegetation.Plan(greens, species, density, input.Seed, layout.Lanterns, PlantBlocked, rows);
             }
             cancel.ThrowIfCancellationRequested();
 
@@ -598,7 +636,8 @@ namespace Placemaker.Core.Layers.Parking
                     Position = P3(p.Position), Yaw = (float)(Vegetation.Unit(Vegetation.Hash(p.Seed + 5)) * 2 * Math.PI),
                     Role = p.Tree ? ObjectRole.Tree : ObjectRole.Bush,
                     Asset = p.Species < speciesAssets.Count ? speciesAssets[p.Species] : new AssetRef(""),
-                    Age = p.Tree ? 1 + (int)(p.Seed % 2) : -1, Variation = p.Seed,
+                    // rf-parking: the trees of a planting line share one growth stage (adult), so the line reads as planted
+                    Age = !p.Tree ? -1 : p.Row ? 2 : 1 + (int)(p.Seed % 2), Variation = p.Seed,
                 });
                 if (p.Tree) trees++;
             }
