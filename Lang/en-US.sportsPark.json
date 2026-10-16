@@ -101,5 +101,10 @@
   "Placemaker.UI.Group.parking": "Parking",
   "Placemaker.Stat.Parking": "Parking spaces",
   "Placemaker.Category.decal.fieldline": "white line decals",
-  "Placemaker.Category.decal.courtbasketball": "basketball court decals"
+  "Placemaker.Category.decal.courtbasketball": "basketball court decals",
+  "Placemaker.Sports.tennisSurface": "Court surface",
+  "Placemaker.Sports.tennisSurface.Tooltip": "What the tennis courts are laid in: hard courts, clay (a club look) or grass.",
+  "Placemaker.Sports.tennisSurface.hard": "Hard",
+  "Placemaker.Sports.tennisSurface.clay": "Clay",
+  "Placemaker.Sports.tennisSurface.grass": "Grass"
 }

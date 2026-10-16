@@ -110,6 +110,18 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         /// </summary>
         public const string HostSizedTag = "hostSized";
 
+        /// <summary>(rf-sports) Region tag prefix a host adds to choose the court surface ("courtSurface:clay"); the field's own choice otherwise.</summary>
+        public const string SurfaceTagPrefix = "courtSurface:";
+
+        /// <summary>(rf-sports) The surface a host's place asks for, else <paramref name="own"/>.</summary>
+        public static string HostSurface(AreaInput input, string own)
+        {
+            if (input?.RegionTags != null)
+                foreach (var t in input.RegionTags)
+                    if (t != null && t.StartsWith(SurfaceTagPrefix, StringComparison.Ordinal)) return t.Substring(SurfaceTagPrefix.Length);
+            return own;
+        }
+
         /// <summary>The formats of this field (biggest first).</summary>
         protected abstract FieldFormat[] Formats(LayerContext ctx);
 
@@ -249,6 +261,9 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             int k = -1;
             for (int i = want; i < formats.Length; i++)
                 if (formats[i].Length <= site.HalfLength * 2f + 0.6f && formats[i].Width <= site.HalfWidth * 2f + 0.6f) { k = i; break; }
+            // (rf-sports) A host that sized the place below the smallest format (the sports park's compact track)
+            // gets the smallest format laid out to the place: the add-on shrinks to it (a track shrinks its bends).
+            if (k < 0 && sized && formats.Length > 0) k = formats.Length - 1;
             if (k < 0) { NoSpace(ctx, NameKey); return; }
             if (k > want && !sized && !Auto(ctx)) ctx.Issue(IssueSeverity.Info, SmallerKey, NameKey);
             var f = formats[k];

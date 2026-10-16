@@ -104,7 +104,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 ("skateItems", 4.0), ("ledges", 2.0), ("embankment", 3.0), ("walls", 0.0), ("graffiti", 40.0), ("decay", 90.0), ("overgrowth", 70.0), ("benches", 2.0));
             Preset("graffitiPark", ("subtype", "graffitiPark"), ("deck", true), ("deckSide", "side"), ("collapse", 0.0), ("padShare", 60.0), ("skateItems", 6.0),
                 ("ledges", 4.0), ("walls", 10.0), ("graffiti", 100.0), ("decay", 25.0), ("overgrowth", 20.0), ("benches", 10.0));
-            Preset("parkour", ("subtype", "parkour"), ("deck", false), ("padShare", 35.0), ("skateItems", 2.0), ("ledges", 0.0), ("blocks", 30.0),
+            Preset("parkour", ("subtype", "parkour"), ("deck", false), ("padShare", 20.0), ("skateItems", 2.0), ("ledges", 0.0), ("blocks", 30.0),
                 ("blockSpacing", 4.5), ("walls", 6.0), ("graffiti", 45.0), ("decay", 40.0), ("overgrowth", 25.0));
             Preset("dirtJumps", ("subtype", "dirtJumps"), ("deck", true), ("deckSide", "side"), ("deckWidth", 12.0), ("collapse", 80.0), ("padShare", 0.0),
                 ("skateItems", 0.0), ("ledges", 0.0), ("jumpLines", 3.0), ("jumpHeight", 1.75), ("walls", 0.0), ("graffiti", 30.0), ("decay", 60.0), ("overgrowth", 55.0));
@@ -113,7 +113,22 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         private struct Span { public OrientedRect R; public bool Collapsed, Ramp; }
 
         /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
-        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null;
+
+        /// <summary>
+        /// (rf-sports) The ruins' own ground: weathered (dark) asphalt pads and a cracked, oil-stained fallen carriageway. The
+        /// shared gritty default for paving is Concrete Surface 02, which in the game's own catalog is a bright white slab:
+        /// the DIY spot read as two white squares on the lawn.
+        /// </summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtSurfaces = new Dictionary<string, GritAssets.Set>(System.StringComparer.Ordinal)
+        {
+            [AssetCategories.SurfacePaving] = new GritAssets.Set(true, "EAI - Surface Pack Concrete Weathered Asphalt Surface|Pavement Surface 01|Concrete Surface 01"),
+            [AssetCategories.SurfaceAsphalt] = new GritAssets.Set(true, "EAI - Surface Pack Concrete Cracked Asphalt Surface|Oil Surface 01|Pavement Surface 01"),
+        };
+
+        /// <summary>(rf-sports) Road arrows and a speed number: the fallen carriageway reads as a highway (the marking pool's best were no-parking stripes).</summary>
+        private static readonly string[] Arrows = { "EU RoadArrow Forward", "NA RoadArrow Forward" };
+        private static readonly string[] SpeedSigns = { "EU LaneMarkings Speed100", "EU LaneMarkings Speed120", "NA LaneMarkings Speed65" };
 
         // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
         protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 130f); }
@@ -229,13 +244,31 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 fallen.Add(slab);
                 // Faded lane markings on the fallen carriageway (dashes on the centre and lane lines).
                 if (wantMarkings)
-                    foreach (var w in new[] { 0f, -s.R.HalfWidth * 0.5f, s.R.HalfWidth * 0.5f })
-                        for (float u = -s.R.HalfLength + 2f; u < s.R.HalfLength - 1f; u += 6f)
-                        {
-                            uint mv = Hashing.Mix(v, (uint)(u * 10f + w * 100f + 1000f));
-                            if (Hashing.Unit(mv) > 0.85f - 0.5f * decay) continue;
-                            if (DecayKit.Decal(ctx, guard, s.R.Local(u, w), s.R.Yaw, AssetCategories.DecalMarkings, mv)) markings++;
-                        }
+                {
+                    // (rf-sports) Faded white lane dashes only from white line pieces (never the general marking pool: its
+                    // best-ranked items are yellow no-parking stripes), then one arrow per lane (two lanes each way) and a
+                    // speed number now and then, all from the game's own road markings.
+                    if (AssetAvailability.Has(AssetCategories.DecalFieldLine))
+                        foreach (var w in new[] { 0f, -s.R.HalfWidth * 0.5f, s.R.HalfWidth * 0.5f })
+                            for (float u = -s.R.HalfLength + 2f; u < s.R.HalfLength - 1f; u += 6f)
+                            {
+                                uint mv = Hashing.Mix(v, (uint)(u * 10f + w * 100f + 1000f));
+                                if (Hashing.Unit(mv) > 0.85f - 0.5f * decay) continue;
+                                if (DecayKit.Decal(ctx, guard, s.R.Local(u, w), s.R.Yaw, AssetCategories.DecalFieldLine, mv)) markings++;
+                            }
+                    for (int lane = 0; lane < 4; lane++)
+                    {
+                        float w = (lane - 1.5f) * s.R.HalfWidth * 0.5f;
+                        uint mv = Hashing.Mix(v, 0xA770u + (uint)lane);
+                        if (Hashing.Unit(mv) > 0.9f - 0.45f * decay) continue;
+                        float u = (Hashing.Unit(Hashing.Mix(mv, 1u)) - 0.5f) * s.R.HalfLength * 0.8f;
+                        var p = s.R.Local(u, w);
+                        if (!guard.Free(p, 0.6f, 0.4f, 0f)) continue;
+                        bool speed = Hashing.Unit(Hashing.Mix(mv, 2u)) < 0.25f;
+                        ctx.Object(p, s.R.Yaw + (w < 0f ? math.PI : 0f), ObjectRole.Decal, AssetMix.One("", speed ? SpeedSigns : Arrows), mv, -1, AssetCategories.DecalMarkings);
+                        markings++;
+                    }
+                }
             }
             ctx.Check();
 
@@ -343,7 +376,9 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 {
                     var pad = pads[pi];
                     float share = pad.HalfLength * pad.HalfWidth / math.max(1f, padArea);
-                    int items = rampCat == null ? 0 : (int)math.ceil(ctx.I("skateItems") * share);
+                    // (rf-sports) A pad is filled to its size (about one obstacle per 100 m2 of pad): a 120 m pad with twelve
+                    // obstacles read as an empty concrete slab.
+                    int items = rampCat == null ? 0 : math.max((int)math.ceil(ctx.I("skateItems") * share), ctx.I("skateItems") > 0 && sub != "parkour" ? (int)(pad.HalfLength * pad.HalfWidth * 4f / 100f) : 0);
                     int ledgeWanted = (int)math.ceil(ctx.I("ledges") * share);
                     skate += SkateLines(ctx, occ, pad, items, ctx.L("rampAssets"), rampCat, Hashing.Mix(ctx.Seed, 0x5CA0u + (uint)pi));
                     if (ledgeWanted > 0)
@@ -367,7 +402,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 {
                     float spacing = ctx.F("jumpSpacing");
                     int maxJumps = math.clamp((int)((major * 0.55f - 17f) / spacing), 2, 6);
-                    jumps = DirtJumps.PlaceLines(ctx, region, occ, all, far, axis, ctx.I("jumpLines"), maxJumps, ctx.F("jumpHeight"), spacing, true, true, 1, Hashing.Mix(ctx.Seed, 0xB3Au));
+                    jumps = DirtJumps.PlaceLines(ctx, region, occ, all, far, axis, ctx.I("jumpLines"), maxJumps, ctx.F("jumpHeight"), spacing, true, true, 3, Hashing.Mix(ctx.Seed, 0xB3Au));   // (rf-sports) 3 = dirt (1 was dry grass: the track was invisible)
                     if (jumps == 0) ctx.Issue(IssueSeverity.Info, "Placemaker.Ruins.Issue.Fewer", 0, ctx.I("jumpLines"));
                 }
                 else if (m == "blocks" && ctx.I("blocks") > 0)
@@ -396,6 +431,19 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                         o.Scale = 1.2f + 0.7f * Hashing.Unit(Hashing.Mix(kv, 3u));
                         occ.Take(p, 1.8f, 2);
                         fallenSlabs++;
+                    }
+                // (rf-sports) The carriageway's own furniture, so the fallen deck reads as a highway: broken runs of jersey
+                // barriers along both edges. (No abandoned vehicles: the game has no vehicle props to stand in.)
+                for (int e = -1; e <= 1; e += 2)
+                    for (float u = -s.R.HalfLength + 1.5f; u < s.R.HalfLength - 1f; u += 3.2f)
+                    {
+                        uint bv = Hashing.Mix(v, 0xBA00u + (uint)((u + 100f) * 10f) + (uint)(e + 1) * 7919u);
+                        if (Hashing.Unit(bv) < 0.25f + 0.45f * decay) continue;
+                        var p = s.R.Local(u, e * (s.R.HalfWidth - 0.9f));
+                        if (!region.ContainsDisc(p, 1f) || !occ.Free(p, 1f, 0.6f, 0.1f)) continue;
+                        float tilt = (Hashing.Unit(Hashing.Mix(bv, 1u)) - 0.5f) * 0.5f * decay;
+                        ctx.Object(p, s.R.Yaw + math.PI * 0.5f + tilt, ObjectRole.Furniture, AssetMix.One("", "ConcreteBarrier01", "ConcreteBarrier02"), bv, -1, AssetCategories.ScrapBarrier);
+                        occ.Take(p, 1f, 2);
                     }
                 if (rubbleCat != null)
                 {
@@ -509,12 +557,23 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         }
 
         /// <summary>Skate lines along the pad: ramps at both ends facing in, rails/boxes between. Returns the count.</summary>
+        private static readonly string[] SkateEnds = { "SkateParkRamp01", "SkateParkRamp02", "SkateParkRamp03", "SkateParkRamp04" };
+        private static readonly string[] SkateMiddles = { "SkateParkBox01", "SkateParkRail01", "SkateParkBox02", "SkateParkRail02" };
+
         private static int SkateLines(LayerContext ctx, Occupancy occ, OrientedRect pad, int items, string[] ids, string cat, uint seed)
         {
             if (cat == null || items <= 0) return 0;
-            var lines = pad.HalfWidth >= 5f ? new[] { -pad.HalfWidth * 0.45f, pad.HalfWidth * 0.45f } : new[] { 0f };
-            int perLine = (int)math.ceil(items / (float)lines.Length);
+            // (rf-sports) One skate line per ~11 m of pad width (up to four), evenly across it.
+            int nl = pad.HalfWidth >= 5f ? math.clamp((int)math.round(pad.HalfWidth * 2f / 11f), 2, 4) : 1;
+            var lines = new float[nl];
+            for (int i = 0; i < nl; i++) lines[i] = nl == 1 ? 0f : -pad.HalfWidth * 0.8f + pad.HalfWidth * 1.6f * i / (nl - 1);
+            bool auto = ids == null || ids.Length == 0 || System.Array.TrueForAll(ids, string.IsNullOrEmpty);
             int n = 0;
+            // (rf-sports) A big pad gets the game's half-pipe (14 x 5 m) as its centrepiece; the lines run round it.
+            if (auto && pad.HalfLength >= 12f && pad.HalfWidth >= 7f
+                && LeisureKit.Put(ctx, occ, pad.Center, pad.Yaw + math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One("", "SkateParkHalfPipe01", "SkateParkHalfPipe02"), cat, 7.2f,
+                    Hashing.Mix(seed, 0x4A1Fu), 0.4f, 0.4f, 2)) n++;
+            int perLine = (int)math.ceil(items / (float)lines.Length);
             for (int li = 0; li < lines.Length; li++)
             {
                 float w = lines[li];
@@ -527,8 +586,12 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                     float yaw = pad.Yaw + (k < slots / 2 ? 0f : math.PI);
                     if (!end) yaw = pad.Yaw + ((k + li) % 2 == 0 ? 0f : math.PI * 0.5f) * 0.25f;
                     uint v = Hashing.Mix(seed, (uint)(li * 64 + k));
+                    // (rf-sports) Automatic skate props are one uniform prop per build (every obstacle the same box): a line
+                    // gets ramps or a half-pipe at its ends and boxes and rails between, from the game's own skate set.
+                    var asset = auto ? AssetMix.One("", end ? SkateEnds[(int)(v % (uint)SkateEnds.Length)] : SkateMiddles[(int)(v % (uint)SkateMiddles.Length)])
+                        : AssetMix.Pick(ids, v);
                     foreach (var du in new[] { 0f, 1.5f, -1.5f })
-                        if (LeisureKit.Put(ctx, occ, pad.Local(u + du, w), yaw, ObjectRole.Furniture, AssetMix.Pick(ids, v), cat, 1.8f, v, 0.4f, 0.4f, 2))
+                        if (LeisureKit.Put(ctx, occ, pad.Local(u + du, w), yaw, ObjectRole.Furniture, asset, cat, end && auto ? 2.9f : 1.8f, v, 0.4f, 0.4f, 2))
                         { n++; break; }
                 }
             }

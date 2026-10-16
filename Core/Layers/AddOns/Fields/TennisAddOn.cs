@@ -76,11 +76,15 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             float hw = math.min(blockW * 0.5f, (blockL >= blockW ? place.HalfWidth : place.HalfLength) - 0.4f);
             var block = f.Rect(0f, 0f, hl, hw);
 
-            FieldKit.Surface(ctx, block.Ring, ctx.S("surface") == "grass" ? SurfaceRole.Grass : SurfaceRole.Asphalt, ctx.S("surfaceAsset"), Chain(ctx.S("surface")));
+            string surface = HostSurface(ctx.Input, ctx.S("surface"));
+            FieldKit.Surface(ctx, block.Ring, surface == "grass" ? SurfaceRole.Grass : SurfaceRole.Asphalt, ctx.S("surfaceAsset"), Chain(surface));
 
             string netCat = FieldKit.Cat(ctx, ctx.S("netAsset"), AssetCategories.SportsTennis);
             var l = j.Lines;
             float pitch = CourtW + Between;
+            // (rf-sports) No line pieces installed: each court gets the game's own court decal (lines only by pieces otherwise).
+            bool stamp = FieldKit.StampMarkings(ctx);
+            if (stamp) l = new LinePainter();
             float a = CourtL * 0.5f, b = CourtW * 0.5f, sb = 4.115f, sl = 6.40f;
             int benches = 0;
             for (int i = 0; i < n; i++)
@@ -91,15 +95,21 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                 l.Seg(f, -sl, vc - sb, -sl, vc + sb); l.Seg(f, sl, vc - sb, sl, vc + sb);
                 l.Seg(f, -sl, vc, sl, vc);
                 l.Spot(f, -a + 0.15f, vc); l.Spot(f, a - 0.15f, vc);
-                FieldKit.Equip(j, f.P(0f, vc), f.Yaw + math.PI * 0.5f, netCat, ctx.S("netAsset"), 0.5f, 0x7E00u + (uint)i);
+                // (rf-sports) The game's tennis net by default: the automatic tennis pool starts with a bench, so
+                // every "net" came out as a red bench in the middle of the court.
+                FieldKit.Equip(j, f.P(0f, vc), f.Yaw + math.PI * 0.5f, netCat, ctx.S("netAsset"), 0.5f, 0x7E00u + (uint)i, "TennisNet01");
+                if (stamp) FieldKit.Stamp(ctx, f, new float2(0f, vc), j.V(0x7EC0u + (uint)i), AssetCategories.DecalMarkings, "TennisCourtDecal02", "TennisCourtDecal01");
                 if (ctx.B("benches"))
                 {
-                    // A bench by the net post on the +v side (in the gap between courts, or the outer run-off).
-                    benches += FieldKit.Benches(j, new[] { f.P(0f, vc + b + 1.7f) }, f.P(0f, vc));
+                    // A bench by the net post on the +v side (in the gap between courts, or the outer run-off),
+                    // the umpire's chair at the other post.
+                    benches += FieldKit.Benches(j, new[] { f.P(0f, vc + b + 1.7f) }, f.P(0f, vc), "TennisBench01", "TennisBench02");
+                    if (netCat != null)
+                        LeisureKit.Put(ctx, j.Occ, f.P(1.6f, vc - b - 1.1f), f.Yaw - math.PI * 0.5f, ObjectRole.Furniture, AssetMix.One("", "TennisUmpireChair01"), netCat, 0.5f, j.V(0x7E40u + (uint)i), 0.1f, 0.1f);
                 }
             }
             if (ctx.B("fence"))
-                RectFence(ctx, block, j.Toward, 1.5f, AssetMix.One(ctx.S("fenceAsset")));
+                RectFence(ctx, block, j.Toward, 1.5f, AssetMix.One(ctx.S("fenceAsset"), "FenceIndustrialHigh01", "FenceIndustrialHigh02"));   // (rf-sports) a chain-link cage, not a garden picket
             if (ctx.B("floodlights"))
             {
                 // Poles inside the fence behind each baseline, one per court end, shining down the court.

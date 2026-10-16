@@ -61,12 +61,15 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             FieldKit.Surface(ctx, f.Box(-a - runU, -b - runV, a + runU, b + runV), SurfaceRole.Asphalt, ctx.S("surfaceAsset"), chain);
 
             // A full court gets the game's own court decal (28 × 15 m) when installed: one clean stamp
-            // instead of hundreds of line pieces. Compact courts (26 × 14) keep painted lines.
-            bool stamp = !compact && ctx.B("lines") && AssetAvailability.Has(AssetCategories.DecalCourtBasketball);
+            // instead of hundreds of line pieces.
+            // (rf-sports) The court decals are the game's own (named explicitly): the marking decals being usable is enough. A compact
+            // court (26 x 14 m) takes it too: the decal (28 x 15 m) still lies inside the court's 2 m run-off surface.
+            bool stamp = ctx.B("lines") && (AssetAvailability.Has(AssetCategories.DecalCourtBasketball) || AssetAvailability.Has(AssetCategories.DecalMarkings));
             if (stamp)
             {
-                // The decal's long side is its local X: turn it a quarter so it runs along the court.
-                ctx.Object(f.O, f.Yaw + math.PI * 0.5f, ObjectRole.Decal, new AssetRef(""), j.V(0xC0u), -1, AssetCategories.DecalCourtBasketball);
+                // The decal's long side is its local X: turn it a quarter so it runs along the court. (rf-sports) Named
+                // explicitly: the category has no automatic pool, so the empty ref was dropped and no court had lines.
+                FieldKit.Stamp(ctx, f, float2.zero, j.V(0xC0u), AssetCategories.DecalCourtBasketball, "BasketballCourtDecal01", "BasketballCourtDecal03");
                 ctx.Plan.Facts["courtDecal"] = 1;
             }
             var l = stamp ? new LinePainter() : j.Lines;

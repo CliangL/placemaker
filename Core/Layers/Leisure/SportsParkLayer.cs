@@ -116,6 +116,7 @@ namespace Placemaker.Core.Layers.Leisure
             c.Choice("cricketGroundSize", "auto", ControlTier.More, "facilities", WithAuto(FieldSpecs.Cricket));
             c.Slider("tennisCourtsCount", 1, 1, 4, 1, "count", ControlTier.More, "facilities").Tip();
             c.Choice("tennisCourtsSize", "two", ControlTier.More, "facilities", "four", "three", "two", "one").Tip();
+            c.Choice("tennisSurface", "hard", ControlTier.More, "facilities", "hard", "clay", "grass").Tip();
             c.Slider("basketballCourtCount", 1, 1, 6, 1, "count", ControlTier.More, "facilities");
             c.Slider("volleyballCount", 1, 1, 4, 1, "count", ControlTier.More, "facilities");
             c.Slider("tableTennisCount", 2, 1, 6, 1, "count", ControlTier.More, "facilities");
@@ -148,7 +149,7 @@ namespace Placemaker.Core.Layers.Leisure
 
             EntranceMarkers(c);
             DefineStreetShopControls(c);
-            foreach (var id in new[] { "subtype", "hero", "fieldAxis", "pitchSize", "baseballDiamondSize", "runningTrackSize", "cricketGroundSize", "tennisCourtsSize", "parking", "promenade" })
+            foreach (var id in new[] { "subtype", "hero", "fieldAxis", "tennisSurface", "pitchSize", "baseballDiamondSize", "runningTrackSize", "cricketGroundSize", "tennisCourtsSize", "parking", "promenade" })
                 c.Fixed(id);
             c.RandomRange("spacing", 80, 140);
             c.RandomRange("treeDensity", 15, 45);
@@ -160,10 +161,10 @@ namespace Placemaker.Core.Layers.Leisure
                 ("tennisCourtsSize", "two"), ("basketballCourtCount", 1.0), ("promenade", "both"), ("treeBelt", "single"), ("berms", true), ("spacing", 100.0));
             PresetFeatures("community", "fitness");
             Preset("stadium", ("subtype", "stadium"), ("hero", "runningTrack"), ("runningTrackSize", "auto"), ("pitchCount", 1.0), ("pitchSize", "seven"),
-                ("treeBelt", "double"), ("berms", true), ("parking", "on"), ("bikeRacks", 14.0), ("spacing", 120.0), ("promenade", "both"), ("kiosk", true));
+                ("treeBelt", "single"), ("berms", true), ("parking", "auto"), ("bikeRacks", 14.0), ("spacing", 95.0), ("promenade", "both"), ("kiosk", true));
             PresetFeatures("stadium", "runningTrack", "fitness", "-tennisCourts", "-basketballCourt", "-playground");
             Preset("tennisClub", ("subtype", "tennisClub"), ("hero", "tennisCourts"), ("tennisCourtsCount", 3.0), ("tennisCourtsSize", "two"),
-                ("promenade", "spine"), ("treeBelt", "single"), ("berms", false), ("treeDensity", 35.0), ("spacing", 90.0), ("fence", true));
+                ("promenade", "spine"), ("treeBelt", "single"), ("berms", false), ("treeDensity", 35.0), ("spacing", 90.0), ("fence", true), ("tennisSurface", "clay"));
             PresetFeatures("tennisClub", "tableTennis", "-pitch", "-basketballCourt");
             Preset("campus", ("subtype", "campus"), ("hero", "pitch"), ("pitchCount", 1.0), ("pitchSize", "auto"), ("baseballDiamondCount", 1.0),
                 ("tennisCourtsCount", 1.0), ("tennisCourtsSize", "two"), ("basketballCourtCount", 2.0), ("volleyballCount", 2.0),

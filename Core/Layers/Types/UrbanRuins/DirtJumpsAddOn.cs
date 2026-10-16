@@ -27,7 +27,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
             c.Slider("spacing", 9, 6, 14, 0.5, "m", ControlTier.More, "jumps").Tip();
             c.Toggle("startHill", true, ControlTier.More, "jumps").Tip();
             c.Toggle("paint", true, ControlTier.More, "jumps");
-            c.Slider("paintLayer", 1, 1, 4, 1, "count", ControlTier.More, "jumps").When("paint=true").Tip();
+            c.Slider("paintLayer", 3, 1, 4, 1, "count", ControlTier.More, "jumps").When("paint=true").Tip();
             c.Fixed("paintLayer");
         }
 

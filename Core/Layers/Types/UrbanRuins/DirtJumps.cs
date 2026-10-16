@@ -72,7 +72,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
             if (paint)
             {
                 var strip = new OrientedRect { Center = r.Center, Axis = r.Axis, HalfLength = r.HalfLength, HalfWidth = math.min(r.HalfWidth, LineWidth * 0.5f) };
-                TerrainPaint.Patch(ctx, strip.Ring, paintLayer, 0.9f, 1.5f);
+                TerrainPaint.Patch(ctx, strip.Ring, paintLayer, 1.8f, 1.5f);   // (rf-sports) full-strength dirt: at 0.45 the track barely showed
             }
             if (built > 0) WarnPermanent(ctx);
             return built;
@@ -99,6 +99,7 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         public static void Dish(LayerContext ctx, float2 c, float radius, float depth)
         {
             float baseH = ctx.H(c);
+            ctx.Plan.Facts["intentionalPit"] = 1;   // (rf-sports) a skate bowl is dug on purpose: the pit guard filled it back in
             for (int i = 0; i < 2; i++)
             {
                 float f = i == 0 ? 1f : 0.6f;

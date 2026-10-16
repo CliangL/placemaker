@@ -321,10 +321,10 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         }
 
         /// <summary>Benches (team benches, spectators) at the given points, facing <paramref name="face"/> square-on along <paramref name="normal"/>.</summary>
-        public static int Benches(FieldJob j, IEnumerable<float2> points, float2 face)
+        public static int Benches(FieldJob j, IEnumerable<float2> points, float2 face, params string[] defaults)
         {
             var ctx = j.Ctx;
-            var asset = AssetMix.One(ctx.S("benchAsset"));
+            var asset = AssetMix.One(ctx.S("benchAsset"), defaults);
             int n = 0, i = 0;
             foreach (var p in points)
                 if (LeisureKit.Put(ctx, j.Occ, p, LeisureKit.Yaw(p, face), ObjectRole.Bench, asset, null, 1.1f, j.V(0xBE00u + (uint)(j.Benches + i++)), 0.3f, 0.2f)) n++;
@@ -333,13 +333,33 @@ namespace Placemaker.Core.Layers.AddOns.Fields
         }
 
         /// <summary>One piece of equipment (goal, net, hoop…) at an exact spot; it takes its disc in the occupancy.</summary>
-        public static bool Equip(FieldJob j, float2 p, float yaw, string cat, string chosen, float radius, uint salt)
+        public static bool Equip(FieldJob j, float2 p, float yaw, string cat, string chosen, float radius, uint salt, params string[] defaults)
         {
             if (cat == null) return false;
-            if (!LeisureKit.Put(j.Ctx, j.Occ, p, yaw, ObjectRole.Furniture, AssetMix.One(chosen), cat, radius, j.V(salt), 0.1f, 0.1f)) return false;
+            if (!LeisureKit.Put(j.Ctx, j.Occ, p, yaw, ObjectRole.Furniture, AssetMix.One(chosen, defaults), cat, radius, j.V(salt), 0.1f, 0.1f)) return false;
             j.Equipment++;
             return true;
         }
+
+        /// <summary>
+        /// (rf-sports) True when no white line piece is installed (the game's own catalog has none): painted lines
+        /// cannot be drawn, so courts and pitches stamp the game's whole-field marking decals instead.
+        /// </summary>
+        public static bool NoLinePieces => !AssetAvailability.Has(AssetCategories.DecalFieldLine);
+
+        /// <summary>
+        /// (rf-sports) A whole-field marking decal of the game (TennisCourtDecal02, FootballFieldDecal01,
+        /// BasketballCourtDecal01…) at the field centre. These decals have no automatic pool, so they are named
+        /// explicitly (an empty automatic ref was dropped: no court ever got its decal). Their long side is the
+        /// decal's local X: a quarter turn lays it along the field's u axis.
+        /// </summary>
+        public static void Stamp(LayerContext ctx, Frame f, float2 at, uint variation, string category, params string[] ids)
+        {
+            ctx.Object(f.P(at), f.Yaw + math.PI * 0.5f, ObjectRole.Decal, AssetMix.One("", ids), variation, -1, category);
+        }
+
+        /// <summary>(rf-sports) Whole-field decals (they sit in the game's marking decals) instead of line pieces.</summary>
+        public static bool StampMarkings(LayerContext ctx) => ctx.B("lines") && NoLinePieces && AssetAvailability.Has(AssetCategories.DecalMarkings);
 
         /// <summary>A fence run through the points (open polyline).</summary>
         public static int FenceRun(LayerContext ctx, IReadOnlyList<float2> pts, AssetRef fence)
