@@ -258,8 +258,8 @@ namespace Placemaker.Core.Layers.Plaza
             {
                 float d = falloff * 0.5f + band * k;
                 if (d > inscribed - 2f) break;
-                var ring = region.InsetVertices(d);
-                if (!Poly.IsSimple(ring) || Poly.SignedArea(ring) <= 0f) continue;
+                var ring = region.InsetRing(d);   // rf-squares: robust on chamfered corners
+                if (ring == null) continue;
                 var r = LayerRegion.From(ring);
                 if (r == null) continue;
                 for (float s = 0; s < r.Perimeter; s += 3.5f)
@@ -513,8 +513,84 @@ namespace Placemaker.Core.Layers.Plaza
                 }
                 made++;
             }
+            // rf-squares: the quarter parterres need the entrance axes on the square's axes; with the access points the
+            // tool suggests round a city block (6 to 8, anywhere on the outline) every quarter is crossed by a walk and
+            // none fit ("green" built a bare slab in the game runner). Then the lawns fill what the walks leave.
+            if (made == 0) made = FreeLawns(ctx, occ, region, centre, rondel, pave, pct);
             if (made == 0) ctx.Issue(IssueSeverity.Info, K + "Issue.NoLawn");
             ctx.Plan.Facts["lawns"] = made;
+        }
+
+        /// <summary>
+        /// (rf-squares) Lawns in the free ground between the walks, the centre and the edge allée: each free piece
+        /// shrunk evenly (rounded) until the lawns cover the asked share of the square, a specimen tree in the big ones
+        /// and flowerbeds round it. Works whatever the number and position of the entrances. Returns the lawns made.
+        /// </summary>
+        private static int FreeLawns(LayerContext ctx, Occupancy occ, LayerRegion region, float2 centre, float rondel, PavingPlan pave, float pct)
+        {
+            float fw = FrameWidth(region);
+            float inner = math.max(rondel + 3.5f, 4f), edge = fw + 2f;
+            var pieces = FreeSpace.Pieces(region,
+                p => math.distance(p, centre) < inner || region.BoundaryDistance(p, edge + 1f) < edge || occ.Corridors.Overlaps(p, 1.5f) || !occ.Free(p, 0.8f, 0f, 0.2f),
+                2f, 60f, ctx.Cancel);
+            if (pieces.Count == 0) return 0;
+            float target = math.saturate(pct / 100f) * region.Area;
+            List<float2[]> Shrunk(float d)
+            {
+                var res = new List<float2[]>();
+                foreach (var piece in pieces)
+                    foreach (var r in Poly.Offset(piece, d, OffsetJoin.Round, 4f, 0.25f))
+                        if (r.Outer != null && r.Outer.Length >= 3 && Poly.Area(r.Outer) >= 40f) res.Add(r.Outer);
+                return res;
+            }
+            float Total(List<float2[]> rings) { float a = 0f; foreach (var r in rings) a += Poly.Area(r); return a; }
+            // Find the even shrink (at least 1 m: a paved margin round every lawn) that gives the asked cover.
+            float lo = 1f, hi = 14f;
+            var lawns = Shrunk(lo);
+            if (Total(lawns) > target)
+                for (int it = 0; it < 6; it++)
+                {
+                    float mid = (lo + hi) * 0.5f;
+                    var m = Shrunk(mid);
+                    if (Total(m) > target) { lo = mid; lawns = m; } else hi = mid;
+                }
+            ctx.Check();
+            var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0);
+            int made = 0;
+            foreach (var ring in lawns)
+            {
+                if (made >= 24) break;
+                var lr = LayerRegion.From(ring);
+                if (lr == null) continue;
+                uint v = Hashing.Mix(ctx.Seed, 0x1C00u + (uint)made);
+                pave.Add(ring, SurfaceRole.Grass, new AssetRef("", PavingPalettes.VGrass), AssetCategories.SurfaceGrass);
+                var deep = lr.DeepestPoint(out float ins, null, 16);
+                if (ins >= 3.5f)
+                {
+                    ctx.Object(deep, Hashing.Unit(v) * 6.28f, ObjectRole.Tree, PlazaArt.Or(ctx, "treeAsset", PlazaArt.GardenTrees, v), v, 3);
+                    for (int k = 0; k < 4 && ins >= 5f; k++)
+                    {
+                        float a = k * 1.5708f + Hashing.Unit(v) * 1.5f;
+                        var p = deep + new float2(math.cos(a), math.sin(a)) * 3.2f;
+                        ctx.Object(p, a, ObjectRole.Planter, PlazaArt.Or(ctx, "flowerbedAsset", PlazaArt.Flowerbeds, v + (uint)k), Hashing.Mix(v, (uint)k), -1, AssetCategories.Flowerbed);
+                    }
+                }
+                // The lawn is taken: furniture and beds placed later keep off it.
+                var min = lr.Min; var max = lr.Max;
+                for (float x = min.x + 1f; x <= max.x; x += 2.5f)
+                    for (float y = min.y + 1f; y <= max.y; y += 2.5f)
+                    {
+                        var p = new float2(x, y);
+                        if (lr.Contains(p)) occ.Take(p, 1.6f, 3);
+                    }
+                // A bench at the lawn's point nearest the middle of the square, looking out over it.
+                var near = lr.ClosestOnBoundary(centre, out _, out _);
+                var outDir = math.normalizesafe(centre - near);
+                LeisureKit.Put(ctx, occ, near + outDir * 1.2f, math.atan2(outDir.x, outDir.y), ObjectRole.Bench, bench, null, 1.0f, Hashing.Mix(v, 0x51u), 0.3f, 0.1f);
+                made++;
+            }
+            ctx.Plan.Facts["freeLawns"] = made;
+            return made;
         }
 
         /// <summary>
@@ -630,8 +706,10 @@ namespace Placemaker.Core.Layers.Plaza
                 case "edge":
                 {
                     float pitch = 9f, inset = fw + 2.8f;
-                    var inner = region.InsetVertices(inset);
-                    var r = Poly.IsSimple(inner) && Poly.SignedArea(inner) > 0f ? LayerRegion.From(inner) : null;
+                    // rf-squares: a true offset; the per-vertex inset folded over on a bucket-filled block's chamfered
+                    // corners and the whole allée was dropped (no trees on any plaza in the game runner).
+                    var inner = region.InsetRing(inset);
+                    var r = inner != null ? LayerRegion.From(inner) : null;
                     if (r == null) break;
                     int count = math.max(1, (int)math.round(r.Perimeter / pitch));
                     float step = r.Perimeter / count;

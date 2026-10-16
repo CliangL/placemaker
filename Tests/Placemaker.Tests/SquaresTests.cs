@@ -74,6 +74,37 @@ namespace Placemaker.Tests
             Assert.False(Layer(plan, "plaza").Facts.ContainsKey("specimenCentre"));
         }
 
+        /// <summary>A city block as the bucket tool outlines it in the game: a square with 2 m chamfers at the junctions (shorter than ~3.5 m folds a 5.8 m per-vertex inset).</summary>
+        private static float3[] Block(float side, float chamfer = 2f) => new[]
+        {
+            new float3(chamfer, 0, 0), new float3(side - chamfer, 0, 0), new float3(side, 0, chamfer), new float3(side, 0, side - chamfer),
+            new float3(side - chamfer, 0, side), new float3(chamfer, 0, side), new float3(0, 0, side - chamfer), new float3(0, 0, chamfer),
+        };
+
+        [Theory]
+        [InlineData("plaza", "fountain", "plazaTrees")]
+        [InlineData("plaza", "green", "plazaTrees")]
+        [InlineData("plaza", null, "plazaTrees")]
+        [InlineData("marketSquare", "weekly", "ringTrees")]
+        public void TheEdgeTreesSurviveABlocksChamferedCorners(string type, string preset, string fact)
+        {
+            // Game runner (show-7-builds-1016-072905-1abe): no allée on any plaza, no tree ring on any market square: the
+            // per-vertex inset folded over on the 8-corner outline of a bucket-filled block.
+            var layer = Layer(Compose(type, Block(126f), preset), type);
+            Assert.True(layer.Facts.TryGetValue(fact, out var n) && Convert.ToInt32(n) >= 20, $"{type}/{preset}: {fact} = {n}");
+        }
+
+        [Fact]
+        public void TheGreenSquareHasLawnsWhereverTheEntrancesAre()
+        {
+            // The suggested access points of a city block sit anywhere on the outline: every quarter parterre is crossed
+            // by a walk, so the lawns fill the free ground between the walks instead.
+            var plan = Layer(Compose("plaza", Block(126f), "green"), "plaza");
+            Assert.True(plan.Facts.TryGetValue("lawns", out var n) && Convert.ToInt32(n) >= 2, "lawns " + n);
+            float grass = plan.Surfaces.Where(s => s.Role == SurfaceRole.Grass).Sum(s => Placemaker.Core.Geometry.Poly.Area(Placemaker.Core.Geometry.Poly.To2D(s.Ring)));
+            Assert.True(grass > 0.2f * 126f * 126f, "grass " + grass);
+        }
+
         [Fact]
         public void MarketStallsScaleWithTheSquare()
         {

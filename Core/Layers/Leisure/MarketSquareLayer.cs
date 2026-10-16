@@ -97,10 +97,15 @@ namespace Placemaker.Core.Layers.Leisure
                 occ.TakeCorridor(g.Position, g.Position + inward * 6f, 1.5f, 6);   // keep the way in clear
             }
             LeisureKit.Frame(region, out var centre, out _, out _, out _, out _);
-            // rf-squares: a main aisle from every way in to the market cross, so a big market reads as streets of stalls
-            // meeting in the middle (and every gate leads somewhere).
-            foreach (var g in gates) occ.TakeCorridor(g.Position, centre, 2.3f, 6);
             var axis = PlazaDressing.SquareAxis(region);
+            // rf-squares: two main aisles across the square on its own axes, meeting at the centre: a big market reads as
+            // streets of stalls in four quarters. (Aisles to every access point cut the stall rows at odd angles.)
+            {
+                PlazaDressing.Extents(region, centre, axis, out float minA, out float maxA, out float minB, out float maxB);
+                var sideAxis = new float2(-axis.y, axis.x);
+                occ.TakeCorridor(centre + axis * minA, centre + axis * maxA, 2.4f, 6);
+                occ.TakeCorridor(centre + sideAxis * minB, centre + sideAxis * maxB, 2.4f, 6);
+            }
             region.DeepestPoint(out float ins, null, 12);
             // Art pass a2: an old-town square in setts (a fountain square in warm sandstone), framed in dark
             // flags, the market floor in a lighter stone, trees in pits — one paving tiling (PavingKit).
@@ -148,8 +153,9 @@ namespace Placemaker.Core.Layers.Leisure
                 var bench = PlazaArt.Or(ctx, "benchAsset", PlazaArt.Benches, 0);
                 var ids = string.IsNullOrEmpty(ctx.S("treeAsset")) ? PlazaArt.ChestnutTrees : new[] { ctx.S("treeAsset") };
                 float spacing = math.max(7f, ctx.Raw("treeSpacing"));
-                var inner = region.InsetVertices(fw + 2.6f);
-                var ringRegion = Poly.IsSimple(inner) && Poly.SignedArea(inner) > 0f ? LayerRegion.From(inner) : null;
+                // rf-squares: a true offset (the per-vertex inset folded over on a block's chamfered corners: no ring).
+                var inner = region.InsetRing(fw + 2.6f);
+                var ringRegion = inner != null ? LayerRegion.From(inner) : null;
                 int t = 0;
                 if (ringRegion != null)
                 {

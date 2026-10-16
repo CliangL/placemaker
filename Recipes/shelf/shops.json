@@ -21,7 +21,8 @@
       "terraced",
       "splitLevel",
       "cascade",
-      "podium"
+      "podium",
+      "piazza"
     ],
     "amphitheatre": [
       "cinema",
@@ -30,7 +31,8 @@
     ],
     "fairground": [
       "festival",
-      "funfair"
+      "funfair",
+      "foodTrucks"
     ]
   }
 }

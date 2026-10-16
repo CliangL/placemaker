@@ -193,8 +193,8 @@ namespace Placemaker.Core.Layers.Types.Events
             float2[] loop = null;
             if (layout == "loop")
             {
-                loop = region.InsetVertices(loopInset);
-                bool ok = loop.Length >= 3 && Poly.IsSimple(loop) && Poly.SignedArea(loop) > 600f;
+                loop = region.InsetRing(loopInset);   // rf-squares: robust on a block's chamfered corners
+                bool ok = loop != null && Poly.SignedArea(loop) > 600f;
                 if (ok) foreach (var v in loop) if (!region.ContainsDisc(v, loopInset * 0.5f)) { ok = false; break; }
                 if (!ok) { loop = null; ctx.Issue(IssueSeverity.Info, K + "Issue.LoopFallback"); }
             }
@@ -208,8 +208,8 @@ namespace Placemaker.Core.Layers.Types.Events
                 var fit = region;
                 if (loop != null)
                 {
-                    var inner = region.InsetVertices(loopInset + ctx.F("streetWidth") * 0.5f + 6f);
-                    var innerRegion = inner.Length >= 3 && Poly.IsSimple(inner) && Poly.SignedArea(inner) > 300f ? LayerRegion.From(inner) : null;
+                    var inner = region.InsetRing(loopInset + ctx.F("streetWidth") * 0.5f + 6f);
+                    var innerRegion = inner != null && Poly.SignedArea(inner) > 300f ? LayerRegion.From(inner) : null;
                     if (innerRegion != null) fit = innerRegion;
                 }
                 st = PlanStage(ctx, occ, region, fit, centre, inDir, side, mainGate, pave);

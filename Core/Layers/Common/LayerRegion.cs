@@ -302,6 +302,25 @@ namespace Placemaker.Core.Layers.Common
         }
 
         /// <summary>
+        /// (rf-squares) A robust inward offset of the whole outline for loops along it (tree rings, promenades): the
+        /// largest ring of a true polygon offset (Poly.Offset), CCW and simple, or null when nothing is left. Unlike
+        /// <see cref="InsetVertices"/> it survives short edges: a bucket-filled city block has chamfered corners a few
+        /// metres long, which a per-vertex miter folds over itself (the plaza and market tree rings then vanished).
+        /// </summary>
+        public float2[] InsetRing(float distance)
+        {
+            float2[] best = null;
+            float bestArea = 0f;
+            foreach (var r in Poly.Offset(Ring, distance))
+            {
+                if (r == null || r.Length < 3) continue;
+                float a = math.abs(Poly.SignedArea(r));
+                if (a > bestArea) { bestArea = a; best = r; }
+            }
+            return best != null && Poly.SignedArea(best) < 0f ? Poly.EnsureCcw(best) : best;
+        }
+
+        /// <summary>
         /// Mitred inward offset of every vertex (index-aligned with Ring). Reflex corners use the
         /// bisector; very sharp convex corners are clamped so the miter cannot shoot across the shape.
         /// </summary>
