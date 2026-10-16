@@ -113,7 +113,22 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
         private struct Span { public OrientedRect R; public bool Collapsed, Ramp; }
 
         /// <summary>Type-specific curated defaults (over GritAssets' shared sets); null = shared only.</summary>
-        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null, ArtSurfaces = null;
+        private static readonly Dictionary<string, GritAssets.Set> ArtObjects = null;
+
+        /// <summary>
+        /// (rf-sports) The ruins' own ground: weathered (dark) asphalt pads and a cracked, oil-stained fallen carriageway. The
+        /// shared gritty default for paving is Concrete Surface 02, which in the game's own catalog is a bright white slab:
+        /// the DIY spot read as two white squares on the lawn.
+        /// </summary>
+        private static readonly Dictionary<string, GritAssets.Set> ArtSurfaces = new Dictionary<string, GritAssets.Set>(System.StringComparer.Ordinal)
+        {
+            [AssetCategories.SurfacePaving] = new GritAssets.Set(true, "EAI - Surface Pack Concrete Weathered Asphalt Surface|Pavement Surface 01|Concrete Surface 01"),
+            [AssetCategories.SurfaceAsphalt] = new GritAssets.Set(true, "EAI - Surface Pack Concrete Cracked Asphalt Surface|Oil Surface 01|Pavement Surface 01"),
+        };
+
+        /// <summary>(rf-sports) Road arrows and a speed number: the fallen carriageway reads as a highway (the marking pool's best were no-parking stripes).</summary>
+        private static readonly string[] Arrows = { "EU RoadArrow Forward", "NA RoadArrow Forward" };
+        private static readonly string[] SpeedSigns = { "EU LaneMarkings Speed100", "EU LaneMarkings Speed120", "NA LaneMarkings Speed65" };
 
         // Art pass: whatever the player left automatic gets the curated gritty defaults (GritAssets).
         protected override void PlanCore(LayerContext ctx) { PlanArt(ctx); GritAssets.Apply(ctx.Plan, ctx.Seed, ArtObjects, ArtSurfaces); GritAssets.CapDecals(ctx.Plan, ctx.LayerRegion.Area, 130f); }
@@ -229,13 +244,31 @@ namespace Placemaker.Core.Layers.Types.UrbanRuins
                 fallen.Add(slab);
                 // Faded lane markings on the fallen carriageway (dashes on the centre and lane lines).
                 if (wantMarkings)
-                    foreach (var w in new[] { 0f, -s.R.HalfWidth * 0.5f, s.R.HalfWidth * 0.5f })
-                        for (float u = -s.R.HalfLength + 2f; u < s.R.HalfLength - 1f; u += 6f)
-                        {
-                            uint mv = Hashing.Mix(v, (uint)(u * 10f + w * 100f + 1000f));
-                            if (Hashing.Unit(mv) > 0.85f - 0.5f * decay) continue;
-                            if (DecayKit.Decal(ctx, guard, s.R.Local(u, w), s.R.Yaw, AssetCategories.DecalMarkings, mv)) markings++;
-                        }
+                {
+                    // (rf-sports) Faded white lane dashes only from white line pieces (never the general marking pool: its
+                    // best-ranked items are yellow no-parking stripes), then one arrow per lane (two lanes each way) and a
+                    // speed number now and then, all from the game's own road markings.
+                    if (AssetAvailability.Has(AssetCategories.DecalFieldLine))
+                        foreach (var w in new[] { 0f, -s.R.HalfWidth * 0.5f, s.R.HalfWidth * 0.5f })
+                            for (float u = -s.R.HalfLength + 2f; u < s.R.HalfLength - 1f; u += 6f)
+                            {
+                                uint mv = Hashing.Mix(v, (uint)(u * 10f + w * 100f + 1000f));
+                                if (Hashing.Unit(mv) > 0.85f - 0.5f * decay) continue;
+                                if (DecayKit.Decal(ctx, guard, s.R.Local(u, w), s.R.Yaw, AssetCategories.DecalFieldLine, mv)) markings++;
+                            }
+                    for (int lane = 0; lane < 4; lane++)
+                    {
+                        float w = (lane - 1.5f) * s.R.HalfWidth * 0.5f;
+                        uint mv = Hashing.Mix(v, 0xA770u + (uint)lane);
+                        if (Hashing.Unit(mv) > 0.9f - 0.45f * decay) continue;
+                        float u = (Hashing.Unit(Hashing.Mix(mv, 1u)) - 0.5f) * s.R.HalfLength * 0.8f;
+                        var p = s.R.Local(u, w);
+                        if (!guard.Free(p, 0.6f, 0.4f, 0f)) continue;
+                        bool speed = Hashing.Unit(Hashing.Mix(mv, 2u)) < 0.25f;
+                        ctx.Object(p, s.R.Yaw + (w < 0f ? math.PI : 0f), ObjectRole.Decal, AssetMix.One("", speed ? SpeedSigns : Arrows), mv, -1, AssetCategories.DecalMarkings);
+                        markings++;
+                    }
+                }
             }
             ctx.Check();
 

@@ -425,13 +425,30 @@ namespace Placemaker.Core.Layers.Leisure
 
         private bool Wants(string layer) => _ctx.Input.HasChildTarget(Amenities.Place(layer));
 
+        /// <summary>
+        /// (rf-sports) A single pitch is already drawn inside a running track's infield: with a track as the hero
+        /// the pitch feature is only its stand-in for when the track does not fit (a stadium on a small block).
+        /// </summary>
+        private bool InInfield(string hero, string layer) => hero == "runningTrack" && layer == "pitch" && Count("pitch") <= 1 && _ctx.S("subtype") == "stadium";
+
+        /// <summary>(rf-sports) The track's ladder ends in a compact oval (bends shrunk to the place) so a stadium fits a city block.</summary>
+        private static readonly FieldFormat[] TrackLadder = Append(FieldSpecs.Track, new FieldFormat("compact", 84f, 50f));
+
+        private static FieldFormat[] Append(FieldFormat[] a, FieldFormat extra)
+        {
+            var r = new FieldFormat[a.Length + 1];
+            Array.Copy(a, r, a.Length);
+            r[a.Length] = extra;
+            return r;
+        }
+
         private static FieldFormat[] Ladder(string layer)
         {
             switch (layer)
             {
                 case "pitch": return FieldSpecs.Pitch;
                 case "baseballDiamond": return FieldSpecs.Baseball;
-                case "runningTrack": return FieldSpecs.Track;
+                case "runningTrack": return TrackLadder;
                 case "cricketGround": return FieldSpecs.Cricket;
                 case "tennisCourts": return FieldSpecs.Tennis;
                 case "basketballCourt": return FieldSpecs.Basketball;
@@ -547,9 +564,9 @@ namespace Placemaker.Core.Layers.Leisure
             else anchor = _playCentre + _axis * (gu > 0f ? u0 : u1) + _side * ((v0 + v1) * 0.5f);
             // Several big fields: the hero takes the far corner so the others can line up beside it.
             int bigTotal = 0;
-            foreach (var f in SportsParkLayer.BigFields) if (Wants(f)) bigTotal += Count(f);
+            foreach (var f in SportsParkLayer.BigFields) if (Wants(f) && !InInfield(layer, f)) bigTotal += Count(f);
             int others = 0;
-            foreach (var f in SportsParkLayer.Facilities()) if (Wants(f) && f != layer) others++;
+            foreach (var f in SportsParkLayer.Facilities()) if (Wants(f) && f != layer && !InInfield(layer, f)) others++;
             float cap = others == 0 ? 0.8f : others <= 2 ? 0.45f : 0.36f;
             if (bigTotal > Count(layer)) cap = math.min(cap, 0.25f);   // other big fields share the ground
             // …unless the hero is so long that the others cannot sit beside it anyway (a running track): then centred.
@@ -594,7 +611,7 @@ namespace Placemaker.Core.Layers.Leisure
         {
             foreach (var f in SportsParkLayer.BigFields)
             {
-                if (!Wants(f) || (_hero != null && f == _hero.Layer)) continue;
+                if (!Wants(f) || (_hero != null && (f == _hero.Layer || InInfield(_hero.Layer, f)))) continue;
                 var anchor = _hero != null ? _hero.Rect.Center : _playCentre;
                 Func<float2, float> extra = null;
                 if (_hero != null)

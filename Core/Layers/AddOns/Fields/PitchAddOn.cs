@@ -89,11 +89,20 @@ namespace Placemaker.Core.Layers.AddOns.Fields
                 FieldKit.Surface(ctx, f.Box(-a - 1.5f, -b - 1.5f, a + 1.5f, b + 1.5f), SurfaceRole.Grass, ctx.S("turfAsset"), AssetCategories.SurfaceGrass);
 
             float goalU;
+            // (rf-sports) No line pieces installed: a soccer pitch at least the size of the game's own football pitch decal
+            // (68 x 52.5 m) gets that decal; smaller ones stay unmarked (no line pieces to paint them with).
+            var lines = j.Lines;
+            if (code == "soccer" && FieldKit.StampMarkings(ctx) && place.HalfLength * 2f >= 66f && place.HalfWidth * 2f >= 50f)
+            {
+                FieldKit.Stamp(ctx, f, float2.zero, j.V(0xF0Du), AssetCategories.DecalMarkings, "FootballFieldDecal01");
+                lines = new LinePainter();
+                ctx.Plan.Facts["pitchDecal"] = 1;
+            }
             switch (code)
             {
-                case "gridiron": goalU = GridironLines(j.Lines, f, a, b); break;
-                case "rugby": goalU = RugbyLines(j.Lines, f, a, b, area.x / 120f); break;
-                default: SoccerLines(j.Lines, f, a, b); goalU = a; break;
+                case "gridiron": goalU = GridironLines(lines, f, a, b); break;
+                case "rugby": goalU = RugbyLines(lines, f, a, b, area.x / 120f); break;
+                default: SoccerLines(lines, f, a, b); goalU = a; break;
             }
 
             // Goals (soccer: on the goal line; gridiron: posts at the back of the end zones; rugby: on the try lines).

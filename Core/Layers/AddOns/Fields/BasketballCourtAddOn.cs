@@ -65,8 +65,9 @@ namespace Placemaker.Core.Layers.AddOns.Fields
             bool stamp = !compact && ctx.B("lines") && AssetAvailability.Has(AssetCategories.DecalCourtBasketball);
             if (stamp)
             {
-                // The decal's long side is its local X: turn it a quarter so it runs along the court.
-                ctx.Object(f.O, f.Yaw + math.PI * 0.5f, ObjectRole.Decal, new AssetRef(""), j.V(0xC0u), -1, AssetCategories.DecalCourtBasketball);
+                // The decal's long side is its local X: turn it a quarter so it runs along the court. (rf-sports) Named
+                // explicitly: the category has no automatic pool, so the empty ref was dropped and no court had lines.
+                FieldKit.Stamp(ctx, f, float2.zero, j.V(0xC0u), AssetCategories.DecalCourtBasketball, "BasketballCourtDecal01", "BasketballCourtDecal03");
                 ctx.Plan.Facts["courtDecal"] = 1;
             }
             var l = stamp ? new LinePainter() : j.Lines;

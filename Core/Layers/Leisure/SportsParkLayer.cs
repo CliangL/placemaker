@@ -160,7 +160,7 @@ namespace Placemaker.Core.Layers.Leisure
                 ("tennisCourtsSize", "two"), ("basketballCourtCount", 1.0), ("promenade", "both"), ("treeBelt", "single"), ("berms", true), ("spacing", 100.0));
             PresetFeatures("community", "fitness");
             Preset("stadium", ("subtype", "stadium"), ("hero", "runningTrack"), ("runningTrackSize", "auto"), ("pitchCount", 1.0), ("pitchSize", "seven"),
-                ("treeBelt", "double"), ("berms", true), ("parking", "on"), ("bikeRacks", 14.0), ("spacing", 120.0), ("promenade", "both"), ("kiosk", true));
+                ("treeBelt", "single"), ("berms", true), ("parking", "auto"), ("bikeRacks", 14.0), ("spacing", 95.0), ("promenade", "both"), ("kiosk", true));
             PresetFeatures("stadium", "runningTrack", "fitness", "-tennisCourts", "-basketballCourt", "-playground");
             Preset("tennisClub", ("subtype", "tennisClub"), ("hero", "tennisCourts"), ("tennisCourtsCount", 3.0), ("tennisCourtsSize", "two"),
                 ("promenade", "spine"), ("treeBelt", "single"), ("berms", false), ("treeDensity", 35.0), ("spacing", 90.0), ("fence", true));

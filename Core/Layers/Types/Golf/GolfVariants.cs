@@ -102,9 +102,16 @@ namespace Placemaker.Core.Layers.Types.Golf
                 bool flip = (i & 1) == 1;   // alternate the playing direction so neighbouring lanes read as a course
                 float dirSign = flip ? -1f : 1f;
                 // Concrete kerb, felt lane, cup flag and one obstacle; no painted markings (no road decals in leisure places).
-                ctx.Surface(r.Ring, SurfaceRole.Paving, kerb, AssetCategories.SurfacePaving);
+                // (rf-sports) The kerb is four strips round the felt, never a slab under it: two overlapping surfaces draw
+                // by priority, and the concrete won, so every lane came out as a white slab without its felt.
                 var inner = new OrientedRect { Center = r.Center, Axis = r.Axis, HalfLength = r.HalfLength - 0.6f, HalfWidth = r.HalfWidth - 0.6f };
                 ctx.Surface(inner.Ring, SurfaceRole.Grass, felt, AssetCategories.SurfaceGrass);
+                var rs = new float2(-r.Axis.y, r.Axis.x);
+                for (int e = -1; e <= 1; e += 2)
+                {
+                    ctx.Surface(LayerRegion.Rect(r.Center + rs * (e * (r.HalfWidth - 0.3f)), r.Axis, r.HalfLength, 0.3f), SurfaceRole.Paving, kerb, AssetCategories.SurfacePaving);
+                    ctx.Surface(LayerRegion.Rect(r.Center + r.Axis * (e * (r.HalfLength - 0.3f)), r.Axis, 0.3f, r.HalfWidth - 0.6f), SurfaceRole.Paving, kerb, AssetCategories.SurfacePaving);
+                }
                 if (flagCat != null)
                     ctx.Object(r.Local(dirSign * (r.HalfLength - 1.4f), 0f), 0f, ObjectRole.Furniture, flagAsset, v, -1, flagCat);
                 {
@@ -301,7 +308,9 @@ namespace Placemaker.Core.Layers.Types.Golf
                 var (flagAsset, flagCat) = GolfAssets.FlagProp(ctx.S("flagAsset"), false);
                 if (!ctx.B("flags")) flagCat = null;
                 var (signAsset, signCat) = GolfAssets.Prop("", AssetCategories.GolfTee, AssetMix.One("SportParkTrainingPole01"), AssetCategories.Sports);
-                var green = GolfAssets.GreenRef(ctx.S("greenSurface"));
+                // (rf-sports) The range is one grass surface: target greens on top of it need the overlay copy (drawn above
+                // every vanilla surface), else they vanished under it and only their bunkers showed.
+                var green = string.IsNullOrEmpty(ctx.S("greenSurface")) ? AssetMix.One("Placemaker Overlay (Grass Surface 02)", "Grass Surface 02") : GolfAssets.GreenRef(ctx.S("greenSurface"));
                 var sand = GolfAssets.BunkerRef(ctx.S("bunkerSurface"));
                 bool warned = false;
                 float runFrom = math.dot(strip.Center - centre, dir);

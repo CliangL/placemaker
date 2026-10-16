@@ -9,5 +9,13 @@
   ],
   "types": [],
   "hiddenTypes": [],
-  "hiddenStyles": {}
+  "hiddenStyles": {
+    "sportsPark": [
+      "campus"
+    ],
+    "urbanRuins": [
+      "graffitiPark"
+    ]
+  },
+  "_why": "rf-sports (2026-10-16, docs/refactor/sports.md): the user graded Sports D, weird but unique; cut only what is bad AND not unique. sportsPark campus = community plus a baseball diamond that never fits a city block (5 facilities missing on 1.5 ha). urbanRuins graffitiPark = the DIY spot with a wall row; its point (graffiti) needs decal packs, without them a bare white slab."
 }
