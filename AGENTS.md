@@ -135,7 +135,10 @@ ode_modules`.
 ## Known mod bugs (found by the game runner, not fixed yet)
 
 - Build freezes of 1.4–2.7 s (the build itself; report 09's other items: ghost re-emission, plan landing work).
-- Strip mall: a lot planned from leftover land (lot first) can show stall markings on grass with no asphalt.
+- The decal-copy rescan fix is proven with park companions in the clean profile (no rescan after them); decal copies
+  themselves only appear with the user's asset packs (`-AllMods`), not run.
+- Plazas and market squares: their shops face the city streets (these types have no lanes); for the Shops & squares
+  agent to decide.
 - The roads presets strict-grid and superblocks build nothing.
 - The game crashes (native, `TerrainSystem.CullForCascades`) on the 4th build of `Show.ps1 -Category parks -Type park
   -Style all -Views 45,top -Modes clean,zoning,terrain` (park-garden, right after its terraform and terrain paint);
