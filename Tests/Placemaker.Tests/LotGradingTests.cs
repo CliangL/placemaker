@@ -59,6 +59,7 @@ namespace Placemaker.Tests
                 var input = new AreaInput { Shape = new AreaShape { Ring = ring }, Site = site, Settings = r.Root.Settings, Markers = r.Root.Markers };
                 r.Root.Markers.AddRange(GeneratorRegistry.Get(type).SuggestMarkers(input));
             }
+            ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             return Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 

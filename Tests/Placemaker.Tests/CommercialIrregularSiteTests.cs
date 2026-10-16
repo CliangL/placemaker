@@ -144,6 +144,9 @@ namespace Placemaker.Tests
             if (preset != "") Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
+            // (rf-shops3) What a player places on a block: a car entrance mid main street and a footpath beside it (every gate through a
+            // row of shops costs that row a plot; the driveway is exercised by the connectivity tests).
+            ShopTestEntrances.Place(r, ring, site, footpath: true);
             return Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 

@@ -42,13 +42,15 @@ namespace Placemaker.Tests
             }
         }
 
-        private static ComposedPlan Compose(string type, string preset, float3[] ring, SiteContext site, uint seed = 5, string zone = null)
+        private static ComposedPlan Compose(string type, string preset, float3[] ring, SiteContext site, uint seed = 5, string zone = null, bool entrances = true)
         {
             var r = Editor.SingleLayerRecipe(GeneratorRegistry.Get(type), seed);
             if (!string.IsNullOrEmpty(preset)) Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
             if (zone != null) r.Root.Settings.Values["zoneKind"] = zone;
+            // (rf-shops3) The entrance types wait for the player's ways in: a car entrance mid main street, a footpath, a driveway.
+            if (entrances) ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             return Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 
@@ -135,10 +137,19 @@ namespace Placemaker.Tests
                 Assert.Contains(host.Nets, n => n.Role == NetRole.DriveConnector);
             }
 
-            // Nothing of any layer stands on a plot (Cutouts.Enforce + planning around them).
+            // Nothing of any layer stands on a plot (Cutouts.Enforce + planning around them) but the plot planting (rf-shops3: trees and
+            // shrubs at the back of a plot, categories tree.plot / bush.plot, kept by Cutouts.KeepsOnPlot), which stands on nothing else.
             foreach (var l in plan.Layers)
                 foreach (var o in l.Objects.Where(o => o.Role != ObjectRole.Decal))
+                {
+                    if (Cutouts.KeepsOnPlot(o))
+                    {
+                        Assert.True(o.Role == ObjectRole.Tree || o.Role == ObjectRole.Bush, $"{ctx}: plot planting {o.Role}");
+                        Assert.True(plots.Any(q => Poly.Contains(q, o.Position.xz)), $"{ctx}: plot planting at {o.Position.xz} off the plots");
+                        continue;
+                    }
                     Assert.False(plots.Any(q => Poly.Contains(Inset(q, 0.3f), o.Position.xz)), $"{ctx}: {l.GeneratorId} {o.Role} at {o.Position.xz} on a plot");
+                }
             TestKit.AssertSurfacesAccepted(host);
         }
 
@@ -223,11 +234,31 @@ namespace Placemaker.Tests
         [Fact]
         public void WithoutAStreetTheSiteBecomesAParkWithAWarning()
         {
+            // (rf-shops3) The types laid out from the streets (here the shopping plaza); the types planned from the player's
+            // entrances never become a park (below).
             var ring = Site("small");
-            var plan = Compose("stripMall", "", ring, new SiteContext());
+            var plan = Compose("shoppingPlaza", "", ring, new SiteContext());
             Assert.False(plan.HasErrors);
             Assert.Contains(plan.AllIssues(), i => i.Key == CommercialLayer.NoStreetKey);
             Assert.Empty(plan.Layers.SelectMany(l => l.Zoning));
+        }
+
+        [Theory]
+        [InlineData("stripMall")]
+        [InlineData("mallPark")]
+        [InlineData("mallDistrict")]
+        public void WithoutAStreetAnEntranceTypeIsStillPlannedNeverAPark(string type)
+        {
+            // (rf-shops3) No street, no entrance: the composition is still planned (the preview), with its ring and its plots;
+            // no pocket park, and nothing joins a street.
+            var ring = Site("small");
+            var plan = Compose(type, "", ring, new SiteContext(), entrances: false);
+            Assert.False(plan.HasErrors);
+            Assert.DoesNotContain(plan.AllIssues(), i => i.Key == CommercialLayer.NoStreetKey);
+            var host = plan.Layers.First(l => l.GeneratorId == type);
+            Assert.Contains(host.Regions, Cutouts.IsCutout);
+            Assert.Contains(host.Nets, n => n.Role == NetRole.Alley || n.Role == NetRole.Street);
+            Assert.DoesNotContain(plan.Layers.SelectMany(l => l.Nets), n => n.StartAttach >= 0 || n.EndAttach >= 0);
         }
 
         [Fact]

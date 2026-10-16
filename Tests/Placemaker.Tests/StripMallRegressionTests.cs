@@ -67,6 +67,8 @@ namespace Placemaker.Tests
             if (!string.IsNullOrEmpty(preset)) Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
+            // (rf-shops3) Planned from the player's entrances: a car entrance mid main street, a footpath beside it, a driveway.
+            ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             return Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 
