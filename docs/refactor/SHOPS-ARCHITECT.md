@@ -149,7 +149,9 @@ trucks and a bike shelter at the plaza.
 **Mall district, Shopping district: "the lanes".** A ring drive round the quarter (shops on both sides where it is
 deep enough), a grid of lanes and pedestrian streets inside joined to the ring, courtyard gardens, the square at the
 central crossing (café tables, a fountain, food trucks); walks in from the footpath entrances through planted
-gateways, bike racks at the gateways.
+gateways, bike racks at the gateways. On a normal block (no room for lanes inside) the ring gets soft 7 m corners so each
+side holds a row either side of a walk, rows face it from both sides, a corner court sits outside each soft corner, and
+the middle is the quarter's square.
 
 **Mall district, Downtown.** Denser, taller, alleys, and parking courts mixed through the grid (landscaped, EV
 chargers).
