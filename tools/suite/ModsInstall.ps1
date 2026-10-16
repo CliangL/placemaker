@@ -57,15 +57,33 @@ function MI-FolderInfo([string]$dir) {
     foreach ($f in Get-ChildItem -LiteralPath $dir -Recurse -File -Force) { $items[$f.FullName.Substring($root.Length + 1).ToLowerInvariant()] = $f }
     $keys = [string[]]@($items.Keys)
     [Array]::Sort($keys, [StringComparer]::Ordinal)
-    $lines = foreach ($rel in $keys) {
-        $f = $items[$rel]
-        $h = try { (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256 -ErrorAction Stop).Hash } catch { 'unreadable' }
-        $r.files++; $r.bytes += $f.Length
-        if ($rel -eq 'placemaker.dll') { $r.dll = "$h".Substring(0, [math]::Min(8, "$h".Length)).ToLowerInvariant(); $r.dllTime = $f.LastWriteTime.ToString('o') }
-        "${rel}:$($f.Length):$h"
-    }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $lines = foreach ($rel in $keys) {
+            $f = $items[$rel]
+            $h = MI-FileSha $sha $f.FullName
+            $r.files++; $r.bytes += $f.Length
+            if ($rel -eq 'placemaker.dll') { $r.dll = $h.Substring(0, [math]::Min(8, $h.Length)).ToLowerInvariant(); $r.dllTime = $f.LastWriteTime.ToString('o') }
+            "${rel}:$($f.Length):$h"
+        }
+    } finally { $sha.Dispose() }
     $r.hash = if ($r.files -gt 0) { (MI-Hash (@($lines) -join "`n")).Substring(0, 16) } else { 'empty' }
     return $r
+}
+# SHA-256 of a file (read with every share mode: the game may hold it), upper-case hex like Get-FileHash, and fast
+# (a cmdlet per file made hashing a 634-file build take seconds).
+function MI-FileSha($sha, [string]$path) {
+    try {
+        $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite, Delete')
+        try { return ([BitConverter]::ToString($sha.ComputeHash($fs)) -replace '-', '') } finally { $fs.Dispose() }
+    } catch { return 'unreadable' }
+}
+# The first 8 hex of Placemaker.dll's SHA-256 ('' when there is none).
+function MI-DllHash([string]$dir) {
+    $p = Join-Path $dir 'Placemaker.dll'
+    if (-not (Test-Path -LiteralPath $p)) { return '' }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return (MI-FileSha $sha $p).Substring(0, 8).ToLowerInvariant() } finally { $sha.Dispose() }
 }
 
 function MI-ReadJson([string]$p) {
@@ -175,11 +193,32 @@ function MI-Snapshot($cur, [string]$why) {
 
 function MI-Describe($i) { if (-not $i -or -not ($i.had -or $i.exists)) { return 'nothing installed' }; return "Placemaker.dll $($i.dll) of $(if ($i.dllTime) { ([datetime]$i.dllTime).ToString('yyyy-MM-dd HH:mm') })" }
 
+# A verified copy of the user's build waiting in staging (prepared while the queue's game runs), so that putting it
+# back when the game exits is two renames: the moment Mods\Placemaker holds the queue's build without a game is short.
+function MI-ReadyDir($ub) { return (Join-Path $script:MI.Stage ('ready-' + $ub.hash)) }
+function MI-PrepareRestore {
+    try {
+        MI-WithLock {
+            $ub = MI-ReadUser
+            if (-not $ub -or -not $ub.had) { return }
+            $ready = MI-ReadyDir $ub
+            if ((Test-Path -LiteralPath $ready) -and (Test-Path -LiteralPath "$ready.ok")) { return }
+            MI-Remove $ready | Out-Null
+            $s = MI-Stage (Join-Path $script:MI.User 'mod') $ub.hash
+            MI-Move $s $ready
+            [IO.File]::WriteAllText("$ready.ok", $ub.hash)
+        } | Out-Null
+    } catch { MI-Log "could not prepare the user's build for a quick restore: $($_.Exception.Message)" }
+}
+
 # Puts the user's build back from user-build (a verified copy, swapped in).
 function MI-PutBackUser($ub) {
     if ($ub.had) {
-        $stage = MI-Stage (Join-Path $script:MI.User 'mod') $ub.hash
+        $ready = MI-ReadyDir $ub
+        $usedReady = (Test-Path -LiteralPath $ready) -and (Test-Path -LiteralPath "$ready.ok") -and "$([IO.File]::ReadAllText("$ready.ok"))".Trim() -eq $ub.hash
+        $stage = if ($usedReady) { $ready } else { MI-Stage (Join-Path $script:MI.User 'mod') $ub.hash }
         $out = MI-SwapIn $stage
+        if ($usedReady) { Remove-Item -LiteralPath "$ready.ok" -Force -ErrorAction SilentlyContinue }
     } else {
         $g = @(MI-Games); if ($g.Count -gt 0) { throw 'a game is running' }
         $out = $null
@@ -197,9 +236,18 @@ function MI-ReconcileLocked([string]$why) {
         if ($st.state -ne 'user') { return @{ ok = $false; pending = $true; message = "a game is running (Cities2.exe PID $($g -join ', ')): the user's build goes back when it has closed" } }
         return @{ ok = $true; pending = $false; message = '' }
     }
-    # leftovers of an operation that was cut off (nothing is in progress while the lock is held)
     $ub = MI-ReadUser
-    foreach ($d in Get-ChildItem -LiteralPath $script:MI.Stage -Directory -ErrorAction SilentlyContinue | Where-Object { ($ub -or $_.Name -notlike 'user-old-*') -and $_.LastWriteTime -lt (Get-Date).AddMinutes(-10) }) { MI-Remove $d.FullName | Out-Null }
+    # the usual case, fast (the moment a queue game exits): the queue's own build is there, the user's goes back
+    if ($ub -and $st.state -eq 'queue' -and $st.queueDll -and (MI-DllHash $script:MI.Mods) -eq $st.queueDll) {
+        MI-SetState 'restoring' @{ queueHash = "$($st.queueHash)"; queueDll = "$($st.queueDll)"; label = "$($st.label)" }
+        MI-PutBackUser $ub
+        MI-SetState 'user'
+        $m = "put back the user's build ($(MI-Describe $ub); $why)"; MI-Log $m
+        return @{ ok = $true; pending = $false; message = $m; changed = $true }
+    }
+    # leftovers of an operation that was cut off (nothing is in progress while the lock is held)
+    $keepReady = if ($ub) { Split-Path (MI-ReadyDir $ub) -Leaf } else { '' }
+    foreach ($d in Get-ChildItem -LiteralPath $script:MI.Stage -Directory -ErrorAction SilentlyContinue | Where-Object { ($ub -or $_.Name -notlike 'user-old-*') -and $_.Name -ne $keepReady -and $_.LastWriteTime -lt (Get-Date).AddMinutes(-10) }) { MI-Remove $d.FullName | Out-Null; Remove-Item -LiteralPath "$($d.FullName).ok" -Force -ErrorAction SilentlyContinue }
     $cur = MI-FolderInfo $script:MI.Mods
     if (-not $ub) {
         if ($st.state -ne 'user') { MI-Log "no copy of the user's build to put back ($why): keeping what Mods\Placemaker holds ($(MI-Describe $cur)) as the user's" }

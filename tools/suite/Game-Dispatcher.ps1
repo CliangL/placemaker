@@ -189,6 +189,7 @@ function D-HandleOrphans($foreign) {
 # that was killed). Only when no game runs and no game host (ours or another) holds the suite lock.
 function D-RestoreUserBuild([string]$why, [switch]$Now) {
     if (-not (MI-Pending)) { return $true }
+    if ($script:sess) { return $false }   # our own game runs: its host puts the user's build back when it exits
     if (-not $Now -and ((Get-Date) - $script:lastReconcile).TotalSeconds -lt 15) { return $false }
     $script:lastReconcile = Get-Date
     $g = @(MI-Games)
@@ -622,6 +623,7 @@ function D-Fits($r) {
 
 function D-Status([string]$state, $queued) {
     $rates = Q-Rates
+    if ($script:active) { $queued = @($queued | Where-Object { $_.id -ne $script:active.req.id }) }   # taken this round: it is the current one, not in line
     $now = Get-Date
     $cur = $null
     $remain = 0.0

@@ -315,6 +315,7 @@ try {
     $ourPid = $proc.Id
     Write-NoBom $activeFile (@{ pid = $ourPid; runId = $RunId; start = $launchedAt.ToString('o'); runDir = $runDir } | ConvertTo-Json -Compress)
     Say "started Cities2.exe PID $ourPid $gameArgs"
+    if ($script:queueInstall -and -not $Playground) { MI-PrepareRestore }   # while it boots: the user's build ready to swap back in at once
 
     $bootLimit = if ($AllMods) { 600 } else { 240 }
     $staleLimit = if ($AllMods) { 240 } else { 120 }
@@ -323,7 +324,7 @@ try {
     $hb = Join-Path $runDir 'heartbeat.json'
     $lastBeat = $null; $lastBeatChange = Get-Date; $everBeat = $false; $status = 'running'
     while ($true) {
-        Start-Sleep -Seconds 2
+        [void]$proc.WaitForExit(2000)   # 2 s, or less the moment the game exits
         $now = Get-Date
         $alive = [bool](Get-Process -Id $ourPid -ErrorAction SilentlyContinue)
         $beat = $null
@@ -352,7 +353,7 @@ try {
         if ($elapsed -gt $TimeoutMin * 60) { $status = 'timeout'; Say "overall timeout ($TimeoutMin min)"; break }
         if ($beat -and $beat.phase -eq 'quit') {
             $quitAt = Get-Date
-            while ((Get-Process -Id $ourPid -ErrorAction SilentlyContinue) -and ((Get-Date) - $quitAt).TotalSeconds -lt 90) { Start-Sleep -Seconds 1 }
+            [void]$proc.WaitForExit(90000)   # returns the moment the game has exited
             if (Get-Process -Id $ourPid -ErrorAction SilentlyContinue) { $status = 'quit-timeout'; Say 'clean quit did not finish in 90 s' }
             else { $status = 'quit'; Say ("game exited cleanly {0:F0} s after the quit request" -f ((Get-Date) - $quitAt).TotalSeconds) }
             break
