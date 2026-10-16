@@ -203,6 +203,28 @@ namespace Placemaker.Core.Layers.Parking
                         edges.Add(new RowEdge { Corner = mid, RowDir = strip, Back = outward, Cap = true });
                     }
                 }
+                // free strips no stall faces (a planted strip between two lanes): probed across from one long side
+                foreach (var ring in greens)
+                {
+                    if (ring == null || ring.Count < 3) continue;
+                    var axis = new double2(1, 0); double longest = 0;
+                    for (int i = 0; i < ring.Count; i++)
+                    {
+                        var d = ring[(i + 1) % ring.Count] - ring[i];
+                        double l2 = PGeo.Dot(d, d);
+                        if (l2 > longest) { longest = l2; axis = PGeo.Norm(d); }
+                    }
+                    var across = PGeo.Perp(axis);
+                    double x0 = double.MaxValue, x1 = double.MinValue, y0 = double.MaxValue, y1 = double.MinValue;
+                    foreach (var p in ring)
+                    {
+                        double x = PGeo.Dot(p, axis), y = PGeo.Dot(p, across);
+                        x0 = Math.Min(x0, x); x1 = Math.Max(x1, x); y0 = Math.Min(y0, y); y1 = Math.Max(y1, y);
+                    }
+                    if (y1 - y0 > 4.5 || x1 - x0 < 12) continue;
+                    for (double x = x0 + 0.75; x < x1; x += 1.5)
+                        edges.Add(new RowEdge { Corner = axis * x + across * (y0 - 0.04), RowDir = axis, Back = across });
+                }
                 var rows = Vegetation.PlanRows(edges, species, density, input.Seed, layout.Lanterns, IsGreen, PlantBlocked);
                 layout.Plants = Vegetation.Plan(greens, species, density, input.Seed, layout.Lanterns, PlantBlocked, rows);
             }

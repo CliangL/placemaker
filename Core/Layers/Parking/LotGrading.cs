@@ -182,21 +182,6 @@ namespace Placemaker.Core.Layers.Parking
                         if (!double.IsNaN(h) && !double.IsInfinity(h)) ties.Add(new double3(q.x, q.y, h));
                     }
                 }
-            // rf-parking: a car entrance ties the edge to its street wherever the street is (the connector runs there anyway).
-            // On a 7 % slope with the street 10 m off the outline the lot stood 2.6 m above the street at its entrance and
-            // the connector climbed that bank in its first 6 m (game runner: "net sag ... humps 1.1 m").
-            if (roads != null && roads.Count > 0 && layout.Entrances != null)
-                foreach (var en in layout.Entrances)
-                {
-                    if (!EntranceKinds.ForCars(en.Kind)) continue;
-                    if (!Roads.Cast(roads, f.ToWorld(en.Point), f.DirToWorld(-en.Inward), 40, out var hit)) continue;
-                    if (hit.Distance <= roads[hit.Road].Width * 0.5 + TieReach) continue;   // the edge sampling tied it already
-                    double h = Roads.HeightAt(roads, hit);
-                    if (double.IsNaN(h) || double.IsInfinity(h)) continue;
-                    var along = PGeo.Perp(en.Inward);
-                    double half = Math.Max(2.0, en.Width * 0.5 + 1.0);
-                    for (double s = -half; s <= half + 1e-6; s += TieStep) ties.Add(new double3(en.Point.x + along.x * s, en.Point.y + along.y * s, h));
-                }
             res.Ties = ties.Count;
             // The planes are fitted to the ground and (weighted) to the road edges, so the blend at the edges stays small.
             var fit = new List<double3>(pts);
