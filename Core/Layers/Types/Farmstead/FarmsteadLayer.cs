@@ -1024,6 +1024,48 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             }
         }
 
+        /// <summary>
+        /// A hedgerow as the game's own hedge net (one continuous hedge per straight run), not 2.6 m hedge pieces that
+        /// the declutter pass thinned into a dotted line (rf-farms). Runs break at gates, gaps and corners.
+        /// </summary>
+        private sealed class HedgeLine
+        {
+            private readonly LayerContext _ctx;
+            private readonly Occupancy _occ;
+            private bool _open;
+            private float2 _start, _last, _dir;
+            public float Length;
+            public static readonly AssetRef Net = AnimalPark.AnimalParkArt.Boundary("", true);
+
+            public HedgeLine(LayerContext ctx, Occupancy occ) { _ctx = ctx; _occ = occ; }
+
+            public void Add(float2 p, float2 tangent, bool ok)
+            {
+                if (!ok) { Flush(); return; }
+                if (_open && math.dot(math.normalizesafe(tangent), _dir) < 0.985f) Flush();
+                if (!_open) { _start = p; _dir = math.normalizesafe(tangent); _open = true; }
+                _last = p;
+            }
+
+            public void Flush()
+            {
+                if (!_open) return;
+                _open = false;
+                float len = math.distance(_start, _last);
+                if (len < 4f) return;
+                // Half a sample step past each end closes the gap to the next run, never past the outline.
+                var region = _ctx.LayerRegion;
+                var a = region.ContainsDisc(_start - _dir * 1.2f, 1f) ? _start - _dir * 1.2f : _start;
+                var b = region.ContainsDisc(_last + _dir * 1.2f, 1f) ? _last + _dir * 1.2f : _last;
+                _ctx.StraightNet(a, b, NetRole.Fence, Net);
+                _occ.TakeCorridor(a, b, 0.8f, 5);
+                Length += math.distance(a, b);
+            }
+        }
+
+        private static bool HedgeTree(LayerContext ctx, Occupancy occ, float2 p, string[] treeIds, uint v) =>
+            ctx.LayerRegion.Contains(p) && LeisureKit.Put(ctx, occ, p, Hashing.Unit(v) * 6.28f, ObjectRole.Tree, AssetMix.Pick(treeIds, v), null, 2.4f, v, 0.5f, 0.3f, 3, 2);
+
         private static int HedgeItem(LayerContext ctx, Occupancy occ, float2 p, float2 tangent, string cat, string[] bushIds, string[] treeIds,
             bool tree, uint v)
         {
@@ -1039,18 +1081,29 @@ namespace Placemaker.Core.Layers.Types.Farmstead
             var region = ctx.LayerRegion;
             int n = 0;
             float nextTree = treeEvery * 0.5f;
+            var line = bushIds.Length == 0 ? new HedgeLine(ctx, occ) : null;
             for (float s = 1.3f; s < region.Perimeter && n < budget; s += 2.6f)
             {
                 var p = region.PointAt(s, out var tangent, out var inward, out _);
                 p += inward * 1.6f;
                 bool nearGate = false;
                 foreach (var g in gates) if (math.distancesq(g.Position, p) < 49f) { nearGate = true; break; }
-                if (nearGate || hard.Hits(p, 0.5f)) continue;
+                bool ok = !nearGate && !hard.Hits(p, 0.5f);
+                uint v = Hashing.Mix(ctx.Seed, 0xED6Eu + (uint)n);
+                if (line != null)
+                {
+                    line.Add(p, tangent, ok);
+                    if (ok && s >= nextTree && HedgeTree(ctx, occ, p + inward * 2.8f, treeIds, v)) nextTree = s + treeEvery;
+                    if (ok) n++;
+                    continue;
+                }
+                if (!ok) continue;
                 bool tree = s >= nextTree;
-                int r = HedgeItem(ctx, occ, p, tangent, cat, bushIds, treeIds, tree, Hashing.Mix(ctx.Seed, 0xED6Eu + (uint)n));
+                int r = HedgeItem(ctx, occ, p, tangent, cat, bushIds, treeIds, tree, v);
                 if (r == 2) nextTree = s + treeEvery;
                 if (r > 0) { n++; length += 2.6f; }
             }
+            if (line != null) { line.Flush(); length += line.Length; }
             return n;
         }
 
@@ -1069,19 +1122,31 @@ namespace Placemaker.Core.Layers.Types.Farmstead
                     float len = math.distance(a, b);
                     var d = (b - a) / math.max(1e-3f, len);
                     float nextTree = treeEvery * 0.5f;
+                    var hedge = bushIds.Length == 0 ? new HedgeLine(ctx, occ) : null;
                     for (float s = 1.3f; s < len && n < budget; s += 2.6f)
                     {
                         var p = a + d * s;
                         // Field gateway: a gap in the middle of every field side.
                         float k = math.dot(p - origin, dir) / pitch;
                         float frac = k - math.floor(k);
-                        if (math.abs(frac - 0.5f) * pitch < 3.5f) continue;
-                        if (region.BoundaryDistance(p, 4f) < 3.5f || hard.Hits(p, 1f)) continue;
+                        bool ok = math.abs(frac - 0.5f) * pitch >= 3.5f && region.BoundaryDistance(p, 4f) >= 3.5f && !hard.Hits(p, 1f);
+                        uint v = Hashing.Mix(ctx.Seed, 0xF1EDu + (uint)n);
+                        if (hedge != null)
+                        {
+                            // Never across a track or a field gate: the hedge stops 1.5 m short of any path.
+                            ok = ok && !occ.Corridors.Overlaps(p, 1.5f);
+                            hedge.Add(p, d, ok);
+                            if (ok && s >= nextTree && HedgeTree(ctx, occ, p + nrm * 2.8f, treeIds, v)) nextTree = s + treeEvery;
+                            if (ok) n++;
+                            continue;
+                        }
+                        if (!ok) continue;
                         bool tree = s >= nextTree;
-                        int r = HedgeItem(ctx, occ, p, d, cat, bushIds, treeIds, tree, Hashing.Mix(ctx.Seed, 0xF1EDu + (uint)n));
+                        int r = HedgeItem(ctx, occ, p, d, cat, bushIds, treeIds, tree, v);
                         if (r == 2) nextTree = s + treeEvery;
                         if (r > 0) { n++; walked += 2.6f; }
                     }
+                    if (hedge != null) { hedge.Flush(); walked += hedge.Length; }
                 }
             }
             // Lines carrying a track are already a boundary (the track itself): no hedge there.

@@ -63,7 +63,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             c.Toggle("hay", true, ControlTier.More, "enclosures");
             c.Toggle("arena", false, ControlTier.More, "enclosures").Tip();
             c.Slider("jumps", 6, 0, 10, 1, "count", ControlTier.More, "enclosures").When("arena=true");
-            c.Slider("aviaries", 2, 0, 12, 1, "count", ControlTier.More, "enclosures").Tip();
+            c.Slider("aviaries", 0, 0, 12, 1, "count", ControlTier.More, "enclosures").Tip();   // vanilla aviaries are gazebos: none unless asked (rf-farms)
             c.Toggle("animals", true, ControlTier.Essential, "animals").Tip();
             c.Slider("animalsPerPen", 2, 1, 6, 1, "count", ControlTier.More, "animals").When("animals=true");
             c.Toggle("pond", true, ControlTier.More, "animals").Tip();
@@ -93,7 +93,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
             EntranceMarkers(c);
             DefineStreetShopControls(c);
             c.RandomRange("pens", 2, 7);
-            c.RandomRange("aviaries", 0, 4);
+            c.RandomRange("aviaries", 0, 1);
             c.RandomRange("woodland", 0, 30);
             c.Fixed("terrain");
             c.Fixed("wornGround");
@@ -104,7 +104,7 @@ namespace Placemaker.Core.Layers.Types.AnimalPark
 
         protected override void DefinePresets()
         {
-            Preset("pettingFarm", ("kind", "petting"), ("pens", 6.0), ("layout", "loop"), ("walkIn", true), ("aviaries", 2.0), ("animalsPerPen", 2.0),
+            Preset("pettingFarm", ("kind", "petting"), ("pens", 6.0), ("layout", "loop"), ("walkIn", true), ("aviaries", 0.0), ("animalsPerPen", 2.0),
                 ("pond", true), ("pondSize", 20.0), ("viewpoints", 2.0), ("benchSpacing", 30.0), ("shadeTrees", 20.0), ("hedgerow", true));
             Preset("paddocks", ("kind", "paddocks"), ("pens", 4.0), ("layout", "spine"), ("walkIn", false), ("aviaries", 0.0), ("animalsPerPen", 3.0),
                 ("pond", false), ("viewpoints", 4.0), ("benchSpacing", 50.0), ("shadeTrees", 15.0), ("hedgerow", true));
