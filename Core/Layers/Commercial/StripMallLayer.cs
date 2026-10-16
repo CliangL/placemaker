@@ -152,10 +152,17 @@ namespace Placemaker.Core.Layers.Commercial
                 float needL = dd0 + h + mall.KerbMargin(r.At(xL - wl, mid), r.In) + 1f;
                 float needR = dd0 + h + mall.KerbMargin(r.At(xR + wr, mid), r.In) + 1f;
                 sideRowsL = false; sideRowsR = false;
+                // (it2) Never a row backing onto a city street: the street's own zone block reaches 48 m in, and where its cells are
+                // nearer the street than our lane the game hands them to the street's block (blocked by the kerb strip there):
+                // the back half of such a row was lost ("8 -> 0" plots in the game). Rows outside the rails only on an edge with
+                // no street (an L's notch, a site cut out of a block).
+                bool streetL = mall.KerbMargin(r.At(xL - wl, mid), r.In) > 0f, streetR = mall.KerbMargin(r.At(xR + wr, mid), r.In) > 0f;
+                if (streetL) wl = -1000f;
+                if (streetR) wr = -1000f;
                 if (wl >= needL) sideRowsL = true;
-                else if (xR - (xL + needL - wl) >= 140f) { xL += needL - wl; sideRowsL = true; }
+                else if (!streetL && xR - (xL + needL - wl) >= 140f) { xL += needL - wl; sideRowsL = true; }
                 if (wr >= needR) sideRowsR = true;
-                else if ((xR - (needR - wr)) - xL >= 140f) { xR -= needR - wr; sideRowsR = true; }
+                else if (!streetR && (xR - (needR - wr)) - xL >= 140f) { xR -= needR - wr; sideRowsR = true; }
                 if (!sideRowsL) xL = math.max(xL, sMin + h + 3f);
                 if (!sideRowsR) xR = math.min(xR, sMax - h - 3f);
             }
@@ -181,8 +188,6 @@ namespace Placemaker.Core.Layers.Commercial
             // Depth pattern over the rails' common stretch: lot, then n pairs (rung, row, row, rung, lot), then optionally a last
             // rung and row (needed when there is no street behind: it is the U's back run).
             float lotMin1 = Mall.LotDepth(1) + 4f, lotBetween = MinLotBetween(ctx);
-            // A last row backing onto a street stops short of its first zone row (else the row is cut shallower and a lawn is left).
-            float kbBack = through ? mall.KerbMargin(r.At(0.5f * (xs[0] + xs[xs.Count - 1]), t1 + 1f), r.Dir) : 0f;
             int bestRows = 0, bestN = 0, bestCells = cells; bool bestEnd = false; float bestLot = 0f;
             for (int c = cells; c >= 2 && bestRows == 0; c--)
             {
@@ -193,8 +198,9 @@ namespace Placemaker.Core.Layers.Commercial
                         if (!through && !end) continue;
                         int nRows = 2 * n + (end ? 1 : 0);
                         if (nRows == 0) continue;
-                        float fixedT = n * (4f * h + 2f * d) + (end ? 2f * h + d + kbBack : 0f);
-                        float lot = (D - fixedT) / (n + 1);
+                        // With a street behind, the last row backs onto a lot entered from that street (not onto the street).
+                        float fixedT = n * (4f * h + 2f * d) + (end ? 2f * h + d + (through ? Mall.PlotClear : 0f) : 0f);
+                        float lot = (D - fixedT) / (n + 1 + (end && through ? 1 : 0));
                         if (lot < (nRows >= 2 ? lotBetween : lotMin1)) continue;
                         // more rows first; then a last row backing onto the back (stores' backs to the neighbours, not a lot)
                         if (nRows > bestRows || (nRows == bestRows && end && !bestEnd))
@@ -264,13 +270,13 @@ namespace Placemaker.Core.Layers.Commercial
             // rows across those lanes are then split at the real joins (in the game a row planned first lost its cells where a
             // later stub split the lane under it: "10 -> 0" plots). The rows' land is held meanwhile.
             var holds = new List<float2[]>();
-            void HoldRow(Mall.Lane lane, int side, int seg0, int seg1)
+            void HoldRow(Mall.Lane lane, int side, int seg0, int seg1, float backGap)
             {
                 if (lane == null) return;
                 for (int i = seg0; i <= seg1 && i + 1 < lane.Points.Count; i++)
                 {
                     var f = Mall.Frame(lane.Points[i], lane.Points[i + 1]);
-                    float a = side > 0 ? h : -(h + dd + 1f), b = side > 0 ? h + dd + 1f : -h;
+                    float a = side > 0 ? h : -(h + dd + backGap), b = side > 0 ? h + dd + backGap : -h;
                     // Clear of the crossing lanes at its ends (further in where a rail runs askew).
                     for (float trim = h + 0.5f; trim <= h + 16f; trim += 2f)
                     {
@@ -280,13 +286,16 @@ namespace Placemaker.Core.Layers.Commercial
                     }
                 }
             }
-            foreach (var (lane, side) in rungs) HoldRow(lane, side, 0, 0);
-            if (u != null) HoldRow(u, +1, 0, u.Points.Count - 2);
+            // Rows back to back keep 1 m of slack; the last row, backing onto the back lot, keeps the lot clear of its plots (PlotClear).
+            float yLast = levels[levels.Count - 1].y;
+            foreach (var (lane, side) in rungs)
+                HoldRow(lane, side, 0, 0, bestEnd && through && side > 0 && math.abs(math.dot(lane.Points[0] - r.A, r.In) - yLast) < 1.5f ? Mall.PlotClear : 1f);
+            if (u != null) HoldRow(u, +1, 0, u.Points.Count - 2, 1f);
             else
             {
-                if (sideRowsL) HoldRow(rails[0], +1, 0, rails[0].Points.Count - 2);
+                if (sideRowsL) HoldRow(rails[0], +1, 0, rails[0].Points.Count - 2, 1f);
                 var lastRail = rails[xs.Count - 1];
-                if (sideRowsR && lastRail != null) HoldRow(lastRail, -1, 0, lastRail.Points.Count - 2);
+                if (sideRowsR && lastRail != null) HoldRow(lastRail, -1, 0, lastRail.Points.Count - 2, 1f);
             }
             mall.MainDir = r.Dir;
             mall.LotBudget = float.MaxValue;
