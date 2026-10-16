@@ -214,6 +214,7 @@ namespace Placemaker.Core.Layers.Commercial
         private static void FinishDesign(LayerContext ctx, Mall mall)
         {
             mall.DressGates();
+            mall.ServiceYards();
             mall.PaintSites();
             mall.PlantPlots();
             if (mall.BikeRackCount > 0) ctx.Plan.Facts["bikeRacks"] = mall.BikeRackCount;

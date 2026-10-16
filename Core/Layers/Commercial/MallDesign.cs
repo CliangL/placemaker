@@ -314,6 +314,27 @@ namespace Placemaker.Core.Layers.Commercial
                     bn++;
                 }
             }
+            {
+                // Street trees along the drive behind the frontage (a boulevard into the centre), and on a long frontage a pergola
+                // beside the promenade where people wait and meet.
+                var reserved = Reserved();
+                if (walk != null) for (int i = 0; i + 1 < walk.Count; i++) reserved.AddCorridor(walk[i], walk[i + 1], 2.4f, "walk");
+                int st = 0;
+                for (float s0 = k.S0 + 5f; s0 <= k.S1 - 5f; s0 += 11f)
+                {
+                    var p = k.Frame.At(s0, k.T1 - 2.4f);
+                    if (!region.Contains(p) || region.BoundaryDistance(p, 3f) < 1.6f || reserved.Blocks(p, 2.2f)) continue;
+                    Ctx.Object(p, 0f, ObjectRole.Tree, AssetMix.Pick(PlazaArt.PlaneTrees, (uint)st), Hashing.Mix(Ctx.Seed, k.Salt + 0xC0u + (uint)st), 2);
+                    reserved.AddDisc(p, 2.5f);
+                    st++;
+                }
+                if (k.S1 - k.S0 >= 110f && k.T1 - k.T0 >= 10f && AssetAvailability.Has(AssetCategories.Shelter))
+                {
+                    var p = k.Frame.At(k.S0 + (k.S1 - k.S0) * 0.25f, k.T0 + (k.T1 - k.T0) * 0.35f);
+                    if (region.Contains(p) && !reserved.Blocks(p, 3.2f))
+                        Ctx.Object(p, math.atan2(k.Frame.In.x, k.Frame.In.y), ObjectRole.Furniture, AssetMix.Pick(PlazaArt.Pergolas, k.Salt), Hashing.Mix(Ctx.Seed, k.Salt + 0xD0u), -1, AssetCategories.Shelter);
+                }
+            }
             Ctx.Plan.Facts["frontageDressed"] = (Ctx.Plan.Facts.TryGetValue("frontageDressed", out var fd) ? fd : 0) + 1;
             if (walk != null) Ctx.Plan.Facts["promenade"] = (Ctx.Plan.Facts.TryGetValue("promenade", out var pm) ? pm : 0) + walk.Count;
             Landscape(piece, k.Salt, walk, k.Frame, k.T1);
@@ -424,6 +445,12 @@ namespace Placemaker.Core.Layers.Commercial
                 var q = f.At(s, k.T0 + 0.9f);
                 if (math.abs(s - sm) < 2.5f || reserved.Blocks(q, 0.5f)) continue;   // the spine comes in at the middle
                 Ctx.Object(q, 0f, ObjectRole.Planter, AssetMix.Pick(PlazaArt.CityBushes, (uint)(s * 7f)), Hashing.Mix(Ctx.Seed, salt + 0x20u + (uint)(s * 3f)));
+            }
+            // A vending machine against the shop-side edge, by the café corner.
+            if (AssetAvailability.Has(AssetCategories.Vending))
+            {
+                var q = f.At(math.lerp(k.S0, k.S1, 0.5f) + 4.5f, k.T1 - 0.9f);
+                if (!reserved.Blocks(q, 0.6f)) Ctx.Object(q, yawToShops + math.PI, ObjectRole.Furniture, new AssetRef("", "VendingMachine01", "VendingMachine02"), Hashing.Mix(Ctx.Seed, salt + 0x70u), -1, AssetCategories.Vending);
             }
             // Lamps at the two lot-side corners.
             foreach (float u in new[] { 0f, 1f })
@@ -746,6 +773,32 @@ namespace Placemaker.Core.Layers.Commercial
                     kit.Fill(Rect(f, 0.6f, w - 0.6f, siteDepth - 1f, dep - 0.5f), TerrainMaterials.Lush, 0.55f, 2f, 0.8f, 6f);
             }
             Ctx.Plan.Facts["buildingSites"] = n;
+            return n;
+        }
+
+        /// <summary>
+        /// (rf-shops3) Service yards: a dumpster behind every other deep plot (behind the shop, never in front of it), where the
+        /// ground behind stayed planted: shops have a back side, and it shows.
+        /// </summary>
+        public int ServiceYards()
+        {
+            if (!X.Designed || Shops.Count == 0) return 0;
+            var reserved = Reserved();
+            int n = 0, k = 0;
+            foreach (var s in Shops)
+            {
+                if (!PlotFrame(s, out var f, out float w, out float dep) || dep < 3f * Cell - 0.5f || w < 14f) continue;
+                if ((k++ & 1) == 1) continue;
+                var p = f.At(w * 0.7f, dep + 2.6f);
+                bool ok = Region.Contains(p) && Region.BoundaryDistance(p, 4f) > 1.8f && !reserved.Blocks(p, 1.4f);
+                if (ok) foreach (var l in Lots) if (Poly.Contains(l, p) || Poly.DistanceToBoundary(l, p) < 1.5f) { ok = false; break; }
+                if (ok) foreach (var o in Shops) if (Poly.Contains(o, p) || Poly.DistanceToBoundary(o, p) < 1.2f) { ok = false; break; }
+                if (!ok) continue;
+                Ctx.Object(p, math.atan2(f.Dir.x, f.Dir.y), ObjectRole.Furniture, new AssetRef("", "TrashContainerEmpty01", "TrashContainerEmpty02", "TrashContainerEmpty03"), Hashing.Mix(Ctx.Seed, 0x5E0u + (uint)n), -1, "industrial.skip");
+                reserved.AddDisc(p, 1.6f);
+                n++;
+            }
+            if (n > 0) Ctx.Plan.Facts["serviceYards"] = n;
             return n;
         }
 
