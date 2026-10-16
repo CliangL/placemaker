@@ -107,6 +107,10 @@ namespace Placemaker.Core.Layers.Types.Beach
             DefineStreetShopControls(c);
             // s20 (appended): how far the sand and the graded slope continue under the water.
             c.Slider("underwater", IntoWater, 0, 40, 2, "m", ControlTier.More, "shore").When("sandReach=true").Tip();
+            // rf-beach (appended): timber jetties from the sand out over the water, a T-head to swim from.
+            c.Slider("jetties", 0, 0, 3, 1, "count", ControlTier.More, "amenities").Tip();
+            c.Slider("jettyLength", 26, 8, 80, 2, "m", ControlTier.More, "amenities").Tip();
+            c.Toggle("jettyHead", true, ControlTier.More, "amenities").Tip();
 
             c.Fixed("waterSide");
             c.Fixed("carve");
@@ -128,11 +132,15 @@ namespace Placemaker.Core.Layers.Types.Beach
         {
             // Preset ids are save format; only labels and values changed.
             // Family beach: deep sand, loose umbrella groups, lifeguard posts, low dunes with marram grass and pines behind.
-            Preset("sandy", ("style", "sandy"), ("beachDepth", 56.0), ("sandBlend", 16.0), ("umbrellas", 70.0), ("layout", "scattered"), ("backdrop", "dunes"),
-                ("huts", "none"), ("lifeguards", 2.0), ("duneDepth", 26.0), ("duneHeight", 1.5), ("grassDensity", 70.0), ("treeDensity", 40.0), ("kiosks", 1.0));
+            // rf-beach: busier (umbrellas 70 -> 110 /ha), a swimming jetty with a T-head, boats pulled up, dunes a little higher.
+            Preset("sandy", ("style", "sandy"), ("beachDepth", 56.0), ("sandBlend", 16.0), ("umbrellas", 110.0), ("layout", "scattered"), ("backdrop", "dunes"),
+                ("huts", "none"), ("lifeguards", 2.0), ("duneDepth", 26.0), ("duneHeight", 2.0), ("grassDensity", 70.0), ("treeDensity", 40.0), ("kiosks", 1.0),
+                ("jetties", 1.0), ("jettyLength", 26.0), ("jettyHead", true), ("boats", true));
             // Promenade beach: tidy rows, one wide promenade on a level bench with benches and kiosks, palms on a lawn.
-            Preset("resort", ("style", "sandy"), ("beachDepth", 52.0), ("sandBlend", 6.0), ("umbrellas", 110.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "none"),
-                ("pathWidth", "wide"), ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 2.0), ("slope", 4.0), ("treeDensity", 30.0), ("accessSpacing", 45.0));
+            // rf-beach: denser rows (110 -> 150 /ha), a palm avenue along the promenade (Backdrop), a long pier with a T-head.
+            Preset("resort", ("style", "sandy"), ("beachDepth", 52.0), ("sandBlend", 6.0), ("umbrellas", 150.0), ("layout", "rows"), ("backdrop", "lawn"), ("huts", "none"),
+                ("pathWidth", "wide"), ("benchSpacing", 15.0), ("kiosks", 2.0), ("lifeguards", 2.0), ("slope", 4.0), ("treeDensity", 30.0), ("accessSpacing", 45.0),
+                ("jetties", 1.0), ("jettyLength", 44.0), ("jettyHead", true));
             // Rocky cove: dirt texture with sand pockets, rocks along the waterline, tide pools, a wide rough blend.
             Preset("rocky", ("style", "rocky"), ("umbrellas", 5.0), ("sandSurface", false), ("paintLayer", (double)TerrainMaterials.Dirt), ("backdrop", "none"),
                 ("huts", "none"), ("lifeguards", 0.0), ("kiosks", 0.0), ("rockClusters", 8.0), ("tidePools", 5.0), ("beachDepth", 36.0), ("sandBlend", 20.0),
@@ -140,8 +148,9 @@ namespace Placemaker.Core.Layers.Types.Beach
             Preset("river", ("style", "river"), ("beachDepth", 30.0), ("sandBlend", 8.0), ("wetBand", 3.0), ("slope", 3.0), ("umbrellas", 10.0), ("backdrop", "lawn"),
                 ("treeDensity", 35.0), ("boats", true), ("lifeguards", 0.0), ("huts", "none"), ("accessSpacing", 40.0), ("underwater", 12.0));
             // Wild dunes: no amenities, sand drifting up low, smooth dune ridges parallel to the shore, headlands, fire rings, pines.
-            Preset("cove", ("style", "cove"), ("beachDepth", 44.0), ("sandBlend", 22.0), ("umbrellas", 6.0), ("backdrop", "dunes"), ("duneDepth", 30.0),
-                ("duneHeight", 2.0), ("treeDensity", 60.0), ("grassDensity", 75.0), ("fires", true), ("lifeguards", 0.0), ("huts", "none"), ("kiosks", 0.0),
+            // rf-beach: real dunes (2 -> 3.5 m, deeper belt, thick marram grass; no sand fences: vanilla has no timber one), pines only far behind them.
+            Preset("cove", ("style", "cove"), ("beachDepth", 44.0), ("sandBlend", 22.0), ("umbrellas", 6.0), ("backdrop", "dunes"), ("duneDepth", 36.0),
+                ("duneHeight", 3.5), ("treeDensity", 25.0), ("grassDensity", 90.0), ("fires", true), ("lifeguards", 0.0), ("huts", "none"), ("kiosks", 0.0),
                 ("lamps", false), ("rockClusters", 3.0), ("boats", true), ("benchSpacing", 0.0), ("accessSpacing", 90.0), ("showers", false));
             Preset("volleyball", ("style", "volleyball"), ("beachDepth", 66.0), ("sandBlend", 10.0), ("courts", 4.0), ("umbrellas", 25.0), ("accessSpacing", 120.0),
                 ("lifeguards", 1.0), ("kiosks", 2.0), ("huts", "none"), ("pathWidth", "wide"), ("backdrop", "lawn"), ("treeDensity", 30.0), ("slope", 3.0));
@@ -169,7 +178,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             public List<(float2 top, float2 bottom)> Access = new List<(float2, float2)>();
             public List<float2> Landings = new List<float2>();
             public AssetRef Umbrella, Lounger;
-            public int Umbrellas, Loungers, Showers, Huts, Guards, Courts, Rocks, Pools, Boats, Fires, Kiosks, Lookouts;
+            public int Umbrellas, Loungers, Showers, Huts, Guards, Courts, Rocks, Pools, Boats, Fires, Kiosks, Lookouts, Jetties;
 
             public float FromWater(float2 p) => Shore.FromWater(p);
         }
@@ -217,6 +226,7 @@ namespace Placemaker.Core.Layers.Types.Beach
             ctx.Check();
             if (!allCliff)
             {
+                Jetties(b);   // rf-beach: before anything else takes the sand at the water
                 Courts(b);
                 Rocks(b);
                 TidePools(b);
@@ -254,6 +264,8 @@ namespace Placemaker.Core.Layers.Types.Beach
             ctx.Plan.Facts["landings"] = b.Landings.Count;
             ctx.Plan.Facts["lifeguards"] = b.Guards;
             ctx.Plan.Facts["lookouts"] = b.Lookouts;
+            ctx.Plan.Facts["jetties"] = b.Jetties;
+            if (b.Jetties > 0) ctx.Stat("Placemaker.Stat.Piers", b.Jetties, Keys.UnitCount);
             // s30: how smooth the promenade came out (tests, gallery, debug dump).
             float radius = 9999f, grade = 0f, wlen = 0f; int wig = 0;
             for (int li = 0; li < b.Lines.Count; li++)
@@ -409,7 +421,7 @@ namespace Placemaker.Core.Layers.Types.Beach
                 // The lawn starts where the sand has mostly faded (not at the path), so the blend stays visible.
                 float from = b.PathDw + b.Hw + 0.8f + (ctx.B("paint") ? b.Blend * 0.6f : 0f);
                 foreach (var ring in shore.BandFromWater(from, shore.MaxDepth + Shoreline.MaxGap + 20f))
-                    ctx.Surface(ring, SurfaceRole.Grass, AssetMix.One(""));
+                    Waterfront.WaterfrontLayer.Lawn(ctx, ring);   // (rf-beach) painted, not the hard-edged grass surface
             }
         }
 
@@ -793,6 +805,82 @@ namespace Placemaker.Core.Layers.Types.Beach
             }
         }
 
+        /// <summary>
+        /// (rf-beach) Timber jetties: straight piers from the sand out over the water, in line with an access path where one
+        /// is near, rooted where the beach face reaches the deck height (so the deck lands on the sand), with a T-head at the
+        /// end to swim from. Like the waterfront's piers they may reach past the outline over the real water.
+        /// </summary>
+        private static void Jetties(Work b)
+        {
+            var ctx = b.Ctx; var shore = b.Shore; var g = b.G;
+            int wanted = ctx.I("jetties");
+            if (wanted <= 0 || shore.Mode == ShoreMode.Assumed || !shore.HasWaterline) return;
+            float maxLen = ctx.F("jettyLength");
+            bool head = ctx.B("jettyHead");
+            var asset = new AssetRef("", Waterfront.WaterfrontArt.Pier);
+            var stations = shore.Stations(wanted, 18f, 0.5f);
+            foreach (float s0 in stations)
+            {
+                float s = s0;
+                // in line with the nearest access landing when one is close
+                float best = 16f;
+                foreach (var (_, bottom) in b.Access)
+                {
+                    shore.Nearest(bottom, out _, out float a);
+                    if (math.abs(a - s0) < best) { best = math.abs(a - s0); s = a; }
+                }
+                if (!InBeachRun(b, s)) continue;
+                var water = shore.WaterAt(s, out var inw);
+                // the deck 0.8 m over the water (over the reference ground at the waterline when the level is not trusted)
+                float deck = (g.HasLevel ? g.Level : g.Ref(s)) + 0.8f;
+                // the root: walking up the beach face from the water to where the ground meets the deck
+                float2 root = water; bool found = false;
+                for (float d = 0f; d < b.D; d += 0.5f)
+                {
+                    var q = water + inw * d;
+                    if (g.H(q) >= deck - 0.5f) { root = q; found = true; break; }
+                }
+                if (!found) continue;
+                var dir = -inw;
+                float len = 0f, wet = 0f;
+                for (float l = 2f; l <= maxLen; l += 2f)
+                {
+                    var q = root + dir * l;
+                    bool isWet = shore.IsWet(q);
+                    if (!isWet && wet > 0f) break;   // water ends (an island, the far shore)
+                    if (shore.Mode == ShoreMode.Inside && !shore.Outline.ContainsDisc(q, 2f) && !isWet) break;
+                    if (isWet) wet += 2f;
+                    len = l;
+                }
+                if (wet < 8f) continue;
+                var end = root + dir * len;
+                ctx.Plan.Nets.Add(new PlannedNet
+                {
+                    A = new float3(root.x, deck, root.y), B = new float3(math.lerp(root, end, 1f / 3f).x, deck, math.lerp(root, end, 1f / 3f).y),
+                    C = new float3(math.lerp(root, end, 2f / 3f).x, deck, math.lerp(root, end, 2f / 3f).y), D = new float3(end.x, deck, end.y),
+                    Role = NetRole.Pathway, Asset = asset, FollowTerrain = false, Category = AssetCategories.NetPier,
+                });
+                if (head)
+                {
+                    var side = new float2(-dir.y, dir.x);
+                    foreach (float sgn in new[] { 1f, -1f })
+                    {
+                        var h = end + side * sgn * 7f;
+                        if (!shore.IsWet(h)) continue;
+                        ctx.Plan.Nets.Add(new PlannedNet
+                        {
+                            A = new float3(end.x, deck, end.y), B = new float3(math.lerp(end, h, 1f / 3f).x, deck, math.lerp(end, h, 1f / 3f).y),
+                            C = new float3(math.lerp(end, h, 2f / 3f).x, deck, math.lerp(end, h, 2f / 3f).y), D = new float3(h.x, deck, h.y),
+                            Role = NetRole.Pathway, Asset = asset, FollowTerrain = false, Category = AssetCategories.NetPier,
+                        });
+                    }
+                }
+                // umbrellas, boats and posts keep off the jetty and a lane beside it
+                b.Occ.TakeCorridor(root + inw * 2f, end, 3f, 100);
+                b.Jetties++;
+            }
+        }
+
         private static void Boats(Work b)
         {
             var ctx = b.Ctx; var shore = b.Shore;
@@ -1122,6 +1210,22 @@ namespace Placemaker.Core.Layers.Types.Beach
                     return;
                 }
                 if (backdrop == "none" && treeDensity <= 0f) return;
+                // (rf-beach) A lawn backdrop gets an avenue: one tree every ~12 m along the promenade's land side (palms on a
+                // resort beach), instead of only trees dotted over the lawn.
+                if (backdrop == "lawn" && b.HasPath && canTrees)
+                    for (int li = 0; li < b.Lines.Count; li++)
+                    {
+                        var line = b.Lines[li];
+                        float len = Shoreline.LengthOf(line);
+                        int k = 0;
+                        for (float s = 6f; s < len - 3f; s += 12f, k++)
+                        {
+                            var p = Shoreline.PointOn(line, s, out _);
+                            shore.Nearest(p, out var inw, out _);
+                            uint v = Hashing.Mix(ctx.Seed, 0xA7E0u + (uint)k + (uint)li * 500u);
+                            LeisureKit.Put(ctx, occ, p + inw * (b.Hw + 3.2f), Hashing.Unit(v) * 6.283f, ObjectRole.Tree, AssetMix.Pick(trees, (uint)k), null, 2.5f, v, 0.4f, 0.2f);
+                        }
+                    }
                 float factor = backdrop == "woods" ? 1.8f : 1f;
                 // Trees stand back from the sand blend (they grow where the ground is ground again).
                 float from = (backdrop == "woods" ? behind : behind + 3f) + b.Blend * 0.5f;

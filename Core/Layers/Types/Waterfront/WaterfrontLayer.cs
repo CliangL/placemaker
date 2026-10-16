@@ -149,8 +149,9 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             Preset("pier", ("style", "pier"), ("edge", "walkway"), ("promWidth", 12.0), ("pathWidth", "wide"), ("surface", "paved"), ("steps", "none"), ("piers", 2.0),
                 ("pierLength", 50.0), ("pierHeads", true), ("nautical", true), ("trees", "row"), ("benchSpacing", 12.0), ("backdrop", "park"), ("railings", true));
             // Harbour quay: a wide quay at the water, a paved apron at deck level with kiosks, lamps and benches, an avenue behind.
-            Preset("harbor", ("style", "harbor"), ("edge", "quay"), ("promWidth", 22.0), ("railings", false), ("moorings", false), ("nautical", true), ("kiosks", 3.0),
-                ("lampSpacing", 16.0), ("trees", "row"), ("treeSpacing", 14.0), ("piers", 1.0), ("steps", "none"), ("backdrop", "lawn"), ("deckHeight", 1.8));
+            // rf-beach: two T-headed piers off the quay (the quay used to block its own pier), bollards along it, a park behind instead of a bare lawn.
+            Preset("harbor", ("style", "harbor"), ("edge", "quay"), ("promWidth", 22.0), ("railings", false), ("moorings", true), ("nautical", true), ("kiosks", 3.0),
+                ("lampSpacing", 16.0), ("trees", "row"), ("treeSpacing", 14.0), ("piers", 2.0), ("pierLength", 36.0), ("pierHeads", true), ("steps", "none"), ("backdrop", "park"), ("deckHeight", 1.8));
             // River steps: a low walkway quay along the river, paved flights on the smooth bank down to it from a tree-lined promenade.
             Preset("riverSteps", ("style", "riverSteps"), ("edge", "walkway"), ("promWidth", 16.0), ("railings", true), ("steps", "spots"), ("stepCount", 3.0),
                 ("stepWidth", 10.0), ("stepLevels", 4.0), ("trees", "double"), ("backdrop", "park"), ("lampSpacing", 22.0), ("piers", 0.0), ("deckHeight", 0.9));
@@ -915,7 +916,11 @@ namespace Placemaker.Core.Layers.Types.Waterfront
             var ctx = w.Ctx; var shore = w.Shore; var g = w.G; var occ = w.Occ;
             int wanted = ctx.I("piers");
             if (wanted <= 0) return;
-            if (shore.Mode != ShoreMode.Inside)
+            // (rf-beach) A shore drawn along the water (Edge) gets its piers too: they reach out past the outline over the real
+            // water (the site's water snapshot reaches 60 m beyond it). In the game runner a waterfront drawn to the waterline
+            // got no piers at all, so "Pier park" built none.
+            bool beyond = shore.Mode == ShoreMode.Edge && w.Water;
+            if (shore.Mode != ShoreMode.Inside && !beyond)
             {
                 ctx.Issue(IssueSeverity.Info, "Placemaker.Waterfront.Issue.PiersNeedWater");
                 return;
@@ -963,7 +968,13 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 for (float l = 2f; l <= maxLen; l += 2f)
                 {
                     var q = root + dir * l;
-                    if (!shore.Outline.ContainsDisc(q, 3f) || !shore.IsWet(q)) break;
+                    if (!(beyond || shore.Outline.ContainsDisc(q, 3f)) || !shore.IsWet(q))
+                    {
+                        // (rf-beach) the first metres may still be under the edge deck itself (a wide quay's centre line is
+                        // on land): look past its width before giving up. The harbour's pier was never built for this.
+                        if (l <= w.EdgeHw + 2f && len == 0f) continue;
+                        break;
+                    }
                     len = l;
                 }
                 if (len < 8f) continue;
@@ -976,7 +987,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                     foreach (float sgn in new[] { 1f, -1f })
                     {
                         var h = end + side * sgn * 8f;
-                        if (shore.Outline.ContainsDisc(h, 1.5f) && shore.IsWet(h))
+                        if ((beyond || shore.Outline.ContainsDisc(h, 1.5f)) && shore.IsWet(h))
                         {
                             Deck(ctx, Straight(end, h), deck, NetRole.Pathway, pierAsset, AssetCategories.NetPier);
                             length += 8f;
@@ -1163,7 +1174,7 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                         break;
                 }
                 if (ctx.S("backdrop") != "none")
-                    foreach (var ring in Behind(shore, walk, d1 + 0.3f)) ctx.Surface(ring, SurfaceRole.Grass, AssetMix.One(""));
+                    foreach (var ring in Behind(shore, walk, d1 + 0.3f)) Lawn(ctx, ring);
                 // The bank in one texture: lush grass from the paving's sea edge down to the shore band.
                 if (w.Water && w.Edge != "quay")
                 {
@@ -1173,9 +1184,15 @@ namespace Placemaker.Core.Layers.Types.Waterfront
                 }
             }
             if (w.Fronts.Count == 0 && ctx.S("backdrop") != "none")
-                foreach (var ring in shore.BandFromWater(w.P + 2.5f, shore.MaxDepth + Shoreline.MaxGap + 20f)) ctx.Surface(ring, SurfaceRole.Grass, AssetMix.One(""));
+                foreach (var ring in shore.BandFromWater(w.P + 2.5f, shore.MaxDepth + Shoreline.MaxGap + 20f)) Lawn(ctx, ring);
             ShoreTexture(w);
         }
+
+        /// <summary>
+        /// (rf-beach) The lawn behind the promenade: lush grass painted into the terrain with a soft, wandering edge (the grass
+        /// surface read as a flat neon-green rectangle with hard edges in the game runner's pictures).
+        /// </summary>
+        internal static void Lawn(LayerContext ctx, IReadOnlyList<float2> ring) => TerrainPaint.Field(ctx, ring, TerrainMaterials.Lush, 0.6f, 5f, 3f, null, 0f, 0f, 0f, 0x1A3Bu);
 
         /// <summary>
         /// A clean shore band in the terrain texture at a soft edge: sand (promenade, pier) or dirt (fishing bank) from a few

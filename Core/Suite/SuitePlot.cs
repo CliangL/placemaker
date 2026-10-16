@@ -1,7 +1,8 @@
 // Game runner: a plot, test land made to order for one build (its "land" in the scenario). Plots lie in a row east of
 // the block grid, each with the shape the build is drawn as (rectangle, circle, pinch, L or any outline), any size,
 // the ground it asks for (flat, a slope, hills, bumps, mountains or its own heights) and, unless it asks for none, a
-// ring road around it so entrances have a street. Pure geometry: the game layer writes the ground into the heightmap
+// ring road around it so entrances have a street, and (rf-beach) optionally a lake on one side for the shore types.
+// Pure geometry: the game layer writes the ground into the heightmap
 // and lays the ring roads like the grid's.
 
 using System;
@@ -38,6 +39,21 @@ namespace Placemaker.Core.Suite
         /// <summary>From the shape's bounding box to the ring road's centre line (m).</summary>
         public float Gap = 16f;
 
+        /// <summary>
+        /// (rf-beach) A lake beside the land, for the shore types: "" none, or the side it lies on (north | south | east |
+        /// west). The waterline runs along that side of the shape's bounding box (ShoreIn metres inside it), the ground
+        /// falls from the land to the water over a bank of BankGrade, the lake floor falls at UnderGrade to WaterDepth and
+        /// rises again WaterWidth out. The ring road leaves that side out; the game layer adds the water.
+        /// </summary>
+        public string Water = "";
+        public float WaterWidth = 90f, WaterDepth = 4f, Freeboard = 2f, BankGrade = 0.12f, ShoreIn = 0f;
+        public const float UnderGrade = 0.10f, FarBank = 20f;
+        public bool HasWater => !string.IsNullOrEmpty(Water);
+        /// <summary>The water's surface above the base (m): the land meets it Freeboard higher.</summary>
+        public float WaterRise => -Freeboard;
+        /// <summary>The bank's run from the land down to the waterline (m).</summary>
+        public float BankRun => Freeboard / math.max(0.05f, BankGrade);
+
         /// <summary>Placed by the layout.</summary>
         public float2 Center;
 
@@ -46,9 +62,10 @@ namespace Placemaker.Core.Suite
 
         public float2 LandMin => Center - Size * 0.5f;
         public float2 LandMax => Center + Size * 0.5f;
-        /// <summary>The ring road's centre lines (also the plot's block bounds).</summary>
-        public float2 RingMin => LandMin - Gap;
-        public float2 RingMax => LandMax + Gap;
+        /// <summary>The ring road's centre lines (also the plot's block bounds); on a lake's side the ring takes in the lake.</summary>
+        public float2 RingMin => LandMin - new float2(GapOn("west"), GapOn("south"));
+        public float2 RingMax => LandMax + new float2(GapOn("east"), GapOn("north"));
+        private float GapOn(string side) => side == Water ? math.max(Gap, WaterWidth - ShoreIn + FarBank) : Gap;
         /// <summary>Everything the plot changes.</summary>
         public float2 OuterMin => RingMin - (Hold + Fade);
         public float2 OuterMax => RingMax + (Hold + Fade);
@@ -123,8 +140,73 @@ namespace Placemaker.Core.Suite
             return 1f - math.smoothstep(0f, Fade, d);
         }
 
-        /// <summary>The plot's ground above (or below) the base at (x, z).</summary>
+        /// <summary>The plot's ground above (or below) the base at (x, z), with its lake when it has one.</summary>
         public float Rise(float x, float z)
+        {
+            if (!HasWater) return LandRise(x, z);
+            float s = IntoWater(x, z, out float2 shore);
+            float land = LandRise(x, z) - LandRise(shore.x, shore.y);   // the land meets the bank at the base
+            float level = WaterRise, bottom = level - WaterDepth;
+            if (s <= 0f) return math.lerp(land, level, math.smoothstep(-BankRun, 0f, s));
+            float far = WaterWidth;
+            if (s >= far) return math.lerp(level, 0f, math.smoothstep(far, far + FarBank, s));
+            return math.max(bottom, level - UnderGrade * math.min(s, far - s));
+        }
+
+        private float2 WaterNormal => Water == "south" ? new float2(0f, -1f) : Water == "east" ? new float2(1f, 0f) : Water == "west" ? new float2(-1f, 0f) : new float2(0f, 1f);
+
+        /// <summary>(rf-beach) Signed metres from the waterline into the lake (negative on land), and the waterline point opposite (x, z).</summary>
+        public float IntoWater(float x, float z, out float2 shore)
+        {
+            float2 lo = LandMin, hi = LandMax;
+            switch (Water)
+            {
+                case "south": shore = new float2(x, lo.y + ShoreIn); return shore.y - z;
+                case "east": shore = new float2(hi.x - ShoreIn, z); return x - shore.x;
+                case "west": shore = new float2(lo.x + ShoreIn, z); return shore.x - x;
+                default: shore = new float2(x, hi.y - ShoreIn); return z - shore.y;
+            }
+        }
+
+        /// <summary>(rf-beach) Water sources down the middle of the lake, about every 1.6 radii, each with its radius.</summary>
+        public List<(float2 at, float radius)> WaterSources()
+        {
+            var r = new List<(float2, float)>();
+            if (!HasWater) return r;
+            float radius = math.clamp(WaterWidth * 0.4f, 8f, 45f);
+            bool alongX = Water == "north" || Water == "south";
+            float a0 = alongX ? RingMin.x - Hold : RingMin.y - Hold, a1 = alongX ? RingMax.x + Hold : RingMax.y + Hold;
+            int n = math.max(1, (int)math.ceil((a1 - a0) / (radius * 1.6f)));
+            IntoWater(Center.x, Center.y, out float2 shore);
+            for (int k = 0; k < n; k++)
+            {
+                float a = math.lerp(a0, a1, (k + 0.5f) / n);
+                float2 p = shore + WaterNormal * (WaterWidth * 0.5f);
+                if (alongX) p.x = a; else p.y = a;
+                r.Add((p, radius));
+            }
+            return r;
+        }
+
+        /// <summary>(rf-beach) Points a few metres into the lake along the shore, with the depth expected there once it is full.</summary>
+        public List<(float2 at, float depth)> WaterProbes()
+        {
+            var r = new List<(float2, float)>();
+            if (!HasWater) return r;
+            float s = math.min(WaterWidth * 0.5f, 15f);
+            IntoWater(Center.x, Center.y, out float2 shore);
+            bool alongX = Water == "north" || Water == "south";
+            for (int k = -1; k <= 1; k++)
+            {
+                float2 p = shore + WaterNormal * s;
+                if (alongX) p.x = Center.x + k * Size.x * 0.35f; else p.y = Center.y + k * Size.y * 0.35f;
+                r.Add((p, math.min(WaterDepth, UnderGrade * s)));
+            }
+            return r;
+        }
+
+        /// <summary>The land's own ground (flat, slope, hills...) above the base at (x, z).</summary>
+        private float LandRise(float x, float z)
         {
             float u = x - Center.x, v = z - Center.y;
             float a = Amplitude > 0f ? Amplitude : DefaultAmplitude;
@@ -174,9 +256,21 @@ namespace Placemaker.Core.Suite
             if (!RoadsAround) return r;
             float piece = Ground == "flat" ? 150f : 30f;
             float2 a = RingMin, b = RingMax;
+            // (rf-beach) with a lake the ring leaves its side out and its two legs stop on the land, short of the bank
+            if (HasWater)
+            {
+                float stop = BankRun + 6f;
+                IntoWater(Center.x, Center.y, out float2 shore);
+                if (Water == "north") b.y = shore.y - stop;
+                else if (Water == "south") a.y = shore.y + stop;
+                else if (Water == "east") b.x = shore.x - stop;
+                else a.x = shore.x + stop;
+            }
+            string[] names = { "south", "east", "north", "west" };
             var corners = new[] { new float2(a.x, a.y), new float2(b.x, a.y), new float2(b.x, b.y), new float2(a.x, b.y) };
             for (int side = 0; side < 4; side++)
             {
+                if (names[side] == Water) continue;
                 float2 p = corners[side], q = corners[(side + 1) % 4];
                 int n = math.max(1, (int)math.ceil(math.distance(p, q) / piece));
                 for (int k = 0; k < n; k++)
@@ -194,7 +288,8 @@ namespace Placemaker.Core.Suite
         {
             Name = Name, Kind = SuiteBlockKind.Plot, I = -1, J = -1,
             X0 = RingMin.x, X1 = RingMax.x, Z0 = RingMin.y, Z1 = RingMax.y,
-            West = RoadsAround ? Road : "", East = RoadsAround ? Road : "", South = RoadsAround ? Road : "", North = RoadsAround ? Road : "",
+            West = RoadsAround && Water != "west" ? Road : "", East = RoadsAround && Water != "east" ? Road : "",
+            South = RoadsAround && Water != "south" ? Road : "", North = RoadsAround && Water != "north" ? Road : "",
         };
     }
 }

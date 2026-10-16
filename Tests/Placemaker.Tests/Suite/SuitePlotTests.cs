@@ -76,5 +76,29 @@ namespace Placemaker.Tests.Suite
             Assert.Empty(p.RingRoads());
             Assert.Equal("", p.Block().South);
         }
+
+        [Fact]
+        public void Lake_BesideTheLand_BankFloorAndNoRoadOnItsSide()
+        {
+            var l = new SuiteLayout();
+            var p = l.AddPlot(new SuitePlot { Size = new float2(160, 100), Water = "north", WaterWidth = 80f, WaterDepth = 4f, Freeboard = 2f, BankGrade = 0.1f });
+            float shoreZ = p.LandMax.y, x = p.Center.x;
+            Assert.Equal(0f, p.Rise(x, p.Center.y), 2);                        // the land at the base
+            Assert.Equal(-2f, p.Rise(x, shoreZ), 2);                           // the waterline, 2 m down
+            Assert.Equal(-1f, p.Rise(x, shoreZ - 10f), 1);                     // half way down the 20 m bank
+            Assert.Equal(-3f, p.Rise(x, shoreZ + 10f), 2);                     // the floor at 10 %
+            Assert.Equal(-6f, p.Rise(x, shoreZ + 40f), 2);                     // the deepest water
+            Assert.Equal(0f, p.Rise(x, shoreZ + 80f + SuitePlot.FarBank), 2);  // the far shore back at the base
+            Assert.True(p.RingMax.y >= shoreZ + 80f + SuitePlot.FarBank);      // the plot takes in the lake
+            Assert.Equal("", p.Block().North);
+            Assert.NotEqual("", p.Block().South);
+            Assert.All(p.RingRoads(), r => Assert.True(math.max(r.A.y, r.B.y) <= shoreZ - p.BankRun));
+            Assert.NotEmpty(p.WaterSources());
+            Assert.All(p.WaterProbes(), q => Assert.True(p.Rise(q.at.x, q.at.y) < -2f));
+            // a slope rising from the water keeps the waterline at the base's level
+            var s = l.AddPlot(new SuitePlot { Size = new float2(160, 100), Ground = "slope", Grade = 0.08f, Toward = "south", Water = "north" });
+            Assert.Equal(-s.Freeboard, s.Rise(s.Center.x, s.LandMax.y), 2);
+            Assert.True(s.Rise(s.Center.x, s.LandMin.y) > 6f);
+        }
     }
 }

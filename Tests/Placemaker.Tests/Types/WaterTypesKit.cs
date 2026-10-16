@@ -84,10 +84,12 @@ namespace Placemaker.Tests.Types
             {
                 // s20: a quay or boardwalk is built AT the water, which may lie a few metres past the drawn outline.
                 bool deck = !n.FollowTerrain && (n.Category == AssetCategories.NetQuay || n.Category == AssetCategories.NetPier);
+                // rf-beach: piers and jetties reach out over the real water past an outline drawn along the shore.
+                bool pier = !n.FollowTerrain && n.Category == AssetCategories.NetPier;
                 for (int i = 0; i <= 8; i++)
                 {
                     var p = Composer.Bezier(n.A, n.B, n.C, n.D, i / 8f).xz;
-                    Assert.True(Poly.Contains(r, p) || Poly.DistanceToBoundary(r, p) < (deck ? 10.5f : 0.5f), $"{plan.GeneratorId}: {n.Role} at {p} outside");
+                    Assert.True(Poly.Contains(r, p) || Poly.DistanceToBoundary(r, p) < (pier ? 130f : deck ? 10.5f : 0.5f), $"{plan.GeneratorId}: {n.Role} at {p} outside");
                 }
             }
         }

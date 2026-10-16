@@ -451,6 +451,13 @@ namespace Placemaker.Game.Suite
         {
             var placed = new JArray();
             string[] sides = { "south", "east", "north", "west" };
+            // (rf-beach) only sides with a street when the block has one: land by a lake has no street on its water side
+            var b = st.S.Block;
+            if (b != null)
+            {
+                var streets = sides.Where(x => !string.IsNullOrEmpty(x == "south" ? b.South : x == "east" ? b.East : x == "north" ? b.North : b.West)).ToArray();
+                if (streets.Length > 0) sides = streets;
+            }
             for (int k = 0; k < sides.Length && _tool.SuiteMarkerRequest().Path != null; k++)
             {
                 var sub = new JObject { ["side"] = sides[k] };
