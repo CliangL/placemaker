@@ -132,6 +132,7 @@ namespace Placemaker.Core.Layers.Commercial
                 if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * ComposeMoreBelow) ComposeMore(ctx, mall, runs);
                 ctx.Check();
             }
+            mall.MainDir = runs[0].Dir;
             // (s50) Lot first: the shop rows, access alleys and lots the composition did not reach.
             LotFirst(ctx, mall, runs);
             ctx.Check();
@@ -148,7 +149,7 @@ namespace Placemaker.Core.Layers.Commercial
         /// (shops) Most of the site all lots together may take (the user: "the parking lots look weird"; lot first filled every
         /// leftover with asphalt). The composition's own lots always go in; leftover lots stop at this share and the rest is planted.
         /// </summary>
-        protected virtual float LotShare => 0.35f;
+        protected virtual float LotShare => 0.4f;
 
         private Mall NewMall(LayerContext ctx)
         {

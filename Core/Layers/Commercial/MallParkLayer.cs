@@ -31,7 +31,7 @@ namespace Placemaker.Core.Layers.Commercial
             c.Toggle("fountain", true, ControlTier.More, "layout").Tip();
             OuterRowControls(c, ZoneKinds.CommercialHigh);
             Shared(c.Slider("outerDepth", 24, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
-            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false, green: false);
+            CommonControls(c, ZoneKinds.CommercialLow, 16, null, false, green: false, streetShops: true);
             c.Fixed("parkStyle");
             c.Fixed("loop");
         }
@@ -104,9 +104,12 @@ namespace Placemaker.Core.Layers.Commercial
                 if (a != null) mouths.Add((a, onLoop));
             }
             Access(r.At(cx, 0f), -r.In, r.At(cx, fy));
-            if (street[2]) Access(r.At(cx, reach), r.In, r.At(cx, by));
-            if (street[1] && parkD >= 40f) Access(r.At(s1, cy), r.Dir, r.At(rx, cy));
-            if (street[3] && parkD >= 40f) Access(r.At(s0, cy), -r.Dir, r.At(lx, cy));
+            // (shops) An access lane cuts the ring row it crosses in two; a side shorter than this keeps its row whole instead (on the
+            // default city block every side was cut into pieces too short to zone and the loop had no shop at all).
+            const float CutSide = 58f;
+            if (street[2] && parkW >= CutSide) Access(r.At(cx, reach), r.In, r.At(cx, by));
+            if (street[1] && parkD >= CutSide) Access(r.At(s1, cy), r.Dir, r.At(rx, cy));
+            if (street[3] && parkD >= CutSide) Access(r.At(s0, cy), -r.Dir, r.At(lx, cy));
 
             // The park inside the loop, its walks opening onto the loop at the access junctions and mid-sides.
             var park = Mall.Rect(r, lx + h, rx - h, fy + h, by - h);
