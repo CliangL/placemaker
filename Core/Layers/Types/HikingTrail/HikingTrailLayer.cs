@@ -57,7 +57,9 @@ namespace Placemaker.Core.Layers.Types.Hiking
             c.Slider("waymarkers", 150, 0, 400, 25, "m", ControlTier.More, "trailStops").Layout(25).Tip();
 
             c.Choice("trailheads", "main", ControlTier.More, "trailheads", "main", "all", "none").Tip();
-            c.Slider("parking", 8, 0, 30, 1, "count", ControlTier.More, "trailheads").Tip();
+            // (rf-nature) Off by default: the gravel "car park" has no driveway from the street, so on every site it read as
+            // a bare sand rectangle by the entrance. The slider still adds one.
+            c.Slider("parking", 0, 0, 30, 1, "count", ControlTier.More, "trailheads").Tip();
             c.Toggle("mapBoard", true, ControlTier.More, "trailheads").Tip();
             c.Choice("trailheadGround", "gravel", ControlTier.More, "trailheads", "gravel", "asphalt");
 

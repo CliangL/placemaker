@@ -40,16 +40,20 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             float side = (spec.Seed & 1u) == 0 ? 1f : -1f;
             float leg = 0f;
             float margin = spec.HalfWidth + 2f;
+            float arrive = Arrive(spec);
             for (int stepNo = 0; stepNo < MaxSteps; stepNo++)
             {
-                if (math.distance(p, spec.Summit) <= spec.SummitRadius + Step * 0.5f) break;
+                // (rf-nature) Close enough to walk straight onto the plaza: stop here. The plaza disc is reserved, so
+                // the walker could never step inside SummitRadius + margin and circled the plaza (the hook and the
+                // S-bend at the top of the hilltop and kite-hill paths).
+                if (math.distance(p, spec.Summit) <= arrive) break;
                 var toSummit = math.normalizesafe(spec.Summit - p);
                 var g = field.Gradient(p);
                 float gl = math.length(g);
                 float2 q = p; bool moved = false;
                 if (spec.Style == "direct" || gl <= spec.Grade * 1.05f)
                 {
-                    q = p + toSummit * math.min(Step, math.distance(p, spec.Summit) - spec.SummitRadius);
+                    q = p + toSummit * math.min(Step, math.max(0.5f, math.distance(p, spec.Summit) - arrive + 0.5f));
                     moved = Ok(region, occ, q, margin, spec) && FarFromEarlier(pts, q, spec.Spacing);
                 }
                 if (!moved && spec.Style != "direct")
@@ -90,7 +94,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 }
             }
             // Finish at the summit plaza edge when close enough.
-            if (math.distance(p, spec.Summit) > spec.SummitRadius + 0.5f && math.distance(p, spec.Summit) < spec.SummitRadius + 30f)
+            if (math.distance(p, spec.Summit) > spec.SummitRadius + 0.5f && math.distance(p, spec.Summit) < arrive + 30f)
             {
                 var end = spec.Summit + math.normalizesafe(p - spec.Summit) * spec.SummitRadius;
                 pts.Add(end);
@@ -101,10 +105,13 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
         public static bool Reached(List<float2> pts, ClimbSpec spec) =>
             pts.Count > 1 && math.distance(pts[pts.Count - 1], spec.Summit) <= spec.SummitRadius + Step;
 
+        /// <summary>Distance from the summit at which the path turns straight onto the plaza.</summary>
+        private static float Arrive(ClimbSpec spec) => spec.SummitRadius + spec.HalfWidth + 3f;
+
         private static bool Ok(LayerRegion region, Occupancy occ, float2 q, float margin, ClimbSpec spec)
         {
             if (!region.ContainsDisc(q, margin)) return false;
-            if (math.distance(q, spec.Summit) < spec.SummitRadius) return true;   // arriving on the plaza
+            if (math.distance(q, spec.Summit) < Arrive(spec) + 0.5f) return true;   // arriving on the plaza
             return occ.Free(q, spec.HalfWidth, margin, 0.3f);
         }
 

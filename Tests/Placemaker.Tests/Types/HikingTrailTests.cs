@@ -185,7 +185,10 @@ namespace Placemaker.Tests.Types
         public void TrailheadHasParkingMapAndBench()
         {
             var road = B12Kit.Road(250);
-            var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues("forestTrail")), B12Kit.FiveHa, road), B12Kit.FiveHa, road).Layers[0];
+            // (rf-nature) The car park is off by default (no driveway reaches it); asked for, it is still laid out.
+            var plain = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, PresetValues("forestTrail")), B12Kit.FiveHa, road), B12Kit.FiveHa, road).Layers[0];
+            Assert.False(plain.Facts.ContainsKey("parkingStalls"), "a car park by default");
+            var plan = B12Kit.Compose(TestKit.Entered(B12Kit.With(Id, With(PresetValues("forestTrail"), ("parking", 8.0))), B12Kit.FiveHa, road), B12Kit.FiveHa, road).Layers[0];
             Assert.Contains(plan.Objects, o => o.Category == AssetCategories.TrailSign);
             Assert.True(plan.Facts.TryGetValue("parkingStalls", out var stalls) && stalls >= 8, "no trailhead car park");
             Assert.Contains(plan.Surfaces, s => s.Category == AssetCategories.SurfaceNatural);

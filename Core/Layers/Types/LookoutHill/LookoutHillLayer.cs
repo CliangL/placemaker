@@ -104,7 +104,7 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
             Preset("viewpointMound", ("subtype", "viewpointMound"), ("height", 8.0), ("shape", "cone"), ("plateau", 5.0), ("pathStyle", "spiral"),
                 ("viewpoint", "plaza"), ("telescopes", 0.0), ("summitBenches", 8.0), ("treeDensity", 40.0), ("treeLine", 30.0), ("roughness", 10.0));
             Preset("terraces", ("subtype", "terraces"), ("height", 16.0), ("shape", "terraced"), ("levels", 4.0), ("plateau", 12.0),
-                ("pathStyle", "switchback"), ("pathWidth", "wide"), ("viewpoint", "plaza"), ("summitBenches", 10.0), ("treeDensity", 50.0), ("lamps", true));
+                ("pathStyle", "switchback"), ("viewpoint", "plaza"), ("summitBenches", 10.0), ("treeDensity", 50.0), ("lamps", true));
             Preset("kiteHill", ("subtype", "kiteHill"), ("height", 12.0), ("shape", "dome"), ("plateau", 14.0), ("pathStyle", "direct"),
                 ("viewpoint", "cairn"), ("treeDensity", 30.0), ("treeLine", 25.0), ("kites", 6.0), ("summitBenches", 4.0), ("roughness", 0.0));
         }
@@ -241,7 +241,13 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                     }
                     if (best >= 0 && bd < 120f)
                     {
-                        LeisureKit.Path(ctx, occ, g.Position, main[best], role, asset);
+                        if (bd >= 1f)
+                        {
+                            var spur = ctx.StraightNet(g.Position, main[best], role, asset);
+                            AttachStart(spur, g);
+                            occ.TakeCorridor(g.Position, main[best], hw, 100);
+                            occ.Paths.Add(g.Position, main[best], hw, 100);
+                        }
                         total += bd;
                         continue;
                     }
@@ -256,17 +262,50 @@ namespace Placemaker.Core.Layers.Types.LookoutHill
                 if (pts.Count < 3) continue;
                 if (!HillPaths.Reached(pts, spec)) ctx.Issue(IssueSeverity.Info, "Placemaker.LookoutHill.Issue.PathShort");
                 var simple = Poly.SimplifyPolyline(pts, 0.6f);
-                for (int i = 0; i + 1 < simple.Length; i++)
+                int n = simple.Length;
+                for (int i = 0; i + 1 < n; i++)
                 {
+                    // (rf-nature) Smooth pieces (Catmull-Rom tangents through the walker's corners) instead of straight
+                    // chords, so the climb reads as one flowing path, not a chain of kinks; straight where a curve
+                    // would leave the outline. The first piece starts on the street (attached), like every park path.
+                    var a = simple[i]; var b = simple[i + 1];
+                    var p0 = i > 0 ? simple[i - 1] : a; var p3 = i + 2 < n ? simple[i + 2] : b;
+                    var cb = a + (b - p0) / 6f; var cc = b - (p3 - a) / 6f;
+                    var net = i > 0 && i + 2 < n && CurveInside(region, a, cb, cc, b, hw)
+                        ? ctx.CurvedNet(a, cb, cc, b, role, asset) : ctx.StraightNet(a, b, role, asset);
+                    if (i == 0) AttachStart(net, g);
                     // Pieces are added to the occupancy one by one; the last piece onto the plaza is fine.
-                    ctx.StraightNet(simple[i], simple[i + 1], role, asset);
-                    occ.TakeCorridor(simple[i], simple[i + 1], hw, 100);
-                    occ.Paths.Add(simple[i], simple[i + 1], hw, 100);
-                    total += math.distance(simple[i], simple[i + 1]);
+                    var prev = a;
+                    for (int k = 1; k <= 6; k++)
+                    {
+                        var q = Composer.Bezier(net.A, net.B, net.C, net.D, k / 6f).xz;
+                        occ.TakeCorridor(prev, q, hw, 100);
+                        occ.Paths.Add(prev, q, hw, 100);
+                        prev = q;
+                    }
+                    total += math.distance(a, b);
                 }
                 if (main.Count == 0) main.AddRange(simple);
             }
             return total;
+        }
+
+        private static void AttachStart(PlannedNet net, Gate g)
+        {
+            if (g.AttachId < 0 || math.distancesq(net.A.xz, g.Position) > 1e-4f) return;
+            net.StartAttach = g.AttachId;
+            net.StartAttachT = g.AttachT;
+        }
+
+        private static bool CurveInside(LayerRegion region, float2 a, float2 b, float2 c, float2 d, float hw)
+        {
+            for (int i = 1; i < 8; i++)
+            {
+                float u = i / 8f, v = 1f - u;
+                var p = v * v * v * a + 3f * v * v * u * b + 3f * v * u * u * c + u * u * u * d;
+                if (!region.ContainsDisc(p, hw + 0.5f)) return false;
+            }
+            return true;
         }
 
         private static bool Clear(LayerRegion region, Occupancy occ, float2 a, float2 b, float hw)
