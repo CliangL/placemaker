@@ -33,6 +33,7 @@ does the steps you write, takes the pictures you ask for in order, and collects 
 PASS/FAIL); **you read the logs**. Pictures come second.
 
 ```
+powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal   # final picture, plan picture, log lines
 powershell -File tools/suite/Play.ps1                     # the user's playground: flat grid, camera on it, they play
 powershell -File tools/suite/Run-Suite.ps1 -Set look-one  # one type and preset, one 45° picture, quit
 powershell -File tools/suite/Run-Suite.ps1 -Set look      # every preset of a type, one 45° picture each

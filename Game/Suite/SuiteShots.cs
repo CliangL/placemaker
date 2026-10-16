@@ -156,15 +156,93 @@ namespace Placemaker.Game.Suite
             }
             if (c["yaw"] != null) yaw = (float)c["yaw"];
             if (c["pitch"] != null) pitch = (float)c["pitch"];
-            if (c["distance"] != null) dist = (float)c["distance"];
             if (c["fov"] != null) fov = (float)c["fov"];
+            // the build fills the picture: first guess from the geometry, then framed on what the camera really shows
+            bool fit = (target == "build" || target == "area") && (view == "oblique" || view == "low") && st.Ring != null && st.Ring.Length > 0 && c["distance"] == null;
+            if (fit) dist = FitDistance(st.Ring, pivot, yaw, pitch, fov);
+            if (c["distance"] != null) dist = (float)c["distance"];
             var cr = rec["camera"] as JObject ?? (JObject)(rec["camera"] = new JObject());
             cr["target"] = target;
             cr["index"] = i;
             cr["view"] = view;
             if (err != null) { cr["error"] = err; rec["error"] = "camera: " + err; ok(false); yield break; }
             yield return CameraTo(pivot, yaw, pitch, dist, rec, fov);
+            if (fit)
+            {
+                // where the outline (and 12 m above it) lands on the screen: re-centre it and come closer until it fills
+                // the picture (the game aims a little above its pivot, and the near side looks bigger than the far side)
+                int passes = 0;
+                for (; passes < 4; passes++)
+                {
+                    var box = ScreenBox(st.Ring);
+                    if (box == null) break;
+                    var (x0, y0, x1, y1) = box.Value;
+                    float cx = (x0 + x1) * 0.5f - 0.5f, cy = (y0 + y1) * 0.5f - 0.5f, now = math.max(x1 - x0, y1 - y0);
+                    cr["filled"] = Math.Round(now, 2);
+                    if (math.abs(cx) < 0.02f && math.abs(cy) < 0.02f && math.abs(now - FrameFill) < 0.03f) break;
+                    var eff = SuiteCapture.Effective(pivot);
+                    float d = float.IsNaN(eff.Distance) ? dist : eff.Distance;
+                    float ty = math.tan(math.radians(float.IsNaN(eff.Fov) ? 32f : eff.Fov) * 0.5f), tx = ty * (_cfg.shotWidth / (float)math.max(1, _cfg.shotHeight));
+                    float yr = math.radians(yaw), pr = math.radians(float.IsNaN(eff.Pitch) ? pitch : eff.Pitch);
+                    var ahead = new float3(math.sin(yr), 0f, math.cos(yr));
+                    var right = new float3(math.cos(yr), 0f, -math.sin(yr));
+                    pivot += ahead * (cy * 2f * d * ty / math.max(0.2f, math.sin(pr))) + right * (cx * 2f * d * tx);
+                    pivot.y = _fixture.H(pivot.x, pivot.z);
+                    dist = math.max(20f, dist * now / FrameFill);
+                    yield return CameraTo(pivot, yaw, pitch, dist, rec, fov);
+                }
+                cr["fitPasses"] = passes;
+            }
             ok(true);
+        }
+
+        /// <summary>How much of the picture the build fills (the larger of width and height, 1 = edge to edge).</summary>
+        private const float FrameFill = 0.9f;
+
+        /// <summary>The outline's corners, on the ground and 12 m above it, in the rendered camera's viewport (0..1); null when behind it.</summary>
+        private (float X0, float Y0, float X1, float Y1)? ScreenBox(float2[] ring)
+        {
+            var cam = Camera.main;
+            if (cam == null) return null;
+            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+            foreach (var p in ring)
+                foreach (var lift in new[] { 0f, 12f })
+                {
+                    var v = cam.WorldToViewportPoint(new Vector3(p.x, _fixture.H(p.x, p.y) + lift, p.y));
+                    if (v.z <= 0f) return null;
+                    x0 = math.min(x0, v.x); x1 = math.max(x1, v.x);
+                    y0 = math.min(y0, v.y); y1 = math.max(y1, v.y);
+                }
+            return (x0, y0, x1, y1);
+        }
+
+        /// <summary>
+        /// The camera distance at which every corner of the outline's bounding box, on the ground and 12 m above it, is
+        /// inside the picture with a small margin, for a camera at this yaw and pitch looking at the pivot (the camera sits
+        /// south of the pivot: yaw 0 looks north).
+        /// </summary>
+        private float FitDistance(float2[] ring, float3 pivot, float yaw, float pitch, float? fov)
+        {
+            var (lo, hi) = Bounds(ring, 0f);
+            float vfov = fov ?? (Camera.main != null ? Camera.main.fieldOfView : 35f);
+            float aspect = _cfg.shotWidth / (float)math.max(1, _cfg.shotHeight);
+            float ty = math.tan(math.radians(vfov) * 0.5f), tx = ty * aspect;
+            const float fill = 0.92f;
+            float y = math.radians(yaw), p = math.radians(pitch);
+            var f = new float3(math.sin(y) * math.cos(p), -math.sin(p), math.cos(y) * math.cos(p));
+            var r = math.normalize(new float3(f.z, 0f, -f.x));
+            var u = math.cross(f, r);
+            float dist = 30f;
+            foreach (var x in new[] { lo.x, hi.x })
+                foreach (var z in new[] { lo.y, hi.y })
+                    foreach (var lift in new[] { 0f, 12f })
+                    {
+                        var c = new float3(x, _fixture.H(x, z) + lift, z) - pivot;
+                        float ahead = math.dot(c, f);
+                        dist = math.max(dist, math.abs(math.dot(c, r)) / (tx * fill) - ahead);
+                        dist = math.max(dist, math.abs(math.dot(c, u)) / (ty * fill) - ahead);
+                    }
+            return dist;
         }
 
         private IEnumerator StepCameraAndShot(ScenarioState st, JObject step, JObject rec)

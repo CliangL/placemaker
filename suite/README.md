@@ -1,5 +1,22 @@
 # Placemaker game runner
 
+## See one build: `Show.ps1`
+
+```
+powershell -File tools/suite/Show.ps1                                    # the categories, types and styles
+powershell -File tools/suite/Show.ps1 -Category parks -Type park -Style formal
+```
+
+One launch (about 75 s, the game must be closed). It builds the type on a flat test block the way a person does
+(bucket the block, pick type and style, entrances, Review, Build), quits, and prints:
+
+* **Final picture**: the finished build at 45°, framed on the build.
+* **Plan picture**: the same view in Review before building, the plan the build came from.
+* **Log**: `Placemaker.log` and the lines of this build; `Player.log` for the game's own errors.
+
+That is the whole loop. Anything else (more pictures, other angles, several builds in one launch, edits, deletes) is a
+scenario file you write yourself, below.
+
 ## What it is
 
 A simple tool: it launches the real game, does the steps you write, the way a person would, takes the pictures you ask
@@ -188,7 +205,8 @@ it; the grid is made wide enough for the set (summary.json `capacity`, `blocksNe
 the script placed), `issue` (the n-th issue the plan marks on the map), `point` (`at`, `abs`), `overview`.
 `index: "all"` frames every one, shots named `<shot>-<n>`.
 
-`view`: `oblique` (yaw 25, pitch 60, 3.4 x the target's radius), `top` (yaw 0, pitch 89.5, field of view 18°:
+`view`: `oblique` (yaw 25, pitch 60; on `build`/`area` the camera comes as close as it can with the whole outline, and
+12 m above it, in the picture; elsewhere 3.4 x the target's radius; `distance` overrides), `top` (yaw 0, pitch 89.5, field of view 18°:
 nearly orthographic), `closeup` (yaw 30, pitch 38, 45-60 m), `low` (pitch 20). The camera sits south of its target
 and looks north; the noon sun is behind it. The game lifts the eye over terrain and clamps tilt: the rendered pitch
 and distance are read back and the request corrected (up to 3 passes).
