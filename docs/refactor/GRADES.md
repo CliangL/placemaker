@@ -56,3 +56,21 @@ Rules for everyone:
 | Nature | A | **Wetlands A+** (best in the pack, don't break it). **Lookout hill A/A+**, but its roads get weird. |
 | Farms | ok | Look at each one. **Animal park and Farmstead** are much better than **urban farm / urban gardens** (ugly, repetitive, too many assets). |
 | Sports | D | Weird but unique; keep the uniqueness and don't cut much. Cut the ones that are bad **and** not unique. |
+
+## Notes from the other sessions (for the core and category agents)
+
+- **Style ids:** the user's "Garden walk" is the park preset `garden`, "Urban pocket" is `urban`, "Natural" is
+  `natural` (check the catalog). The picker's Parks category held 13 types because gardens and water folded into it:
+  park, adventurePlayground, cemeteryGrounds, dogPark, memorialPark, orchardPark, picnicGrounds, botanicalGarden,
+  communityGarden, formalGarden, zenGarden, beach, waterfront.
+- **No style-level hide exists yet.** PresetInfo and PresetView have no hide flag, and `[AreaGenerator(Hidden = true)]`
+  means "recipes and features only", not a shelf. The core agent must add type- and style-level shelving.
+- **Keep:** when the current recipe's group is shelved (for example, the player last used Quarry), the TypeBrowser
+  `useEffect` switches to the first type shown. This was checked in the game: picking quarry flips to Roads. Keep that
+  behaviour when the shelf moves to per-category files.
+- **UI mock tests follow the categories:** `grid/presets/round4/s42.spec.ts` expects roads, parking, parks, commercial,
+  nature; gardens in Parks; squares in commercial. `mock/backend/fakeCatalog.ts` MORE_TYPES has `quarry` (industrial)
+  and `restArea` (transport) to check they stay hidden. A new Beach category means updating these.
+- **The parking-lot trees not drawn after the build** and **the strip-mall pit of 7–8 m by the parking entrance**
+  (visible with `Show.ps1 -Modes terrain`) are in the core agent's scope. Another session's proposal cards for these
+  are being withdrawn.
