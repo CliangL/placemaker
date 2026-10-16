@@ -22,6 +22,10 @@ namespace Placemaker.Core.Layers.Commercial
         public override string Id => "stripMall";
         public override string Icon => "Media/Game/Icons/ZoneCommercial.svg";
 
+        /// <summary>(shops) A second strip on the back street when the first leaves half the block (a lot, a lane and two cells of shops: ~45 m).</summary>
+        protected override float ComposeMoreBelow => 0.6f;
+        protected override float MoreReach => 44f;
+
         public static readonly string[] Styles = { "classic", "corner", "rearAlley" };
 
         protected override void DefineControls(ControlSet c)
@@ -70,7 +74,8 @@ namespace Placemaker.Core.Layers.Commercial
             Span(ctx, r, out float s0, out float s1);
             if (s1 - s0 < 50f) return false;
             int cells = Cells(ctx), aisles = Mall.Aisles(ctx.S("lotSize"));
-            float reach = mall.Reach(r, s0, s1);
+            // (shops) Free land only: a second strip on another street (ComposeMore) stops at the first one's shops.
+            float reach = math.min(mall.Reach(r, s0, s1), mall.FreeReach(r, s0, s1));
             // (s26) The shops front this lane (across it from the lot): it must carry zone blocks.
             var (laneAsset, h) = Mall.ShopLane(ctx);
             while (aisles > 0 && Mall.LotDepth(aisles) + 2 * h + cells * Mall.Cell > reach - 1f)

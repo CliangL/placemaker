@@ -125,6 +125,30 @@ namespace Placemaker.Core.Layers.Commercial
             return extent;
         }
 
+        /// <summary>(shops) How far the free land (inside the area, not taken) reaches inward from a run point (m).</summary>
+        public float FreeReachAt(StreetShops.Run r, float s, float max = 600f)
+        {
+            float extent = 0f;
+            for (float t = 2f; t < max; t += 2f)
+            {
+                var p = r.At(s, t);
+                if (!Region.Contains(p) || (Ctx.Site?.WaterDepthAt != null && Ctx.Site.WaterDepthAt(p) > 0.05f)) break;
+                bool taken = false;
+                foreach (var q in Taken) if (Poly.Contains(q, p)) { taken = true; break; }
+                if (taken) break;
+                extent = t;
+            }
+            return extent;
+        }
+
+        /// <summary>(shops) Smallest free reach across [s0, s1] (9 samples).</summary>
+        public float FreeReach(StreetShops.Run r, float s0, float s1)
+        {
+            float m = float.MaxValue;
+            for (int k = 0; k <= 8; k++) m = math.min(m, FreeReachAt(r, math.lerp(s0, s1, k / 8f)));
+            return m;
+        }
+
         /// <summary>Smallest reach across [s0, s1] (5 samples).</summary>
         public float Reach(StreetShops.Run r, float s0, float s1)
         {

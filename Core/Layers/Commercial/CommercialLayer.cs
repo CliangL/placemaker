@@ -118,7 +118,7 @@ namespace Placemaker.Core.Layers.Commercial
                     for (int i = 0; i < all.Count; i++) if (i != k) runs.Add(all[i]);
                 }
                 Compose(ctx, mall, runs);
-                if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * 0.25f) ComposeMore(ctx, mall, runs);
+                if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * ComposeMoreBelow) ComposeMore(ctx, mall, runs);
                 ctx.Check();
                 held = mall.Lanes.Count > 0 && !mark.IssuedSince(ctx.Plan, FallbackKey);
             }
@@ -129,7 +129,7 @@ namespace Placemaker.Core.Layers.Commercial
                 mall = NewMall(ctx);
                 runs = all;
                 Compose(ctx, mall, runs);
-                if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * 0.25f) ComposeMore(ctx, mall, runs);
+                if (runs[0].Length < CurvedFrontage || mall.TakenArea() < mall.Region.Area * ComposeMoreBelow) ComposeMore(ctx, mall, runs);
                 ctx.Check();
             }
             // (s50) Lot first: the shop rows, access alleys and lots the composition did not reach.
@@ -201,10 +201,21 @@ namespace Placemaker.Core.Layers.Commercial
         private void ComposeMore(LayerContext ctx, Mall mall, List<StreetShops.Run> runs)
         {
             float total = mall.Region.Area;
+            // (shops) The runs with the most free land straight behind them first (the back street of a strip mall before the
+            // short side streets beside it); a run with less than MoreReach of free land behind it is not composed.
+            var cand = new List<(int k, float free)>();
             for (int k = 1; k < runs.Count; k++)
+            {
+                var rk = runs[k];
+                float mk = 0.5f * (rk.From + rk.To);
+                cand.Add((k, mall.FreeReachAt(rk, mk)));
+            }
+            cand.Sort((a, b) => b.free.CompareTo(a.free));
+            foreach (var (k, free) in cand)
             {
                 ctx.Check();
                 if (mall.TakenArea() > total * LeftoverMax) break;
+                if (free < MoreReach) continue;
                 var r = runs[k];
                 if (r.Length < 3 * Mall.Cell + 2f) continue;
                 // The frontage must still be free where the middle of the run starts.
@@ -215,6 +226,11 @@ namespace Placemaker.Core.Layers.Commercial
                 Compose(ctx, mall, order);
             }
         }
+
+        /// <summary>(shops) The other frontages are composed when less than this share of the site is taken after the main one.</summary>
+        protected virtual float ComposeMoreBelow => 0.25f;
+        /// <summary>(shops) Least free land (m) behind a run's middle for another composition there.</summary>
+        protected virtual float MoreReach => 0f;
 
         /// <summary>Compose another frontage while less than this share of the site is taken.</summary>
         private const float LeftoverMax = 0.6f;
