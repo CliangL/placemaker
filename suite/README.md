@@ -1,5 +1,48 @@
 # Placemaker game runner
 
+## The game queue: every game command goes through it
+
+Only one game can run, and every build installs into the same `Mods\Placemaker`. So `Show.ps1`, `Run-Suite.ps1`,
+`Send-Suite.ps1` and `Play.ps1` do not launch the game themselves: they put a request in one machine-wide line
+(`%LOCALAPPDATA%\PlacemakerGameQueue`) and wait their turn. Ten agents share one game, launched once per build.
+
+* **Run the command in the background.** It blocks until its results are back, then prints what it always printed
+  (the builds, the pictures, the log lines) and exits with the same exit code, so you are woken up when it exits.
+* While it waits it prints a line every ~15 s and on every change:
+
+  ```
+  queue: #2 in line | ahead: lead (3 build(s), relaunch) | now: fix-roads 2 build(s), 40 s in | game open with build 3f2a1c9e7b10 | your build needs a launch | ETA about 2 min 10 s (around 21:14)
+  ```
+
+  `#N in line` is your place; `ahead` is who goes first (`relaunch`: their build needs the game restarted); `now` is
+  what the game does; the ETA comes from measured boot, per-build and quit times (`history.json`). `waiting: the
+  user's own game is open` or `the user's playground is open`: the line waits until the user closes the game, and the
+  ETA is unknown meanwhile.
+* **Your build is frozen when you ask.** The command builds your worktree without installing it (unless `-NoBuild`)
+  and copies what Deploy would install (`bin\Release`, `UI\build`) plus the runner scripts into the queue. Their hash
+  is the build's identity. Keep working while you wait: later edits do not change your request.
+* **Batching.** The game stays open with a build. Requests with that build run back to back in it without a relaunch
+  (land made to order is laid out in the open game when its request comes). Another build waits for the request in
+  the game, then the game quits cleanly and relaunches with it (about 60 s). The oldest request with the open game's
+  build goes first, unless the head of the line has waited more than 10 minutes. A request that does not fit the open
+  game's test grid gets a fresh launch.
+* **The user comes first.** `Play.ps1` goes next after the request in the game; the line then waits until the user
+  closes the playground. A game the user started themselves is never touched: the line waits for it.
+* **Leaving the line:** Ctrl+C (or killing the command), or deleting its folder in `requests\`.
+* The dispatcher (`Game-Dispatcher.ps1`) starts by itself with the first request, and stops when nothing has been in
+  line for 10 minutes (the game quits first). Then `Mods\Placemaker` gets back the build that was installed before the
+  queue started (unless someone installed another one meanwhile). **The queue does not install your build for the
+  user's own game**: do that with `dotnet build -c Release` when no game is open.
+* Results land where they always did (`.forensics/suite/runs/<runId>/`). `logs/Placemaker.log` is the queue game's log
+  so far (Show prints your lines in it); the game's own run folder is `runs/queue-<time>/`.
+* `powershell -File tools/suite/Queue.ps1` shows the line (`-Watch`, `-Log 40`, `-Cancel <id>`). In the queue folder:
+  `requests\`, `active\`, `done\<id>\result.json`, `dispatcher.log`, `launches.log` (one line per game launch),
+  `status.json`.
+* `-Direct` on any of the commands launches the game here and now, outside the line: for debugging the runner only.
+  It is refused while any game is open.
+* Through the queue, `Send-Suite.ps1` runs your file in the queue's game with your current build (`bin\Release` as it
+  is; `-Build` rebuilds first). `on` works only within one file: the next file may land in another game.
+
 ## See builds: `Show.ps1`
 
 ```
@@ -13,7 +56,8 @@ powershell -File tools/suite/Show.ps1 -Type roads -Size 900x700 -Ground mountain
 powershell -File tools/suite/Show.ps1 -Type plaza -Land my-land.json     # any outline, any heights
 ```
 
-One launch for everything asked (about 70 s, then about 10 s per build; the game must be closed). Each build gets its
+One request for everything asked (a new game takes about 60 s, then about 10 s per build; an open game with the same
+build is reused). Each build gets its
 own test land and is built the way a person does (select the area, pick type and style, entrances, Review, Build). It
 prints, per build, its pictures and its lines in `Placemaker.log`; `Player.log` has the game's own errors.
 
@@ -35,8 +79,8 @@ With any of them it gets its own land, made to order at launch (east of the grid
 * `-Land`: the same as JSON (a file, or the text; keys in `suite/schema.json` "land"), merged over the options, e.g.
   `{"points": [[0,0],[90,0],[90,40],[30,70],[0,60]], "ground": "bumpy"}`.
 
-The area is drawn in the land's shape with the Points tool. Land is laid out at launch, so it cannot be sent to a
-running queue session.
+The area is drawn in the land's shape with the Points tool. Land is laid out at launch, or, in a game that is already
+open (the queue's), when its request arrives.
 
 * `-Type`, `-Style`: one or more (`a,b`), or `all` (with `-Category` for types). Every type x every style is built.
 * `-Views`: `45` (default), `top`, `low`, `close`. Framed on the build (`close` looks at its middle).
@@ -90,14 +134,20 @@ powershell -File tools/suite/Run-Suite.ps1 -Set look-one
 powershell -File tools/suite/Play.ps1                       # the user's playground: the flat grid, controls handed over
 ```
 
-Or keep the game open and feed it builds one file at a time. This needs no relaunch for a new list; a code change
-always needs one:
+Or feed builds one file at a time. Through the queue each file runs in the queue's game with your current build (no
+relaunch while that build's game is open; a code change always needs one):
 
 ```
-powershell -File tools/suite/Run-Suite.ps1 -Set queue -Queue
 powershell -File tools/suite/Send-Suite.ps1 -File my-builds.json
 powershell -File tools/suite/Send-Suite.ps1 -Json '{"command":"grow","seconds":40}'
-powershell -File tools/suite/Send-Suite.ps1 -Quit
+```
+
+Debugging the runner outside the queue, with a session of your own:
+
+```
+powershell -File tools/suite/Run-Suite.ps1 -Direct -Set queue -Queue
+powershell -File tools/suite/Send-Suite.ps1 -Direct -File my-builds.json
+powershell -File tools/suite/Send-Suite.ps1 -Direct -Quit
 ```
 
 Send-Suite prints each scenario's status, any step the runner could not do, its pictures and where the logs are. Exit
@@ -115,8 +165,9 @@ If a run is cut off, its logs are not copied into the run folder. Read them in
 `%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\` before the next launch overwrites them. Then
 run `Run-Suite.ps1 -RestoreOnly` so the user's game settings are put back.
 
-Only one game at a time: Run-Suite takes `.forensics/suite/lock`, and stops when a Cities2.exe it did not start is
-running (a runner game it left behind is asked to quit through its inbox; the user's own game is never touched).
+Only one game at a time: the queue (above) runs one game for everyone. Underneath, Run-Suite takes
+`.forensics/suite/lock` (one for every worktree), and stops when a Cities2.exe it did not start is running (a runner
+game it left behind is asked to quit through its inbox; the user's own game is never touched).
 
 Other Run-Suite switches: `-AllMods` (the user's whole playset; slow boot), `-UserModSettings` (keep the user's
 Placemaker options), `-Look game` (the map's own light and weather), `-Pace settled|user`, `-Grid 20x9`,
@@ -280,6 +331,10 @@ If the game is closed early the quit hook writes what is known, marked incomplet
 
 ## Live queue
 
-`Run-Suite -Queue` keeps the game open (after the set, or right after the fixture with `-Set queue`). Send-Suite drops
-a file into `<run>/inbox`; the result comes back as `<file>.result.json`. `{"command":"grow","seconds":40}` grows the
-whole city. The session ends with `-Quit`, after 15 idle minutes, or at the host timeout (8 h).
+`Run-Suite -Queue` keeps the game open (after the set, or right after the fixture with `-Set queue`); the game queue's
+dispatcher runs its games this way. Send-Suite (or the dispatcher) drops a file into `<run>/inbox`; the result comes
+back as `<file>.result.json`. `{"command":"grow","seconds":40}` grows the whole city. A file's own `settings` hold for
+that file only. A scenario with `land` gets its land laid out when it arrives (east of the last plot; the ground is
+written only beyond what is already laid out, so standing builds keep theirs); `no-block` when the map has no room
+left. A queue-only session grows its housing when the first `zoned` scenario arrives. The session ends with `-Quit`,
+after 15 idle minutes, or at the host timeout (8 h).

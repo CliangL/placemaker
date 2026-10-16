@@ -46,9 +46,24 @@ powershell -File tools/suite/Show.ps1 -Category parking -Type parking -Style all
 powershell -File tools/suite/Play.ps1                     # the user's playground: flat grid, camera on it, they play
 powershell -File tools/suite/Run-Suite.ps1 -Set look-one  # one type and preset, one 45° picture, quit
 powershell -File tools/suite/Run-Suite.ps1 -Set look      # every preset of a type, one 45° picture each
-powershell -File tools/suite/Run-Suite.ps1 -Set queue -Queue   # keep the game open, then:
-powershell -File tools/suite/Send-Suite.ps1 -File x.json        # feed it builds without relaunching
+powershell -File tools/suite/Send-Suite.ps1 -File x.json  # a scenario file in the open game, with your current build
+powershell -File tools/suite/Queue.ps1                    # who is in line, what runs now, ETAs
 ```
+
+### The game queue: always go through it
+
+There is one game for every agent. Each of these commands waits its turn in one machine-wide line, with a frozen copy
+of your build; requests with the same build share one open game, and the game is relaunched only to switch builds.
+
+- **Run the command as a background command.** It exits when your results are back (same output and exit code as
+  before), which wakes you up. Do the next thing meanwhile; don't poll, retry or start a second copy.
+- Read its progress lines: `queue: #2 in line | ahead: lead (3 build(s), relaunch) | now: ... | ETA about 2 min 10 s`.
+  `#N` is your place, `ahead` who goes first, the ETA is measured. `waiting: the user's ... game is open`: the line
+  waits for the user; that can take long, and that is fine.
+- Ctrl+C leaves the line. `-Direct` bypasses the queue: for debugging the runner only.
+- The queue does not install your build for the user's own game (it puts back what was installed before). Say so when
+  you report a fix; install it with `dotnet build -c Release` only when the user asks and no game is open.
+- Details: `suite/README.md`, "The game queue".
 
 - Results go to `.forensics/suite/runs/<id>/`: `logs/Placemaker.log`, `logs/Player.log`, `suite.log`,
   `summary.md`, `contact.html` and `shots/`.
@@ -82,7 +97,7 @@ powershell -File tools/suite/Send-Suite.ps1 -File x.json        # feed it builds
 
 - They are not a programmer. Use plain language and short answers.
 - Never say something is fixed unless you saw it work in the game (`Show.ps1`) **and** it is installed. Compare the
-  time on `Mods\Placemaker\Placemaker.dll` with your commit.
+  time on `Mods\Placemaker\Placemaker.dll` with your commit (the game queue does not leave your build installed).
 - Fix things everywhere they occur: every type and code path that shares the mechanism, not just the one in the
   screenshot.
 - Helper agents use the strongest model. Commit when a piece of work is done; the user tests in game.
