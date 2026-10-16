@@ -23,7 +23,7 @@ using UnityEngine;
 
 namespace Placemaker.Game.Suite
 {
-    internal sealed class SuiteFixture
+    internal sealed partial class SuiteFixture
     {
         public readonly SuiteLayout Layout = new SuiteLayout();
         public List<SuiteBlock> Blocks;
@@ -156,10 +156,10 @@ namespace Placemaker.Game.Suite
         /// Bulldozes what the map has in the fixture area (top-level nets and static objects: trees, props, buildings) through
         /// vanilla delete definitions, the way the bulldozer does.
         /// </summary>
-        public int EmitClear(SuiteFixtureToolSystem tool, out string detail)
+        public int EmitClear(SuiteFixtureToolSystem tool, out string detail, float2? min = null, float2? max = null)
         {
-            var lo = Layout.FixtureMin - 20f;
-            var hi = Layout.FixtureMax + 20f;
+            var lo = (min ?? Layout.FixtureMin) - 20f;   // a plot laid out later clears only its own ground
+            var hi = (max ?? Layout.FixtureMax) + 20f;
             bool Inside(float3 p) => p.x >= lo.x && p.x <= hi.x && p.z >= lo.y && p.z <= hi.y;
             int edges = 0, objects = 0;
             using (var q = _em.CreateEntityQuery(ComponentType.ReadOnly<Edge>(), ComponentType.ReadOnly<Curve>(), ComponentType.Exclude<Owner>(),
@@ -266,6 +266,7 @@ namespace Placemaker.Game.Suite
         public string ApplyHeightmap()
         {
             var existing = ReadHeightmap(out var source);
+            _mapHeights = existing;   // the map's own ground, for land laid out later (SuiteFixture.Grow.cs)
             Note(existing != null ? "map heightmap read from " + source : "map heightmap unavailable: the whole map becomes the layout");
             Replace(Layout.Heightmap(existing));
             return null;

@@ -418,7 +418,8 @@ namespace Placemaker.Game.Suite
                 _summary["plots"] = new JArray(_fixture.Layout.Plots.Select(p => $"{p.Name}: {p.Shape} {p.Size.x:F0} x {p.Size.y:F0} m, ground {p.Ground}, roads {(p.RoadsAround ? "around" : "none")}"));
             _summary["grid"] = $"{_fixture.Layout.NX} x {_fixture.Layout.NZ} blocks, spacing {_fixture.Spacing}";
             _summary["capacity"] = new JObject { ["flat"] = _fixture.Capacity(SuiteBlockKind.Flat), ["zoned"] = _fixture.Capacity(SuiteBlockKind.Zoned), ["slope"] = _fixture.Capacity(SuiteBlockKind.Slope), ["rough"] = _fixture.Capacity(SuiteBlockKind.Rough), ["survive"] = _fixture.Capacity(SuiteBlockKind.Survive) };
-            bool wantsZoned = scenarios == null || scenarios.Any(s => string.Equals(s.Site, "zoned", StringComparison.OrdinalIgnoreCase));
+            // a queue-only session grows the housing when its first zoned scenario arrives (RunOne), not at launch
+            bool wantsZoned = scenarios == null ? _cfg.set != "queue" : scenarios.Any(s => string.Equals(s.Site, "zoned", StringComparison.OrdinalIgnoreCase));
             yield return Guard(BuildFixture(wantsZoned), e => { Say("fixture failed: " + e); _summary["fixtureError"] = e.Message; });
             yield return Guard(LookCalibrate(), e => Say("look calibration failed: " + e.Message));
             PinSettings(set);
