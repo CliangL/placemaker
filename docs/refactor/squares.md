@@ -159,6 +159,6 @@ the amphitheatre; festival and funfair need assets nobody has; food trucks staye
   the centrepiece is kept.
 - Not tried on odd shapes (triangles, L-shapes, slopes); everything was judged on a flat 150 x 140 m block.
 - Street shops, when turned on, still face the city street with their backs to the square (by design for now).
-- Amphitheatre default and classic still a small bowl in a big lawn on large sites (rows capped at 2x).
+- Amphitheatre classic (AFTER) fills the block well, but the stage sits low on one side with an empty lawn corner; amphitheatre default not re-shot.
 - Fairground default/christmas still sparse on a block; foodTrucks hidden rather than fixed.
 - Branch not merged.
