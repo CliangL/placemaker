@@ -122,6 +122,7 @@ namespace Placemaker.Core.Layers.Leisure
             _ctx.Check();
             Hub();
             Courts();
+            Terminus();
             Gates();
             Bays();
             Islands();
@@ -146,9 +147,11 @@ namespace Placemaker.Core.Layers.Leisure
             float2 T;
             var line = new List<float2>();
             var doors = _doors;
+            Door? first = null, second = null;
             if (doors.Count >= 2)
             {
-                // The two ways in farthest apart (gates count a little more than car park doors).
+                // The two ways in farthest apart (gates count a little more than car park doors). Two ways in side by side on one edge
+                // are one entrance: the market street starts there and runs to the far side (the other gets a lane to it).
                 int bi = 0, bj = 1; float best = -1f;
                 for (int i = 0; i < doors.Count; i++)
                     for (int j = i + 1; j < doors.Count; j++)
@@ -156,7 +159,14 @@ namespace Placemaker.Core.Layers.Leisure
                         float d = math.distance(doors[i].At, doors[j].At) * (doors[i].Lot ? 0.85f : 1f) * (doors[j].Lot ? 0.85f : 1f);
                         if (d > best) { best = d; bi = i; bj = j; }
                     }
-                var A = doors[bi]; var B = doors[bj];
+                if (math.distance(doors[bi].At, doors[bj].At) < 60f && math.dot(doors[bi].In, doors[bj].In) > 0.7f)
+                    first = doors[bi].Lot ? doors[bj] : doors[bi];
+                else { first = doors[bi]; second = doors[bj]; }
+            }
+            else if (doors.Count == 1) first = doors[0];
+            if (first.HasValue && second.HasValue)
+            {
+                var A = first.Value; var B = second.Value;
                 T = math.normalizesafe(B.At - A.At, A.In);
                 // A chord passing near the middle of the site: a straight market street, its cross on it. Else it bends through the middle.
                 float off = math.sqrt(SegmentIndex.DistSq(_focal, A.At, B.At));
@@ -173,9 +183,10 @@ namespace Placemaker.Core.Layers.Leisure
                     Sample(line, _hub, _hub + T * dB / 3f, B.At + B.In * dB / 3f, B.At, false);
                 }
             }
-            else if (doors.Count == 1)
+            else if (first.HasValue)
             {
-                var A = doors[0];
+                var A = first.Value;
+                _farEnd = true;
                 _hub = _focal;
                 if (math.distance(A.At, _hub) < 24f) _hub = A.At + A.In * 24f;
                 T = math.normalizesafe(math.lerp(A.In, math.normalizesafe(_hub - A.At, A.In), 0.6f), A.In);
@@ -381,6 +392,42 @@ namespace Placemaker.Core.Layers.Leisure
         }
 
         private bool _streetMode;
+        /// <summary>The market street's far end has no way in (one entrance: it runs on to the far side).</summary>
+        private bool _farEnd;
+
+        /// <summary>
+        /// Where the market street ends at the far side without a way in: a pocket square closing the view down the street — an accent
+        /// pad, two trees, flowerbeds against the edge and benches looking back up the street.
+        /// </summary>
+        private void Terminus()
+        {
+            if (!_farEnd || _spine.Line.Count < 3) return;
+            var line = _spine.Line;
+            var e = line[line.Count - 1];
+            var t = math.normalizesafe(e - line[line.Count - 3]);
+            var side = new float2(-t.y, t.x);
+            var c = e - t * (_fw + 6f);
+            if (!_r.Contains(c) || math.distance(c, _hub) < _hubR + 14f) return;
+            _accentPieces.Add(LayerRegion.Rect(c, t, 6f, _spine.Half + 3.5f));
+            _streetMode = true;
+            try
+            {
+                foreach (int sg in new[] { -1, 1 })
+                {
+                    Tree(c + side * (sg * (_spine.Half + 1.6f)) + t * 2f, 0x7E00u + (uint)(sg + 1), true);
+                    var bp = c - t * 1.5f + side * (sg * 2.2f);
+                    if (Put(bp, math.atan2(-t.x, -t.y), ObjectRole.Bench, PlazaArt.Or(_ctx, "benchAsset", PlazaArt.Benches, 0), null, 0.9f, Hashing.Mix(_ctx.Seed, 0x7E10u + (uint)(sg + 1)), 0.2f, 0.1f)) _benches++;
+                }
+                if (AssetAvailability.Has(AssetCategories.Flowerbed))
+                    for (int k = -1; k <= 1; k++)
+                        Put(c + t * 3.6f + side * (k * 2.8f), math.atan2(side.x, side.y), ObjectRole.Planter, PlazaArt.Or(_ctx, "flowerbedAsset", PlazaArt.Flowerbeds, (uint)(k + 1)), AssetCategories.Flowerbed,
+                            1.2f, Hashing.Mix(_ctx.Seed, 0x7E20u + (uint)(k + 1)), 0.2f, 0.1f);
+                Put(c - t * 1.5f, 0f, ObjectRole.Bin, PlazaArt.Bin, null, 0.4f, Hashing.Mix(_ctx.Seed, 0x7E30u), 0.2f, 0.1f);
+            }
+            finally { _streetMode = false; }
+            _occ.Take(c, 6.5f, 3);
+            _ctx.Plan.Facts["marketStreetEnd"] = 1;
+        }
 
         private static float DistToLine(List<float2> line, float2 p)
         {
@@ -626,6 +673,12 @@ namespace Placemaker.Core.Layers.Leisure
                     if (AssetAvailability.Has(AssetCategories.Wayfinding))
                         Put(d.At + d.In * 5.5f - side * (sgn * (w * 0.5f + 1.2f)), math.atan2(d.In.x, d.In.y), ObjectRole.Furniture, PlazaArt.Signpost, AssetCategories.Wayfinding,
                             0.4f, Hashing.Mix(_ctx.Seed, salt + 0x40u), 0.2f, 0.1f);
+                }
+                else if (AssetAvailability.Has(AssetCategories.Vending))
+                {
+                    // At a car park's door: a vending machine for the drivers.
+                    Put(d.At + d.In * 4.5f + side * (sgn * (w * 0.5f + 1.4f)), math.atan2(-side.x * sgn, -side.y * sgn), ObjectRole.Furniture, PlazaArt.Vending, AssetCategories.Vending,
+                        0.6f, Hashing.Mix(_ctx.Seed, salt + 0x44u), 0.2f, 0.1f);
                 }
                 // Food carts just inside, their hatches to the walk.
                 int carts = big ? 2 : 1;
