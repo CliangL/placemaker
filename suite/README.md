@@ -4,7 +4,8 @@
 
 Only one game can run, and every build installs into the same `Mods\Placemaker`. So `Show.ps1`, `Run-Suite.ps1`,
 `Send-Suite.ps1` and `Play.ps1` do not launch the game themselves: they put a request in one machine-wide line
-(`%LOCALAPPDATA%\PlacemakerGameQueue`) and wait their turn. Ten agents share one game, launched once per build.
+(`%USERPROFILE%\.placemaker\game-queue`; not under AppData, which the agents' command sandbox keeps private per
+session) and wait their turn. Ten agents share one game, launched once per build.
 
 * **Run the command in the background.** It blocks until its results are back, then prints what it always printed
   (the builds, the pictures, the log lines) and exits with the same exit code, so you are woken up when it exits.

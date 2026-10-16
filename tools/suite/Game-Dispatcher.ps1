@@ -4,8 +4,8 @@
   gone again when the line has been empty for a while. Nobody runs it by hand.
 
 .DESCRIPTION
-  Works the line in %LOCALAPPDATA%\PlacemakerGameQueue (see GameQueue.ps1):
-  * Single instance: a named mutex plus dispatcher.lock (PID and start time; a lock whose process is gone is taken over).
+  Works the line in %USERPROFILE%\.placemaker\game-queue (see GameQueue.ps1):
+  * Single instance: dispatcher.lock, held open for its whole life (its PID and start time inside; a lock nobody holds is stale and taken over).
   * Batching: while a game is open with build K it runs the oldest request with build K next (fed into the open game's
     inbox, no relaunch), unless the head of the line has waited more than -StarveMinutes; another build waits for the
     current request, then the game quits cleanly, the new bundle is installed into Mods\Placemaker and the game relaunched.
@@ -22,13 +22,16 @@ param(
     [double]$IdleMinutes = 10,
     [double]$StarveMinutes = 10,
     [int]$ExitGraceSec = 20,
-    # tests only: another queue folder, a fake game host instead of Run-Suite, another runs folder
-    [string]$QueueRoot = '', [string]$FakeHost = '', [string]$Runs = ''
+    # started by a client: start the real dispatcher (hidden) and exit, so it is nobody's child
+    [switch]$Detach
 )
 $ErrorActionPreference = 'Stop'
-if ($QueueRoot) { $env:PLACEMAKER_GAME_QUEUE = $QueueRoot }
-if ($FakeHost) { $env:PLACEMAKER_GAME_QUEUE_FAKE = $FakeHost }
-if ($Runs) { $env:PLACEMAKER_GAME_QUEUE_RUNS = $Runs }
+if ($Detach) {
+    $pass = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-IdleMinutes', $IdleMinutes, '-StarveMinutes', $StarveMinutes, '-ExitGraceSec', $ExitGraceSec)
+    if ($env:PLACEMAKER_GAME_QUEUE_IDLE) { $pass[6] = $env:PLACEMAKER_GAME_QUEUE_IDLE }   # tests
+    Start-Process -FilePath 'powershell.exe' -ArgumentList ($pass -join ' ') -WindowStyle Hidden -WorkingDirectory $env:USERPROFILE | Out-Null
+    exit 0
+}
 . (Join-Path $PSScriptRoot 'GameQueue.ps1')
 Q-Init
 $script:mods = Join-Path $script:QUserData 'Mods\Placemaker'
@@ -39,17 +42,16 @@ function D-Log([string]$m) {
     try { Add-Content -Path $script:Q.Log -Value $line -Encoding UTF8 } catch { }
 }
 
-# ───────────── single instance ─────────────
-$script:mutex = [Threading.Mutex]::new($false, ('Local\PlacemakerGameQueueDispatcher' + $(if ($env:PLACEMAKER_GAME_QUEUE) { '-' + (Q-HashText $env:PLACEMAKER_GAME_QUEUE.ToLowerInvariant()).Substring(0, 12) } else { '' })))
-$got = $false
-try { $got = $script:mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $got = $true; D-Log 'the previous dispatcher died holding the mutex: taking over' }
-if (-not $got) { exit 0 }
-$old = Q-ReadJson $script:Q.Lock
-if ($old -and $old.pid -ne $PID) {
-    if (Q-Alive $old.pid $old.start) { D-Log "dispatcher.lock names PID $($old.pid), which is alive but does not hold the mutex: replacing the lock" }
-    else { D-Log "took over a stale lock (dispatcher PID $($old.pid) from $($old.at) is gone)" }
-}
-Q-WriteJson $script:Q.Lock ([ordered]@{ pid = $PID; start = (Q-ProcStart $PID); at = (Get-Date).ToString('o'); script = $PSCommandPath })
+# ───────────── single instance: dispatcher.lock held open for the dispatcher's life ─────────────
+# Nobody else can open it for writing while this process lives; when it dies (killed or not) the handle goes with it,
+# and the PID inside is only information (a lock file whose PID is gone is stale and taken over).
+try { $script:lockStream = [IO.File]::Open($script:Q.Lock, 'OpenOrCreate', 'ReadWrite', 'Read') } catch { exit 0 }
+$oldText = ''
+try { $buf = New-Object byte[] ([int]$script:lockStream.Length); [void]$script:lockStream.Read($buf, 0, $buf.Length); $oldText = [Text.Encoding]::UTF8.GetString($buf) } catch { }
+$old = $null; try { if ($oldText.Trim()) { $old = $oldText | ConvertFrom-Json } } catch { }
+if ($old -and $old.pid -and $old.pid -ne $PID) { D-Log "took over a stale lock (dispatcher PID $($old.pid) from $($old.at) is gone)" }
+$lockBytes = [Text.Encoding]::UTF8.GetBytes((([ordered]@{ pid = $PID; start = (Q-ProcStart $PID); at = (Get-Date).ToString('o'); script = $PSCommandPath }) | ConvertTo-Json -Compress))
+$script:lockStream.SetLength(0); $script:lockStream.Write($lockBytes, 0, $lockBytes.Length); $script:lockStream.Flush()
 D-Log "dispatcher up (PID $PID, $PSCommandPath)$(if ($script:QFake) { ", FAKE host $script:QFake" })"
 Q-SeedHistory
 
@@ -751,8 +753,7 @@ catch { D-Log "dispatcher error: $($_.Exception.Message) at $($_.InvocationInfo.
 finally {
     if (-not $script:sess) { D-RestoreInstalled | Out-Null }
     try { $st = Q-ReadJson $script:Q.Status; if ($st) { $st.state = 'stopped'; $st.updated = (Get-Date).ToString('o'); Q-WriteJson $script:Q.Status $st } } catch { }
-    $l = Q-ReadJson $script:Q.Lock
-    if ($l -and $l.pid -eq $PID) { Remove-Item $script:Q.Lock -Force -ErrorAction SilentlyContinue }
     D-Log 'dispatcher down'
-    try { $script:mutex.ReleaseMutex() } catch { }
+    try { $script:lockStream.Dispose() } catch { }
+    Remove-Item $script:Q.Lock -Force -ErrorAction SilentlyContinue   # fails harmlessly when the next dispatcher already holds it
 }

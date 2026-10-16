@@ -3,7 +3,8 @@
   and the dispatcher (Game-Dispatcher.ps1). Dot-source it.
 
   Only one Cities2.exe can run, and every build installs into the same Mods\Placemaker folder, so every agent's game
-  work goes through one line at %LOCALAPPDATA%\PlacemakerGameQueue:
+  work goes through one line at %USERPROFILE%\.placemaker\game-queue (not under AppData\Local or Roaming: the agents'
+  command sandbox gives every session its own private copy of those, so the line would not be shared):
     requests\<id>\request.json + payload.json   waiting in line (delete the folder to leave the line)
     active\<id>\                                being run now
     done\<id>\result.json                       finished: the client prints it and exits
@@ -13,7 +14,7 @@
   open game, back to back, and relaunches only to switch builds. See suite/README.md, "The game queue".
 #>
 
-$script:QRoot = if ($env:PLACEMAKER_GAME_QUEUE) { $env:PLACEMAKER_GAME_QUEUE } else { Join-Path $env:LOCALAPPDATA 'PlacemakerGameQueue' }
+$script:QRoot = if ($env:PLACEMAKER_GAME_QUEUE) { $env:PLACEMAKER_GAME_QUEUE } else { Join-Path $env:USERPROFILE '.placemaker\game-queue' }
 $script:QFake = $env:PLACEMAKER_GAME_QUEUE_FAKE   # tests only: a fake game host script instead of Run-Suite
 $script:Q = @{
     Root = $script:QRoot
@@ -309,17 +310,14 @@ function Q-DispatcherInfo {
     return $null
 }
 
+# Starts the dispatcher detached: Game-Dispatcher.ps1 -Detach starts the real one and exits at once, so the dispatcher
+# is nobody's child and outlives the command that started it (an agent's background command is stopped with its tree).
 function Q-StartDispatcher([string]$scriptDir) {
     $script = Join-Path $scriptDir 'Game-Dispatcher.ps1'
-    $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$script`""
-    # Created by WMI: not a child of this command, so it outlives it (an agent's background command may be killed with its tree).
-    $si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
-    foreach ($kv in @(@('PLACEMAKER_GAME_QUEUE', '-QueueRoot'), @('PLACEMAKER_GAME_QUEUE_FAKE', '-FakeHost'), @('PLACEMAKER_GAME_QUEUE_RUNS', '-Runs'), @('PLACEMAKER_GAME_QUEUE_IDLE', '-IdleMinutes'))) {   # tests: WMI does not pass this process's environment
-        $v = [Environment]::GetEnvironmentVariable($kv[0]); if ($v) { $cmd += " $($kv[1]) `"$v`"" }
-    }
-    $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = $env:USERPROFILE; ProcessStartupInformation = $si }
-    if ($r.ReturnValue -ne 0) { throw "could not start the dispatcher (WMI code $($r.ReturnValue))" }
-    return [int]$r.ProcessId
+    $p = Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$script`" -Detach" -WindowStyle Hidden -WorkingDirectory $env:USERPROFILE -PassThru
+    $p.WaitForExit(15000) | Out-Null
+    for ($i = 0; $i -lt 20; $i++) { $d = Q-DispatcherInfo; if ($d) { return [int]$d.pid }; Start-Sleep -Milliseconds 250 }
+    return 0
 }
 
 # ───────────── the client: ask, wait, print ─────────────
@@ -383,12 +381,13 @@ function Q-ProgressLine($st, [string]$id, [datetime]$since) {
     if ($st.game -and $st.game.build) { $parts += "game open with build $($st.game.build)$(if ($st.game.state -ne 'ready') { " ($($st.game.state))" })" }
     if ($st.note) { $parts += $st.note }
     if ($me) {
-        if ($me.unknown -or $st.paused) { $parts += 'ETA unknown (after the playground / the user''s game closes)' }
+        if ($me.unknown -or $st.paused) { $parts += 'ETA unknown until the user''s game or playground ahead is closed' }
         else {
             $parts += $(if ($me.relaunch) { 'your build needs a launch' } else { 'your build is the open game''s' })
             $parts += ('ETA about {0} (around {1:HH:mm})' -f (Q-Duration $me.doneInSec), (Get-Date).AddSeconds([double]$me.doneInSec))
         }
     }
+    if ($parts.Count -eq 0) { return 'in line; the dispatcher has not planned it yet' }
     return ($parts -join ' | ')
 }
 
