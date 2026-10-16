@@ -387,6 +387,16 @@ namespace Placemaker.Core.Layers.Commercial
                     // Worn ground where the walk meets the street (many feet, the lawn gives way).
                     var kit = PaintKit();
                     kit.Radial(k.Walk[0], TerrainMaterials.Dirt, 0.45f, 1.5f, 4.5f, Falloff.Smooth, 1.2f, 3f);
+                    // Desire lines: people cut from their cars across the planted strip to the walk, between the trees.
+                    int dl = 0;
+                    for (float at = 8f; at < total - 8f; at += 17f)
+                    {
+                        var (p, dir) = Along(k.Walk, at + 4.5f);
+                        var side = new float2(-dir.y, dir.x) * ((dl & 1) == 0 ? 1f : -1f);
+                        var a = p + side * 1.6f; var b = p + side * (0.5f * (k.S1 - k.S0) + 0.6f) + dir * 2.2f;
+                        TrailPaint.DesireLine(kit, a, b, 1.2f, 0.7f, TerrainMaterials.Dirt, Hashing.Mix(Ctx.Seed, k.Salt + 0xE0u + (uint)dl));
+                        dl++;
+                    }
                 }
             }
             Taken.Add(Poly.EnsureCcw(k.Ring));

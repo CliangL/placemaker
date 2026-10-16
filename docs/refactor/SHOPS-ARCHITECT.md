@@ -144,4 +144,17 @@ carts and bike racks at the gates, a car park at a car entrance.
 
 ## Iterations
 
-(Filled in as the game runs.)
+Every run: the styles on the normal block (bucket), a block four times bigger, a long rectangle, an L and a circle (both
+with a ring road that follows them), a 6 % slope, and one circle inside a block that touches no street (gap 16); the
+entrances placed with the runner's steps the way a user would (strip mall: two-way S 0.3 and 0.72, footpath S 0.5,
+driveway N 0.5, way out E 0.55; mall district: two-way S and N, footpaths E and W, driveway E 0.25; mall park: two-way
+S, driveway E, footpaths W and N), grow 20-30 s, plan / 45 / zoning / close pictures; scripts in
+ (gen.js makes the set, analyze.js reads the logs).
+
+- **Baseline**  (master): the lands sat 8 m off the kerb (Show.ps1 gap 16): the
+  circle, the L and most of the big rectangle found no street and became pocket parks; no entrance placed anywhere.
+- **it1**  (strip mall centre, zoning fix): every entrance step placed; strip mall block 38/38 cells
+  zoned (was 14/46), big box block 48/48 (was 24/66), all builds 97-100 %, every grown shop faces our lanes, no pits;
+  the circle inside a block builds a centre. Seen: the circle's east half was planted (a lot shape test too strict
+  inside a ring: relaxed); the block's back row was two wide plots (the loop started mid-edge: now on a corner; rows
+  are rounded to the piece size with anchors at the ends).
