@@ -141,6 +141,49 @@ namespace Placemaker.Core.Layers.Commercial
         /// may be nowhere near the entrance); the variant with the most stalls is kept. False when nothing it touches can
         /// enter it or no variant holds a useful number of stalls.
         /// </summary>
+        /// <summary>
+        /// (shops) The part of a leftover piece of about <paramref name="area"/> m² nearest its way in: the piece cut by a square round
+        /// its first entrance (square to the main street), grown until it holds that much. Null when the piece has no way in.
+        /// </summary>
+        public float2[] NearEntrance(float2[] piece, float area)
+        {
+            var entries = Entries(piece);
+            if (entries.Count == 0) return null;
+            var e = entries[0].at;
+            var d = MainDir ?? new float2(1f, 0f);
+            var n = new float2(-d.y, d.x);
+            float2[] best = null;
+            for (float h = 12f; h <= 300f; h += 4f)
+            {
+                var sq = Poly.EnsureCcw(new[] { e - d * h - n * h, e + d * h - n * h, e + d * h + n * h, e - d * h + n * h });
+                float2[] cut;
+                try { cut = Largest(Poly.Intersection(piece, sq), 300f); }
+                catch (Exception) { cut = null; }
+                if (cut == null) continue;
+                best = cut;
+                if (Poly.Area(cut) >= area) break;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// (shops) A leftover lot reads as a car park only when it is roughly a rectangle square to the main street, at least a
+        /// double row of bays (30 m) across: thin strips and odd shapes with turning bulbs looked like stray asphalt.
+        /// </summary>
+        private bool Tidy(float2[] ring)
+        {
+            var d = MainDir ?? new float2(1f, 0f);
+            var n = new float2(-d.y, d.x);
+            float a0 = float.MaxValue, a1 = float.MinValue, b0 = float.MaxValue, b1 = float.MinValue;
+            foreach (var p in ring) { float a = math.dot(p, d), b = math.dot(p, n); a0 = math.min(a0, a); a1 = math.max(a1, a); b0 = math.min(b0, b); b1 = math.max(b1, b); }
+            float w = a1 - a0, h = b1 - b0;
+            if (math.min(w, h) < 30f) return false;
+            return Poly.Area(ring) >= 0.75f * w * h;
+        }
+
+        /// <summary>(shops) The main street's direction (the composition's frame): leftover lots lay their rows square to it.</summary>
+        public float2? MainDir;
+
         public bool PolyLot(float2[] piece, SettingsBag parking, uint salt)
         {
             var shapes = new List<float2[]>();
@@ -157,7 +200,10 @@ namespace Placemaker.Core.Layers.Commercial
                 if (entries.Count == 0) continue;
                 var tan = TangentAt(shape, entries[0].at);
                 float ang = math.degrees(math.atan2(tan.y, tan.x));
-                foreach (float rot in new[] { float.NaN, 0f, 90f })
+                // (shops) Rows square to the site's main street: a leftover lot laid along its own entrance edge sat askew to
+                // everything round it (the user: "the parking lots look weird").
+                if (MainDir.HasValue) ang = math.degrees(math.atan2(MainDir.Value.y, MainDir.Value.x));
+                foreach (float rot in MainDir.HasValue ? new[] { 0f, 90f } : new[] { float.NaN, 0f, 90f })
                 {
                     var bag = new SettingsBag();
                     foreach (var kv in parking.Values) bag.Values[kv.Key] = kv.Value;
@@ -174,7 +220,8 @@ namespace Placemaker.Core.Layers.Commercial
                     float score = t.Capacity * math.min(1f, fill / GoodFill);
                     if (score > bestScore) { bestScore = score; best = t; }
                 }
-                if (best != null && best.Capacity >= 4f) return CommitLot(best, true);
+                // (shops) A leftover lot of a handful of stalls reads as a stray patch of asphalt: ten at least, else the piece is planted.
+                if (best != null && best.Capacity >= 10f && Tidy(best.Ring)) return CommitLot(best, true);
             }
             return false;
         }

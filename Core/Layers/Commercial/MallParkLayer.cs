@@ -52,24 +52,33 @@ namespace Placemaker.Core.Layers.Commercial
             if (ped) { var p = Mall.PedLane(ctx, false); asset = p.asset; h = p.half; role = p.pedestrian ? NetRole.Street : NetRole.Alley; }
             else { var p = Mall.ShopLane(ctx); asset = p.asset; h = p.half; role = NetRole.Alley; }
             int inner = Cells(ctx);
-            int outer = ctx.B("outerRow") ? Mall.Cells(ctx.Raw("outerDepth")) : 0;
+            // (shops) The outer rows face the city streets: only with "Shops facing the streets"; else the ring rows take the land.
+            int outer = ctx.B("outerRow") && ctx.B("streetShops") ? Mall.Cells(ctx.Raw("outerDepth")) : 0;
 
             // The site in the main street's frame: s along it, t inward; which sides have a street.
             float s0 = r.From, s1 = r.To;
             float reach = mall.Reach(r, s0 + 2f, s1 - 2f);
+            // (shops) On an angled or curved block the stretch of the run with the most land straight behind it, not the whole run.
+            var span = mall.BestSpan(r, 60f, 60f, r.From + 2f, r.To - 2f);
+            if (span.HasValue && (span.Value.s0 > r.From + 3f || span.Value.s1 < r.To - 3f)) { s0 = span.Value.s0 - 2f; s1 = span.Value.s1 + 2f; reach = span.Value.reach; }
+            bool atStart = s0 <= r.From + 0.5f, atEnd = s1 >= r.To - 0.5f;
             var corners = new[] { r.At(s0, 0f), r.At(s1, 0f), r.At(s1, reach), r.At(s0, reach) };
             bool[] street = new bool[4];
             street[0] = true;
-            street[1] = r.EndCorner || mall.StreetAlong(r.At(s1, 0f) + r.Dir * 0.5f, r.At(s1, reach) + r.Dir * 0.5f);
+            street[1] = (atEnd && r.EndCorner) || mall.StreetAlong(r.At(s1, 0f) + r.Dir * 0.5f, r.At(s1, reach) + r.Dir * 0.5f);
             street[2] = mall.StreetAlong(r.At(s1, reach) + r.In * 0.5f, r.At(s0, reach) + r.In * 0.5f);
-            street[3] = r.StartCorner || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
+            street[3] = (atStart && r.StartCorner) || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
 
             // Insets of the loop's centre line from each side; shrink rows until the park keeps at least 36 × 30 m.
+            // (shops) Per side, how far a ring row backing onto that street keeps in (its first zone row: Mall.KerbMargin).
+            float cm = 0.5f * (s0 + s1);
+            var kerb = new[] { mall.KerbMargin(r.At(cm, 0f), r.Dir), mall.KerbMargin(r.At(s1, reach * 0.5f), r.In), mall.KerbMargin(r.At(cm, reach), r.Dir), mall.KerbMargin(r.At(s0, reach * 0.5f), r.In) };
             float[] inset = new float[4];
             float parkW = 0f, parkD = 0f;
             for (int guard = 0; guard < 12; guard++)
             {
-                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h;
+                // (shops) With no outer row a ring row backs onto the street: it keeps clear of the street's first zone row (Mall.KerbBand).
+                for (int k = 0; k < 4; k++) inset[k] = (street[k] ? outer : 0) * Mall.Cell + inner * Mall.Cell + h + (street[k] && outer == 0 ? kerb[k] : 0f);
                 parkW = (s1 - s0) - inset[1] - inset[3] - 2f * h;
                 parkD = reach - inset[0] - inset[2] - 2f * h;
                 if (parkW >= 36f && parkD >= 30f) break;
@@ -78,6 +87,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
             if (parkW < 24f || parkD < 24f)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                 mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, Cells(ctx));
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;
@@ -88,6 +98,7 @@ namespace Placemaker.Core.Layers.Commercial
             var loop = mall.Loop(r.At(cx, fy), new[] { r.At(rx, fy), r.At(rx, by), r.At(lx, by), r.At(lx, fy) }, role, asset, h);
             if (loop == null)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                 mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, Cells(ctx));
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;
@@ -100,9 +111,12 @@ namespace Placemaker.Core.Layers.Commercial
                 if (a != null) mouths.Add((a, onLoop));
             }
             Access(r.At(cx, 0f), -r.In, r.At(cx, fy));
-            if (street[2]) Access(r.At(cx, reach), r.In, r.At(cx, by));
-            if (street[1] && parkD >= 40f) Access(r.At(s1, cy), r.Dir, r.At(rx, cy));
-            if (street[3] && parkD >= 40f) Access(r.At(s0, cy), -r.Dir, r.At(lx, cy));
+            // (shops) An access lane cuts the ring row it crosses in two; a side shorter than this keeps its row whole instead (on the
+            // default city block every side was cut into pieces too short to zone and the loop had no shop at all).
+            const float CutSide = 58f;
+            if (street[2] && parkW >= CutSide) Access(r.At(cx, reach), r.In, r.At(cx, by));
+            if (street[1] && parkD >= CutSide) Access(r.At(s1, cy), r.Dir, r.At(rx, cy));
+            if (street[3] && parkD >= CutSide) Access(r.At(s0, cy), -r.Dir, r.At(lx, cy));
 
             // The park inside the loop, its walks opening onto the loop at the access junctions and mid-sides.
             var park = Mall.Rect(r, lx + h, rx - h, fy + h, by - h);

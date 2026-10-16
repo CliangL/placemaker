@@ -198,21 +198,15 @@ namespace Placemaker.Tests
         }
 
         /// <summary>
-        /// (s50, s58) The least commercial share a type must reach on a site: lot first, a park only where it is the type's own. Styles whose
-        /// design spends land on something other than shops get their own target (measured at s58, not loosened across the board):
-        ///   * the small 1.5 ha block (sq1.5): the 8 m margins, the lane and its approaches are a fixed cost, so every type loses ~5 points;
-        ///     mallDistrict (internal streets, squares) 0.60;
-        ///   * highStreet 0.73 (its shared-street preset 0.68: the street is shared with greens), mallDistrict/village 0.68 (pocket greens);
-        ///   * shopsPark / mallPark are park-led: 0.45 on regular blocks, 0.35 on curved ones, 0.22 on the small block (measured 25-29 %).
+        /// (shops) The least commercial share (plots, lots, lanes, paved squares) a type must reach on a site. The s50 "lot first" targets
+        /// (0.70-0.75) are gone: leftover lots stop at the parking budget (CommercialLayer.LotShare; the user: "the parking lots look
+        /// weird") and the rest is planted. What stays is the guard against a composition collapsing into a park or a lawn: every
+        /// type keeps at least 12 % of the block commercial (measured after the change: 14-94 %, park-led types lowest).
         /// </summary>
-        public static float Target(string type, string preset, float step = 4f)
-        {
-            bool small = step == -2f, curved = step == 0f || step == 6f;
-            if (type == "shopsPark" || type == "mallPark" || (type == "shoppingPlaza" && preset == "green")) return small ? 0.22f : curved ? 0.35f : 0.45f;
-            if (type == "mallDistrict") return small ? 0.60f : preset == "village" ? 0.68f : 0.75f;
-            if (type == "highStreet") return preset == "shared" ? 0.68f : 0.73f;
-            return small ? 0.70f : 0.75f;
-        }
+        public static float Target(string type, string preset, float step = 4f) => type == "shopsPark" ? 0.06f : 0.12f;   // shops & park (hidden) is a park with shops
+
+        /// <summary>(shops) Most of the block all lots together may cover: the budget (40 %, retail park 60 %) plus the composition's own lots.</summary>
+        public static float LotCap(string type) => type == "retailPark" ? 0.85f : 0.6f;
 
         [Theory]
         [MemberData(nameof(Cases))]
@@ -224,7 +218,9 @@ namespace Placemaker.Tests
             _out.WriteLine($"SHARE {type}/{preset} @ {SiteName(step)}: area {area / 10000f:0.00} ha, plots {m.NPlots} ({m.Plots:0}), lots {m.Lots:0}, lanes {m.Lanes:0}, paved {m.Paved:0}, lot edges {m.Edges:0} => {m.Commercial:P0} (need {Target(type, preset, step):P0}), grass {m.Grass:0}, trees {m.Trees}; issues {string.Join(",", plan.AllIssues().Select(i => i.Key.Substring(i.Key.LastIndexOf((char)46) + 1)).Distinct())}");
             Assert.False(plan.HasErrors);
             Assert.DoesNotContain(plan.AllIssues(), i => i.Key == CommercialLayer.NoStreetKey);
-            Assert.True(m.NPlots >= 3, type + "/" + preset + ": " + m.NPlots + " plots");
+            // (shops) A strip mall needs a straight street of 50 m; the fully curved block has none, so only its fallback row is planned.
+            Assert.True(m.NPlots >= (type == "stripMall" && step == 0f ? 2 : 3), type + "/" + preset + ": " + m.NPlots + " plots");
+            Assert.True(m.Lots <= LotCap(type) * area, $"{type}/{preset} @ {SiteName(step)}: lots cover {m.Lots / area:P0} of the block (cap {LotCap(type):P0})");
             Assert.True(m.Commercial >= Target(type, preset, step), $"{type}/{preset} @ {SiteName(step)}: only {m.Commercial:P0} commercial (need {Target(type, preset, step):P0})");
         }
     }

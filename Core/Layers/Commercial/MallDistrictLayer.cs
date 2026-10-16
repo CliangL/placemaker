@@ -53,33 +53,43 @@ namespace Placemaker.Core.Layers.Commercial
             var (rungAsset, hp) = kinds == "alley" ? Lane(ctx, out var rungRole) : Ped(ctx, out rungRole);
             // Lane rows stand back to back: two cells at least (a one-cell row hands the row behind it its second zone row).
             int inner = math.max(2, Cells(ctx));
-            int outer = ctx.B("outerRow") ? Mall.Cells(ctx.Raw("outerDepth")) : 0;
+            // (shops) The outer rows face the city streets: only with "Shops facing the streets"; else the lane grid takes the whole site.
+            int outer = ctx.B("outerRow") && ctx.B("streetShops") ? Mall.Cells(ctx.Raw("outerDepth")) : 0;
             float court = ctx.S("blocks") == "compact" ? 0f : ctx.S("blocks") == "spacious" ? 32f : 16f;
             // Rows of neighbouring lanes stand back to back; on a slope they need a bank between them (Mall.SlopeGap).
             court = math.max(court, mall.SlopeGap());
 
             float s0 = r.From, s1 = r.To;
             float reach = mall.Reach(r, s0 + 2f, s1 - 2f);
-            bool right = r.EndCorner || mall.StreetAlong(r.At(s1, 0f) + r.Dir * 0.5f, r.At(s1, reach) + r.Dir * 0.5f);
+            // (shops) On an angled or curved block the stretch of the run with the most land straight behind it, not the whole run.
+            var span = mall.BestSpan(r, 60f, 60f, r.From + 2f, r.To - 2f);
+            if (span.HasValue && (span.Value.s0 > r.From + 3f || span.Value.s1 < r.To - 3f)) { s0 = span.Value.s0 - 2f; s1 = span.Value.s1 + 2f; reach = span.Value.reach; }
+            bool atStart = s0 <= r.From + 0.5f, atEnd = s1 >= r.To - 0.5f;
+            bool right = (atEnd && r.EndCorner) || mall.StreetAlong(r.At(s1, 0f) + r.Dir * 0.5f, r.At(s1, reach) + r.Dir * 0.5f);
             bool back = mall.StreetAlong(r.At(s1, reach) + r.In * 0.5f, r.At(s0, reach) + r.In * 0.5f);
-            bool left = r.StartCorner || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
+            bool left = (atStart && r.StartCorner) || mall.StreetAlong(r.At(s0, reach) - r.Dir * 0.5f, r.At(s0, 0f) - r.Dir * 0.5f);
 
+            // (shops) No outer row: rows backing onto a street keep clear of its first zone row (the kerb strip there), by the
+            // street's own width (Mall.KerbMargin).
+            float kbL = mall.KerbMargin(r.At(s0, reach * 0.5f), r.In), kbR = mall.KerbMargin(r.At(s1, reach * 0.5f), r.In);
+            float kbF = mall.KerbMargin(r.At(0.5f * (s0 + s1), 0f), r.Dir), kbB = mall.KerbMargin(r.At(0.5f * (s0 + s1), reach), r.Dir);
             // Fit: rails need a row on each side; shrink the rows until at least two rails and one block fit.
             float d = inner * Mall.Cell, o = outer * Mall.Cell;
             float sl = 0f, sr = 0f, tf = 0f, tb = 0f;
             for (int guard = 0; guard < 12; guard++)
             {
                 d = inner * Mall.Cell; o = outer * Mall.Cell;
-                sl = s0 + (left ? o : 0f) + d + hr;
-                sr = s1 - (right ? o : 0f) - d - hr;
-                tf = o + d + hp;
-                tb = reach - (back ? o : 0f) - d - hr;
+                sl = s0 + (left ? (outer == 0 ? kbL : o) : 0f) + d + hr;
+                sr = s1 - (right ? (outer == 0 ? kbR : o) : 0f) - d - hr;
+                tf = (outer == 0 ? kbF : o) + d + hp;
+                tb = reach - (back ? (outer == 0 ? kbB : o) : 0f) - d - hr;
                 if (sr - sl >= 2f * d + 2f * hr && tb - tf >= 2f * d + 2f * hp) break;
                 // Rows back to back stay two cells deep (a one-cell row would hand the row behind it its second zone row).
                 if (outer > 2) outer--; else if (inner > 2) inner--; else if (outer > 0) outer = 0; else break;
             }
             if (sr - sl < 2f * d + 2f * hr || tb - tf < d + hp)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                 mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, math.max(1, inner));
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;
@@ -98,7 +108,7 @@ namespace Placemaker.Core.Layers.Commercial
             {
                 for (int k = 0; k < xs.Count; k++)
                     rails[k] = mall.Connect(Mall.End.Street(r.At(xs[k], 0f), -r.In), null, Mall.End.Street(r.At(xs[k], mall.ReachAt(r, xs[k])), r.In), railRole, railAsset, hr);
-                tb = reach - o - d - hp;
+                tb = reach - (outer == 0 ? kbB : o) - d - hp;
             }
             else
             {
@@ -107,6 +117,7 @@ namespace Placemaker.Core.Layers.Commercial
                 u = mall.Connect(Mall.End.Street(r.At(sl, 0f), -r.In), new[] { r.At(sl, tb), r.At(sr, tb) }, Mall.End.Street(r.At(sr, 0f), -r.In), railRole, railAsset, hr);
                 if (u == null)
                 {
+                    if (mall.Extra) return;   // (shops) another frontage: nothing left behind
                     mall.ShopRow(r, s0 + 2f, s1 - 2f, 0f, math.max(1, inner));
                     ctx.Issue(IssueSeverity.Info, FallbackKey);
                     return;

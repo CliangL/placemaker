@@ -68,6 +68,8 @@ namespace Placemaker.Core.Layers.Commercial
             var lane = mall.AddLane(r.At(l, 0f), -r.In, new[] { r.At(l, depth + h), r.At(rr, depth + h) }, r.At(rr, 0f), -r.In, NetRole.Alley, laneAsset, h);
             if (lane == null)
             {
+                if (mall.Extra) return;   // (shops) another frontage: nothing left behind
+
                 mall.ShopRow(r, from, to, 0f, cells);
                 ctx.Issue(IssueSeverity.Info, FallbackKey);
                 return;

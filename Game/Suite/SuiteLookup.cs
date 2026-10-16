@@ -36,7 +36,7 @@ namespace Placemaker.Game.Suite
 
         private Entity PrefabOf(Entity e) => _em.HasComponent<PrefabRef>(e) ? _em.GetComponentData<PrefabRef>(e).m_Prefab : Entity.Null;
 
-        private int GroupOf(Entity e)
+        public int GroupOf(Entity e)
         {
             try
             {
