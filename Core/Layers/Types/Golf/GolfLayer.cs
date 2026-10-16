@@ -117,7 +117,7 @@ namespace Placemaker.Core.Layers.Types.Golf
                 ("treeDensity", 0.0), ("bushDensity", 90.0), ("fairwayWidth", 40.0), ("routing", "outAndBack"), ("roughLayer", 2.0), ("cartPaths", false));
             Preset("pitchPutt", ("subtype", "pitchPutt"), ("holes", 9.0), ("holeLength", 65.0), ("doglegs", 0.0), ("bunkers", 2.0), ("water", 1.0),
                 ("fairwayWidth", 14.0), ("greenSize", 16.0), ("teeBoxes", 1.0), ("cartPaths", false), ("treeDensity", 50.0));
-            Preset("miniGolf", ("subtype", "miniGolf"), ("holes", 18.0), ("miniTheme", "adventure"), ("treeDensity", 30.0), ("bushDensity", 80.0),
+            Preset("miniGolf", ("subtype", "miniGolf"), ("holes", 18.0), ("miniTheme", "adventure"), ("treeDensity", 12.0), ("bushDensity", 80.0),
                 ("lamps", true), ("roughPaint", false));
             Preset("drivingRange", ("subtype", "drivingRange"), ("bays", 16.0), ("targets", 5.0), ("lamps", true), ("treeDensity", 20.0), ("bunkers", 1.0));
             Preset("discGolf", ("subtype", "discGolf"), ("holes", 9.0), ("holeLength", 85.0), ("doglegs", 30.0), ("bunkers", 0.0), ("water", 0.0),

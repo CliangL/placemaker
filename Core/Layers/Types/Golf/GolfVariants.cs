@@ -75,11 +75,21 @@ namespace Placemaker.Core.Layers.Types.Golf
             // Lanes: long ones first, then shorter ones, then across the axis for narrow sites.
             int wanted = ctx.I("holes");
             var lanes = new List<OrientedRect>();
+            // (rf-sports) Lanes grow with the site (up to 1.6x): 18 lanes of 13 x 3.6 m were a thin strip down the middle of a
+            // city block, the rest a random wood.
+            float grow = math.clamp(math.sqrt(region.Area / (math.max(1, wanted) * 260f)), 1f, 1.6f);
+            float laneW = 3.6f * math.min(grow, 1.3f);
             foreach (var (len, alongMajor) in new[] { (13f, true), (10f, true), (10f, false), (7.5f, true) })
             {
                 if (lanes.Count >= wanted) break;
-                lanes.AddRange(PackNear(region, occ, centre, alongMajor ? axis : side, len, 3.6f, 2.4f, 2.6f, wanted - lanes.Count, 1.2f, spine));
+                lanes.AddRange(PackNear(region, occ, centre, alongMajor ? axis : side, len * grow, laneW, 2.4f * grow, 2.6f, wanted - lanes.Count, 1.2f, spine));
             }
+            if (lanes.Count < wanted && grow > 1f)
+                foreach (var (len, alongMajor) in new[] { (10f, true), (10f, false), (7.5f, true) })
+                {
+                    if (lanes.Count >= wanted) break;
+                    lanes.AddRange(PackNear(region, occ, centre, alongMajor ? axis : side, len, 3.6f, 2.4f, 2.6f, wanted - lanes.Count, 1.2f, spine));
+                }
             // Number them in walking order: along the promenade from the entrance end.
             var start = spine.Count > 0 ? (math.distance(spine[0].a, home) < math.distance(spine[0].b, home) ? spine[0].a : spine[0].b) : home;
             lanes.Sort((x, y) => math.distance(x.Center, start).CompareTo(math.distance(y.Center, start)));
@@ -330,6 +340,8 @@ namespace Placemaker.Core.Layers.Types.Golf
                     if (!ok) continue;
                     uint v = Hashing.Mix(ctx.Seed, 0x7A70u + (uint)k);
                     var ring = LeisureKit.Blob(c, r, v, 16, 0.18f);
+                    // (rf-sports) A sand collar round each target: a green on the range's own grass did not show at all.
+                    ctx.Surface(LeisureKit.Blob(c, r + 1.4f, v, 16, 0.18f), SurfaceRole.Decorative, sand, AssetCategories.SurfaceSand);
                     ctx.Surface(ring, SurfaceRole.Grass, green, AssetCategories.SurfaceGrass);
                     occ.Take(c, r + 1f, GolfRouting.GreenKind);
                     if (flagCat != null) ctx.Object(c, 0f, ObjectRole.Furniture, flagAsset, v, -1, flagCat);
