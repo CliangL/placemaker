@@ -1,6 +1,6 @@
 {
   "generatedBy": "the in-game suite from GeneratorRegistry",
-  "assembly": "0.1.0+72bc9c8",
+  "assembly": "0.1.0+ec8919a",
   "categories": [
     {
       "id": "roads",
@@ -461,7 +461,7 @@
             "officeHigh",
             "industrial"
           ],
-          "default": "commercialLow"
+          "default": "commercialHigh"
         },
         {
           "id": "plotDepth",
@@ -470,7 +470,7 @@
           "max": 48.0,
           "step": 8.0,
           "unit": "m",
-          "default": 32.0
+          "default": 40.0
         },
         {
           "id": "streetShops",
@@ -1293,8 +1293,7 @@
             "formal",
             "natural",
             "modern",
-            "pocket",
-            "garden"
+            "pocket"
           ],
           "default": "urban"
         },
@@ -2468,16 +2467,6 @@
           "default": true
         },
         {
-          "id": "parkingBlocks",
-          "kind": "Choice",
-          "options": [
-            "none",
-            "some",
-            "many"
-          ],
-          "default": "none"
-        },
-        {
           "id": "outerRow",
           "kind": "Toggle",
           "default": true
@@ -2540,40 +2529,6 @@
           "id": "streetShops",
           "kind": "Toggle",
           "default": false
-        },
-        {
-          "id": "stallAngle",
-          "kind": "Choice",
-          "options": [
-            "90",
-            "60",
-            "45"
-          ],
-          "default": "90"
-        },
-        {
-          "id": "lotGreen",
-          "kind": "Choice",
-          "options": [
-            "none",
-            "edges",
-            "medians"
-          ],
-          "default": "medians"
-        },
-        {
-          "id": "evShare",
-          "kind": "Slider",
-          "min": 0.0,
-          "max": 30.0,
-          "step": 1.0,
-          "unit": "%",
-          "default": 4.0
-        },
-        {
-          "id": "lamps",
-          "kind": "Toggle",
-          "default": true
         },
         {
           "id": "extraGreen",
@@ -5606,11 +5561,6 @@
           "id": "treeRing",
           "kind": "Toggle",
           "default": true
-        },
-        {
-          "id": "fill",
-          "kind": "Toggle",
-          "default": false
         },
         {
           "id": "centerKind",
