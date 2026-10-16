@@ -1,0 +1,18 @@
+{
+  "_about": "One 45-degree picture of one type and preset. Change layer and preset. See README: Default use.",
+  "grow": false,
+  "scenarios": [
+    {
+      "id": "look-one",
+      "site": "flat",
+      "pace": "settled",
+      "steps": [
+        { "do": "area", "tool": "bucket" },
+        { "do": "type", "layer": "stripMall", "preset": "classic" },
+        { "do": "entrances" },
+        { "do": "build" },
+        { "do": "camera", "target": "build", "view": "oblique", "pitch": 45, "shot": "final", "shotMode": "render" }
+      ]
+    }
+  ]
+}

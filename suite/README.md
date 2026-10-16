@@ -1,13 +1,69 @@
-# Placemaker in-game suite
+# Placemaker game runner
+
+## Read this first: what this tool is for
+
+This tool runs the real game for you, so you can close the loop yourself: change Placemaker, run the game, and see
+what actually happened. It is not mainly a test framework.
+
+* **The main purpose is the logs.** A run launches Cities: Skylines II with Placemaker and does what you ask, the way
+  a person would: it selects a test block, picks a type and preset, adds entrances, builds. It then saves everything
+  the game wrote into the run folder. Read these yourself; that is the point:
+  * `logs/Placemaker.log`: everything Placemaker did, including plans, the build audit, left-out pieces, zoning and
+    errors.
+  * `logs/Player.log`: the game's own errors and exceptions.
+  * `suite.log`: what the runner did, with timings.
+  * `scenarios/NN-<id>.json`: what was measured in the world.
+* **Screenshots come second.** Use them for an artistic look at the result, or to catch what the logs don't say: things
+  built but never drawn, a fence across an entrance, a pit, shops facing the wrong street.
+* **The PASS / FAIL / UNKNOWN checks are helpers, not the goal.** They point at likely problems. You still read the
+  logs and look at the picture. UNKNOWN means "not measured", never "fine".
+
+## Default use: one 45° picture per build, many builds per launch
+
+The most useful picture is the finished build seen from 45° (camera south of the build, noon sun behind it). Queue as
+many builds as you like into one launch. Each gets its own block and one final 45° shot.
+
+* **Every preset of one type:** `suite/scenarios/look.json`. Change `"layer"` to the type you want, or replace it with
+  `"group"` for a whole Make-row category.
+* **One specific type and preset:** `suite/scenarios/look-one.json`. Change `layer` and `preset`.
+* Type, preset (style) and option ids for this build are listed in `suite/catalog.json`, written by every run.
+
+```
+powershell -File tools/suite/Run-Suite.ps1 -Set look        # launch, build them all, one 45° shot each, quit
+powershell -File tools/suite/Run-Suite.ps1 -Set look-one
+```
+
+Or keep the game open and feed it builds one file at a time. This needs no relaunch for a new list; a code change
+always needs one:
+
+```
+powershell -File tools/suite/Run-Suite.ps1 -Set queue -Queue
+powershell -File tools/suite/Send-Suite.ps1 -File my-builds.json
+powershell -File tools/suite/Send-Suite.ps1 -Quit
+```
+
+Timings and limits:
+* About 60 s from launch to a ready test world, then about 5–12 s per build.
+* The default grid holds about 75 flat blocks. For more, split by `group`, run several launches, or pass a bigger
+  `-Grid`.
+* Water and slope types look odd on flat blocks; use `"site": "slope"` where that matters.
+* Commercial types show empty shop plots unless you add `{"do":"grow","seconds":40}` before the camera step. That
+  grows the whole city.
+
+If a run is cut off, its logs are not copied into the run folder. Read them in
+`%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\` before the next launch overwrites them. Then
+run `Run-Suite.ps1 -RestoreOnly` so the user's game settings are put back.
+
+`look.json` and `look-one.json` were added on 2026-10-15 and have not run yet. If the game refuses one, fix the file
+and not the tool. The rest of this README is the full reference.
+
+# Full reference
 
 One game launch: a new game on the vanilla map Plains, the fixture area reshaped in place (water removed, trees and
 nets bulldozed, flat / slope / rough ground easing into the map), a grid of vanilla roads, low-rise housing grown on
 the zoned row, two plopped parks that must survive, then many scenarios, each on its own block. Every action is done
 the way a person does it, every result is judged right away, every picture is taken only once the scene is provably
-still, and a contact sheet shows all of it in order.
-
-The tool exists so an architect can check a Placemaker change in the real game without the user. Read
-"What PASS means" before trusting a result.
+still, and a contact sheet shows all of it in order. Read "What PASS means" before trusting a check.
 
 ## The loop
 

@@ -1,0 +1,19 @@
+{
+  "_about": "One 45-degree picture of every preset of one type. Change layer (or use \"group\" for a whole Make-row category). See README: Default use.",
+  "grow": false,
+  "scenarios": [
+    {
+      "expand": "presets",
+      "layer": "parking",
+      "site": "flat",
+      "pace": "settled",
+      "steps": [
+        { "do": "area", "tool": "bucket" },
+        { "do": "type" },
+        { "do": "entrances" },
+        { "do": "build" },
+        { "do": "camera", "target": "build", "view": "oblique", "pitch": 45, "shot": "final", "shotMode": "render" }
+      ]
+    }
+  ]
+}
