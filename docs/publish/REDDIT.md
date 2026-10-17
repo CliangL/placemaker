@@ -1,21 +1,20 @@
 # Reddit post (draft)
 
-For r/CitiesSkylines, flair "Modding". Post once the mod is Public (the Paradox link shows "not found" until then).
-Uploading the video straight to Reddit does better than the YouTube link.
+For r/CitiesSkylines, flair "Modding", with the showcase video uploaded in the post. Post once the mod is Public (the
+Paradox link shows "not found" until then).
 
 ---
 
 ## Title
 
-made a mod where you pick an area and it just builds the thing (roads, parks, parking lots, beaches...)
+I made a mod that builds a whole area for you: roads, parks, parking lots, beaches and more
 
 ## Body
 
-hey! been working on **Placemaker** for a while 👋
+I've been working on a mod called Placemaker. You select an area, pick what you want there, and it builds it: street
+layouts, parking lots, parks, beaches, farms, shops and more. You see a preview on the map first, and every style has
+settings you can change and save as your own. There are 25 types and over 100 styles to start from.
 
-select an area, pick what you want there, preview it, build it. streets, parking lots, parks, beaches, farms, shops... 25 types, 100+ styles, and you can tweak pretty much everything
+Paradox Mods: https://mods.paradoxplaza.com/mods/163638/Windows
 
-video: https://www.youtube.com/watch?v=ghIR5UhFwj4
-mod: https://mods.paradoxplaza.com/mods/163638/Windows
-
-still early (shops need some love), so if something builds weird send me a screenshot 🙏 big thanks to ParkingLotTool, ParkManager and Grid Road Generator for the ideas
+Thanks to ParkingLotTool, ParkManager and Grid Road Generator for the inspiration. Would love to hear what you think.
