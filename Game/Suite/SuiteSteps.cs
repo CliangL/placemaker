@@ -171,6 +171,7 @@ namespace Placemaker.Game.Suite
                     var cam = step["camera"] as JObject ?? DefaultShotCamera(what);
                     var sstep = ShotOptions(step);
                     sstep["camera"] = cam;
+                    if (what == "hover") sstep["keepCursor"] = true;
                     var srec = new JObject();
                     yield return Guard(StepShot(st, sstep, srec, shot), e => srec["error"] = "suite error: " + e.Message);
                     rec["shotRecord"] = srec;
