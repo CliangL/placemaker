@@ -197,3 +197,13 @@ S, driveway E, footpaths W and N), grow 20-30 s, plan / 45 / zoning / close pict
   gate whose way straight in is blocked bends to the free lane point cutting the fewest rows (the big box's way out on
   the east failed); rings too small for deep rows retry with two-cell rows; corner courts (a small car park turned to
   each soft corner, entered from the chamfer); the big box pond from an 80 m front.
+- **it3** `shops3-it3` (56 builds, the big market too): every build built, every entrance step placed, 7383 of 7389
+  planned cells zoned, no grown shop faces a city street, plot trees: of 17600 trees 1719 hidden by grown shops and none
+  standing within 7 m of one. The suite now logs every plan's facts. Seen: strip mall, district and market on big, long,
+  L and round sites read as designed places (the district big a lane grid with corner courts; the market quarter with
+  its rondel, islands and car park); the normal block still weak: the mall park's ring failed there and fell back to
+  the older layout (no parking), the district had 6 plots. Fixed for it4: soft ring corners (district 7 m, mall park
+  8 m) so a side holds a row either side of an entrance's way; deep and two-cell rows both planned and the plan with more
+  shop ground kept (Downtown on a block: 1 plot -> 11); the small district's middle a square; two pads on a 90 m strip
+  mall front; gate courts in the mall park; lots that would warn (a way in reaching no aisle or no lane, stalls no car
+  reaches) are planned again without that way or planted.
