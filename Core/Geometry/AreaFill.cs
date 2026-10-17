@@ -55,6 +55,16 @@ namespace Placemaker.Core.Geometry
     /// <summary>The walls touching a box, appended to <paramref name="into"/> (the game layer caches them).</summary>
     public delegate void WallQuery(float2 min, float2 max, List<BrushObstacle> into);
 
+    /// <summary>
+    /// Thrown by a WallQuery that cannot answer for this box off the main thread (the game reads the walls there): the fill
+    /// stops and the caller reads the walls of [Min, Max] and runs it again.
+    /// </summary>
+    public sealed class FillNeedsWalls : Exception
+    {
+        public readonly float2 Min, Max;
+        public FillNeedsWalls(float2 min, float2 max) : base("walls needed") { Min = min; Max = max; }
+    }
+
     public sealed class FillResult
     {
         public FillStatus Status = FillStatus.Failed;
@@ -79,6 +89,8 @@ namespace Placemaker.Core.Geometry
         public FillWindow Window_;
         /// <summary>The region's cells on that grid.</summary>
         public bool[] Cells;
+        /// <summary>What went wrong (Failed).</summary>
+        public string Error;
 
         public override string ToString() =>
             $"{Status} area {(Ring != null ? Poly.Area(Ring) : 0f):F0} m2, cell {Cell:F2} m, window {Window:F0} m x{Attempts}, gap {GapUsed:F1} m, "
@@ -157,9 +169,11 @@ namespace Placemaker.Core.Geometry
                 r.Status = FillStatus.Failed;
                 return r;
             }
-            catch (Exception)
+            catch (FillNeedsWalls) { throw; }
+            catch (Exception e)
             {
                 r.Status = FillStatus.Failed;
+                r.Error = e.GetType().Name + ": " + e.Message;
                 return r;
             }
             finally { r.Ms = sw.Elapsed.TotalMilliseconds; }

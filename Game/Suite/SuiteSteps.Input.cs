@@ -288,7 +288,8 @@ namespace Placemaker.Game.Suite
                 case "nodes":
                 case "perimeter":
                 {
-                    yield return UiSetAreaMode(rec, SelectionMode.Perimeter);
+                    // Area overhaul: Road nodes is part of Points — the same clicks on the junctions, the corners snap to the nodes.
+                    yield return UiSetAreaMode(rec, SelectionMode.Draw);
                     var targets = new List<float2>();
                     if (step["nodes"] is JArray list) foreach (var p in list) targets.Add(Pt(p, b, abs));
                     else { targets.Add(new float2(b.X0, b.Z0)); targets.Add(new float2(b.X1, b.Z0)); targets.Add(new float2(b.X1, b.Z1)); targets.Add(new float2(b.X0, b.Z1)); }

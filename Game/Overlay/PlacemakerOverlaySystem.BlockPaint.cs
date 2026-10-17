@@ -58,9 +58,12 @@ namespace Placemaker.Game.Overlay
             bool selecting = _tool.BrushLive;
             if (cur != null)
             {
-                // Open-land fallback: no block line; the shading shows the roads/obstacles near the brush.
-                if (cur.Block != null) Ring(buffer, cur.Block, OutlineDim, w * 0.8f, dashed: true);
-                if (selecting && cur.Obstacles.Count > 0)
+                // Open box: no fence line; the shading shows the stops near the brush.
+                if (cur.Block != null && _tool.LayerVisible(AreaLegend.Fence)) Ring(buffer, cur.Block, OutlineDim, w * 0.8f, dashed: true);
+                if (selecting && _tool.LayerVisible(AreaLegend.Doors))
+                    foreach (var d in cur.Doors)
+                        for (int i = 0; i + 1 < d.Length; i++) buffer.DrawDashedLine(DoorColor, new Line3.Segment(d[i], d[i + 1]), w * 1.4f, w * 3f, w * 2f);
+                if (selecting && cur.Obstacles.Count > 0 && _tool.LayerVisible(AreaLegend.Stops))
                 {
                     var shown = cur.Open ? NearBrush(cur) : cur.Obstacles;
                     if (!ReferenceEquals(_bpSigFor, cur) || !ReferenceEquals(_bpShown, shown))
@@ -74,8 +77,11 @@ namespace Placemaker.Game.Overlay
             }
 
             var hover = _tool.HoverFace;
-            if (hover?.Area != null && !_tool.Painting && _tool.BrushLive)
+            if (hover?.Area != null && !_tool.Painting && _tool.BrushLive && _tool.LayerVisible(AreaLegend.Fence))
+            {
                 Ring(buffer, hover.Area.Ring, HoverBlock, w * 0.7f, dashed: true);
+                DrawFillExtras(buffer, w, hover);
+            }
 
             var mask = _tool.BlockPaintMask;
             if (mask.Version != _bpVersion)
@@ -94,7 +100,7 @@ namespace Placemaker.Game.Overlay
                     buffer.DrawLine(Outline, new Line3.Segment(new float3(a.x, y, a.y), new float3(b.x, y, b.y)), w * 0.7f);
                 }
             }
-            else Ring(buffer, shape.Ring, Outline, w);
+            else if (_tool.LayerVisible(AreaLegend.Painted)) Ring(buffer, shape.Ring, Outline, w);
 
             var c = _tool.Erasing ? Erase : Brush;
             if (_tool.BrushLive) DrawBrushCursor(buffer, w, _tool.Painting ? c : new Color(c.r, c.g, c.b, 0.2f));
