@@ -118,10 +118,12 @@ namespace Placemaker.Game.Tool
                         // Only a stroke that changed cells is an input change; the outline is rebuilt on mouse-up.
                         if (_bpMask.Version != v) ShapeChanged(throttled: true);
                     }
+                    PumpPaintPreview(BlockPaintCurrent);
                     return;
                 }
                 var g = _gesture;
                 _gesture = Gesture.None;
+                _bpPreview = null;
                 Mod.Log.Info($"Placemaker: Paint area stroke ended after {_bpStrokeFrames} frames, {_bpMask.PaintedCellCount} cells painted");
                 ShapeChanged();
                 Commit(g == Gesture.Erase ? "Placemaker.Undo.Erase" : "Placemaker.Undo.Paint");
@@ -212,6 +214,47 @@ namespace Placemaker.Game.Tool
 
         private List<float2[]> _bpDoors;
         private int _bpStrokeFrames;
+
+        // ───────────── live outline while painting ─────────────
+        // The user: "when I'm drawing the blocks, they don't always fully represent the final paint". While a stroke runs
+        // the outline it would give (smoothing, curb snap, exact cut) is worked out again in the background every few
+        // frames from a copy of the painted cells, and the overlay draws it over the cells.
+
+        private System.Threading.Tasks.Task<float2[]> _bpPreviewJob;
+        private int _bpPreviewJobVersion = -1;
+        private float _bpPreviewAt;
+        private float2[] _bpPreview;
+
+        /// <summary>The outline the current stroke would give (XZ), or null (none yet, or not painting).</summary>
+        public float2[] BlockPaintPreview => Painting && _mode == SelectionMode.BlockPaint ? _bpPreview : null;
+
+        private void PumpPaintPreview(BlockPaintContext ctx)
+        {
+            if (_bpPreviewJob != null)
+            {
+                if (!_bpPreviewJob.IsCompleted) return;
+                if (_bpPreviewJob.Status == System.Threading.Tasks.TaskStatus.RanToCompletion) _bpPreview = _bpPreviewJob.Result;
+                _bpPreviewJob = null;
+            }
+            if (ctx?.Brush == null || _bpMask.IsEmpty || _bpMask.Version == _bpPreviewJobVersion) return;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (now - _bpPreviewAt < 0.1f) return;
+            _bpPreviewAt = now;
+            _bpPreviewJobVersion = _bpMask.Version;
+            var snap = _bpMask.Save();
+            var brush = ctx.Brush;
+            float cell = _bpMask.CellSize;
+            _bpPreviewJob = System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var m = new BrushMask(cell);
+                    m.Restore(snap);
+                    lock (brush) return brush.Outline(m)?.Ring;
+                }
+                catch (Exception) { return null; }
+            });
+        }
 
         /// <summary>
         /// Fence + stops for the current target; rebuilt when the target, the rules or the edited group changed (or when
@@ -337,7 +380,8 @@ namespace Placemaker.Game.Tool
             var ctx = EnsureBlockPaintContext(false);
             if (ctx == null) return null;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var o = ctx.Brush.Outline(_bpMask);
+            BlockBrushOutline o;
+            lock (ctx.Brush) o = ctx.Brush.Outline(_bpMask);
             if (sw.Elapsed.TotalMilliseconds > 30) Mod.Log.Info("Placemaker: Paint area outline in " + sw.Elapsed.TotalMilliseconds.ToString("0.0") + " ms");
             if (o?.Ring == null) return null;
             var shape = new AreaShape { Ring = Poly.To3D(o.Ring, p => _site.SampleHeight(p)), Source = AreaSource.Painted };

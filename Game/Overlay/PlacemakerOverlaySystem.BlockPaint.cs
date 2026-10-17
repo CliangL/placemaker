@@ -89,16 +89,25 @@ namespace Placemaker.Game.Overlay
                 _bpVersion = mask.Version;
                 _bpBoundary = mask.RawBoundary();
             }
-            // Raw cells while painting; the smoothed, curb-snapped outline once the shape exists.
+            // While painting: the outline the stroke would give (worked out in the background) over the painted cells, dim;
+            // the cells alone until the first outline is in. Once the shape exists: its outline.
             if (_tool.Painting || shape == null)
             {
+                var preview = _tool.BlockPaintPreview;
                 int max = math.min(_bpBoundary.Count, 20000);
                 float y = _tool.Cursor.y;
+                var cellColor = preview != null ? OutlineDim : Outline;
                 for (int i = 0; i < max; i++)
                 {
                     var (a, b) = _bpBoundary[i];
-                    buffer.DrawLine(Outline, new Line3.Segment(new float3(a.x, y, a.y), new float3(b.x, y, b.y)), w * 0.7f);
+                    buffer.DrawLine(cellColor, new Line3.Segment(new float3(a.x, y, a.y), new float3(b.x, y, b.y)), w * (preview != null ? 0.45f : 0.7f));
                 }
+                if (preview != null && _tool.LayerVisible(AreaLegend.Painted))
+                    for (int i = 0; i < preview.Length; i++)
+                    {
+                        float2 a = preview[i], b = preview[(i + 1) % preview.Length];
+                        buffer.DrawLine(Outline, new Line3.Segment(new float3(a.x, y, a.y), new float3(b.x, y, b.y)), w);
+                    }
             }
             else if (_tool.LayerVisible(AreaLegend.Painted)) Ring(buffer, shape.Ring, Outline, w);
 

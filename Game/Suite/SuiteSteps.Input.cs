@@ -116,7 +116,7 @@ namespace Placemaker.Game.Suite
         /// raycasts at its screen point, glides the cursor there and clicks. rec gets the press (screen point, hit,
         /// how far the hit is from the scripted point, pans). Returns the hit through done (null = refused, with rec error).
         /// </summary>
-        private IEnumerator Press(ScenarioState st, JObject rec, float3 target, bool right, Action<RaycastHit?> done, bool releaseOnly = false, TypeMask? mask = null)
+        private IEnumerator Press(ScenarioState st, JObject rec, float3 target, bool right, Action<RaycastHit?> done, bool releaseOnly = false, TypeMask? mask = null, bool shift = false)
         {
             var presses = rec["presses"] as JArray ?? (JArray)(rec["presses"] = new JArray());
             var pr = new JObject { ["target"] = new JArray(Math.Round(target.x, 1), Math.Round(target.z, 1)) };
@@ -163,7 +163,7 @@ namespace Placemaker.Game.Suite
             var from = PlacemakerToolSystem.SuiteCursor ?? (h.m_HitPosition + new float3(40f, 0f, 0f));
             int glide = st.Pace == "human" ? 8 : st.Pace == "user" ? 3 : 4;
             PlacemakerToolSystem.SuiteHover(from, h.m_HitPosition, glide);
-            PlacemakerToolSystem.SuiteClickHit(owner, h, right);
+            PlacemakerToolSystem.SuiteClickHit(owner, h, right, shift);
             yield return Feed(rec);
             float pause = StepPause(st);
             if (pause > 0f) yield return Seconds(pause);
@@ -228,6 +228,14 @@ namespace Placemaker.Game.Suite
                     RaycastHit? hit = null;
                     yield return Press(st, rec, P3(Pt(step["at"], b, abs)), false, h => hit = h);
                     if (!hit.HasValue) { st.Result["status"] = "no-outline"; yield break; }
+                    // (area overhaul) Shift+clicks add more fills: "shift": [[dx, dz], ...]
+                    if (step["shift"] is JArray more)
+                        foreach (var p in more)
+                        {
+                            RaycastHit? h2 = null;
+                            yield return Press(st, rec, P3(Pt(p, b, abs)), false, h => h2 = h, shift: true);
+                            if (!h2.HasValue) { st.Result["status"] = "no-outline"; yield break; }
+                        }
                     break;
                 }
                 case "points":
