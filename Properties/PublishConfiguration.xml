@@ -7,6 +7,8 @@
 	<LongDescription>
 Placemaker fills an area for you. Select some land, choose what you want there, check the preview and build it.
 
+[Watch the showcase video on YouTube](https://www.youtube.com/watch?v=ghIR5UhFwj4) (3 minutes).
+
 It only uses the game's own assets, so no asset packs are needed.
 
 **How to use**
@@ -59,6 +61,7 @@ Inspired by ParkingLotTool (KruemelGames), ParkManager (tomkpunkt) and Grid Road
 	<ModVersion Value="0.1.0" />
 	<GameVersion Value="1.6.*" />
 	<ChangeLog Value="First public version." />
+	<ExternalLink Type="youtube" Url="https://www.youtube.com/watch?v=ghIR5UhFwj4" />
 	<!--Add once the source is public: <ExternalLink Type="github" Url="https://github.com/..." />-->
 	<!--Public, Unlisted or Private, exactly as written (a typo falls back to Public). Private for the first test upload-->
 	<AccessLevel Value="Private" />

@@ -17,6 +17,8 @@ preview first, then build it in one go.
 
 Placemaker fills an area for you. Select some land, choose what you want there, check the preview and build it.
 
+[Watch the showcase video on YouTube](https://www.youtube.com/watch?v=ghIR5UhFwj4) (3 minutes).
+
 It only uses the game's own assets, so no asset packs are needed.
 
 **How to use**
