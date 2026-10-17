@@ -196,6 +196,7 @@ namespace Placemaker.Game.Tool
             EnableActions(true);
             if (_anarchy) ApplyAnarchy(true);
             _wasRunning = true;
+            InvalidateFills();   // the city changed while the tool was closed
             Touch();
         }
 

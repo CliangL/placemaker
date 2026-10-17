@@ -128,12 +128,18 @@ namespace Placemaker.Game.Selection
             return _walls.Water(seed - h, seed + h, 2f, rules);
         }
 
+        /// <summary>Grids older than this (s) are drawn again: buildings grow, zoning changes.</summary>
+        private const float CacheAge = 10f;
+        private float _cacheAt = -100f;
+
         private void EnsureCacheKey(BrushRules rules, int group)
         {
             string key = rules.GetHashCode() + "/" + group;
-            if (key == _cacheKey) return;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (key == _cacheKey && now - _cacheAt < CacheAge && now >= _cacheAt) return;
             lock (_lock) { for (int i = 0; i < _cache.Length; i++) _cache[i] = null; }
             _cacheKey = key;
+            _cacheAt = now;
         }
 
         private void StartPending()
