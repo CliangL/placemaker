@@ -24,7 +24,7 @@ It only uses the game's own assets, so no asset packs are needed.
 - Parking: lots of any shape, with trees, lamps and fences
 - Parks: parks, gardens, memorial parks, playgrounds, amphitheatres
 - Beach: sand painted from the water's edge, quays and boardwalks
-- Shops &amp; squares: strip malls, mall districts, market squares, transit plazas
+- Shops &amp; squares: strip malls, mall parks, mall districts, market squares
 - Nature: wetlands, reserves, lookout hills, hiking trails, campgrounds
 - Farms and Sports: farmsteads, animal parks, sports parks, golf, a skate spot
 
@@ -46,15 +46,22 @@ Inspired by ParkingLotTool (KruemelGames), ParkManager (tomkpunkt) and Grid Road
 	</LongDescription>
 	<!--A missing picture is silently replaced by a default one: add it before uploading-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
-	<!--Stills from the showcase video (v6)-->
-	<Screenshot Value="Properties/Screenshots/01-roads.jpg" />
-	<Screenshot Value="Properties/Screenshots/02-parking.jpg" />
-	<Screenshot Value="Properties/Screenshots/03-wetland.jpg" />
-	<Screenshot Value="Properties/Screenshots/04-beach.jpg" />
-	<Screenshot Value="Properties/Screenshots/05-sports-park.jpg" />
-	<Screenshot Value="Properties/Screenshots/06-amphitheatre.jpg" />
-	<Screenshot Value="Properties/Screenshots/07-strip-mall.jpg" />
-	<Screenshot Value="Properties/Screenshots/08-coast-farms.jpg" />
+	<!--Labelled stills from the showcase recordings; 02 is the game runner's street patterns-->
+	<Screenshot Value="Properties/Screenshots/01-streets.jpg" />
+	<Screenshot Value="Properties/Screenshots/02-street-patterns.jpg" />
+	<Screenshot Value="Properties/Screenshots/03-parking-lot.jpg" />
+	<Screenshot Value="Properties/Screenshots/04-strip-mall.jpg" />
+	<Screenshot Value="Properties/Screenshots/05-mall-district.jpg" />
+	<Screenshot Value="Properties/Screenshots/06-park.jpg" />
+	<Screenshot Value="Properties/Screenshots/07-amphitheatre.jpg" />
+	<Screenshot Value="Properties/Screenshots/08-sports-park.jpg" />
+	<Screenshot Value="Properties/Screenshots/09-wetland.jpg" />
+	<Screenshot Value="Properties/Screenshots/10-lookout-hill.jpg" />
+	<Screenshot Value="Properties/Screenshots/11-beach.jpg" />
+	<Screenshot Value="Properties/Screenshots/12-waterfront.jpg" />
+	<Screenshot Value="Properties/Screenshots/13-farmstead.jpg" />
+	<Screenshot Value="Properties/Screenshots/14-animal-park.jpg" />
+	<Screenshot Value="Properties/Screenshots/15-coast.jpg" />
 	<!--"Code Mod" is added by the publisher itself-->
 	<Tag Value="Code Mod" />
 	<ForumLink Value="" />

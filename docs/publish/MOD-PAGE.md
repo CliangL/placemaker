@@ -34,7 +34,7 @@ It only uses the game's own assets, so no asset packs are needed.
 - Parking: lots of any shape, with trees, lamps and fences
 - Parks: parks, gardens, memorial parks, playgrounds, amphitheatres
 - Beach: sand painted from the water's edge, quays and boardwalks
-- Shops & squares: strip malls, mall districts, market squares, transit plazas
+- Shops & squares: strip malls, mall parks, mall districts, market squares
 - Nature: wetlands, reserves, lookout hills, hiking trails, campgrounds
 - Farms and Sports: farmsteads, animal parks, sports parks, golf, a skate spot
 
@@ -64,4 +64,4 @@ Andreas Pardeike (MIT). Licensed GPL-3.0.
 ## Pictures
 
 - Thumbnail: `Properties/Thumbnail.png`: four shots (roads, parking, wetland, beach), the logo and name on a plain band.
-- Screenshots: `Properties/Screenshots/` (8 stills from showcase v6).
+- Screenshots: `Properties/Screenshots/`: 15 labelled pictures, one per type, from the showcase recordings; 02 is a street-patterns sheet from the game runner.
