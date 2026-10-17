@@ -207,3 +207,10 @@ S, driveway E, footpaths W and N), grow 20-30 s, plan / 45 / zoning / close pict
   shop ground kept (Downtown on a block: 1 plot -> 11); the small district's middle a square; two pads on a 90 m strip
   mall front; gate courts in the mall park; lots that would warn (a way in reaching no aisle or no lane, stalls no car
   reaches) are planned again without that way or planted.
+- **it4** `shops3-it4` (40 builds: the eight styles on the block, big, L, circle and the circle inside a block): every
+  build built, every entrance step placed, 5578 of 5587 cells zoned, plot trees 1471 of 12746 hidden by grown shops and
+  none standing within 7 m of one. The normal block now builds every ring: the district 9 plots round its square with
+  three corner courts (was 6, lawn corners), the mall park's ring holds (it fell back to the older layout with no
+  parking) with corner lots, gate courts on the round mall park. Left: 1 shop of the big box inside a block grew facing
+  the city street; the big box's way out on the L found no lane (the panel warns); small blocks still carry lawn where a
+  side's row is cut short by an entrance's way.
