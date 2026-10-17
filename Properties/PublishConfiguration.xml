@@ -67,6 +67,6 @@ Based on similar concepts to ParkingLotTool (KruemelGames), ParkManager (tomkpun
 	<ChangeLog Value="Area tools: the paint bucket follows roads and buildings more exactly and previews as you hover, painting shows a live outline, slow drags now paint, and fills pick up new buildings and zoning." />
 	<ExternalLink Type="youtube" Url="https://www.youtube.com/watch?v=ghIR5UhFwj4" />
 	<!--Add once the source is public: <ExternalLink Type="github" Url="https://github.com/..." />-->
-	<!--Public, Unlisted or Private, exactly as written (a typo falls back to Public). Private for the first test upload-->
-	<AccessLevel Value="Private" />
+	<!--Public, Unlisted or Private, exactly as written (a typo falls back to Public). Made Public by the user on the website, 2026-10-17-->
+	<AccessLevel Value="Public" />
 </Publish>
