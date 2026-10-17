@@ -48,17 +48,17 @@ Inspired by ParkingLotTool (KruemelGames), ParkManager (tomkpunkt) and Grid Road
 	</LongDescription>
 	<!--A missing picture is silently replaced by a default one: add it before uploading-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
-	<!--At most 10 (Paradox Mods refuses more). Labelled stills from the showcase recordings, related types paired; 02 is the game runner's street patterns-->
+	<!--At most 10 (Paradox Mods refuses more): roads first, then one picture per category, related types paired; settings pills from the panel or the preset-->
 	<Screenshot Value="Properties/Screenshots/01-streets.jpg" />
 	<Screenshot Value="Properties/Screenshots/02-street-patterns.jpg" />
-	<Screenshot Value="Properties/Screenshots/03-parking-lot.jpg" />
-	<Screenshot Value="Properties/Screenshots/04-shops.jpg" />
-	<Screenshot Value="Properties/Screenshots/05-parks.jpg" />
-	<Screenshot Value="Properties/Screenshots/06-sports-park.jpg" />
-	<Screenshot Value="Properties/Screenshots/07-nature.jpg" />
-	<Screenshot Value="Properties/Screenshots/08-beach.jpg" />
-	<Screenshot Value="Properties/Screenshots/09-farms.jpg" />
-	<Screenshot Value="Properties/Screenshots/10-coast.jpg" />
+	<Screenshot Value="Properties/Screenshots/03-preview.jpg" />
+	<Screenshot Value="Properties/Screenshots/04-parking-lot.jpg" />
+	<Screenshot Value="Properties/Screenshots/05-shops.jpg" />
+	<Screenshot Value="Properties/Screenshots/06-parks.jpg" />
+	<Screenshot Value="Properties/Screenshots/07-sports-park.jpg" />
+	<Screenshot Value="Properties/Screenshots/08-nature.jpg" />
+	<Screenshot Value="Properties/Screenshots/09-beach.jpg" />
+	<Screenshot Value="Properties/Screenshots/10-farms.jpg" />
 	<!--"Code Mod" is added by the publisher itself-->
 	<Tag Value="Code Mod" />
 	<ForumLink Value="" />
