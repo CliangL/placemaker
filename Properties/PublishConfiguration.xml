@@ -45,10 +45,10 @@ Inspired by ParkingLotTool (KruemelGames), ParkManager (tomkpunkt) and Grid Road
 	<!--A missing picture is silently replaced by a default one: add it before uploading-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
 	<!--Stills from the showcase video (v6)-->
-	<Screenshot Value="Properties/Screenshots/01-beach.jpg" />
+	<Screenshot Value="Properties/Screenshots/01-roads.jpg" />
 	<Screenshot Value="Properties/Screenshots/02-parking.jpg" />
 	<Screenshot Value="Properties/Screenshots/03-wetland.jpg" />
-	<Screenshot Value="Properties/Screenshots/04-roads.jpg" />
+	<Screenshot Value="Properties/Screenshots/04-beach.jpg" />
 	<Screenshot Value="Properties/Screenshots/05-sports-park.jpg" />
 	<Screenshot Value="Properties/Screenshots/06-amphitheatre.jpg" />
 	<Screenshot Value="Properties/Screenshots/07-strip-mall.jpg" />

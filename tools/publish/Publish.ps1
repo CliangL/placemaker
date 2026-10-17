@@ -65,6 +65,9 @@ Write-Host "page: $($p.DisplayName.Value) $($p.ModVersion.Value), $access, $($pi
 if ($StageOnly) { Write-Host 'stage only: nothing uploaded'; exit 0 }
 
 # --- the upload ---
+# The uploader and the game share one saved Paradox login (.pdxsdk): an upload while a game runs (the user's or the
+# game queue's) left the game holding an outdated session, and the login came back logged out (2026-10-17).
+if (Get-Process Cities2 -ErrorAction SilentlyContinue) { Write-Host 'STOP: a game is running (yours or the game queue''s); the uploader shares its Paradox login, so close it first'; exit 1 }
 $publisher = $env:CSII_MODPUBLISHERPATH
 if (-not $publisher) { $publisher = [Environment]::GetEnvironmentVariable('CSII_MODPUBLISHERPATH', 'User') }
 if (-not $publisher -or -not (Test-Path -LiteralPath $publisher)) { Write-Host "STOP: ModPublisher not found (CSII_MODPUBLISHERPATH = '$publisher')"; exit 1 }
