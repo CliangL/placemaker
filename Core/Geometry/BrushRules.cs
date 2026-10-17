@@ -14,7 +14,7 @@ using Unity.Mathematics;
 
 namespace Placemaker.Core.Geometry
 {
-    public enum BrushObstacleKind { Road = 0, Building = 1, Lot = 2, ZonedCell = 3, EmptyZoneCell = 4, PlacemakerBuild = 5, UnbuiltZonedCell = 6 }
+    public enum BrushObstacleKind { Road = 0, Building = 1, Lot = 2, ZonedCell = 3, EmptyZoneCell = 4, PlacemakerBuild = 5, UnbuiltZonedCell = 6, Path = 7, Bike = 8, Track = 9, Water = 10 }
 
     /// <summary>A polygon the brush may stop at, tagged with what it is (rules decide whether it counts).</summary>
     public struct BrushObstacle
