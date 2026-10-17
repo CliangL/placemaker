@@ -44,7 +44,7 @@ If something looks wrong, please report it with a screenshot and your Placemaker
 
 **Credits**
 
-Inspired by ParkingLotTool (KruemelGames), ParkManager (tomkpunkt) and Grid Road Generator. Includes Harmony by Andreas Pardeike (MIT). Licensed GPL-3.0.
+Based on similar concepts to ParkingLotTool (KruemelGames), ParkManager (tomkpunkt) and Grid Road Generator. Includes Harmony by Andreas Pardeike (MIT). Licensed GPL-3.0.
 	</LongDescription>
 	<!--A missing picture is silently replaced by a default one: add it before uploading-->
 	<Thumbnail Value="Properties/Thumbnail.png" />

@@ -29,8 +29,7 @@ powershell -File tools/publish/Publish.ps1 -Command Update         # the page on
 
 ## Before going Public
 
-1. **Credits wording**: "inspired by" or "uses code from" (the code contains ported ParkingLotTool and ParkManager
-   code).
+1. **Credits wording**: decided 2026-10-17: "Based on similar concepts to ...". The code files keep their own "ported from" notes (GPL-3.0).
 2. **Your co-author's OK.** Grid Road Generator code is in Placemaker, and that mod has no licence yet. The code
    comments disagree too (`Core/Tool/RoadGraph.cs` says MIT, `BuildService.Terrain.cs` says GPL-3.0); settle it.
 3. **Public source code** (the GPL-3.0 requires it): the code is on GitHub at https://github.com/jackwrichards/placemaker, **private** for now (master and this branch pushed 2026-10-17). Make it public, then add it as `<ExternalLink Type="github">`.
