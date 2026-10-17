@@ -38,6 +38,8 @@ if ($Command -ne 'Publish' -and -not ("$($p.ChangeLog.Value)$($p.ChangeLog.Inner
 $github = @($p.ExternalLink | Where-Object { $_.Type -eq 'github' -and $_.Url })
 if ($access -ne 'Private' -and -not $github) { $problems += "AccessLevel is $access but there is no github ExternalLink: the GPL-3.0 needs the source public before anyone else gets the mod" }
 $pictures = @($p.Thumbnail.Value) + @($p.Screenshot | ForEach-Object { $_.Value })
+$shots = @($p.Screenshot | Where-Object { $_.Value })
+if ($shots.Count -gt 10) { $problems += "$($shots.Count) screenshots: Paradox Mods takes at most 10" }
 foreach ($pic in $pictures) { if ($pic -and -not (Test-Path -LiteralPath (Join-Path $root $pic))) { $problems += "missing picture: $pic" } }
 if ($problems) { $problems | ForEach-Object { Write-Host "STOP: $_" }; exit 1 }
 

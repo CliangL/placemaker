@@ -64,4 +64,4 @@ Andreas Pardeike (MIT). Licensed GPL-3.0.
 ## Pictures
 
 - Thumbnail: `Properties/Thumbnail.png`: four shots (roads, parking, wetland, beach), the logo and name on a plain band.
-- Screenshots: `Properties/Screenshots/`: 15 labelled pictures, one per type, from the showcase recordings; 02 is a street-patterns sheet from the game runner.
+- Screenshots: `Properties/Screenshots/`: 10 labelled pictures (Paradox Mods takes at most 10), every visible type, related types paired; 02 is a street-patterns sheet from the game runner.

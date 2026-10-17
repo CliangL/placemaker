@@ -48,3 +48,4 @@ powershell -File tools/publish/Publish.ps1 -Command Update         # the page on
 - No review before it goes live, but reported mods are checked, and Paradox can remove them.
 - A name stays reserved even after the mod is deleted.
 - Every new version needs a higher `ModVersion` and a `ChangeLog`; the uploader refuses the same version twice.
+- At most 10 screenshots (Paradox refuses more; `Publish.ps1` checks).
