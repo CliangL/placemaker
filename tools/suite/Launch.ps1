@@ -58,20 +58,3 @@ finally {
     }
 }
 exit $code
-) { $psi.Arguments = ("$($psi.Arguments) -screen-fullscreen 0 -screen-width $($Matches[1]) -screen-height $($Matches[2])").Trim() }
-    $psi.WorkingDirectory = $gameDir
-    $psi.UseShellExecute = $false
-    $psi.EnvironmentVariables['SteamAppId'] = '949230'
-    $psi.EnvironmentVariables['SteamGameId'] = '949230'
-    $p = [System.Diagnostics.Process]::Start($psi)
-    Write-Host "launch: started Cities2.exe PID $($p.Id) $($psi.Arguments) (the user's own settings; main menu)"
-    $p.WaitForExit()
-    Write-Host 'launch: the game closed'
-}
-catch { Write-Host "launch: $($_.Exception.Message)"; $code = 1 }
-finally {
-    foreach ($d in $added) {
-        if (Test-Path -LiteralPath (Join-Path $d '.playground-copy')) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue; Write-Host "launch: removed the session copy $d" }
-    }
-}
-exit $code
