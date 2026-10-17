@@ -7,7 +7,9 @@ Paradox link shows "not found" until then).
 
 ## Title
 
-Placemaker: select an area and build roads, parks, parking lots and more
+I made a mod that builds whole areas for you
+
+(Other options: "Placemaker, my new mod for building whole areas" · "Placemaker: build any area in a few clicks")
 
 ## Body
 
