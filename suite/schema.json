@@ -17,6 +17,7 @@
   "steps": {
     "area": { "keys": ["tool", "at", "points", "rect", "stroke", "size", "square", "angle", "nodes", "abs", "cameraDistance"], "enums": { "tool": ["bucket", "block", "points", "draw", "land", "paint", "paintAnything", "nodes", "perimeter"] } },
     "clear": { "keys": [] },
+    "hover": { "keys": ["tool", "at", "abs", "seconds"], "enums": { "tool": ["bucket", "block", "paint", "points", "draw"] } },
     "type": { "keys": ["layer", "preset", "fresh"] },
     "preset": { "keys": ["layer", "preset"] },
     "value": { "keys": ["path", "id", "value", "json"] },

@@ -172,6 +172,37 @@ namespace Placemaker.Game.Suite
 
         // ───────────── area tools ─────────────
 
+        /// <summary>
+        /// (Area overhaul) The cursor rests on a spot in the Area stage with a tool picked, so the shot shows what it shows
+        /// there: the fill under the cursor with its closed gaps, reach and stops (bucket), or the brush and the fill a
+        /// stroke would paint in (paint). Nothing is clicked.
+        /// </summary>
+        private IEnumerator StepHover(ScenarioState st, JObject step, JObject rec)
+        {
+            var b = st.S.Block;
+            bool abs = (bool?)step["abs"] ?? false;
+            string tool = ((string)step["tool"] ?? "bucket").ToLowerInvariant();
+            if (_tool.Stage != ToolStage.Area) yield return UiGoToStage(rec, ToolStage.Area);
+            var mode = tool == "paint" ? SelectionMode.BlockPaint : tool == "points" || tool == "draw" ? SelectionMode.Draw : SelectionMode.Block;
+            yield return UiSetAreaMode(rec, mode);
+            var at = P3(Pt(step["at"], b, abs));
+            var from = PlacemakerToolSystem.SuiteCursor ?? (at + new float3(30f, 0f, 0f));
+            PlacemakerToolSystem.SuiteHover(from, at, 8);
+            float wait = (float?)step["seconds"] ?? 2f;
+            int frames = math.max(30, (int)(wait * 120f));
+            for (int i = 0; i < frames; i++) PlacemakerToolSystem.SuiteQueue(new PlacemakerToolSystem.SuiteFrame { At = at });
+            yield return Seconds(wait);
+            var hover = _tool.HoverFace;
+            rec["at"] = new JArray(Math.Round(at.x, 1), Math.Round(at.z, 1));
+            if (hover?.Fill != null)
+            {
+                rec["fill"] = hover.Fill.ToString();
+                rec["fillDoors"] = hover.Doors.Count;
+                rec["fillStops"] = hover.Stops.Count;
+            }
+            else rec["fill"] = _tool.HoverFaceProblem?.Key ?? "none";
+        }
+
         private IEnumerator StepArea(ScenarioState st, JObject step, JObject rec)
         {
             var b = st.S.Block;

@@ -62,10 +62,25 @@ namespace Placemaker.Game.Tool
             _hoverFaceAt = new float2(float.MaxValue);
         }
 
+        private int _hoverRulesKey, _blockRulesKey;
+
+        private int FillKey(BrushRules rules)
+        {
+            var r = rules.ForOutline();
+            return r.GetHashCode() * 31 + _editingGroup;
+        }
+
         private void UpdateBlock()
         {
             _cursorValid = _in.HasHit;
             Fills.Pump();
+            int key = FillKey(BrushRules);
+            if (key != _blockRulesKey)
+            {
+                bool first = _blockRulesKey == 0;
+                _blockRulesKey = key;
+                if (!first && _blocks.Seeds.Count > 0 && _gesture == Gesture.None) RepickBlocks();
+            }
             if (_in.HasHit)
             {
                 _cursor = _in.Hit;
@@ -101,6 +116,14 @@ namespace Placemaker.Game.Tool
         private void HoverFill(float2 p)
         {
             var rules = BrushRules;
+            // The rules changed elsewhere (the options page, the game runner): the hover was filled with the old ones.
+            int key = FillKey(rules);
+            if (key != _hoverRulesKey)
+            {
+                _hoverRulesKey = key;
+                _hoverFace = null;
+                _hoverFaceAt = new float2(float.MaxValue);
+            }
             var latest = _fills.Latest;
             if (_fills.Version != _hoverFillVersion)
             {
