@@ -58,6 +58,8 @@ Andreas Pardeike (MIT). Licensed GPL-3.0.
 
 ## Changelog (shown in its own panel)
 
+0.1.1: area tools: the paint bucket follows roads and buildings more exactly and previews as you hover, painting shows a live outline, slow drags now paint, and fills pick up new buildings and zoning.
+
 0.1.0: first public version
 
 ---

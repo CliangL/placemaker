@@ -62,9 +62,9 @@ Based on similar concepts to ParkingLotTool (KruemelGames), ParkManager (tomkpun
 	<!--"Code Mod" is added by the publisher itself-->
 	<Tag Value="Code Mod" />
 	<ForumLink Value="" />
-	<ModVersion Value="0.1.0" />
+	<ModVersion Value="0.1.1" />
 	<GameVersion Value="1.6.*" />
-	<ChangeLog Value="First public version." />
+	<ChangeLog Value="Area tools: the paint bucket follows roads and buildings more exactly and previews as you hover, painting shows a live outline, slow drags now paint, and fills pick up new buildings and zoning." />
 	<ExternalLink Type="youtube" Url="https://www.youtube.com/watch?v=ghIR5UhFwj4" />
 	<!--Add once the source is public: <ExternalLink Type="github" Url="https://github.com/..." />-->
 	<!--Public, Unlisted or Private, exactly as written (a typo falls back to Public). Private for the first test upload-->
