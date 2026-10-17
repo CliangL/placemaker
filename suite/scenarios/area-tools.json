@@ -1,0 +1,54 @@
+{
+  "_note": "The area tools (Points, Paint bucket, Paint area) on land made for them: dead ends with turning circles, footpaths into a block, a street that stops short of another, a zoned block. No builds: each picks an area and takes top-down overlay shots.",
+  "scenarios": [
+    {
+      "id": "area-culdesac",
+      "note": "Two dead ends with turning circles inside a ring block. Paint area stroke over them, then the bucket in the north part.",
+      "land": { "size": [200, 160], "nets": [ { "prefab": "Small Road", "points": [[0, -96], [0, -30]] }, { "prefab": "Small Road", "points": [[116, 0], [55, 0]] } ] },
+      "steps": [
+        { "do": "camera", "target": "block", "view": "top", "shot": "land", "shotMode": "render" },
+        { "do": "area", "tool": "paint", "size": 50, "stroke": [[-70, -70], [-30, -45], [30, -45], [70, -70], [70, -10], [100, 15], [40, 20], [-70, -15]] },
+        { "do": "camera", "target": "block", "view": "top", "shot": "paint", "shotMode": "overlay" },
+        { "do": "clear" },
+        { "do": "area", "tool": "bucket", "at": [-50, 40] },
+        { "do": "camera", "target": "block", "view": "top", "shot": "bucket", "shotMode": "overlay" }
+      ]
+    },
+    {
+      "id": "area-paths",
+      "note": "A footpath from the south street's node to a dead end inside the block, and one from the middle of the west street (splits it). The bucket left and right of them.",
+      "land": { "size": [200, 160], "nets": [ { "prefab": "Pavement Path", "points": [[0, -96], [50, 30]] }, { "prefab": "Pavement Path", "points": [[-116, 45], [-40, 45]] } ] },
+      "steps": [
+        { "do": "camera", "target": "block", "view": "top", "shot": "land", "shotMode": "render" },
+        { "do": "area", "tool": "bucket", "at": [-50, -50] },
+        { "do": "camera", "target": "block", "view": "top", "shot": "bucket-left", "shotMode": "overlay" },
+        { "do": "clear" },
+        { "do": "area", "tool": "bucket", "at": [60, -50] },
+        { "do": "camera", "target": "block", "view": "top", "shot": "bucket-right", "shotMode": "overlay" }
+      ]
+    },
+    {
+      "id": "area-gap",
+      "note": "A street from the west side that stops about 8 m short of the east street: with a gap setting of 10 m the bucket fills only the south half.",
+      "land": { "size": [240, 160], "nets": [ { "prefab": "Small Road", "points": [[-136, 0], [112, 0]] } ] },
+      "steps": [
+        { "do": "camera", "target": "block", "view": "top", "shot": "land", "shotMode": "render" },
+        { "do": "area", "tool": "bucket", "at": [-50, -50] },
+        { "do": "camera", "target": "block", "view": "top", "shot": "bucket", "shotMode": "overlay" }
+      ]
+    },
+    {
+      "id": "area-zoned",
+      "site": "zoned",
+      "note": "A grown housing block: the bucket, Paint area and Points must keep off the houses and their zoning.",
+      "steps": [
+        { "do": "camera", "target": "block", "view": "top", "shot": "land", "shotMode": "render", "zones": true },
+        { "do": "area", "tool": "bucket" },
+        { "do": "camera", "target": "block", "view": "top", "shot": "bucket", "shotMode": "overlay" },
+        { "do": "clear" },
+        { "do": "area", "tool": "points", "rect": [120, 110] },
+        { "do": "camera", "target": "block", "view": "top", "shot": "points", "shotMode": "overlay" }
+      ]
+    }
+  ]
+}
