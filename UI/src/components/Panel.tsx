@@ -118,8 +118,14 @@ function isInsideButton(el: HTMLElement | null, stop: HTMLElement | null) {
     return false;
 }
 
-/** Pixels per rem: the root font size (the game scales it with resolution and UI scale). */
+/**
+ * Pixels per rem as the panel is really drawn (rendered width / width in rem), measured after every render. The root
+ * font size is only the fallback: in the game it does not match the UI scale, which made the width follow the mouse at
+ * the wrong speed and let the height grow past the screen.
+ */
+let measuredRemPx = 0;
 function remPx() {
+    if (measuredRemPx > 0) return measuredRemPx;
     const fs = parseFloat(getComputedStyle(document.documentElement).fontSize);
     return fs > 0 ? fs : window.innerHeight / 1080;
 }
@@ -144,6 +150,12 @@ function usePanelPosition() {
     const maxWidth = () => Math.max(MIN_REM, Math.floor((window.innerWidth * MAX_SHARE) / remPx()));
     const clampWidth = (w: number) => Math.max(MIN_REM, Math.min(maxWidth(), Math.round(w)));
     const width = clampWidth(resizing ?? chosen ?? defaultWidth());
+
+    // The real pixels per rem, from the panel as drawn: mouse moves (pixels) and sizes (rem) use the same scale.
+    useLayoutEffect(() => {
+        const w = wrapRef.current?.getBoundingClientRect().width ?? 0;
+        if (w > 0 && width > 0) measuredRemPx = w / width;
+    });
 
     /** Height in rem: the chosen one (or the docked height), never taller than the screen. */
     const dockedHeight = () => Math.max(MIN_HEIGHT_REM, window.innerHeight / remPx() - (DOCK_TOP + DOCK_BOTTOM));
