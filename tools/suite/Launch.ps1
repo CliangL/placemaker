@@ -12,7 +12,8 @@ $gameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II'
 $exe = Join-Path $gameDir 'Cities2.exe'
 if (Get-Process -Name Cities2 -ErrorAction SilentlyContinue) { Write-Host 'STOP: the game is already running'; exit 2 }
 
-$snap = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '....')).Path ('.forensicssuitelaunch-snapshots\x27 + (Get-Date -Format 'MMdd-HHmmss'))
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$snap = Join-Path $repoRoot ('.forensics\suite\launch-snapshots\' + (Get-Date -Format 'MMdd-HHmmss'))
 New-Item -ItemType Directory -Force -Path $snap | Out-Null
 foreach ($f in @('Settings.coc', 'FallbackSettings.coc', 'launcher-settings.json')) { $s = Join-Path $ud $f; if (Test-Path -LiteralPath $s) { Copy-Item -LiteralPath $s -Destination $snap } }
 Write-Host "launch: settings snapshot in $snap"
@@ -40,7 +41,7 @@ try {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exe
     $psi.Arguments = $(if ($AllMods) { '' } else { '-disableModding -disableCodeModding-' })
-    if ($Window -match '^(d+)x(d+)
+    if ($Window -match '^(\d+)x(\d+)$') { $psi.Arguments = ("$($psi.Arguments) -screen-fullscreen 0 -screen-width $($Matches[1]) -screen-height $($Matches[2])").Trim() }
     $psi.WorkingDirectory = $gameDir
     $psi.UseShellExecute = $false
     $psi.EnvironmentVariables['SteamAppId'] = '949230'
