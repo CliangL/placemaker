@@ -109,6 +109,7 @@ namespace Placemaker.Game.Tool
                 bool held = _gesture == Gesture.Paint || _bpEraseWithLeft ? _in.LeftHeld : _in.RightHeld;
                 if (held)
                 {
+                    _bpStrokeFrames++;
                     if (_in.HasHit)
                     {
                         int v = _bpMask.Version;
@@ -121,6 +122,7 @@ namespace Placemaker.Game.Tool
                 }
                 var g = _gesture;
                 _gesture = Gesture.None;
+                Mod.Log.Info($"Placemaker: Paint area stroke ended after {_bpStrokeFrames} frames, {_bpMask.PaintedCellCount} cells painted");
                 ShapeChanged();
                 Commit(g == Gesture.Erase ? "Placemaker.Undo.Erase" : "Placemaker.Undo.Paint");
                 if (!_bpMask.IsEmpty && _shape == null) Flash(new LocText("Placemaker.Problem.PaintTooSmall"));
@@ -152,6 +154,7 @@ namespace Placemaker.Game.Tool
             if (erase && _bpMask.IsEmpty) return;
 
             _gesture = erase ? Gesture.Erase : Gesture.Paint;
+            _bpStrokeFrames = 0;
             _bpEraseWithLeft = erase && !_in.RightPressed;
             _lastStroke = _in.Hit.xz;
             _bpMask.Stamp(_in.Hit.xz, radius, erase, _brushSquare, _brushAngle);
@@ -208,6 +211,7 @@ namespace Placemaker.Game.Tool
         }
 
         private List<float2[]> _bpDoors;
+        private int _bpStrokeFrames;
 
         /// <summary>
         /// Fence + stops for the current target; rebuilt when the target, the rules or the edited group changed (or when

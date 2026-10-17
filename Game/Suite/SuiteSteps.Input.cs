@@ -188,9 +188,9 @@ namespace Placemaker.Game.Suite
             var at = P3(Pt(step["at"], b, abs));
             var from = PlacemakerToolSystem.SuiteCursor ?? (at + new float3(30f, 0f, 0f));
             PlacemakerToolSystem.SuiteHover(from, at, 8);
+            // After the glide the cursor rests there (the last scripted position repeats until new input).
             float wait = (float?)step["seconds"] ?? 2f;
-            int frames = math.max(30, (int)(wait * 120f));
-            for (int i = 0; i < frames; i++) PlacemakerToolSystem.SuiteQueue(new PlacemakerToolSystem.SuiteFrame { At = at });
+            yield return Feed(rec);
             yield return Seconds(wait);
             var hover = _tool.HoverFace;
             rec["at"] = new JArray(Math.Round(at.x, 1), Math.Round(at.z, 1));
