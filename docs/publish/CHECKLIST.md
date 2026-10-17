@@ -24,6 +24,7 @@ powershell -File tools/publish/Publish.ps1 -Command Update         # the page on
 ## The private test
 
 1. Uploaded 2026-10-17 as Private: mod id **163638** (build 0.1.0+51b39d1, master's mod code).
+   0.1.1 uploaded 2026-10-17 09:25 (build 0.1.1+bc58941 = master with the area tools work).
 2. Remove the local copy (`Mods\Placemaker`) so the game doesn't load two, subscribe to the private mod in your game,
    and check it works.
 
