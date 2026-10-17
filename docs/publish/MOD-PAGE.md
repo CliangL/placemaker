@@ -46,12 +46,12 @@ Roads, parking and parks are the most finished. Shops and squares still need wor
 - Big builds can freeze the game for a second or two
 - Shops in plazas and market squares face the city street
 
-If something looks wrong, post a screenshot and your Placemaker.log (in the game's Logs folder) on the forum thread.
+If something looks wrong, please report it with a screenshot and your Placemaker.log (in the game's Logs folder).
 
 **Credits**
 
 Inspired by ParkingLotTool (KruemelGames), ParkManager (tomkpunkt) and Grid Road Generator. Includes Harmony by
-Andreas Pardeike (MIT). Licensed GPL-3.0, source code: [link].
+Andreas Pardeike (MIT). Licensed GPL-3.0.
 
 ## Changelog (shown in its own panel)
 
@@ -59,7 +59,7 @@ Andreas Pardeike (MIT). Licensed GPL-3.0, source code: [link].
 
 ---
 
-## Pictures needed
+## Pictures
 
-- Thumbnail: one good-looking place at 45°.
-- 5–8 screenshots: a street grid, a parking lot, a park, a strip mall, a wetland, and the panel with a preview.
+- Thumbnail: `Properties/Thumbnail.png` (coast farms aerial, logo and name in the video's title style).
+- Screenshots: `Properties/Screenshots/` (8 stills from showcase v6).

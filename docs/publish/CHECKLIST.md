@@ -6,37 +6,45 @@ Paradox account. Anyone can then subscribe, and the game downloads it for them. 
 which players get automatically.
 
 **How.** Code mods have no upload button on the website. The game's modding kit includes an uploader
-(`ModPublisher.exe`) that runs on this computer and uses the Paradox login you last used in the game. It reads
-`Properties/PublishConfiguration.xml`.
+(`ModPublisher.exe`) that runs on this computer and uses the Paradox login you last used in the game. 
+`tools/publish/Publish.ps1` builds a clean copy of the mod and runs it with `Properties/PublishConfiguration.xml`:
 
-## Before the first upload
+```
+powershell -File tools/publish/Publish.ps1 -StageOnly              # build and show what would go up
+powershell -File tools/publish/Publish.ps1                         # the first upload (writes the mod's id back)
+powershell -File tools/publish/Publish.ps1 -Command NewVersion     # new files: raise ModVersion, write ChangeLog
+powershell -File tools/publish/Publish.ps1 -Command Update         # the page only: text, pictures, AccessLevel
+```
 
-1. **Credits wording.** Decide between "inspired by" and "uses code from" (the code really contains ported
-   ParkingLotTool and ParkManager code).
+## Ready
+
+- Page text, thumbnail (from the showcase video, with the logo) and 8 screenshots (stills from showcase v6).
+- `AccessLevel` = Private: only you can see it.
+
+## The private test
+
+1. Upload (`Publish.ps1`). It prints the mod's id and writes it into `ModId`: commit that.
+2. Remove the local copy (`Mods\Placemaker`) so the game doesn't load two, subscribe to the private mod in your game,
+   and check it works.
+
+## Before going Public
+
+1. **Credits wording**: "inspired by" or "uses code from" (the code contains ported ParkingLotTool and ParkManager
+   code).
 2. **Your co-author's OK.** Grid Road Generator code is in Placemaker, and that mod has no licence yet. The code
    comments disagree too (`Core/Tool/RoadGraph.cs` says MIT, `BuildService.Terrain.cs` says GPL-3.0); settle it.
-3. **Public source code.** The GPL-3.0 licence requires it: a public GitHub repository, linked on the page.
-4. **Pictures.** A thumbnail (`Properties/Thumbnail.png`; other mods use 512×512 to 1254×1254) and 5–8 screenshots
-   (1920×1080). The game runner can take them.
-5. **Check the page's claims in the game**: undo after a build, and what happens to built places when the mod is
+3. **Public source code** (the GPL-3.0 requires it): a public GitHub repository, as `<ExternalLink Type="github">`.
+   `Publish.ps1` refuses Public or Unlisted without it.
+4. **The video**: Paradox Mods takes pictures only. Put the showcase on YouTube and add it as
+   `<ExternalLink Type="youtube">` (and a line on the page).
+5. **Where to report bugs**: a GitHub issues page or a forum thread (`ForumLink`), named on the page.
+6. **Check the page's claims in the game**: undo after a build, and what happens to built places when the mod is
    removed (put it on the page if they vanish).
-6. **Sign in to your Paradox account in the game** once, if you haven't lately.
-
-## The first upload (a private test)
-
-7. Build a clean release into a separate folder with only the mod's files (no logs, no debug files). The project's
-   normal build doesn't run the uploader, so this needs a small upload script.
-8. Upload with `AccessLevel` = Private. The uploader prints the mod's number: write it into `ModId`.
-9. Remove the local copy (`Mods\Placemaker`), subscribe to the private mod in your game, and check it works.
-10. Switch `AccessLevel` to Public and run the uploader's update. Placemaker is now public.
-
-## Every later update
-
-- Raise `ModVersion` (0.1.1, 0.2.0…) and write the `ChangeLog`; the uploader refuses the same version twice.
-- Upload as a new version. Subscribers get it the next time they start the game.
+7. Set `AccessLevel` to Public and run `Publish.ps1 -Command Update`.
 
 ## Rules worth knowing
 
 - Mods must be free (donation links are allowed) and contain only things you may share (Paradox user agreement, §5).
 - No review before it goes live, but reported mods are checked, and Paradox can remove them.
 - A name stays reserved even after the mod is deleted.
+- Every new version needs a higher `ModVersion` and a `ChangeLog`; the uploader refuses the same version twice.
