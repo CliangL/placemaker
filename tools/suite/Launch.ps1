@@ -6,7 +6,7 @@
 #   -Window 2560x1440  a window of that size for this launch only (Unity flags; the saved display setting is not edited)
 # The graphics settings files are snapshotted before the launch into .forensics/suite/launch-snapshots/<time> so any
 # change the game makes to them can be shown and undone.
-param([string[]]$Mods = @(), [switch]$AllMods, [string]$Window = '')
+param([string[]]$Mods = @(), [switch]$AllMods, [string]$Window = '', [switch]$DevMode)
 $ud = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
 $gameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II'
 $exe = Join-Path $gameDir 'Cities2.exe'
@@ -42,6 +42,7 @@ try {
     $psi.FileName = $exe
     $psi.Arguments = $(if ($AllMods) { '' } else { '-disableModding -disableCodeModding-' })
     if ($Window -match '^(\d+)x(\d+)$') { $psi.Arguments = ("$($psi.Arguments) -screen-fullscreen 0 -screen-width $($Matches[1]) -screen-height $($Matches[2])").Trim() }
+    if ($DevMode) { $psi.Arguments = ("$($psi.Arguments) -developerMode").Trim() }
     $psi.WorkingDirectory = $gameDir
     $psi.UseShellExecute = $false
     $psi.EnvironmentVariables['SteamAppId'] = '949230'
