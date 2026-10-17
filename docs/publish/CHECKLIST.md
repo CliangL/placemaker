@@ -33,7 +33,7 @@ powershell -File tools/publish/Publish.ps1 -Command Update         # the page on
 1. **Credits wording**: decided 2026-10-17: "Based on similar concepts to ...". The code files keep their own "ported from" notes (GPL-3.0).
 2. **Your co-author's OK.** Grid Road Generator code is in Placemaker, and that mod has no licence yet. The code
    comments disagree too (`Core/Tool/RoadGraph.cs` says MIT, `BuildService.Terrain.cs` says GPL-3.0); settle it.
-3. **Public source code** (the GPL-3.0 requires it): the code is on GitHub at https://github.com/jackwrichards/placemaker, **private** for now (master and this branch pushed 2026-10-17). Make it public, then add it as `<ExternalLink Type="github">`.
+3. **Public source code** (the GPL-3.0 requires it): the code is on GitHub at https://github.com/jackwrichards/placemaker, **public** since 2026-10-17, linked on the page (`<ExternalLink Type="github">` and in the credits line).
    `Publish.ps1` refuses Public or Unlisted without it.
 4. **The video**: Paradox Mods takes pictures only. Put the showcase on YouTube and add it as
    `<ExternalLink Type="youtube">` (and a line on the page).
