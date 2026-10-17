@@ -2,9 +2,16 @@
 // inside the outline and benches between them, a civic centrepiece (statue, fountain or clock) in
 // the middle, and a grid of market stalls — back-to-back pairs facing the aisles — filling the
 // space between. Lamps along the aisles, cafe tables under the trees, bollards on the road edges.
+//
+// rf-shops3: entrances as in the parking tool (MarketEntrances): the player places them, nothing is suggested, Build waits for
+// the first. Gates for people, car entrances (a small car park at that edge) and driveways (a service lane for the stall vans).
+// Big market ("fill") is the market quarter (MarketQuarter): market streets planned from the gates, food courts, planting
+// islands and café groves, stalls to the site's real rim.
 
+using System;
 using System.Collections.Generic;
 using Placemaker.Core.Geometry;
+using Placemaker.Core.Layers.Commercial;
 using Placemaker.Core.Layers.Common;
 using Placemaker.Core.Layers.Plaza;
 using Unity.Mathematics;
@@ -18,8 +25,11 @@ namespace Placemaker.Core.Layers.Leisure
         public string[] OnValueSet(SettingsBag settings, string controlId) => GroundPalettes.OnValueSet(settings, controlId, "surface");
         public void Derive(SettingsBag settings) => GroundPalettes.Derive(settings, "surface");
 
-        /// <summary>A square with access points (not park entrances): never blocks Build.</summary>
+        /// <summary>A square with its own entrance kinds (MarketEntrances), not the park's typed entrances.</summary>
         protected override bool TypedEntrances => false;
+
+        /// <summary>(rf-shops3) Build waits for the first entrance (any kind: one gate for people makes a market).</summary>
+        public override Readiness CheckReady(AreaInput input) => MarketEntrances.Ready(input);
 
         public const string AccessKind = PlazaLayer.AccessKind;
 
@@ -35,11 +45,8 @@ namespace Placemaker.Core.Layers.Leisure
             Feature("decals", ("theme", "paving"), ("ground", "paved"), ("density", 0.6)), Feature("terrain", ("shape", "flatten")),
         };
 
-        public override List<EdgeMarker> SuggestMarkers(AreaInput input)
-        {
-            var region = LayerRegion.From(input?.Shape?.Ring);
-            return region == null ? new List<EdgeMarker>() : Entrances.Suggest(input, region, AccessKind, math.clamp((int)(region.Perimeter / 80f), 2, 8));
-        }
+        /// <summary>(rf-shops3) No automatic entrances: the player places every one ("it wouldn't do anything unless I did").</summary>
+        public override List<EdgeMarker> SuggestMarkers(AreaInput input) => new List<EdgeMarker>();
 
         protected override void DefineControls(ControlSet c)
         {
@@ -62,7 +69,9 @@ namespace Placemaker.Core.Layers.Leisure
             c.Asset("treeAsset", AssetCategories.Tree, ControlTier.More, "assets");
             c.Asset("benchAsset", AssetCategories.Bench, ControlTier.More, "assets");
             c.Asset("lampAsset", AssetCategories.Lamp, ControlTier.More, "assets");
-            c.Markers("access", ControlTier.More, AccessKind);
+            // rf-shops3: the parking tool's way of placing entrances (gates, car entrances, driveways).
+            MarketEntrances.Control(c, "access");
+            c.Toggle("groundPaint", false, ControlTier.More, "ground").Tip();
             DefineStreetShopControls(c);
             c.RandomRange("stalls", 8, 24);
             c.Fixed("centerKind");
@@ -71,7 +80,8 @@ namespace Placemaker.Core.Layers.Leisure
         protected override void DefinePresets()
         {
             Preset("weekly", ("stalls", 16.0), ("aisle", 4.5), ("treeRing", true), ("centerKind", "statue"));
-            Preset("bigMarket", ("stalls", 44.0), ("aisle", 4.0), ("treeRing", false), ("centerKind", "none"), ("cafe", 0.0), ("fill", true));
+            // rf-shops3: the market quarter, a fountain (a planted centre without one) at the market cross, soil in the tree pits.
+            Preset("bigMarket", ("stalls", 44.0), ("aisle", 4.0), ("treeRing", false), ("centerKind", "fountain"), ("cafe", 0.0), ("fill", true), ("groundPaint", true));
             Preset("farmers", ("stalls", 10.0), ("aisle", 5.5), ("treeRing", true), ("cafe", 3.0), ("centerKind", "fountain"), ("pattern", "border"));
         }
 
@@ -90,11 +100,11 @@ namespace Placemaker.Core.Layers.Leisure
         public const float StreetStep = 56f;
 
         /// <summary>
-        /// (shops2) The filled market's streets: aisles 6 m wide across the square on its axes every <see cref="StreetStep"/> m
+        /// (shops2, superseded by MarketQuarter in rf-shops3; kept) The filled market's streets: aisles 6 m wide across the square on its axes every <see cref="StreetStep"/> m
         /// (the middle ones are the main aisles), lined with trees; at every other crossing a food court (cafe seating round
         /// trees and benches), so the stall blocks are broken up by shade and places to sit, not one sea of stalls.
         /// </summary>
-        private static void MarketStreets(LayerContext ctx, Occupancy occ, LayerRegion region, float2 c, float2 axis, List<Gate> gates, List<float2> pits)
+        internal static void MarketStreets(LayerContext ctx, Occupancy occ, LayerRegion region, float2 c, float2 axis, List<Gate> gates, List<float2> pits)
         {
             PlazaDressing.Extents(region, c, axis, out float minA, out float maxA, out float minB, out float maxB);
             var side = new float2(-axis.y, axis.x);
@@ -158,18 +168,69 @@ namespace Placemaker.Core.Layers.Leisure
             ctx.Plan.Facts["streetTrees"] = t;
         }
 
+        /// <summary>The selected area itself (not a piece another type plans with this one, e.g. a shopping plaza's market court).</summary>
+        private static bool IsRoot(AreaInput input)
+        {
+            var tags = input?.RegionTags;
+            return tags == null || tags.Length == 0 || Array.IndexOf(tags, RegionTags.Root) >= 0;
+        }
+
         protected override void PlanCore(LayerContext ctx)
         {
-            var region = ctx.LayerRegion;
+            var site = ctx.LayerRegion;
+            // rf-shops3: the player's entrances only. A market planted inside another type (a shopping plaza's court) has none of its
+            // own and keeps the suggested access points it always had.
+            var placed = MarketEntrances.Resolve(ctx.Input, site);
+            var lots = new List<MarketEntrances.CarPark>();
+            var lanes = new List<MarketEntrances.ServiceLane>();
+            var avoid = new List<float2[]>();
+            if (placed.Count > 0)
+            {
+                lots = MarketEntrances.CarParks(ctx, new Mall(ctx), site, placed);
+                foreach (var lot in lots) avoid.Add(lot.Ring);
+                lanes = MarketEntrances.ServiceLanes(ctx, site, placed, avoid);
+                foreach (var l in lanes) avoid.Add(l.Ring);
+                ctx.Plan.Facts["carParks"] = lots.Count;
+                ctx.Plan.Facts["serviceLanes"] = lanes.Count;
+            }
+            var region = MarketEntrances.Rest(site, avoid);
+            ctx.LayerRegion = region;
+            // The ways in for people, on what is left: the gates, and each car park's door into the market.
+            var doors = new List<MarketQuarter.Door>();
+            foreach (var g in placed)
+            {
+                if (!g.People) continue;
+                var p = region.ClosestOnBoundary(g.At, out int seg, out _);
+                doors.Add(new MarketQuarter.Door { At = p, In = region.InwardNormal(seg), Segment = seg, Street = g.HasStreet });
+                g.Landed = "gate";
+            }
+            foreach (var lot in lots)
+            {
+                var p = region.ClosestOnBoundary(lot.Door, out int seg, out _);
+                if (math.distance(p, lot.Door) > 6f) continue;
+                doors.Add(new MarketQuarter.Door { At = p, In = region.InwardNormal(seg), Segment = seg, Lot = true });
+            }
+            var bays = new List<float2>();
+            foreach (var l in lanes) bays.Add(region.ClosestOnBoundary(l.End, out _, out _));
+            var gates = new List<Gate>();
+            foreach (var d in doors) gates.Add(new Gate { Position = d.At, Segment = d.Segment, AttachId = -1, Kind = AccessKind });
+            if (placed.Count == 0 && !IsRoot(ctx.Input))
+                gates = Entrances.Resolve(ctx.Input, region, AccessKind, math.clamp((int)(region.Perimeter / 80f), 2, 8));
+            ctx.Plan.Facts["gates"] = doors.Count;
             var occ = new Occupancy(region, ctx.Input.Reserved, ctx.Site);
-            var gates = Entrances.Resolve(ctx.Input, region, AccessKind, math.clamp((int)(region.Perimeter / 80f), 2, 8));
             ctx.NavigationArea(region.Ring, AreaRole.PedestrianArea, new AssetRef("", "Pedestrian Area", "Walking Area"));
+            if (ctx.B("fill"))
+            {
+                PlanQuarter(ctx, region, occ, doors, bays, avoid);
+                return;
+            }
             foreach (var g in gates)
             {
                 var inward = region.InwardNormal(g.Segment);
                 ctx.Object(g.Position, math.atan2(inward.x, inward.y), ObjectRole.AccessPoint, new AssetRef("", "Pedestrian Access Location"), 0);
                 occ.TakeCorridor(g.Position, g.Position + inward * 6f, 1.5f, 6);   // keep the way in clear
             }
+            foreach (var b in bays) occ.Take(b, 5f, 6);
             LeisureKit.Frame(region, out var centre, out _, out _, out _, out _);
             var axis = PlazaDressing.SquareAxis(region);
             // rf-squares: two main aisles across the square on its own axes, meeting at the centre: a big market reads as
@@ -289,6 +350,27 @@ namespace Placemaker.Core.Layers.Leisure
             if (coreR > 0f) ctx.AddRegion(LayerRegion.Circle(centre, coreR, 20), "core", RegionTags.Core, RegionTags.Paved);
             CommonStats(ctx);
             ctx.Stat("Placemaker.Stat.Stalls", stalls, Keys.UnitCount);
+        }
+
+        /// <summary>(rf-shops3) Big market: the market quarter (MarketQuarter) on what the car parks and service lanes leave.</summary>
+        private void PlanQuarter(LayerContext ctx, LayerRegion region, Occupancy occ, List<MarketQuarter.Door> doors, List<float2> bays, List<float2[]> avoid)
+        {
+            var palette = GroundPalettes.Resolve(ctx.Settings, GroundPalettes.Cobble, "surface");
+            // The market floor on Automatic: granite setts, or (a game without the paving packs) the warm vanilla setts, so the floor
+            // is not one white field beside the pale streets, the light courts and the dark frame.
+            string chosen = ctx.S(GroundPalettes.Control);
+            if ((string.IsNullOrEmpty(chosen) || chosen == GroundPalettes.Automatic) && string.IsNullOrEmpty(ctx.S("surface")))
+                palette.Field = new AssetRef(GroundSurfaces.Setts, GroundSurfaces.WarmCobble, GroundSurfaces.VTilesWarm);
+            var pave = new PavingPlan { Axis = PlazaDressing.SquareAxis(region) };
+            int stalls = MarketQuarter.Plan(ctx, region, occ, pave, palette, doors, bays, avoid, out _, out _);
+            ctx.Check();
+            // The player's own café terraces (the "cafe" slider; the quarter has its courts and groves).
+            PlazaDressing.Cafe(ctx, occ);
+            pave.Emit(ctx, region.Ring, SurfaceRole.Plaza, palette.Field, AssetCategories.SurfacePaving);
+            ctx.AddRegion(region.Ring, "paved", RegionTags.Paved);
+            CommonStats(ctx);
+            ctx.Stat("Placemaker.Stat.Stalls", stalls, Keys.UnitCount);
+            if (stalls == 0) ctx.Issue(IssueSeverity.Info, "Placemaker.Market.Issue.Fewer", 0, ctx.I("stalls"));
         }
     }
 }

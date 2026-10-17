@@ -34,6 +34,8 @@ namespace Placemaker.Core.Layers.Commercial
         public const float Shoulder = Cell;
         /// <summary>(s41) How far past the street's edge a lane's approach is graded (m), whatever the outline does.</summary>
         public const float ApproachDepth = 14f;
+        /// <summary>(rf-shops3) Half width of a drive from the kerb (its asphalt strip, MallRoute.Drive).</summary>
+        public const float DriveHalf = 3.6f;
 
         public static void Grade(Mall mall, List<(float2[] ring, Func<float2, float> height)> lots)
         {
@@ -151,6 +153,30 @@ namespace Placemaker.Core.Layers.Commercial
                 }
             }
 
+            // ── (rf-shops3) drives from the kerb (the player's car entrances): one straight ramp from the street's height at the
+            // kerb to the lane's at its node, level across the drive and a shoulder (the lane's own surface stays the lane's) ──
+            foreach (var (kerb, at, street, st, lane) in mall.KerbDrives)
+            {
+                float len = math.distance(kerb, at);
+                if (len < 1f) continue;
+                var d = (at - kerb) / len; var nrm = new float2(-d.y, d.x);
+                float hs = StreetHeight(ctx, street, st, kerb);
+                float he = g0(at);
+                if (lane != null && profiles.TryGetValue(lane, out var lp)) { lp.Distance(at, out float sa); he = lp.At(sa); }
+                float laneHalf = lane?.Half ?? 0f, run = math.max(1f, len - laneHalf);
+                float reach = DriveHalf + Shoulder;
+                foreach (int k in Nodes(sc, new[] { kerb, at }, reach + 3f))
+                {
+                    if (!sc.Free[k]) continue;
+                    var p = sc.Pos(k);
+                    float s = math.dot(p - kerb, d), off = math.abs(math.dot(p - kerb, nrm));
+                    if (s < -2.5f || s > run || off > reach) continue;
+                    if (laneSet[k] && laneDist[k] <= laneHalf + 0.25f) continue;
+                    sc.Target[k] = math.lerp(hs, he, math.saturate(s / run));
+                    prot[k] = true;
+                }
+            }
+
             Bank(sc, prot, MaxBank);
             ctx.Check();
             var clips = new List<float2[]> { region.Ring };
@@ -212,6 +238,16 @@ namespace Placemaker.Core.Layers.Commercial
                     var a = p0 + d * math.max(0f, edge - 2.5f); var b = p0 + d * len;
                     list.Add(Poly.EnsureCcw(new[] { a - nrm * w, b - nrm * w, b + nrm * w, a + nrm * w }));
                 }
+            }
+            // (rf-shops3) The drives from the kerb, from 2.5 m inside the street to the lane.
+            foreach (var (kerb, at, _, _, _) in mall.KerbDrives)
+            {
+                float len = math.distance(kerb, at);
+                if (len < 1f) continue;
+                var d = (at - kerb) / len; var nrm = new float2(-d.y, d.x);
+                float w = DriveHalf + Shoulder;
+                var a = kerb - d * 2.5f;
+                list.Add(Poly.EnsureCcw(new[] { a - nrm * w, at - nrm * w, at + nrm * w, a + nrm * w }));
             }
             return list;
         }

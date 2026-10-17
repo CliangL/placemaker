@@ -190,6 +190,18 @@ if ($Type.Count -eq 1 -and $Type[0] -ieq 'all') {
         $types += $t
     }
 }
+# (rf-shops3) Made-to-order land touches its street the way a user draws it: the outline about 2 m off the kerb of the
+# 16 m ring road (gap 10 from the shape to the road centre; the old default, 16 m, left the outline 8 m off the kerb, out
+# of every type's frontage reach), and round or odd shapes get a ring road that follows them. Give "gap" (or roads
+# "around") on purpose for a site that does not touch its street.
+function Default-Land($spec) {
+    if (-not $spec) { return $spec }
+    if (-not $spec.Contains('gap')) { $spec['gap'] = 10 }
+    $shape = "$($spec['shape'])".ToLowerInvariant()
+    if (-not $spec.Contains('roads') -and (@('l', 'circle', 'pinch', 'points') -contains $shape)) { $spec['roads'] = 'follow' }
+    return $spec
+}
+$landSpec = Default-Land $landSpec
 $landList = @([pscustomobject]@{ Name = ''; Spec = $landSpec })
 if ($Lands) {
     $text = if (Test-Path -LiteralPath $Lands -PathType Leaf) { Get-Content -LiteralPath $Lands -Raw } else { $Lands }
@@ -203,7 +215,7 @@ if ($Lands) {
                 if (-not (@($schema.land.keys) -contains $p.Name)) { Stop-With "-Lands: unknown key '$($p.Name)' (keys: $(@($schema.land.keys) -join ', '))" }
                 $spec[$p.Name] = $p.Value
             }
-            [pscustomobject]@{ Name = "$($o.name)"; Spec = $(if ($spec.Count) { $spec } else { $null }); Only = @($o.only | Where-Object { $_ }) }
+            [pscustomobject]@{ Name = "$($o.name)"; Spec = $(if ($spec.Count) { Default-Land $spec } else { $null }); Only = @($o.only | Where-Object { $_ }) }
         })
 }
 $builds = @()

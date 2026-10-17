@@ -25,6 +25,9 @@ namespace Placemaker.Core.Layers.Commercial
         public const float Gap = 8f;
         /// <summary>(s39) Shortest free stretch of frontage that gets plots: two cells and a metre (two whole columns whatever the grid).</summary>
         public const float MinStretch = 2 * Cell + 1f;
+        /// <summary>(rf-shops3) Rows of the designed compositions: 0 = the old even split; above 0 pieces are rounded to the
+        /// row's piece size and the end pieces of a row of three or more are this many times wider (anchors).</summary>
+        public float AnchorWeight;
         /// <summary>Width of a paseo (a walk through a row of plots, m).</summary>
         /// <remarks>(s39) Wide enough that no zone column whose centre lies on a plot touches the walk (a walk closes the column it
         /// crosses; a 3 m walk ± 4 m of cell): the plots either side keep whole columns (game depth rule, s36).</remarks>
@@ -127,6 +130,27 @@ namespace Placemaker.Core.Layers.Commercial
             end += d; control += d;
         }
 
+        /// <summary>
+        /// (rf-shops3) A lot's stub ending within 1.5 m of a join already on its lane (another net's end) ends on that join: a stub 0.3 m
+        /// from a driveway's junction made Finish move both split points onto one, and the driveway's lane ended beside the node (a
+        /// dead end). (Near a corner of the lane Finish moves the corner onto the stub's end instead.)
+        /// </summary>
+        private static void OntoNode(Lane lane, ref float3 end, ref float3 control)
+        {
+            float best = 1.5f; var q = end.xz;
+            foreach (var j in lane.Joins) { float dj = math.distance(j, end.xz); if (dj < best) { best = dj; q = j; } }
+            if (math.distance(q, end.xz) <= 0.01f) return;
+            var d = new float3(q.x - end.x, 0f, q.y - end.z);
+            end += d; control += d;
+        }
+
+        /// <summary>A join on <paramref name="lane"/>, once (a repeated join would split the lane twice at one point).</summary>
+        private static void AddJoin(Lane lane, float2 p)
+        {
+            foreach (var j in lane.Joins) if (math.distance(j, p) <= 0.01f) return;
+            lane.Joins.Add(p);
+        }
+
         /// <summary>Takes back a lane made by <see cref="Connect"/> (before anything was planned against it).</summary>
         public void Remove(Lane lane)
         {
@@ -196,7 +220,19 @@ namespace Placemaker.Core.Layers.Commercial
         // ───────────── frames and rows ─────────────
 
         /// <summary>Where a lane's zone cells begin (ZoneUtils.GetCellWidth · 4 from its centre line; = the edge of 8/16 m lanes).</summary>
-        public static float ZoneOffset(Lane lane) => math.max(lane.Half, Build.ZoneBlockPredictor.CellWidth(2f * lane.Half) * 4f);
+        public static float ZoneOffset(Lane lane) => ZoneOffset(lane.Half);
+
+        /// <summary>Where a lane of half width <paramref name="half"/> zones from (its zone blocks start on the cell grid of its width).</summary>
+        public static float ZoneOffset(float half) => math.max(half, Build.ZoneBlockPredictor.CellWidth(2f * half) * 4f);
+
+        /// <summary>
+        /// (rf-shops3) How far in from the outline (at <paramref name="p"/>, outward normal <paramref name="nOut"/>) a ring drive of half
+        /// width <paramref name="half"/> runs so a row <paramref name="depth"/> m deep fits between it and the street: the row starts
+        /// at the drive's zone offset (a 12 m drive zones from 8 m, not 6), and its back stays clear of the street's first zone row
+        /// (<see cref="KerbMargin"/>, a metre to spare: <see cref="BacksOntoStreet"/> tests the plot's corners).
+        /// </summary>
+        public float RowInset(float2 p, float2 nOut, float half, float depth) =>
+            ZoneOffset(half) + depth + math.max(1.5f, KerbMargin(p, new float2(-nOut.y, nOut.x)) + 0.5f);
 
         /// <summary>A frame along a segment: s along a → b, t to its left (CCW inward for an outline edge).</summary>
         public static StreetShops.Run Frame(float2 a, float2 b)
@@ -250,9 +286,33 @@ namespace Placemaker.Core.Layers.Commercial
             // Pieces at least maxPiece cells long: every 8 m of frontage holds one cell centre of the road's block whatever its
             // alignment, so a piece shorter than a cell could hold none (ZoneGuard would drop it).
             int n = math.max(1, (int)math.floor(len / (maxPiece * Cell) + 0.01f));
+            // (rf-shops3) A designed row: pieces about maxPiece cells (rounded, not floored: a 45 m stretch is two shops, not one
+            // 45 m box), never under two cells, and an anchor at each end of a longer row (AnchorWeight wider than the rest).
+            var cut = new float[n + 1];
+            if (AnchorWeight > 0f)
+            {
+                n = math.max(1, math.min((int)math.floor(len / (2f * Cell) + 0.01f), (int)math.round(len / (maxPiece * Cell))));
+                float total = 0f;
+                // The inline pieces between the anchors keep two cells too (a 68 m row of three gave the middle shop 14.7 m: one
+                // zone column, which the game blocks): fewer pieces until they do.
+                for (; ; n--)
+                {
+                    total = 0f;
+                    for (int k = 0; k < n; k++) total += n >= 3 && (k == 0 || k == n - 1) ? AnchorWeight : 1f;
+                    if (n <= 1 || len / total >= 2f * Cell - 0.01f) break;
+                }
+                cut = new float[n + 1];
+                float acc = 0f;
+                for (int k = 0; k <= n; k++)
+                {
+                    cut[k] = s0 + len * acc / total;
+                    if (k < n) acc += n >= 3 && (k == 0 || k == n - 1) ? AnchorWeight : 1f;
+                }
+            }
+            else for (int k = 0; k <= n; k++) cut[k] = math.lerp(s0, s1, (float)k / n);
             for (int k = 0; k < n; k++)
             {
-                float a = math.lerp(s0, s1, (float)k / n), b = math.lerp(s0, s1, (float)(k + 1) / n);
+                float a = cut[k], b = cut[k + 1];
                 if (Piece(r, a, b, t0, cells, dir, zone, minCells)) { made++; continue; }
                 int m = (int)math.floor((b - a) / Cell + 0.01f);
                 if (m >= 2)
@@ -333,12 +393,14 @@ namespace Placemaker.Core.Layers.Commercial
         /// Rows on both sides (or one: side = ±1, 0 = both) of every segment of a lane, from its edge, <paramref name="trimStart"/>
         /// / <paramref name="trimEnd"/> metres kept clear at the lane's ends (a street mouth's gateway, a plaza).
         /// </summary>
-        public int LaneRows(Lane lane, int cells, string zone, int side = 0, float trimStart = 0f, float trimEnd = 0f, int maxPiece = 3, int minCells = 2)
+        public int LaneRows(Lane lane, int cells, string zone, int side = 0, float trimStart = 0f, float trimEnd = 0f, int maxPiece = 3, int minCells = 2, Func<int, bool> segment = null)
         {
             int made = 0;
             int last = lane.Points.Count - 2;
             for (int i = 0; i <= last; i++)
             {
+                // (rf-shops3) Only the segments asked for (a ring drive carries rows on its back and sides, not on its front).
+                if (segment != null && !segment(i)) continue;
                 var a = lane.Points[i]; var b = lane.Points[i + 1];
                 var f = Frame(a, b);
                 float s0 = 0f, s1 = f.To;
@@ -718,7 +780,7 @@ namespace Placemaker.Core.Layers.Commercial
             if (clearance < 7f)
             {
                 // A strip: one even line along its spine (the long axis of its bounds), as street trees.
-                if (clearance < 2.6f) { Taken.Add(Poly.EnsureCcw(ring)); return; }
+                if (clearance < 2.6f) { Take(ring); return; }
                 var size = region.Max - region.Min;
                 bool alongX = size.x >= size.y;
                 float len = alongX ? size.x : size.y;
@@ -746,7 +808,7 @@ namespace Placemaker.Core.Layers.Commercial
                     for (float x = region.Min.x + spacing * 0.5f; x < region.Max.x; x += spacing * 0.8f)
                         Try(new float2(x, y) + new float2(rng.NextFloat(-2f, 2f), rng.NextFloat(-2f, 2f)), 3.2f);
             }
-            Taken.Add(Poly.EnsureCcw(ring));
+            Take(ring);
         }
 
         /// <summary>

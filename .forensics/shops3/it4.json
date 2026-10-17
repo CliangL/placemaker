@@ -1,0 +1,3192 @@
+{
+ "scenarios": [
+  {
+   "id": "stripMall-classic-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "classic"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "stripMall-classic-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "classic"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "stripMall-classic-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "classic"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "stripMall-classic-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "classic"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "stripMall-classic-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "classic"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  },
+  {
+   "id": "stripMall-bigBox-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "bigBox"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "stripMall-bigBox-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "bigBox"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "stripMall-bigBox-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "bigBox"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "stripMall-bigBox-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "bigBox"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "stripMall-bigBox-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "stripMall",
+     "preset": "bigBox"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.3,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.72,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.55,
+     "kind": "exit"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  },
+  {
+   "id": "mallDistrict-district-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "district"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "mallDistrict-district-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "district"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallDistrict-district-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "district"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallDistrict-district-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "district"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallDistrict-district-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "district"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  },
+  {
+   "id": "mallDistrict-dense-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "dense"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "mallDistrict-dense-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "dense"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallDistrict-dense-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "dense"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallDistrict-dense-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "dense"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallDistrict-dense-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallDistrict",
+     "preset": "dense"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.25,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  },
+  {
+   "id": "mallPark-commons-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "commons"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "mallPark-commons-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "commons"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-commons-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "commons"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-commons-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "commons"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-commons-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "commons"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  },
+  {
+   "id": "mallPark-garden-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "garden"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "mallPark-garden-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "garden"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-garden-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "garden"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-garden-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "garden"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-garden-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "garden"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  },
+  {
+   "id": "mallPark-family-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "family"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "mallPark-family-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "family"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-family-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "family"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-family-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "family"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "mallPark-family-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "mallPark",
+     "preset": "family"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "footpath"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "grow",
+     "seconds": 20
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  },
+  {
+   "id": "marketSquare-bigMarket-block",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "bucket"
+    },
+    {
+     "do": "type",
+     "layer": "marketSquare",
+     "preset": "bigMarket"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ]
+  },
+  {
+   "id": "marketSquare-bigMarket-big",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "marketSquare",
+     "preset": "bigMarket"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-zoning",
+     "shotMode": "render",
+     "zones": true
+    }
+   ],
+   "land": {
+    "size": [
+     300,
+     280
+    ],
+    "gap": 10
+   }
+  },
+  {
+   "id": "marketSquare-bigMarket-l",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "marketSquare",
+     "preset": "bigMarket"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "l",
+    "size": [
+     280,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "marketSquare-bigMarket-circle",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "marketSquare",
+     "preset": "bigMarket"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "closeup",
+     "shot": "close-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     260,
+     260
+    ],
+    "roads": "follow",
+    "gap": 10
+   }
+  },
+  {
+   "id": "marketSquare-bigMarket-inner",
+   "site": "flat",
+   "pace": "settled",
+   "steps": [
+    {
+     "do": "area",
+     "tool": "land"
+    },
+    {
+     "do": "type",
+     "layer": "marketSquare",
+     "preset": "bigMarket"
+    },
+    {
+     "do": "entrance",
+     "side": "south",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "north",
+     "t": 0.5,
+     "kind": "access"
+    },
+    {
+     "do": "entrance",
+     "side": "east",
+     "t": 0.5,
+     "kind": "entrance"
+    },
+    {
+     "do": "entrance",
+     "side": "west",
+     "t": 0.5,
+     "kind": "alley"
+    },
+    {
+     "do": "preview",
+     "shot": "plan",
+     "shotMode": "overlay",
+     "camera": {
+      "target": "build",
+      "view": "top"
+     }
+    },
+    {
+     "do": "build"
+    },
+    {
+     "do": "camera",
+     "target": "build",
+     "view": "oblique",
+     "pitch": 45,
+     "shot": "45-clean",
+     "shotMode": "render"
+    }
+   ],
+   "land": {
+    "shape": "circle",
+    "size": [
+     240,
+     240
+    ],
+    "roads": "around",
+    "gap": 16
+   }
+  }
+ ]
+}

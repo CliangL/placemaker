@@ -64,6 +64,7 @@ namespace Placemaker.Tests
             var r = Editor.SingleLayerRecipe(GeneratorRegistry.Get(gen), seed);
             uint q = 0;
             Editor.AddDefaultFeatures(r, () => ++q);
+            ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
             string ctx = $"{gen}/{kind}/{seed}";
             Assert.False(plan.HasErrors, ctx);

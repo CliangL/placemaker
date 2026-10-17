@@ -30,7 +30,7 @@ namespace Placemaker.Tests
         private static Dictionary<string, AssetInfo> _catalog;
 
         /// <summary>The gallery's asset fixture (net widths, footprints): what the planners see in the game.</summary>
-        private static Dictionary<string, AssetInfo> Catalog()
+        internal static Dictionary<string, AssetInfo> Catalog()
         {
             if (_catalog != null) return _catalog;
             var root = JsonNode.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(TestKit.RepoRoot(), "Tests", "Placemaker.Tests", "Fixtures", "catalog-bounds.json")));
@@ -80,6 +80,8 @@ namespace Placemaker.Tests
             uint n = 0;
             Editor.AddDefaultFeatures(r, () => ++n);
             tweak?.Invoke(r);
+            // (rf-shops3) The entrance types wait for the player's ways in: a car entrance mid main street, a footpath, a driveway.
+            ShopTestEntrances.Place(r, ring, site, footpath: true, driveway: true);
             return Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
         }
 
@@ -146,9 +148,11 @@ namespace Placemaker.Tests
                 Assert.Equal((int)host.Facts["capacity"], host.Objects.Count(o => o.Role == ObjectRole.ParkingBay));
         }
 
+        // (rf-shops3) The mall district and the mall park's visible styles are planned from the entrances round a ring drive: every
+        // row faces the ring, no row stands on a street (so "outer row" has nothing to zone there). The mall park's hidden car-free
+        // promenade keeps the old composition with its street rows.
         [Theory]
-        [InlineData("mallDistrict", "")]
-        [InlineData("mallPark", "")]
+        [InlineData("mallPark", "promenade")]
         [InlineData("highStreet", "boulevard")]
         public void BigBuildingsOnTheStreetsLittleOnesOnTheLanes(string type, string preset)
         {
@@ -218,7 +222,17 @@ namespace Placemaker.Tests
             // A closed loop: every loop node is shared by two pieces; the park's walks open onto it.
             Assert.Contains(host.Objects, o => o.Category != null && o.Category.StartsWith("play"));
             Assert.True(host.Nets.Count(n => n.Role == NetRole.Pathway || n.Role == NetRole.PathwayWide) >= 4);
-            Assert.True(host.Facts["shopPlots"] >= 16);
+            // (rf-shops3) The park inside a ring that follows the site (here a road with parking both sides), small shops outside
+            // it facing the park on every side (the old layout's 16 plots stood on the streets too).
+            Assert.Equal(1.0, host.Facts[MallParkLayer.RingFact]);
+            Assert.True(host.Facts["shopPlots"] >= 8, "shop plots " + host.Facts["shopPlots"]);
+            var sides = new HashSet<int>();
+            foreach (var g in host.Regions.Where(Cutouts.IsCutout))
+            {
+                var p = Poly.Centroid(Poly.To2D(g.Ring)) - new float2(100f, 100f);
+                sides.Add(math.abs(p.x) > math.abs(p.y) ? (p.x > 0 ? 0 : 1) : (p.y > 0 ? 2 : 3));
+            }
+            Assert.Equal(4, sides.Count);
         }
 
         [Fact]

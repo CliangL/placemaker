@@ -14,7 +14,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Commercial
 {
     [AreaGenerator(23, Group = Group)]
-    public sealed class MallDistrictLayer : CommercialLayer
+    public sealed partial class MallDistrictLayer : CommercialLayer
     {
         protected override string Area => "MallDistrict";
         public override string Id => "mallDistrict";
@@ -36,6 +36,8 @@ namespace Placemaker.Core.Layers.Commercial
             OuterRowControls(c, ZoneKinds.CommercialHigh);
             Shared(c.Slider("outerDepth", 32, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
             CommonControls(c, ZoneKinds.CommercialLow, 16, null, true);
+            // (rf-shops3) The architect's extras.
+            ExtrasControls(c, pads: false, trucks: 2);
             c.Fixed("lanes");
             c.Fixed("blocks");
         }
@@ -45,7 +47,7 @@ namespace Placemaker.Core.Layers.Commercial
             Preset("district", ("lanes", "mixed"), ("blocks", "medium"));
             Preset("pedestrian", ("lanes", "pedestrian"), ("blocks", "medium"), ("outerDepth", 24.0));
             Preset("mixedUse", ("lanes", "mixed"), ("blocks", "spacious"), ("zoneKind", ZoneKinds.Mixed), ("plotDepth", 24.0));
-            Preset("dense", ("lanes", "alley"), ("blocks", "compact"), ("zoneKind", ZoneKinds.CommercialHigh), ("plotDepth", 24.0), ("outerDepth", 40.0), ("squares", false), ("parkingBlocks", "some"));
+            Preset("dense", ("lanes", "alley"), ("blocks", "compact"), ("zoneKind", ZoneKinds.CommercialHigh), ("plotDepth", 24.0), ("outerDepth", 40.0), ("squares", false), ("parkingBlocks", "many"));
             Preset("village", ("lanes", "pedestrian"), ("blocks", "compact"), ("plotDepth", 16.0), ("outerDepth", 16.0), ("outerZone", ZoneKinds.CommercialLow));
         }
 

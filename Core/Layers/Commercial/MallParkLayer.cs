@@ -13,7 +13,7 @@ using Unity.Mathematics;
 namespace Placemaker.Core.Layers.Commercial
 {
     [AreaGenerator(19, Group = Group)]
-    public sealed class MallParkLayer : CommercialLayer
+    public sealed partial class MallParkLayer : CommercialLayer
     {
         protected override string Area => "MallPark";
         public override string Id => "mallPark";
@@ -27,22 +27,27 @@ namespace Placemaker.Core.Layers.Commercial
         {
             c.Choice("parkStyle", "urban", ControlTier.Essential, "layout", ParkStyles).Tip();
             c.Choice("loop", "lane", ControlTier.Essential, "layout", "lane", "pedestrian").Tip();
+            // (rf-shops3) The loop as a road with parking on both sides (the town square: cars parked along the park), or a quiet alley.
+            c.Choice("loopRoad", "parking", ControlTier.Essential, "layout", "alley", "parking").Tip();
             c.Toggle("playground", true, ControlTier.More, "layout").Tip();
             c.Toggle("fountain", true, ControlTier.More, "layout").Tip();
             OuterRowControls(c, ZoneKinds.CommercialHigh);
             Shared(c.Slider("outerDepth", 24, 16, 48, 8, "m", ControlTier.More, "shops")).Tip().When("outerRow=true");
             CommonControls(c, ZoneKinds.CommercialLow, 16, null, false, green: false);
+            // (rf-shops3) The architect's extras.
+            ExtrasControls(c, pads: false, trucks: 2);
             c.Fixed("parkStyle");
             c.Fixed("loop");
         }
 
         protected override void DefinePresets()
         {
-            Preset("commons", ("parkStyle", "urban"), ("loop", "lane"));
+            Preset("commons", ("parkStyle", "urban"), ("loop", "lane"), ("loopRoad", "parking"), ("foodTrucks", 3.0), ("water", "none"));
             // (shops2) Garden square: the Parks category's Garden walk (the user's favourite park); the formal park planted only half
             // the square ("the garden kind of stops").
-            Preset("garden", ("parkStyle", "garden"), ("loop", "lane"), ("zoneKind", ZoneKinds.Mixed), ("playground", false));
-            Preset("family", ("parkStyle", "natural"), ("loop", "lane"), ("playground", true), ("fountain", false), ("outerZone", ZoneKinds.CommercialLow), ("outerDepth", 16.0));
+            Preset("garden", ("parkStyle", "garden"), ("loop", "lane"), ("zoneKind", ZoneKinds.Mixed), ("playground", false), ("loopRoad", "alley"), ("water", "pond"), ("foodTrucks", 1.0));
+            Preset("family", ("parkStyle", "natural"), ("loop", "lane"), ("playground", true), ("fountain", false), ("outerZone", ZoneKinds.CommercialLow), ("outerDepth", 16.0),
+                ("loopRoad", "parking"), ("water", "pond"), ("foodTrucks", 3.0));
             Preset("promenade", ("parkStyle", "modern"), ("loop", "pedestrian"), ("plotDepth", 24.0), ("outerDepth", 32.0));
         }
 

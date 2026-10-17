@@ -75,6 +75,7 @@ namespace Placemaker.Gallery
                     case "--no-harmony": Variants.NoHarmony = true; break;
                     case "--no-shops": Variants.NoShops = true; break;
                     case "--dump": dump = next; i++; break;
+                    case "--markers": Renderer.MarkerSpec = next; i++; break;   // (rf-shops3) entrances placed on every job
                     case "--terrain-dump": terrainDump = next; i++; break;   // s30: render in-game terrain dumps (DumpView)
                 }
             }
@@ -474,7 +475,7 @@ namespace Placemaker.Gallery
                 {
                     if (j.Shore != null) { expanded.Add(j); continue; }
                     foreach (var s in Renderer.Slopes)
-                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "~" + s, Title = j.Title + " (" + s + " slope)", Recipe = j.Recipe.Clone(), TargetArea = j.TargetArea, Shape = j.Shape, Slope = s });
+                        expanded.Add(new Job { Type = j.Type, Variant = j.Variant + "~" + s, Title = j.Title + " (" + s + " slope)", Recipe = j.Recipe.Clone(), TargetArea = j.TargetArea, Shape = j.Shape, Slope = s, Site = j.Site });
                 }
                 jobs = expanded;
             }
@@ -569,6 +570,35 @@ namespace Placemaker.Gallery
         [ThreadStatic] private static bool _paintView;
         /// <summary>(s33) --map arid|mediterranean|tropic|alpine|shuffled: plan and draw with that map's paint materials.</summary>
         public static string MapPalette;
+        /// <summary>
+        /// (rf-shops3) --markers kind@side:t,…: the entrances a player places, on every job (side s/e/n/w of the site's box, t 0..1
+        /// west→east or south→north, snapped to the outline), e.g. access@s:0.5,entrance@e:0.4,alley@w:0.6.
+        /// </summary>
+        public static string MarkerSpec;
+
+        private static void ApplyMarkerSpec(Recipe r, float3[] ring)
+        {
+            if (string.IsNullOrEmpty(MarkerSpec) || r?.Root == null || r.Root.Markers.Count > 0) return;
+            var region = Placemaker.Core.Layers.Common.LayerRegion.From(ring);
+            if (region == null) return;
+            foreach (var part in MarkerSpec.Split(','))
+            {
+                var at = part.Split('@');
+                if (at.Length != 2) continue;
+                var st = at[1].Split(':');
+                float t = st.Length > 1 ? float.Parse(st[1], CultureInfo.InvariantCulture) : 0.5f;
+                float2 lo = region.Min, hi = region.Max, p;
+                switch (st[0])
+                {
+                    case "n": p = new float2(math.lerp(lo.x, hi.x, t), hi.y); break;
+                    case "e": p = new float2(hi.x, math.lerp(lo.y, hi.y, t)); break;
+                    case "w": p = new float2(lo.x, math.lerp(lo.y, hi.y, t)); break;
+                    default: p = new float2(math.lerp(lo.x, hi.x, t), lo.y); break;
+                }
+                var q = region.ClosestOnBoundary(p, out int seg, out float rt);
+                r.Root.Markers.Add(new EdgeMarker { Kind = at[0], RingSegment = seg, RingT = rt, Position = new float3(q.x, 0f, q.y) });
+            }
+        }
 
         /// <summary>(s18) Odd sites: a triangle, a long thin trapezoid, a square, an L (CCW in x/z, scaled to the area).</summary>
         public static float3[] Shaped(string shape, float targetArea)
@@ -691,6 +721,7 @@ namespace Placemaker.Gallery
                 if (job.Custom != null) plan = custom.plan;
                 else
                 {
+                    ApplyMarkerSpec(job.Recipe, ring);
                     if (Showcase || shaped || siteKind != null) ApplySuggestedMarkers(job.Recipe, ring, site);
                     AddMarkersIfNeeded(job.Recipe, ring);
 

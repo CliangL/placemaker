@@ -341,6 +341,11 @@ namespace Placemaker.Game.Suite
             else rec["previewMode"] = "sketch";
             rec["issues"] = Issues(rec);
             rec["planCost"] = Math.Round(_tool.PlanCost);
+            // (rf-shops3) The plan's facts per layer, for reading a run without the pictures (gates landed, rows, lots, fails).
+            if (_tool.Plan != null)
+                foreach (var l in _tool.Plan.Layers)
+                    if (l.Facts != null && l.Facts.Count > 0)
+                        Mod.Log.Info($"Placemaker plan facts ({st.S.Id}): " + string.Join(" ", l.Facts.Select(kv => kv.Key + "=" + Math.Round(kv.Value, 1).ToString(System.Globalization.CultureInfo.InvariantCulture))));
             st.Result["planIssues"] = rec["issues"];
             st.Result["planCost"] = rec["planCost"];
             // what the panel shows: the bound state and summary parse, and the main button as the person sees it

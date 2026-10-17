@@ -74,9 +74,15 @@ namespace Placemaker.Core.Build
             if (plan?.Layers == null || plan.Footprints == null || plan.Footprints.Count == 0) return res;
             // The build's shop plots (the zoning quads as the layers planned them).
             var plots = new List<float2[]>();
+            var fronts = new List<(float2 a, float2 b)>();   // (shops3) A→B: the frontage the quad was zoned from (EdgeZoningAddOn, parking)
             foreach (var l in plan.Layers)
                 if (l?.Zoning != null)
-                    foreach (var z in l.Zoning) if (z != null) plots.Add(Poly.EnsureCcw(new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz }));
+                    foreach (var z in l.Zoning)
+                        if (z != null)
+                        {
+                            plots.Add(Poly.EnsureCcw(new[] { z.A.xz, z.B.xz, z.C.xz, z.D.xz }));
+                            fronts.Add((z.A.xz, z.B.xz));
+                        }
             if (plots.Count == 0) return res;
             halfWidth = halfWidth ?? (n => ZoneGuard.NetWidth(n, site) * 0.5f);
 
@@ -96,9 +102,10 @@ namespace Placemaker.Core.Build
             var city = new List<NearbyNet>();
             if (site?.NearbyNets != null) foreach (var n in site.NearbyNets) if (n.Category == NetCategory.Road) city.Add(n);
 
-            // Which of our nets (and on which side) each plot faces. Exactly: the commercial kit plans a lane row on that lane's own
-            // (predicted) cells, so a plot that is a rectangle of one side's cells belongs to it. Otherwise the nearest road edge, our
-            // lane winning ties within a cell (the kit plans rows to face its lanes; a row backing onto a city street is the lane's).
+            // Which of our nets (and on which side) each plot faces. First the road its front runs along (see FrontNet: a lane row's
+            // plot lies along its lane; the nearest road to its centre may be the lane crossing the row's end). Then exactly: a plot
+            // that is a rectangle of one side's cells belongs to it. Otherwise the nearest road edge, our lane winning ties within a
+            // cell (the kit plans rows to face its lanes; a row backing onto a city street is the lane's).
             var cells = new List<(PlannedNet n, int side)>();
             var grids = new List<ZoneGrid>();
             foreach (var (_, n) in ours)
@@ -108,14 +115,23 @@ namespace Placemaker.Core.Build
                     cells.Add((n, side));
                     grids.Add(g);
                 }
+            // (shops3) Every road a plot front may run along: ours and the city streets.
+            var roads = new List<RoadLine>();
+            foreach (var (_, n) in ours) roads.Add(new RoadLine(n, n.A, n.B, n.C, n.D, halfWidth(n)));
+            foreach (var c in city) roads.Add(new RoadLine(null, c.A, c.B, c.C, c.D, c.Width * 0.5f));
             var served = new Dictionary<PlannedNet, int>();   // bit 1 = right, bit 2 = left
             void Serve(PlannedNet n, int side)
             {
                 served.TryGetValue(n, out int bits);
                 served[n] = bits | (side > 0 ? 1 : 2);
             }
-            foreach (var quad in plots)
+            for (int qi = 0; qi < plots.Count; qi++)
             {
+                var quad = plots[qi];
+                // (shops3) The road the plot's front runs along zones it; a city street there keeps ours off (a street plot).
+                int front = FrontNet(quad, fronts[qi], roads, out var fn, out int fside);
+                if (front > 0) { Serve(fn, fside); continue; }
+                if (front < 0) continue;
                 int gi = ZoneGuard.AlignedGrid(quad, grids);
                 if (gi >= 0) { Serve(cells[gi].n, cells[gi].side); continue; }
                 var p = Poly.Centroid(quad);
@@ -150,6 +166,102 @@ namespace Placemaker.Core.Build
                 n.Upgrades = list.ToArray();
             }
             return res;
+        }
+
+        /// <summary>
+        /// (shops3) How far (m) beyond a road's half width a plot side may lie and still run along that road (StreetFrontage.Tolerance:
+        /// a lane row starts at its lane's zone offset; MallKit keeps the rows Tolerance + 0.5 m clear of a crossing lane's edge).
+        /// </summary>
+        public const float FrontReach = 4f;
+        /// <summary>(shops3) A plot side runs along a road only when nearly parallel to it (|cos| of the angle).</summary>
+        private const float FrontParallel = 0.9f;
+
+        /// <summary>
+        /// (shops3) The road a plot's front runs along: the road its A→B side (the frontage EdgeZoningAddOn zoned it from) runs along,
+        /// else of the quad's sides lying along a road, the closest. A side runs along a road when its 20/50/80 % points lie within the
+        /// road's half width + <see cref="FrontReach"/> of its centre line, the side parallel to it. Returns 1 for one of our nets
+        /// (<paramref name="fn"/>, <paramref name="side"/>), −1 for a city street, 0 when no side runs along a road.
+        /// Game run show-6-builds-1016-140401 (strip mall on a 150 x 140 m block: 46 cells planned, 14 zoned): the row along the rung
+        /// ends 8.5 m from the rail crossing it, so an end plot's centre lay nearer the rail than the rung and the old nearest-road rule
+        /// kept the rail's side zoning. That 48 m block crosses the row; between crossing blocks the game has no depth rule and the
+        /// older build order wins (CellOverlapJobs.CheckPriority), so the rails, built first, took the rung's cells over 48 m from each
+        /// end (Blocked in pass B) and the depth rule cut the one-column rest; only the end plots zoned, sideways from the rails.
+        /// </summary>
+        private static int FrontNet(float2[] quad, (float2 a, float2 b) frontage, List<RoadLine> roads, out PlannedNet fn, out int side)
+        {
+            fn = null; side = 0;
+            float best = float.MaxValue;
+            RoadLine bestRoad = null;
+            void Side(float2 a, float2 b)
+            {
+                float len = math.distance(a, b);
+                if (len < 1f) return;
+                var dir = (b - a) / len;
+                foreach (var road in roads)
+                {
+                    float s = road.Along(a, b, dir);
+                    if (s < best) { best = s; bestRoad = road; }
+                }
+            }
+            Side(frontage.a, frontage.b);
+            if (bestRoad == null)
+                for (int e = 0; e < quad.Length; e++) Side(quad[e], quad[(e + 1) % quad.Length]);
+            if (bestRoad == null) return 0;
+            if (bestRoad.Net == null) return -1;
+            fn = bestRoad.Net;
+            SideOf(fn, Poly.Centroid(quad), out side);
+            return 1;
+        }
+
+        /// <summary>(shops3) A road's centre line as a polyline with its half width: one of our nets, or a city street (Net null).</summary>
+        private sealed class RoadLine
+        {
+            public readonly PlannedNet Net;
+            public readonly float Half;
+            private readonly float2[] _line;
+            private readonly float2 _min, _max;
+
+            public RoadLine(PlannedNet net, float3 A, float3 B, float3 C, float3 D, float half)
+            {
+                const int N = 32;
+                Net = net; Half = half;
+                _line = new float2[N + 1];
+                _min = new float2(float.MaxValue); _max = new float2(float.MinValue);
+                for (int k = 0; k <= N; k++)
+                {
+                    _line[k] = Composer.Bezier(A, B, C, D, k / (float)N).xz;
+                    _min = math.min(_min, _line[k]); _max = math.max(_max, _line[k]);
+                }
+            }
+
+            /// <summary>
+            /// Mean distance (m) beyond the half width of a quad side's 20/50/80 % points from the centre line when the side runs along
+            /// the road (each within <see cref="FrontReach"/>, the road there parallel to the side), else float.MaxValue.
+            /// </summary>
+            public float Along(float2 a, float2 b, float2 dir)
+            {
+                float reach = Half + FrontReach;
+                if (math.min(a.x, b.x) > _max.x + reach || math.max(a.x, b.x) < _min.x - reach
+                    || math.min(a.y, b.y) > _max.y + reach || math.max(a.y, b.y) < _min.y - reach) return float.MaxValue;
+                float sum = 0f;
+                for (int i = 0; i < 3; i++)
+                {
+                    var p = math.lerp(a, b, i == 0 ? 0.2f : i == 1 ? 0.5f : 0.8f);
+                    float bestD = float.MaxValue; int bk = -1;
+                    for (int k = 0; k + 1 < _line.Length; k++)
+                    {
+                        var s0 = _line[k]; var d = _line[k + 1] - s0;
+                        float l2 = math.lengthsq(d);
+                        float t = l2 > 1e-8f ? math.saturate(math.dot(p - s0, d) / l2) : 0f;
+                        float dd = math.distance(p, s0 + d * t);
+                        if (dd < bestD) { bestD = dd; bk = k; }
+                    }
+                    if (bk < 0 || bestD > reach) return float.MaxValue;
+                    if (math.abs(math.dot(math.normalizesafe(_line[bk + 1] - _line[bk]), dir)) < FrontParallel) return float.MaxValue;
+                    sum += math.max(0f, bestD - Half);
+                }
+                return sum / 3f;
+            }
         }
 
         /// <summary>Does the band of a side's zone blocks (half width … half width + 48 m) lie mostly inside the footprints?</summary>

@@ -55,6 +55,8 @@ namespace Placemaker.Tests
             if (preset != "") Editor.ApplyPreset(r, RecipePaths.Root, preset);
             uint q = 0;
             Editor.AddDefaultFeatures(r, () => ++q);
+            // (rf-shops3) A car entrance mid main street and a driveway (a real junction: a lane leaves the street).
+            ShopTestEntrances.Place(r, ring, site, driveway: true);
             var plan = Composer.Compose(r, new AreaShape { Ring = ring, Source = AreaSource.Drawn }, site, CancellationToken.None);
             string ctx = $"{preset}/{kind}";
             Assert.False(plan.HasErrors, ctx);

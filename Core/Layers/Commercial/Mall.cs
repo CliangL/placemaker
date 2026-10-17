@@ -82,7 +82,7 @@ namespace Placemaker.Core.Layers.Commercial
 
         /// <summary>(shops2) The lengths of the mall's lists (a composition that gives up late is taken back with <see cref="Rewind"/>,
         /// together with CommercialLayer.PlanMark for the plan). Only for lists appended to since the mark.</summary>
-        public int[] Mark() => new[] { Taken.Count, Shops.Count, Lanes.Count, Lots.Count, Doors.Count, _lotGround.Count, Walks.Count, Stalls, EvStalls };
+        public int[] Mark() => new[] { Taken.Count, Shops.Count, Lanes.Count, Lots.Count, Doors.Count, _lotGround.Count, Walks.Count, Stalls, EvStalls, KeptLand.Count, RowHolds.Count, SpineFronts.Count, Drives.Count, KerbDrives.Count };
 
         public void Rewind(int[] m)
         {
@@ -96,6 +96,8 @@ namespace Placemaker.Core.Layers.Commercial
             for (int i = m[1]; i < Shops.Count; i++) { ShopZone.Remove(Shops[i]); CellPlots.Remove(Shops[i]); }
             Cut(Taken, m[0]); Cut(Shops, m[1]); Cut(Lanes, m[2]); Cut(Lots, m[3]); Cut(Doors, m[4]); Cut(_lotGround, m[5]); Cut(Walks, m[6]);
             Stalls = m[7]; EvStalls = m[8];
+            if (m.Length > 12) { Cut(KeptLand, m[9]); Cut(RowHolds, m[10]); Cut(SpineFronts, m[11]); Cut(Drives, m[12]); }
+            if (m.Length > 13) Cut(KerbDrives, m[13]);
         }
         /// <summary>(shops) True while another frontage is composed (CommercialLayer.ComposeMore): a composition that does not fit there leaves nothing behind (no fallback street row).</summary>
         public bool Extra;
@@ -223,6 +225,20 @@ namespace Placemaker.Core.Layers.Commercial
 
         public bool Fits(float2[] poly) => StreetShops.Fits(Region, poly) && Free(poly);
 
+        /// <summary>
+        /// (rf-shops3) Takes a polygon of any shape: Taken is tested piece by piece as convex (separating axes), so a concave piece
+        /// (an L-shaped park, a planted leftover) goes in as its convex parts — whole, its hull took the land in its inner corner.
+        /// </summary>
+        public void Take(float2[] ring)
+        {
+            if (ring == null || ring.Length < 3) return;
+            var r = Poly.EnsureCcw(ring);
+            if (Poly.IsConvex(r)) { Taken.Add(r); return; }
+            List<float2[]> parts = null;
+            try { parts = ConvexDecomposition.Decompose(r); } catch (Exception) { parts = null; }
+            if (parts == null || parts.Count == 0) Taken.Add(r); else Taken.AddRange(parts);
+        }
+
         /// <summary>(s46) Area of everything planned so far (the pieces of Taken are disjoint, up to the 5 cm touching tolerance).</summary>
         public float TakenArea() { float a = 0f; foreach (var t in Taken) a += Poly.Area(t); return a; }
 
@@ -341,6 +357,19 @@ namespace Placemaker.Core.Layers.Commercial
             Lanes.Add(lane);
         }
 
+        /// <summary>How far from its end on <paramref name="host"/> a lane leaving it along <paramref name="dir"/> keeps its corridor (m).</summary>
+        private static float Clearance(Lane host, float2 at, float2 dir, float half)
+        {
+            float best = float.MaxValue; float2 e = dir;
+            for (int k = 0; k + 1 < host.Points.Count; k++)
+            {
+                float dd = SegmentIndex.DistSq(at, host.Points[k], host.Points[k + 1]);
+                if (dd < best) { best = dd; e = math.normalizesafe(host.Points[k + 1] - host.Points[k]); }
+            }
+            float sin = math.max(0.25f, math.abs(dir.x * e.y - dir.y * e.x)), cos = math.abs(math.dot(dir, e));
+            return host.Half / sin + half * cos / sin + 0.1f;
+        }
+
         /// <summary>Lane footprint pieces (the road width; plots may start right at its edge, where its zone blocks begin).</summary>
         private List<float2[]> Corridors(Lane lane)
         {
@@ -353,8 +382,9 @@ namespace Placemaker.Core.Layers.Commercial
                 // Square ends overlap at bends so the union is closed; at an attached end only the part inside the area matters.
                 float ea = i == 0 ? 0f : h, eb = i + 2 == lane.Points.Count ? (lane.EndAttach >= 0 ? 0f : 0.5f) : h;
                 // (s32) An end on another lane stops at that lane's edge (its corridor is already taken).
-                if (i == 0 && lane.StartOn != null) ea = -(lane.StartOn.Half + 0.1f);
-                if (i + 2 == lane.Points.Count && lane.EndOn != null) eb = -(lane.EndOn.Half + 0.1f);
+                // (rf-shops3) Met at an angle (a chord of a round ring) the end stops further back: the host's band is wider along the lane, and the lane's own corners reach out sideways.
+                if (i == 0 && lane.StartOn != null) ea = -Clearance(lane.StartOn, a, d, h);
+                if (i + 2 == lane.Points.Count && lane.EndOn != null) eb = -Clearance(lane.EndOn, b, -d, h);
                 list.Add(Poly.EnsureCcw(new[] { a - d * ea - n * h, b + d * eb - n * h, b + d * eb + n * h, a - d * ea + n * h }));
             }
             return list;
@@ -448,8 +478,8 @@ namespace Placemaker.Core.Layers.Commercial
             // split the lane at the stub's end instead.
             foreach (var n in sub.Nets)
             {
-                if (t.Synthetic.TryGetValue(n.StartAttach, out var s0)) { SnapOnto(s0.lane, s0.seg, ref n.A, ref n.B); s0.lane.Joins.Add(n.A.xz); n.StartAttach = -1; }
-                if (t.Synthetic.TryGetValue(n.EndAttach, out var s1)) { SnapOnto(s1.lane, s1.seg, ref n.D, ref n.C); s1.lane.Joins.Add(n.D.xz); n.EndAttach = -1; }
+                if (t.Synthetic.TryGetValue(n.StartAttach, out var s0)) { SnapOnto(s0.lane, s0.seg, ref n.A, ref n.B); OntoNode(s0.lane, ref n.A, ref n.B); AddJoin(s0.lane, n.A.xz); n.StartAttach = -1; }
+                if (t.Synthetic.TryGetValue(n.EndAttach, out var s1)) { SnapOnto(s1.lane, s1.seg, ref n.D, ref n.C); OntoNode(s1.lane, ref n.D, ref n.C); AddJoin(s1.lane, n.D.xz); n.EndAttach = -1; }
             }
             sub.Regions.Clear();
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error || i.Key == "Placemaker.Parking.Issue.NoEntrance");
@@ -494,6 +524,8 @@ namespace Placemaker.Core.Layers.Commercial
             b.Values["lanterns"] = ctx.B("lamps");
             b.Values["perimeterRoad"] = false;
             b.Values["setback"] = 1.0;
+            // (rf-shops3) Wider planted medians between the rows of bays (real-3: long tree-lined medians), when the type asks.
+            if (ctx.Settings.Values.ContainsKey("lotMedian") && ctx.Raw("lotMedian") > 2.5f) b.Values["medianDepth"] = (double)ctx.Raw("lotMedian");
             return b;
         }
 
@@ -655,7 +687,7 @@ namespace Placemaker.Core.Layers.Commercial
             }
             sub.Issues.RemoveAll(i => i.Severity == IssueSeverity.Error);
             Merge(sub);
-            Taken.Add(Poly.EnsureCcw(ring));
+            Take(ring);
             return true;
         }
 
@@ -688,7 +720,7 @@ namespace Placemaker.Core.Layers.Commercial
                     placed.Add(p);
                     Ctx.Object(p, rng.NextFloat(0f, 6.283f), ObjectRole.Tree, new AssetRef(""), Hashing.Mix(Ctx.Seed, salt + (uint)placed.Count), 1 + (int)(rng.NextUInt() % 2));
                 }
-            Taken.Add(Poly.EnsureCcw(ring));
+            Take(ring);
         }
 
         private void Merge(AreaPlan sub)
