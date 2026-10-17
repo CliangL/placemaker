@@ -3,12 +3,19 @@
 # copied from the subscribed-mods cache into Mods\ for this session and removed again when the game closes).
 #   powershell -File tools/suite/Launch.ps1 -Mods PreservePhotoMode,SunGlasses
 #   powershell -File tools/suite/Launch.ps1 -AllMods        # the whole playset, as the launcher would
-param([string[]]$Mods = @(), [switch]$AllMods)
+#   -Window 2560x1440  a window of that size for this launch only (Unity flags; the saved display setting is not edited)
+# The graphics settings files are snapshotted before the launch into .forensics/suite/launch-snapshots/<time> so any
+# change the game makes to them can be shown and undone.
+param([string[]]$Mods = @(), [switch]$AllMods, [string]$Window = '')
 $ud = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
 $gameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II'
 $exe = Join-Path $gameDir 'Cities2.exe'
 if (Get-Process -Name Cities2 -ErrorAction SilentlyContinue) { Write-Host 'STOP: the game is already running'; exit 2 }
 
+$snap = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '....')).Path ('.forensicssuitelaunch-snapshots\x27 + (Get-Date -Format 'MMdd-HHmmss'))
+New-Item -ItemType Directory -Force -Path $snap | Out-Null
+foreach ($f in @('Settings.coc', 'FallbackSettings.coc', 'launcher-settings.json')) { $s = Join-Path $ud $f; if (Test-Path -LiteralPath $s) { Copy-Item -LiteralPath $s -Destination $snap } }
+Write-Host "launch: settings snapshot in $snap"
 $added = @()
 $Mods = @($Mods | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $cache = Join-Path $ud '.cache\Mods\pdx_mods'
@@ -33,6 +40,24 @@ try {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exe
     $psi.Arguments = $(if ($AllMods) { '' } else { '-disableModding -disableCodeModding-' })
+    if ($Window -match '^(d+)x(d+)
+    $psi.WorkingDirectory = $gameDir
+    $psi.UseShellExecute = $false
+    $psi.EnvironmentVariables['SteamAppId'] = '949230'
+    $psi.EnvironmentVariables['SteamGameId'] = '949230'
+    $p = [System.Diagnostics.Process]::Start($psi)
+    Write-Host "launch: started Cities2.exe PID $($p.Id) $($psi.Arguments) (the user's own settings; main menu)"
+    $p.WaitForExit()
+    Write-Host 'launch: the game closed'
+}
+catch { Write-Host "launch: $($_.Exception.Message)"; $code = 1 }
+finally {
+    foreach ($d in $added) {
+        if (Test-Path -LiteralPath (Join-Path $d '.playground-copy')) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue; Write-Host "launch: removed the session copy $d" }
+    }
+}
+exit $code
+) { $psi.Arguments = ("$($psi.Arguments) -screen-fullscreen 0 -screen-width $($Matches[1]) -screen-height $($Matches[2])").Trim() }
     $psi.WorkingDirectory = $gameDir
     $psi.UseShellExecute = $false
     $psi.EnvironmentVariables['SteamAppId'] = '949230'
