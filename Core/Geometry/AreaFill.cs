@@ -208,7 +208,18 @@ namespace Placemaker.Core.Geometry
             // Cells the fill may take: free land within reach of the click.
             var ok = new bool[n];
             float r2 = reach * reach;
-            for (int k = 0; k < n; k++) ok[k] = f.State[k] == WallField.Free && math.distancesq(f.Center(k), seed) <= r2;
+            // Row by row: the span of the reach disc on the row, its free cells.
+            for (int j = 0; j < h; j++)
+            {
+                float dy = f.Origin.y + (j + 0.5f) * f.Cell - seed.y;
+                float rest = r2 - dy * dy;
+                if (rest < 0f) continue;
+                float half = math.sqrt(rest);
+                int a = math.max(0, (int)math.ceil((seed.x - half - f.Origin.x) / f.Cell - 0.5f));
+                int b = math.min(w - 1, (int)math.floor((seed.x + half - f.Origin.x) / f.Cell - 0.5f));
+                int row = j * w;
+                for (int i = a; i <= b; i++) ok[row + i] = f.State[row + i] == WallField.Free;
+            }
             int s = SeedCell(f, seed, ok);
             if (s < 0) { status = FillStatus.OnWall; return null; }
 
