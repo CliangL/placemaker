@@ -10,14 +10,15 @@ Placemaker
 
 ## Short description
 
-Select an area and turn it into roads, a parking lot, a park, shops or about 30 other kinds of places. You see a
-preview first, then build it in one go.
+Select an area and turn it into roads, parking, parks, shops, nature, farms or sports: 25 types, over 100 styles, every setting adjustable. Preview it, then build it.
 
 ## Long description
 
 Placemaker fills an area for you. Select some land, choose what you want there, check the preview and build it.
 
 [Watch the showcase video on YouTube](https://www.youtube.com/watch?v=ghIR5UhFwj4) (3 minutes).
+
+**Not just presets.** There are 25 types and over 100 styles to start from, and each one has its own settings: layout, paths, planting, surfaces, extras. Change anything and save it as your own style. That makes billions of combinations; the pictures show only a few.
 
 It only uses the game's own assets, so no asset packs are needed.
 
