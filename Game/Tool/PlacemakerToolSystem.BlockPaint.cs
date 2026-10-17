@@ -113,8 +113,8 @@ namespace Placemaker.Game.Tool
                     if (_in.HasHit)
                     {
                         int v = _bpMask.Version;
-                        _bpMask.Stroke(_lastStroke, _in.Hit.xz, radius, _gesture == Gesture.Erase, _brushSquare, _brushAngle);
-                        _lastStroke = _in.Hit.xz;
+                        if (_bpMask.Stroke(_lastStroke, _in.Hit.xz, radius, _gesture == Gesture.Erase, _brushSquare, _brushAngle))
+                            _lastStroke = _in.Hit.xz;
                         // Only a stroke that changed cells is an input change; the outline is rebuilt on mouse-up.
                         if (_bpMask.Version != v) ShapeChanged(throttled: true);
                     }
