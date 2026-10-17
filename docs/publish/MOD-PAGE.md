@@ -61,5 +61,5 @@ Andreas Pardeike (MIT). Licensed GPL-3.0.
 
 ## Pictures
 
-- Thumbnail: `Properties/Thumbnail.png` (coast farms aerial, logo and name in the video's title style).
+- Thumbnail: `Properties/Thumbnail.png`: four shots (roads, parking, wetland, beach), the logo and name on a plain band.
 - Screenshots: `Properties/Screenshots/` (8 stills from showcase v6).

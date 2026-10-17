@@ -18,7 +18,7 @@ powershell -File tools/publish/Publish.ps1 -Command Update         # the page on
 
 ## Ready
 
-- Page text, thumbnail (from the showcase video, with the logo) and 8 screenshots (stills from showcase v6).
+- Page text, thumbnail (four shots from the showcase recordings, the logo and name) and 8 screenshots (stills from showcase v6).
 - `AccessLevel` = Private: only you can see it.
 
 ## The private test
